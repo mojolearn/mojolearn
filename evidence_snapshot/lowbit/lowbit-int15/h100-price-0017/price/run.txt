@@ -1,0 +1,15 @@
+profile=mojolearn.identical.gemm.int15i64.v1
+box=h100
+started=2026-09-29T03:46:40Z
+tree_head=45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 dirty_files=20
+mac_budget=default repeats=default only=all
+machine=NVIDIA H100 NVL, 580.159.04
+build exit=0 17s
+warm exit=0 31s (untimed, every arm once)
+others_before_the_timed_run:
+price exit=0 58s
+others_after_the_timed_run:
+warm-and-timed: the two runs printed the same digests (322)
+price-sabotage exit=0 (identity only)
+sabotage-comparison exit=0 (0: every sabotaged fifteen-bit digest differed from the clean one)
+finished=2026-09-29T03:49:10Z

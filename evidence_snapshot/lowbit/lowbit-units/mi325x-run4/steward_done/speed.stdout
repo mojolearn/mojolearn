@@ -1,0 +1,717 @@
+######## phase price on mi325x, started 2026-09-29T03:20:01Z
+box=mi325x
+started=2026-09-29T03:20:01Z
+tree_head=f1e6cb61ca792fec4a71e0b4b13112c8129288f2 dirty_files=30
+mac_budget=default repeats=default only=all identity_only=0
+price exit=0
+price-sabotage exit=0 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=0 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T03:20:30Z
+== price.log (every line that is not a PRICE or device-bits line)
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_int8_apple_chunk.mojo:145:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3617:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    p: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_int8_apple_chunk.mojo:250:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_int8_apple_chunk.mojo:250:59: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_int8_apple_chunk.mojo:252:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_int8_apple_chunk.mojo:252:72: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3047:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                             ~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3047:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                        ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3047:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3047:81: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                                           ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3048:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                             ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3048:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3048:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3048:85: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                               ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3699:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3852:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[sg] = ea0
+            ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3853:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[NSG + sg] = eb0
+            ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3862:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var atc = at + cur * ASZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3863:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var btc = bt + cur * BSZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3864:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var wmc = wmin + cur * 2 * NSG
+                  ~~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3871:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[sg] = ea
+                ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3872:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[NSG + sg] = eb
+                ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3881:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bea = min(bea, wmc[q])
+                           ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3882:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            beb = min(beb, wmc[NSG + q])
+                           ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3893:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3893:64: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3895:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3895:77: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3906:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var av = atc[p * AST + (sgm * FM + fm) * 8 + frow]
+                             ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3909:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var bv = btc[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
+                                     ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3916:81: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ean = _admit_warp_min(_amma_stage[BM, KB, NT, True, AST](at + nxt * ASZ, ra, tid, a_ofast))
+                                                                             ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3917:82: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ebn = _admit_warp_min(_amma_stage[BN, KB, NT, False, BST](bt + nxt * BSZ, rb, tid, b_ofast))
+                                                                              ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3919:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + sg] = ean
+                    ~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3920:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + NSG + sg] = ebn
+                    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3933:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    fl[pe] = part[pe]
+                    ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3943:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            outv[oe] = fl[oe]
+                       ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3957:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[Int(block_idx.y) * m * n + gi * n + gj] = outv[2 * (fm * FN + fq) + e]
+                        ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3959:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[cbase + gi * n + gj] = ftz(outv[2 * (fm * FN + fq) + e])
+                        ~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7254:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7255:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7287:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7288:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7370:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7371:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7386:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var raa = as_.load[width=RPT, alignment=ALIGN](abase + ca * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7387:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rba = bs_.load[width=CPT, alignment=ALIGN](bbase + ca * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7393:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7394:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7420:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:7421:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_int8_apple_chunk.mojo:182:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + e) * ST + r] = v[e]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_int8_apple_chunk.mojo:184:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_int8_apple_chunk.mojo:184:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_int8_apple_chunk.mojo:184:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3669:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3669:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3671:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3677:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q]
+                                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3683:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3683:51: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3685:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3691:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q * k_stride]
+                                            ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3719:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3719:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3719:37: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~~^~~~~~
+                                     unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3722:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(o4 + q) * ST + pp] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3728:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + q) * ST + o] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3730:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3730:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-wt/steward-do-amd/gemm/checks/gemm_identical.mojo:3730:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+== bench/gemm_lowbit_price_main.mojo [IDENTICAL] ==
+column amd
+profiles fp32.v1, bf16f32.v1, int8i32.v1
+int8 dispatch: mma (lib_int8_matrix_unit_for)
+sabotage: price none  lowbit none  apple chunk none
+repeats 5  mac budget 34359738368  only 
+EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one synchronize per sample; the median of the timed calls is reported and the minimum beside it.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 0.0617 0.0602 271.9601 GMAC/s 0x920cdd138650a8bd plan=13
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.fused 1.1355 1.1186 14.7757 GMAC/s 0xcd39e9d6e6d7179a dispatched
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.widen 0.0961 0.0945 174.5263 GMAC/s 0xcd39e9d6e6d7179a not-dispatched(cells<=16384)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 1.0738 1.0514 15.6246 GMAC/s 0x8a9227b93e430acd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma 0.0512 0.0489 327.4242 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 1.3571 1.3439 0.0030 Gelem/s 0x54279cbda1444726 per-call
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 3.8474 3.8098 4.3607 Gelem/s 0x305b1a502296caf6 once-per-weight
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.pack.b 0.0460 0.0450 364.5636 Gelem/s 0x24efed638bb6b96b once-per-weight
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.widen.b 0.0463 0.0461 362.3589 Gelem/s 0xd2c2d96392622325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.dequantize.b 0.0471 0.0460 356.5827 Gelem/s 0x2fd9ee536fd82325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL inference.bf16f32.v1 1.1249 1.1208 14.9139 GMAC/s 0xcd39e9d6e6d7179a product
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1 1.3753 1.3562 12.1991 GMAC/s 0x8a9227b93e430acd quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL training.bf16f32.v1 1.1700 1.1561 14.3390 GMAC/s 0xcd39e9d6e6d7179a pack.b+product
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1 5.2064 5.1688 3.2224 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.0775 0.0731 1732.7360 GMAC/s 0xd5677d8a13939709 plan=14
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.fused 1.1883 1.1815 112.9487 GMAC/s 0xf36fe1a8828cefd9 not-dispatched(cells>16384)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.widen 0.1067 0.1055 1257.3325 GMAC/s 0xf36fe1a8828cefd9 dispatched
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 1.1356 1.1311 118.1872 GMAC/s 0x484bd20aabe66ee5 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma 0.0516 0.0511 2601.1692 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 1.4372 1.4194 0.0228 Gelem/s 0xbd0b5aed2b83cb45 per-call
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 3.8437 3.7800 4.3648 Gelem/s 0xa8ce17326c01345 once-per-weight
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.pack.b 0.0470 0.0459 357.3422 Gelem/s 0xdccc5a093a080c52 once-per-weight
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.widen.b 0.0472 0.0451 355.4570 Gelem/s 0x944a5da41b4d2325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.dequantize.b 0.0467 0.0463 359.0245 Gelem/s 0x24697157b3da2325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL inference.bf16f32.v1 0.1078 0.1063 1244.8315 GMAC/s 0xf36fe1a8828cefd9 product
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1 1.4746 1.4656 91.0213 GMAC/s 0x484bd20aabe66ee5 quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL training.bf16f32.v1 0.1395 0.1394 962.0584 GMAC/s 0xf36fe1a8828cefd9 pack.b+product
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1 5.2733 5.2595 25.4521 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 0.9254 0.9240 9282.7428 GMAC/s 0x67d3d940546b834c plan=10
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.fused 41.2363 41.1790 208.3102 GMAC/s 0x4abd79a5b10221e5 not-dispatched(cells>16384)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.widen 0.9384 0.9307 9153.9361 GMAC/s 0x4abd79a5b10221e5 dispatched
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 41.5870 41.5626 206.5535 GMAC/s 0xa5f2ce1f1b9a0ebd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma 0.2669 0.2641 32183.0084 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 3.6599 3.6566 0.5730 Gelem/s 0xe8bb3ad105a4ae26 per-call
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 3.7819 3.7787 4.4362 Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.pack.b 0.0490 0.0474 342.3223 Gelem/s 0xaef2da473a8e2a10 once-per-weight
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.widen.b 0.0490 0.0486 342.1059 Gelem/s 0xc8e5243510392325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.dequantize.b 0.0494 0.0492 339.5510 Gelem/s 0x1798a32eac742325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL inference.bf16f32.v1 0.9480 0.9427 9060.9595 GMAC/s 0x4abd79a5b10221e5 product
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1 4.0606 3.9168 2115.4353 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL training.bf16f32.v1 0.9616 0.9513 8933.1646 GMAC/s 0x4abd79a5b10221e5 pack.b+product
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1 8.0397 7.8813 1068.4373 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_up.t1  m=1 n=14336 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 0.1631 0.1619 359.9621 GMAC/s 0x4965ea6af2ff5e61 plan=13
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.fused 1.1869 1.1843 49.4746 GMAC/s 0x5e3f5ff35a448024 dispatched
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.widen 0.2841 0.2828 206.7040 GMAC/s 0x5e3f5ff35a448024 not-dispatched(cells<=16384)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 1.1041 1.0982 53.1844 GMAC/s 0xff302668595b02d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma 0.0567 0.0556 1034.7364 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a 1.3569 1.3401 0.0030 Gelem/s 0x1343c750c1ded02 per-call
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b 4.1559 4.1214 14.1293 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.pack.b 0.1268 0.1260 463.2067 Gelem/s 0xed618e2333b13294 once-per-weight
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.widen.b 0.1364 0.1339 430.5951 Gelem/s 0x573b3a44b4012325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.dequantize.b 0.1492 0.1477 393.6756 Gelem/s 0x5a7e8639220c2325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL inference.bf16f32.v1 1.1905 1.1872 49.3246 GMAC/s 0x5e3f5ff35a448024 product
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1 1.4112 1.4013 41.6097 GMAC/s 0xff302668595b02d quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL training.bf16f32.v1 1.2557 1.2544 46.7646 GMAC/s 0x5e3f5ff35a448024 pack.b+product
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1 5.4792 5.4255 10.7169 GMAC/s 0xff302668595b02d quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_up.t8  m=8 n=14336 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 0.1677 0.1658 2801.3719 GMAC/s 0x7b30465d325906e plan=14
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.fused 2.8442 2.8216 165.1659 GMAC/s 0x1531c10dcd152579 not-dispatched(cells>16384)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.widen 0.2917 0.2898 1610.1582 GMAC/s 0x1531c10dcd152579 dispatched
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 2.8417 2.8324 165.3084 GMAC/s 0xbd4b3a783f9d9a0d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma 0.0583 0.0574 8063.2003 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a 1.4404 1.4312 0.0227 Gelem/s 0x5e46321f760ef85d per-call
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b 4.1601 4.1237 14.1149 Gelem/s 0xa9e079afde494e3d once-per-weight
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.pack.b 0.1261 0.1254 465.8120 Gelem/s 0xc5111a6224412c3f once-per-weight
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.widen.b 0.1312 0.1308 447.4606 Gelem/s 0x6a679200ae02325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.dequantize.b 0.1487 0.1472 394.8111 Gelem/s 0x89939dca58a02325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL inference.bf16f32.v1 0.2920 0.2909 1609.0497 GMAC/s 0x1531c10dcd152579 product
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1 1.5008 1.4954 313.0023 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL training.bf16f32.v1 0.4017 0.3992 1169.4379 GMAC/s 0x1531c10dcd152579 pack.b+product
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1 5.5771 5.5515 84.2312 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_up.t512  m=512 n=14336 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 2.3895 2.3752 12582.0659 GMAC/s 0x27a166783c45f9f0 plan=10
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.fused 174.3496 173.9604 172.4396 GMAC/s 0x5b29318ad80be465 not-dispatched(cells>16384)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.widen 2.4240 2.4223 12402.7844 GMAC/s 0x5b29318ad80be465 dispatched
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 151.1207 149.6964 198.9454 GMAC/s 0x220ff5fe96f5ef55 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma 0.8773 0.8759 34270.5566 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a 3.7927 3.7481 0.5529 Gelem/s 0x8c503fb082856006 per-call
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b 4.1662 4.1429 14.0943 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.pack.b 0.1270 0.1267 462.1859 Gelem/s 0x1c04d570a3d23380 once-per-weight
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.widen.b 0.1357 0.1338 432.7849 Gelem/s 0x5c9d5dc97a412325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.dequantize.b 0.1478 0.1475 397.3787 Gelem/s 0xb584f740e2d62325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL inference.bf16f32.v1 2.5044 2.5020 12004.6650 GMAC/s 0x5b29318ad80be465 product
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1 4.9238 4.7118 6106.0011 GMAC/s 0x220ff5fe96f5ef55 quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL training.bf16f32.v1 2.6662 2.6192 11276.3386 GMAC/s 0x5b29318ad80be465 pack.b+product
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1 8.9997 8.9159 3340.6467 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_down.t1  m=1 n=4096 k=14336  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 0.1560 0.1549 376.3636 GMAC/s 0x4efb8e54c724fa9 plan=13
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.fused 3.9476 3.8942 14.8750 GMAC/s 0xd044aebb510dc9 dispatched
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.widen 0.2810 0.2796 208.9399 GMAC/s 0xd044aebb510dc9 not-dispatched(cells<=16384)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 3.8100 3.7541 15.4122 GMAC/s 0x1ffdde3ffffb72c9 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma 0.1374 0.1363 427.4948 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a 4.6908 4.6797 0.0031 Gelem/s 0x160d734878c0f458 per-call
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b 14.1738 14.0770 4.1429 Gelem/s 0x31274090cc79ba2f once-per-weight
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.pack.b 0.1275 0.1269 460.4066 Gelem/s 0x9dba12f4fe0c9e9b once-per-weight
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.widen.b 0.1325 0.1321 443.3089 Gelem/s 0x45255120c9d82325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.dequantize.b 0.1493 0.1476 393.2274 Gelem/s 0x8e72f1c5a3402325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL inference.bf16f32.v1 3.9026 3.8987 15.0466 GMAC/s 0xd044aebb510dc9 product
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1 4.8812 4.8317 12.0299 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL training.bf16f32.v1 3.9136 3.8569 15.0042 GMAC/s 0xd044aebb510dc9 pack.b+product
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1 18.9537 18.7923 3.0981 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_down.t8  m=8 n=4096 k=14336  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 0.1947 0.1906 2412.5126 GMAC/s 0xfb21004541ae3e8e plan=14
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.fused 3.6965 3.6292 127.0843 GMAC/s 0xcbe807d3ae13612f not-dispatched(cells>16384)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.widen 0.3105 0.3089 1513.0772 GMAC/s 0xcbe807d3ae13612f dispatched
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 3.7483 3.7445 125.3254 GMAC/s 0x694aafd520fdadad not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma 0.1415 0.1401 3320.8354 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a 5.1709 5.1059 0.0222 Gelem/s 0xbb4f2a7232392bfe per-call
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b 14.1137 13.8430 4.1605 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.pack.b 0.1255 0.1246 467.7451 Gelem/s 0xfbacba127cf6177e once-per-weight
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.widen.b 0.1341 0.1321 437.8874 Gelem/s 0xcbcb5933d8352325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.dequantize.b 0.1485 0.1473 395.2895 Gelem/s 0x9dcad54d7e462325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL inference.bf16f32.v1 0.3250 0.3227 1445.2927 GMAC/s 0xcbe807d3ae13612f product
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1 5.3521 5.2635 87.7721 GMAC/s 0x694aafd520fdadad quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL training.bf16f32.v1 0.4312 0.4278 1089.3058 GMAC/s 0xcbe807d3ae13612f pack.b+product
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1 19.3871 19.3240 24.2307 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 2.5107 2.4546 11974.5949 GMAC/s 0x4743c97cb961339e plan=10
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.fused 192.6926 191.9201 156.0245 GMAC/s 0x508d64e0e41d3350 not-dispatched(cells>16384)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.widen 2.5016 2.4830 12018.2456 GMAC/s 0x508d64e0e41d3350 dispatched
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 139.1355 138.8258 216.0826 GMAC/s 0x6120545eacb068ad not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma 0.8422 0.8415 35698.4083 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a 13.3456 13.3150 0.5500 Gelem/s 0x903f6ff84c6082 per-call
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b 13.6201 13.6160 4.3113 Gelem/s 0xa046020a81d05746 once-per-weight
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.pack.b 0.1285 0.1272 456.8603 Gelem/s 0xd1b066f4e6a61fed once-per-weight
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.widen.b 0.1344 0.1331 437.0693 Gelem/s 0xf0fcf217ba5c2325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.dequantize.b 0.1501 0.1491 391.3379 Gelem/s 0xd972f24f17be2325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL inference.bf16f32.v1 2.5862 2.5802 11625.2871 GMAC/s 0x508d64e0e41d3350 product
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1 14.7519 14.3545 2038.0283 GMAC/s 0x6120545eacb068ad quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL training.bf16f32.v1 2.7672 2.7226 10864.5215 GMAC/s 0x508d64e0e41d3350 pack.b+product
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1 28.8290 28.5589 1042.8644 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.lm_head.t1  m=1 n=128256 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 1.3122 1.3039 400.3583 GMAC/s 0xcdc134cbce391535 plan=13
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.fused 5.4303 5.4107 96.7423 GMAC/s 0x23f2e7e17341274a not-dispatched(cells>16384)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.widen 2.4613 2.4533 213.4426 GMAC/s 0x23f2e7e17341274a dispatched
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 6.4084 6.0644 81.9758 GMAC/s 0xe0222b2f9de835ed not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma 0.2862 0.2835 1835.3075 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a 1.3676 1.3425 0.0030 Gelem/s 0x67d2e298b047bf2b per-call
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b 15.6604 15.5096 33.5455 Gelem/s 0x1c75800d0b1054bd once-per-weight
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.pack.b 1.0160 1.0133 517.0493 Gelem/s 0xa3f53235cc152516 once-per-weight
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.widen.b 1.1499 1.1393 456.8359 Gelem/s 0x63450213e8e12325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.dequantize.b 1.2571 1.2500 417.8999 Gelem/s 0x23115689185e2325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL inference.bf16f32.v1 2.5466 2.5203 206.2867 GMAC/s 0x23f2e7e17341274a product
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1 1.6439 1.6342 319.5585 GMAC/s 0xe0222b2f9de835ed quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL training.bf16f32.v1 3.5467 3.5365 148.1189 GMAC/s 0x23f2e7e17341274a pack.b+product
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1 17.1070 17.0513 30.7088 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.lm_head.t8  m=8 n=128256 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 1.2280 1.2270 3422.3686 GMAC/s 0x3ebab59d0da21444 plan=14
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.fused 40.8262 40.1259 102.9411 GMAC/s 0x82bad7b4e5c4c263 not-dispatched(cells>16384)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.widen 2.4054 2.4031 1747.2031 GMAC/s 0x82bad7b4e5c4c263 dispatched
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 46.4979 45.3977 90.3846 GMAC/s 0x8151fd05ff287a5d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma 0.3323 0.3313 12648.0837 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a 1.4594 1.4338 0.0225 Gelem/s 0x443be8ad16d189a3 per-call
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b 16.0647 15.8689 32.7013 Gelem/s 0x8e01af3f075298bb once-per-weight
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.pack.b 1.0180 1.0156 516.0543 Gelem/s 0xbdac0264c773e6f1 once-per-weight
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.widen.b 1.1513 1.1495 456.3002 Gelem/s 0x4e388bd358a22325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.dequantize.b 1.2664 1.2585 414.8113 Gelem/s 0xb8835a7fc2342325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL inference.bf16f32.v1 2.4984 2.4754 1682.1853 GMAC/s 0x82bad7b4e5c4c263 product
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1 1.9165 1.8948 2192.9285 GMAC/s 0x8151fd05ff287a5d quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL training.bf16f32.v1 3.4718 3.4434 1210.5153 GMAC/s 0x82bad7b4e5c4c263 pack.b+product
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1 17.5921 17.3529 238.8972 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.lm_head.t512  m=512 n=16032 k=4096  CAPPED  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 2.7776 2.7441 12104.5207 GMAC/s 0x84fd143bb625cf70 plan=10
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.fused 271.0917 261.1044 124.0227 GMAC/s 0xa75052ecc1e78b46 not-dispatched(cells>16384)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.widen 2.8174 2.8086 11933.6491 GMAC/s 0xa75052ecc1e78b46 dispatched
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 250.1423 248.9967 134.4096 GMAC/s 0xaae4f3d3c69453cd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma 1.0130 1.0072 33189.8078 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a 3.9300 3.7409 0.5336 Gelem/s 0xfd89ee79d025dda7 per-call
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b 4.2702 4.2455 15.3779 Gelem/s 0xcc187b17bc36366d once-per-weight
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.pack.b 0.1431 0.1403 458.9535 Gelem/s 0xaabc0c6ba2a73e85 once-per-weight
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.widen.b 0.1499 0.1492 438.0141 Gelem/s 0xbd6a89a89fc02325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.dequantize.b 0.1662 0.1646 395.2062 Gelem/s 0xf6a61b0da9142325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED inference.bf16f32.v1 2.9081 2.8681 11561.2155 GMAC/s 0xa75052ecc1e78b46 product
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1 5.0582 4.9293 6646.9431 GMAC/s 0xaae4f3d3c69453cd quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED training.bf16f32.v1 3.0784 3.0632 10921.8612 GMAC/s 0xa75052ecc1e78b46 pack.b+product
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1 9.1749 9.0936 3664.5071 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== done [IDENTICAL]: 12 shapes ==
+== sabotage verdict
+DISAGREE (expected) llama8b.qkv.t1 fp32.v1: clean 0x920cdd138650a8bd sabotage 0x920cdc138650a70a
+DISAGREE (expected) llama8b.qkv.t1 bf16f32.v1.fused: clean 0xcd39e9d6e6d7179a sabotage 0xcd39ead6e6d7194d
+DISAGREE (expected) llama8b.qkv.t1 bf16f32.v1.widen: clean 0xcd39e9d6e6d7179a sabotage 0xcd39ead6e6d7194d
+DISAGREE (expected) llama8b.qkv.t1 int8i32.v1.flat: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 int8i32.v1.mma: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.quantize.a: clean 0x54279cbda1444726 sabotage 0x542798bda1472383
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.pack.b: clean 0x305b1a502296caf6 sabotage 0x890ef69c534d0ca9
+DISAGREE (expected) llama8b.qkv.t1 convert.bf16.pack.b: clean 0x24efed638bb6b96b sabotage 0x24efec638bb6b7b8
+DISAGREE (expected) llama8b.qkv.t1 convert.bf16.widen.b: clean 0xd2c2d96392622325 sabotage 0xd2c2d86392622172
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.dequantize.b: clean 0x2fd9ee536fd82325 sabotage 0x2fd9ed536fd82172
+DISAGREE (expected) llama8b.qkv.t1 inference.bf16f32.v1: clean 0xcd39e9d6e6d7179a sabotage 0xcd39ead6e6d7194d
+DISAGREE (expected) llama8b.qkv.t1 inference.int8i32.v1: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 training.bf16f32.v1: clean 0xcd39e9d6e6d7179a sabotage 0xcd39ead6e6d7194d
+DISAGREE (expected) llama8b.qkv.t1 training.int8i32.v1: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t8 fp32.v1: clean 0xd5677d8a13939709 sabotage 0xd5677c8a13939556
+DISAGREE (expected) llama8b.qkv.t8 bf16f32.v1.fused: clean 0xf36fe1a8828cefd9 sabotage 0xf36fe0a8828cee26
+DISAGREE (expected) llama8b.qkv.t8 bf16f32.v1.widen: clean 0xf36fe1a8828cefd9 sabotage 0xf36fe0a8828cee26
+DISAGREE (expected) llama8b.qkv.t8 int8i32.v1.flat: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 int8i32.v1.mma: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.quantize.a: clean 0xbd0b5aed2b83cb45 sabotage 0x9fe9a836780c4372
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.pack.b: clean 0xa8ce17326c01345 sabotage 0xfedb09cb32b7d192
+DISAGREE (expected) llama8b.qkv.t8 convert.bf16.pack.b: clean 0xdccc5a093a080c52 sabotage 0xdccc5b093a080e05
+DISAGREE (expected) llama8b.qkv.t8 convert.bf16.widen.b: clean 0x944a5da41b4d2325 sabotage 0x944a5ca41b4d2172
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.dequantize.b: clean 0x24697157b3da2325 sabotage 0x24697057b3da2172
+DISAGREE (expected) llama8b.qkv.t8 inference.bf16f32.v1: clean 0xf36fe1a8828cefd9 sabotage 0xf36fe0a8828cee26
+DISAGREE (expected) llama8b.qkv.t8 inference.int8i32.v1: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 training.bf16f32.v1: clean 0xf36fe1a8828cefd9 sabotage 0xf36fe0a8828cee26
+DISAGREE (expected) llama8b.qkv.t8 training.int8i32.v1: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t512 fp32.v1: clean 0x67d3d940546b834c sabotage 0x67d3da40546b84ff
+DISAGREE (expected) llama8b.qkv.t512 bf16f32.v1.fused: clean 0x4abd79a5b10221e5 sabotage 0x4abd78a5b1022032
+DISAGREE (expected) llama8b.qkv.t512 bf16f32.v1.widen: clean 0x4abd79a5b10221e5 sabotage 0x4abd78a5b1022032
+DISAGREE (expected) llama8b.qkv.t512 int8i32.v1.flat: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 int8i32.v1.mma: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.quantize.a: clean 0xe8bb3ad105a4ae26 sabotage 0xa4c29f2d55db77d9
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.pack.b: clean 0xd5ea46fdcb251db4 sabotage 0xcd5a4c6ba3ec5f67
+DISAGREE (expected) llama8b.qkv.t512 convert.bf16.pack.b: clean 0xaef2da473a8e2a10 sabotage 0xaef2db473a8e2bc3
+DISAGREE (expected) llama8b.qkv.t512 convert.bf16.widen.b: clean 0xc8e5243510392325 sabotage 0xc8e5233510392172
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.dequantize.b: clean 0x1798a32eac742325 sabotage 0x1798a22eac742172
+DISAGREE (expected) llama8b.qkv.t512 inference.bf16f32.v1: clean 0x4abd79a5b10221e5 sabotage 0x4abd78a5b1022032
+DISAGREE (expected) llama8b.qkv.t512 inference.int8i32.v1: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 training.bf16f32.v1: clean 0x4abd79a5b10221e5 sabotage 0x4abd78a5b1022032
+DISAGREE (expected) llama8b.qkv.t512 training.int8i32.v1: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+sabotage comparison: 42 compared, 42 differed, 0 did not, 0 not compared
+VERDICT: the sabotage arm was seen at every arm and shape compared
+price_job: box=mi325x red=0
+######## phase price on mi325x exit=0, finished 2026-09-29T03:20:30Z
+######## phase vendor on mi325x, started 2026-09-29T03:20:30Z
+[vendor-torch] AMD detected: GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+[vendor-torch] installing torch from https://download.pytorch.org/whl/rocm6.4 (this is the long step)
+/root/.venv-vendor-torch/lib/python3.12/site-packages/torch/_subclasses/functional_tensor.py:279: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+[vendor-torch] torch 2.9.1+rocm6.4 cuda None hip 6.4.43484-123eb5128 available True
+/root/.venv-vendor-torch/lib/python3.12/site-packages/torch/_subclasses/functional_tensor.py:279: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+== tools/vendor_gemm_price.py ==
+  device      : AMD Instinct Mi325X VF (cuda)
+  library     : hipBLASLt/rocBLAS
+  build       : ROCm 6.4.43484-123eb5128, torch 2.9.1+rocm6.4
+  shapes      : 12 of 20, parsed from bench/gemm_shapes.mojo (--only llama8b)
+  COMPARISON ONLY: a vendor library's arithmetic is the vendor's; no arm
+                here carries an identity claim and none is hashed.
+  repeats     : 10 timed, 3 warm-up, median reported
+  arms        : strict only, meaning torch's DEFAULT for this backend.
+                On ROCm that default is off, but CDNA3 does have an XF32
+                matrix mode that the same allow_tf32 switch reaches, so
+                this is strict FP32 by default rather than by assertion.
+                An XF32 arm is OWED here the way tf32 is measured on CUDA.
+  bf16 arm    : both operands torch.bfloat16, product in bf16 (allow_tf32 off).
+
+VENDORPRICE strict     llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.0672 ms      499.5 GF/s
+VENDORPRICE bf16       llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.0268 ms     1252.3 GF/s
+VENDORPRICE strict     llama8b.qkv.t8                   NT m=8       n=4096    k=4096          0.0698 ms     3846.4 GF/s
+VENDORPRICE bf16       llama8b.qkv.t8                   NT m=8       n=4096    k=4096          0.0267 ms    10046.1 GF/s
+VENDORPRICE strict     llama8b.qkv.t512                 NT m=512     n=4096    k=4096          0.2201 ms    78069.4 GF/s
+VENDORPRICE bf16       llama8b.qkv.t512                 NT m=512     n=4096    k=4096          0.0521 ms   329713.2 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          0.0845 ms     1390.1 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          0.0534 ms     2198.5 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          0.0819 ms    11466.0 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          0.0571 ms    16442.5 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t512              NT m=512     n=14336   k=4096          0.8458 ms    71094.2 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t512              NT m=512     n=14336   k=4096          0.1084 ms   554728.7 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         0.0748 ms     1569.9 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         0.0426 ms     2758.4 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         0.0760 ms    12365.5 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         0.0438 ms    21467.5 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t512            NT m=512     n=4096    k=14336         1.1845 ms    50764.0 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t512            NT m=512     n=4096    k=14336         0.1275 ms   471698.6 GF/s
+VENDORPRICE strict     llama8b.lm_head.t1               NT m=1       n=128256  k=4096          0.6223 ms     1688.4 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t1               NT m=1       n=128256  k=4096          0.2787 ms     3770.5 GF/s
+VENDORPRICE strict     llama8b.lm_head.t8               NT m=8       n=128256  k=4096          0.6488 ms    12954.5 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t8               NT m=8       n=128256  k=4096          0.2826 ms    29738.9 GF/s
+VENDORPRICE strict     llama8b.lm_head.t512             NT m=512     n=128256  k=4096          5.1521 ms   104413.0 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t512             NT m=512     n=128256  k=4096          0.9871 ms   544962.4 GF/s
+
+  wrote /root/mojolearn-wt/steward-do-amd/bench/results/lowbit_units/mi325x/vendor/vendor_price.json
+[vendor-torch] vendor_gemm_price exit=0
+vendor_job: box=mi325x exit=0
+######## phase vendor on mi325x exit=0, finished 2026-09-29T03:20:57Z
+box_job: box=mi325x phases: price=0 vendor=0 red=0

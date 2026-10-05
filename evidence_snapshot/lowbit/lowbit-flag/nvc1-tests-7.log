@@ -1,0 +1,23 @@
+nvidia_central: lane lowbit-flag is on nvc1 (2 GPU slots, NVIDIA GeForce RTX 4090); submit with: tools/nvidia_central.sh submit lowbit-flag <script>
+installed package: /root/lowbit-flag-venv/lib/python3.14/site-packages/mojolearn
+mojolearn        0.8.25
+mojolearn-amd    0.8.25
+mojolearn-nvidia 0.8.25
+numpy            2.5.3
+pytest           9.1.1
+new file       _numeric_profile.py
+base==release  __init__.py
+base==release  _samba_impl.py
+base==release  models/causal_lm.py
+base==release  models/parallel_causal_lm.py
+new file       tests/test_numeric_profile.py
+import ok 0.8.25 fp32_v1 identical
+import_exit=0
+........................................................................ [ 70%]
+..............................                                           [100%]
+=============================== warnings summary ===============================
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+102 passed, 2 warnings in 0.86s
+pytest_exit=0

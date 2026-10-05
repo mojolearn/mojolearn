@@ -1,0 +1,196 @@
+✨ Pixi task (check-gemm-int8-apple-chunk-value-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int8_apple_chunk_check.mojo
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:249:54: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if INT8_PRODUCT_MAX * INT8_APPLE_CHUNK_MAX_STEPS >= F32_EXACT_INTEGER_BOUND:
+                                                     ^
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:251:60: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if INT8_PRODUCT_MAX * (INT8_APPLE_CHUNK_MAX_STEPS + 1) < F32_EXACT_INTEGER_BOUND:
+                                                           ^
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:57:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:145:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:57:
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:74:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3617:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    p: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:57:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:250:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:57:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:250:59: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:57:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:252:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:57:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:252:72: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:57:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:182:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + e) * ST + r] = v[e]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:57:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:184:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:57:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:184:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:57:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:184:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:283:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:284:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:285:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:321:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:322:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk_check.mojo:323:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+== gemm/checks/gemm_int8_apple_chunk_check.mojo [IDENTICAL]  sabotage: LOWBIT_VALUE_FLIP ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the Apple exact-chunk PROBE
+   column: apple
+   geometries: WIDE 64x64 (2x2 simdgroups, 4x4 fragments); ROW 8x128 (1x4 simdgroups, 1x4 fragments)
+   ok chunk 1024 steps (32 windows of 32), bound 1040; the host chain at 1041 steps is 16790288, the integer is 16790289
+ok check_chunk_bound_is_exact_and_tight
+!! GATE FAILED: check_apple_chunk_matches_flat_and_oracle
+   int8 chunk 1x32x32 (chunk vs oracle): 32 of 32 cells differ; first at 0 got 53.32813/0x0x42555001 want 53.328125/0x0x42555000
+   ok ROW == WIDE == flat on 14 shapes
+ok check_apple_chunk_geometries_agree
+   !! int8 chunk planted all-positive 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 2016.1251/0x0x44fc0401 want 2016.125/0x0x44fc0400
+   !! int8 chunk planted all-positive 9x7x1024 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got 2016.1251/0x0x44fc0401 want 2016.125/0x0x44fc0400
+   !! int8 chunk planted all-negative 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got -2016.1251/0x0xc4fc0401 want -2016.125/0x0xc4fc0400
+   !! int8 chunk planted all-negative 9x7x1024 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got -2016.1251/0x0xc4fc0401 want -2016.125/0x0xc4fc0400
+   !! int8 chunk planted cancel-halves 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 9x7x1024 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 2014.1407/0x0x44fbc481 want 2014.1406/0x0x44fbc480
+   !! int8 chunk planted odd-windows 9x7x1024 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got 2014.1407/0x0x44fbc481 want 2014.1406/0x0x44fbc480
+   !! int8 chunk planted checkerboard 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got -2016.1251/0x0xc4fc0401 want -2016.125/0x0xc4fc0400
+   !! int8 chunk planted checkerboard 9x7x1024 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got -2016.1251/0x0xc4fc0401 want -2016.125/0x0xc4fc0400
+   !! int8 chunk planted all-positive 9x7x1025 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 2018.094/0x0x44fc4302 want 2018.0939/0x0x44fc4301
+   !! int8 chunk planted all-positive 9x7x1025 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got 2018.094/0x0x44fc4302 want 2018.0939/0x0x44fc4301
+   !! int8 chunk planted all-negative 9x7x1025 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got -2018.094/0x0xc4fc4302 want -2018.0939/0x0xc4fc4301
+   !! int8 chunk planted all-negative 9x7x1025 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got -2018.094/0x0xc4fc4302 want -2018.0939/0x0xc4fc4301
+   !! int8 chunk planted cancel-halves 9x7x1025 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 9x7x1025 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 9x7x1025 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 2016.0941/0x0x44fc0303 want 2016.094/0x0x44fc0302
+   !! int8 chunk planted odd-windows 9x7x1025 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got 2016.0941/0x0x44fc0303 want 2016.094/0x0x44fc0302
+   !! int8 chunk planted checkerboard 9x7x1025 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got -2018.094/0x0xc4fc4302 want -2018.0939/0x0xc4fc4301
+   !! int8 chunk planted checkerboard 9x7x1025 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got -2018.094/0x0xc4fc4302 want -2018.0939/0x0xc4fc4301
+   !! int8 chunk planted all-positive 3x5x1040 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 2047.6271/0x0x44fff411 want 2047.627/0x0x44fff410
+   !! int8 chunk planted all-positive 3x5x1040 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 2047.6271/0x0x44fff411 want 2047.627/0x0x44fff410
+   !! int8 chunk planted all-negative 3x5x1040 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -2047.6271/0x0xc4fff411 want -2047.627/0x0xc4fff410
+   !! int8 chunk planted all-negative 3x5x1040 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -2047.6271/0x0xc4fff411 want -2047.627/0x0xc4fff410
+   !! int8 chunk planted cancel-halves 3x5x1040 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 3x5x1040 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 3x5x1040 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 2045.6117/0x0x44ffb393 want 2045.6116/0x0x44ffb392
+   !! int8 chunk planted odd-windows 3x5x1040 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 2045.6117/0x0x44ffb393 want 2045.6116/0x0x44ffb392
+   !! int8 chunk planted checkerboard 3x5x1040 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -2047.6271/0x0xc4fff411 want -2047.627/0x0xc4fff410
+   !! int8 chunk planted checkerboard 3x5x1040 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -2047.6271/0x0xc4fff411 want -2047.627/0x0xc4fff410
+   !! int8 chunk planted all-positive 3x5x1041 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 2049.596/0x0x45001989 want 2049.5957/0x0x45001988
+   !! int8 chunk planted all-positive 3x5x1041 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 2049.596/0x0x45001989 want 2049.5957/0x0x45001988
+   !! int8 chunk planted all-negative 3x5x1041 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted all-negative 3x5x1041 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted cancel-halves 3x5x1041 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 3x5x1041 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 3x5x1041 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 2047.565/0x0x44fff215 want 2047.565/0x0x44fff214
+   !! int8 chunk planted odd-windows 3x5x1041 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 2047.565/0x0x44fff215 want 2047.565/0x0x44fff214
+   !! int8 chunk planted checkerboard 3x5x1041 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted checkerboard 3x5x1041 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted all-positive 70x9x2081 WIDE (flat vs oracle): 630 of 630 cells differ; first at 0 got 4097.223/0x0x458009c9 want 4097.2227/0x0x458009c8
+   !! int8 chunk planted all-positive 70x9x2081 ROW (flat vs oracle): 630 of 630 cells differ; first at 0 got 4097.223/0x0x458009c9 want 4097.2227/0x0x458009c8
+   !! int8 chunk planted all-negative 70x9x2081 WIDE (flat vs oracle): 630 of 630 cells differ; first at 0 got -4097.223/0x0xc58009c9 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted all-negative 70x9x2081 ROW (flat vs oracle): 630 of 630 cells differ; first at 0 got -4097.223/0x0xc58009c9 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted cancel-halves 70x9x2081 WIDE (flat vs oracle): 630 of 630 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 70x9x2081 ROW (flat vs oracle): 630 of 630 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 70x9x2081 WIDE (flat vs oracle): 630 of 630 cells differ; first at 0 got 4093.1767/0x0x457fd2d4 want 4093.1765/0x0x457fd2d3
+   !! int8 chunk planted odd-windows 70x9x2081 ROW (flat vs oracle): 630 of 630 cells differ; first at 0 got 4093.1767/0x0x457fd2d4 want 4093.1765/0x0x457fd2d3
+   !! int8 chunk planted checkerboard 70x9x2081 WIDE (flat vs oracle): 630 of 630 cells differ; first at 0 got -4097.223/0x0xc58009c9 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted checkerboard 70x9x2081 ROW (flat vs oracle): 630 of 630 cells differ; first at 0 got -4097.223/0x0xc58009c9 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted all-positive 65x67x4096 WIDE (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 8064.5005/0x0x45fc0401 want 8064.5/0x0x45fc0400
+   !! int8 chunk planted all-positive 65x67x4096 ROW (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 8064.5005/0x0x45fc0401 want 8064.5/0x0x45fc0400
+   !! int8 chunk planted all-negative 65x67x4096 WIDE (flat vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.5005/0x0xc5fc0401 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted all-negative 65x67x4096 ROW (flat vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.5005/0x0xc5fc0401 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted cancel-halves 65x67x4096 WIDE (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 65x67x4096 ROW (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 65x67x4096 WIDE (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 8056.563/0x0x45fbc481 want 8056.5625/0x0x45fbc480
+   !! int8 chunk planted odd-windows 65x67x4096 ROW (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 8056.563/0x0x45fbc481 want 8056.5625/0x0x45fbc480
+   !! int8 chunk planted checkerboard 65x67x4096 WIDE (flat vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.5005/0x0xc5fc0401 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted checkerboard 65x67x4096 ROW (flat vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.5005/0x0xc5fc0401 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted all-positive 1x130x4097 WIDE (flat vs oracle): 130 of 130 cells differ; first at 0 got 8066.469/0x0x45fc13c1 want 8066.4688/0x0x45fc13c0
+   !! int8 chunk planted all-positive 1x130x4097 ROW (flat vs oracle): 130 of 130 cells differ; first at 0 got 8066.469/0x0x45fc13c1 want 8066.4688/0x0x45fc13c0
+   !! int8 chunk planted all-negative 1x130x4097 WIDE (flat vs oracle): 130 of 130 cells differ; first at 0 got -8066.469/0x0xc5fc13c1 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted all-negative 1x130x4097 ROW (flat vs oracle): 130 of 130 cells differ; first at 0 got -8066.469/0x0xc5fc13c1 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted cancel-halves 1x130x4097 WIDE (flat vs oracle): 130 of 130 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 1x130x4097 ROW (flat vs oracle): 130 of 130 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 1x130x4097 WIDE (flat vs oracle): 130 of 130 cells differ; first at 0 got 8058.516/0x0x45fbd421 want 8058.5156/0x0x45fbd420
+   !! int8 chunk planted odd-windows 1x130x4097 ROW (flat vs oracle): 130 of 130 cells differ; first at 0 got 8058.516/0x0x45fbd421 want 8058.5156/0x0x45fbd420
+   !! int8 chunk planted checkerboard 1x130x4097 WIDE (flat vs oracle): 130 of 130 cells differ; first at 0 got -8066.469/0x0xc5fc13c1 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted checkerboard 1x130x4097 ROW (flat vs oracle): 130 of 130 cells differ; first at 0 got -8066.469/0x0xc5fc13c1 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted all-positive 8x129x14336 WIDE (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 28225.752/0x0x46dc8381 want 28225.75/0x0x46dc8380
+   !! int8 chunk planted all-positive 8x129x14336 ROW (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 28225.752/0x0x46dc8381 want 28225.75/0x0x46dc8380
+   !! int8 chunk planted all-negative 8x129x14336 WIDE (flat vs oracle): 1032 of 1032 cells differ; first at 0 got -28225.752/0x0xc6dc8381 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted all-negative 8x129x14336 ROW (flat vs oracle): 1032 of 1032 cells differ; first at 0 got -28225.752/0x0xc6dc8381 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted cancel-halves 8x129x14336 WIDE (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 8x129x14336 ROW (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 8x129x14336 WIDE (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 28197.97/0x0x46dc4bf1 want 28197.969/0x0x46dc4bf0
+   !! int8 chunk planted odd-windows 8x129x14336 ROW (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 28197.97/0x0x46dc4bf1 want 28197.969/0x0x46dc4bf0
+   !! int8 chunk planted checkerboard 8x129x14336 WIDE (flat vs oracle): 1032 of 1032 cells differ; first at 0 got -28225.752/0x0xc6dc8381 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted checkerboard 8x129x14336 ROW (flat vs oracle): 1032 of 1032 cells differ; first at 0 got -28225.752/0x0xc6dc8381 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted all-positive 2x3x131072 WIDE (flat vs oracle): 6 of 6 cells differ; first at 0 got 258064.02/0x0x487c0401 want 258064.0/0x0x487c0400
+   !! int8 chunk planted all-positive 2x3x131072 ROW (flat vs oracle): 6 of 6 cells differ; first at 0 got 258064.02/0x0x487c0401 want 258064.0/0x0x487c0400
+   !! int8 chunk planted all-negative 2x3x131072 WIDE (flat vs oracle): 6 of 6 cells differ; first at 0 got -258064.02/0x0xc87c0401 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted all-negative 2x3x131072 ROW (flat vs oracle): 6 of 6 cells differ; first at 0 got -258064.02/0x0xc87c0401 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted cancel-halves 2x3x131072 WIDE (flat vs oracle): 6 of 6 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 2x3x131072 ROW (flat vs oracle): 6 of 6 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 2x3x131072 WIDE (flat vs oracle): 6 of 6 cells differ; first at 0 got 257810.02/0x0x487bc481 want 257810.0/0x0x487bc480
+   !! int8 chunk planted odd-windows 2x3x131072 ROW (flat vs oracle): 6 of 6 cells differ; first at 0 got 257810.02/0x0x487bc481 want 257810.0/0x0x487bc480
+   !! int8 chunk planted checkerboard 2x3x131072 WIDE (flat vs oracle): 6 of 6 cells differ; first at 0 got -258064.02/0x0xc87c0401 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted checkerboard 2x3x131072 ROW (flat vs oracle): 6 of 6 cells differ; first at 0 got -258064.02/0x0xc87c0401 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted all-positive 1x1x1041 WIDE (flat vs oracle): 1 of 1 cells differ; first at 0 got 2049.596/0x0x45001989 want 2049.5957/0x0x45001988
+   !! int8 chunk planted all-positive 1x1x1041 ROW (flat vs oracle): 1 of 1 cells differ; first at 0 got 2049.596/0x0x45001989 want 2049.5957/0x0x45001988
+   !! int8 chunk planted all-negative 1x1x1041 WIDE (flat vs oracle): 1 of 1 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted all-negative 1x1x1041 ROW (flat vs oracle): 1 of 1 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted cancel-halves 1x1x1041 WIDE (flat vs oracle): 1 of 1 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 1x1x1041 ROW (flat vs oracle): 1 of 1 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 1x1x1041 WIDE (flat vs oracle): 1 of 1 cells differ; first at 0 got 2047.565/0x0x44fff215 want 2047.565/0x0x44fff214
+   !! int8 chunk planted odd-windows 1x1x1041 ROW (flat vs oracle): 1 of 1 cells differ; first at 0 got 2047.565/0x0x44fff215 want 2047.565/0x0x44fff214
+   !! int8 chunk planted checkerboard 1x1x1041 WIDE (flat vs oracle): 1 of 1 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted checkerboard 1x1x1041 ROW (flat vs oracle): 1 of 1 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   planted: 100 cases, 100 failed
+!! GATE FAILED: check_apple_chunk_planted_worst_cases
+   100 of 100 planted cases differ; first: int8 chunk planted all-positive 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 2016.1251/0x0x44fc0401 want 2016.125/0x0x44fc0400
+== 4 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 of 4 gates failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

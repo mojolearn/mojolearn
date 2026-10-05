@@ -1,0 +1,15 @@
+box=h100 name=unit
+started=2026-09-29T03:55:52Z
+tree_head=a4b906e81e351b0c6e56b1dd3e7c1482e9285321 dirty_files=19
+machine=NVIDIA H100 NVL, 580.159.04
+arms=fp32.v1,int8i32.v1.flat,int8i32.v1.mma*,probe.int8.mma*,convert.int8.quantize.a.par,convert.int8.pack.b.par,inference.int8i32.v1.tuned,training.int8i32.v1.tuned,inference.4x.int8i32.v1.tuned,training.4x.int8i32.v1.tuned only=all repeats=default mac_budget=default identity_only=0
+build exit=0
+build-sabotage exit=0
+cold started=2026-09-29T03:57:27Z
+cold exit=1 (the first run after the build: its times are never read)
+price started=2026-09-29T03:57:29Z
+price exit=1 (the run of record)
+cold-vs-record exit=1 (0: the two runs' digests agree at every arm and shape)
+price-sabotage exit=1 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=1 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T03:57:33Z

@@ -1,0 +1,19 @@
+2026-09-29T02:43:33Z
+== m3ultra-b: grow the APFS container to the full EBS volume
+/dev/disk5s2s1   300Gi    12Gi   275Gi     5%    459k  2.9G    0%   /
+== m3ultra-b: toolchain (must match the laptop: Xcode 26.6, Metal toolchain 17.6.109)
+26.7
+Apple M3 Ultra
+/Library/Developer/CommandLineTools
+xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance
+xcrun: error: unable to find utility "metal", not a developer tool or in PATH
+== m3ultra-b: pixi
+pixi 0.81.0
+== m3ultra-b: bare repo (the laptop PUSHES here; the org disables deploy keys, so no GitHub credential lives on this Mac)
+BARE_OK
+m3ultra-b: pushed origin/main
+== m3ultra-b: worktree + pixi install
+PIXI_OK
+45464ced2
+bootstrap_exit=0
+2026-09-29T02:45:57Z

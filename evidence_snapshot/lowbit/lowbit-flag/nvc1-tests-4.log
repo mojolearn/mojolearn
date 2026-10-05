@@ -1,0 +1,60 @@
+nvidia_central: lowbit-flag on GPU(s) 1 of nvc1 (r29w610uuwkfwy)
+installed package: /root/lowbit-flag-venv/lib/python3.14/site-packages/mojolearn
+mojolearn        0.8.25
+mojolearn-amd    0.8.25
+mojolearn-nvidia 0.8.25
+numpy            2.5.3
+pytest           9.1.1
+BASE DIFFERS FROM RELEASE  _gemm_profile.py
+BASE DIFFERS FROM RELEASE  __init__.py
+BASE DIFFERS FROM RELEASE  _samba_impl.py
+BASE DIFFERS FROM RELEASE  models/causal_lm.py
+BASE DIFFERS FROM RELEASE  models/parallel_causal_lm.py
+fatal: path 'python/mojolearn/_gemm_profile.py' exists on disk, but not in '45464ced2e5ec9c5f858fe17030ec6ba9bdd4698'
+BASE DIFFERS FROM RELEASE  tests/test_gemm_profile.py
+fatal: path 'python/mojolearn/tests/test_gemm_profile.py' exists on disk, but not in '45464ced2e5ec9c5f858fe17030ec6ba9bdd4698'
+import ok 0.8.25 fp32.v1 identical
+import_exit=0
+........................................................................ [ 75%]
+........................                                                 [100%]
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteLMSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteParallelTrainer has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteOffloadedReplay has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteModelPool has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba1DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba2DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerDecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _CausalLMSession has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _BpeHandle has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _BpeTrainedHandle has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+96 passed, 12 warnings in 2.26s
+pytest_exit=0
+run_exit=0

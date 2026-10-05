@@ -1,0 +1,21 @@
+{
+ "transformers": "4.46.3",
+ "windows": 4,
+ "gate": {
+  "max_abs_delta_mean_nll": 1e-05,
+  "min_top1_agreement": 0.999
+ },
+ "forward": {
+  "max_abs_logit_diff": 8.463859558105469e-05,
+  "delta_mean_nll": -4.867919023432421e-08,
+  "top1_agreement": 1.0
+ },
+ "forward_passes": true,
+ "sabotage_rope_theta_10000": {
+  "max_abs_logit_diff": 8.171164512634277,
+  "delta_mean_nll": 0.038002251371553664,
+  "top1_agreement": 0.9315068493150684
+ },
+ "sabotage_fails": true,
+ "verdict": "PASS"
+}

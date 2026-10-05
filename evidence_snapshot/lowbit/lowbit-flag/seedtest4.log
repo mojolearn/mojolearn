@@ -1,0 +1,17 @@
+2026-09-29T02:55:23Z
+45464ced2e5ec9c5f858fe17030ec6ba9bdd4698
+gpuq: dispatcher up, lease backstop up
+dev_pod: GitHub refused the box; shipping a4b906e81e351b0c6e56b1dd3e7c1482e9285321 from this checkout: 5 objects (less the tree of the HEAD the box holds: 45464ced2e5ec9c5f858fe17030ec6ba9bdd4698)
+dev_pod: patch-synced 1d28ecc54+worktree -> r29w610uuwkfwy:/root/mojolearn-lowbit-seedtest2 (105479 bytes over merge base a4b906e81)
+nvidia_central: lane lowbit-seedtest2 is on nvc1 (2 GPU slots, NVIDIA GeForce RTX 4090); submit with: tools/nvidia_central.sh submit lowbit-seedtest2 <script>
+sync_exit=0
+2026-09-29T02:55:47Z
+box HEAD a4b906e81e351b0c6e56b1dd3e7c1482e9285321
+shallow: 45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 a4b906e81e351b0c6e56b1dd3e7c1482e9285321
+TREE_EQUALS_LAPTOP_TREE
+26414
+ M tools/dev_pod.sh
+?? bench/lowbit_quality/
+?? docs/lanes/LOWBIT_UNITS_PLAN.md
+?? docs/lanes/progress/lowbit-quality.md
+check_exit=0

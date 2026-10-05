@@ -1,0 +1,7 @@
+269329 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70db00000000, nodemask=1)
+Imported from /tmp/lowbit-mma-speed-ptx/ptx_driver.mojo:7:
+./gemm/checks/gemm_int8_mma_tuned.mojo:543:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here

@@ -1,0 +1,478 @@
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:148:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:145:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3617:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    p: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:148:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:250:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:148:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:250:59: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:148:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:252:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:148:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:252:72: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3047:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                             ~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3047:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                        ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3047:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3047:81: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                                           ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3048:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                             ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3048:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3048:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3048:85: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                               ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3699:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3852:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[sg] = ea0
+            ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3853:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[NSG + sg] = eb0
+            ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3862:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var atc = at + cur * ASZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3863:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var btc = bt + cur * BSZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3864:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var wmc = wmin + cur * 2 * NSG
+                  ~~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3871:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[sg] = ea
+                ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3872:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[NSG + sg] = eb
+                ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3881:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bea = min(bea, wmc[q])
+                           ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3882:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            beb = min(beb, wmc[NSG + q])
+                           ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3893:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3893:64: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3895:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3895:77: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3906:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var av = atc[p * AST + (sgm * FM + fm) * 8 + frow]
+                             ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3909:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var bv = btc[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
+                                     ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3916:81: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ean = _admit_warp_min(_amma_stage[BM, KB, NT, True, AST](at + nxt * ASZ, ra, tid, a_ofast))
+                                                                             ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3917:82: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ebn = _admit_warp_min(_amma_stage[BN, KB, NT, False, BST](bt + nxt * BSZ, rb, tid, b_ofast))
+                                                                              ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3919:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + sg] = ean
+                    ~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3920:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + NSG + sg] = ebn
+                    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3933:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    fl[pe] = part[pe]
+                    ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3943:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            outv[oe] = fl[oe]
+                       ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3957:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[Int(block_idx.y) * m * n + gi * n + gj] = outv[2 * (fm * FN + fq) + e]
+                        ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3959:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[cbase + gi * n + gj] = ftz(outv[2 * (fm * FN + fq) + e])
+                        ~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7254:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7255:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7287:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7288:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7370:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7371:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7386:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var raa = as_.load[width=RPT, alignment=ALIGN](abase + ca * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7387:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rba = bs_.load[width=CPT, alignment=ALIGN](bbase + ca * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7393:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7394:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7420:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7421:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:148:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:182:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + e) * ST + r] = v[e]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:148:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:184:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:148:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:184:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:148:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:184:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3669:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3669:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3671:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3677:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q]
+                                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3683:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3683:51: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3685:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3691:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q * k_stride]
+                                            ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3719:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3719:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3719:37: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~~^~~~~~
+                                     unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3722:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(o4 + q) * ST + pp] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3728:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + q) * ST + o] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3730:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3730:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:142:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3730:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+== bench/gemm_lowbit_price_main.mojo [IDENTICAL] ==
+column apple
+profiles fp32.v1, bf16f32.v1, int8i32.v1
+int8 dispatch: flat (no int8 matrix unit on this column)
+sabotage: price ONE_BIT_OF_THE_LAST_CELL  lowbit none  apple chunk none
+repeats 1  mac budget 34359738368  only qkv
+EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one synchronize per sample; the median of the timed calls is reported and the minimum beside it.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.fp32.v1.device 4.274
+   device-bits lowbit.llama8b.qkv.t1.fp32.v1.device 4.274/0x4011189374bc6a7f
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 4.2740 4.2740 3.9254 GMAC/s 0x920cdc138650a70a plan=0
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.bf16f32.v1.fused.device 4.115
+   device-bits lowbit.llama8b.qkv.t1.bf16f32.v1.fused.device 4.115/0x401075c28f5c28f6
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.fused 4.1150 4.1150 4.0771 GMAC/s 0xcd39ead6e6d7194d dispatched
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.bf16f32.v1.widen.device 5.397
+   device-bits lowbit.llama8b.qkv.t1.bf16f32.v1.widen.device 5.397/0x401596872b020c4a
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.widen 5.3970 5.3970 3.1086 GMAC/s 0xcd39ead6e6d7194d not-dispatched(cells<=16384)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.flat.device 3.656
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.flat.device 3.656/0x400d3f7ced916873
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 3.6560 3.6560 4.5890 GMAC/s 0x8a9226b93e43091a dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.applechunk.device 1.236
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.applechunk.device 1.236/0x3ff3c6a7ef9db22d
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.applechunk 1.2360 1.2360 13.5738 GMAC/s 0x8a9226b93e43091a probe,geometry=1
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.quantize.a.device 1.93
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.quantize.a.device 1.93/0x3ffee147ae147ae1
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 1.9300 1.9300 0.0021 Gelem/s 0x542798bda1472383 per-call
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.pack.b.device 5.064
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.pack.b.device 5.064/0x40144189374bc6a8
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 5.0640 5.0640 3.3130 Gelem/s 0x890ef69c534d0ca9 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.bf16.pack.b.device 1.706
+   device-bits lowbit.llama8b.qkv.t1.convert.bf16.pack.b.device 1.706/0x3ffb4bc6a7ef9db2
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.pack.b 1.7060 1.7060 9.8342 Gelem/s 0x24efec638bb6b7b8 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.bf16.widen.b.device 1.304
+   device-bits lowbit.llama8b.qkv.t1.convert.bf16.widen.b.device 1.304/0x3ff4dd2f1a9fbe77
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.widen.b 1.3040 1.3040 12.8660 Gelem/s 0xd2c2d86392622172 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.dequantize.b.device 5.503
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.dequantize.b.device 5.503/0x401603126e978d50
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.dequantize.b 5.5030 5.5030 3.0487 Gelem/s 0x2fd9ed536fd82172 per-call-when-materialized
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.fp32.v1.device 3.14
+   device-bits lowbit.llama8b.qkv.t8.fp32.v1.device 3.14/0x40091eb851eb851f
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 3.1400 3.1400 42.7445 GMAC/s 0xd5677c8a13939556 plan=20
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.bf16f32.v1.fused.device 15.08
+   device-bits lowbit.llama8b.qkv.t8.bf16f32.v1.fused.device 15.08/0x402e28f5c28f5c29
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.fused 15.0800 15.0800 8.9004 GMAC/s 0xf36fe0a8828cee26 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.bf16f32.v1.widen.device 2.527
+   device-bits lowbit.llama8b.qkv.t8.bf16f32.v1.widen.device 2.527/0x4004374bc6a7ef9e
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.widen 2.5270 2.5270 53.1135 GMAC/s 0xf36fe0a8828cee26 dispatched
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.flat.device 10.149
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.flat.device 10.149/0x40244c49ba5e353f
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 10.1490 10.1490 13.2247 GMAC/s 0x484bd10aabe66d32 dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.applechunk.device 1.29
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.applechunk.device 1.29/0x3ff4a3d70a3d70a4
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.applechunk 1.2900 1.2900 104.0448 GMAC/s 0x484bd10aabe66d32 probe,geometry=1
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.quantize.a.device 1.394
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.quantize.a.device 1.394/0x3ff64dd2f1a9fbe7
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 1.3940 1.3940 0.0235 Gelem/s 0x9fe9a836780c4372 per-call
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.pack.b.device 3.844
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.pack.b.device 3.844/0x400ec083126e978d
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 3.8440 3.8440 4.3645 Gelem/s 0xfedb09cb32b7d192 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.bf16.pack.b.device 1.569
+   device-bits lowbit.llama8b.qkv.t8.convert.bf16.pack.b.device 1.569/0x3ff91a9fbe76c8b4
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.pack.b 1.5690 1.5690 10.6929 Gelem/s 0xdccc5b093a080e05 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.bf16.widen.b.device 1.171
+   device-bits lowbit.llama8b.qkv.t8.convert.bf16.widen.b.device 1.171/0x3ff2bc6a7ef9db23
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.widen.b 1.1710 1.1710 14.3273 Gelem/s 0x944a5ca41b4d2172 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.dequantize.b.device 4.135
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.dequantize.b.device 4.135/0x40108a3d70a3d70a
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.dequantize.b 4.1350 4.1350 4.0574 Gelem/s 0x24697057b3da2172 per-call-when-materialized
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.fp32.v1.device 37.597
+   device-bits lowbit.llama8b.qkv.t512.fp32.v1.device 37.597/0x4042cc6a7ef9db23
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 37.5970 37.5970 228.4739 GMAC/s 0x67d3da40546b84ff plan=20
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.bf16f32.v1.fused.device 514.262
+   device-bits lowbit.llama8b.qkv.t512.bf16f32.v1.fused.device 514.262/0x408012189374bc6a
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.fused 514.2620 514.2620 16.7034 GMAC/s 0x4abd78a5b1022032 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.bf16f32.v1.widen.device 18.246
+   device-bits lowbit.llama8b.qkv.t512.bf16f32.v1.widen.device 18.246/0x40323ef9db22d0e5
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.widen 18.2460 18.2460 470.7845 GMAC/s 0x4abd78a5b1022032 dispatched
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.flat.device 514.434
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.flat.device 514.434/0x40801378d4fdf3b6
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 514.4340 514.4340 16.6978 GMAC/s 0xa5f2cd1f1b9a0d0a dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.applechunk.device 8.577
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.applechunk.device 8.577/0x4021276c8b439581
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.applechunk 8.5770 8.5770 1001.5081 GMAC/s 0xa5f2cd1f1b9a0d0a probe,geometry=0
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.quantize.a.device 3.499
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.quantize.a.device 3.499/0x400bfdf3b645a1cb
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 3.4990 3.4990 0.5994 Gelem/s 0xa4c29f2d55db77d9 per-call
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.pack.b.device 3.863
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.pack.b.device 3.863/0x400ee76c8b439581
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 3.8630 3.8630 4.3431 Gelem/s 0xcd5a4c6ba3ec5f67 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.bf16.pack.b.device 1.09
+   device-bits lowbit.llama8b.qkv.t512.convert.bf16.pack.b.device 1.09/0x3ff170a3d70a3d71
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.pack.b 1.0900 1.0900 15.3919 Gelem/s 0xaef2db473a8e2bc3 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.bf16.widen.b.device 0.727
+   device-bits lowbit.llama8b.qkv.t512.convert.bf16.widen.b.device 0.727/0x3fe74395810624dd
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.widen.b 0.7270 0.7270 23.0773 Gelem/s 0xc8e5233510392172 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.dequantize.b.device 3.693
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.dequantize.b.device 3.693/0x400d8b4395810625
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.dequantize.b 3.6930 3.6930 4.5430 Gelem/s 0x1798a22eac742172 per-call-when-materialized
+
+== done [IDENTICAL]: 3 shapes ==

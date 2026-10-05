@@ -1,0 +1,23 @@
+box=h100
+started=2026-09-29T03:55:39Z
+tree_head=a4b906e81e351b0c6e56b1dd3e7c1482e9285321 dirty_files=19
+machine=NVIDIA H100 NVL, 580.159.04
+mojo_cache=/tmp/lowbit-mma-speed-ptx/mojo-cache (private)
+build exit=0
+run exit=0
+PTX_PROBE label=reference regs=46 local=0 shared=0
+PTX_PROBE label=direct_reference_loads regs=46 local=0 shared=0
+PTX_PROBE label=direct_aligned_loads regs=51 local=0 shared=0
+PTX_PROBE label=direct_scalar_acc regs=51 local=0 shared=0
+PTX_PROBE label=probe_loads_hoisted regs=40 local=0 shared=0
+PTX_PROBE label=staged_w16_b32_k32_l4 regs=40 local=0 shared=3072
+PTX_PROBE label=staged_w64_b128_k32_l4 regs=250 local=0 shared=12288
+PTX_PROBE label=staged_w64_b128_k64_l16 regs=247 local=512 shared=20480
+PTX_PROBE label=staged_w64_b128x256_k64_l16 regs=238 local=0 shared=30720
+PTX_PROBE label=staged_w32_b64_k64_l16 regs=114 local=0 shared=10240
+PTX_PROBE label=staged_w32_b128_k64_l16 regs=63 local=0 shared=20480
+PTX_PROBE label=staged_w16x32_b128_k64_l16 regs=47 local=0 shared=20480
+PTX_PROBE label=quantize_reference regs=23 local=0 shared=0
+PTX_PROBE label=quantize_par_256 regs=31 local=0 shared=1024
+PTX_PROBE_DONE
+finished=2026-09-29T03:55:52Z

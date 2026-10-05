@@ -1,0 +1,5 @@
+int15	0	14s	expected=pass	held=yes
+int15-force-flat	0	17s	expected=pass	held=yes
+int15-sabotage	1	18s	expected=fail	held=yes
+int15-host-sabotage	1	18s	expected=fail	held=yes
+int15-piece-sabotage	1	17s	expected=fail	held=yes

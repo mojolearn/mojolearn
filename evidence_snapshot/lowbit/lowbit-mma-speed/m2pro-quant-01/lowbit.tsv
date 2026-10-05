@@ -1,0 +1,276 @@
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 1.7290 1.4800 9.7034 GMAC/s 0x920cdd138650a8bd plan=0
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 1.7990 1.3310 9.3259 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.applechunk 1.2680 0.7680 13.2312 GMAC/s 0x8a9227b93e430acd probe,geometry=1
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 1.8350 1.3030 0.0022 Gelem/s 0x54279cbda1444726 per-call
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 3.8320 3.7600 4.3782 Gelem/s 0x305b1a502296caf6 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1 2.5280 2.4960 6.6366 GMAC/s 0x8a9227b93e430acd quantize.a+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.applechunk 2.4040 1.9210 6.9789 GMAC/s 0x8a9227b93e430acd quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1 6.1550 6.0850 2.7258 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.applechunk 6.0560 5.5530 2.7703 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+probe
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a.par 0.1670 0.1630 0.0245 Gelem/s 0x54279cbda1444726 per-call,block=1
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b.par 0.6700 0.6660 25.0406 Gelem/s 0x305b1a502296caf6 once-per-weight,block=1
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.parq 1.3620 1.3480 12.3181 GMAC/s 0x8a9227b93e430acd quantize.a.par+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.parq 1.8910 1.8570 8.8721 GMAC/s 0x8a9227b93e430acd quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.applechunk.parq 1.2630 0.7830 13.2836 GMAC/s 0x8a9227b93e430acd quantize.a.par+probe
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.applechunk.parq 1.8860 1.3130 8.8957 GMAC/s 0x8a9227b93e430acd quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 1.4570 1.4440 92.1192 GMAC/s 0xd5677d8a13939709 plan=20
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 9.7060 9.6910 13.8283 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.applechunk 0.8250 0.7950 162.6882 GMAC/s 0x484bd20aabe66ee5 probe,geometry=1
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 1.3670 1.3360 0.0240 Gelem/s 0xbd0b5aed2b83cb45 per-call
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 3.8040 3.7520 4.4104 Gelem/s 0xa8ce17326c01345 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1 10.9490 10.8970 12.2584 GMAC/s 0x484bd20aabe66ee5 quantize.a+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.applechunk 2.0130 1.9950 66.6755 GMAC/s 0x484bd20aabe66ee5 quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1 14.5120 14.4990 9.2487 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.applechunk 5.6480 5.6140 23.7638 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+probe
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a.par 0.1710 0.1660 0.1916 Gelem/s 0xbd0b5aed2b83cb45 per-call,block=1
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b.par 0.6780 0.6710 24.7452 Gelem/s 0xa8ce17326c01345 once-per-weight,block=1
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.parq 9.7420 9.7090 13.7772 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.parq 10.2940 10.2740 13.0384 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.applechunk.parq 0.8290 0.8190 161.9032 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+probe
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.applechunk.parq 1.3340 1.3130 100.6130 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 17.6670 17.6380 486.2135 GMAC/s 0x67d3d940546b834c plan=20
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 515.0300 514.3810 16.6785 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.applechunk 8.6050 8.5350 998.2492 GMAC/s 0xa5f2ce1f1b9a0ebd probe,geometry=0
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 3.4900 3.4400 0.6009 Gelem/s 0xe8bb3ad105a4ae26 per-call
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 3.8320 3.7840 4.3782 Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1 517.8240 517.6260 16.5885 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.applechunk 11.8110 11.7930 727.2826 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1 521.6630 520.7970 16.4664 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.applechunk 15.4370 15.4020 556.4510 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+probe
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a.par 0.2910 0.2610 7.2067 Gelem/s 0xe8bb3ad105a4ae26 per-call,block=1
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b.par 0.7030 0.6900 23.8652 Gelem/s 0xd5ea46fdcb251db4 once-per-weight,block=1
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.parq 515.2490 514.4000 16.6714 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.parq 515.3420 514.9900 16.6684 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.applechunk.parq 8.6700 8.6600 990.7652 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+probe
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.applechunk.parq 9.1960 9.1430 934.0947 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 5.2820 5.2120 11.1170 GMAC/s 0x4965ea6af2ff5e61 plan=0
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 5.0130 4.9750 11.7136 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.applechunk 2.0560 2.0060 28.5604 GMAC/s 0xff302668595b02d probe,geometry=1
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a 1.3680 1.3290 0.0030 Gelem/s 0x1343c750c1ded02 per-call
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b 13.6780 13.6680 4.2930 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1 6.1820 6.1780 9.4986 GMAC/s 0xff302668595b02d quantize.a+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1.applechunk 3.1740 3.1680 18.5004 GMAC/s 0xff302668595b02d quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1 19.5880 19.5460 2.9978 GMAC/s 0xff302668595b02d quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1.applechunk 16.6190 16.6110 3.5333 GMAC/s 0xff302668595b02d quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a.par 0.2050 0.1920 0.0200 Gelem/s 0x1343c750c1ded02 per-call,block=1
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b.par 1.9620 1.9230 29.9288 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight,block=1
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1.parq 5.0260 4.9500 11.6833 GMAC/s 0xff302668595b02d quantize.a.par+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1.parq 6.7490 6.7410 8.7006 GMAC/s 0xff302668595b02d quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1.applechunk.parq 2.0150 2.0090 29.1416 GMAC/s 0xff302668595b02d quantize.a.par+probe
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1.applechunk.parq 3.7350 3.7260 15.7216 GMAC/s 0xff302668595b02d quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 4.0660 4.0180 115.5342 GMAC/s 0x7b30465d325906e plan=20
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 29.3530 29.2910 16.0039 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.applechunk 2.0280 2.0020 231.6381 GMAC/s 0xbd4b3a783f9d9a0d probe,geometry=1
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a 1.3880 1.3650 0.0236 Gelem/s 0x5e46321f760ef85d per-call
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b 13.6780 13.6440 4.2930 Gelem/s 0xa9e079afde494e3d once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1 30.5170 30.1100 15.3935 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1.applechunk 3.2350 3.1890 145.2124 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1 43.9500 43.5850 10.6886 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1.applechunk 16.7040 16.6550 28.1227 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a.par 0.1880 0.1690 0.1743 Gelem/s 0x5e46321f760ef85d per-call,block=1
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b.par 1.9130 1.9130 30.6954 Gelem/s 0xa9e079afde494e3d once-per-weight,block=1
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1.parq 29.3570 28.9540 16.0017 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1.parq 31.1570 30.7510 15.0773 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1.applechunk.parq 2.0230 2.0160 232.2106 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+probe
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1.applechunk.parq 3.7450 3.7410 125.4371 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 60.6080 60.4360 496.0528 GMAC/s 0x27a166783c45f9f0 plan=20
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 1799.1610 1798.6340 16.7104 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.applechunk 27.9960 27.9480 1073.8952 GMAC/s 0x220ff5fe96f5ef55 probe,geometry=0
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a 3.4910 3.4800 0.6007 Gelem/s 0x8c503fb082856006 per-call
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b 13.7560 13.7180 4.2687 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1 1802.6860 1801.9650 16.6778 GMAC/s 0x220ff5fe96f5ef55 quantize.a+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1.applechunk 31.1530 31.1390 965.0682 GMAC/s 0x220ff5fe96f5ef55 quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1 1815.8590 1815.5380 16.5568 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1.applechunk 44.6220 44.6020 673.7657 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a.par 0.3110 0.2750 6.7433 Gelem/s 0x8c503fb082856006 per-call,block=1
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b.par 1.9550 1.9050 30.0359 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight,block=1
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1.parq 1799.1160 1798.8600 16.7109 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1.parq 1800.9390 1800.7690 16.6939 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1.applechunk.parq 28.0780 27.9700 1070.7590 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+probe
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1.applechunk.parq 29.7310 29.7210 1011.2264 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 5.5590 5.5370 10.5631 GMAC/s 0x4efb8e54c724fa9 plan=0
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 4.4200 4.4100 13.2851 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.applechunk 2.4900 2.4360 23.5824 GMAC/s 0x1ffdde3ffffb72c9 probe,geometry=1
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a 4.2850 4.2790 0.0033 Gelem/s 0x160d734878c0f458 per-call
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b 13.9070 13.8610 4.2224 Gelem/s 0x31274090cc79ba2f once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1 8.4790 8.4380 6.9254 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1.applechunk 6.5380 6.5010 8.9814 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1 22.0850 22.0440 2.6588 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1.applechunk 20.1500 20.1330 2.9142 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a.par 0.2380 0.2010 0.0602 Gelem/s 0x160d734878c0f458 per-call,block=1
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b.par 2.1720 2.1630 27.0351 Gelem/s 0x31274090cc79ba2f once-per-weight,block=1
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1.parq 4.3770 4.3670 13.4156 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1.parq 6.4240 6.4010 9.1408 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1.applechunk.parq 2.4720 2.4620 23.7541 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+probe
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1.applechunk.parq 4.4100 4.3950 13.3153 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 4.9560 4.9100 94.7865 GMAC/s 0xfb21004541ae3e8e plan=20
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 33.8750 33.8320 13.8675 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.applechunk 2.4520 2.4220 191.5832 GMAC/s 0x694aafd520fdadad probe,geometry=1
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a 4.4040 4.3890 0.0260 Gelem/s 0xbb4f2a7232392bfe per-call
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b 13.8780 13.8590 4.2312 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1 38.1280 38.0720 12.3207 GMAC/s 0x694aafd520fdadad quantize.a+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1.applechunk 6.6460 6.6280 70.6834 GMAC/s 0x694aafd520fdadad quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1 51.7440 51.6830 9.0786 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1.applechunk 20.3210 20.2340 23.1171 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a.par 0.2020 0.1750 0.5678 Gelem/s 0xbb4f2a7232392bfe per-call,block=1
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b.par 2.2060 2.1950 26.6184 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight,block=1
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1.parq 33.9150 33.8740 13.8512 GMAC/s 0x694aafd520fdadad quantize.a.par+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1.parq 35.9350 35.9100 13.0725 GMAC/s 0x694aafd520fdadad quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1.applechunk.parq 2.4730 2.4570 189.9563 GMAC/s 0x694aafd520fdadad quantize.a.par+probe
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1.applechunk.parq 4.4230 4.3960 106.2089 GMAC/s 0x694aafd520fdadad quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 65.3300 64.7400 460.1985 GMAC/s 0x4743c97cb961339e plan=20
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 1828.9250 1828.6400 16.4385 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.applechunk 30.0450 29.9990 1000.6580 GMAC/s 0x6120545eacb068ad probe,geometry=0
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a 12.0070 11.9970 0.6113 Gelem/s 0x903f6ff84c6082 per-call
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b 13.8850 13.8740 4.2290 Gelem/s 0xa046020a81d05746 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1 1840.4820 98.0470 16.3353 GMAC/s 0x6120545eacb068ad quantize.a+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1.applechunk 41.7750 41.7530 719.6833 GMAC/s 0x6120545eacb068ad quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1 1854.6970 1854.2410 16.2101 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1.applechunk 55.4460 55.3640 542.2352 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a.par 0.4730 0.4680 15.5180 Gelem/s 0x903f6ff84c6082 per-call,block=1
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b.par 2.2180 2.2030 26.4744 Gelem/s 0xa046020a81d05746 once-per-weight,block=1
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1.parq 1829.1690 1828.8600 16.4363 GMAC/s 0x6120545eacb068ad quantize.a.par+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1.parq 1831.3970 1830.8170 16.4163 GMAC/s 0x6120545eacb068ad quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1.applechunk.parq 30.2840 30.2760 992.7609 GMAC/s 0x6120545eacb068ad quantize.a.par+probe
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1.applechunk.parq 32.2940 32.2640 930.9708 GMAC/s 0x6120545eacb068ad quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 33.2740 32.9990 15.7882 GMAC/s 0xcdc134cbce391535 plan=0
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 32.6680 32.5760 16.0811 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.applechunk 11.9560 11.8930 43.9392 GMAC/s 0xe0222b2f9de835ed probe,geometry=1
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a 1.3670 1.3510 0.0030 Gelem/s 0x67d2e298b047bf2b per-call
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b 96.3320 96.1290 5.4534 Gelem/s 0x1c75800d0b1054bd once-per-weight
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1 33.7620 33.6900 15.5600 GMAC/s 0xe0222b2f9de835ed quantize.a+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1.applechunk 13.0830 13.0680 40.1541 GMAC/s 0xe0222b2f9de835ed quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1 130.1680 129.8140 4.0358 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1.applechunk 109.2750 108.9050 4.8075 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+probe
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a.par 0.2210 0.2130 0.0185 Gelem/s 0x67d2e298b047bf2b per-call,block=1
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b.par 15.7610 15.7360 33.3314 Gelem/s 0x1c75800d0b1054bd once-per-weight,block=1
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1.parq 32.6280 32.5760 16.1008 GMAC/s 0xe0222b2f9de835ed quantize.a.par+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1.parq 48.1770 48.1250 10.9043 GMAC/s 0xe0222b2f9de835ed quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1.applechunk.parq 11.9550 11.8910 43.9428 GMAC/s 0xe0222b2f9de835ed quantize.a.par+probe
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1.applechunk.parq 27.4540 27.4270 19.1352 GMAC/s 0xe0222b2f9de835ed quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 33.3850 33.2410 125.8857 GMAC/s 0x3ebab59d0da21444 plan=20
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 252.3620 251.8160 16.6534 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.applechunk 11.8770 11.8500 353.8514 GMAC/s 0x8151fd05ff287a5d probe,geometry=1
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a 1.3930 1.3640 0.0235 Gelem/s 0x443be8ad16d189a3 per-call
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b 96.2280 95.7270 5.4593 Gelem/s 0x8e01af3f075298bb once-per-weight
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1 253.6820 252.9530 16.5668 GMAC/s 0x8151fd05ff287a5d quantize.a+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1.applechunk 13.0580 13.0280 321.8481 GMAC/s 0x8151fd05ff287a5d quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1 349.7160 349.1310 12.0174 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1.applechunk 109.0950 108.4020 38.5232 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+probe
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a.par 0.2230 0.1990 0.1469 Gelem/s 0x443be8ad16d189a3 per-call,block=1
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b.par 15.7350 15.7210 33.3865 Gelem/s 0x8e01af3f075298bb once-per-weight,block=1
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1.parq 252.4980 252.0110 16.6445 GMAC/s 0x8151fd05ff287a5d quantize.a.par+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1.parq 268.0530 267.3580 15.6786 GMAC/s 0x8151fd05ff287a5d quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1.applechunk.parq 11.8830 11.8630 353.6727 GMAC/s 0x8151fd05ff287a5d quantize.a.par+probe
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1.applechunk.parq 27.3770 27.3530 153.5118 GMAC/s 0x8151fd05ff287a5d quantize.a.par+pack.b.par+probe
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 67.6090 67.4850 497.2939 GMAC/s 0x84fd143bb625cf70 plan=20
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 2012.2620 2011.9600 16.7083 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.applechunk 31.3170 31.1670 1073.5875 GMAC/s 0xaae4f3d3c69453cd probe,geometry=0
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a 3.4880 3.4430 0.6012 Gelem/s 0xfd89ee79d025dda7 per-call
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b 13.8730 13.8670 4.7334 Gelem/s 0xcc187b17bc36366d once-per-weight
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1 2015.5610 2014.7310 16.6810 GMAC/s 0xaae4f3d3c69453cd quantize.a+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1.applechunk 34.3300 34.3190 979.3633 GMAC/s 0xaae4f3d3c69453cd quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1 2029.0570 2028.6950 16.5700 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1.applechunk 47.9700 47.9230 700.8868 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+probe
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a.par 0.3070 0.2890 6.8311 Gelem/s 0xfd89ee79d025dda7 per-call,block=1
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b.par 2.1640 2.1600 30.3452 Gelem/s 0xcc187b17bc36366d once-per-weight,block=1
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1.parq 2012.3480 2012.2450 16.7076 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1.parq 2014.5260 2014.3840 16.6896 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1.applechunk.parq 31.2510 31.1930 1075.8549 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+probe
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1.applechunk.parq 33.3360 33.1470 1008.5655 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+pack.b.par+probe

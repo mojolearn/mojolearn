@@ -1,0 +1,204 @@
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 0.0737 0.0718 227.5340 GMAC/s 0x920cdd138650a8bd plan=13
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.fused 0.7918 0.7899 21.1884 GMAC/s 0xcd39e9d6e6d7179a dispatched
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.widen 0.1245 0.1198 134.7871 GMAC/s 0xcd39e9d6e6d7179a not-dispatched(cells<=16384)
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 0.6663 0.6645 25.1804 GMAC/s 0x8a9227b93e430acd not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma 0.1591 0.1556 105.4607 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 0.4892 0.4881 0.0084 Gelem/s 0x54279cbda1444726 per-call
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 2.6705 2.6580 6.2824 Gelem/s 0x305b1a502296caf6 once-per-weight
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.pack.b 0.0640 0.0636 262.2956 Gelem/s 0x24efed638bb6b96b once-per-weight
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.widen.b 0.0626 0.0618 267.9510 Gelem/s 0xd2c2d96392622325 per-call-when-materialized
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int8.dequantize.b 0.0794 0.0788 211.2574 Gelem/s 0x2fd9ee536fd82325 per-call-when-materialized
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.bf16f32.v1 0.7976 0.7925 21.0351 GMAC/s 0xcd39e9d6e6d7179a product
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1 0.6420 0.6393 26.1316 GMAC/s 0x8a9227b93e430acd quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL training.bf16f32.v1 0.8473 0.8423 19.8007 GMAC/s 0xcd39e9d6e6d7179a pack.b+product
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1 3.2892 3.2759 5.1007 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.1074 0.1036 1249.9323 GMAC/s 0xd5677d8a13939709 plan=14
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.fused 0.7850 0.7816 170.9787 GMAC/s 0xf36fe1a8828cefd9 not-dispatched(cells>16384)
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.widen 0.1506 0.1492 891.3857 GMAC/s 0xf36fe1a8828cefd9 dispatched
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 0.6652 0.6641 201.7826 GMAC/s 0x484bd20aabe66ee5 not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma 0.1486 0.1474 903.3729 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 0.6018 0.5989 0.0545 Gelem/s 0xbd0b5aed2b83cb45 per-call
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 2.4819 2.4809 6.7599 Gelem/s 0xa8ce17326c01345 once-per-weight
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.pack.b 0.0669 0.0658 250.6981 Gelem/s 0xdccc5a093a080c52 once-per-weight
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.widen.b 0.0648 0.0619 258.8118 Gelem/s 0x944a5da41b4d2325 per-call-when-materialized
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int8.dequantize.b 0.0807 0.0774 207.9889 Gelem/s 0x24697157b3da2325 per-call-when-materialized
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.bf16f32.v1 0.1529 0.1508 877.7219 GMAC/s 0xf36fe1a8828cefd9 product
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1 0.7706 0.7679 174.1739 GMAC/s 0x484bd20aabe66ee5 quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL training.bf16f32.v1 0.2084 0.2070 644.1596 GMAC/s 0xf36fe1a8828cefd9 pack.b+product
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1 3.3994 3.3924 39.4827 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 1.0377 1.0367 8277.5003 GMAC/s 0x67d3d940546b834c plan=10
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.fused 39.4083 39.3668 217.9725 GMAC/s 0x4abd79a5b10221e5 not-dispatched(cells>16384)
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.widen 1.1048 1.0949 7775.3008 GMAC/s 0x4abd79a5b10221e5 dispatched
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 39.1923 39.1891 219.1738 GMAC/s 0xa5f2ce1f1b9a0ebd not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma 1.4407 1.4183 5962.4664 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 2.6236 2.6179 0.7993 Gelem/s 0xe8bb3ad105a4ae26 per-call
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 2.4763 2.4717 6.7752 Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.pack.b 0.0639 0.0623 262.6447 Gelem/s 0xaef2da473a8e2a10 once-per-weight
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.widen.b 0.0636 0.0615 263.7305 Gelem/s 0xc8e5243510392325 per-call-when-materialized
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int8.dequantize.b 0.0808 0.0790 207.7442 Gelem/s 0x1798a32eac742325 per-call-when-materialized
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.bf16f32.v1 1.0943 1.0889 7850.0228 GMAC/s 0x4abd79a5b10221e5 product
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1 4.0802 4.0790 2105.2889 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL training.bf16f32.v1 1.1520 1.1458 7456.5663 GMAC/s 0x4abd79a5b10221e5 pack.b+product
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1 6.7240 6.7133 1277.4964 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 0.1884 0.1824 311.6241 GMAC/s 0x4965ea6af2ff5e61 plan=13
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.fused 0.7926 0.7903 74.0889 GMAC/s 0x5e3f5ff35a448024 dispatched
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.widen 0.3677 0.3659 159.7161 GMAC/s 0x5e3f5ff35a448024 not-dispatched(cells<=16384)
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 0.6687 0.6646 87.8164 GMAC/s 0xff302668595b02d not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma 0.1914 0.1898 306.8704 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a 0.5017 0.5007 0.0082 Gelem/s 0x1343c750c1ded02 per-call
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b 2.4907 2.4863 23.5757 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.pack.b 0.1988 0.1974 295.3260 Gelem/s 0xed618e2333b13294 once-per-weight
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.widen.b 0.1892 0.1883 310.3706 Gelem/s 0x573b3a44b4012325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.dequantize.b 0.2460 0.2456 238.7051 Gelem/s 0x5a7e8639220c2325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL inference.bf16f32.v1 0.7966 0.7963 73.7169 GMAC/s 0x5e3f5ff35a448024 product
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1 0.6701 0.6679 87.6271 GMAC/s 0xff302668595b02d quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL training.bf16f32.v1 0.9845 0.9800 59.6441 GMAC/s 0x5e3f5ff35a448024 pack.b+product
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1 3.3314 3.3164 17.6260 GMAC/s 0xff302668595b02d quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 0.2757 0.2740 1704.1481 GMAC/s 0x7b30465d325906e plan=14
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.fused 2.5309 2.5293 185.6071 GMAC/s 0x1531c10dcd152579 not-dispatched(cells>16384)
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.widen 0.4534 0.4532 1036.1126 GMAC/s 0x1531c10dcd152579 dispatched
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 2.5062 2.5057 187.4435 GMAC/s 0xbd4b3a783f9d9a0d not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma 0.2094 0.2089 2243.1897 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a 0.6134 0.6130 0.0534 Gelem/s 0x5e46321f760ef85d per-call
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b 2.4844 2.4830 23.6351 Gelem/s 0xa9e079afde494e3d once-per-weight
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.pack.b 0.1984 0.1973 296.0272 Gelem/s 0xc5111a6224412c3f once-per-weight
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.widen.b 0.1876 0.1871 313.0295 Gelem/s 0x6a679200ae02325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.dequantize.b 0.2447 0.2440 239.9517 Gelem/s 0x89939dca58a02325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL inference.bf16f32.v1 0.4535 0.4519 1035.8430 GMAC/s 0x1531c10dcd152579 product
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1 0.8027 0.8021 585.1932 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL training.bf16f32.v1 0.6398 0.6388 734.2545 GMAC/s 0x1531c10dcd152579 pack.b+product
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1 3.3082 3.3008 141.9977 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 3.3462 3.3395 8984.7099 GMAC/s 0x27a166783c45f9f0 plan=10
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.fused 139.2825 138.9768 215.8546 GMAC/s 0x5b29318ad80be465 not-dispatched(cells>16384)
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.widen 3.5225 3.5163 8535.1535 GMAC/s 0x5b29318ad80be465 dispatched
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 135.6707 135.6653 221.6011 GMAC/s 0x220ff5fe96f5ef55 not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma 4.6280 4.6260 6496.2674 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a 2.6462 2.6391 0.7925 Gelem/s 0x8c503fb082856006 per-call
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b 2.4778 2.4746 23.6988 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.pack.b 0.1976 0.1964 297.1207 Gelem/s 0x1c04d570a3d23380 once-per-weight
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.widen.b 0.1880 0.1861 312.3219 Gelem/s 0x5c9d5dc97a412325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.dequantize.b 0.2451 0.2428 239.6246 Gelem/s 0xb584f740e2d62325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL inference.bf16f32.v1 3.5188 3.5132 8544.1234 GMAC/s 0x5b29318ad80be465 product
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1 7.0929 7.0703 4238.7326 GMAC/s 0x220ff5fe96f5ef55 quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL training.bf16f32.v1 3.7078 3.7048 8108.5092 GMAC/s 0x5b29318ad80be465 pack.b+product
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1 9.6502 9.6310 3115.4477 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 0.1773 0.1711 331.2737 GMAC/s 0x4efb8e54c724fa9 plan=13
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.fused 2.7570 2.7547 21.2986 GMAC/s 0xd044aebb510dc9 dispatched
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.widen 0.3531 0.3517 166.2860 GMAC/s 0xd044aebb510dc9 not-dispatched(cells<=16384)
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 2.3473 2.3404 25.0159 GMAC/s 0x1ffdde3ffffb72c9 not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma 0.6532 0.6507 89.8984 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a 1.7354 1.7313 0.0083 Gelem/s 0x160d734878c0f458 per-call
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b 9.9852 9.9656 5.8807 Gelem/s 0x31274090cc79ba2f once-per-weight
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.pack.b 0.1993 0.1972 294.6281 Gelem/s 0x9dba12f4fe0c9e9b once-per-weight
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.widen.b 0.1870 0.1865 314.0641 Gelem/s 0x45255120c9d82325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.dequantize.b 0.2452 0.2436 239.5210 Gelem/s 0x8e72f1c5a3402325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL inference.bf16f32.v1 2.7606 2.7569 21.2706 GMAC/s 0xd044aebb510dc9 product
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1 2.3209 2.3175 25.3007 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL training.bf16f32.v1 2.9441 2.9401 19.9453 GMAC/s 0xd044aebb510dc9 pack.b+product
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1 12.2797 12.2718 4.7819 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 0.2918 0.2900 1609.6175 GMAC/s 0xfb21004541ae3e8e plan=14
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.fused 2.7008 2.6968 173.9361 GMAC/s 0xcbe807d3ae13612f not-dispatched(cells>16384)
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.widen 0.4674 0.4649 1005.1052 GMAC/s 0xcbe807d3ae13612f dispatched
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 2.3387 2.3358 200.8640 GMAC/s 0x694aafd520fdadad not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma 0.6976 0.6897 673.4206 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a 2.4272 2.4200 0.0473 Gelem/s 0xbb4f2a7232392bfe per-call
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b 9.9917 9.9606 5.8769 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.pack.b 0.1987 0.1977 295.4746 Gelem/s 0xfbacba127cf6177e once-per-weight
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.widen.b 0.1870 0.1864 314.0121 Gelem/s 0xcbcb5933d8352325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.dequantize.b 0.2438 0.2429 240.8394 Gelem/s 0x9dcad54d7e462325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL inference.bf16f32.v1 0.4693 0.4681 1001.0485 GMAC/s 0xcbe807d3ae13612f product
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1 3.0493 3.0398 154.0573 GMAC/s 0x694aafd520fdadad quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL training.bf16f32.v1 0.6561 0.6550 716.0134 GMAC/s 0xcbe807d3ae13612f pack.b+product
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1 13.0500 13.0116 35.9972 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 3.3696 3.3627 8922.3243 GMAC/s 0x4743c97cb961339e plan=10
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.fused 136.6683 136.4845 219.9835 GMAC/s 0x508d64e0e41d3350 not-dispatched(cells>16384)
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.widen 3.5471 3.5429 8475.7541 GMAC/s 0x508d64e0e41d3350 dispatched
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 137.9638 137.9026 217.9179 GMAC/s 0x6120545eacb068ad not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma 5.5492 5.5429 5417.8217 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a 9.9645 9.9555 0.7366 Gelem/s 0x903f6ff84c6082 per-call
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b 10.0053 9.9670 5.8689 Gelem/s 0xa046020a81d05746 once-per-weight
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.pack.b 0.1979 0.1975 296.6763 Gelem/s 0xd1b066f4e6a61fed once-per-weight
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.widen.b 0.1868 0.1862 314.3298 Gelem/s 0xf0fcf217ba5c2325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.dequantize.b 0.2435 0.2426 241.2005 Gelem/s 0xd972f24f17be2325 per-call-when-materialized
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL inference.bf16f32.v1 3.5462 3.5406 8478.0486 GMAC/s 0x508d64e0e41d3350 product
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1 15.5603 15.4742 1932.1518 GMAC/s 0x6120545eacb068ad quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL training.bf16f32.v1 3.7332 3.7294 8053.3125 GMAC/s 0x508d64e0e41d3350 pack.b+product
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1 25.5078 25.4380 1178.6489 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 1.2049 1.2045 435.9962 GMAC/s 0xcdc134cbce391535 plan=13
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.fused 2.5968 2.5837 202.3032 GMAC/s 0x23f2e7e17341274a not-dispatched(cells>16384)
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.widen 2.8119 2.8076 186.8239 GMAC/s 0x23f2e7e17341274a dispatched
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 2.5115 2.4984 209.1759 GMAC/s 0xe0222b2f9de835ed not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma 0.9633 0.9419 545.3781 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a 0.5086 0.5026 0.0081 Gelem/s 0x67d2e298b047bf2b per-call
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b 12.1727 12.0612 43.1569 Gelem/s 0x1c75800d0b1054bd once-per-weight
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.pack.b 1.6761 1.6726 313.4233 Gelem/s 0xa3f53235cc152516 once-per-weight
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.widen.b 1.6152 1.6133 325.2453 Gelem/s 0x63450213e8e12325 per-call-when-materialized
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.dequantize.b 2.1048 2.1000 249.5942 Gelem/s 0x23115689185e2325 per-call-when-materialized
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL inference.bf16f32.v1 2.8132 2.8054 186.7412 GMAC/s 0x23f2e7e17341274a product
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1 1.4608 1.4554 359.6336 GMAC/s 0xe0222b2f9de835ed quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL training.bf16f32.v1 4.4719 4.4680 117.4741 GMAC/s 0x23f2e7e17341274a pack.b+product
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1 13.6141 13.5182 38.5876 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 2.1659 2.1627 1940.4034 GMAC/s 0x3ebab59d0da21444 plan=14
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.fused 19.9111 19.3711 211.0724 GMAC/s 0x82bad7b4e5c4c263 not-dispatched(cells>16384)
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.widen 3.7598 3.7593 1117.8010 GMAC/s 0x82bad7b4e5c4c263 dispatched
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 19.2579 19.2484 218.2323 GMAC/s 0x8151fd05ff287a5d not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma 1.3649 1.3564 3079.0716 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a 0.6119 0.6091 0.0536 Gelem/s 0x443be8ad16d189a3 per-call
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b 12.1075 12.0764 43.3892 Gelem/s 0x8e01af3f075298bb once-per-weight
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.pack.b 1.6751 1.6720 313.6156 Gelem/s 0xbdac0264c773e6f1 once-per-weight
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.widen.b 1.6124 1.6119 325.8168 Gelem/s 0x4e388bd358a22325 per-call-when-materialized
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.dequantize.b 2.1013 2.1008 250.0067 Gelem/s 0xb8835a7fc2342325 per-call-when-materialized
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL inference.bf16f32.v1 3.7630 3.7562 1116.8588 GMAC/s 0x82bad7b4e5c4c263 product
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1 1.9728 1.9625 2130.3446 GMAC/s 0x8151fd05ff287a5d quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL training.bf16f32.v1 5.4179 5.4146 775.7077 GMAC/s 0x82bad7b4e5c4c263 pack.b+product
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1 14.1975 14.1198 296.0161 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 3.7367 3.7296 8997.5813 GMAC/s 0x84fd143bb625cf70 plan=10
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.fused 156.4376 156.2763 214.9198 GMAC/s 0xa75052ecc1e78b46 not-dispatched(cells>16384)
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.widen 3.9342 3.9250 8545.9772 GMAC/s 0xa75052ecc1e78b46 dispatched
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 151.9419 151.8072 221.2790 GMAC/s 0xaae4f3d3c69453cd not-dispatched(the-column-has-the-unit)
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma 5.1285 5.1228 6555.8810 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a 2.5252 2.5219 0.8305 Gelem/s 0xfd89ee79d025dda7 per-call
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b 2.6325 2.6258 24.9443 Gelem/s 0xcc187b17bc36366d once-per-weight
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.pack.b 0.2197 0.2182 298.8875 Gelem/s 0xaabc0c6ba2a73e85 once-per-weight
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.widen.b 0.2087 0.2082 314.5954 Gelem/s 0xbd6a89a89fc02325 per-call-when-materialized
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.dequantize.b 0.2734 0.2719 240.1438 Gelem/s 0xf6a61b0da9142325 per-call-when-materialized
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED inference.bf16f32.v1 3.9246 3.9171 8566.7834 GMAC/s 0xa75052ecc1e78b46 product
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1 7.5827 7.5666 4433.9690 GMAC/s 0xaae4f3d3c69453cd quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED training.bf16f32.v1 4.1322 4.1293 8136.5259 GMAC/s 0xa75052ecc1e78b46 pack.b+product
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1 10.1328 10.1145 3318.0876 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on

@@ -1,0 +1,28 @@
+installed package: /root/lowbit-flag-venv/lib/python3.14/site-packages/mojolearn
+mojolearn        0.8.25
+mojolearn-amd    0.8.25
+mojolearn-nvidia 0.8.25
+numpy            2.5.3
+pytest           9.1.1
+260
+new file       _numeric_profile.py
+base==release  __init__.py
+base==release  _samba_impl.py
+base==release  _training_impl.py
+base==release  _byte_lm_host.py
+base==release  _byte_lm_impl.py
+base==release  models/causal_lm.py
+base==release  models/parallel_causal_lm.py
+fatal: path 'python/mojolearn/tests/test_numeric_profile.py' exists on disk, but not in '45464ced2e5ec9c5f858fe17030ec6ba9bdd4698'
+BASE DIFFERS FROM RELEASE  tests/test_numeric_profile.py
+import ok 0.8.25 fp32_v1 identical
+import_exit=0
+........................................................................ [ 40%]
+........................................................................ [ 80%]
+..................................                                       [100%]
+=============================== warnings summary ===============================
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+178 passed, 2 warnings in 1.74s
+pytest_exit=0

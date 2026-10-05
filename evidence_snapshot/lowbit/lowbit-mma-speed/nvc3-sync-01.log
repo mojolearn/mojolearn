@@ -1,0 +1,3 @@
+gpuq: dispatcher up, lease backstop up
+dev_pod: patch-synced f5963e47b+worktree -> ggsb85k40x5i87:/root/mojolearn-lowbit-mma-speed (388351 bytes over merge base a4b906e81)
+nvidia_central: lane lowbit-mma-speed is on nvc3 (1 GPU slots, NVIDIA H100 NVL); submit with: tools/nvidia_central.sh submit lowbit-mma-speed <script>

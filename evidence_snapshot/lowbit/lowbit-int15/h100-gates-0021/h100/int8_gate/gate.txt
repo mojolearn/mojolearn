@@ -1,0 +1,15 @@
+profiles=mojolearn.identical.gemm.bf16f32.v1, mojolearn.identical.gemm.int8i32.v1
+box=h100 integer_matrix_unit=yes
+started=2026-09-29T04:05:04Z
+tree_head=45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 dirty_files=36
+loads: stated alignment, unstated alignment and the flat plan printed the same 24 cell lines
+reach: lowbit-sabotage failed check_int8_device_matches_oracle, as it must
+reach: lowbit-sabotage failed check_int8_mma_matches_flat, as it must
+reach: lowbit-sabotage failed check_bf16_device_matches_oracle, as it must
+reach: lowbit-host-sabotage failed check_int8_device_matches_oracle, as it must
+reach: lowbit-host-sabotage failed check_int8_mma_matches_flat, as it must
+reach: lowbit-host-sabotage failed check_bf16_device_matches_oracle, as it must
+   column: nvidia  int8 dispatch: mma (lib_int8_matrix_unit_for)
+   column: nvidia  int8 dispatch: flat (MOJOLEARN_INT8_FORCE_FLAT)
+finished=2026-09-29T04:08:09Z
+verdict=GREEN every expected outcome held (see status.tsv)

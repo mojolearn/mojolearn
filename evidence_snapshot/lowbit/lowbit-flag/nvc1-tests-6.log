@@ -1,0 +1,41 @@
+nvidia_central: lane lowbit-flag is on nvc1 (2 GPU slots, NVIDIA GeForce RTX 4090); submit with: tools/nvidia_central.sh submit lowbit-flag <script>
+new file       _gemm_profile.py
+base==release  __init__.py
+base==release  _samba_impl.py
+base==release  models/causal_lm.py
+base==release  models/parallel_causal_lm.py
+new file       tests/test_gemm_profile.py
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import mojolearn as ml; print("import ok", ml.__version__ if hasattr(ml,"__version__") else "", ml.gemm_profile(), ml.numeric_mode())
+                                                                                                    ^^^^^^^^^^^^^^^
+  File "/root/lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/__init__.py", line 551, in __getattr__
+    raise AttributeError(f"module 'mojolearn' has no attribute {name!r}")
+AttributeError: module 'mojolearn' has no attribute 'gemm_profile'
+import_exit=1
+..............F......................................................... [ 72%]
+...........................                                              [100%]
+=================================== FAILURES ===================================
+__________ test_a_state_is_read_only_under_the_profile_that_wrote_it ___________
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1c9f546410>
+    def test_a_state_is_read_only_under_the_profile_that_wrote_it(monkeypatch):
+        g = _fresh(monkeypatch)
+        other = next(k for k in g.PROFILES if k != "fp32.v1")
+        # no field: written under fp32.v1, by every version before this module
+        assert g.check_saved({}, "fp32.v1") == "fp32.v1"
+        assert g.check_saved({"gemm_profile": g.PREFIX + other}, other) == other
+        for state, mine in (({"gemm_profile": g.PREFIX + other}, "fp32.v1"), ({}, other),
+                            ({"gemm_profile": "fp32.v1"}, other)):
+            with pytest.raises(ValueError) as e:
+                g.check_saved(state, mine)
+>           assert "fp32.v1" in str(e.value) and g.public_name(other) in str(e.value)
+E           assert ('fp32.v1' in "mojolearn: state was written under GEMM profile 'fp32.v1' and this object computes under 'bf16f32.v1'; a run keeps one arithmetic, so build the object with precision='fp32.v1'" and 'bf16.v1' in "mojolearn: state was written under GEMM profile 'fp32.v1' and this object computes under 'bf16f32.v1'; a run keeps one arithmetic, so build the object with precision='fp32.v1'")
+E            +  where "mojolearn: state was written under GEMM profile 'fp32.v1' and this object computes under 'bf16f32.v1'; a run keeps one arithmetic, so build the object with precision='fp32.v1'" = str(ValueError("mojolearn: state was written under GEMM profile 'fp32.v1' and this object computes under 'bf16f32.v1'; a run keeps one arithmetic, so build the object with precision='fp32.v1'"))
+E            +    where ValueError("mojolearn: state was written under GEMM profile 'fp32.v1' and this object computes under 'bf16f32.v1'; a run keeps one arithmetic, so build the object with precision='fp32.v1'") = <ExceptionInfo ValueError("mojolearn: state was written under GEMM profile 'fp32.v1' and this object computes under 'bf16f32.v1'; a run keeps one arithmetic, so build the object with precision='fp32.v1'") tblen=2>.value
+E            +  and   'bf16.v1' = <function public_name at 0x7f1c9f544300>('bf16f32.v1')
+E            +    where <function public_name at 0x7f1c9f544300> = <module '_gemm_profile_under_test' from '/root/lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/_gemm_profile.py'>.public_name
+E            +  and   "mojolearn: state was written under GEMM profile 'fp32.v1' and this object computes under 'bf16f32.v1'; a run keeps one arithmetic, so build the object with precision='fp32.v1'" = str(ValueError("mojolearn: state was written under GEMM profile 'fp32.v1' and this object computes under 'bf16f32.v1'; a run keeps one arithmetic, so build the object with precision='fp32.v1'"))
+E            +    where ValueError("mojolearn: state was written under GEMM profile 'fp32.v1' and this object computes under 'bf16f32.v1'; a run keeps one arithmetic, so build the object with precision='fp32.v1'") = <ExceptionInfo ValueError("mojolearn: state was written under GEMM profile 'fp32.v1' and this object computes under 'bf16f32.v1'; a run keeps one arithmetic, so build the object with precision='fp32.v1'") tblen=2>.value
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py:145: AssertionError
+1 failed, 98 passed in 0.88s
+pytest_exit=1

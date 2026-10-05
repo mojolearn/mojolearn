@@ -1,0 +1,8 @@
+box=h100
+started=2026-09-29T02:50:26Z
+tree_head=a4b906e81e351b0c6e56b1dd3e7c1482e9285321 dirty_files=11
+mac_budget=default repeats=default only=all identity_only=1
+price exit=0
+price-sabotage exit=0 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=0 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T02:52:09Z

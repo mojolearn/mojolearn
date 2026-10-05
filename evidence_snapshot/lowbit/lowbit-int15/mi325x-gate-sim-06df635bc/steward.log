@@ -1,0 +1,4 @@
+
+$ git fetch -q --depth=1 origin 06df635bc3c1594c8eda44f12c5f03d6f2496d4e
+
+$ git checkout -q --detach 06df635bc3c1594c8eda44f12c5f03d6f2496d4e

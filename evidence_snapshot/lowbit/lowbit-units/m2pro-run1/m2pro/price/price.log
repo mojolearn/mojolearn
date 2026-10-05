@@ -1,0 +1,775 @@
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:141:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:145:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3617:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    p: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:141:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:250:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:141:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:250:59: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:141:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:252:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:141:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:252:72: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3047:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                             ~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3047:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                        ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3047:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3047:81: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                                           ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3048:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                             ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3048:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3048:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3048:85: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                               ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3699:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3852:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[sg] = ea0
+            ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3853:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[NSG + sg] = eb0
+            ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3862:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var atc = at + cur * ASZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3863:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var btc = bt + cur * BSZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3864:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var wmc = wmin + cur * 2 * NSG
+                  ~~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3871:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[sg] = ea
+                ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3872:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[NSG + sg] = eb
+                ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3881:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bea = min(bea, wmc[q])
+                           ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3882:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            beb = min(beb, wmc[NSG + q])
+                           ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3893:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3893:64: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3895:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3895:77: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3906:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var av = atc[p * AST + (sgm * FM + fm) * 8 + frow]
+                             ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3909:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var bv = btc[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
+                                     ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3916:81: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ean = _admit_warp_min(_amma_stage[BM, KB, NT, True, AST](at + nxt * ASZ, ra, tid, a_ofast))
+                                                                             ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3917:82: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ebn = _admit_warp_min(_amma_stage[BN, KB, NT, False, BST](bt + nxt * BSZ, rb, tid, b_ofast))
+                                                                              ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3919:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + sg] = ean
+                    ~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3920:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + NSG + sg] = ebn
+                    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3933:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    fl[pe] = part[pe]
+                    ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3943:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            outv[oe] = fl[oe]
+                       ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3957:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[Int(block_idx.y) * m * n + gi * n + gj] = outv[2 * (fm * FN + fq) + e]
+                        ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3959:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[cbase + gi * n + gj] = ftz(outv[2 * (fm * FN + fq) + e])
+                        ~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7254:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7255:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7287:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7288:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7370:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7371:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7386:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var raa = as_.load[width=RPT, alignment=ALIGN](abase + ca * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7387:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rba = bs_.load[width=CPT, alignment=ALIGN](bbase + ca * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7393:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7394:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7420:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:7421:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:141:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:182:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + e) * ST + r] = v[e]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:141:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:184:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:141:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:184:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:141:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_int8_apple_chunk.mojo:184:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3669:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3669:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3671:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3677:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q]
+                                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3683:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3683:51: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3685:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3691:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q * k_stride]
+                                            ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3719:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3719:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3719:37: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~~^~~~~~
+                                     unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3722:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(o4 + q) * ST + pp] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3728:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + q) * ST + o] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3730:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3730:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/gemm_lowbit_price_main.mojo:135:
+/Users/ec2-user/mojolearn-wt/steward-m2pro/gemm/checks/gemm_identical.mojo:3730:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+== bench/gemm_lowbit_price_main.mojo [IDENTICAL] ==
+column apple
+profiles fp32.v1, bf16f32.v1, int8i32.v1
+int8 dispatch: flat (no int8 matrix unit on this column)
+sabotage: price none  lowbit none  apple chunk none
+repeats 5  mac budget 34359738368  only 
+EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one synchronize per sample; the median of the timed calls is reported and the minimum beside it.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.fp32.v1.device 2.091
+   device-bits lowbit.llama8b.qkv.t1.fp32.v1.device 2.091/0x4000ba5e353f7cee
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 2.0910 1.5420 8.0235 GMAC/s 0x920cdd138650a8bd plan=0
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.bf16f32.v1.fused.device 1.886
+   device-bits lowbit.llama8b.qkv.t1.bf16f32.v1.fused.device 1.886/0x3ffe2d0e56041893
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.fused 1.8860 1.4470 8.8957 GMAC/s 0xcd39e9d6e6d7179a dispatched
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.bf16f32.v1.widen.device 2.725
+   device-bits lowbit.llama8b.qkv.t1.bf16f32.v1.widen.device 2.725/0x4005cccccccccccd
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.widen 2.7250 2.0360 6.1568 GMAC/s 0xcd39e9d6e6d7179a not-dispatched(cells<=16384)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.flat.device 1.802
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.flat.device 1.802/0x3ffcd4fdf3b645a2
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 1.8020 1.3650 9.3103 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.applechunk.device 1.345
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.applechunk.device 1.345/0x3ff5851eb851eb85
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.applechunk 1.3450 0.7780 12.4738 GMAC/s 0x8a9227b93e430acd probe,geometry=1
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.quantize.a.device 1.846
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.quantize.a.device 1.846/0x3ffd89374bc6a7f0
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 1.8460 1.3130 0.0022 Gelem/s 0x54279cbda1444726 per-call
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.pack.b.device 4.345
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.pack.b.device 4.345/0x40116147ae147ae1
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 4.3450 3.8230 3.8613 Gelem/s 0x305b1a502296caf6 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.bf16.pack.b.device 1.577
+   device-bits lowbit.llama8b.qkv.t1.convert.bf16.pack.b.device 1.577/0x3ff93b645a1cac08
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.pack.b 1.5770 1.0450 10.6387 Gelem/s 0x24efed638bb6b96b once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.bf16.widen.b.device 1.16
+   device-bits lowbit.llama8b.qkv.t1.convert.bf16.widen.b.device 1.16/0x3ff28f5c28f5c28f
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.widen.b 1.1600 0.6910 14.4631 Gelem/s 0xd2c2d96392622325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.dequantize.b.device 4.128
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.dequantize.b.device 4.128/0x401083126e978d50
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.dequantize.b 4.1280 3.7230 4.0642 Gelem/s 0x1f7ca28077042325 per-call-when-materialized
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.fp32.v1.device 1.516
+   device-bits lowbit.llama8b.qkv.t8.fp32.v1.device 1.516/0x3ff84189374bc6a8
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 1.5160 1.5100 88.5341 GMAC/s 0xd5677d8a13939709 plan=20
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.bf16f32.v1.fused.device 9.615
+   device-bits lowbit.llama8b.qkv.t8.bf16f32.v1.fused.device 9.615/0x40233ae147ae147b
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.fused 9.6150 9.2160 13.9592 GMAC/s 0xf36fe1a8828cefd9 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.bf16f32.v1.widen.device 2.072
+   device-bits lowbit.llama8b.qkv.t8.bf16f32.v1.widen.device 2.072/0x40009374bc6a7efa
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.widen 2.0720 2.0190 64.7769 GMAC/s 0xf36fe1a8828cefd9 dispatched
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.flat.device 9.719
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.flat.device 9.719/0x40237020c49ba5e3
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 9.7190 9.6870 13.8098 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.applechunk.device 0.812
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.applechunk.device 0.812/0x3fe9fbe76c8b4396
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.applechunk 0.8120 0.7970 165.2928 GMAC/s 0x484bd20aabe66ee5 probe,geometry=1
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.quantize.a.device 1.343
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.quantize.a.device 1.343/0x3ff57ced916872b0
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 1.3430 1.3330 0.0244 Gelem/s 0xbd0b5aed2b83cb45 per-call
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.pack.b.device 3.774
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.pack.b.device 3.774/0x400e3126e978d4fe
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 3.7740 3.7660 4.4455 Gelem/s 0xa8ce17326c01345 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.bf16.pack.b.device 1.022
+   device-bits lowbit.llama8b.qkv.t8.convert.bf16.pack.b.device 1.022/0x3ff05a1cac083127
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.pack.b 1.0220 1.0040 16.4161 Gelem/s 0xdccc5a093a080c52 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.bf16.widen.b.device 0.714
+   device-bits lowbit.llama8b.qkv.t8.convert.bf16.widen.b.device 0.714/0x3fe6d916872b020c
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.widen.b 0.7140 0.7060 23.4975 Gelem/s 0x944a5da41b4d2325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.dequantize.b.device 3.718
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.dequantize.b.device 3.718/0x400dbe76c8b43958
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.dequantize.b 3.7180 3.6660 4.5124 Gelem/s 0x24697157b3da2325 per-call-when-materialized
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.fp32.v1.device 17.608
+   device-bits lowbit.llama8b.qkv.t512.fp32.v1.device 17.608/0x40319ba5e353f7cf
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 17.6080 17.5120 487.8427 GMAC/s 0x67d3d940546b834c plan=20
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.bf16f32.v1.fused.device 514.727
+   device-bits lowbit.llama8b.qkv.t512.bf16f32.v1.fused.device 514.727/0x408015d0e5604189
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.fused 514.7270 513.3830 16.6883 GMAC/s 0x4abd79a5b10221e5 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.bf16f32.v1.widen.device 18.276
+   device-bits lowbit.llama8b.qkv.t512.bf16f32.v1.widen.device 18.276/0x403246a7ef9db22d
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.widen 18.2760 18.2100 470.0117 GMAC/s 0x4abd79a5b10221e5 dispatched
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.flat.device 515.143
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.flat.device 515.143/0x40801924dd2f1aa0
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 515.1430 514.6540 16.6749 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.applechunk.device 8.599
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.applechunk.device 8.599/0x402132b020c49ba6
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.applechunk 8.5990 8.5640 998.9458 GMAC/s 0xa5f2ce1f1b9a0ebd probe,geometry=0
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.quantize.a.device 3.503
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.quantize.a.device 3.503/0x400c0624dd2f1aa0
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 3.5030 3.4680 0.5987 Gelem/s 0xe8bb3ad105a4ae26 per-call
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.pack.b.device 3.85
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.pack.b.device 3.85/0x400ecccccccccccd
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 3.8500 3.8280 4.3577 Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.bf16.pack.b.device 1.054
+   device-bits lowbit.llama8b.qkv.t512.convert.bf16.pack.b.device 1.054/0x3ff0dd2f1a9fbe77
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.pack.b 1.0540 1.0350 15.9177 Gelem/s 0xaef2da473a8e2a10 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.bf16.widen.b.device 0.732
+   device-bits lowbit.llama8b.qkv.t512.convert.bf16.widen.b.device 0.732/0x3fe76c8b43958106
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.widen.b 0.7320 0.7000 22.9197 Gelem/s 0xc8e5243510392325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.dequantize.b.device 3.699
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.dequantize.b.device 3.699/0x400d978d4fdf3b64
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.dequantize.b 3.6990 3.6660 4.5356 Gelem/s 0x1798a32eac742325 per-call-when-materialized
+
+== llama8b.mlp_up.t1  m=1 n=14336 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.fp32.v1.device 5.275
+   device-bits lowbit.llama8b.mlp_up.t1.fp32.v1.device 5.275/0x401519999999999a
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 5.2750 5.2360 11.1318 GMAC/s 0x4965ea6af2ff5e61 plan=0
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.bf16f32.v1.fused.device 5.185
+   device-bits lowbit.llama8b.mlp_up.t1.bf16f32.v1.fused.device 5.185/0x4014bd70a3d70a3d
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.fused 5.1850 5.1560 11.3250 GMAC/s 0x5e3f5ff35a448024 dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.bf16f32.v1.widen.device 7.164
+   device-bits lowbit.llama8b.mlp_up.t1.bf16f32.v1.widen.device 7.164/0x401ca7ef9db22d0e
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.widen 7.1640 7.1280 8.1966 GMAC/s 0x5e3f5ff35a448024 not-dispatched(cells<=16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.int8i32.v1.flat.device 4.996
+   device-bits lowbit.llama8b.mlp_up.t1.int8i32.v1.flat.device 4.996/0x4013fbe76c8b4396
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 4.9960 4.9810 11.7535 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.int8i32.v1.applechunk.device 2.018
+   device-bits lowbit.llama8b.mlp_up.t1.int8i32.v1.applechunk.device 2.018/0x400024dd2f1a9fbe
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.applechunk 2.0180 1.9810 29.0982 GMAC/s 0xff302668595b02d probe,geometry=1
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.convert.int8.quantize.a.device 1.337
+   device-bits lowbit.llama8b.mlp_up.t1.convert.int8.quantize.a.device 1.337/0x3ff5645a1cac0831
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a 1.3370 1.3140 0.0031 Gelem/s 0x832055f1f3e21b7d per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.convert.int8.pack.b.device 13.657
+   device-bits lowbit.llama8b.mlp_up.t1.convert.int8.pack.b.device 13.657/0x402b50624dd2f1aa
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b 13.6570 13.6050 4.2996 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.convert.bf16.pack.b.device 3.129
+   device-bits lowbit.llama8b.mlp_up.t1.convert.bf16.pack.b.device 3.129/0x4009083126e978d5
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.pack.b 3.1290 3.0780 18.7665 Gelem/s 0xed618e2333b13294 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.convert.bf16.widen.b.device 2.129
+   device-bits lowbit.llama8b.mlp_up.t1.convert.bf16.widen.b.device 2.129/0x4001083126e978d5
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.widen.b 2.1290 2.1000 27.5811 Gelem/s 0x573b3a44b4012325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.convert.int8.dequantize.b.device 14.021
+   device-bits lowbit.llama8b.mlp_up.t1.convert.int8.dequantize.b.device 14.021/0x402c0ac083126e98
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.dequantize.b 14.0210 13.9960 4.1880 Gelem/s 0xa9afd845a78c2325 per-call-when-materialized
+
+== llama8b.mlp_up.t8  m=8 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.fp32.v1.device 4.102
+   device-bits lowbit.llama8b.mlp_up.t8.fp32.v1.device 4.102/0x40106872b020c49c
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 4.1020 4.0510 114.5202 GMAC/s 0x7b30465d325906e plan=20
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.bf16f32.v1.fused.device 30.394
+   device-bits lowbit.llama8b.mlp_up.t8.bf16f32.v1.fused.device 30.394/0x403e64dd2f1a9fbe
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.fused 30.3940 30.2080 15.4557 GMAC/s 0x1531c10dcd152579 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.bf16f32.v1.widen.device 6.022
+   device-bits lowbit.llama8b.mlp_up.t8.bf16f32.v1.widen.device 6.022/0x401816872b020c4a
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.widen 6.0220 5.9850 78.0076 GMAC/s 0x1531c10dcd152579 dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.int8i32.v1.flat.device 29.385
+   device-bits lowbit.llama8b.mlp_up.t8.int8i32.v1.flat.device 29.385/0x403d628f5c28f5c3
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 29.3850 29.3730 15.9865 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.int8i32.v1.applechunk.device 2.012
+   device-bits lowbit.llama8b.mlp_up.t8.int8i32.v1.applechunk.device 2.012/0x4000189374bc6a7f
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.applechunk 2.0120 2.0030 233.4801 GMAC/s 0xbd4b3a783f9d9a0d probe,geometry=1
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.convert.int8.quantize.a.device 1.368
+   device-bits lowbit.llama8b.mlp_up.t8.convert.int8.quantize.a.device 1.368/0x3ff5e353f7ced917
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a 1.3680 1.3450 0.0240 Gelem/s 0x47d6423613a8aaa5 per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.convert.int8.pack.b.device 13.668
+   device-bits lowbit.llama8b.mlp_up.t8.convert.int8.pack.b.device 13.668/0x402b5604189374bc
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b 13.6680 13.6370 4.2962 Gelem/s 0xa9e079afde494e3d once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.convert.bf16.pack.b.device 3.105
+   device-bits lowbit.llama8b.mlp_up.t8.convert.bf16.pack.b.device 3.105/0x4008d70a3d70a3d7
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.pack.b 3.1050 3.0530 18.9115 Gelem/s 0xc5111a6224412c3f once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.convert.bf16.widen.b.device 2.155
+   device-bits lowbit.llama8b.mlp_up.t8.convert.bf16.widen.b.device 2.155/0x40013d70a3d70a3d
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.widen.b 2.1550 2.1210 27.2484 Gelem/s 0x6a679200ae02325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.convert.int8.dequantize.b.device 14.024
+   device-bits lowbit.llama8b.mlp_up.t8.convert.int8.dequantize.b.device 14.024/0x402c0c49ba5e353f
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.dequantize.b 14.0240 14.0110 4.1871 Gelem/s 0xb415c8d063202325 per-call-when-materialized
+
+== llama8b.mlp_up.t512  m=512 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.fp32.v1.device 60.379
+   device-bits lowbit.llama8b.mlp_up.t512.fp32.v1.device 60.379/0x404e3083126e978d
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 60.3790 60.2960 497.9342 GMAC/s 0x27a166783c45f9f0 plan=20
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.bf16f32.v1.fused.device 1794.876
+   device-bits lowbit.llama8b.mlp_up.t512.bf16f32.v1.fused.device 1794.876/0x409c0b810624dd2f
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.fused 1794.8760 1792.9370 16.7503 GMAC/s 0x5b29318ad80be465 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.bf16f32.v1.widen.device 62.341
+   device-bits lowbit.llama8b.mlp_up.t512.bf16f32.v1.widen.device 62.341/0x404f2ba5e353f7cf
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.widen 62.3410 62.2740 482.2632 GMAC/s 0x5b29318ad80be465 dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.int8i32.v1.flat.device 1799.218
+   device-bits lowbit.llama8b.mlp_up.t512.int8i32.v1.flat.device 1799.218/0x409c1cdf3b645a1d
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 1799.2180 1798.9980 16.7099 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.int8i32.v1.applechunk.device 27.997
+   device-bits lowbit.llama8b.mlp_up.t512.int8i32.v1.applechunk.device 27.997/0x403bff3b645a1cac
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.applechunk 27.9970 27.9290 1073.8569 GMAC/s 0x220ff5fe96f5ef55 probe,geometry=0
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.convert.int8.quantize.a.device 3.468
+   device-bits lowbit.llama8b.mlp_up.t512.convert.int8.quantize.a.device 3.468/0x400bbe76c8b43958
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a 3.4680 3.4540 0.6047 Gelem/s 0x8c503fb082856006 per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.convert.int8.pack.b.device 13.696
+   device-bits lowbit.llama8b.mlp_up.t512.convert.int8.pack.b.device 13.696/0x402b645a1cac0831
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b 13.6960 13.6710 4.2874 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.convert.bf16.pack.b.device 3.095
+   device-bits lowbit.llama8b.mlp_up.t512.convert.bf16.pack.b.device 3.095/0x4008c28f5c28f5c3
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.pack.b 3.0950 3.0760 18.9726 Gelem/s 0x1c04d570a3d23380 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.convert.bf16.widen.b.device 2.13
+   device-bits lowbit.llama8b.mlp_up.t512.convert.bf16.widen.b.device 2.13/0x40010a3d70a3d70a
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.widen.b 2.1300 2.1060 27.5682 Gelem/s 0x5c9d5dc97a412325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.convert.int8.dequantize.b.device 14.047
+   device-bits lowbit.llama8b.mlp_up.t512.convert.int8.dequantize.b.device 14.047/0x402c1810624dd2f2
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.dequantize.b 14.0470 13.9890 4.1803 Gelem/s 0xb584f740e2d62325 per-call-when-materialized
+
+== llama8b.mlp_down.t1  m=1 n=4096 k=14336  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.fp32.v1.device 5.727
+   device-bits lowbit.llama8b.mlp_down.t1.fp32.v1.device 5.727/0x4016e872b020c49c
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 5.7270 5.5480 10.2532 GMAC/s 0x4efb8e54c724fa9 plan=0
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.bf16f32.v1.fused.device 5.143
+   device-bits lowbit.llama8b.mlp_down.t1.bf16f32.v1.fused.device 5.143/0x4014926e978d4fdf
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.fused 5.1430 5.1160 11.4175 GMAC/s 0xd044aebb510dc9 dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.bf16f32.v1.widen.device 7.5
+   device-bits lowbit.llama8b.mlp_down.t1.bf16f32.v1.widen.device 7.5/0x401e000000000000
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.widen 7.5000 7.4400 7.8294 GMAC/s 0xd044aebb510dc9 not-dispatched(cells<=16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.int8i32.v1.flat.device 4.537
+   device-bits lowbit.llama8b.mlp_down.t1.int8i32.v1.flat.device 4.537/0x401225e353f7ced9
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 4.5370 4.3590 12.9425 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.int8i32.v1.applechunk.device 2.602
+   device-bits lowbit.llama8b.mlp_down.t1.int8i32.v1.applechunk.device 2.602/0x4004d0e560418937
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.applechunk 2.6020 2.4890 22.5674 GMAC/s 0x1ffdde3ffffb72c9 probe,geometry=1
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.convert.int8.quantize.a.device 4.299
+   device-bits lowbit.llama8b.mlp_down.t1.convert.int8.quantize.a.device 4.299/0x4011322d0e560419
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a 4.2990 4.2100 0.0033 Gelem/s 0x1cd0dd08873effc3 per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.convert.int8.pack.b.device 13.904
+   device-bits lowbit.llama8b.mlp_down.t1.convert.int8.pack.b.device 13.904/0x402bced916872b02
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b 13.9040 13.7890 4.2233 Gelem/s 0x31274090cc79ba2f once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.convert.bf16.pack.b.device 3.104
+   device-bits lowbit.llama8b.mlp_down.t1.convert.bf16.pack.b.device 3.104/0x4008d4fdf3b645a2
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.pack.b 3.1040 2.9560 18.9176 Gelem/s 0x9dba12f4fe0c9e9b once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.convert.bf16.widen.b.device 2.206
+   device-bits lowbit.llama8b.mlp_down.t1.convert.bf16.widen.b.device 2.206/0x4001a5e353f7ced9
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.widen.b 2.2060 2.1670 26.6184 Gelem/s 0x45255120c9d82325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.convert.int8.dequantize.b.device 13.305
+   device-bits lowbit.llama8b.mlp_down.t1.convert.int8.dequantize.b.device 13.305/0x402a9c28f5c28f5c
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.dequantize.b 13.3050 13.1900 4.4134 Gelem/s 0x4354f59510c02325 per-call-when-materialized
+
+== llama8b.mlp_down.t8  m=8 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.fp32.v1.device 4.987
+   device-bits lowbit.llama8b.mlp_down.t8.fp32.v1.device 4.987/0x4013f2b020c49ba6
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 4.9870 4.9370 94.1973 GMAC/s 0xfb21004541ae3e8e plan=20
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.bf16f32.v1.fused.device 34.667
+   device-bits lowbit.llama8b.mlp_down.t8.bf16f32.v1.fused.device 34.667/0x404155604189374c
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.fused 34.6670 34.4100 13.5507 GMAC/s 0xcbe807d3ae13612f not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.bf16f32.v1.widen.device 6.879
+   device-bits lowbit.llama8b.mlp_down.t8.bf16f32.v1.widen.device 6.879/0x401b84189374bc6a
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.widen 6.8790 6.8550 68.2893 GMAC/s 0xcbe807d3ae13612f dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.int8i32.v1.flat.device 33.903
+   device-bits lowbit.llama8b.mlp_down.t8.int8i32.v1.flat.device 33.903/0x4040f395810624dd
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 33.9030 33.8810 13.8561 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.int8i32.v1.applechunk.device 2.464
+   device-bits lowbit.llama8b.mlp_down.t8.int8i32.v1.applechunk.device 2.464/0x4003b645a1cac083
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.applechunk 2.4640 2.4270 190.6502 GMAC/s 0x694aafd520fdadad probe,geometry=1
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.convert.int8.quantize.a.device 4.429
+   device-bits lowbit.llama8b.mlp_down.t8.convert.int8.quantize.a.device 4.429/0x4011b74bc6a7ef9e
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a 4.4290 4.4080 0.0259 Gelem/s 0xbb4f2a7232392bfe per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.convert.int8.pack.b.device 13.925
+   device-bits lowbit.llama8b.mlp_down.t8.convert.int8.pack.b.device 13.925/0x402bd9999999999a
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b 13.9250 13.8520 4.2169 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.convert.bf16.pack.b.device 2.99
+   device-bits lowbit.llama8b.mlp_down.t8.convert.bf16.pack.b.device 2.99/0x4007eb851eb851ec
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.pack.b 2.9900 2.9480 19.6389 Gelem/s 0xfbacba127cf6177e once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.convert.bf16.widen.b.device 2.131
+   device-bits lowbit.llama8b.mlp_down.t8.convert.bf16.widen.b.device 2.131/0x40010c49ba5e353f
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.widen.b 2.1310 2.1130 27.5553 Gelem/s 0xcbcb5933d8352325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.convert.int8.dequantize.b.device 13.182
+   device-bits lowbit.llama8b.mlp_down.t8.convert.int8.dequantize.b.device 13.182/0x402a5d2f1a9fbe77
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.dequantize.b 13.1820 13.1670 4.4546 Gelem/s 0x9dcad54d7e462325 per-call-when-materialized
+
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.fp32.v1.device 65.429
+   device-bits lowbit.llama8b.mlp_down.t512.fp32.v1.device 65.429/0x40505b74bc6a7efa
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 65.4290 64.5330 459.5022 GMAC/s 0x4743c97cb961339e plan=20
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.bf16f32.v1.fused.device 1936.953
+   device-bits lowbit.llama8b.mlp_down.t512.bf16f32.v1.fused.device 1936.953/0x409e43cfdf3b645a
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.fused 1936.9530 1935.0870 15.5217 GMAC/s 0x508d64e0e41d3350 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.bf16f32.v1.widen.device 66.936
+   device-bits lowbit.llama8b.mlp_down.t512.bf16f32.v1.widen.device 66.936/0x4050bbe76c8b4396
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.widen 66.9360 66.6660 449.1570 GMAC/s 0x508d64e0e41d3350 dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.int8i32.v1.flat.device 1829.523
+   device-bits lowbit.llama8b.mlp_down.t512.int8i32.v1.flat.device 1829.523/0x409c96178d4fdf3b
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 1829.5230 1829.1630 16.4331 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.int8i32.v1.applechunk.device 30.078
+   device-bits lowbit.llama8b.mlp_down.t512.int8i32.v1.applechunk.device 30.078/0x403e13f7ced91687
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.applechunk 30.0780 30.0010 999.5602 GMAC/s 0x6120545eacb068ad probe,geometry=0
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.convert.int8.quantize.a.device 12.006
+   device-bits lowbit.llama8b.mlp_down.t512.convert.int8.quantize.a.device 12.006/0x402803126e978d50
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a 12.0060 11.9430 0.6114 Gelem/s 0x903f6ff84c6082 per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.convert.int8.pack.b.device 13.874
+   device-bits lowbit.llama8b.mlp_down.t512.convert.int8.pack.b.device 13.874/0x402bbf7ced916873
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b 13.8740 13.8230 4.2324 Gelem/s 0xa046020a81d05746 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.convert.bf16.pack.b.device 2.988
+   device-bits lowbit.llama8b.mlp_down.t512.convert.bf16.pack.b.device 2.988/0x4007e76c8b439581
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.pack.b 2.9880 2.9780 19.6520 Gelem/s 0xd1b066f4e6a61fed once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.convert.bf16.widen.b.device 2.146
+   device-bits lowbit.llama8b.mlp_down.t512.convert.bf16.widen.b.device 2.146/0x40012b020c49ba5e
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.widen.b 2.1460 2.1130 27.3627 Gelem/s 0xf0fcf217ba5c2325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.convert.int8.dequantize.b.device 13.201
+   device-bits lowbit.llama8b.mlp_down.t512.convert.int8.dequantize.b.device 13.201/0x402a66e978d4fdf4
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.dequantize.b 13.2010 13.1570 4.4482 Gelem/s 0xd972f24f17be2325 per-call-when-materialized
+
+== llama8b.lm_head.t1  m=1 n=128256 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.fp32.v1.device 32.986
+   device-bits lowbit.llama8b.lm_head.t1.fp32.v1.device 32.986/0x40407e353f7ced91
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 32.9860 32.8550 15.9260 GMAC/s 0xcdc134cbce391535 plan=0
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.bf16f32.v1.fused.device 32.818
+   device-bits lowbit.llama8b.lm_head.t1.bf16f32.v1.fused.device 32.818/0x404068b439581062
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.fused 32.8180 32.5600 16.0076 GMAC/s 0x23f2e7e17341274a not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.bf16f32.v1.widen.device 50.202
+   device-bits lowbit.llama8b.lm_head.t1.bf16f32.v1.widen.device 50.202/0x404919db22d0e560
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.widen 50.2020 50.0070 10.4645 GMAC/s 0x23f2e7e17341274a dispatched
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.int8i32.v1.flat.device 32.865
+   device-bits lowbit.llama8b.lm_head.t1.int8i32.v1.flat.device 32.865/0x40406eb851eb851f
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 32.8650 32.4660 15.9847 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.int8i32.v1.applechunk.device 11.862
+   device-bits lowbit.llama8b.lm_head.t1.int8i32.v1.applechunk.device 11.862/0x4027b95810624dd3
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.applechunk 11.8620 11.7750 44.2874 GMAC/s 0xe0222b2f9de835ed probe,geometry=1
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.convert.int8.quantize.a.device 1.356
+   device-bits lowbit.llama8b.lm_head.t1.convert.int8.quantize.a.device 1.356/0x3ff5b22d0e560419
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a 1.3560 1.3240 0.0030 Gelem/s 0x4a11896c4fb834f0 per-call
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.convert.int8.pack.b.device 96.323
+   device-bits lowbit.llama8b.lm_head.t1.convert.int8.pack.b.device 96.323/0x405814ac083126e9
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b 96.3230 96.2390 5.4539 Gelem/s 0xb364ee7208fddf70 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.convert.bf16.pack.b.device 24.842
+   device-bits lowbit.llama8b.lm_head.t1.convert.bf16.pack.b.device 24.842/0x4038d78d4fdf3b64
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.pack.b 24.8420 24.7980 21.1471 Gelem/s 0xd88b54f9c1b3341b once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.convert.bf16.widen.b.device 17.278
+   device-bits lowbit.llama8b.lm_head.t1.convert.bf16.widen.b.device 17.278/0x4031472b020c49ba
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.widen.b 17.2780 17.2510 30.4049 Gelem/s 0x63450213e8e12325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.convert.int8.dequantize.b.device 146.997
+   device-bits lowbit.llama8b.lm_head.t1.convert.int8.dequantize.b.device 146.997/0x40625fe76c8b4396
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.dequantize.b 146.9970 146.9780 3.5738 Gelem/s 0x85950a1d355e2325 per-call-when-materialized
+
+== llama8b.lm_head.t8  m=8 n=128256 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.fp32.v1.device 33.275
+   device-bits lowbit.llama8b.lm_head.t8.fp32.v1.device 33.275/0x4040a33333333333
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 33.2750 33.2390 126.3018 GMAC/s 0x3ebab59d0da21444 plan=20
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.bf16f32.v1.fused.device 252.028
+   device-bits lowbit.llama8b.lm_head.t8.bf16f32.v1.fused.device 252.028/0x406f80e560418937
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.fused 252.0280 251.2670 16.6755 GMAC/s 0x82bad7b4e5c4c263 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.bf16f32.v1.widen.device 50.428
+   device-bits lowbit.llama8b.lm_head.t8.bf16f32.v1.widen.device 50.428/0x404936c8b4395810
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.widen 50.4280 50.3660 83.3405 GMAC/s 0x82bad7b4e5c4c263 dispatched
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.int8i32.v1.flat.device 252.297
+   device-bits lowbit.llama8b.lm_head.t8.int8i32.v1.flat.device 252.297/0x406f89810624dd2f
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 252.2970 251.9660 16.6577 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.int8i32.v1.applechunk.device 11.818
+   device-bits lowbit.llama8b.lm_head.t8.int8i32.v1.applechunk.device 11.818/0x4027a2d0e5604189
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.applechunk 11.8180 11.8070 355.6179 GMAC/s 0x8151fd05ff287a5d probe,geometry=1
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.convert.int8.quantize.a.device 1.375
+   device-bits lowbit.llama8b.lm_head.t8.convert.int8.quantize.a.device 1.375/0x3ff6000000000000
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a 1.3750 1.3590 0.0238 Gelem/s 0x443be8ad16d189a3 per-call
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.convert.int8.pack.b.device 96.286
+   device-bits lowbit.llama8b.lm_head.t8.convert.int8.pack.b.device 96.286/0x4058124dd2f1a9fc
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b 96.2860 96.0400 5.4560 Gelem/s 0x2d7a0cd447f12c4c once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.convert.bf16.pack.b.device 24.879
+   device-bits lowbit.llama8b.lm_head.t8.convert.bf16.pack.b.device 24.879/0x4038e10624dd2f1b
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.pack.b 24.8790 24.8330 21.1157 Gelem/s 0xcc0aa53d00927bab once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.convert.bf16.widen.b.device 17.387
+   device-bits lowbit.llama8b.lm_head.t8.convert.bf16.widen.b.device 17.387/0x403163126e978d50
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.widen.b 17.3870 17.2770 30.2143 Gelem/s 0x4e388bd358a22325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.convert.int8.dequantize.b.device 146.984
+   device-bits lowbit.llama8b.lm_head.t8.convert.int8.dequantize.b.device 146.984/0x40625f7ced916873
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.dequantize.b 146.9840 146.9460 3.5741 Gelem/s 0x8e4331c54a342325 per-call-when-materialized
+
+== llama8b.lm_head.t512  m=512 n=16032 k=4096  CAPPED  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.fp32.v1.device 67.534
+   device-bits lowbit.llama8b.lm_head.t512.fp32.v1.device 67.534/0x4050e22d0e560419
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 67.5340 67.4610 497.8461 GMAC/s 0x84fd143bb625cf70 plan=20
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.bf16f32.v1.fused.device 2011.315
+   device-bits lowbit.llama8b.lm_head.t512.bf16f32.v1.fused.device 2011.315/0x409f6d428f5c28f6
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.fused 2011.3150 2008.4310 16.7162 GMAC/s 0xa75052ecc1e78b46 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.bf16f32.v1.widen.device 69.733
+   device-bits lowbit.llama8b.lm_head.t512.bf16f32.v1.widen.device 69.733/0x40516ee978d4fdf4
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.widen 69.7330 69.6330 482.1468 GMAC/s 0xa75052ecc1e78b46 dispatched
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.int8i32.v1.flat.device 2011.159
+   device-bits lowbit.llama8b.lm_head.t512.int8i32.v1.flat.device 2011.159/0x409f6ca2d0e56042
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 2011.1590 2010.9640 16.7175 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.int8i32.v1.applechunk.device 31.28
+   device-bits lowbit.llama8b.lm_head.t512.int8i32.v1.applechunk.device 31.28/0x403f47ae147ae148
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.applechunk 31.2800 31.2030 1074.8574 GMAC/s 0xaae4f3d3c69453cd probe,geometry=0
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.convert.int8.quantize.a.device 3.509
+   device-bits lowbit.llama8b.lm_head.t512.convert.int8.quantize.a.device 3.509/0x400c126e978d4fdf
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a 3.5090 3.4310 0.5976 Gelem/s 0xfd89ee79d025dda7 per-call
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.convert.int8.pack.b.device 13.887
+   device-bits lowbit.llama8b.lm_head.t512.convert.int8.pack.b.device 13.887/0x402bc624dd2f1aa0
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b 13.8870 13.8660 4.7287 Gelem/s 0xcc187b17bc36366d once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.convert.bf16.pack.b.device 3.464
+   device-bits lowbit.llama8b.lm_head.t512.convert.bf16.pack.b.device 3.464/0x400bb645a1cac083
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.pack.b 3.4640 3.3650 18.9570 Gelem/s 0xaabc0c6ba2a73e85 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.convert.bf16.widen.b.device 2.384
+   device-bits lowbit.llama8b.lm_head.t512.convert.bf16.widen.b.device 2.384/0x4003126e978d4fdf
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.widen.b 2.3840 2.3570 27.5449 Gelem/s 0xbd6a89a89fc02325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.convert.int8.dequantize.b.device 15.798
+   device-bits lowbit.llama8b.lm_head.t512.convert.int8.dequantize.b.device 15.798/0x402f989374bc6a7f
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.dequantize.b 15.7980 15.7450 4.1567 Gelem/s 0xf6a61b0da9142325 per-call-when-materialized
+
+== done [IDENTICAL]: 12 shapes ==

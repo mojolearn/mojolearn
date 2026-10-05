@@ -1,0 +1,944 @@
+199025 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x137bc0000000, nodemask=1)
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_int8_apple_chunk.mojo:145:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3617:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    p: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_int8_apple_chunk.mojo:250:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_int8_apple_chunk.mojo:250:59: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_int8_apple_chunk.mojo:252:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_int8_apple_chunk.mojo:252:72: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3047:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                             ~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3047:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                        ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3047:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3047:81: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                                           ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3048:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                             ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3048:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3048:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3048:85: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                               ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3699:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3852:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[sg] = ea0
+            ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3853:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[NSG + sg] = eb0
+            ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3862:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var atc = at + cur * ASZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3863:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var btc = bt + cur * BSZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3864:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var wmc = wmin + cur * 2 * NSG
+                  ~~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3871:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[sg] = ea
+                ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3872:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[NSG + sg] = eb
+                ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3881:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bea = min(bea, wmc[q])
+                           ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3882:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            beb = min(beb, wmc[NSG + q])
+                           ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3893:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3893:64: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3895:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3895:77: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3906:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var av = atc[p * AST + (sgm * FM + fm) * 8 + frow]
+                             ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3909:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var bv = btc[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
+                                     ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3916:81: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ean = _admit_warp_min(_amma_stage[BM, KB, NT, True, AST](at + nxt * ASZ, ra, tid, a_ofast))
+                                                                             ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3917:82: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ebn = _admit_warp_min(_amma_stage[BN, KB, NT, False, BST](bt + nxt * BSZ, rb, tid, b_ofast))
+                                                                              ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3919:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + sg] = ean
+                    ~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3920:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + NSG + sg] = ebn
+                    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3933:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    fl[pe] = part[pe]
+                    ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3943:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            outv[oe] = fl[oe]
+                       ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3957:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[Int(block_idx.y) * m * n + gi * n + gj] = outv[2 * (fm * FN + fq) + e]
+                        ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3959:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[cbase + gi * n + gj] = ftz(outv[2 * (fm * FN + fq) + e])
+                        ~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7254:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7255:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7287:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7288:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7370:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7371:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7386:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var raa = as_.load[width=RPT, alignment=ALIGN](abase + ca * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7387:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rba = bs_.load[width=CPT, alignment=ALIGN](bbase + ca * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7393:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7394:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7420:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:7421:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_int8_apple_chunk.mojo:182:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + e) * ST + r] = v[e]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_int8_apple_chunk.mojo:184:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_int8_apple_chunk.mojo:184:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:183:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_int8_apple_chunk.mojo:184:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3669:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3669:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3671:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3677:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q]
+                                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3683:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3683:51: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3685:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3691:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q * k_stride]
+                                            ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3719:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3719:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3719:37: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~~^~~~~~
+                                     unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3722:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(o4 + q) * ST + pp] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3728:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + q) * ST + o] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3730:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3730:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-units/bench/gemm_lowbit_price_main.mojo:177:
+/root/mojolearn-lowbit-units/gemm/checks/gemm_identical.mojo:3730:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+== bench/gemm_lowbit_price_main.mojo [IDENTICAL] ==
+column nvidia
+profiles fp32.v1, bf16f32.v1, int8i32.v1
+int8 dispatch: mma (lib_int8_matrix_unit_for)
+sabotage: price none  lowbit none  apple chunk none
+repeats 5  mac budget 34359738368  only 
+EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one synchronize per sample; the median of the timed calls is reported and the minimum beside it.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.fp32.v1.device 0.073735
+   device-bits lowbit.llama8b.qkv.t1.fp32.v1.device 0.073735/0x3fb2e04c05921038
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 0.0737 0.0718 227.5340 GMAC/s 0x920cdd138650a8bd plan=13
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.bf16f32.v1.fused.device 0.791811
+   device-bits lowbit.llama8b.qkv.t1.bf16f32.v1.fused.device 0.791811/0x3fe9568405b39e28
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.fused 0.7918 0.7899 21.1884 GMAC/s 0xcd39e9d6e6d7179a dispatched
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.bf16f32.v1.widen.device 0.124472
+   device-bits lowbit.llama8b.qkv.t1.bf16f32.v1.widen.device 0.124472/0x3fbfdd65a14488c6
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.widen 0.1245 0.1198 134.7871 GMAC/s 0xcd39e9d6e6d7179a not-dispatched(cells<=16384)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.flat.device 0.666281
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.flat.device 0.666281/0x3fe5522c881e4713
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 0.6663 0.6645 25.1804 GMAC/s 0x8a9227b93e430acd not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.device 0.159085
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.device 0.159085/0x3fc45ce5b4245f5b
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma 0.1591 0.1556 105.4607 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.quantize.a.device 0.489215
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.quantize.a.device 0.489215/0x3fdf4f4c6e6d9be5
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 0.4892 0.4881 0.0084 Gelem/s 0x54279cbda1444726 per-call
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.pack.b.device 2.67053
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.pack.b.device 2.67053/0x40055d3ed527e521
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 2.6705 2.6580 6.2824 Gelem/s 0x305b1a502296caf6 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.bf16.pack.b.device 0.063963
+   device-bits lowbit.llama8b.qkv.t1.convert.bf16.pack.b.device 0.063963/0x3fb05fe111276fb1
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.pack.b 0.0640 0.0636 262.2956 Gelem/s 0x24efed638bb6b96b once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.bf16.widen.b.device 0.062613
+   device-bits lowbit.llama8b.qkv.t1.convert.bf16.widen.b.device 0.062613/0x3fb00767d34df04e
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.widen.b 0.0626 0.0618 267.9510 Gelem/s 0xd2c2d96392622325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.dequantize.b.device 0.079416
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.dequantize.b.device 0.079416/0x3fb4549b62c77575
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int8.dequantize.b 0.0794 0.0788 211.2574 Gelem/s 0x2fd9ee536fd82325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.inference.bf16f32.v1.device 0.797581
+   device-bits lowbit.llama8b.qkv.t1.inference.bf16f32.v1.device 0.797581/0x3fe985c896dd26b7
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.bf16f32.v1 0.7976 0.7925 21.0351 GMAC/s 0xcd39e9d6e6d7179a product
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.inference.int8i32.v1.device 0.642028
+   device-bits lowbit.llama8b.qkv.t1.inference.int8i32.v1.device 0.642028/0x3fe48b7e4de3b8a2
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1 0.6420 0.6393 26.1316 GMAC/s 0x8a9227b93e430acd quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.training.bf16f32.v1.device 0.847304
+   device-bits lowbit.llama8b.qkv.t1.training.bf16f32.v1.device 0.847304/0x3feb1d1d4738a3b5
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL training.bf16f32.v1 0.8473 0.8423 19.8007 GMAC/s 0xcd39e9d6e6d7179a pack.b+product
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.training.int8i32.v1.device 3.289215
+   device-bits lowbit.llama8b.qkv.t1.training.int8i32.v1.device 3.289215/0x400a504ff43419e3
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1 3.2892 3.2759 5.1007 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.fp32.v1.device 0.10738
+   device-bits lowbit.llama8b.qkv.t8.fp32.v1.device 0.10738/0x3fbb7d41743e963e
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.1074 0.1036 1249.9323 GMAC/s 0xd5677d8a13939709 plan=14
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.bf16f32.v1.fused.device 0.784997
+   device-bits lowbit.llama8b.qkv.t8.bf16f32.v1.fused.device 0.784997/0x3fe91eb2074ea8da
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.fused 0.7850 0.7816 170.9787 GMAC/s 0xf36fe1a8828cefd9 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.bf16f32.v1.widen.device 0.150572
+   device-bits lowbit.llama8b.qkv.t8.bf16f32.v1.widen.device 0.150572/0x3fc345f17bd8be73
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.widen 0.1506 0.1492 891.3857 GMAC/s 0xf36fe1a8828cefd9 dispatched
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.flat.device 0.66516
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.flat.device 0.66516/0x3fe548fd9fd36f7e
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 0.6652 0.6641 201.7826 GMAC/s 0x484bd20aabe66ee5 not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.device 0.148574
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.device 0.148574/0x3fc304790b849881
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma 0.1486 0.1474 903.3729 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.quantize.a.device 0.601792
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.quantize.a.device 0.601792/0x3fe341e14bdfd263
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 0.6018 0.5989 0.0545 Gelem/s 0xbd0b5aed2b83cb45 per-call
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.pack.b.device 2.481875
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.pack.b.device 2.481875/0x4003dae147ae147b
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 2.4819 2.4809 6.7599 Gelem/s 0xa8ce17326c01345 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.bf16.pack.b.device 0.066922
+   device-bits lowbit.llama8b.qkv.t8.convert.bf16.pack.b.device 0.066922/0x3fb121ccd9620685
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.pack.b 0.0669 0.0658 250.6981 Gelem/s 0xdccc5a093a080c52 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.bf16.widen.b.device 0.064824
+   device-bits lowbit.llama8b.qkv.t8.convert.bf16.widen.b.device 0.064824/0x3fb0984e3ffef391
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.widen.b 0.0648 0.0619 258.8118 Gelem/s 0x944a5da41b4d2325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.dequantize.b.device 0.080664
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.dequantize.b.device 0.080664/0x3fb4a66559f6ec5b
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int8.dequantize.b 0.0807 0.0774 207.9889 Gelem/s 0x24697157b3da2325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.inference.bf16f32.v1.device 0.152916
+   device-bits lowbit.llama8b.qkv.t8.inference.bf16f32.v1.device 0.152916/0x3fc392c061847f56
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.bf16f32.v1 0.1529 0.1508 877.7219 GMAC/s 0xf36fe1a8828cefd9 product
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.inference.int8i32.v1.device 0.770596
+   device-bits lowbit.llama8b.qkv.t8.inference.int8i32.v1.device 0.770596/0x3fe8a8b8f14db595
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1 0.7706 0.7679 174.1739 GMAC/s 0x484bd20aabe66ee5 quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.training.bf16f32.v1.device 0.208361
+   device-bits lowbit.llama8b.qkv.t8.training.bf16f32.v1.device 0.208361/0x3fcaab92c061847f
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL training.bf16f32.v1 0.2084 0.2070 644.1596 GMAC/s 0xf36fe1a8828cefd9 pack.b+product
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.training.int8i32.v1.device 3.399407
+   device-bits lowbit.llama8b.qkv.t8.training.int8i32.v1.device 3.399407/0x400b31fc4c165908
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1 3.3994 3.3924 39.4827 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.fp32.v1.device 1.037745
+   device-bits lowbit.llama8b.qkv.t512.fp32.v1.device 1.037745/0x3ff09a9a8049667b
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 1.0377 1.0367 8277.5003 GMAC/s 0x67d3d940546b834c plan=10
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.bf16f32.v1.fused.device 39.408339
+   device-bits lowbit.llama8b.qkv.t512.bf16f32.v1.fused.device 39.408339/0x4043b44473cd5736
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.fused 39.4083 39.3668 217.9725 GMAC/s 0x4abd79a5b10221e5 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.bf16f32.v1.widen.device 1.104772
+   device-bits lowbit.llama8b.qkv.t512.bf16f32.v1.widen.device 1.104772/0x3ff1ad256798958e
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.widen 1.1048 1.0949 7775.3008 GMAC/s 0x4abd79a5b10221e5 dispatched
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.flat.device 39.192344
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.flat.device 39.192344/0x4043989eba6aca79
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 39.1923 39.1891 219.1738 GMAC/s 0xa5f2ce1f1b9a0ebd not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.device 1.440668
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.device 1.440668/0x3ff70cf9e3864cb6
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma 1.4407 1.4183 5962.4664 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.quantize.a.device 2.623614
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.quantize.a.device 2.623614/0x4004fd29563a9f38
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 2.6236 2.6179 0.7993 Gelem/s 0xe8bb3ad105a4ae26 per-call
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.pack.b.device 2.476262
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.pack.b.device 2.476262/0x4003cf6273929ed4
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 2.4763 2.4717 6.7752 Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.bf16.pack.b.device 0.063878
+   device-bits lowbit.llama8b.qkv.t512.convert.bf16.pack.b.device 0.063878/0x3fb05a4f00ef1349
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.pack.b 0.0639 0.0623 262.6447 Gelem/s 0xaef2da473a8e2a10 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.bf16.widen.b.device 0.063615
+   device-bits lowbit.llama8b.qkv.t512.convert.bf16.widen.b.device 0.063615/0x3fb049129888f862
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.widen.b 0.0636 0.0615 263.7305 Gelem/s 0xc8e5243510392325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.dequantize.b.device 0.080759
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.dequantize.b.device 0.080759/0x3fb4ac9f2fdb8fde
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int8.dequantize.b 0.0808 0.0790 207.7442 Gelem/s 0x1798a32eac742325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.inference.bf16f32.v1.device 1.094256
+   device-bits lowbit.llama8b.qkv.t512.inference.bf16f32.v1.device 1.094256/0x3ff1821294573a79
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.bf16f32.v1 1.0943 1.0889 7850.0228 GMAC/s 0x4abd79a5b10221e5 product
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.inference.int8i32.v1.device 4.080169
+   device-bits lowbit.llama8b.qkv.t512.inference.int8i32.v1.device 4.080169/0x40105217d2849cb2
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1 4.0802 4.0790 2105.2889 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.training.bf16f32.v1.device 1.151996
+   device-bits lowbit.llama8b.qkv.t512.training.bf16f32.v1.device 1.151996/0x3ff26e935b91f70e
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL training.bf16f32.v1 1.1520 1.1458 7456.5663 GMAC/s 0x4abd79a5b10221e5 pack.b+product
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.training.int8i32.v1.device 6.724038
+   device-bits lowbit.llama8b.qkv.t512.training.int8i32.v1.device 6.724038/0x401ae56a37ac3eb8
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1 6.7240 6.7133 1277.4964 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_up.t1  m=1 n=14336 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.fp32.v1.device 0.188433
+   device-bits lowbit.llama8b.mlp_up.t1.fp32.v1.device 0.188433/0x3fc81e92923e5b85
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 0.1884 0.1824 311.6241 GMAC/s 0x4965ea6af2ff5e61 plan=13
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.bf16f32.v1.fused.device 0.792565
+   device-bits lowbit.llama8b.mlp_up.t1.bf16f32.v1.fused.device 0.792565/0x3fe95cb1465e8922
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.fused 0.7926 0.7903 74.0889 GMAC/s 0x5e3f5ff35a448024 dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.bf16f32.v1.widen.device 0.367654
+   device-bits lowbit.llama8b.mlp_up.t1.bf16f32.v1.widen.device 0.367654/0x3fd787a4a48f96e1
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.widen 0.3677 0.3659 159.7161 GMAC/s 0x5e3f5ff35a448024 not-dispatched(cells<=16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.int8i32.v1.flat.device 0.668671
+   device-bits lowbit.llama8b.mlp_up.t1.int8i32.v1.flat.device 0.668671/0x3fe565c0b9991362
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 0.6687 0.6646 87.8164 GMAC/s 0xff302668595b02d not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.int8i32.v1.mma.device 0.191352
+   device-bits lowbit.llama8b.mlp_up.t1.int8i32.v1.mma.device 0.191352/0x3fc87e38eb0318b9
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma 0.1914 0.1898 306.8704 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.convert.int8.quantize.a.device 0.501743
+   device-bits lowbit.llama8b.mlp_up.t1.convert.int8.quantize.a.device 0.501743/0x3fe00e4755ffe6d6
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a 0.5017 0.5007 0.0082 Gelem/s 0x1343c750c1ded02 per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.convert.int8.pack.b.device 2.490714
+   device-bits lowbit.llama8b.mlp_up.t1.convert.int8.pack.b.device 2.490714/0x4003ecfb762d83c7
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b 2.4907 2.4863 23.5757 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.convert.bf16.pack.b.device 0.198832
+   device-bits lowbit.llama8b.mlp_up.t1.convert.bf16.pack.b.device 0.198832/0x3fc97353b4b2fa94
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.pack.b 0.1988 0.1974 295.3260 Gelem/s 0xed618e2333b13294 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.convert.bf16.widen.b.device 0.189194
+   device-bits lowbit.llama8b.mlp_up.t1.convert.bf16.widen.b.device 0.189194/0x3fc837824d4cb9ed
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.widen.b 0.1892 0.1883 310.3706 Gelem/s 0x573b3a44b4012325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.convert.int8.dequantize.b.device 0.245995
+   device-bits lowbit.llama8b.mlp_up.t1.convert.int8.dequantize.b.device 0.245995/0x3fcf7cc39ffd60e9
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.dequantize.b 0.2460 0.2456 238.7051 Gelem/s 0x5a7e8639220c2325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.inference.bf16f32.v1.device 0.796564
+   device-bits lowbit.llama8b.mlp_up.t1.inference.bf16f32.v1.device 0.796564/0x3fe97d73c9257860
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL inference.bf16f32.v1 0.7966 0.7963 73.7169 GMAC/s 0x5e3f5ff35a448024 product
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.inference.int8i32.v1.device 0.670115
+   device-bits lowbit.llama8b.mlp_up.t1.inference.int8i32.v1.device 0.670115/0x3fe571950331e3a8
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1 0.6701 0.6679 87.6271 GMAC/s 0xff302668595b02d quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.training.bf16f32.v1.device 0.984511
+   device-bits lowbit.llama8b.mlp_up.t1.training.bf16f32.v1.device 0.984511/0x3fef811d3671ac15
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL training.bf16f32.v1 0.9845 0.9800 59.6441 GMAC/s 0x5e3f5ff35a448024 pack.b+product
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t1.training.int8i32.v1.device 3.331449
+   device-bits lowbit.llama8b.mlp_up.t1.training.int8i32.v1.device 3.331449/0x400aa6cebbba55d2
+LOWBIT nvidia llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1 3.3314 3.3164 17.6260 GMAC/s 0xff302668595b02d quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_up.t8  m=8 n=14336 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.fp32.v1.device 0.275658
+   device-bits lowbit.llama8b.mlp_up.t8.fp32.v1.device 0.275658/0x3fd1a46173b85e81
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 0.2757 0.2740 1704.1481 GMAC/s 0x7b30465d325906e plan=14
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.bf16f32.v1.fused.device 2.530949
+   device-bits lowbit.llama8b.mlp_up.t8.bf16f32.v1.fused.device 2.530949/0x40043f623076c051
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.fused 2.5309 2.5293 185.6071 GMAC/s 0x1531c10dcd152579 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.bf16f32.v1.widen.device 0.453389
+   device-bits lowbit.llama8b.mlp_up.t8.bf16f32.v1.widen.device 0.453389/0x3fdd04534bd76ee7
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.widen 0.4534 0.4532 1036.1126 GMAC/s 0x1531c10dcd152579 dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.int8i32.v1.flat.device 2.506153
+   device-bits lowbit.llama8b.mlp_up.t8.int8i32.v1.flat.device 2.506153/0x40040c99f1ae2da5
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 2.5062 2.5057 187.4435 GMAC/s 0xbd4b3a783f9d9a0d not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.int8i32.v1.mma.device 0.209417
+   device-bits lowbit.llama8b.mlp_up.t8.int8i32.v1.mma.device 0.209417/0x3fcace2d1f1cfbb9
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma 0.2094 0.2089 2243.1897 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.convert.int8.quantize.a.device 0.613426
+   device-bits lowbit.llama8b.mlp_up.t8.convert.int8.quantize.a.device 0.613426/0x3fe3a12f901083dc
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a 0.6134 0.6130 0.0534 Gelem/s 0x5e46321f760ef85d per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.convert.int8.pack.b.device 2.484449
+   device-bits lowbit.llama8b.mlp_up.t8.convert.int8.pack.b.device 2.484449/0x4003e026cc1ca3a5
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b 2.4844 2.4830 23.6351 Gelem/s 0xa9e079afde494e3d once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.convert.bf16.pack.b.device 0.198361
+   device-bits lowbit.llama8b.mlp_up.t8.convert.bf16.pack.b.device 0.198361/0x3fc963e4abe6a338
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.pack.b 0.1984 0.1973 296.0272 Gelem/s 0xc5111a6224412c3f once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.convert.bf16.widen.b.device 0.187587
+   device-bits lowbit.llama8b.mlp_up.t8.convert.bf16.widen.b.device 0.187587/0x3fc802d9cf13ceea
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.widen.b 0.1876 0.1871 313.0295 Gelem/s 0x6a679200ae02325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.convert.int8.dequantize.b.device 0.244717
+   device-bits lowbit.llama8b.mlp_up.t8.convert.int8.dequantize.b.device 0.244717/0x3fcf52e2fbe33acd
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.dequantize.b 0.2447 0.2440 239.9517 Gelem/s 0x89939dca58a02325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.inference.bf16f32.v1.device 0.453507
+   device-bits lowbit.llama8b.mlp_up.t8.inference.bf16f32.v1.device 0.453507/0x3fdd0642396073de
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL inference.bf16f32.v1 0.4535 0.4519 1035.8430 GMAC/s 0x1531c10dcd152579 product
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.inference.int8i32.v1.device 0.802747
+   device-bits lowbit.llama8b.mlp_up.t8.inference.int8i32.v1.device 0.802747/0x3fe9b01a79fec99f
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1 0.8027 0.8021 585.1932 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.training.bf16f32.v1.device 0.639781
+   device-bits lowbit.llama8b.mlp_up.t8.training.bf16f32.v1.device 0.639781/0x3fe4791600f34507
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL training.bf16f32.v1 0.6398 0.6388 734.2545 GMAC/s 0x1531c10dcd152579 pack.b+product
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t8.training.int8i32.v1.device 3.308238
+   device-bits lowbit.llama8b.mlp_up.t8.training.int8i32.v1.device 3.308238/0x400a77457c0b1359
+LOWBIT nvidia llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1 3.3082 3.3008 141.9977 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_up.t512  m=512 n=14336 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.fp32.v1.device 3.346215
+   device-bits lowbit.llama8b.mlp_up.t512.fp32.v1.device 3.346215/0x400ac50c5eb313be
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 3.3462 3.3395 8984.7099 GMAC/s 0x27a166783c45f9f0 plan=10
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.bf16f32.v1.fused.device 139.282523
+   device-bits lowbit.llama8b.mlp_up.t512.bf16f32.v1.fused.device 139.282523/0x4061690a6dacabc5
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.fused 139.2825 138.9768 215.8546 GMAC/s 0x5b29318ad80be465 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.bf16f32.v1.widen.device 3.522464
+   device-bits lowbit.llama8b.mlp_up.t512.bf16f32.v1.widen.device 3.522464/0x400c2e019b0ab2e1
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.widen 3.5225 3.5163 8535.1535 GMAC/s 0x5b29318ad80be465 dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.int8i32.v1.flat.device 135.670696
+   device-bits lowbit.llama8b.mlp_up.t512.int8i32.v1.flat.device 135.670696/0x4060f576577531db
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 135.6707 135.6653 221.6011 GMAC/s 0x220ff5fe96f5ef55 not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.int8i32.v1.mma.device 4.628007
+   device-bits lowbit.llama8b.mlp_up.t512.int8i32.v1.mma.device 4.628007/0x40128314445aa2e4
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma 4.6280 4.6260 6496.2674 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.convert.int8.quantize.a.device 2.646238
+   device-bits lowbit.llama8b.mlp_up.t512.convert.int8.quantize.a.device 2.646238/0x40052b7ed41b75a7
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a 2.6462 2.6391 0.7925 Gelem/s 0x8c503fb082856006 per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.convert.int8.pack.b.device 2.477776
+   device-bits lowbit.llama8b.mlp_up.t512.convert.int8.pack.b.device 2.477776/0x4003d27c39368273
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b 2.4778 2.4746 23.6988 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.convert.bf16.pack.b.device 0.197631
+   device-bits lowbit.llama8b.mlp_up.t512.convert.bf16.pack.b.device 0.197631/0x3fc94bf8fcd67fd4
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.pack.b 0.1976 0.1964 297.1207 Gelem/s 0x1c04d570a3d23380 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.convert.bf16.widen.b.device 0.188012
+   device-bits lowbit.llama8b.mlp_up.t512.convert.bf16.widen.b.device 0.188012/0x3fc810c6f7a0b5ee
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.widen.b 0.1880 0.1861 312.3219 Gelem/s 0x5c9d5dc97a412325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.convert.int8.dequantize.b.device 0.245051
+   device-bits lowbit.llama8b.mlp_up.t512.convert.int8.dequantize.b.device 0.245051/0x3fcf5dd4c76d117b
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.dequantize.b 0.2451 0.2428 239.6246 Gelem/s 0xb584f740e2d62325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.inference.bf16f32.v1.device 3.518766
+   device-bits lowbit.llama8b.mlp_up.t512.inference.bf16f32.v1.device 3.518766/0x400c266ec9e236c1
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL inference.bf16f32.v1 3.5188 3.5132 8544.1234 GMAC/s 0x5b29318ad80be465 product
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.inference.int8i32.v1.device 7.092868
+   device-bits lowbit.llama8b.mlp_up.t512.inference.int8i32.v1.device 7.092868/0x401c5f18c9fb6135
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1 7.0929 7.0703 4238.7326 GMAC/s 0x220ff5fe96f5ef55 quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.training.bf16f32.v1.device 3.707805
+   device-bits lowbit.llama8b.mlp_up.t512.training.bf16f32.v1.device 3.707805/0x400da995aaf78fef
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL training.bf16f32.v1 3.7078 3.7048 8108.5092 GMAC/s 0x5b29318ad80be465 pack.b+product
+PRICE IDENTICAL lowbit.llama8b.mlp_up.t512.training.int8i32.v1.device 9.650225
+   device-bits lowbit.llama8b.mlp_up.t512.training.int8i32.v1.device 9.650225/0x40234cea4a8c154d
+LOWBIT nvidia llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1 9.6502 9.6310 3115.4477 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_up.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_down.t1  m=1 n=4096 k=14336  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.fp32.v1.device 0.177256
+   device-bits lowbit.llama8b.mlp_down.t1.fp32.v1.device 0.177256/0x3fc6b05319828805
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 0.1773 0.1711 331.2737 GMAC/s 0x4efb8e54c724fa9 plan=13
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.bf16f32.v1.fused.device 2.757004
+   device-bits lowbit.llama8b.mlp_down.t1.bf16f32.v1.fused.device 2.757004/0x40060e581cf7878b
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.fused 2.7570 2.7547 21.2986 GMAC/s 0xd044aebb510dc9 dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.bf16f32.v1.widen.device 0.353128
+   device-bits lowbit.llama8b.mlp_down.t1.bf16f32.v1.widen.device 0.353128/0x3fd699a62ed35222
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.widen 0.3531 0.3517 166.2860 GMAC/s 0xd044aebb510dc9 not-dispatched(cells<=16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.int8i32.v1.flat.device 2.347316
+   device-bits lowbit.llama8b.mlp_down.t1.int8i32.v1.flat.device 2.347316/0x4002c74d9c6b0532
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 2.3473 2.3404 25.0159 GMAC/s 0x1ffdde3ffffb72c9 not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.int8i32.v1.mma.device 0.653185
+   device-bits lowbit.llama8b.mlp_down.t1.int8i32.v1.mma.device 0.653185/0x3fe4e6e43aa79bbb
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma 0.6532 0.6507 89.8984 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.convert.int8.quantize.a.device 1.735403
+   device-bits lowbit.llama8b.mlp_down.t1.convert.int8.quantize.a.device 1.735403/0x3ffbc435efa615a9
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a 1.7354 1.7313 0.0083 Gelem/s 0x160d734878c0f458 per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.convert.int8.pack.b.device 9.985247
+   device-bits lowbit.llama8b.mlp_down.t1.convert.int8.pack.b.device 9.985247/0x4023f8724b76f6d7
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b 9.9852 9.9656 5.8807 Gelem/s 0x31274090cc79ba2f once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.convert.bf16.pack.b.device 0.199303
+   device-bits lowbit.llama8b.mlp_down.t1.convert.bf16.pack.b.device 0.199303/0x3fc982c2bd7f51f0
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.pack.b 0.1993 0.1972 294.6281 Gelem/s 0x9dba12f4fe0c9e9b once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.convert.bf16.widen.b.device 0.186969
+   device-bits lowbit.llama8b.mlp_down.t1.convert.bf16.widen.b.device 0.186969/0x3fc7ee99a62ed352
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.widen.b 0.1870 0.1865 314.0641 Gelem/s 0x45255120c9d82325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.convert.int8.dequantize.b.device 0.245157
+   device-bits lowbit.llama8b.mlp_down.t1.convert.int8.dequantize.b.device 0.245157/0x3fcf614df8b15726
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.dequantize.b 0.2452 0.2436 239.5210 Gelem/s 0x8e72f1c5a3402325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.inference.bf16f32.v1.device 2.760629
+   device-bits lowbit.llama8b.mlp_down.t1.inference.bf16f32.v1.device 2.760629/0x400615c4a83b1d0d
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL inference.bf16f32.v1 2.7606 2.7569 21.2706 GMAC/s 0xd044aebb510dc9 product
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.inference.int8i32.v1.device 2.320898
+   device-bits lowbit.llama8b.mlp_down.t1.inference.int8i32.v1.device 2.320898/0x40029132f87ad081
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1 2.3209 2.3175 25.3007 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.training.bf16f32.v1.device 2.94407
+   device-bits lowbit.llama8b.mlp_down.t1.training.bf16f32.v1.device 2.94407/0x40078d74927913e8
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL training.bf16f32.v1 2.9441 2.9401 19.9453 GMAC/s 0xd044aebb510dc9 pack.b+product
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t1.training.int8i32.v1.device 12.279658
+   device-bits lowbit.llama8b.mlp_down.t1.training.int8i32.v1.device 12.279658/0x40288f2f55582129
+LOWBIT nvidia llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1 12.2797 12.2718 4.7819 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_down.t8  m=8 n=4096 k=14336  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.fp32.v1.device 0.291847
+   device-bits lowbit.llama8b.mlp_down.t8.fp32.v1.device 0.291847/0x3fd2ad9f0a1be2b5
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 0.2918 0.2900 1609.6175 GMAC/s 0xfb21004541ae3e8e plan=14
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.bf16f32.v1.fused.device 2.700773
+   device-bits lowbit.llama8b.mlp_down.t8.bf16f32.v1.fused.device 2.700773/0x40059b2edfe75bc4
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.fused 2.7008 2.6968 173.9361 GMAC/s 0xcbe807d3ae13612f not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.bf16f32.v1.widen.device 0.467376
+   device-bits lowbit.llama8b.mlp_down.t8.bf16f32.v1.widen.device 0.467376/0x3fdde97d06bbdbe4
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.widen 0.4674 0.4649 1005.1052 GMAC/s 0xcbe807d3ae13612f dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.int8i32.v1.flat.device 2.338707
+   device-bits lowbit.llama8b.mlp_down.t8.int8i32.v1.flat.device 2.338707/0x4002b5ac03ff6901
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 2.3387 2.3358 200.8640 GMAC/s 0x694aafd520fdadad not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.int8i32.v1.mma.device 0.697576
+   device-bits lowbit.llama8b.mlp_down.t8.int8i32.v1.mma.device 0.697576/0x3fe6528ae74f2f12
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma 0.6976 0.6897 673.4206 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.convert.int8.quantize.a.device 2.427171
+   device-bits lowbit.llama8b.mlp_down.t8.convert.int8.quantize.a.device 2.427171/0x40036ad8a116659d
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a 2.4272 2.4200 0.0473 Gelem/s 0xbb4f2a7232392bfe per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.convert.int8.pack.b.device 9.991735
+   device-bits lowbit.llama8b.mlp_down.t8.convert.int8.pack.b.device 9.991735/0x4023fbc4b09e98dd
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b 9.9917 9.9606 5.8769 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.convert.bf16.pack.b.device 0.198732
+   device-bits lowbit.llama8b.mlp_down.t8.convert.bf16.pack.b.device 0.198732/0x3fc9700cd855970b
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.pack.b 0.1987 0.1977 295.4746 Gelem/s 0xfbacba127cf6177e once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.convert.bf16.widen.b.device 0.187
+   device-bits lowbit.llama8b.mlp_down.t8.convert.bf16.widen.b.device 0.187/0x3fc7ef9db22d0e56
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.widen.b 0.1870 0.1864 314.0121 Gelem/s 0xcbcb5933d8352325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.convert.int8.dequantize.b.device 0.243815
+   device-bits lowbit.llama8b.mlp_down.t8.convert.int8.dequantize.b.device 0.243815/0x3fcf355475a31a4c
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.dequantize.b 0.2438 0.2429 240.8394 Gelem/s 0x9dcad54d7e462325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.inference.bf16f32.v1.device 0.46927
+   device-bits lowbit.llama8b.mlp_down.t8.inference.bf16f32.v1.device 0.46927/0x3fde088509bf9c63
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL inference.bf16f32.v1 0.4693 0.4681 1001.0485 GMAC/s 0xcbe807d3ae13612f product
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.inference.int8i32.v1.device 3.049268
+   device-bits lowbit.llama8b.mlp_down.t8.inference.int8i32.v1.device 3.049268/0x400864e69f05ea25
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1 3.0493 3.0398 154.0573 GMAC/s 0x694aafd520fdadad quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.training.bf16f32.v1.device 0.65608
+   device-bits lowbit.llama8b.mlp_down.t8.training.bf16f32.v1.device 0.65608/0x3fe4fe9b7bf1e8e6
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL training.bf16f32.v1 0.6561 0.6550 716.0134 GMAC/s 0xcbe807d3ae13612f pack.b+product
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t8.training.int8i32.v1.device 13.049976
+   device-bits lowbit.llama8b.mlp_down.t8.training.int8i32.v1.device 13.049976/0x402a1996744b2b77
+LOWBIT nvidia llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1 13.0500 13.0116 35.9972 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.fp32.v1.device 3.369612
+   device-bits lowbit.llama8b.mlp_down.t512.fp32.v1.device 3.369612/0x400af4f722e1ac58
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 3.3696 3.3627 8922.3243 GMAC/s 0x4743c97cb961339e plan=10
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.bf16f32.v1.fused.device 136.668324
+   device-bits lowbit.llama8b.mlp_down.t512.bf16f32.v1.fused.device 136.668324/0x40611562e9036439
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.fused 136.6683 136.4845 219.9835 GMAC/s 0x508d64e0e41d3350 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.bf16f32.v1.widen.device 3.54715
+   device-bits lowbit.llama8b.mlp_down.t512.bf16f32.v1.widen.device 3.54715/0x400c60902de00d1b
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.widen 3.5471 3.5429 8475.7541 GMAC/s 0x508d64e0e41d3350 dispatched
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.int8i32.v1.flat.device 137.963774
+   device-bits lowbit.llama8b.mlp_down.t512.int8i32.v1.flat.device 137.963774/0x40613ed73c925786
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 137.9638 137.9026 217.9179 GMAC/s 0x6120545eacb068ad not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.int8i32.v1.mma.device 5.549236
+   device-bits lowbit.llama8b.mlp_down.t512.int8i32.v1.mma.device 5.549236/0x4016326aec0724b7
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma 5.5492 5.5429 5417.8217 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.convert.int8.quantize.a.device 9.964465
+   device-bits lowbit.llama8b.mlp_down.t512.convert.int8.quantize.a.device 9.964465/0x4023edce5b4245f6
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a 9.9645 9.9555 0.7366 Gelem/s 0x903f6ff84c6082 per-call
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.convert.int8.pack.b.device 10.00527
+   device-bits lowbit.llama8b.mlp_down.t512.convert.int8.pack.b.device 10.00527/0x402402b2bfdb4cc2
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b 10.0053 9.9670 5.8689 Gelem/s 0xa046020a81d05746 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.convert.bf16.pack.b.device 0.197927
+   device-bits lowbit.llama8b.mlp_down.t512.convert.bf16.pack.b.device 0.197927/0x3fc955ac03ff6901
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.pack.b 0.1979 0.1975 296.6763 Gelem/s 0xd1b066f4e6a61fed once-per-weight
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.convert.bf16.widen.b.device 0.186811
+   device-bits lowbit.llama8b.mlp_down.t512.convert.bf16.widen.b.device 0.186811/0x3fc7e96c3fc43b2e
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.widen.b 0.1868 0.1862 314.3298 Gelem/s 0xf0fcf217ba5c2325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.convert.int8.dequantize.b.device 0.24345
+   device-bits lowbit.llama8b.mlp_down.t512.convert.int8.dequantize.b.device 0.24345/0x3fcf295e9e1b089a
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.dequantize.b 0.2435 0.2426 241.2005 Gelem/s 0xd972f24f17be2325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.inference.bf16f32.v1.device 3.54619
+   device-bits lowbit.llama8b.mlp_down.t512.inference.bf16f32.v1.device 3.54619/0x400c5e98dcdb37ca
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL inference.bf16f32.v1 3.5462 3.5406 8478.0486 GMAC/s 0x508d64e0e41d3350 product
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.inference.int8i32.v1.device 15.560253
+   device-bits lowbit.llama8b.mlp_down.t512.inference.int8i32.v1.device 15.560253/0x402f1ed97b30f8c6
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1 15.5603 15.4742 1932.1518 GMAC/s 0x6120545eacb068ad quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.training.bf16f32.v1.device 3.733218
+   device-bits lowbit.llama8b.mlp_down.t512.training.bf16f32.v1.device 3.733218/0x400ddda16616b54e
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL training.bf16f32.v1 3.7332 3.7294 8053.3125 GMAC/s 0x508d64e0e41d3350 pack.b+product
+PRICE IDENTICAL lowbit.llama8b.mlp_down.t512.training.int8i32.v1.device 25.507827
+   device-bits lowbit.llama8b.mlp_down.t512.training.int8i32.v1.device 25.507827/0x40398200f345069a
+LOWBIT nvidia llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1 25.5078 25.4380 1178.6489 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.mlp_down.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.lm_head.t1  m=1 n=128256 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.fp32.v1.device 1.204911
+   device-bits lowbit.llama8b.lm_head.t1.fp32.v1.device 1.204911/0x3ff34750c1b97354
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 1.2049 1.2045 435.9962 GMAC/s 0xcdc134cbce391535 plan=13
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.bf16f32.v1.fused.device 2.596778
+   device-bits lowbit.llama8b.lm_head.t1.bf16f32.v1.fused.device 2.596778/0x4004c6338b47c73f
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.fused 2.5968 2.5837 202.3032 GMAC/s 0x23f2e7e17341274a not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.bf16f32.v1.widen.device 2.811934
+   device-bits lowbit.llama8b.lm_head.t1.bf16f32.v1.widen.device 2.811934/0x40067ed740c4156e
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.widen 2.8119 2.8076 186.8239 GMAC/s 0x23f2e7e17341274a dispatched
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.int8i32.v1.flat.device 2.511458
+   device-bits lowbit.llama8b.lm_head.t1.int8i32.v1.flat.device 2.511458/0x400417774aba3876
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 2.5115 2.4984 209.1759 GMAC/s 0xe0222b2f9de835ed not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.int8i32.v1.mma.device 0.963252
+   device-bits lowbit.llama8b.lm_head.t1.int8i32.v1.mma.device 0.963252/0x3feed2f5dbb9cf9a
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma 0.9633 0.9419 545.3781 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.convert.int8.quantize.a.device 0.508635
+   device-bits lowbit.llama8b.lm_head.t1.convert.int8.quantize.a.device 0.508635/0x3fe046bce8533b10
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a 0.5086 0.5026 0.0081 Gelem/s 0x67d2e298b047bf2b per-call
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.convert.int8.pack.b.device 12.172708
+   device-bits lowbit.llama8b.lm_head.t1.convert.int8.pack.b.device 12.172708/0x4028586d2ed783e0
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b 12.1727 12.0612 43.1569 Gelem/s 0x1c75800d0b1054bd once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.convert.bf16.pack.b.device 1.676125
+   device-bits lowbit.llama8b.lm_head.t1.convert.bf16.pack.b.device 1.676125/0x3ffad16872b020c5
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.pack.b 1.6761 1.6726 313.4233 Gelem/s 0xa3f53235cc152516 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.convert.bf16.widen.b.device 1.615201
+   device-bits lowbit.llama8b.lm_head.t1.convert.bf16.widen.b.device 1.615201/0x3ff9d7dd00f776c5
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.widen.b 1.6152 1.6133 325.2453 Gelem/s 0x63450213e8e12325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.convert.int8.dequantize.b.device 2.104763
+   device-bits lowbit.llama8b.lm_head.t1.convert.int8.dequantize.b.device 2.104763/0x4000d68dfbd6a594
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.dequantize.b 2.1048 2.1000 249.5942 Gelem/s 0x23115689185e2325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.inference.bf16f32.v1.device 2.81318
+   device-bits lowbit.llama8b.lm_head.t1.inference.bf16f32.v1.device 2.81318/0x40068164840e171a
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL inference.bf16f32.v1 2.8132 2.8054 186.7412 GMAC/s 0x23f2e7e17341274a product
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.inference.int8i32.v1.device 1.460755
+   device-bits lowbit.llama8b.lm_head.t1.inference.int8i32.v1.device 1.460755/0x3ff75f40a2877ee5
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1 1.4608 1.4554 359.6336 GMAC/s 0xe0222b2f9de835ed quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.training.bf16f32.v1.device 4.471935
+   device-bits lowbit.llama8b.lm_head.t1.training.bf16f32.v1.device 4.471935/0x4011e342edbb59de
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL training.bf16f32.v1 4.4719 4.4680 117.4741 GMAC/s 0x23f2e7e17341274a pack.b+product
+PRICE IDENTICAL lowbit.llama8b.lm_head.t1.training.int8i32.v1.device 13.614114
+   device-bits lowbit.llama8b.lm_head.t1.training.int8i32.v1.device 13.614114/0x402b3a6d26740810
+LOWBIT nvidia llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1 13.6141 13.5182 38.5876 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.lm_head.t8  m=8 n=128256 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.fp32.v1.device 2.165886
+   device-bits lowbit.llama8b.lm_head.t8.fp32.v1.device 2.165886/0x400153bc0a06e9ff
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 2.1659 2.1627 1940.4034 GMAC/s 0x3ebab59d0da21444 plan=14
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.bf16f32.v1.fused.device 19.911142
+   device-bits lowbit.llama8b.lm_head.t8.bf16f32.v1.fused.device 19.911142/0x4033e9409a240315
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.fused 19.9111 19.3711 211.0724 GMAC/s 0x82bad7b4e5c4c263 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.bf16f32.v1.widen.device 3.759786
+   device-bits lowbit.llama8b.lm_head.t8.bf16f32.v1.widen.device 3.759786/0x400e140aaeafab54
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.widen 3.7598 3.7593 1117.8010 GMAC/s 0x82bad7b4e5c4c263 dispatched
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.int8i32.v1.flat.device 19.257886
+   device-bits lowbit.llama8b.lm_head.t8.int8i32.v1.flat.device 19.257886/0x40334204d12018a4
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 19.2579 19.2484 218.2323 GMAC/s 0x8151fd05ff287a5d not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.int8i32.v1.mma.device 1.364922
+   device-bits lowbit.llama8b.lm_head.t8.int8i32.v1.mma.device 1.364922/0x3ff5d6b873797460
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma 1.3649 1.3564 3079.0716 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.convert.int8.quantize.a.device 0.611902
+   device-bits lowbit.llama8b.lm_head.t8.convert.int8.quantize.a.device 0.611902/0x3fe394b380cb6c7a
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a 0.6119 0.6091 0.0536 Gelem/s 0x443be8ad16d189a3 per-call
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.convert.int8.pack.b.device 12.107536
+   device-bits lowbit.llama8b.lm_head.t8.convert.int8.pack.b.device 12.107536/0x4028370ef566490a
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b 12.1075 12.0764 43.3892 Gelem/s 0x8e01af3f075298bb once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.convert.bf16.pack.b.device 1.675097
+   device-bits lowbit.llama8b.lm_head.t8.convert.bf16.pack.b.device 1.675097/0x3ffacd32830a0b1c
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.pack.b 1.6751 1.6720 313.6156 Gelem/s 0xbdac0264c773e6f1 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.convert.bf16.widen.b.device 1.612368
+   device-bits lowbit.llama8b.lm_head.t8.convert.bf16.widen.b.device 1.612368/0x3ff9cc426351def0
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.widen.b 1.6124 1.6119 325.8168 Gelem/s 0x4e388bd358a22325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.convert.int8.dequantize.b.device 2.10129
+   device-bits lowbit.llama8b.lm_head.t8.convert.int8.dequantize.b.device 2.10129/0x4000cf7121ab4b73
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.dequantize.b 2.1013 2.1008 250.0067 Gelem/s 0xb8835a7fc2342325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.inference.bf16f32.v1.device 3.762958
+   device-bits lowbit.llama8b.lm_head.t8.inference.bf16f32.v1.device 3.762958/0x400e1a89b951c5c5
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL inference.bf16f32.v1 3.7630 3.7562 1116.8588 GMAC/s 0x82bad7b4e5c4c263 product
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.inference.int8i32.v1.device 1.972776
+   device-bits lowbit.llama8b.lm_head.t8.inference.int8i32.v1.device 1.972776/0x3fff907d912556d2
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1 1.9728 1.9625 2130.3446 GMAC/s 0x8151fd05ff287a5d quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.training.bf16f32.v1.device 5.417882
+   device-bits lowbit.llama8b.lm_head.t8.training.bf16f32.v1.device 5.417882/0x4015abe9424e5929
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL training.bf16f32.v1 5.4179 5.4146 775.7077 GMAC/s 0x82bad7b4e5c4c263 pack.b+product
+PRICE IDENTICAL lowbit.llama8b.lm_head.t8.training.int8i32.v1.device 14.197516
+   device-bits lowbit.llama8b.lm_head.t8.training.int8i32.v1.device 14.197516/0x402c6520d130df9c
+LOWBIT nvidia llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1 14.1975 14.1198 296.0161 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== llama8b.lm_head.t512  m=512 n=16032 k=4096  CAPPED  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.fp32.v1.device 3.736731
+   device-bits lowbit.llama8b.lm_head.t512.fp32.v1.device 3.736731/0x400de4d338f79852
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 3.7367 3.7296 8997.5813 GMAC/s 0x84fd143bb625cf70 plan=10
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.bf16f32.v1.fused.device 156.437636
+   device-bits lowbit.llama8b.lm_head.t512.bf16f32.v1.fused.device 156.437636/0x40638e011d3671ac
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.fused 156.4376 156.2763 214.9198 GMAC/s 0xa75052ecc1e78b46 not-dispatched(cells>16384)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.bf16f32.v1.widen.device 3.934195
+   device-bits lowbit.llama8b.lm_head.t512.bf16f32.v1.widen.device 3.934195/0x400f793b3a68b19a
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.widen 3.9342 3.9250 8545.9772 GMAC/s 0xa75052ecc1e78b46 dispatched
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.int8i32.v1.flat.device 151.94186
+   device-bits lowbit.llama8b.lm_head.t512.int8i32.v1.flat.device 151.94186/0x4062fe23b7952d23
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 151.9419 151.8072 221.2790 GMAC/s 0xaae4f3d3c69453cd not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.int8i32.v1.mma.device 5.128455
+   device-bits lowbit.llama8b.lm_head.t512.int8i32.v1.mma.device 5.128455/0x40148389b52007dd
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma 5.1285 5.1228 6555.8810 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.convert.int8.quantize.a.device 2.525183
+   device-bits lowbit.llama8b.lm_head.t512.convert.int8.quantize.a.device 2.525183/0x40043393250b5244
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a 2.5252 2.5219 0.8305 Gelem/s 0xfd89ee79d025dda7 per-call
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.convert.int8.pack.b.device 2.632544
+   device-bits lowbit.llama8b.lm_head.t512.convert.int8.pack.b.device 2.632544/0x40050f733a8a3f8a
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b 2.6325 2.6258 24.9443 Gelem/s 0xcc187b17bc36366d once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.convert.bf16.pack.b.device 0.219705
+   device-bits lowbit.llama8b.lm_head.t512.convert.bf16.pack.b.device 0.219705/0x3fcc1f4b1ee24357
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.pack.b 0.2197 0.2182 298.8875 Gelem/s 0xaabc0c6ba2a73e85 once-per-weight
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.convert.bf16.widen.b.device 0.208735
+   device-bits lowbit.llama8b.lm_head.t512.convert.bf16.widen.b.device 0.208735/0x3fcab7d41743e964
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.widen.b 0.2087 0.2082 314.5954 Gelem/s 0xbd6a89a89fc02325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.convert.int8.dequantize.b.device 0.273449
+   device-bits lowbit.llama8b.lm_head.t512.convert.int8.dequantize.b.device 0.273449/0x3fd180303c07ee0b
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.dequantize.b 0.2734 0.2719 240.1438 Gelem/s 0xf6a61b0da9142325 per-call-when-materialized
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.inference.bf16f32.v1.device 3.92464
+   device-bits lowbit.llama8b.lm_head.t512.inference.bf16f32.v1.device 3.92464/0x400f65a9a8049668
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED inference.bf16f32.v1 3.9246 3.9171 8566.7834 GMAC/s 0xa75052ecc1e78b46 product
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.inference.int8i32.v1.device 7.582719
+   device-bits lowbit.llama8b.lm_head.t512.inference.int8i32.v1.device 7.582719/0x401e54b44a1f0803
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1 7.5827 7.5666 4433.9690 GMAC/s 0xaae4f3d3c69453cd quantize.a+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.training.bf16f32.v1.device 4.132174
+   device-bits lowbit.llama8b.lm_head.t512.training.bf16f32.v1.device 4.132174/0x401087589efd86a9
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED training.bf16f32.v1 4.1322 4.1293 8136.5259 GMAC/s 0xa75052ecc1e78b46 pack.b+product
+PRICE IDENTICAL lowbit.llama8b.lm_head.t512.training.int8i32.v1.device 10.132807
+   device-bits lowbit.llama8b.lm_head.t512.training.int8i32.v1.device 10.132807/0x402443ff47735c18
+LOWBIT nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1 10.1328 10.1145 3318.0876 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+product
+LOWBIT-NOT-RUN nvidia llama8b.lm_head.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+
+== done [IDENTICAL]: 12 shapes ==

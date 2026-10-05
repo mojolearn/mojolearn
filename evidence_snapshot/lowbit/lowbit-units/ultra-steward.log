@@ -1,0 +1,14 @@
+m3ultra-b: pushed origin/main
+clone at 624a1d092
+bootstrapped /Library/LaunchDaemons/mojolearn.steward.plist
+	state = running
+	pid = 1449
+		state = active
+		state = active
+install_exit=0
+	state = running
+	pid = 1449
+	last exit code = (never exited)
+		state = active
+		state = active
+clone at 624a1d092

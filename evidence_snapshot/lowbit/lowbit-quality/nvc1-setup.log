@@ -1,0 +1,9 @@
+gpuq: dispatcher up, lease backstop up
+dev_pod: patch-synced 56a40527d+worktree -> r29w610uuwkfwy:/root/mojolearn-lowbit-quality (6461 bytes over merge base a4b906e81)
+nvidia_central: lane lowbit-quality is on nvc1 (2 GPU slots, NVIDIA GeForce RTX 4090); submit with: tools/nvidia_central.sh submit lowbit-quality <script>
+a4b906e8
+PIXI_EXIT=0
+NVIDIA GeForce RTX 4090, 24564 MiB
+NVIDIA GeForce RTX 4090, 24564 MiB
+overlay          80G  6.1G   74G   8% /
+exit=0

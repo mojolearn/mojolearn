@@ -1,0 +1,132 @@
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 2.0910 1.5420 8.0235 GMAC/s 0x920cdd138650a8bd plan=0
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.fused 1.8860 1.4470 8.8957 GMAC/s 0xcd39e9d6e6d7179a dispatched
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.widen 2.7250 2.0360 6.1568 GMAC/s 0xcd39e9d6e6d7179a not-dispatched(cells<=16384)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 1.8020 1.3650 9.3103 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.applechunk 1.3450 0.7780 12.4738 GMAC/s 0x8a9227b93e430acd probe,geometry=1
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 1.8460 1.3130 0.0022 Gelem/s 0x54279cbda1444726 per-call
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 4.3450 3.8230 3.8613 Gelem/s 0x305b1a502296caf6 once-per-weight
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.pack.b 1.5770 1.0450 10.6387 Gelem/s 0x24efed638bb6b96b once-per-weight
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.widen.b 1.1600 0.6910 14.4631 Gelem/s 0xd2c2d96392622325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.dequantize.b 4.1280 3.7230 4.0642 Gelem/s 0x1f7ca28077042325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 1.5160 1.5100 88.5341 GMAC/s 0xd5677d8a13939709 plan=20
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.fused 9.6150 9.2160 13.9592 GMAC/s 0xf36fe1a8828cefd9 not-dispatched(cells>16384)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.widen 2.0720 2.0190 64.7769 GMAC/s 0xf36fe1a8828cefd9 dispatched
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 9.7190 9.6870 13.8098 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.applechunk 0.8120 0.7970 165.2928 GMAC/s 0x484bd20aabe66ee5 probe,geometry=1
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 1.3430 1.3330 0.0244 Gelem/s 0xbd0b5aed2b83cb45 per-call
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 3.7740 3.7660 4.4455 Gelem/s 0xa8ce17326c01345 once-per-weight
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.pack.b 1.0220 1.0040 16.4161 Gelem/s 0xdccc5a093a080c52 once-per-weight
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.widen.b 0.7140 0.7060 23.4975 Gelem/s 0x944a5da41b4d2325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.dequantize.b 3.7180 3.6660 4.5124 Gelem/s 0x24697157b3da2325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 17.6080 17.5120 487.8427 GMAC/s 0x67d3d940546b834c plan=20
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.fused 514.7270 513.3830 16.6883 GMAC/s 0x4abd79a5b10221e5 not-dispatched(cells>16384)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.widen 18.2760 18.2100 470.0117 GMAC/s 0x4abd79a5b10221e5 dispatched
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 515.1430 514.6540 16.6749 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.applechunk 8.5990 8.5640 998.9458 GMAC/s 0xa5f2ce1f1b9a0ebd probe,geometry=0
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 3.5030 3.4680 0.5987 Gelem/s 0xe8bb3ad105a4ae26 per-call
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 3.8500 3.8280 4.3577 Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.pack.b 1.0540 1.0350 15.9177 Gelem/s 0xaef2da473a8e2a10 once-per-weight
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.widen.b 0.7320 0.7000 22.9197 Gelem/s 0xc8e5243510392325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.dequantize.b 3.6990 3.6660 4.5356 Gelem/s 0x1798a32eac742325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 5.2750 5.2360 11.1318 GMAC/s 0x4965ea6af2ff5e61 plan=0
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.fused 5.1850 5.1560 11.3250 GMAC/s 0x5e3f5ff35a448024 dispatched
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.widen 7.1640 7.1280 8.1966 GMAC/s 0x5e3f5ff35a448024 not-dispatched(cells<=16384)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 4.9960 4.9810 11.7535 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.applechunk 2.0180 1.9810 29.0982 GMAC/s 0xff302668595b02d probe,geometry=1
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a 1.3370 1.3140 0.0031 Gelem/s 0x832055f1f3e21b7d per-call
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b 13.6570 13.6050 4.2996 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.pack.b 3.1290 3.0780 18.7665 Gelem/s 0xed618e2333b13294 once-per-weight
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.widen.b 2.1290 2.1000 27.5811 Gelem/s 0x573b3a44b4012325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.dequantize.b 14.0210 13.9960 4.1880 Gelem/s 0xa9afd845a78c2325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 4.1020 4.0510 114.5202 GMAC/s 0x7b30465d325906e plan=20
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.fused 30.3940 30.2080 15.4557 GMAC/s 0x1531c10dcd152579 not-dispatched(cells>16384)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.widen 6.0220 5.9850 78.0076 GMAC/s 0x1531c10dcd152579 dispatched
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 29.3850 29.3730 15.9865 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.applechunk 2.0120 2.0030 233.4801 GMAC/s 0xbd4b3a783f9d9a0d probe,geometry=1
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a 1.3680 1.3450 0.0240 Gelem/s 0x47d6423613a8aaa5 per-call
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b 13.6680 13.6370 4.2962 Gelem/s 0xa9e079afde494e3d once-per-weight
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.pack.b 3.1050 3.0530 18.9115 Gelem/s 0xc5111a6224412c3f once-per-weight
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.widen.b 2.1550 2.1210 27.2484 Gelem/s 0x6a679200ae02325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.dequantize.b 14.0240 14.0110 4.1871 Gelem/s 0xb415c8d063202325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 60.3790 60.2960 497.9342 GMAC/s 0x27a166783c45f9f0 plan=20
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.fused 1794.8760 1792.9370 16.7503 GMAC/s 0x5b29318ad80be465 not-dispatched(cells>16384)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.widen 62.3410 62.2740 482.2632 GMAC/s 0x5b29318ad80be465 dispatched
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 1799.2180 1798.9980 16.7099 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.applechunk 27.9970 27.9290 1073.8569 GMAC/s 0x220ff5fe96f5ef55 probe,geometry=0
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a 3.4680 3.4540 0.6047 Gelem/s 0x8c503fb082856006 per-call
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b 13.6960 13.6710 4.2874 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.pack.b 3.0950 3.0760 18.9726 Gelem/s 0x1c04d570a3d23380 once-per-weight
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.widen.b 2.1300 2.1060 27.5682 Gelem/s 0x5c9d5dc97a412325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.dequantize.b 14.0470 13.9890 4.1803 Gelem/s 0xb584f740e2d62325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 5.7270 5.5480 10.2532 GMAC/s 0x4efb8e54c724fa9 plan=0
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.fused 5.1430 5.1160 11.4175 GMAC/s 0xd044aebb510dc9 dispatched
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.widen 7.5000 7.4400 7.8294 GMAC/s 0xd044aebb510dc9 not-dispatched(cells<=16384)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 4.5370 4.3590 12.9425 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.applechunk 2.6020 2.4890 22.5674 GMAC/s 0x1ffdde3ffffb72c9 probe,geometry=1
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a 4.2990 4.2100 0.0033 Gelem/s 0x1cd0dd08873effc3 per-call
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b 13.9040 13.7890 4.2233 Gelem/s 0x31274090cc79ba2f once-per-weight
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.pack.b 3.1040 2.9560 18.9176 Gelem/s 0x9dba12f4fe0c9e9b once-per-weight
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.widen.b 2.2060 2.1670 26.6184 Gelem/s 0x45255120c9d82325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.dequantize.b 13.3050 13.1900 4.4134 Gelem/s 0x4354f59510c02325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 4.9870 4.9370 94.1973 GMAC/s 0xfb21004541ae3e8e plan=20
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.fused 34.6670 34.4100 13.5507 GMAC/s 0xcbe807d3ae13612f not-dispatched(cells>16384)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.widen 6.8790 6.8550 68.2893 GMAC/s 0xcbe807d3ae13612f dispatched
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 33.9030 33.8810 13.8561 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.applechunk 2.4640 2.4270 190.6502 GMAC/s 0x694aafd520fdadad probe,geometry=1
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a 4.4290 4.4080 0.0259 Gelem/s 0xbb4f2a7232392bfe per-call
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b 13.9250 13.8520 4.2169 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.pack.b 2.9900 2.9480 19.6389 Gelem/s 0xfbacba127cf6177e once-per-weight
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.widen.b 2.1310 2.1130 27.5553 Gelem/s 0xcbcb5933d8352325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.dequantize.b 13.1820 13.1670 4.4546 Gelem/s 0x9dcad54d7e462325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 65.4290 64.5330 459.5022 GMAC/s 0x4743c97cb961339e plan=20
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.fused 1936.9530 1935.0870 15.5217 GMAC/s 0x508d64e0e41d3350 not-dispatched(cells>16384)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.widen 66.9360 66.6660 449.1570 GMAC/s 0x508d64e0e41d3350 dispatched
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 1829.5230 1829.1630 16.4331 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.applechunk 30.0780 30.0010 999.5602 GMAC/s 0x6120545eacb068ad probe,geometry=0
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a 12.0060 11.9430 0.6114 Gelem/s 0x903f6ff84c6082 per-call
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b 13.8740 13.8230 4.2324 Gelem/s 0xa046020a81d05746 once-per-weight
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.pack.b 2.9880 2.9780 19.6520 Gelem/s 0xd1b066f4e6a61fed once-per-weight
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.widen.b 2.1460 2.1130 27.3627 Gelem/s 0xf0fcf217ba5c2325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.dequantize.b 13.2010 13.1570 4.4482 Gelem/s 0xd972f24f17be2325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 32.9860 32.8550 15.9260 GMAC/s 0xcdc134cbce391535 plan=0
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.fused 32.8180 32.5600 16.0076 GMAC/s 0x23f2e7e17341274a not-dispatched(cells>16384)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.widen 50.2020 50.0070 10.4645 GMAC/s 0x23f2e7e17341274a dispatched
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 32.8650 32.4660 15.9847 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.applechunk 11.8620 11.7750 44.2874 GMAC/s 0xe0222b2f9de835ed probe,geometry=1
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a 1.3560 1.3240 0.0030 Gelem/s 0x4a11896c4fb834f0 per-call
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b 96.3230 96.2390 5.4539 Gelem/s 0xb364ee7208fddf70 once-per-weight
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.pack.b 24.8420 24.7980 21.1471 Gelem/s 0xd88b54f9c1b3341b once-per-weight
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.widen.b 17.2780 17.2510 30.4049 Gelem/s 0x63450213e8e12325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.dequantize.b 146.9970 146.9780 3.5738 Gelem/s 0x85950a1d355e2325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 33.2750 33.2390 126.3018 GMAC/s 0x3ebab59d0da21444 plan=20
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.fused 252.0280 251.2670 16.6755 GMAC/s 0x82bad7b4e5c4c263 not-dispatched(cells>16384)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.widen 50.4280 50.3660 83.3405 GMAC/s 0x82bad7b4e5c4c263 dispatched
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 252.2970 251.9660 16.6577 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.applechunk 11.8180 11.8070 355.6179 GMAC/s 0x8151fd05ff287a5d probe,geometry=1
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a 1.3750 1.3590 0.0238 Gelem/s 0x443be8ad16d189a3 per-call
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b 96.2860 96.0400 5.4560 Gelem/s 0x2d7a0cd447f12c4c once-per-weight
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.pack.b 24.8790 24.8330 21.1157 Gelem/s 0xcc0aa53d00927bab once-per-weight
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.widen.b 17.3870 17.2770 30.2143 Gelem/s 0x4e388bd358a22325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.dequantize.b 146.9840 146.9460 3.5741 Gelem/s 0x8e4331c54a342325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 67.5340 67.4610 497.8461 GMAC/s 0x84fd143bb625cf70 plan=20
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.fused 2011.3150 2008.4310 16.7162 GMAC/s 0xa75052ecc1e78b46 not-dispatched(cells>16384)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.widen 69.7330 69.6330 482.1468 GMAC/s 0xa75052ecc1e78b46 dispatched
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 2011.1590 2010.9640 16.7175 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.applechunk 31.2800 31.2030 1074.8574 GMAC/s 0xaae4f3d3c69453cd probe,geometry=0
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a 3.5090 3.4310 0.5976 Gelem/s 0xfd89ee79d025dda7 per-call
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b 13.8870 13.8660 4.7287 Gelem/s 0xcc187b17bc36366d once-per-weight
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.pack.b 3.4640 3.3650 18.9570 Gelem/s 0xaabc0c6ba2a73e85 once-per-weight
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.widen.b 2.3840 2.3570 27.5449 Gelem/s 0xbd6a89a89fc02325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.dequantize.b 15.7980 15.7450 4.1567 Gelem/s 0xf6a61b0da9142325 per-call-when-materialized

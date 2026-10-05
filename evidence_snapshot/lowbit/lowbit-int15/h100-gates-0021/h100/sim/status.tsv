@@ -1,0 +1,4 @@
+sim	0	15s	expected=pass	held=yes
+sim-host-sabotage	1	14s	expected=fail	held=yes
+sim-convert-sabotage	1	15s	expected=fail	held=yes
+sim-device-sabotage	1	15s	expected=fail	held=yes
