@@ -89,7 +89,7 @@ class _PowSched(_Sched):
         _q(self.base_lr, "base_lr")
         _q(self.gamma, "gamma")
         out = _array.array("f", bytes(4 * n))
-        st, at = _lr_native("lr_pow_values")([self.base_lr, self.gamma], [t0 - 1, n, self._step],
+        st, at = _lr_native("lr_pow_values")([self.base_lr, self.gamma], [t0 - 1, n, self._step],  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
                                              out.buffer_info()[0])
         st, at = int(st), int(at)
         if st:
@@ -207,7 +207,7 @@ class OneCycleLR(_LrTable, _Sched):
     def _exact_params(self):
         return ([1 if self.anneal_strategy == "linear" else 0, 1 if self.three_phase else 0, self.total_steps],
                 [self.max_lr, self.div_factor, self.final_div_factor, self._e1f, self._e2f],
-                "lr_onecycle_exact_block")
+                "lr_onecycle_exact_block")  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
 
     def _lr_at_slow(self, t):
         """The exact route of one step in Mojo big rationals
@@ -217,7 +217,7 @@ class OneCycleLR(_LrTable, _Sched):
         if step > self.total_steps:
             raise ValueError(f"OneCycleLR: step {t} is beyond total_steps {self.total_steps} + 1 (torch refuses it too)")
         ip, fp, _ = self._exact_params()
-        st, v = _lr_native("lr_onecycle_exact")(ip + [step], fp)
+        st, v = _lr_native("lr_onecycle_exact")(ip + [step], fp)  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
         _lr_status(st)
         return float(v)
 
