@@ -3021,7 +3021,10 @@ def smoke_verdict(race, rec, vendor):
             continue
         if not isinstance(c.get("median_ms"), (int, float)):
             fails.append((arm, "no time"))
-        if not exempt and not any(v is not None for v in (c.get("quality") or {}).values()):
+        quality = c.get("quality") or {}
+        if "error" in quality:
+            fails.append((arm, "quality error: " + str(quality["error"])))
+        if not exempt and not any(v is not None for k, v in quality.items() if k != "error"):
             fails.append((arm, "no quality value"))
     return fails
 

@@ -3534,8 +3534,12 @@ def _build_layer(lane, arm, D):
             k.endswith("weight") and not k.startswith(("bn", "norm")) and s["task"] not in (
                 "batchnorm1d", "batchnorm2d", "layernorm") for k in state)
         info["output_comparable"] = bool(comparable)
-        out = (lambda: {"y": _arr(S["y"].numpy() if getattr(S["y"], "_device_tensor", False) else S["y"],
-                                  np.float32)}) if comparable else (lambda: {})
+        # Lack of shared Torch weights prevents opponent comparison, not an
+        # own-host check: both own routes use the same seeded constructor.
+        # Keep the distinct key so quality() cannot compare unrelated weights.
+        output_key = "y" if comparable else "own_y"
+        out = lambda: {output_key: _arr(
+            S["y"].numpy() if getattr(S["y"], "_device_tensor", False) else S["y"], np.float32)}
         rec = dict(kw, __library__="mojolearn")
         return Runner(info, fit, out, infer, record=rec)
     setting = arm[len("torch-"):]
