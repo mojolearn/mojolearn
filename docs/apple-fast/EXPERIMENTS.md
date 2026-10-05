@@ -1187,3 +1187,12 @@ Rows from board-quality-audit-2026-10-04 where FAST quality trailed the best opp
 | `FA_ITER_DEVICE` | factor-analysis / istella; taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | istella 10.4 s -> ~1.95-2.0 s; taxi 358 -> 192 | HOLD-quality | same istella log-likelihood loss as FA_GRAM_ONCE (M3, full board, 1 run per arm, 2026-10-04); stays off |
 | `FA_ALL` | factor-analysis / istella; taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | istella 10.4 s -> 9.54 s; taxi 358 -> 30.4 | HOLD-quality | same istella log-likelihood loss (M3, full board, 1 run per arm, 2026-10-04); stays off |
 
+
+## lane/apple-fast-s-seq (2026-10-05): LSTM scan fix + width, sequence targets
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `SEQ_FAST_LSTM_SCAN` (fixed) | lstm-clf, lstm-reg / synthetic, taxi-hourly | lane/apple-fast-s-seq @ 8bb42b7de | - | - | READY-AB | code changed since the DROPPED-quality bundle: the scan kernels built Args from `Args()` (integer-made `dummy_ptr` slots) in a non-inlined `_scan_args`, the Metal int-pointer / non-inlined-pointer trap; now the fieldwise constructor, inlined (sequence/recurrent_scan.mojo `_scan_args`). Judge quality first: accuracy / r2 must match arm A |
+| `SEQ_FAST_LSTM_SCAN + _SCAN_SMEM` | as above | lane/apple-fast-s-seq @ 8bb42b7de | - | - | READY-AB | re-judge after the fix |
+| `SEQ_FAST_LSTM_SCAN + _SCAN_SMEM + _WGRAD` (bundle) | as above | lane/apple-fast-s-seq @ 8bb42b7de | - | - | READY-AB | re-judge after the fix (was 1877 -> 1315 ms, broken quality) |
+| `SEQ_FAST_LSTM_SCAN + _SCAN_WIDE (+ _WGRAD)` | as above | lane/apple-fast-s-seq @ 826305835 | - | - | READY-AB | G H lanes per row (256 for H 64): forward gate columns folded one per lane (same fold), backward dh split by gate then summed in g order (FAST fold); 4x shorter serial chain per step |
