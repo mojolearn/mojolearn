@@ -19,7 +19,8 @@ from x_decomp.api import _f, _n
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADD, OP_ADDS, OP_AXPY, OP_DIV, OP_GTS, OP_LOGS, OP_MAXS, OP_MUL, OP_MUZ, OP_RECIP,
-    OP_SELECT, OP_SQDIFF, OP_SQRT, mat_const, mat_eye, mat_from, mat_t, mat_vec_t,
+    OP_MINS, OP_SCALE, OP_SELECT, OP_SQ, OP_SQDIFF, OP_SQRT, mat_const, mat_eye, mat_from, mat_rows, mat_t,
+    mat_vec_t,
 )
 
 #: `_expansion_decomp._F32_EPS`
@@ -254,3 +255,99 @@ def nmf_solve_py[E: Exec](
         for i in range(nc * d):
             ph.unsafe_store(i, H.d[i])
     return PythonObject(it)
+
+
+def _nrm_or0(v: Float64) -> Float64:
+    """Python's `1.0 / v if v else 0.0`."""
+    return 1.0 / v if v != 0.0 else 0.0
+
+
+def _f32_prod(a: Float64, b: Float64) -> Float64:
+    """`_f32(_f32(a) * _f32(b))`: the binary64 product of two float32
+    values (exact), rounded once to float32."""
+    return Float64(Float32(Float64(Float32(a)) * Float64(Float32(b))))
+
+
+def nmf_nndsvd[E: Exec](U: Mat, S: Mat, Vt: Mat, nc: Int, mut W: Mat, mut H: Mat) raises:
+    """`NMF._init`'s per-component nndsvd loop (lane py-runtime-b): W (n x
+    nc) the stacked factor columns, H (nc x d) the stacked factor rows, from
+    the thin SVD (U n x r, S 1 x r, Vt r x d), the same cells per
+    component."""
+    var k = Kit[E]()
+    var n = U.r
+    var d = Vt.c
+    var Ut = mat_t(U)
+    W = Mat(n, nc)
+    var Wt = Mat(nc, n)
+    H = Mat(nc, d)
+    for j in range(nc):  # small-loop(nc: components): one factor pair per component, each a whole-matrix cell chain
+        var x = mat_vec_t(mat_rows(Ut, j, j + 1))
+        var y = mat_rows(Vt, j, j + 1)
+        var sj = Mat(1, 1)
+        sj.d[0] = S.d[j]
+        var wc: Mat
+        var hr: Mat
+        if j == 0:
+            var r = k.ew1(OP_SQRT, sj, 0.0)
+            wc = k.ew2(OP_MUL, k.ew1(OP_ABS, x, 0.0), r)
+            hr = k.ew2(OP_MUL, k.ew1(OP_ABS, y, 0.0), r)
+        else:
+            var xp = k.ew1(OP_MAXS, x, 0.0)
+            var yp = k.ew1(OP_MAXS, y, 0.0)
+            var xn = k.ew1(OP_ABS, k.ew1(OP_MINS, x, 0.0), 0.0)
+            var yn = k.ew1(OP_ABS, k.ew1(OP_MINS, y, 0.0), 0.0)
+            var xpn = _vnorm(k, xp)
+            var ypn = _vnorm(k, yp)
+            var xnn = _vnorm(k, xn)
+            var ynn = _vnorm(k, yn)
+            var mp = _f32_prod(xpn, ypn)
+            var mn = _f32_prod(xnn, ynn)
+            var u: Mat
+            var v: Mat
+            var sigma: Float64
+            if mp > mn:
+                u = k.ew1(OP_SCALE, xp, _nrm_or0(xpn))
+                v = k.ew1(OP_SCALE, yp, _nrm_or0(ypn))
+                sigma = mp
+            else:
+                u = k.ew1(OP_SCALE, xn, _nrm_or0(xnn))
+                v = k.ew1(OP_SCALE, yn, _nrm_or0(ynn))
+                sigma = mn
+            var lbd = k.ew1(OP_SQRT, k.ew1(OP_SCALE, sj, sigma), 0.0)
+            wc = k.ew2(OP_MUL, u, lbd)
+            hr = k.ew2(OP_MUL, v, lbd)
+        Kit[E].place_row(Wt, wc, j)
+        Kit[E].place_row(H, hr, j)
+    W = mat_t(Wt)
+
+
+def _vnorm[E: Exec](k: Kit[E], v: Mat) raises -> Float64:
+    """`_norm`: sqrt(total(v^2)) read as a float."""
+    return k.word(k.ew1(OP_SQRT, k.total(k.ew1(OP_SQ, v, 0.0)), 0.0))
+
+
+def nmf_nndsvd_py[E: Exec](
+    u: PythonObject, s: PythonObject, vt: PythonObject, w: PythonObject, h: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """`nmf_nndsvd` over u (n x r), s (r), vt (r x d); w (n x nc) and h
+    (nc x d) written. p = [n, d, r, nc]."""
+    var n = _n(p, 0)
+    var d = _n(p, 1)
+    var r = _n(p, 2)
+    var nc = _n(p, 3)
+    if nc > r or n * r > 2147483647 or r * d > 2147483647 or n * nc > 2147483647:
+        raise Error("x_decomp: nndsvd shape out of range")
+    var pu = _f(u)
+    var ps = _f(s)
+    var pv = _f(vt)
+    var pw = _f(w)
+    var ph = _f(h)
+    with GILReleased(Python()):
+        var W = Mat(0, 0)
+        var H = Mat(0, 0)
+        nmf_nndsvd[E](mat_from(pu, n, r), mat_from(ps, 1, r), mat_from(pv, r, d), nc, W, H)
+        for i in range(n * nc):
+            pw.unsafe_store(i, W.d[i])
+        for i in range(nc * d):
+            ph.unsafe_store(i, H.d[i])
+    return PythonObject(nc)

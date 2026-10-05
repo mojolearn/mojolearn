@@ -42,7 +42,7 @@ FAMILIES = (
             # lane cpu2-l8-decomp (2026-10-04): exact select reductions, the small stable order, the Lanczos steps
             "x_decomp_reduce", "x_decomp_order_small", "x_decomp_lanczos", "x_decomp_mds_setup", "x_decomp_mds_disp",
             # lane py-runtime-b (2026-10-05): the solver drivers in Mojo
-            "x_decomp_nmf_solve", "x_decomp_ica_solve",
+            "x_decomp_nmf_solve", "x_decomp_nmf_nndsvd", "x_decomp_ica_solve",
             "x_decomp_numeric_mode", "x_decomp_vendor",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",

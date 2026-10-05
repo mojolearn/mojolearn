@@ -2112,32 +2112,12 @@ class NMF(_Base):
             W = k.ew("scale", k.ew("abs", k.rand(n, nc, seed, 11, 1)), s=avg)
             return W, H
         U, S, Vt = _thin_svd(k, M, nc, u_based=(n >= d))
-        # lane cpu2-l8-decomp (re-audit L8, NMF._init): S[j] stays a 1 x 1
-        # operand where S lives and sqrt(S[j]) / sqrt(S[j] sigma) are cells
-        # (float32, correctly rounded) instead of host doubles; the factor
-        # columns and rows are stacked where they live (k.hstack / k.vstack)
-        Wc, Hr = [], []
-        for j in range(nc):
-            x, y = U.cols(j, j + 1), Vt.rows(j, j + 1)
-            sj = S.cols(j, j + 1)
-            if j == 0:
-                r = k.ew("sqrt", sj)
-                Wc.append(k.ew("mul", k.ew("abs", x), r))
-                Hr.append(k.ew("mul", k.ew("abs", y), r))
-                continue
-            xp, yp = k.ew("maxs", x, s=0.0), k.ew("maxs", y, s=0.0)
-            xn, yn = k.ew("abs", k.ew("mins", x, s=0.0)), k.ew("abs", k.ew("mins", y, s=0.0))
-            xpn, ypn, xnn, ynn = _norm(k, xp), _norm(k, yp), _norm(k, xn), _norm(k, yn)
-            mp = _f32(_f32(xpn) * _f32(ypn))
-            mn = _f32(_f32(xnn) * _f32(ynn))
-            if mp > mn:
-                u, v, sigma = k.ew("scale", xp, s=1.0 / xpn if xpn else 0.0), k.ew("scale", yp, s=1.0 / ypn if ypn else 0.0), mp
-            else:
-                u, v, sigma = k.ew("scale", xn, s=1.0 / xnn if xnn else 0.0), k.ew("scale", yn, s=1.0 / ynn if ynn else 0.0), mn
-            lbd = k.ew("sqrt", k.ew("scale", sj, s=sigma))
-            Wc.append(k.ew("mul", u, lbd))
-            Hr.append(k.ew("mul", v, lbd))
-        W, H = k.hstack(Wc), k.vstack(Hr)
+        # the per-component factor pairs in ONE binding call (lane
+        # py-runtime-b: x_decomp/nmf.mojo `nmf_nndsvd`, the same cells per
+        # component and the same float32 products of the norms; on resident
+        # device matrices in the GPU binding)
+        W, H = _M.zeros(n, nc), _M.zeros(nc, d)
+        k.b.x_decomp_nmf_nndsvd(U.addr, S.addr, Vt.addr, W.addr, H.addr, [n, d, S.r * S.c, nc])
         z = _M.zeros(1, 1)
         W = k.ew("select", W, W, z, s=1e-6 - 1e-13)
         H = k.ew("select", H, H, z, s=1e-6 - 1e-13)

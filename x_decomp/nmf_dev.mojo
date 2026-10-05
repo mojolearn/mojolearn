@@ -11,10 +11,10 @@ from std.python._cpython import GILReleased
 from x_decomp.api import _f, _n
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADD, OP_ADDS, OP_AXPY, OP_DIV, OP_GTS, OP_LOGS, OP_MAXS, OP_MUL, OP_MUZ, OP_RECIP,
-    OP_SELECT, OP_SQDIFF, OP_SQRT, mat_const, mat_eye, mat_from,
+    OP_MINS, OP_SCALE, OP_SELECT, OP_SQ, OP_SQDIFF, OP_SQRT, mat_const, mat_eye, mat_from,
 )
 from x_decomp.kit_device import DKit, DMat
-from x_decomp.nmf import NMF_F32_EPS, NMF_LOG_FLOOR, NMF_ZERO_ERR0, NmfArgs, _nmf_args
+from x_decomp.nmf import NMF_F32_EPS, NMF_LOG_FLOOR, NMF_ZERO_ERR0, NmfArgs, _f32_prod, _nmf_args, _nrm_or0
 
 
 def nmf_err_dev(mut k: DKit, M: DMat, W: DMat, H: DMat, beta: Float64) raises -> Float64:
@@ -203,3 +203,79 @@ def nmf_solve_dev_py(
         for i in range(nc * d):
             ph.unsafe_store(i, hh.d[i])
     return PythonObject(it)
+
+
+def nmf_nndsvd_dev_py(
+    u: PythonObject, s: PythonObject, vt: PythonObject, w: PythonObject, h: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """`nmf_nndsvd_py` on the resident kit (the same cells per component;
+    U's column j taken as the row of U^T, the same words in an n x 1 shape)."""
+    var n = _n(p, 0)
+    var d = _n(p, 1)
+    var r = _n(p, 2)
+    var nc = _n(p, 3)
+    if nc > r or n * r > 2147483647 or r * d > 2147483647 or n * nc > 2147483647:
+        raise Error("x_decomp: nndsvd shape out of range")
+    var pu = _f(u)
+    var ps = _f(s)
+    var pv = _f(vt)
+    var pw = _f(w)
+    var ph = _f(h)
+    with GILReleased(Python()):
+        var k = DKit()
+        var Ut = k.t(k.upload(mat_from(pu, n, r)))
+        var Sd = k.upload(mat_from(ps, r, 1))
+        var V = k.upload(mat_from(pv, r, d))
+        var Wt = k.zeros(nc, n)
+        var H = k.zeros(nc, d)
+        for j in range(nc):  # small-loop(nc: components): one factor pair per component, each a whole-matrix cell chain
+            var x = k.vec_t(k.rows(Ut, j, j + 1))
+            var y = k.rows(V, j, j + 1)
+            var sj = k.rows(Sd, j, j + 1)
+            var wc: DMat
+            var hr: DMat
+            if j == 0:
+                var rr = k.ew1(OP_SQRT, sj, 0.0)
+                wc = k.ew2(OP_MUL, k.ew1(OP_ABS, x, 0.0), rr)
+                hr = k.ew2(OP_MUL, k.ew1(OP_ABS, y, 0.0), rr)
+            else:
+                var xp = k.ew1(OP_MAXS, x, 0.0)
+                var yp = k.ew1(OP_MAXS, y, 0.0)
+                var xn = k.ew1(OP_ABS, k.ew1(OP_MINS, x, 0.0), 0.0)
+                var yn = k.ew1(OP_ABS, k.ew1(OP_MINS, y, 0.0), 0.0)
+                var xpn = _vnorm_dev(k, xp)
+                var ypn = _vnorm_dev(k, yp)
+                var xnn = _vnorm_dev(k, xn)
+                var ynn = _vnorm_dev(k, yn)
+                var mp = _f32_prod(xpn, ypn)
+                var mn = _f32_prod(xnn, ynn)
+                var uu: DMat
+                var vv: DMat
+                var sigma: Float64
+                if mp > mn:
+                    uu = k.ew1(OP_SCALE, xp, _nrm_or0(xpn))
+                    vv = k.ew1(OP_SCALE, yp, _nrm_or0(ypn))
+                    sigma = mp
+                else:
+                    uu = k.ew1(OP_SCALE, xn, _nrm_or0(xnn))
+                    vv = k.ew1(OP_SCALE, yn, _nrm_or0(ynn))
+                    sigma = mn
+                var lbd = k.ew1(OP_SQRT, k.ew1(OP_SCALE, sj, sigma), 0.0)
+                wc = k.ew2(OP_MUL, uu, lbd)
+                hr = k.ew2(OP_MUL, vv, lbd)
+            k.place_row(Wt, wc, j)
+            k.place_row(H, hr, j)
+        var Wd = k.t(Wt)
+        var hw = k.get(Wd)
+        var hh = k.get(H)
+        k.sync()
+        _ = Wd^
+        for i in range(n * nc):
+            pw.unsafe_store(i, hw.d[i])
+        for i in range(nc * d):
+            ph.unsafe_store(i, hh.d[i])
+    return PythonObject(nc)
+
+
+def _vnorm_dev(mut k: DKit, v: DMat) raises -> Float64:
+    return k.word(k.ew1(OP_SQRT, k.total(k.ew1(OP_SQ, v, 0.0)), 0.0))
