@@ -187,6 +187,10 @@ class _RecurrentBase:
         """The learning rate of every optimizer step: `lr_schedule.lr_at(t)`
         (t one-based) when a schedule is set, else `learning_rate`."""
         if self.lr_schedule is not None:
+            table = getattr(self.lr_schedule, "lr_values", None)
+            got = table(n_steps) if table is not None else None
+            if got is not None:
+                return np.frombuffer(got, dtype=np.float32).copy()
             return np.asarray([self.lr_schedule.lr_at(t) for t in range(1, n_steps + 1)], dtype=np.float32)
         return np.full(n_steps, self.learning_rate, dtype=np.float32)
 

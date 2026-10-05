@@ -36,8 +36,8 @@ from . import _portable_math as _math
 import os as _os
 from fractions import Fraction
 
-from ._training_impl import (_F64_EPS, _LrTable, _PI_HI, _PI_LO, _cos_pi_interval, _cos_pi_run,
-                             _decide_f32, _f32_round)
+from ._training_impl import (_F64_EPS, _LrTable, _PI_HI, _PI_LO, _cos_pi_interval, _decide_f32,
+                             _f32_round, _lr_buffers, _lr_native)
 
 _F32_MIN_NORMAL_EXP = -126
 _F32_MAX_EXP = 127
@@ -217,7 +217,12 @@ class _Sched:
         return struct.unpack("<I", struct.pack("<f", self.lr_at(t)))[0]
 
     def lrs(self, n):
-        """lr_at(1) .. lr_at(n) as a list."""
+        """lr_at(1) .. lr_at(n) as a list: a table schedule's blocks from
+        Mojo (`_LrTable.lr_values`), else one `lr_at` per step."""
+        table = getattr(self, "lr_values", None)
+        got = table(n) if table is not None else None
+        if got is not None:
+            return got.tolist()
         return [self.lr_at(t) for t in range(1, int(n) + 1)]
 
 
@@ -412,8 +417,7 @@ class OneCycleLR(_LrTable, _Sched):
         the exact route answers: a phase's two ends, its extra step, an empty
         phase, a step angle over 1/2)."""
         n = t1 - t0
-        vs = [0.0] * n
-        es = [0.0] * n
+        vs, es = _lr_buffers(n)
         s0 = t0 - 1                 # torch's step of index 0
         s1 = s0 + n - 1
         start = Fraction(0)
@@ -433,27 +437,15 @@ class OneCycleLR(_LrTable, _Sched):
         return vs, es
 
     def _fill(self, vs, es, at, st0, count, start_f, end_f, af, bf):
-        den = end_f - start_f
-        scale = 16.0 * _F64_EPS
-        if self.anneal_strategy == "linear":
-            # (st - start) / den, (b - a), the product, + a: under 2^-53 of
-            # |a| + |b| + |v| each; bound 2^-48 of that sum
-            d = bf - af
-            for k in range(count):
-                v = d * ((st0 + k - start_f) / den) + af
-                vs[at + k] = v
-                es[at + k] = scale * (abs(af) + abs(bf) + abs(v))
-            return
-        got = _cos_pi_run(st0 - start_f, den, count)
-        if got is None:
-            return
-        cs, ce = got
-        hd = abs(af - bf)
-        for k in range(count):
-            # torch's form: end + (start - end) / 2 (cos + 1)
-            v = bf + (af - bf) / 2.0 * (cs[k] + 1.0)
-            vs[at + k] = v
-            es[at + k] = hd * ce[k] + scale * (abs(af) + abs(bf) + abs(v))
+        """One phase's binary64 values and bounds into vs / es from `at`, in
+        Mojo (`lr_onecycle_fill`, bindings/lr_table_helpers.mojo; lane
+        py-runtime round 2): torch's linear form d ((st - start) / den) + a
+        or its cosine form end + (start - end) / 2 (cos + 1), with the same
+        error bounds as before."""
+        _lr_native("lr_onecycle_fill")(
+            [1 if self.anneal_strategy == "linear" else 0, int(at), int(st0), int(count),
+             float(start_f), float(end_f), float(af), float(bf)],
+            vs.buffer_info()[0], es.buffer_info()[0])
 
     def _phase_fx(self, i, a, b):
         """Per phase fixed-point constants: F2 and the floor/ceil of b and of

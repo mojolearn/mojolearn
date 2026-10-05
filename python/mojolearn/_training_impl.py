@@ -1964,7 +1964,7 @@ def _decide_f32(fn):
 # to the same float32 (rounding is monotone, so the exact value, inside the
 # interval, rounds there too); every other step of the block takes the
 # exact route. The cosine of a block is a rotation recurrence from one
-# Taylor anchor (`_cos_pi_run`), not a series per step. The answer is the
+# Taylor anchor (`_cos_run` in bindings/lr_table_helpers.mojo), not a series per step. The answer is the
 # exact route's float32 at every step; what moved is the cost (the board's
 # 100,000-step lanes spent 9 to 18 us a step in Fraction arithmetic, where
 # torch's scheduler spends about 1.5). MOJOLEARN_LR_TABLE=0 (or
@@ -1983,72 +1983,14 @@ def _lr_table_wanted():
             and os.environ.get("MOJOLEARN_LR_EXACT_ONLY") != "1")
 
 
-def _f32_decide_many(vs, errs):
-    """Per value: the float32 every real in [v - e, v + e] rounds to (ties
-    to even), or None when the two ends round apart or the value is not a
-    normal positive float32 (the exact route's flush and overflow rules
-    decide those). `array('f')` is the IEEE binary64 -> binary32
-    conversion, correctly rounded; `e` carries the rounding of `v - e` and
-    `v + e` themselves in its margin."""
-    lo = array.array("f", map(operator.sub, vs, errs))
-    hi = array.array("f", map(operator.add, vs, errs))
-    return [a if (a == b and _F32_MIN_NORMAL_F <= a <= _F32_MAX_F) else None
-            for a, b in zip(lo, hi)]
+def _lr_native(key):
+    """A core-binding entry of the schedule table (bindings/lr_table_helpers.mojo)."""
+    return _buffers._native(key)
 
 
-def _cos_sin_pi_f64(q):
-    """(cos(pi q), sin(pi q)) in binary64 for a float q in [0, 1], each
-    within _COS_SIN_ERR of the true values at the float q: the Taylor
-    series of both on x = pi q' with q' = q or 1 - q in [0, 1/2] (exact,
-    Sterbenz), 26 terms (truncation under 1e-58 at x <= pi/2). Argument
-    roundings (pi, the product) are under 2^-50 and pass through with slope
-    at most 1; the sums' roundings are under 2^-46. No libm."""
-    flip = q > 0.5
-    if flip:
-        q = 1.0 - q
-    x = math.pi * q
-    x2 = x * x
-    c = 0.0
-    sn = 0.0
-    tc = 1.0
-    ts = x
-    for k in range(_COS_F64_TERMS):
-        c += tc
-        sn += ts
-        tc = -tc * x2 / ((2 * k + 1) * (2 * k + 2))
-        ts = -ts * x2 / ((2 * k + 2) * (2 * k + 3))
-    return (-c if flip else c), sn
-
-
-#: bound on each of `_cos_sin_pi_f64`'s two values (2^-46 analysed, 4x margin)
-_COS_SIN_ERR = 2.0 ** -44
-
-
-def _cos_pi_run(n0, den, count):
-    """cos(pi (n0 + k) / den) for k = 0 .. count - 1 (n0, den floats, every
-    (n0 + k) / den in [0, 1]) and a bound on each value's error, as two
-    lists; None when the step angle pi / den exceeds 1/2.
-
-    One anchor (`_cos_sin_pi_f64(n0 / den)`, error under 2^-44 plus the
-    quotient's rounding, under 2^-51 of angle), then the rotation
-    (c, s) <- (c cp - s sp, s cp + c sp) by the step angle x = pi (1 / den)
-    in binary64, whose cosine and sine (`_cos_sin_pi_f64`, x <= 1/2: partial
-    sums under 1, error under 2^-47 each) perturb an isometry by at most
-    2^-46 in the 2-norm; each step's three roundings add under 2^-51. So
-    step k's error is under 2^-44 + 2^-49 (the step angle's own rounding,
-    accumulated over k / den <= 1) + k (2^-46 + 2^-51): the bound used is
-    2^-43 + k 2^-45."""
-    step = 1.0 / den
-    if not (math.pi * step <= 0.5):
-        return None
-    c, sn = _cos_sin_pi_f64(n0 / den)
-    cp, sp = _cos_sin_pi_f64(step)
-    out = []
-    for _ in range(count):
-        out.append(c)
-        c, sn = c * cp - sn * sp, sn * cp + c * sp
-    errs = [2.0 ** -43 + k * 2.0 ** -45 for k in range(count)]
-    return out, errs
+def _lr_buffers(n):
+    """Two zeroed float64 buffers (values, error bounds) of n steps."""
+    return array.array("d", bytes(8 * n)), array.array("d", bytes(8 * n))
 
 
 class _LrTable(object):
@@ -2072,11 +2014,39 @@ class _LrTable(object):
         got = self._fast_values(t0, t1)
         if got is None:
             return [self._lr_at_slow(t) for t in range(t0, t1)]
-        vals = _f32_decide_many(*got)
-        for i, f in enumerate(vals):
-            if f is None:
+        # lane py-runtime round 2: the binary64 table and its float32
+        # decision in Mojo (bindings/lr_table_helpers.mojo); only the steps it
+        # cannot decide take the exact big-rational route
+        vs, es = got
+        n = t1 - t0
+        out = array.array("f", bytes(4 * n))
+        ok = array.array("B", bytes(n))
+        undecided = int(_lr_native("lr_decide")(vs.buffer_info()[0], es.buffer_info()[0], n,
+                                                out.buffer_info()[0], ok.buffer_info()[0]))
+        vals = out.tolist()
+        if undecided:
+            for i in [j for j in range(n) if not ok[j]]:
                 vals[i] = self._lr_at_slow(t0 + i)
         return vals
+
+    def lr_values(self, n):
+        """lr_at(1) .. lr_at(n) as an array('f') (lane py-runtime round 2):
+        whole table blocks from Mojo, the constant tail repeated in C; no
+        per-step Python. None when the table is off (the A/B arm), the
+        caller then asks `lr_at` per step."""
+        n = int(n)
+        if not self._fast:
+            return None
+        m = min(n, self._tail_t - 1)
+        out = array.array("f")
+        for b in range((m + _LR_MASK) >> _LR_SHIFT):  # glue: one native table block per 256 optimizer steps
+            out.extend(self._lr_block(b))
+        del out[m:]
+        if n > m:
+            if self._tail_v is None:
+                self.lr_at(m + 1)          # the exact route's own refusal past the table
+            out.extend(array.array("f", [self._tail_v]) * (n - m))
+        return out
 
     def lr_at(self, t):
         """The float32 learning rate of ONE-BASED step `t`, as a float."""
@@ -2097,6 +2067,8 @@ class _Schedule(_LrTable):
     counter, so `lr_at(1)` is the first step's learning rate."""
 
     kind = ""
+    #: `lr_schedule_values`' kind codes
+    _KIND_CODE = {"constant": 0, "linear": 1, "cosine": 2}
 
     def __init__(self, peak_lr, warmup_steps=0, total_steps=None, min_lr=0.0):
         self.peak_lr = float(_round_f32(peak_lr))
@@ -2161,30 +2133,17 @@ class _Schedule(_LrTable):
             return _f32_round(value)
         return self._decay(p)
 
-    def _decay_values(self, k0, k1):
-        """Values and error bounds of decay steps t = warmup + k, k0 <= k <
-        k1 (0 < k < total - warmup), or None."""
-        return None
-
     def _fast_values(self, t0, t1):
-        w = self.warmup_steps
-        vs, es = [], []
-        b = min(t1, w + 1)
-        if t0 < b:
-            if w >= (1 << 29):
-                return None
-            # peak t is exact (a float32 times an integer under 2^29), the
-            # division rounds once: under 2^-53 of v; bound 2^-50 of v
-            peak = self.peak_lr
-            vs = [peak * t / w for t in range(t0, b)]
-            es = [v * 2.0 ** -50 for v in vs]
-        a = max(t0, w + 1)
-        if a < t1:
-            got = self._decay_values(a - w, t1 - w)
-            if got is None:
-                return None
-            vs += got[0]
-            es += got[1]
+        """(values, error bounds) of steps t0 .. t1 - 1 as float64 buffers,
+        from `lr_schedule_values` (bindings/lr_table_helpers.mojo: the warmup
+        and decay formulas with their bounds), or None when the block has no
+        binary64 route."""
+        n = t1 - t0
+        vs, es = _lr_buffers(n)
+        params = [self._KIND_CODE[self.kind], float(self.peak_lr), float(self.min_lr), self.warmup_steps,
+                  -1 if self.total_steps is None else self.total_steps, t0, t1]
+        if int(_lr_native("lr_schedule_values")(params, vs.buffer_info()[0], es.buffer_info()[0])):
+            return None
         return vs, es
 
     def bits_at(self, t):
@@ -2213,89 +2172,15 @@ class WarmupLinearLR(_Schedule):
         peak, lo = Fraction(self.peak_lr), Fraction(self.min_lr)
         return _f32_round(peak + (lo - peak) * p)
 
-    def _decay_values(self, k0, k1):
-        span = self.total_steps - self.warmup_steps
-        if span >= (1 << 29):
-            return None
-        peak, lo = self.peak_lr, self.min_lr
-        d = lo - peak
-        # d (one rounding at most), d k, / span, peak + : four roundings,
-        # each under 2^-53 of an operand no larger than peak + |lo| + |v|;
-        # bound 2^-50 of that sum (a factor of two over)
-        vs = [peak + d * k / span for k in range(k0, k1)]
-        base = peak + abs(lo)
-        es = [(base + abs(v)) * 2.0 ** -50 for v in vs]
-        return vs, es
 
 
 # lane/neural-net-experiment (2026-09-30): the cosine schedule's value is
 # DEFINED as the float32 nearest the exact rational value (the interval
-# route below), and that definition does not change. What changes is how
-# often the exact route runs: `_decay` first evaluates the same formula in
-# binary64 with a repository-owned Taylor cosine (no libm) and a RIGOROUS
-# error bound, and accepts the float32 it rounds to when the whole error
-# interval rounds to that same float32 (Ziv's test). Only when the interval
-# straddles a float32 rounding boundary, or the value is outside the normal
-# range, does the exact route decide. The answer is the same float32 either
-# way: the fast path never returns a value the exact route would not. The
-# bench board's lr-warmup-cosine lane (100,000 steps) took 332 s of exact
-# rational arithmetic on an MI325X host; MOJOLEARN_LR_EXACT_ONLY=1 restores
-# the exact route for every step (the A/B, and the digest check).
-_COS_F64_TERMS = 26
-#: absolute error bound on `_cos_pi_f64` (analysis in its docstring: the
-#: sum's rounding is under 2^-46 and the argument's under 2^-50; 2^-40
-#: leaves a 64x margin)
-_COS_F64_ERR = 2.0 ** -40
-_F64_EPS = 2.0 ** -52
-
-
-def _cos_pi_f64(p):
-    """cos(pi p) in binary64 for a rational p in [0, 1], by the Taylor
-    series on the reduced argument x = pi q, q = p or 1 - p in [0, 1/2]
-    (cos is odd about pi/2, an exact identity), 26 terms (the truncation
-    x^52 / 52! is below 1e-58 for x <= pi/2). Every operation is IEEE
-    binary64, so the value is the same on every host; its distance from
-    cos(pi p) is under `_COS_F64_ERR`: the argument x carries at most
-    three roundings of relative size 2^-53 (pi, float(q), the product),
-    an absolute error under 2^-50 that cos passes through with slope at
-    most 1, and the sum of 26 terms of magnitude at most 1 accumulates at
-    most 26 roundings, each at most 2^-53 of a partial sum whose magnitude
-    stays under 2 (a bound of 2^-47), plus each term's own three roundings
-    (under 2^-51 in all)."""
-    q = Fraction(p)
-    flip = q > Fraction(1, 2)
-    if flip:
-        q = 1 - q
-    x = math.pi * float(q)
-    x2 = x * x
-    total = 0.0
-    term = 1.0
-    for k in range(_COS_F64_TERMS):
-        total += term
-        term = -term * x2 / ((2 * k + 1) * (2 * k + 2))
-    return -total if flip else total
-
-
-def _f32_of_f64_decided(v, err):
-    """The float32 nearest a real number known to lie in [v - err, v + err]
-    (v, err binary64), or None when that interval is not inside one
-    float32's rounding cell (its two neighbouring midpoints), or when the
-    value is not a normal positive float32 (then the exact route's
-    flush-to-zero and overflow rules decide)."""
-    if not (v > 2.0 ** -120) or v >= 2.0 ** 127 or not (err >= 0.0):
-        return None
-    f = ctypes.c_float(v).value
-    bits = struct.unpack('<I', struct.pack('<f', f))[0]
-    up = struct.unpack('<f', struct.pack('<I', bits + 1))[0]
-    down = struct.unpack('<f', struct.pack('<I', bits - 1))[0]
-    # the midpoints of two adjacent float32s are exact in binary64
-    hi_mid = (f + up) / 2.0
-    lo_mid = (f + down) / 2.0
-    if v - err > lo_mid and v + err < hi_mid:
-        return f
-    return None
-
-
+# route below), and that definition does not change. The binary64 table
+# (`_LrTable`, in Mojo since lane py-runtime round 2:
+# bindings/lr_table_helpers.mojo) answers every step whose rigorous error
+# interval rounds to one float32; the exact route decides the rest.
+# MOJOLEARN_LR_EXACT_ONLY=1 restores the exact route for every step.
 class WarmupCosineLR(_Schedule):
     """Linear warmup over `warmup_steps`, then
     `min_lr + (peak_lr - min_lr) * (1 + cos(pi p)) / 2` with
@@ -2303,7 +2188,7 @@ class WarmupCosineLR(_Schedule):
     float32 nearest the exact rational expression (the interval route,
     never `math.cos`); a binary64 evaluation with a rigorous error bound
     answers first whenever it provably rounds to that same float32 (see
-    the section comment above `_cos_pi_f64`).
+    the section comment above this class).
     """
 
     kind = "cosine"
@@ -2318,38 +2203,11 @@ class WarmupCosineLR(_Schedule):
             return (a, b) if a <= b else (b, a)
         return _decide_f32(interval)
 
-    def _decay_values(self, k0, k1):
-        span_steps = self.total_steps - self.warmup_steps
-        peak, lo = self.peak_lr, self.min_lr
-        span = peak - lo
-        if not (span > 0.0) or span_steps >= (1 << 52):
-            return None
-        got = _cos_pi_run(float(k0), float(span_steps), k1 - k0)
-        if got is None:
-            return None
-        cs, ce = got
-        # `_decay`'s expression and bound with the run's cosine bound
-        vs = [lo + span * (1.0 + c) / 2.0 for c in cs]
-        es = [span * e + 8.0 * _F64_EPS * (peak + abs(v)) for v, e in zip(vs, ce)]
-        return vs, es
-
     def _decay(self, p):
-        if os.environ.get("MOJOLEARN_LR_EXACT_ONLY") == "1":
-            return self._decay_exact(p)
-        peak, lo = self.peak_lr, self.min_lr
-        span = peak - lo
-        if not (span > 0.0):
-            return self._decay_exact(p)
-        c = _cos_pi_f64(p)
-        v = lo + span * (1.0 + c) / 2.0
-        # the cosine's bound scaled into the value, plus the four roundings
-        # of the expression itself (each at most 2^-53 of an operand no
-        # larger than peak + v), with a factor of two of margin
-        err = span * _COS_F64_ERR + 8.0 * _F64_EPS * (peak + abs(v))
-        f = _f32_of_f64_decided(v, err)
-        if f is None:
-            return self._decay_exact(p)
-        return f
+        """The exact route (lane py-runtime round 2: the per-step binary64
+        try in Python is gone; the table answers every step it can decide,
+        in Mojo, and the exact route gives the same float32 for the rest)."""
+        return self._decay_exact(p)
 
 
 # ===================================================================

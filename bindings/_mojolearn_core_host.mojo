@@ -158,6 +158,7 @@ from bindings.hotpath_helpers import (
     group_fold_assign_i32_binding,
     strat_group_assign_i32_binding,
 )
+from bindings.lr_table_helpers import lr_decide_binding, lr_onecycle_fill_binding, lr_schedule_values_binding
 from bindings.array_helpers import (
     strided_copy_bytes_binding,
     check_lengths_i64_binding,
@@ -1538,6 +1539,9 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
         module.def_function[nsum_f64_binding]("nsum_f64")
         module.def_function[row_means_f64_binding]("row_means_f64")
+        module.def_function[lr_schedule_values_binding]("lr_schedule_values")
+        module.def_function[lr_onecycle_fill_binding]("lr_onecycle_fill")
+        module.def_function[lr_decide_binding]("lr_decide")
         module.def_function[class_ratio_f64_host_binding]("class_ratio_f64")
         module.def_function[shard_topk_merge_f32_host_binding]("shard_topk_merge_f32")
         return module.finalize()
