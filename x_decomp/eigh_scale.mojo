@@ -32,6 +32,7 @@ flushed (`ftz`), the host's and every device's denormal policy."""
 from std.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
+from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz, identical_mul
@@ -167,3 +168,61 @@ def host_es_unscale(mut w: List[Float32], f: SIMD[DType.float32, 4]):
     if f[2] != Float32(1.0) or f[3] != Float32(1.0):
         for i in range(len(w)):
             w[i] = es_mul2(w[i], f[2], f[3])
+
+
+def es_unscale_diag_kernel(a: F32Ptr, fac: F32Ptr, n_in: Int32):
+    """a_kk = a_kk g1 g2 on one n x n matrix (fac[2], fac[3]): the diagonal
+    of a solve that leaves its eigenvalues in place (decomposition/impl/
+    linalg/detail/pca.mojo `eig_and_truncate`). No write when both are 1."""
+    var n = Int(n_in)
+    var k = Int(block_idx.x) * ES_TPB + Int(thread_idx.x)
+    if k < n:
+        var g1 = fac.unsafe_load(2)
+        var g2 = fac.unsafe_load(3)
+        if g1 != Float32(1.0) or g2 != Float32(1.0):
+            a.unsafe_store(k * n + k, es_mul2(a.unsafe_load(k * n + k), g1, g2))
+
+
+def host_es_unscale_diag(mut a: List[Float32], n: Int, f: SIMD[DType.float32, 4]):
+    """The host's `es_unscale_diag_kernel`."""
+    if f[2] != Float32(1.0) or f[3] != Float32(1.0):
+        for k in range(n):
+            a[k * n + k] = es_mul2(a[k * n + k], f[2], f[3])
+
+
+def _es_blocks(count: Int) -> Int:
+    return (count + ES_TPB - 1) // ES_TPB if count > 0 else 1
+
+
+def enqueue_es_scale(ctx: DeviceContext, a: F32Ptr, batch: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """x_decomp/eigh_scale.mojo on `batch` n x n problems stacked at `a`
+    (device): each problem's power-of-two range scale, applied in place (no
+    write inside the band). Returns the factors (4 a problem) for
+    `enqueue_es_unscale`. Three launches, nothing read back."""
+    var dfac = ctx.enqueue_create_buffer[DType.float32](4 * max(batch, 1))
+    var drm = ctx.enqueue_create_buffer[DType.float32](max(batch * n, 1))
+    ctx.enqueue_function[es_rowmax_kernel](
+        a, F32Ptr(unsafe_from_address=Int(drm.unsafe_ptr())), Int32(batch * n), Int32(n), grid_dim=_es_blocks(batch * n), block_dim=ES_TPB
+    )
+    ctx.enqueue_function[es_fold_kernel](F32Ptr(unsafe_from_address=Int(drm.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dfac.unsafe_ptr())), Int32(n), grid_dim=max(batch, 1), block_dim=ES_TPB)
+    ctx.enqueue_function[es_apply_kernel](
+        a, F32Ptr(unsafe_from_address=Int(dfac.unsafe_ptr())), Int32(n * n), Int32(batch * n * n), grid_dim=_es_blocks(batch * n * n), block_dim=ES_TPB
+    )
+    _ = drm^
+    return dfac^
+
+
+def enqueue_es_unscale(ctx: DeviceContext, w: F32Ptr, dfac: DeviceBuffer[DType.float32], batch: Int, n: Int) raises:
+    """The eigenvalues of `enqueue_es_scale`'s problems (batch x n at `w`,
+    device) back to the input's scale."""
+    ctx.enqueue_function[es_unscale_kernel](
+        w, F32Ptr(unsafe_from_address=Int(dfac.unsafe_ptr())), Int32(n), Int32(batch * n), grid_dim=_es_blocks(batch * n), block_dim=ES_TPB
+    )
+
+
+def enqueue_es_unscale_diag(ctx: DeviceContext, a: F32Ptr, dfac: DeviceBuffer[DType.float32], n: Int) raises:
+    """The diagonal of `enqueue_es_scale`'s one n x n problem (eigenvalues
+    left in place by the solve) back to the input's scale."""
+    ctx.enqueue_function[es_unscale_diag_kernel](
+        a, F32Ptr(unsafe_from_address=Int(dfac.unsafe_ptr())), Int32(n), grid_dim=_es_blocks(n), block_dim=ES_TPB
+    )
