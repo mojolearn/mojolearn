@@ -1410,7 +1410,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                     src_buf=self.d_multi_stats,
                 )
             self.ctx.synchronize()
-            for row in range(hbs):
+            for row in range(hbs):  # small-loop(hbs: class dimensions, over bins and columns): assemble the per-bin Hessian blocks, never rows
                 var column_count = row + 1
                 var slot = row * stats_len
                 for bin in range(self.bin_count):
