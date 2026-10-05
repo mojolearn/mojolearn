@@ -29,3 +29,13 @@ Recreate the watcher cron (it is session-only): every 20 min run apple_watch.sh 
 ## Owed
 - Multi-seed checks: bayesian-gmm taxi, als taxi-zones, adaboost-reg taxi (TE_ADA_SESSION_OFF probe), mb-dict-learning seed spread.
 - KMEANS FA GRAM_ONCE-alone path still float32 (not covered by the FA fix).
+
+## Update 2026-10-05 (main 9d3fb4278)
+- Landed since: verdicts batch 4 (CC_FAST, SHAP_TREE_TAB, CV_FAST_SLICE/TRUST, MCD_DEFLATE, SYM_CTR_ALL, SYM_EST_ALL, PL_GROUP_NARROW,
+  FA_ITER_DEVICE + double-float Gram; quality fixes LU, PROBA64, DT bins (adaboost-reg r2 -0.61 -> 0.60), ARD, TSVD; reverts of
+  perceptron averaging, IVF coarse init, KNN refine, SVD qfix); MOE_FAST_MMA default (moe -25%); LSTM scan candidates (still broken, off).
+- Board: 354/377 faster, geomean 0.220.
+- Not on main yet, pushed to GitHub: lane/apple-fast-general-speed (LDA tiers, SVM ws rule, ARD one-pass: these CHANGE DEFAULTS, so merge after
+  rab11), lane/apple-fast-s-small (RBF_PIPE, off), lane/apple-fast-s-ts (6 time-series candidates, off), compiling in M2 bq 98-merge.
+- Running speed lanes: apple-fast-s-linalg (incl. TSVD speed), apple-fast-s-shap (incl. LLE quality).
+- M3 queue: rab10 rest, rab11 (LDA/SVC/ARD fixes), rab12 (rbf pipe), rab13 (time series); opponent job last.
