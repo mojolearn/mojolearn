@@ -30,12 +30,19 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 #: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
-#: default OFF, FAST + Apple only. Skipped fills, no bit moves:
+#: FAST + Apple only. Skipped fills, no bit moves:
 #:  MOJOLEARN_AF_FAST_NOFILL: Adafactor's P, G and variance buffers are bound
 #:    by their upload (`Exec.bind`), not zero filled first.
 #:  MOJOLEARN_LN_FAST_NOFILL: LayerNorm's x and dy likewise.
 comptime _PY_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime AF_NOFILL = _PY_APPLE_FAST and is_defined["MOJOLEARN_AF_FAST_NOFILL"]()
+#: AF_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, rab10-afnofill): adafactor 393.2 -> 380.1 ms, digest identical
+#: A == B. KEEP: the FAST + Apple default since then; rollback
+#: -D MOJOLEARN_AF_FAST_NOFILL_OFF. No conflict with AF_FAST_RESIDENT (also a
+#: default): the resident step does not go through `adafactor_step_py`, so
+#: with RESIDENT on the Adafactor class no longer reaches this path; NOFILL
+#: covers the direct `adafactor_step` binding and the RESIDENT_OFF rollback.
+comptime AF_NOFILL = _PY_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_NOFILL_OFF"]()
 #: LN_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 48.2 -> 45.5 ms,
 #: output digest identical A == B. KEEP: the FAST + Apple default since then;

@@ -263,8 +263,9 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[optimizer_resident_move_binding]("optimizer_resident_move")
         m.def_function[optimizer_resident_step_binding]("optimizer_resident_step")
         m.def_function[lamb_resident_step_binding]("lamb_resident_step")
-        # Adafactor's second moment on the device (-D MOJOLEARN_AF_FAST_RESIDENT,
-        # FAST + Apple; the Python side uses it only when these exist)
+        # Adafactor's second moment on the device (FAST + Apple default, off
+        # under -D MOJOLEARN_AF_FAST_RESIDENT_OFF; the Python side uses it
+        # only when these exist)
         comptime if AF_RESIDENT:
             m.def_function[adafactor_resident_open_binding]("adafactor_resident_open")
             m.def_function[adafactor_resident_step_binding]("adafactor_resident_step")

@@ -379,8 +379,8 @@ class Adafactor:
                 self._af_state.append(dict(variance=np.zeros(p.shape[0], np.float32)))
         self.t = 0
         # lane apple-fast-gap-optim: the second moment on the device
-        # (`adafactor_resident_*`, a FAST + Apple binding built with
-        # -D MOJOLEARN_AF_FAST_RESIDENT), mirrored on the host on access as
+        # (`adafactor_resident_*`, a FAST + Apple binding, the default since
+        # rab10-afresident; -D MOJOLEARN_AF_FAST_RESIDENT_OFF), mirrored on the host on access as
         # `_ResidentState` does: `state` downloads once per stale read and the
         # next step uploads the host copies a reader may have written
         self._af_res = None
