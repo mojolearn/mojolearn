@@ -283,7 +283,10 @@ def rows_slot(binding, prefix, rows, direct):
     through `direct` (a DeviceCache the caller closes after its run). The
     returned slot belongs to the caller, who frees it with
     `<prefix>_dev_free` after the run."""
-    take = getattr(binding, prefix + "_dev_take_rows", None)
+    try:
+        take = getattr(binding, prefix + "_dev_take_rows")
+    except (AttributeError, ImportError):  # an older build, or a host facade
+        return None
     if take is None or not rows.size or not DeviceCache.supports(binding, prefix):
         return None
     scope = getattr(_LOCAL, "scope", None)
