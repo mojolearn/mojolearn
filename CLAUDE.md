@@ -77,3 +77,24 @@ every vendor. A rule must come from size, hardware or cost reasoning that covers
 In IDENTICAL, removing such a rule may change bits: that is allowed, because bits only have to match across NVIDIA, AMD,
 Apple and the host column within one version, never across versions. Change all columns together. Each removal gets an
 A/B with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.
+
+## Measurement process (owner, 2026-10-05)
+
+1. Freeze one commit per A/B round. Compile it once on cheap boxes (Apple on the M2; NVIDIA/AMD on cheap fast-CPU boxes).
+   Only a green frozen build goes to the timing GPUs. New code waits for the next freeze.
+2. IDENTICAL switches are decided by NVIDIA and AMD together: combined faster, and neither vendor materially slower.
+   Apple never votes on IDENTICAL switches and IDENTICAL is never tuned for Apple; Apple must only match bits.
+3. Measure IDENTICAL on NVIDIA, AMD and Apple and update every board (main board included) as results land, through the
+   board tools only. A full-board run is IDENTICAL on the three; FAST is not rerun.
+4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.
+5. Read logs with grep and short tails; never paste whole logs. Tell every subagent the same.
+
+## No Python in the runtime
+
+Python is the API shell only: check arguments, choose a binding, pass buffers, return results. No Python runs in the
+runtime: no loops over data, no NumPy or Python arithmetic on data, no Python-side sorting, sampling, reductions, label
+processing over rows, or worker threads in fit, transform, predict, score or training steps, in any mode or on any vendor.
+All runtime work is Mojo: on the device for GPU routes, in the host binding for CPU-only installs. Text and file handling
+that cannot be Mojo is an explicit CPU-only input step before the runtime, marked `# cpu-route: <reason>`.
+Every existing violation is debt to remove (the checker baseline `tools/hooks/host_routes_baseline.tsv`, class py-compute),
+and no change may add one.

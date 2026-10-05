@@ -318,6 +318,9 @@ def cmd_merge(a):
     fill = _read_opp_lines(a.opp_lines)
     ident = a.mode == "identical"
     out_md = a.out or (OUT_MD_IDENT if ident else OUT_MD)
+    if os.path.abspath(out_md) == os.path.abspath(OUT_MD):
+        sys.exit("BOARD_M3_FAST.md is generated from board.json (tools/af_board_render.py); pass --out elsewhere "
+                 "and fold results in with tools/af_board_apply.py")
     tsv = {}
     if os.path.exists(a.tsv):
         lines = open(a.tsv).read().splitlines()

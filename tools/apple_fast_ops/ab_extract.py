@@ -2,7 +2,7 @@
 """M3: one line per A/B tag matching argv[1] regex: tag | A ms | B ms | dB% | A quality | B quality | digest same?"""
 import re, sys, glob, os, json
 pat = re.compile(sys.argv[1]); out = os.path.expanduser("~/mq/out")
-tags = sorted({m.group(0) for m in re.finditer(r"\b(rab[0-9a-z]+-[a-z0-9-]+)", open(os.path.expanduser("~/mq/results.txt")).read()) if pat.search(m.group(0))})
+tags = sorted({m.group(0) for m in re.finditer(r"\b((?:rab|ssl)[0-9a-z]*-[A-Za-z0-9-]+)", open(os.path.expanduser("~/mq/results.txt")).read()) if pat.search(m.group(0))})
 for t in tags:
     f = os.path.join(out, t + ".log")
     if not os.path.exists(f): print(t, "| no log"); continue

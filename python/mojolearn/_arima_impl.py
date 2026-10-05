@@ -643,10 +643,10 @@ class ARIMA(NumericModeMixin):
                 "arima/estimator.mojo disagree about ARIMAOrder.complexity()"
             )
         return self._adopt_fit(arr, copied, y_ndim, batch_size, n_obs, ex, n_exog,
-                               params, x, x0, stats, flags)
+                               params, x, x0, stats, flags, ics)
 
     def _adopt_fit(self, arr, copied, y_ndim, batch_size, n_obs, ex, n_exog,
-                   params, x, x0, stats, flags):
+                   params, x, x0, stats, flags, ics=None):
         """The fitted state from the fit's output buffers (`arima_fit`'s
         layout: params / x / x0 `(batch_size * N,)` f32, stats [llf, fx] f32,
         flags [n_iter, retcode] i32). `fit` calls it after the native fit;
@@ -680,6 +680,15 @@ class ARIMA(NumericModeMixin):
         # binary64, now written by the fit itself (device kernel; the host
         # column runs the same soft-float64 arithmetic). A NaN criterion is
         # the canonical quiet NaN.
+        if ics is None:
+            # Fit-reuse path (ARIMA_FAST_SEARCH_REUSE): the search wrote no
+            # criterion, so form cuML's -2 llf + penalty from llf (glue
+            # arithmetic, one value per series).
+            import math
+            k = float(self.complexity_)
+            self.aic_ = -2.0 * llf + 2.0 * k
+            self.bic_ = -2.0 * llf + math.log(float(n_obs)) * k
+            return self
         self.aic_ = ics[:batch_size]
         self.bic_ = ics[batch_size:]
         return self
