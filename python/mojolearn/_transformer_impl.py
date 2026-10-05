@@ -540,7 +540,7 @@ class TransformerState:
             # the wrap): two slice copies, no per-token loop.
             start = (s - held) % w
             first = min(held, w - start)
-            for head in range(b * kv):
+            for head in range(b * kv):  # glue: two slice copies per head of the KV ring (kv-sized: batch by kv heads)
                 d0, s0 = head * held * hd, (head * w + start) * hd
                 dest[d0:d0 + first * hd] = source[s0:s0 + first * hd]
                 if held > first:

@@ -144,7 +144,7 @@ class ModelPlan:
 
     def layer_weights(self, i):
         out = []
-        for key, template, rows in self._layer_map:
+        for key, template, rows in self._layer_map:  # glue: walks the layer weight name templates
             out.append((key, template.format(i=i), rows))
         return out
 
@@ -152,8 +152,8 @@ class ModelPlan:
         names = [self.embed_name, self.norm_name]
         if self.head_name is not None:
             names.append(self.head_name)
-        for i in range(self.n_layers):
-            for _, name, _ in self.layer_weights(i):
+        for i in range(self.n_layers):  # glue: names the checkpoint weights per layer
+            for _, name, _ in self.layer_weights(i):  # glue: names the checkpoint weights of one layer
                 if name not in names:
                     names.append(name)
         return names

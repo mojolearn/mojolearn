@@ -129,7 +129,7 @@ def _source(corpus_path):
                 raise ValueError(f"mojolearn: pinned corpus length/SHA mismatch for {path} "
                                  f"(manifest {m.get('sha256')}, {m.get('bytes')} bytes; file {sha}, {len(data)})")
             src.update(schema=CORPUS_SCHEMA, manifest_sha256=_sha_bytes(raw), source_url=m.get("source_url"))
-            for key in ("train_range", "validation_range", "test_range"):
+            for key in ("train_range", "validation_range", "test_range"):  # glue: three named range arguments
                 r = m.get(key)
                 if r:
                     ranges[key] = [int(r[0]), int(r[1])]
@@ -262,7 +262,7 @@ def _tokenize(data, src, ranges, tok, identity, out, document_bytes, batch_docum
     if sys.byteorder != "little":
         ids.byteswap()
     payload = ids.tobytes()
-    token_ranges = {key: [boundaries[a], boundaries[b]] for key, (a, b) in ranges.items()}
+    token_ranges = {key: [boundaries[a], boundaries[b]] for key, (a, b) in ranges.items()}  # glue: maps three named ranges to token offsets
     manifest = dict(
         schema=TOKENS_SCHEMA,
         source=src,
@@ -278,7 +278,7 @@ def _tokenize(data, src, ranges, tok, identity, out, document_bytes, batch_docum
         sha256=_sha_bytes(payload), bytes=len(payload), tokens=at_token,
         bytes_per_token=(len(data) / at_token) if at_token else None,
         max_id=max_id, ids_above_255=above_255,
-        **{k: v for k, v in token_ranges.items()},
+        **{k: v for k, v in token_ranges.items()},  # glue: copies three named token ranges
         schedule=_SCHEDULE,
         tokenize_seconds=seconds, encode_seconds=encode_seconds,
         encode_bytes_per_second=(len(data) / encode_seconds) if encode_seconds else None,
@@ -329,7 +329,7 @@ def prepare(corpus, *, vocab=None, cache_dir=None, vocab_size=DEFAULT_VOCAB_SIZE
     caller's own token map (see the module docstring) and nothing is
     trained. Both are cached; a rerun with the same corpus and vocabulary
     reuses the id array after re-hashing it."""
-    for name, value in (("vocab_size", vocab_size), ("min_frequency", min_frequency),
+    for name, value in (("vocab_size", vocab_size), ("min_frequency", min_frequency),  # glue: validates three trainer arguments
                         ("vocab_sample_bytes", vocab_sample_bytes), ("document_bytes", document_bytes),
                         ("batch_documents", batch_documents)):
         if type(value) is not int or value < 1:
@@ -443,7 +443,7 @@ class TokenBatches:
         return self._batches(start_step, steps)
 
     def _batches(self, start_step, steps):
-        for step in range(start_step, start_step + steps):
+        for step in range(start_step, start_step + steps):  # glue: yields one batch handle per step (steps-sized: training steps)
             yield step, self.ids(step)
 
     def describe(self):
