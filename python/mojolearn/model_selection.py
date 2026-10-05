@@ -810,14 +810,6 @@ def _first_seen_native(y):
     return Array._owned(words, (n,), '<i4', 'C'), gc.m, [gc.counts[c] for c in order]  # glue: class order by first row over the k classes
 
 
-def _encode_sorted(values):
-    # the order rule's classes and codes by the native encoder (lane
-    # py-shared); `sorted_classes` stays its definition and fallback
-    from ._labels import encode_labels
-    classes, codes = encode_labels(list(values))
-    return codes.tolist(), classes
-
-
 def _as_index(values):
     if isinstance(values, range) and values.step == 1:
         # a contiguous row range, written by the base binding (lane cgr4-py-compute)
@@ -878,11 +870,6 @@ def _split_indices(test, n):
     return _split_mask(mask, n)
 
 
-class _Mask(bytes):
-    """A test-row mask (1 = test) a splitter's `_test_folds` may yield in
-    place of the row list; `split` uses it as the mask (lane metrics-apple)."""
-
-
 # ---------------------------------------------------------------- native rows
 # lane/py-misc-msel (2026-09-28): the group splitters, PredefinedSplit,
 # unshuffled KFold and StratifiedShuffleSplit build their rows with the core
@@ -920,17 +907,18 @@ class _GroupCodes:
     def get(cls, values, n, name):
         if values is None:
             _labels_list(values, name)  # raises the definition's error
-        if n < _NATIVE_MIN_ROWS or _sabotage_requested() or not _msel_native():
-            return None
+        # lane py-runtime-b: the only route (the Python `_test_folds`
+        # definitions it handed back to are deleted); `_native` raises by
+        # name when the binary lacks a helper
         fold_ids = _native('fold_ids')
         select = _native('select_fold_i64')
         gather = _native('gather_i32')
-        if fold_ids is None or select is None or gather is None:
-            return None
         from ._labels import encode_labels
         classes, codes = encode_labels(values)
-        if codes.ndim != 1 or codes.size != n or codes.dtype != '<i4':
-            return None
+        if codes.ndim != 1 or codes.size != n:
+            raise ValueError(f'{name} has {codes.size} labels for {n} samples')
+        if codes.dtype != '<i4':
+            codes = codes.astype('<i4')
         m = len(classes)
         counts = [0] * m
         if m:
@@ -1006,15 +994,10 @@ class _Splitter:
     def get_params(self, deep=True):
         return {k: v for k, v in vars(self).items() if not k.startswith('_')}  # glue: repr and params over the splitter attributes
 
-    def _test_folds(self, X, y, groups):
-        raise NotImplementedError
-
     def split(self, X, y=None, groups=None):
-        n = _n_samples(X)
-        for test in self._test_folds(X, y, groups):
-            # ascending train and test rows from the test mask, in Mojo
-            # (lane cgr4-py-compute: no per-row Python mask or compress)
-            yield _split_mask(test, n) if isinstance(test, _Mask) else _split_indices(test, n)
+        # every splitter builds its rows natively in its own `split` (lane
+        # py-runtime-b deleted the Python `_test_folds` definitions)
+        raise NotImplementedError
 
 
 def _check_splits(n_splits):
@@ -1166,9 +1149,6 @@ class GroupKFold(_KFoldBase):
     def split(self, X, y=None, groups=None):
         n = _n_samples(X)
         gc = _GroupCodes.get(groups, n, 'groups')
-        if gc is None:
-            yield from super().split(X, y, groups)
-            return
         m = gc.m
         if self.n_splits > m:
             raise ValueError(f'Cannot have number of splits n_splits={self.n_splits} greater than the '
@@ -1193,35 +1173,6 @@ class GroupKFold(_KFoldBase):
                                              to_fold.buffer_info()[0], sizes.buffer_info()[0])
         yield from gc.split_by_fold(to_fold, self.n_splits, sizes)
 
-    def _test_folds(self, X, y, groups):
-        g = _labels_list(groups, 'groups')
-        idx, classes = _encode_sorted(g)
-        m = len(classes)
-        if self.n_splits > m:
-            raise ValueError(f'Cannot have number of splits n_splits={self.n_splits} greater than the '
-                             f'number of groups: {m}.')
-        if self.shuffle:
-            perm = _rng(self.random_state).permutation(m)
-            start = 0
-            for f in range(self.n_splits):
-                size = m // self.n_splits + (f < m % self.n_splits)
-                chosen = set(perm[start:start + size])
-                start += size
-                yield [r for r, v in enumerate(idx) if v in chosen]
-            return
-        sizes = [0] * m
-        for v in idx:
-            sizes[v] += 1
-        order = sorted(range(m), key=lambda i: (sizes[i], i))[::-1]
-        load = [0] * self.n_splits
-        to_fold = [0] * m
-        for gi in order:
-            f = min(range(self.n_splits), key=lambda j: (load[j], j))
-            load[f] += sizes[gi]
-            to_fold[gi] = f
-        for f in range(self.n_splits):
-            yield [r for r, v in enumerate(idx) if to_fold[v] == f]
-
 
 class StratifiedGroupKFold(_KFoldBase):
     """scikit-learn 1.9 `StratifiedGroupKFold`: groups (sorted by the standard
@@ -1232,9 +1183,6 @@ class StratifiedGroupKFold(_KFoldBase):
     def split(self, X, y=None, groups=None):
         n = _n_samples(X)
         gc = _GroupCodes.get(groups, n, 'groups')
-        if gc is None:
-            yield from super().split(X, y, groups)      # the sabotage control's route
-            return
         # the class codes in first-seen order (natively; the dict encoder for
         # labels the native encoder refuses: glue over label objects), each
         # group's fold and each fold's rows by the base binding's
@@ -1265,54 +1213,6 @@ class StratifiedGroupKFold(_KFoldBase):
             raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
                              'each class.')
         yield from gc.split_by_fold(to_fold, self.n_splits, sizes)
-
-    def _test_folds(self, X, y, groups):
-        labels = _labels_list(y)
-        g = _labels_list(groups, 'groups')
-        gidx, classes = _encode_sorted(g)
-        fold_groups = self._assign(labels, gidx, len(classes))
-        for f in range(self.n_splits):
-            yield [r for r, gi in enumerate(gidx) if gi in fold_groups[f]]
-
-    def _assign(self, labels, gidx, m):
-        """Each fold's set of group codes."""
-        yenc, k = _encode_first_seen(labels)
-        counts = [0] * k
-        for c in yenc:
-            counts[c] += 1
-        if max(counts) < self.n_splits:
-            raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
-                             'each class.')
-        dist = [[0] * k for _ in range(m)]
-        for c, gi in zip(yenc, gidx):
-            dist[gi][c] += 1
-        order = list(range(m))
-        if self.shuffle:
-            perm = _rng(self.random_state).permutation(m)
-            order = [order[j] for j in perm]
-        def std(row):
-            mu = sum(row) / k  # integer counts: an exact sum
-            return math.sqrt(math.nsum((v - mu) * (v - mu) for v in row) / k)
-        order = sorted(order, key=lambda gi: -std(dist[gi]))  # stable: equal std keep their order
-        fold_dist = [[0] * k for _ in range(self.n_splits)]
-        fold_groups = [set() for _ in range(self.n_splits)]
-        for gi in order:
-            best, best_std, best_n = None, None, None
-            for f in range(self.n_splits):
-                trial = [fold_dist[f][c] + dist[gi][c] for c in range(k)]
-                std_per_class = []
-                for c in range(k):
-                    col = [(fold_dist[j][c] if j != f else trial[c]) / counts[c] for j in range(self.n_splits)]
-                    mu = math.nsum(col) / self.n_splits
-                    std_per_class.append(math.sqrt(math.nsum((v - mu) * (v - mu) for v in col) / self.n_splits))
-                score = math.nsum(std_per_class) / k
-                size = sum(fold_dist[f])
-                if best is None or score < best_std or (score == best_std and size < best_n):
-                    best, best_std, best_n = f, score, size
-            for c in range(k):
-                fold_dist[best][c] += dist[gi][c]
-            fold_groups[best].add(gi)
-        return fold_groups
 
 
 class TimeSeriesSplit(_Splitter):
@@ -1400,23 +1300,12 @@ class LeaveOneGroupOut(_Splitter):
     def split(self, X, y=None, groups=None):
         n = _n_samples(X)
         gc = _GroupCodes.get(groups, n, 'groups')
-        if gc is None:
-            yield from super().split(X, y, groups)
-            return
         if gc.m <= 1:
             raise ValueError(f'The groups parameter contains fewer than 2 unique groups ({gc.classes}). '
                              'LeaveOneGroupOut expects at least 2.')
         # each group's rows straight from the codes (lane/py-misc-msel)
         for gi in range(gc.m):  # glue: one native row split per group (m groups)
             yield gc.rows(gc.codes, gi, gc.counts[gi])
-
-    def _test_folds(self, X, y, groups):
-        idx, classes = _encode_sorted(_labels_list(groups, 'groups'))
-        if len(classes) <= 1:
-            raise ValueError(f'The groups parameter contains fewer than 2 unique groups ({classes}). '
-                             'LeaveOneGroupOut expects at least 2.')
-        for gi in range(len(classes)):
-            yield [r for r, v in enumerate(idx) if v == gi]
 
 
 class LeavePGroupsOut(_Splitter):
@@ -1431,9 +1320,6 @@ class LeavePGroupsOut(_Splitter):
     def split(self, X, y=None, groups=None):
         n = _n_samples(X)
         gc = _GroupCodes.get(groups, n, 'groups')
-        if gc is None:
-            yield from super().split(X, y, groups)
-            return
         if self.n_groups >= gc.m:
             raise ValueError(f'The groups parameter contains fewer than (or equal to) n_groups '
                              f'({self.n_groups}) numbers of unique groups ({gc.classes}).')
@@ -1443,16 +1329,6 @@ class LeavePGroupsOut(_Splitter):
             for g in combo:  # glue: one per-group table per combination of groups
                 table[g] = 1
             yield gc.rows(gc.mapped(table), 1, sum(gc.counts[g] for g in combo))  # glue: one per-group table per combination of groups
-
-    def _test_folds(self, X, y, groups):
-        import itertools
-        idx, classes = _encode_sorted(_labels_list(groups, 'groups'))
-        if self.n_groups >= len(classes):
-            raise ValueError(f'The groups parameter contains fewer than (or equal to) n_groups '
-                             f'({self.n_groups}) numbers of unique groups ({classes}).')
-        for combo in itertools.combinations(range(len(classes)), self.n_groups):
-            chosen = set(combo)
-            yield [r for r, v in enumerate(idx) if v in chosen]
 
 
 class _Repeated:
@@ -1575,33 +1451,23 @@ class GroupShuffleSplit(ShuffleSplit):
 
     def split(self, X, y=None, groups=None):
         gc = _GroupCodes.get(groups, _n_samples(X), 'groups')
-        if gc is not None:
-            # each group's side (0 train, 1 test, 2 neither) as a table
-            # gathered per row, the same draws (lane/py-misc-msel)
-            # each draw's per-group side table and side sizes in Mojo
-            # (`split_table_i32`; lane cgr4-py-compute; on the device since
-            # lane cpu2-l4-modelsel, `msel_split_table_i32`), gathered per row
-            m = gc.m
-            n_train, n_test = self._sizes(m)
-            rng = _rng(self.random_state)
-            counts = array.array('q', gc.counts)
-            table = array.array('i', bytes(4 * m))
-            sums = array.array('q', [0, 0])
-            for perm in rng.permutation_rows([m] * self.n_splits):  # glue: one device permutation per split (n_splits sized)
-                _native('msel_split_table_i32')(perm.buffer_info()[0], m, n_test, n_train,
-                                                counts.buffer_info()[0], table.buffer_info()[0],
-                                                sums.buffer_info()[0])
-                words = gc.mapped(table)
-                yield gc.only(words, 0, sums[0]), gc.only(words, 1, sums[1])
-            return
-        idx, classes = _encode_sorted(_labels_list(groups, 'groups'))
-        m = len(classes)
+        # each group's side (0 train, 1 test, 2 neither) as a table
+        # gathered per row, the same draws (lane/py-misc-msel)
+        # each draw's per-group side table and side sizes in Mojo
+        # (`split_table_i32`; lane cgr4-py-compute; on the device since
+        # lane cpu2-l4-modelsel, `msel_split_table_i32`), gathered per row
+        m = gc.m
         n_train, n_test = self._sizes(m)
         rng = _rng(self.random_state)
-        for perm in rng.permutations([m] * self.n_splits):
-            te, tr = set(perm[:n_test]), set(perm[n_test:n_test + n_train])
-            yield (_as_index([r for r, v in enumerate(idx) if v in tr]),
-                   _as_index([r for r, v in enumerate(idx) if v in te]))
+        counts = array.array('q', gc.counts)
+        table = array.array('i', bytes(4 * m))
+        sums = array.array('q', [0, 0])
+        for perm in rng.permutation_rows([m] * self.n_splits):  # glue: one device permutation per split (n_splits sized)
+            _native('msel_split_table_i32')(perm.buffer_info()[0], m, n_test, n_train,
+                                            counts.buffer_info()[0], table.buffer_info()[0],
+                                            sums.buffer_info()[0])
+            words = gc.mapped(table)
+            yield gc.only(words, 0, sums[0]), gc.only(words, 1, sums[1])
 
 
 def _approximate_mode(class_counts, n_draws, rng):
@@ -1633,53 +1499,21 @@ class StratifiedShuffleSplit(ShuffleSplit):
     test are then permuted."""
 
     def split(self, X, y, groups=None):
-        fast = self._native_split(y)
-        if fast is not None:
-            yield from fast
-            return
-        labels = _labels_list(y)
-        n = len(labels)
-        n_train, n_test = self._sizes(n)
-        idx, classes = _encode_sorted(labels)
-        k = len(classes)
-        counts = [0] * k
-        rows = [[] for _ in range(k)]
-        for r, c in enumerate(idx):
-            counts[c] += 1
-            rows[c].append(r)
-        if min(counts) < 2:
-            raise ValueError('The least populated classes in y have only 1 member, which is too few. The '
-                             'minimum number of groups for any class cannot be less than 2.')
-        if n_train < k:
-            raise ValueError(f'The train_size = {n_train} should be greater or equal to the number of classes = {k}')
-        if n_test < k:
-            raise ValueError(f'The test_size = {n_test} should be greater or equal to the number of classes = {k}')
-        rng = _rng(self.random_state)
-        for _ in range(self.n_splits):
-            n_i = _approximate_mode(counts, n_train, rng)
-            t_i = _approximate_mode([c - a for c, a in zip(counts, n_i)], n_test, rng)
-            train, test = [], []
-            for c, perm in enumerate(rng.permutations(counts)):
-                cls = [rows[c][j] for j in perm]
-                train.extend(cls[:n_i[c]])
-                test.extend(cls[n_i[c]:n_i[c] + t_i[c]])
-            ptr, pte = rng.permutations([len(train), len(test)])
-            yield _as_index([train[j] for j in ptr]), _as_index([test[j] for j in pte])
+        # lane py-runtime-b: the core-helper route is the only one (the
+        # Python row route is deleted)
+        yield from self._native_split(y)
 
     def _native_split(self, y):
-        """`split`'s rows by the core helpers (lane/py-misc-msel), or None:
+        """`split`'s rows by the core helpers (lane/py-misc-msel):
         each class's ascending rows once (`select_fold_i64` on the codes),
         then per split the same draws in the same order, the permuted rows
         by `gather_i64` straight into the train and test arrays, and the
         final shuffles by `gather_i64` again. A generator after its checks,
         which raise before the first draw exactly as `split` does."""
-        if y is None:
-            return None
-        n0 = len(y) if not hasattr(y, 'shape') else (int(y.shape[0]) if len(y.shape) else 0)
-        gc = _GroupCodes.get(y, n0, 'y')
+        n0 = 0 if y is None else (
+            len(y) if not hasattr(y, 'shape') else (int(y.shape[0]) if len(y.shape) else 0))
+        gc = _GroupCodes.get(y, n0, 'y')  # raises the definition's error for y None
         gather64 = _native('gather_i64')
-        if gc is None or gather64 is None:
-            return None
         n, k, counts = gc.n, gc.m, gc.counts
         n_train, n_test = self._sizes(n)
         if min(counts) < 2:  # glue: least populated class check over k class counts
@@ -1721,33 +1555,28 @@ class PredefinedSplit(_Splitter):
     never tested; folds in sorted order."""
 
     def __init__(self, test_fold):
-        self.test_fold = [int(v) for v in flatten_labels(test_fold)]
+        # lane py-runtime-b: the fold labels widened once to int64 (a C
+        # copy of an integer buffer, array('q') over a list), then the fold
+        # values and rows from the native encoder and row selection; no
+        # Python pass over the rows
+        self._folds = _index_copy(test_fold)
+        self.test_fold = self._folds.tolist()
+
+    def _codes(self):
+        return _GroupCodes.get(self._folds, self._folds.size, 'test_fold')
 
     def get_n_splits(self, X=None, y=None, groups=None):
-        return len({v for v in self.test_fold if v != -1})
+        from ._labels import encode_labels
+        classes = encode_labels(self._folds)[0]
+        return len(classes) - (1 if -1 in classes else 0)  # glue: membership test over the fold values
 
     def split(self, X=None, y=None, groups=None):
-        n = len(self.test_fold)
-        gc = None
-        if n >= _NATIVE_MIN_ROWS and not _sabotage_requested() and _native('select_fold_i64'):
-            try:
-                folds = Array._owned(array.array('q', self.test_fold), (n,), '<i8', 'C')
-            except OverflowError:
-                folds = None
-            if folds is not None:
-                gc = _GroupCodes.get(folds, n, 'test_fold')
-        if gc is not None:
-            # the sorted fold values natively, each fold's rows by its code
-            # (lane/py-misc-msel)
-            for c, f in enumerate(gc.classes):  # glue: one native row split per fold value
-                if f != -1:
-                    yield gc.rows(gc.codes, c, gc.counts[c])
-            return
-        tf = self.test_fold
-        for f in sorted({v for v in tf if v != -1}):
-            # each fold's ascending train and test rows, selected in C
-            yield (_as_index(list(itertools.compress(range(n), map(f.__ne__, tf)))),
-                   _as_index(list(itertools.compress(range(n), map(f.__eq__, tf)))))
+        gc = self._codes()
+        # the sorted fold values natively, each fold's rows by its code
+        # (lane/py-misc-msel)
+        for c, f in enumerate(gc.classes):  # glue: one native row split per fold value
+            if f != -1:
+                yield gc.rows(gc.codes, c, gc.counts[c])
 
 
 def _index_copy(value):
@@ -1790,8 +1619,17 @@ def _native_discrete(y):
     object per label (lane/py-misc-msel): every integer or bool label is
     integral, and a float buffer is discrete when every value is finite and
     integer valued (`reduce_stat`'s integral test, the predicate
-    `_native_default_folds` uses). None for anything else."""
-    if not isinstance(y, Array) or y.ndim != 1 or y.size < _NATIVE_MIN_ROWS or not _msel_native():
+    `_native_default_folds` uses). None for anything else. A numeric list
+    or buffer is materialized first (lane py-runtime-b), so only label
+    objects (str, mixed) reach `check_cv`'s per-label test."""
+    if not isinstance(y, Array):
+        try:
+            y = _materialize(y, 'y')[0]
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if y.ndim == 2 and y.shape[1] == 1:
+            y = y.reshape((y.shape[0],))
+    if y.ndim != 1 or y.size < _NATIVE_MIN_ROWS or not _msel_native():
         return None
     from ._labels import _NATIVE_ENCODE
     if y.dtype not in _NATIVE_ENCODE:
@@ -2282,7 +2120,21 @@ def _cross_val_predict_native(estimator, X, y, folds, n, method):
         return _cross_val_predict_place(preds, n, rows._res)
 
 
+def _numeric_pred(pred):
+    """`pred` as an Array when it is a numeric buffer or list an external
+    estimator returned (lane py-runtime-b: those are scattered natively
+    too), else `pred` unchanged (label objects keep the list route)."""
+    if isinstance(pred, Array):
+        return pred
+    try:
+        a = _materialize(pred, 'predictions')[0]
+    except (TypeError, ValueError, OverflowError):
+        return pred
+    return a if a.dtype in ('<f4', '<f8', '<i4', '<i8', '<u4', '<u1') else pred
+
+
 def _cross_val_predict_place(preds, n, res):
+    preds = [(_numeric_pred(p), t) for p, t in preds]  # glue: one conversion check per fold
     numeric = all(isinstance(p, Array) and p.dtype in ('<f4', '<f8', '<i4', '<i8', '<u4', '<u1')
                   and p.ndim >= 1 and p.shape[0] == t.size for p, t in preds)  # glue: per-fold dtype and shape checks
     width = tuple(preds[-1][0].shape[1:]) if numeric else ()
