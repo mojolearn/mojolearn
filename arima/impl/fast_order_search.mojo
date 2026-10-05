@@ -162,7 +162,7 @@ comptime ARIMA_FAST_D_CONCURRENT = (
 #: `fast_eval_ws.mojo`), statsforecast's approximation, instead of the exact
 #: Kalman likelihood: a scalar recursion per member, no covariance
 #: recursion, and no grouping by state dimension, so EVERY order of the
-#: grid advances in ONE round loop (`_run_rows`, each order stopping on its
+#: grid advances in ONE round loop (`_run_orders`, each order stopping on its
 #: own poll). Each order is optimized by the same per-series device L-BFGS
 #: from the same Hannan-Rissanen start; the criterion is statsforecast's
 #: CSS criterion (up to its per-series offset, which no choice reads). Then
@@ -177,15 +177,15 @@ comptime ARIMA_FAST_D_CONCURRENT = (
 #: q = min(2, max_q); the start models, neighbour order and first-improvement
 #: rule of R's / statsforecast's `auto_arima`, nmodels = 94), every series
 #: walking its own path, all on the device (`order_search_stepwise`): a step
-#: fits, in ONE round loop, every grid order some series needs next, on the
-#: series that need it (the others retired from that order's optimizer at
-#: once), and a decision kernel walks each series' neighbours in R's order
-#: over the cached criteria. A step evaluates all of a series' not yet
+#: runs, in ONE round loop, every grid order on the series that need it next
+#: (the others retired from that order's optimizer at once, so an order no
+#: series needs stops at the first poll), and a decision kernel walks each
+#: series' neighbours in R's order over the cached criteria. A step evaluates all of a series' not yet
 #: fitted neighbours together (R fits them one at a time and stops at the
 #: first improvement); the walk reads them in R's order and marks only
 #: those R would have fitted, so every series' path and choice are R's. The
-#: host reads one word per grid order per step (which orders the next step
-#: needs). Scored by CSS with ARIMA_FAST_CSS_SEARCH, else by the exact
+#: host reads one word per step (whether any series still searches). Each
+#: order's workspace and start are built once for all steps. Scored by CSS with ARIMA_FAST_CSS_SEARCH, else by the exact
 #: likelihood; the chosen orders then get the grouped exact ML fit.
 comptime _FAST_APPLE_ORDERS = (
     ARIMA_ORDER_BATCH and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
@@ -1009,44 +1009,63 @@ def _retire(ctx: DeviceContext, mut state: OrderOptimizer,
     )
 
 
-def _run_rows(
+def _build_orders(
     ctx: DeviceContext,
     mut y: DeviceBuffer[DType.float32], mut exog: DeviceBuffer[DType.float32],
     mut ykf: DeviceBuffer[DType.float32],
     bs: Int, nobs: Int, nkf: Int,
-    orders: List[ARIMAOrder], rows: List[Int], css: Bool, use_mask: Bool,
-    mut want: DeviceBuffer[DType.int32], mut ll_all: DeviceBuffer[DType.float32],
-    mut x0_flag: DeviceBuffer[DType.int32], mut x0_flag_host: HostBuffer[DType.int32],
-    hp: LBFGSParam,
+    orders: List[ARIMAOrder], css: Bool, use_mask: Bool,
+    mut want: DeviceBuffer[DType.int32], mut x0_flag: DeviceBuffer[DType.int32],
+    mut evals: List[FastEvalWS], mut x0s: List[DeviceBuffer[DType.float32]],
 ) raises:
-    """Grid rows `rows` of `orders` fitted on the `bs` series, every order in
-    ONE round loop: each order its own start (`_initial_x_device`), its own
-    evaluation workspace (CSS on the differenced series `ykf` when `css`,
-    else the exact Kalman likelihood) and its own device L-BFGS, polled
-    together once per ASYNC_READ_EVERY rounds; an order is no longer
-    enqueued once its own poll shows no running series. With `use_mask`
-    only the series whose want word (`want[row * bs + b]`) is set are
-    optimized, the others retired at once. The objective at each optimum
-    lands in `ll_all` row `row` (`order_ll_kernel`, -inf on a refusal).
-    Leaves the queue drained."""
-    var evals = List[FastEvalWS]()
-    var states = List[OrderOptimizer]()
-    var live = List[Bool]()
-    for j in range(len(rows)):  # small-loop(rows: grid orders of one search step, a few dozen at most): one optimizer per order, device work
-        var order = orders[rows[j]]
+    """Every grid order's evaluation workspace (CSS on the differenced series
+    `ykf` when `css`, else the exact Kalman likelihood) and packed start
+    (`_initial_x_device`: the Hannan-Rissanen start of the fit), built ONCE
+    and kept by the caller across stepwise steps. With `use_mask` (CSS) the
+    order's CSS kernel skips the series whose want word
+    (`want[row * bs + b]`) is 0."""
+    for j in range(len(orders)):  # small-loop(orders: the AutoARIMA order grid, a few dozen entries): one workspace per order, device work
+        var order = orders[j]
         var okf = order.without_diff()
-        var x_dev = _initial_x_device(ctx, y, exog, bs, nobs, order, x0_flag)
+        x0s.append(_initial_x_device(ctx, y, exog, bs, nobs, order, x0_flag))
         var ew: FastEvalWS
         if css:
             ew = FastEvalWS(ctx, bs, nkf, okf, ykf)
             if use_mask:
-                ew.set_css_mask(want, rows[j] * bs)
+                ew.set_css_mask(want, j * bs)
         else:
             ew = FastEvalWS(ctx, ykf, bs, nkf, okf)
+        evals.append(ew^)
+
+
+def _run_orders(
+    ctx: DeviceContext, orders: List[ARIMAOrder],
+    mut evals: List[FastEvalWS], mut x0s: List[DeviceBuffer[DType.float32]],
+    bs: Int, nobs: Int, use_mask: Bool,
+    mut want: DeviceBuffer[DType.int32], mut ll_all: DeviceBuffer[DType.float32],
+    mut x0_flag: DeviceBuffer[DType.int32], mut x0_flag_host: HostBuffer[DType.int32],
+    hp: LBFGSParam,
+) raises:
+    """Every grid order fitted on the `bs` series in ONE round loop: each
+    order its own device L-BFGS from a device copy of its start, polled
+    together once per ASYNC_READ_EVERY rounds (the first poll before any
+    evaluation); an order is no longer enqueued once its own poll shows no
+    running series. With `use_mask` only the series whose want word
+    (`want[row * bs + b]`) is set are optimized, the others retired at once,
+    so an order no series wants stops at the first poll. The objective at
+    each optimum lands in `ll_all` row `row` (`order_ll_kernel`, -inf on a
+    refusal). Leaves the queue drained."""
+    var states = List[OrderOptimizer]()
+    var live = List[Bool]()
+    for j in range(len(evals)):  # small-loop(evals: one workspace per grid order, a few dozen): one optimizer per order, device work
+        var okf = orders[j].without_diff()
+        var n = bs * okf.complexity()
+        var x_dev = ctx.enqueue_create_buffer[DType.float32](max(1, n))
+        ctx.enqueue_copy(dst_buf=x_dev, src_buf=x0s[j])
+        ref ew = evals[j]
         var state = OrderOptimizer(ctx, ew, bs, Float32(nobs - 1), okf, x_dev^, hp, ARIMA_FIT_H)
         if use_mask:
-            _retire(ctx, state, want, rows[j] * bs, bs)
-        evals.append(ew^)
+            _retire(ctx, state, want, j * bs, bs)
         states.append(state^)
         live.append(True)
     ctx.enqueue_copy(dst_ptr=x0_flag_host.unsafe_ptr(), src_buf=x0_flag)
@@ -1054,20 +1073,20 @@ def _run_rows(
     var max_rounds = hp.max_iterations * max(1, hp.max_linesearch) + 1
     while rounds < max_rounds:
         if rounds % ASYNC_READ_EVERY == 0:
-            for j in range(len(states)):  # small-loop(states: one optimizer per order): enqueues, no series data
+            for j in range(len(states)):  # small-loop(states: one optimizer per grid order): enqueues, no series data
                 if live[j]:
                     states[j].enqueue_poll(ctx)
             ctx.synchronize()
             if x0_flag_host.unsafe_ptr().unsafe_load(0) != Int32(0):
                 raise Error("AutoARIMA: non-finite initial parameter")
             var any_live = False
-            for j in range(len(states)):  # small-loop(states: one optimizer per order): poll verdicts, no series data
+            for j in range(len(states)):  # small-loop(states: one optimizer per grid order): poll verdicts, no series data
                 if live[j]:
                     live[j] = states[j].running()
                     any_live = any_live or live[j]
             if not any_live:
                 break
-        for j in range(len(states)):  # small-loop(states: one optimizer per order): enqueues, no series data
+        for j in range(len(states)):  # small-loop(states: one optimizer per grid order): enqueues, no series data
             if not live[j]:
                 continue
             ref state = states[j]
@@ -1077,19 +1096,18 @@ def _run_rows(
         rounds += 1
     # the objective AT each optimum (member 0 of each order is x itself)
     var ll_grid = (bs + ORDER_TPB - 1) // ORDER_TPB
-    for j in range(len(states)):  # small-loop(states: one optimizer per order): enqueues, no series data
+    for j in range(len(states)):  # small-loop(states: one optimizer per grid order): enqueues, no series data
         ref state = states[j]
         ref ew = evals[j]
         ew.loglike_at(ctx, state.order, state.h, state.x, state.bad)
         ctx.enqueue_function[order_ll_kernel](
             ll_all.unsafe_ptr(), ew.ws.loglike.unsafe_ptr(),
             ew.ws.info_init.unsafe_ptr(), ew.ws.info_loop.unsafe_ptr(),
-            Int32(bs), Int32(rows[j]),
+            Int32(bs), Int32(j),
             grid_dim=(ll_grid, 1, 1), block_dim=(ORDER_TPB, 1, 1),
         )
     ctx.synchronize()
     _ = states^
-    _ = evals^
     _ = live^
 
 
@@ -1145,11 +1163,13 @@ def order_search_css(
         ctx.enqueue_memset(x0_flag, Int32(0))
         ctx.synchronize()
         x0_flag_host.unsafe_ptr().unsafe_store(0, Int32(0))
-        var rows = List[Int]()
-        for i in range(n_orders):  # small-loop(orders: the grid's row numbers): plan entries
-            rows.append(i)
-        _run_rows(ctx, y, exog, ykf, bs, nobs, nkf, orders, rows, True, False, want, ll_all,
-                  x0_flag, x0_flag_host, arima_fit_params(maxiter))
+        var evals = List[FastEvalWS]()
+        var x0s = List[DeviceBuffer[DType.float32]]()
+        _build_orders(ctx, y, exog, ykf, bs, nobs, nkf, orders, True, False, want, x0_flag, evals, x0s)
+        _run_orders(ctx, orders, evals, x0s, bs, nobs, False, want, ll_all, x0_flag, x0_flag_host,
+                    arima_fit_params(maxiter))
+        _ = evals^
+        _ = x0s^
         var ll = List[Float32](length=n_orders * bs, fill=Float32(0.0))
         ctx.enqueue_copy(dst_ptr=ll.unsafe_ptr(), src_buf=ll_all)
         ctx.synchronize()
@@ -1245,7 +1265,7 @@ def sw_init_kernel(
 ):
     """ARIMA_FAST_STEPWISE: one thread per series. Clears the series'
     tables, sets the incumbent to the first start model and requests every
-    start model (`want`, and `any_want[row]` for the host). `ist` holds, per
+    start model (`want`, and the one `any_want` word for the host). `ist` holds, per
     series, field-major: 0 p, 1 q, 2 k, 3 done, 4 models fitted."""
     var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var bs = Int(bs_in)
@@ -1270,7 +1290,7 @@ def sw_init_kernel(
         var r = _sw_cell(cell, t[0], t[1], t[2])
         if r >= 0:
             want.unsafe_store(r * bs + b, Int32(1))
-            any_want.unsafe_store(r, Int32(1))
+            any_want.unsafe_store(0, Int32(1))
 
 
 def sw_store_ic_kernel(
@@ -1278,27 +1298,28 @@ def sw_store_ic_kernel(
     evald: MutPointer[Int32, MutAnyOrigin],
     want: MutPointer[Int32, MutAnyOrigin],
     ll_all: MutPointer[Float32, MutAnyOrigin],
-    pen: Float32, bs_in: Int32, row_in: Int32,
+    pen: MutPointer[Float32, MutAnyOrigin],
+    bs_in: Int32, n_orders_in: Int32,
 ):
-    """ARIMA_FAST_STEPWISE: one thread per series. For a series that wanted
-    grid row `row`, its criterion ic = fma(-2, loglike, penalty) (the
-    device criterion's statement), +inf for a refused or non-finite fit
-    (statsforecast's failed fit), cached with its `evald` word."""
-    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    """ARIMA_FAST_STEPWISE: one thread per (grid row, series). For a cell
+    the series wanted this step, its criterion ic = fma(-2, loglike,
+    penalty) (the device criterion's statement), +inf for a refused or
+    non-finite fit (statsforecast's failed fit), cached with its `evald`
+    word."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var bs = Int(bs_in)
-    if b >= bs:
+    if t >= Int(n_orders_in) * bs:
         return
-    var at = Int(row_in) * bs + b
-    if want.unsafe_load(at) == Int32(0):
+    if want.unsafe_load(t) == Int32(0):
         return
-    var v = ll_all.unsafe_load(at)
+    var v = ll_all.unsafe_load(t)
     var ic = inf[DType.float32]()
     if isfinite(v):
-        ic = identical_mul_add(Float32(-2.0), v, pen)
+        ic = identical_mul_add(Float32(-2.0), v, pen.unsafe_load(t // bs))
         if not isfinite(ic):
             ic = inf[DType.float32]()
-    ic_tab.unsafe_store(at, ic)
-    evald.unsafe_store(at, Int32(1))
+    ic_tab.unsafe_store(t, ic)
+    evald.unsafe_store(t, Int32(1))
 
 
 def sw_decide_kernel(
@@ -1388,7 +1409,7 @@ def sw_decide_kernel(
                     if (r2 >= 0 and fitted.unsafe_load(r2 * bs + b) == Int32(0)
                             and evald.unsafe_load(r2 * bs + b) == Int32(0)):
                         want.unsafe_store(r2 * bs + b, Int32(1))
-                        any_want.unsafe_store(r2, Int32(1))
+                        any_want.unsafe_store(0, Int32(1))
                 break
             fitted.unsafe_store(r * bs + b, Int32(1))
             nf += 1
@@ -1442,8 +1463,8 @@ def order_search_stepwise(
     `ic_ptr`. `orders` is the reachable grid (one d, k in the grid's
     constant options), `pen` one criterion penalty per order. The start
     model is (min(start_p, max_p), min(start_q, max_q), k = 1 when the grid
-    holds a constant). Every step is one `_run_rows` round loop over the
-    orders some series needs; the host reads one word per order per step.
+    holds a constant). Every step is one `_run_orders` round loop over the
+    grid with the step's want words; the host reads one word per step.
     Returns `bs`."""
     comptime if not ARIMA_FAST_STEPWISE:
         raise Error("AutoARIMA stepwise search was not compiled (MOJOLEARN_ARIMA_FAST_STEPWISE)")
@@ -1458,7 +1479,7 @@ def order_search_stepwise(
         # the cell table: grid row of each (p, q, k), plan metadata
         var cell_h = List[Int32](length=SW_CELLS, fill=Int32(-1))
         var has_k1 = False
-        for i in range(n_orders):  # small-loop(orders: the AutoARIMA order grid, a few dozen entries): plan entries, no series data
+        for i in range(n_orders):  # small-loop(n_orders: the AutoARIMA order grid, a few dozen entries): plan entries, no series data
             var o = orders[i]
             cell_h[(o.p * 5 + o.q) * 2 + o.k] = Int32(i)
             has_k1 = has_k1 or o.k == 1
@@ -1482,8 +1503,11 @@ def order_search_stepwise(
         var want = ctx.enqueue_create_buffer[DType.int32](nt)
         var ic_tab = ctx.enqueue_create_buffer[DType.float32](nt)
         var ll_all = ctx.enqueue_create_buffer[DType.float32](nt)
-        var any_want = ctx.enqueue_create_buffer[DType.int32](n_orders)
-        var any_host = ctx.enqueue_create_host_buffer[DType.int32](n_orders)
+        var any_want = ctx.enqueue_create_buffer[DType.int32](1)
+        var any_host = ctx.enqueue_create_host_buffer[DType.int32](1)
+        var pen_h = pen.copy()
+        var d_pen = ctx.enqueue_create_buffer[DType.float32](n_orders)
+        ctx.enqueue_copy(dst_buf=d_pen, src_ptr=pen_h.unsafe_ptr())
         var sw_ist = ctx.enqueue_create_buffer[DType.int32](5 * bs)
         var best_ic = ctx.enqueue_create_buffer[DType.float32](bs)
         var best_dev = ctx.enqueue_create_buffer[DType.int32](bs)
@@ -1503,24 +1527,25 @@ def order_search_stepwise(
         ctx.synchronize()
         x0_flag_host.unsafe_ptr().unsafe_store(0, Int32(0))
         var hp = arima_fit_params(maxiter)
+        # every order's workspace and start, once; each step re-runs every
+        # order with the step's want words (an order no series wants is
+        # retired whole and stops at the first poll)
+        var evals = List[FastEvalWS]()
+        var x0s = List[DeviceBuffer[DType.float32]]()
+        _build_orders(ctx, y, exog, ykf, bs, nobs, nkf, orders, ARIMA_FAST_CSS_SEARCH, True, want,
+                      x0_flag, evals, x0s)
+        var gt = (nt + ORDER_TPB - 1) // ORDER_TPB
         var step = 0
         # every step fits at least one new (order, series) cell, so the walk
-        # ends within n_orders * bs steps; in practice a handful
-        while step <= nt:
-            var rows = List[Int]()
-            for r in range(n_orders):  # small-loop(orders: one want word per grid order): plan entries
-                if any_host.unsafe_ptr().unsafe_load(r) != Int32(0):
-                    rows.append(r)
-            if len(rows) == 0:
-                break
-            _run_rows(ctx, y, exog, ykf, bs, nobs, nkf, orders, rows, ARIMA_FAST_CSS_SEARCH, True,
-                      want, ll_all, x0_flag, x0_flag_host, hp)
-            for j in range(len(rows)):  # small-loop(rows: grid orders of this step): one launch each
-                ctx.enqueue_function[sw_store_ic_kernel](
-                    ic_tab.unsafe_ptr(), evald.unsafe_ptr(), want.unsafe_ptr(), ll_all.unsafe_ptr(),
-                    pen[rows[j]], Int32(bs), Int32(rows[j]),
-                    grid_dim=(g, 1, 1), block_dim=(ORDER_TPB, 1, 1),
-                )
+        # ends within n_orders * bs steps; in practice a handful. The host
+        # reads ONE word per step: whether any series still searches.
+        while step <= nt and any_host.unsafe_ptr().unsafe_load(0) != Int32(0):
+            _run_orders(ctx, orders, evals, x0s, bs, nobs, True, want, ll_all, x0_flag, x0_flag_host, hp)
+            ctx.enqueue_function[sw_store_ic_kernel](
+                ic_tab.unsafe_ptr(), evald.unsafe_ptr(), want.unsafe_ptr(), ll_all.unsafe_ptr(),
+                d_pen.unsafe_ptr(), Int32(bs), Int32(n_orders),
+                grid_dim=(gt, 1, 1), block_dim=(ORDER_TPB, 1, 1),
+            )
             ctx.enqueue_memset(any_want, Int32(0))
             ctx.enqueue_function[sw_decide_kernel](
                 cell.unsafe_ptr(), fitted.unsafe_ptr(), evald.unsafe_ptr(), want.unsafe_ptr(),
@@ -1543,6 +1568,10 @@ def order_search_stepwise(
         ctx.synchronize()
         _write_list_i32(best_ptr, best_l, 0)
         _write_list_f32(ic_ptr, ic_l, 0)
+        _ = evals^
+        _ = x0s^
+        _ = d_pen^
+        _ = pen_h^
         _ = cell_h^
         _ = x0_flag_host^
         _ = x0_flag^

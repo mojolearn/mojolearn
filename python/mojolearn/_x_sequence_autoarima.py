@@ -290,9 +290,10 @@ class AutoARIMA:
                         pens = [self._penalty_of(p_ + q_ + k_ + 1, ic, d_, D_, 0) for p_, q_, _, _, k_ in grid]  # glue: one penalty scalar per order
                         best32 = np.empty(nb, dtype=np.int32)
                         ic32 = np.empty(nb, dtype=np.float32)
+                        max_p, max_q = max(p_opts), max(q_opts)  # glue: the user's order option bounds, two ints
                         written = int(binding.arima_order_search_stepwise(
                             sub.ctypes.data, best32.ctypes.data, ic32.ctypes.data, packed_grid, pens,
-                            [nb, self.n_obs, d_, int(maxiter), 2, 2, max(p_opts), max(q_opts)]))
+                            [nb, self.n_obs, d_, int(maxiter), 2, 2, max_p, max_q]))
                         if written != nb:
                             raise RuntimeError("AutoARIMA: incomplete stepwise search output")
                         chosen_on_device = True
