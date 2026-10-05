@@ -887,6 +887,21 @@ _LITTLE_ENDIAN = __import__('sys').byteorder == 'little'
 _FLIP = bytes([1, 0]) + bytes(254)
 
 
+def _row_stds(rows, means):
+    """The population standard deviation of each equal-length row of float
+    scores about its mean, in Mojo (the core helper `row_stds_f64`, lane
+    py-runtime round 3; it was a Python sqrt(fsum((v - m)^2) / k) per row)."""
+    m = len(rows)
+    if not m:
+        return []
+    k = len(rows[0])
+    flat = array.array('d', itertools.chain.from_iterable(rows))  # glue: score rows packed as one float64 table
+    mu = array.array('d', means)
+    out = array.array('d', bytes(8 * m))
+    _native('row_stds_f64')(flat.buffer_info()[0], m, k, mu.buffer_info()[0], out.buffer_info()[0])
+    return out.tolist()
+
+
 def _row_means(rows):
     """`fsum(row) / len(row)` of each equal-length row of float scores, by
     the core helper `row_means_f64` (lane py-runtime-b: the search results'
@@ -2251,8 +2266,7 @@ class _BaseSearch:
                 results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')  # glue: one score column per split index
             # glue: explicit scalar tail over the candidates x folds scores (Python floats, not data)
             means = _row_means(per[nm])
-            stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s))  # glue: one std per candidate
-                    for s, m in zip(per[nm], means)]  # glue: one std per candidate
+            stds = _row_stds(per[nm], means)
             results[f'mean_test_score{suffix}'] = Array.from_list(means, '<f8')
             results[f'std_test_score{suffix}'] = Array.from_list(stds, '<f8')
             results[f'rank_test_score{suffix}'] = Array.from_list(_rank(means), '<i4')

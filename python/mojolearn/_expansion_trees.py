@@ -1241,7 +1241,7 @@ class AdaBoostClassifier(_AdaBoostBase):
         for est, a in zip(self.estimators_, self.estimator_weights_):  # glue: one member prediction per estimator
             pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]
             self._acc_votes(acc, pred, n, k, a, -a / (k - 1))
-        self._scale(acc, math.fsum(self.estimator_weights_))
+        self._scale(acc, math.fsum(self.estimator_weights_))  # glue: the native fsum (core fsum_f64) of the k estimator weights
         return acc
 
     def decision_function(self, X):
@@ -2049,7 +2049,7 @@ class VotingClassifier(_TreesWrapperBase):
         w = self._weights()
         for e, wi in zip(self.estimators_, w):  # glue: one member prediction per estimator
             self._acc_cols(acc, e.predict_proba(Xa), _trees_sub_cols(e), n, k, wi)
-        self._scale(acc, math.fsum(w))
+        self._scale(acc, math.fsum(w))  # glue: the native fsum (core fsum_f64) of the k estimator weights
         return acc
 
     def predict_proba(self, X):
@@ -2120,7 +2120,7 @@ class VotingRegressor(_TreesWrapperBase):
         acc = zeros((n,), "<f8")
         for e, wi in zip(self.estimators_, w):  # glue: one member prediction per estimator
             self._acc(acc, e.predict(Xa), n, wi)
-        self._scale(acc, math.fsum(w))
+        self._scale(acc, math.fsum(w))  # glue: the native fsum (core fsum_f64) of the k estimator weights
         return acc
 
     def transform(self, X):

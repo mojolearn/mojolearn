@@ -105,6 +105,8 @@ from bindings.lr_table_helpers import lr_decide_binding, lr_onecycle_fill_bindin
 from bindings.array_helpers import (
     nsum_f64_binding,
     row_means_f64_binding,
+    fsum_f64_binding,
+    row_stds_f64_binding,
 )
 from core.shard_merge_device import device_shard_topk_merge_f32
 from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
@@ -2009,6 +2011,8 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
         m.def_function[nsum_f64_binding]("nsum_f64")
         m.def_function[row_means_f64_binding]("row_means_f64")
+        m.def_function[fsum_f64_binding]("fsum_f64")
+        m.def_function[row_stds_f64_binding]("row_stds_f64")
         m.def_function[lr_schedule_values_binding]("lr_schedule_values")
         m.def_function[lr_onecycle_fill_binding]("lr_onecycle_fill")
         m.def_function[lr_decide_binding]("lr_decide")

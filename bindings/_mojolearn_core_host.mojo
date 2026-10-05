@@ -165,6 +165,8 @@ from bindings.array_helpers import (
     ragged_rows_bytes_binding,
     nsum_f64_binding,
     row_means_f64_binding,
+    fsum_f64_binding,
+    row_stds_f64_binding,
     class_ratio_f64_host_binding,
     shard_topk_merge_f32_host_binding,
 )
@@ -1539,6 +1541,8 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
         module.def_function[nsum_f64_binding]("nsum_f64")
         module.def_function[row_means_f64_binding]("row_means_f64")
+        module.def_function[fsum_f64_binding]("fsum_f64")
+        module.def_function[row_stds_f64_binding]("row_stds_f64")
         module.def_function[lr_schedule_values_binding]("lr_schedule_values")
         module.def_function[lr_onecycle_fill_binding]("lr_onecycle_fill")
         module.def_function[lr_decide_binding]("lr_decide")

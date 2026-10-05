@@ -16,7 +16,8 @@ from std.builtin.sort import sort
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from std.math import inf, isinf, isnan
+from std.math import inf, isinf, isnan, sqrt
+from checks.numerics import pinned_mul_f64
 from glm.impl.lm_finish import _exact_sum
 
 
@@ -236,6 +237,83 @@ def row_means_f64_binding(
         op.unsafe_store(r, total / Float64(nc))
     return PythonObject(bad)
 
+
+def _fsum_terms(sp: MutPointer[Float64, MutUntrackedOrigin], count: Int, mut bad: Bool) -> Float64:
+    """`_portable_math.fsum` of count float64 terms: the last NaN if any,
+    else one kind of infinity, else Shewchuk's exact partials rounded once
+    (`_exact_sum`, a zero sum +0.0); bad = +inf with -inf (fsum's
+    ValueError)."""
+    var terms = List[Float64](capacity=count)
+    var nan_v = Float64(0.0)
+    var any_nan = False
+    var pinf = False
+    var ninf = False
+    for i in range(count):  # small-loop(count: terms of one fsum): every caller sums a k-sized list (estimator weights, class priors, one candidate's split scores)
+        var v = sp.unsafe_load(i)
+        if isnan(v):
+            any_nan = True
+            nan_v = v
+        elif isinf(v):
+            if v > 0:
+                pinf = True
+            else:
+                ninf = True
+        else:
+            terms.append(v)
+    bad = pinf and ninf
+    if any_nan:
+        return nan_v
+    if pinf:
+        return inf[DType.float64]()
+    if ninf:
+        return -inf[DType.float64]()
+    return _exact_sum(terms)
+
+
+def fsum_f64_binding(src_addr: PythonObject, n: PythonObject, out_addr: PythonObject) raises -> PythonObject:
+    """`_portable_math.fsum` (lane py-runtime round 3: it was `math.fsum`
+    plus a Python big-integer fold): out[0] = the exact sum of n float64
+    terms (see `_fsum_terms`). Returns 1 for +inf with -inf (the caller
+    raises fsum's ValueError), else 0."""
+    var count = Int(py=n)
+    var op = _addr_ptr[DType.float64](Int(py=out_addr))
+    if count <= 0:
+        op.unsafe_store(0, Float64(0.0))
+        return PythonObject(0)
+    var bad = False
+    var t = _fsum_terms(_addr_ptr[DType.float64](Int(py=src_addr)), count, bad)
+    if bad:
+        return PythonObject(1)
+    op.unsafe_store(0, t)
+    return PythonObject(0)
+
+
+def row_stds_f64_binding(
+    src_addr: PythonObject, rows: PythonObject, cols: PythonObject, means_addr: PythonObject,
+    out_addr: PythonObject,
+) raises -> PythonObject:
+    """The population standard deviation of each row of a C-order float64
+    (rows, cols) score table about its mean (lane py-runtime round 3; it was
+    Python's sqrt(fsum((v - m) * (v - m)) / cols) per search candidate): the
+    same binary64 subtraction and product per score, the exact fsum, one
+    division and the correctly rounded sqrt."""
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    if nr <= 0 or nc <= 0:
+        return PythonObject(0)
+    var sp = _addr_ptr[DType.float64](Int(py=src_addr))
+    var mp = _addr_ptr[DType.float64](Int(py=means_addr))
+    var op = _addr_ptr[DType.float64](Int(py=out_addr))
+    var sq = List[Float64](length=nc, fill=0.0)
+    for r in range(nr):  # small-loop(nr: search candidates): one deviation per candidate row
+        var m = mp.unsafe_load(r)
+        for c in range(nc):  # small-loop(nc: cross-validation splits): one squared deviation per split
+            var d = sp.unsafe_load(r * nc + c) - m
+            sq[c] = pinned_mul_f64(d, d)
+        var bad = False
+        var t = _fsum_terms(sq.unsafe_ptr(), nc, bad)
+        op.unsafe_store(r, sqrt(t / Float64(nc)))
+    return PythonObject(0)
 
 def class_ratio_f64_host_binding(
     counts_addr: PythonObject, k: PythonObject, n: PythonObject, mode: PythonObject, out_addr: PythonObject,

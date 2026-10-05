@@ -3176,7 +3176,7 @@ def _estimator_covs(est, arr, codes, K, who):
         pr.stage("p2m_rgather", n * d, xo, d, ro, xg)
         pr.run(mode)
         cnt = pr.get_i32(tot, K).tolist()
-        starts = [0] + list(itertools.accumulate(cnt))[:-1]
+        starts = [0] + list(itertools.accumulate(cnt))[:-1]  # glue: row offsets of the K class blocks from the device class counts (K-sized)
         blocks = [pr.get(xg + starts[k] * d, (cnt[k], d)) for k in range(K)]  # glue: per-class row block views for the user estimator (K-sized: class count)
     else:
         blocks = [arr.copy()]
@@ -4807,7 +4807,7 @@ def _mlb_flat(y):
     lb = _label_buffer(flat)
     if lb is None:
         return None
-    offs = Array._owned(array.array("i", itertools.accumulate(map(len, rows), initial=0)), (len(rows) + 1,),
+    offs = Array._owned(array.array("i", itertools.accumulate(map(len, rows), initial=0)), (len(rows) + 1,),  # cpu-route: offsets of the user's Python label rows, the explicit label input step
                         "<i4", "C")
     return _MLBFlat(len(rows), lb, offs)
 

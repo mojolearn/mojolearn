@@ -529,7 +529,7 @@ class NearestCentroid(_XNeighbors):
                 raise ValueError("priors must have one entry per class")
             if any(p < 0 for p in prior):  # glue: user priors argument checks
                 raise ValueError("priors must be non-negative")
-            tot = math.fsum(prior)
+            tot = math.fsum(prior)  # glue: the native fsum (core fsum_f64) of the user priors argument
             if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
                 prior = [p / tot for p in prior]  # glue: the user priors argument rescaled to sum one (k sized)
         self.class_prior_ = Array.from_list(prior, "<f8")

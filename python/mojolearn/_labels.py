@@ -142,7 +142,7 @@ def _sorted_plain_classes(labels, kind):
         # `v != v` in C: True only for a NaN float (an int or bool never,
         # at any size), the same test the loop below spells per label;
         # 16 ms at 1M labels against 200 ms through `math.isnan`'s bit pack.
-        if any(map(operator.ne, labels, labels)):
+        if any(map(operator.ne, labels, labels)):  # cpu-route: NaN test of a plain Python label list, the explicit label input step
             raise ValueError(
                 "mojolearn: y contains a NaN label; NaN is not a class"
             )

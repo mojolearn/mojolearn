@@ -170,7 +170,7 @@ def ceil(x):
 
 
 def prod(values, *, start=1):
-    return functools.reduce(operator.mul, values, start)
+    return functools.reduce(operator.mul, values, start)  # glue: product of a shape's dimensions (every caller passes a shape tuple)
 
 
 def _scaled_integer(value, exponent):
@@ -212,51 +212,18 @@ def ldexp(x, exponent):
 
 
 def fsum(values):
-    """Exact finite sum followed by one nearest/even binary64 rounding.
-
-    Fast path (lane py-shared; the argument `_expansion_metrics._fsum` made
-    first, on the supported CPython arm64/x86-64 wheel baselines): compiled
-    `math.fsum` keeps Shewchuk's exact partials and
-    rounds the exact sum once to nearest/even, so whenever its result is
-    finite every term was finite and it is this function's result bit for
-    bit. A zero result is +0.0 here, so a zero goes out as +0.0. A NaN or
-    infinite result, an intermediate overflow, or a term `math.fsum` refuses
-    (a string float() accepts) goes to the exact sum below, which decides it.
-    About 4 ns per term instead of about 500 ns. (The `MOJOLEARN_HOTPATH`
-    reference arm that forced the exact sum is deleted: cpu-gpu-cleanup
-    c-core, no env switch picks a route.)"""
-    vals = values if type(values) is list else list(values)
-    try:
-        s = _cmath.fsum(vals)
-    except (OverflowError, ValueError, TypeError):
-        return _fsum_exact(vals)
-    if s - s == 0.0:
-        return s if s != 0.0 else 0.0
-    return _fsum_exact(vals)
-
-
-def _fsum_exact(values):
-    """The exact portable sum (the reference `fsum` keeps)."""
-    total = 0
-    positive_inf = negative_inf = False
-    nan_value = None
-    for value in values:
-        value = float(value)
-        if isnan(value):
-            nan_value = value
-        elif isinf(value):
-            positive_inf |= value > 0
-            negative_inf |= value < 0
-        else:
-            numerator, denominator = value.as_integer_ratio()
-            total += numerator << (1074 - (denominator.bit_length() - 1))
-    if positive_inf and negative_inf:
+    """Exact finite sum followed by one nearest/even binary64 rounding, with
+    math.fsum's NaN and infinity rules (a zero sum is +0.0). Lane py-runtime
+    round 3: the core helper `fsum_f64` (bindings/array_helpers.mojo,
+    Shewchuk's partials in Mojo); the `math.fsum` fast path and the Python
+    big-integer fold are gone. Callers pass k-sized lists (estimator
+    weights, class priors)."""
+    from ._buffer import _native
+    src = array.array("d", values)
+    out = array.array("d", [0.0])
+    if int(_native("fsum_f64")(src.buffer_info()[0], len(src), out.buffer_info()[0])):
         raise ValueError("-inf + inf in fsum")
-    if nan_value is not None:
-        return nan_value
-    if positive_inf or negative_inf:
-        return inf if positive_inf else -inf
-    return _scaled_integer(total, -1074)
+    return out[0]
 
 
 def exp_array(values):
