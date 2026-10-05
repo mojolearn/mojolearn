@@ -1546,6 +1546,19 @@ class _DARTBase(_TreesEnsembleBase):
                 f"mojolearn DART: n_estimators * classes * (2 * num_leaves - 1) must be at most "
                 f"{self._DART_VALUES_CAP} and num_leaves at most 32768 (the round's leaf-value store); refused by name")
 
+    @staticmethod
+    def _dart_thr(v):
+        """Encode the scalar skip_drop argument for the binding's 53-bit draw.
+
+        For u = m / 2**53, u < v is exactly m < ceil(v * 2**53).
+        This converts one API parameter; the binding performs all draws.
+        """
+        if not v > 0.0:
+            return 0
+        if v >= 1.0:
+            return 1 << 53
+        return int(math.ceil(v * 9007199254740992.0))
+
     def _boost_loop_device(self, Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth, session):
         n, d = Xa.shape
         n_iters = int(self.n_estimators)
