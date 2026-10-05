@@ -1615,8 +1615,8 @@ def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
     return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
-def class_priors_binding(counts: PythonObject, out: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, k]: out (float64, k) = log(max(1e-15, counts[c] / n)),
+def class_priors_binding(counts: PythonObject, priors: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k]: priors (float64, k) = log(max(1e-15, counts[c] / n)),
     the pinned binary64 log (`identical_log64`) of each class's share (DART's
     multiclass start; it was a Python list over the k counts)."""
     _need(params, 2, "x_trees_class_priors")
@@ -1625,7 +1625,7 @@ def class_priors_binding(counts: PythonObject, out: PythonObject, params: Python
     if k < 1 or n < 1:
         raise Error("x_trees_class_priors: needs n >= 1 and k >= 1")
     var cp = i32_ptr(Int(py=counts))
-    var op = f64_ptr(Int(py=out))
+    var op = f64_ptr(Int(py=priors))
     for c in range(k):  # small-loop(k: class count): one prior per class
         var q = Float64(Int(cp[c])) / Float64(n)
         op[c] = identical_log64(q if q > 1e-15 else 1e-15)
