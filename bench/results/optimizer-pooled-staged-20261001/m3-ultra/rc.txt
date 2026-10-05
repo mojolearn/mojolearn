@@ -1,8 +1,0 @@
-05:09:46 build-pass26 rc=0
-05:10:07 build_training-pass26 rc=0
-05:10:22 opt-pass26-adam rc=0
-05:10:25 opt-pass26-sgd rc=0
-05:10:29 opt-pass26-adamw rc=0
-05:10:31 race-pass26-sgd rc=0
-05:10:33 race-pass26-adam rc=0
-05:10:35 race-pass26-adamw rc=0
