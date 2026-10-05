@@ -605,13 +605,10 @@ class Array:
             return self._astype_reference(dtype)
         if _helper("cast_elements", self.size) is None:
             raise _rebuild("cast_elements")
-        # the helper refused an element (lane py-runtime round 2: raised
-        # here, without a second walk): a NaN or a value outside the target
-        if dtype == "<f2":
-            raise OverflowError("mojolearn: float too large to pack with e format")
-        if src in _FLOAT and (self != self).max():
-            raise ValueError("mojolearn: cannot convert float NaN to integer")
-        raise OverflowError(f"mojolearn: value does not fit {dtype}")
+        # the helper refused an element (a NaN, an infinity or a value
+        # outside the target): the Python definition raises its own words
+        # (it never returns here: every element it accepts, the helper did)
+        return self._astype_reference(dtype)
 
     def _astype_reference(self, dtype):
         """`astype`'s Python definition (the differential test's reference)."""
@@ -620,7 +617,7 @@ class Array:
         if src == "<f2" or dtype == "<f2":
             values = self._values()
             if dtype in _INT:
-                values = [int(v) for v in values]  # cpu-route: the differential test's reference arm only
+                values = [int(v) for v in values]  # cpu-route: the refusal path and the test reference arm only
             out = Array._from_flat(values, self.shape, dtype)
         elif dtype in _FLOAT:
             # C-level loop: array.array's item setter converts each element
@@ -637,7 +634,7 @@ class Array:
                 ) from None
             out = Array._owned(store, self.shape, dtype, "C")
         else:
-            values = [int(v) for v in self._mv]  # cpu-route: the differential test's reference arm only
+            values = [int(v) for v in self._mv]  # cpu-route: the refusal path and the test reference arm only
             out = Array._from_flat(values, self.shape, dtype)
         out.order = self.order
         out._set_meta(self.shape, dtype, self.order)
@@ -823,7 +820,7 @@ class Array:
             theirs = other._as_c()._values()
             bits = [1 if x == y else 0 for x, y in zip(mine, theirs)]
         elif isinstance(other, (int, float, bool)):
-            bits = [1 if x == other else 0 for x in mine]  # cpu-route: the differential test's reference arm only
+            bits = [1 if x == other else 0 for x in mine]  # cpu-route: the refusal path and the test reference arm only
         else:
             return NotImplemented
         return Array._owned(array.array("B", bits), self.shape, "<u1", "C")
@@ -911,14 +908,14 @@ class Array:
         if fast is not None:
             return fast
         self._no_reduce("min")
-        return min(self._reduce_values("min"))  # cpu-route: the differential test's reference arm only
+        return min(self._reduce_values("min"))  # cpu-route: the refusal path and the test reference arm only
 
     def max(self):
         fast = self._native_reduce(_REDUCE_MAX)
         if fast is not None:
             return fast
         self._no_reduce("max")
-        return max(self._reduce_values("max"))  # cpu-route: the differential test's reference arm only
+        return max(self._reduce_values("max"))  # cpu-route: the refusal path and the test reference arm only
 
     def sum(self):
         """Sequential accumulation: exact `int` for int dtypes, a Python
@@ -940,9 +937,9 @@ class Array:
             raise _rebuild("reduce_stat")
         values = self._values()
         if self.dtype in _INT:
-            return sum(values)  # cpu-route: the differential test's reference arm only
+            return sum(values)  # cpu-route: the refusal path and the test reference arm only
         acc = 0.0
-        for v in values:  # cpu-route: the differential test's reference arm only
+        for v in values:  # cpu-route: the refusal path and the test reference arm only
             acc += v
         return acc
 
@@ -956,7 +953,7 @@ class Array:
         values = self._as_c()._reduce_values("argmax")
         best = 0
         best_v = values[0]
-        for i in range(1, len(values)):  # cpu-route: the differential test's reference arm only
+        for i in range(1, len(values)):  # cpu-route: the refusal path and the test reference arm only
             v = values[i]
             if v > best_v:
                 best = i
