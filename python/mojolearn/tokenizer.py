@@ -148,7 +148,7 @@ def _byte_to_char():
     order."""
     fixed = set(range(0x21, 0x7F)) | set(range(0xA1, 0xAD)) | set(range(0xAE, 0x100))
     out, extra = {}, 256
-    for b in range(256):
+    for b in range(256):  # cpu-route: byte to char table of the text encoding
         if b in fixed:
             out[b] = chr(b)
         else:
@@ -346,7 +346,7 @@ class BpeTokenizer:
             ) from None
         allow = self._flag(allow_endoftext)
         raws = []
-        for k, d in enumerate(docs):
+        for k, d in enumerate(docs):  # cpu-route: packs the text documents for the native encoder (text input)
             if not isinstance(d, (str, bytes, bytearray, memoryview)):
                 raise TypeError(
                     f"mojolearn: document {k} must be str or bytes-like, got {type(d).__name__}"
@@ -437,7 +437,7 @@ class BpeTokenizer:
 
     def decode_batch(self, batch, errors="replace"):
         """`[decode(ids, errors) for ids in batch]`."""
-        return [b.decode("utf-8", errors) for b in self.decode_bytes_batch(batch)]
+        return [b.decode("utf-8", errors) for b in self.decode_bytes_batch(batch)]  # cpu-route: decodes bytes to str per sequence (text output)
 
     def __repr__(self):
         return f"BpeTokenizer(n_vocab={self._n_vocab}, vocabulary={self._source!r})"
@@ -585,7 +585,7 @@ class BpeVocabularyTrainer:
         if not docs:
             raise ValueError("mojolearn: train needs at least one document")
         raws = []
-        for k, d in enumerate(docs):
+        for k, d in enumerate(docs):  # cpu-route: packs the text documents for the native encoder (text input)
             if isinstance(d, str):
                 raws.append(d.encode("utf-8"))
             elif isinstance(d, (bytes, bytearray, memoryview)):

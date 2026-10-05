@@ -66,10 +66,13 @@ _verification_evidence_data.py _verification_profiles.py
 _forest_host.py _gbdt_host.py _byte_lm_host.py _byte_lm_trainer_host.py
 _classical_host.py _serialize.py
 neural_inference.py _causal_lm_fixtures.py
+_bpe_trainer.py _tokenizer_synthetic.py
 """.split())
 # neural_inference.py: the public CPU inference product.
 # _causal_lm_fixtures.py: verification fixtures (_verify_causal_lm and tests only).
 # _serialize.py: model save/load (no fit, transform or predict).
+# _bpe_trainer.py: the BPE trainer's verification oracle (refused as a run-time route).
+# _tokenizer_synthetic.py: tokenizer fixtures for the gates and the identity lane.
 
 # The host thread pool's own implementation: its contents are the CPU-only
 # executor. Every USE of it in GPU code is still a finding.

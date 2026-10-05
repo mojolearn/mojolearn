@@ -146,7 +146,7 @@ def _sorted_plain_classes(labels, kind):
             raise ValueError(
                 "mojolearn: y contains a NaN label; NaN is not a class"
             )
-    classes = sorted(dict.fromkeys(labels))
+    classes = sorted(dict.fromkeys(labels))  # cpu-route: plain Python list labels (str or Python numbers), the explicit label input step
     code = {c: i for i, c in enumerate(classes)}  # glue: class index table (classes-sized: distinct classes)
     return classes, list(map(code.__getitem__, labels))
 
@@ -164,7 +164,7 @@ def sorted_classes(labels):
             return fast
     first = {}
     numeric = strings = 0
-    for v in labels:
+    for v in labels:  # cpu-route: Python object labels walk (str allowed), the explicit label input step
         if isinstance(v, str):
             strings += 1
         elif isinstance(v, numbers.Real) or is_bool(v):
@@ -186,7 +186,7 @@ def sorted_classes(labels):
         )
     classes = sorted(first)  # glue: sorts the distinct class labels (first-sized: distinct classes)
     code = {c: i for i, c in enumerate(classes)}  # glue: class index table (classes-sized: distinct classes)
-    return classes, [code[v] for v in labels]
+    return classes, [code[v] for v in labels]  # cpu-route: Python object labels walk (str allowed), the explicit label input step
 
 
 # DEVIATION 2500 (2026-09-10): the ORDER RULE for ONE numeric buffer, in
@@ -347,12 +347,12 @@ def decode_labels(classes, codes):
     fast = _decode_labels_native(classes, codes, kind)
     if fast is not None:
         return fast
-    values = [classes[int(c)] for c in codes]
+    values = [classes[int(c)] for c in codes]  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
     try:
         if kind == "int":
-            return Array.from_list([int(v) for v in values], "<i8")
+            return Array.from_list([int(v) for v in values], "<i8")  # cpu-route: int classes past the native decode range, the explicit label output step
         if kind == "float":
-            return Array.from_list([float(v) for v in values], "<f8")
+            return Array.from_list([float(v) for v in values], "<f8")  # cpu-route: float classes past the native decode range, the explicit label output step
     except (OverflowError, TypeError):
         # `Array.from_list` reports an int outside int64 as a TypeError
         # (pre-existing: only OverflowError was caught, so a 2**70 class

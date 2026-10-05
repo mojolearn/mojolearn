@@ -167,7 +167,7 @@ def _flatten(obj):
         obj = obj.tolist()
     if isinstance(obj, (list, tuple)):
         out = []
-        for v in obj:
+        for v in obj:  # cpu-route: flattens a user Python list y, the explicit input step
             out.extend(_flatten(v))
         return out
     return [obj]
@@ -198,7 +198,7 @@ def _is_integer_labels(y):
     if fmt is not None:
         return fmt in _INT_FORMATS
     leaves = _flatten(y)
-    return bool(leaves) and all(type(v) is int for v in leaves)
+    return bool(leaves) and all(type(v) is int for v in leaves)  # cpu-route: kind test of a user Python list y, the explicit input step
 
 
 def _dtype_name(y):

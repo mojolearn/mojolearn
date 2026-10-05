@@ -221,16 +221,16 @@ BLOCKED = [
            "    for i in range(n):  # small-loop(d: feature count): the vector is d long\n"
            "        p[i] = p[i] * 2"}, "for i in range(n):"),
     ("GPU-path Python calls a native host helper by name (py-native-host)",
-     {PY: "def _pz6(arr):\n    return _native(\"all_finite_f32\")(arr._addr, arr.size)"}, "[py-native-host]"),
+     {PY: "def _pz6(arr):\n    return _native(\"nsum_f64\")(arr._addr, arr.size)"}, "[py-native-host]"),
     ("GPU-path Python calls a native host helper as a binding attribute (py-native-host)",
-     {PY: "def _pz7(b, w, n):\n    b.x_trees_samme_step(w, n)"}, "b.x_trees_samme_step(w, n)"),
+     {PY: "def _pz7(b, w, n):\n    b.x_decomp_argsort_f32(w, n)"}, "b.x_decomp_argsort_f32(w, n)"),
     ("Python small-loop note naming a bound the line does not use",
      {PY: "def _pz9(X, d):\n    return [v * 2 for v in X]  # small-loop(d: feature count): one per feature"},
      "[v * 2 for v in X]"),
     ("Python cpu-route note whose reason is under three words",
      {PY: "def _pz10(text):\n    return [ord(c) for c in text]  # cpu-route: fine"}, "[ord(c) for c in text]"),
     ("cpu-route note whose reason is under three words",
-     {PY: "def _pz8(arr):\n    return _native(\"all_finite_f32\")(arr)  # cpu-route: fine"}, "[py-native-host]"),
+     {PY: "def _pz8(arr):\n    return _native(\"nsum_f64\")(arr)  # cpu-route: fine"}, "[py-native-host]"),
     ("duplicating an existing debt line",
      {"cluster/estimator.mojo": "def _p19(groups: Int):\n    host_parallelize(_abs_sum_task, groups)"},
      "host_parallelize(_abs_sum_task, groups)"),
@@ -374,7 +374,9 @@ def test_inflight_rows_serve_only_their_pr_head():
 def test_native_host_exports_are_classified_by_code():
     tree = nhr.Tree("HEAD")
     ex = tree.host_exports()
-    for name in ("all_finite_f32", "argmax_rows_f32", "gather_rows_bytes", "x_trees_samme_step"):
+    # current host-looping exports (all_finite_f32, argmax_rows_f32,
+    # gather_rows_bytes and x_trees_samme_step moved to the device)
+    for name in ("nsum_f64", "x_decomp_argsort_f32", "x_trees_column_f64", "x_decomp_gather"):
         assert name in ex, f"{name} loops on the host and must be a native host helper"
     for name in ("check_indices_i64", "unique_inverse", "cast_f64_to_f32"):
         assert name not in ex, f"{name} runs on the device and is not a native host helper"
@@ -400,16 +402,21 @@ def test_owed_findings_are_reported_not_refused():
         rc = nhr.check_tree("HEAD")
     out = err.getvalue()
     assert rc == 0, out[-2000:]
-    assert "OWED (not baseline debt)" in out and "mojo-host-loop" in out and "py-native-host" in out, out[-2000:]
+    assert "OWED (not baseline debt)" in out and "mojo-host-loop" in out, out[-2000:]
     rows = nhr.owed_rows("HEAD").splitlines()
     assert rows[0] == "rule\tclass\tpath\tline\ttext" and len(rows) > 1
+    # every owed rule HEAD still carries is reported (py-native-host has
+    # none left on main since lane py-runtime, 2026-10-05)
+    for rule in {r.split("\t")[0] for r in rows[1:]}:
+        assert rule in out, (rule, out[-2000:])
 
 
 def test_fixing_an_owed_finding_leaves_no_stale_row():
     rows = [r.split("\t") for r in nhr.owed_rows("HEAD").splitlines()[1:]]
-    py = [r for r in rows if r[0] == "py-native-host"]
-    assert py, "HEAD carries no owed py-native-host finding to remove"
-    path, no = py[0][2], int(py[0][3])
+    # a py-native-host row when HEAD has one, else a mojo-host-loop row
+    py = [r for r in rows if r[0] == "py-native-host"] or [r for r in rows if r[0] == "mojo-host-loop"]
+    assert py, "HEAD carries no owed finding to remove"
+    rule, path, no = py[0][0], py[0][2], int(py[0][3])
     text = _git("show", f"HEAD:{path}").splitlines()[no - 1]
     # replace the call line by a pass at the same indent: the owed row goes away
     lines = _git("show", f"HEAD:{path}").splitlines()
@@ -417,7 +424,7 @@ def test_fixing_an_owed_finding_leaves_no_stale_row():
     lines[no - 1] = ind + "pass"
     tip = scratch({path: ("=", "\n".join(lines) + "\n")})
     rc, err = run_tree(tip)
-    assert "[py-native-host]" not in err, err[-1500:]
+    assert f"[{rule}]" not in err, err[-1500:]
 
 
 def test_cli_tree_and_diff_modes():

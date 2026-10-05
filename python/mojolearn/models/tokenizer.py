@@ -131,7 +131,7 @@ def _pattern_of(pre, path):
         _refuse(path, "pre_tokenizer Metaspace: a SentencePiece family (Llama 2, Mistral, Gemma, Phi-3), refused by name")
     if kind == "Sequence":
         found = None
-        for step in pre.get("pretokenizers", []):
+        for step in pre.get("pretokenizers", []):  # cpu-route: parses the tokenizer.json pretokenizer config (file input)
             t = step.get("type")
             if t == "Split":
                 pat = step.get("pattern", {})
@@ -201,11 +201,11 @@ class Tokenizer:
         self.normalizer = normalizer
         self.source = source
         self.added = dict(added or {})
-        for content, i in self.added.items():
+        for content, i in self.added.items():  # cpu-route: walks the added special tokens (text input)
             if not isinstance(content, str) or not content or type(i) is not int or i < 0:
                 raise ValueError(f"mojolearn.models.Tokenizer: added token {content!r} -> {i!r} is not a non-empty string to a non-negative id")
         self._added_by_id = {}
-        for content, i in self.added.items():
+        for content, i in self.added.items():  # cpu-route: walks the added special tokens (text input)
             if i in self._added_by_id:
                 raise ValueError(f"mojolearn.models.Tokenizer: added tokens {self._added_by_id[i]!r} and {content!r} share id {i}")
             self._added_by_id[i] = content
@@ -214,7 +214,7 @@ class Tokenizer:
         self._m = _binding()
 
     def _special_buffers(self):
-        contents = [c.encode("utf-8") for c in self.added]
+        contents = [c.encode("utf-8") for c in self.added]  # cpu-route: encodes the added special tokens (text input)
         blob, lengths = _blob(contents, "every added token")
         return blob, lengths, array.array("q", self.added.values())
 
@@ -282,14 +282,14 @@ class Tokenizer:
         if norm is not None:
             if norm.get("type") == "NFC":
                 normalizer = "NFC"
-            elif norm.get("type") == "Sequence" and all(s.get("type") == "NFC" for s in norm.get("normalizers", [])) and norm.get("normalizers"):
+            elif norm.get("type") == "Sequence" and all(s.get("type") == "NFC" for s in norm.get("normalizers", [])) and norm.get("normalizers"):  # cpu-route: parses the tokenizer.json normalizer config (file input)
                 normalizer = "NFC"
             else:
                 _refuse(path, f"normalizer {norm.get('type')!r} is not honored; null or NFC")
         pattern = _pattern_of(data.get("pre_tokenizer"), path)
         # added tokens
         added = {}
-        for entry in data.get("added_tokens", []) or []:
+        for entry in data.get("added_tokens", []) or []:  # cpu-route: parses the tokenizer.json added tokens (file input)
             content, i = entry.get("content"), entry.get("id")
             if not isinstance(content, str) or type(i) is not int:
                 _refuse(path, f"added token {entry!r} lacks a string content and an int id")
@@ -301,7 +301,7 @@ class Tokenizer:
         # The vocabulary without the added tokens; the binding decodes the
         # spellings, places the ids and checks the merge list.
         base = dict(vocab)
-        for content in added:
+        for content in added:  # cpu-route: parses the tokenizer.json added tokens (file input)
             base.pop(content, None)
         merges = model.get("merges", []) or []
         if not isinstance(merges, list):
@@ -315,7 +315,7 @@ class Tokenizer:
                 single = post.get("single", [])
                 specials = post.get("special_tokens", {})
                 seen_seq = False
-                for item in single:
+                for item in single:  # cpu-route: parses the tokenizer.json post processor (file input)
                     if "Sequence" in item:
                         seen_seq = True
                     elif "SpecialToken" in item:
@@ -323,7 +323,7 @@ class Tokenizer:
                         ids = specials.get(name, {}).get("ids")
                         if not ids:
                             _refuse(path, f"post_processor names special token {name!r} with no ids")
-                        (eos_ids if seen_seq else bos_ids).extend(int(v) for v in ids)
+                        (eos_ids if seen_seq else bos_ids).extend(int(v) for v in ids)  # cpu-route: parses the tokenizer.json post processor ids (file input)
                     else:
                         _refuse(path, f"post_processor template item {item!r} is not Sequence or SpecialToken")
             elif kind not in ("ByteLevel",):
@@ -340,7 +340,7 @@ class Tokenizer:
         tok.bos_token_id = tok.bos_ids[0] if tok.bos_ids else None
         tok.eos_token_id = tok.eos_ids[-1] if tok.eos_ids else None
         if cfg is not None and isinstance(cfg, dict):
-            for key, attr in (("bos_token", "bos_token_id"), ("eos_token", "eos_token_id")):
+            for key, attr in (("bos_token", "bos_token_id"), ("eos_token", "eos_token_id")):  # cpu-route: parses the tokenizer config special tokens (file input)
                 v = cfg.get(key)
                 if isinstance(v, dict):
                     v = v.get("content")
@@ -368,7 +368,7 @@ class Tokenizer:
         raw = _text_bytes(data)
         out = array.array("q", bytes(8 * (len(raw) + 1)))
         count = int(self._m.vocab_pretokenize(self._handle, _ro(raw, "text"), len(raw), addr(out, name="bounds")))
-        return [raw[a:b] for a, b in zip(out[:count - 1], out[1:count])]
+        return [raw[a:b] for a, b in zip(out[:count - 1], out[1:count])]  # cpu-route: slices the text into pretokens at native bounds (text input)
 
     _bytes = staticmethod(_text_bytes)
 

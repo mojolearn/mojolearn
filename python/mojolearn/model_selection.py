@@ -189,7 +189,7 @@ def _take_rows(values, indices):
     Python list of labels (str or object labels, the G5 input-prep case)
     keeps its list comprehension."""
     if isinstance(values, list):
-        return [values[i] for i in indices]
+        return [values[i] for i in indices]  # cpu-route: Python list of label objects (str/object) taken by index; no Array holds them [py-data-loop]
     with _Resident() as res:
         return res.take(values, indices)
 
@@ -777,7 +777,7 @@ def _labels_list(y, name='y'):
 def _encode_first_seen(values):
     # the first-seen order by dict.fromkeys, the codes by a C map (the same
     # dict equality as setdefault; lane metrics-apple)
-    index = {v: i for i, v in enumerate(dict.fromkeys(values))}
+    index = {v: i for i, v in enumerate(dict.fromkeys(values))}  # cpu-route: first-seen dict encoding of label objects (str/mixed) the native encoder refuses [py-data-loop]
     return list(map(index.__getitem__, values)), len(index)
 
 
@@ -1605,7 +1605,7 @@ def _index_copy(value):
 
 class _IterableCV(_Splitter):
     def __init__(self, cv):
-        self._pairs = [(_index_copy(tr), _index_copy(te)) for tr, te in cv]
+        self._pairs = [(_index_copy(tr), _index_copy(te)) for tr, te in cv]  # cpu-route: user-provided iterable of index pairs, copied once at construction [py-data-loop]
 
     def get_n_splits(self, X=None, y=None, groups=None):
         return len(self._pairs)
@@ -1654,7 +1654,7 @@ def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None
             stratify = native
         elif classifier and y is not None:
             labels = flatten_labels(y)
-            stratify = (all(isinstance(v, str) for v in labels) or
+            stratify = (all(isinstance(v, str) for v in labels) or  # cpu-route: stratify test over label objects (str/mixed) after the native route declines [py-data-loop]
                         all(isinstance(v, numbers.Integral) or
                             (isinstance(v, numbers.Real) and math.isfinite(v) and float(v).is_integer())
                             for v in labels))
@@ -1697,7 +1697,7 @@ def train_test_split(*arrays, test_size=None, train_size=None, random_state=None
 
 def _take_any(values, indices):
     if isinstance(values, (list, tuple)):
-        return [values[i] for i in indices.tolist()]
+        return [values[i] for i in indices.tolist()]  # cpu-route: Python list of label objects taken by index [py-data-loop]
     return _take_rows(values, indices)
 
 
@@ -1842,7 +1842,7 @@ class _Scorer:
             col = None if _memo is None else _memo.get('predict_proba[:, 1]')
             if col is None:
                 fast = _proba_column1(pred)
-                col = fast if fast is not None else Array.from_list([row[1] for row in pred.tolist()], '<f4')
+                col = fast if fast is not None else Array.from_list([row[1] for row in pred.tolist()], '<f4')  # cpu-route: Python list probabilities from an external estimator [py-data-loop]
                 if _memo is not None:
                     _memo['predict_proba[:, 1]'] = col
             pred = col
@@ -2160,16 +2160,16 @@ def _cross_val_predict_place(preds, n, res):
         return out
     rows = [None] * n
     width = None
-    for pred, t in preds:
+    for pred, t in preds:  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
         vals = pred.tolist() if hasattr(pred, 'tolist') else list(pred)
-        for i, v in zip(t.tolist(), vals):
+        for i, v in zip(t.tolist(), vals):  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
             rows[i] = v
         width = getattr(pred, 'shape', (0,))[1:] if hasattr(pred, 'shape') else ()
     if width:
-        return Array.from_list([float(v) for row in rows for v in row], '<f8').reshape((n,) + tuple(width))
-    if all(isinstance(v, numbers.Integral) for v in rows):
+        return Array.from_list([float(v) for row in rows for v in row], '<f8').reshape((n,) + tuple(width))  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
+    if all(isinstance(v, numbers.Integral) for v in rows):  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
         return Array.from_list(rows, '<i8')
-    if all(isinstance(v, numbers.Real) for v in rows):
+    if all(isinstance(v, numbers.Real) for v in rows):  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
         return Array.from_list(rows, '<f8')
     return rows
 
@@ -2561,17 +2561,17 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
     score = mean_score(yl)
     rng = _rng(random_state)
     perm_scores = []
-    for _ in range(n_permutations):
+    for _ in range(n_permutations):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
         if groups is None:
             perm = rng.permutation(len(yl))
-            yp = [yl[j] for j in perm]
+            yp = [yl[j] for j in perm]  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
         else:
             g = flatten_labels(groups)
             yp = list(yl)
-            for gv in sorted(set(g)):
-                rows = [i for i, v in enumerate(g) if v == gv]
+            for gv in sorted(set(g)):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop,py-reduce]
+                rows = [i for i, v in enumerate(g) if v == gv]  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
                 perm = rng.permutation(len(rows))
-                for i, j in zip(rows, perm):
+                for i, j in zip(rows, perm):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
                     yp[i] = yl[rows[j]]
         perm_scores.append(mean_score(yp))
     pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)

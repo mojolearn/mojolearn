@@ -241,7 +241,7 @@ def _float(cfg, mt, field, default):
 
 
 def _moe_check(cfg, mt):
-    for field in ("num_local_experts", "num_experts", "num_experts_per_tok", "n_routed_experts"):
+    for field in ("num_local_experts", "num_experts", "num_experts_per_tok", "n_routed_experts"):  # cpu-route: reads the model config file fields (file input)
         v = cfg.get(field)
         if v not in (None, 0, 1):
             _refuse(mt, field, v, "mixture of experts: the block has one dense SwiGLU MLP")
@@ -361,7 +361,7 @@ def _plan_gemma(cfg, mt):
 
 
 def _plan_gemma2(cfg, mt):
-    for field in ("attn_logit_softcapping", "final_logit_softcapping", "query_pre_attn_scalar"):
+    for field in ("attn_logit_softcapping", "final_logit_softcapping", "query_pre_attn_scalar"):  # cpu-route: reads the model config file fields (file input)
         if cfg.get(field) is not None:
             _refuse(mt, field, cfg.get(field),
                     "Gemma 2's logit softcapping, query scaling, pre/post feed-forward norms and "
@@ -398,7 +398,7 @@ def _plan_mamba(cfg, mt):
     n_layers = _int(cfg, mt, "num_hidden_layers")
     vocab = _int(cfg, mt, "vocab_size")
     fixed = {"state_size": 16, "conv_kernel": 4, "expand": 2, "use_bias": False, "use_conv_bias": True}
-    for field, want in fixed.items():
+    for field, want in fixed.items():  # cpu-route: checks the model config file fields (file input)
         got = cfg.get(field, want)
         if got != want:
             _refuse(mt, field, got, f"Mamba1Block fixes it at {want!r} (mamba/IDENTICAL_MAMBA_CONTRACT.md section 3)")
@@ -425,7 +425,7 @@ def _plan_mamba2(cfg, mt):
     vocab = _int(cfg, mt, "vocab_size")
     fixed = {"state_size": 128, "head_dim": 64, "expand": 2, "n_groups": 1, "chunk_size": 256,
              "conv_kernel": 4, "use_bias": False, "use_conv_bias": True, "rms_norm": True}
-    for field, want in fixed.items():
+    for field, want in fixed.items():  # cpu-route: checks the model config file fields (file input)
         got = cfg.get(field, want)
         if got != want:
             _refuse(mt, field, got, f"Mamba2Block fixes it at {want!r} (mamba/IDENTICAL_MAMBA2_CONTRACT.md section 3)")

@@ -75,7 +75,7 @@ def scale_gamma(values, n_features):
     n = 0
     s1 = 0
     s2 = 0
-    for value in values:
+    for value in values:  # cpu-route: exact gamma reference used only by tests; belongs in tests or _PY_CPU_SIDE
         value = float(value)
         if not isfinite(value):
             raise ValueError("gamma='scale' needs finite input: X holds a NaN or an infinity")

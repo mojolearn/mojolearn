@@ -999,7 +999,7 @@ def _flatten(nested):
     if not seq:
         return (0,), []
     first_shape, flat = _flatten(seq[0])
-    for item in seq[1:]:
+    for item in seq[1:]:  # cpu-route: flattens a ragged user Python list, the explicit input step
         shape, vals = _flatten(item)
         if shape != first_shape:
             raise ValueError(

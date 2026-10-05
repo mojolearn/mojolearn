@@ -415,7 +415,7 @@ def _validate_state(value):
 def _sha(path):
     digest = hashlib.sha256()
     with Path(path).open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):  # cpu-route: reads a binding file in chunks to hash it (file input)
             digest.update(chunk)
     return digest.hexdigest()
 
@@ -425,7 +425,7 @@ def _binding_metadata(binding, shape):
     names = ('python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
              'bindings/_mojolearn_byte_lm.mojo', 'training/byte_lm.mojo',
              'training/byte_lm_config.mojo', 'python/mojolearn/_byte_lm_config.py')
-    inventory = {name: _sha(root / name) for name in names if (root / name).is_file()}
+    inventory = {name: _sha(root / name) for name in names if (root / name).is_file()}  # cpu-route: hashes the binding files (file input)
     # Installed wheels may lack native sources; the Python source and exact
     # loaded binding are still identified. Do not claim a full source audit.
     inventory['loaded_python_wrapper'] = _sha(__file__)

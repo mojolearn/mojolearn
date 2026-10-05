@@ -143,17 +143,17 @@ class SafetensorsFile:
         header = _parse_header(raw, self.path)
         self.metadata = header.pop("__metadata__", None)
         self._infos = {}
-        for name, entry in header.items():
+        for name, entry in header.items():  # cpu-route: parses the safetensors file header (file input)
             if not isinstance(entry, dict) or not {"dtype", "shape", "data_offsets"} <= set(entry):
                 raise ValueError(f"mojolearn.models.safetensors: {self.path}: tensor {name!r} lacks dtype/shape/data_offsets")
             dtype = entry["dtype"]
-            shape = tuple(int(s) for s in entry["shape"])
-            begin, end = (int(v) for v in entry["data_offsets"])
+            shape = tuple(int(s) for s in entry["shape"])  # cpu-route: parses the safetensors file header (file input)
+            begin, end = (int(v) for v in entry["data_offsets"])  # cpu-route: parses the safetensors file header (file input)
             if begin < 0 or end < begin or end > self.data_size:
                 raise ValueError(f"mojolearn.models.safetensors: {self.path}: tensor {name!r} offsets [{begin}, {end}) fall outside the {self.data_size}-byte data section")
             if dtype in DTYPES:
                 size = 1
-                for s in shape:
+                for s in shape:  # cpu-route: parses the safetensors file header (file input)
                     size *= s
                 if size * DTYPES[dtype][2] != end - begin:
                     raise ValueError(f"mojolearn.models.safetensors: {self.path}: tensor {name!r} of {dtype} shape {shape} needs {size * DTYPES[dtype][2]} bytes, the offsets give {end - begin}")
@@ -274,14 +274,14 @@ class Checkpoint:
                 wm = data.get("weight_map") if isinstance(data, dict) else None
                 if not isinstance(wm, dict) or not wm:
                     raise ValueError(f"mojolearn.models.safetensors: {index} has no weight_map")
-                files = sorted(set(os.path.join(path, f) for f in wm.values()))
-                missing = [f for f in files if not os.path.isfile(f)]
+                files = sorted(set(os.path.join(path, f) for f in wm.values()))  # cpu-route: lists the checkpoint shard files (file input)
+                missing = [f for f in files if not os.path.isfile(f)]  # cpu-route: checks the checkpoint shard files exist (file input)
                 if missing:
                     raise FileNotFoundError(f"mojolearn.models.safetensors: {index} names shards that do not exist: {missing}")
-                return cls(files, {n: os.path.join(path, f) for n, f in wm.items()}, path)
+                return cls(files, {n: os.path.join(path, f) for n, f in wm.items()}, path)  # cpu-route: maps weight names to shard files (file input)
             if os.path.isfile(single):
                 return cls([single], {}, path)
-            others = sorted(f for f in os.listdir(path) if f.endswith(".safetensors"))
+            others = sorted(f for f in os.listdir(path) if f.endswith(".safetensors"))  # cpu-route: lists the checkpoint shard files (file input)
             if len(others) == 1:
                 one = os.path.join(path, others[0])
                 return cls([one], {}, path)
@@ -302,13 +302,13 @@ class Checkpoint:
     def _index(self):
         if self._infos is None:
             infos = {}
-            for p in self._paths:
+            for p in self._paths:  # cpu-route: indexes the checkpoint shard files (file input)
                 f = self._file(p)
-                for n in f.names():
+                for n in f.names():  # cpu-route: indexes the checkpoint tensor names (file input)
                     if n in infos:
                         raise ValueError(f"mojolearn.models.safetensors: tensor {n!r} appears in both {infos[n].file} and {p}")
                     infos[n] = f.info(n)
-            for n, p in self._weight_map.items():
+            for n, p in self._weight_map.items():  # cpu-route: indexes the checkpoint weight map (file input)
                 if n not in infos:
                     raise ValueError(f"mojolearn.models.safetensors: the index maps {n!r} to {p} but that shard does not hold it")
             self._infos = infos
@@ -331,7 +331,7 @@ class Checkpoint:
         return self._file(t.file).read(name, bf16=bf16)
 
     def close(self):
-        for f in self._open.values():
+        for f in self._open.values():  # cpu-route: closes the open checkpoint files (file input)
             f.close()
         self._open = {}
 
@@ -355,7 +355,7 @@ def write_safetensors(path, tensors, metadata=None):
         header["__metadata__"] = dict(metadata)
     offset = 0
     payload = []
-    for name in sorted(tensors):
+    for name in sorted(tensors):  # cpu-route: writes the safetensors header in name order (file output)
         dtype, shape, raw = tensors[name]
         header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + len(raw)]}
         payload.append(raw)
@@ -366,6 +366,6 @@ def write_safetensors(path, tensors, metadata=None):
     with open(path, "wb") as fh:
         fh.write(struct.pack("<Q", len(encoded)))
         fh.write(encoded)
-        for raw in payload:
+        for raw in payload:  # cpu-route: writes the tensor payloads (file output)
             fh.write(raw)
     return path

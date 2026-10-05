@@ -210,7 +210,7 @@ def _group_sizes_rowwise(ids):
     sizes = []
     seen = set()
     last = None
-    for i, value in enumerate(ids):
+    for i, value in enumerate(ids):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
         key = _group_id_key(value, i)
         if i > 0 and key == last:
             sizes[-1] += 1
@@ -245,7 +245,7 @@ def _group_sizes_by_runs(ids):
     seen = set()
     last = None
     try:
-        for value, run in itertools.groupby(ids):
+        for value, run in itertools.groupby(ids):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
             kind = type(value)
             if kind is not int and kind is not str and kind is not bytes:
                 return None
@@ -278,10 +278,10 @@ def _pairs_arrays(pairs, pairs_weight, n_rows):
     if len(rows) == 0:
         raise ValueError("mojolearn: pairs is empty")
     flat = []
-    for i, pair in enumerate(rows):
+    for i, pair in enumerate(rows):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
         if len(pair) != 2:
             raise ValueError(f"mojolearn: Length of pairs[{i}] isn't equal to 2.")
-        for j, index in enumerate(pair):
+        for j, index in enumerate(pair):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
             if not isinstance(index, numbers.Integral) or isinstance(index, bool):
                 raise ValueError(
                     f"mojolearn: Invalid pairs[{i}][{j}] = '{index}' value "
@@ -304,12 +304,12 @@ def _pairs_arrays(pairs, pairs_weight, n_rows):
                 f"mojolearn: len(pairs_weight) = {len(weights)} is not equal to "
                 f"len(pairs) = {len(rows)} "
             )
-        for i, w in enumerate(weights):
+        for i, w in enumerate(weights):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
             if not isinstance(w, numbers.Real) or not math.isfinite(float(w)) or float(w) < 0:
                 raise ValueError(
                     f"mojolearn: pairs_weight[{i}] must be a finite nonnegative number"
                 )
-        weights = [float(w) for w in weights]
+        weights = [float(w) for w in weights]  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
     return flat, weights
 
 
@@ -2635,7 +2635,7 @@ class GradientBoosting(NumericModeMixin):
             raise RuntimeError("mojolearn: tree inspection before fit()")
         counts, dimensions, leaves = [], [], []
         declared_trees = None
-        for line in str(self.model_).splitlines():
+        for line in str(self.model_).splitlines():  # cpu-route: model text metadata parsed for inspection [py-data-loop]
             fields = line.split()
             if not fields:
                 continue
@@ -2684,7 +2684,7 @@ class GradientBoosting(NumericModeMixin):
         model text is used to recover the values.
         """
         _, leaves = self._tree_metadata()
-        values = [_f32_bits_to_float(bits) for tree in leaves for bits in tree]
+        values = [_f32_bits_to_float(bits) for tree in leaves for bits in tree]  # cpu-route: model text metadata parsed for inspection [py-data-loop]
         return Array.from_list(values, "<f8")
 
     def save(self, path):
@@ -3052,7 +3052,7 @@ class OrderedRMSE(GradientBoosting):
         )
         if isinstance(permutation, (list, tuple)):
             if any(is_bool(v) or not isinstance(v, numbers.Integral)
-                   for v in permutation):
+                   for v in permutation):  # cpu-route: user permutation Python list type check [py-data-loop]
                 raise bijection_error
         else:
             dtype = getattr(permutation, "dtype", None)

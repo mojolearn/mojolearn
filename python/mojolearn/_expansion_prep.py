@@ -1823,7 +1823,7 @@ class TargetEncoder(_PrepBase):
         fold = full((n,), -1, "<i4")
         assign = _native_helper("assign_fold_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
         trains = []
-        for k, (train, test) in enumerate(splits):
+        for k, (train, test) in enumerate(splits):  # cpu-route: input prep of a user cv splitter index lists
             te = as_index_i64(test, name="test")
             if int(assign(addr_ro(te, name="test") if te.size else 0, te.size, n, k,
                           _addr_rw(fold, name="folds"))) != 0:
@@ -1834,7 +1834,7 @@ class TargetEncoder(_PrepBase):
         sizes = _class_counts(fold, len(splits))
         check = _native_helper("check_indices_i64")
         hits = _native_helper("count_fold_hits_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
-        for k, tr in enumerate(trains):
+        for k, tr in enumerate(trains):  # cpu-route: input prep of a user cv splitter index lists
             # every row outside fold k exactly once: as many as there are,
             # distinct, in range and none in fold k
             if (tr.size != n - sizes[k]
@@ -2004,7 +2004,7 @@ class SimpleImputer(_PrepBase):
         column. Lane cpu3-python: the host compaction arm (`compact_notnan_f32`)
         was unreachable (the program always compacts for a callable) and is gone."""
         stats = []
-        for j in range(d):
+        for j in range(d):  # cpu-route: calls the user strategy callable per column
             stats.append(float(self.strategy(kept[j])))
         self.statistics_ = Array.from_list(stats, "<f4")
         self._fill = self.statistics_
@@ -2664,12 +2664,12 @@ def _partial_walk(est, y, n, first):
     labels = flatten_labels(y)
     if len(labels) != n:
         raise ValueError("mojolearn: X and y have different numbers of rows")
-    index = {c: i for i, c in enumerate(est.classes_)}
-    bad = sorted({repr(v) for v in labels if v not in index})
+    index = {c: i for i, c in enumerate(est.classes_)}  # cpu-route: Python object labels of any kind, the explicit label input step
+    bad = sorted({repr(v) for v in labels if v not in index})  # cpu-route: Python object labels of any kind, the explicit label input step
     if bad:
         raise ValueError(f"mojolearn: The target label(s) {bad} in y do not exist in the initial classes "
                          f"{est.classes_}")
-    return first, Array.from_list([index[v] for v in labels], "<i4")
+    return first, Array.from_list([index[v] for v in labels], "<i4")  # cpu-route: Python object labels of any kind, the explicit label input step
 
 
 def _copy_block(pr, src, rows, cols):
@@ -3181,7 +3181,7 @@ def _estimator_covs(est, arr, codes, K, who):
     else:
         blocks = [arr.copy()]
     out = []
-    for k in range(K):
+    for k in range(K):  # cpu-route: fits the user covariance estimator once per class
         est.fit(blocks[k])
         if not hasattr(est, "covariance_"):
             raise ValueError(f"mojolearn: {type(est).__name__} does not have a covariance_ attribute")
@@ -3189,7 +3189,7 @@ def _estimator_covs(est, arr, codes, K, who):
         flat = flatten_labels(cov.tolist() if hasattr(cov, "tolist") else cov)
         if len(flat) != d * d:
             raise ValueError(f"mojolearn: {who}: covariance_ of {type(est).__name__} is not ({d}, {d})")
-        out.extend(float(v) for v in flat)
+        out.extend(float(v) for v in flat)  # cpu-route: reads the user covariance estimator output
     return out
 
 
@@ -4233,7 +4233,7 @@ def _numeric_labels(values):
         except OverflowError:
             pass
     out = []
-    for v in values:
+    for v in values:  # cpu-route: Python list labels, the explicit label input step
         if isinstance(v, bool) or not isinstance(v, numbers.Real):
             return None
         fv = float(v)
@@ -4251,7 +4251,7 @@ def _label_classes(mode, values):
         classes, _ = sorted_classes(values)
         return classes, None
     cats = _fit_categories(mode, Array._from_flat(nums, (len(nums), 1), "<f4"))[0]
-    ints = set(map(type, values)) == _INT_ONLY or all(isinstance(v, numbers.Integral) for v in values)
+    ints = set(map(type, values)) == _INT_ONLY or all(isinstance(v, numbers.Integral) for v in values)  # cpu-route: Python list labels kind test, the explicit label input step
     classes = [int(c) if ints else float(c) for c in cats.tolist()]  # glue: class list from the device categories (cats-sized: distinct class values)
     return classes, cats
 
@@ -4259,7 +4259,7 @@ def _label_classes(mode, values):
 def _label_codes(pr, values, cats):
     """Stages: each label's index among `cats` (or -1). Returns the codes
     offset and the unknown-count offset."""
-    arr = Array._from_flat([float(v) for v in values], (len(values), 1), "<f4")
+    arr = Array._from_flat([float(v) for v in values], (len(values), 1), "<f4")  # cpu-route: Python list labels to a buffer, the explicit label input step
     return _codes(pr, arr, [cats])
 
 
@@ -4283,8 +4283,8 @@ def _multilabel_indicator(y):
         if len(shape) != 2:
             return None
         rows = y.tolist()
-    elif isinstance(y, (list, tuple)) and y and all(isinstance(r, (list, tuple)) for r in y):
-        rows = [list(r) for r in y]
+    elif isinstance(y, (list, tuple)) and y and all(isinstance(r, (list, tuple)) for r in y):  # cpu-route: Python list-of-lists y, the explicit label input step
+        rows = [list(r) for r in y]  # cpu-route: Python list-of-lists y, the explicit label input step
     else:
         return None
     if not rows or len(rows[0]) < 2:
@@ -4539,11 +4539,11 @@ class LabelEncoder(_PrepBase):
         if not values:
             return Array((0,), "<i4")
         if self._cats is None or _numeric_labels(values) is None:
-            index = {c: i for i, c in enumerate(self._classes)}
-            missing = [v for v in values if v not in index]
+            index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: str or object labels, the explicit label input step
+            missing = [v for v in values if v not in index]  # cpu-route: str or object labels, the explicit label input step
             if missing:
                 raise ValueError(f"mojolearn: y contains previously unseen labels: {missing[:5]}")
-            return Array.from_list([index[v] for v in values], "<i4")
+            return Array.from_list([index[v] for v in values], "<i4")  # cpu-route: str or object labels, the explicit label input step
         n = len(values)
         pr = _Prog()
         codes, neg = _label_codes(pr, values, self._cats)
@@ -4581,10 +4581,10 @@ class LabelEncoder(_PrepBase):
         if got is not None:
             return got
         # str classes or a Python code list: the explicit input-prep route (G5)
-        codes = [int(c) for c in flatten_labels(y)]
-        if any(c < 0 or c >= len(self._classes) for c in codes):
+        codes = [int(c) for c in flatten_labels(y)]  # cpu-route: str classes or a Python code list, the explicit label input step
+        if any(c < 0 or c >= len(self._classes) for c in codes):  # cpu-route: str classes or a Python code list, the explicit label input step
             raise ValueError("mojolearn: y contains previously unseen labels")
-        return _classes_array([self._classes[c] for c in codes])
+        return _classes_array([self._classes[c] for c in codes])  # cpu-route: str classes or a Python code list, the explicit label input step
 
 
 def _stage_class_gather(pr, codes, n, cats, ints):
@@ -4692,8 +4692,8 @@ class LabelBinarizer(_PrepBase):
         n = len(values)
         pr = _Prog()
         if self._cats is None or _numeric_labels(values) is None:
-            index = {c: i for i, c in enumerate(self._classes)}
-            codes = pr.put_list([index.get(v, -1) for v in values])
+            index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: str or object labels, the explicit label input step
+            codes = pr.put_list([index.get(v, -1) for v in values])  # cpu-route: str or object labels, the explicit label input step
         else:
             codes, _neg = _label_codes(pr, values, self._cats)
         if K == 1:
@@ -4734,10 +4734,10 @@ class LabelBinarizer(_PrepBase):
         if self._cats is None:
             # str classes: the codes come back for the explicit object-label decode (G5)
             pr.run(self.numeric_mode_)
-            idx = [int(v) for v in pr.values(codes, n)]
+            idx = [int(v) for v in pr.values(codes, n)]  # cpu-route: str classes decode to Python objects, the explicit label output step
             if K == 1:
                 idx = [0] * n
-            return _classes_array([self._classes[i] for i in idx])
+            return _classes_array([self._classes[i] for i in idx])  # cpu-route: str classes decode to Python objects, the explicit label output step
         # numeric classes (lane cpu2-l3-prep): each code's class gathered on the device
         # (f2_code_gather); one class: both codes name it
         ints = label_kind(self._classes) == "int"
@@ -4812,7 +4812,7 @@ class MultiLabelBinarizer(_PrepBase):
             self._given = True
             self._cats = None
         elif not self._fit_flat(_mlb_flat(y)):
-            flat = [v for row in y for v in row]
+            flat = [v for row in y for v in row]  # cpu-route: Python iterables of labels, the explicit label input step
             self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
             self._given = False
         self.classes_ = _classes_array(self._classes)
@@ -4849,7 +4849,7 @@ class MultiLabelBinarizer(_PrepBase):
                 if self._fit_flat(fl):
                     self.classes_ = _classes_array(self._classes)
                     return self._transform_flat(fl)
-        y = [list(row) for row in y]
+        y = [list(row) for row in y]  # cpu-route: Python iterables of labels, the explicit label input step
         return self.fit(y).transform(y)
 
     def _check_fitted(self):
@@ -4862,18 +4862,18 @@ class MultiLabelBinarizer(_PrepBase):
             fl = _mlb_flat(y)
             if fl is not None:
                 return self._transform_flat(fl)
-        rows = [list(r) for r in y]
+        rows = [list(r) for r in y]  # cpu-route: Python list-of-lists y, the explicit label input step
         n, K = len(rows), len(self._classes)
-        flat = [v for r in rows for v in r]
-        owner = [i for i, r in enumerate(rows) for _ in r]
+        flat = [v for r in rows for v in r]  # cpu-route: Python iterables of labels, the explicit label input step
+        owner = [i for i, r in enumerate(rows) for _ in r]  # cpu-route: Python iterables of labels, the explicit label input step
         pr = _Prog()
         if not flat:
             out = pr.alloc(n * max(K, 1))
             pr.run(self.numeric_mode_)
             return pr.get_i32(out, (n, K))
         if self._cats is None or _numeric_labels(flat) is None:
-            index = {c: i for i, c in enumerate(self._classes)}
-            codes = pr.put_list([index.get(v, -1) for v in flat])
+            index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: str or object labels, the explicit label input step
+            codes = pr.put_list([index.get(v, -1) for v in flat])  # cpu-route: Python iterables of labels, the explicit label input step
         else:
             codes, _neg = _label_codes(pr, flat, self._cats)
         ro = pr.put_list(owner)
@@ -5161,10 +5161,10 @@ class IterativeImputer(_PrepBase):
         Xt = as_f32_c(Xf, name="X")[0].copy()
         seq = []
         done = 0
-        for r, order in enumerate(orders):
+        for r, order in enumerate(orders):  # cpu-route: drives the user estimator per feature
             check = not self.sample_posterior and bool(order)
             prev = Xt.copy() if check else None
-            for j in order:
+            for j in order:  # cpu-route: drives the user estimator per feature
                 nbl = corr.next(j) if corr is not None else [a for a in range(dk) if a != j]  # glue: the other feature ids
                 est = _clone(self.estimator)
                 Xo, yo, Xm, rows, m = self._ii_take(Xt, mask, j, nbl, mode, fit=True)

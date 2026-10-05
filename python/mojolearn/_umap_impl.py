@@ -258,11 +258,11 @@ class UMAP(NumericModeMixin):
             raise ValueError("UMAP target_n_neighbors must be -1 or >= 2")
         if tm == "categorical":
             vals = list(y) if not hasattr(y, "tolist") else y.tolist()
-            if len(vals) != n or any(isinstance(v, (list, tuple)) for v in vals):
+            if len(vals) != n or any(isinstance(v, (list, tuple)) for v in vals):  # cpu-route: categorical y label objects ordered by (type, value) [py-data-loop]
                 raise ValueError("UMAP categorical y must be one label per row")
-            order = sorted({v for v in vals if v != -1}, key=lambda v: (str(type(v)), v))
-            code = {v: float(i) for i, v in enumerate(order)}
-            codes = [-1.0 if v == -1 else code[v] for v in vals]
+            order = sorted({v for v in vals if v != -1}, key=lambda v: (str(type(v)), v))  # cpu-route: categorical y label objects ordered by (type, value) [py-data-loop,py-reduce]
+            code = {v: float(i) for i, v in enumerate(order)}  # cpu-route: categorical y label objects ordered by (type, value) [py-data-loop]
+            codes = [-1.0 if v == -1 else code[v] for v in vals]  # cpu-route: categorical y label objects ordered by (type, value) [py-data-loop]
             t, _ = as_f32_c(codes, ndim=1, name="y")
             return 1, 1, t, max(tk, 0), w
         if tm in ("l2", "euclidean"):

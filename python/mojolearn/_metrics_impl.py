@@ -1097,9 +1097,9 @@ def _classification_labels(values, name, *, allow_empty=False):
     if not allow_empty and not labels:
         raise ValueError(f"{name} must contain at least one label")
     if all(isinstance(v, str) for v in labels):  # glue: type validation of list labels
-        return [str(v) for v in labels], "string"
+        return [str(v) for v in labels], "string"  # cpu-route: str labels, the explicit label input step
     if all(isinstance(v, numbers.Integral) or is_bool(v) for v in labels):  # glue: type validation of list labels
-        return [int(v) for v in labels], "integer"
+        return [int(v) for v in labels], "integer"  # cpu-route: Python int labels, the explicit label input step
     raise TypeError(f"{name} must contain only strings or only integers; "
                     "floating labels, missing labels and mixed types are unsupported")
 
@@ -1201,7 +1201,7 @@ def _label_map(labels, fn):
         gather(_addr_ro(table), len(labels.classes), _addr_ro(labels.codes),
                len(labels), _addr(out))
         return out
-    return Array.from_list([fn(v) for v in labels], "<i4")
+    return Array.from_list([fn(v) for v in labels], "<i4")  # cpu-route: Python object labels mapped per row, the explicit label input step
 
 
 def _classification_pair(y_true, y_pred, sample_weight):
