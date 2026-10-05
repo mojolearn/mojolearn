@@ -99,6 +99,16 @@ def es_rowmax_kernel(a: F32Ptr, rm: F32Ptr, rows_in: Int32, n_in: Int32):
         rm.unsafe_store(r, es_row_max(a, Int(n_in), r))
 
 
+def es_rowmax_strided_kernel(a: F32Ptr, rm: F32Ptr, total_in: Int32, rows_in: Int32, n_in: Int32, pstride_in: Int32):
+    """`es_rowmax_kernel` on problems `pstride` words apart: rm[b rows + k] =
+    max |a| over row k (n words) of problem b. One thread a row."""
+    var r = Int(block_idx.x) * ES_TPB + Int(thread_idx.x)
+    if r < Int(total_in):
+        var rows = Int(rows_in)
+        var b = r // rows
+        rm.unsafe_store(r, es_row_max(a + b * Int(pstride_in), Int(n_in), r - b * rows))
+
+
 def es_fold_kernel(rm: F32Ptr, fac: F32Ptr, n_in: Int32):
     """Block b: the max over problem b's n row maxima (thread t takes rows t,
     t + ES_TPB, ..., then the tree), fac[4 b .. 4 b + 3] = `es_factors`.
@@ -148,6 +158,20 @@ def es_unscale_kernel(w: F32Ptr, fac: F32Ptr, per_in: Int32, total_in: Int32):
         var g2 = fac.unsafe_load(4 * b + 3)
         if g1 != Float32(1.0) or g2 != Float32(1.0):
             w.unsafe_store(t, es_mul2(w.unsafe_load(t), g1, g2))
+
+
+def es_apply_strided_kernel(a: F32Ptr, fac: F32Ptr, per_in: Int32, total_in: Int32, pstride_in: Int32):
+    """`es_apply_kernel` on problems `pstride` words apart (per = the
+    problem's words, contiguous)."""
+    var t = Int(block_idx.x) * ES_TPB + Int(thread_idx.x)
+    if t < Int(total_in):
+        var per = Int(per_in)
+        var b = t // per
+        var f1 = fac.unsafe_load(4 * b)
+        var f2 = fac.unsafe_load(4 * b + 1)
+        if f1 != Float32(1.0) or f2 != Float32(1.0):
+            var at = b * Int(pstride_in) + (t - b * per)
+            a.unsafe_store(at, es_mul2(a.unsafe_load(at), f1, f2))
 
 
 def host_es_scale(mut m: List[Float32], n: Int) -> SIMD[DType.float32, 4]:
@@ -248,4 +272,34 @@ def enqueue_es_unscale_diag(ctx: DeviceContext, a: F32Ptr, dfac: DeviceBuffer[DT
     left in place by the solve) back to the input's scale."""
     ctx.enqueue_function[es_unscale_diag_kernel](
         a, F32Ptr(unsafe_from_address=Int(dfac.unsafe_ptr())), Int32(n), grid_dim=_es_blocks(n), block_dim=ES_TPB
+    )
+
+
+def es_strided_words(batch: Int, n: Int) -> Int:
+    """Scratch words `enqueue_es_scale_strided` takes: 4 factors a problem,
+    then the n row maxima a problem."""
+    return batch * (4 + n)
+
+
+def enqueue_es_scale_strided(
+    ctx: DeviceContext, a: F32Ptr, pstride: Int, batch: Int, n: Int, scratch: F32Ptr
+) raises:
+    """`batch` n x n problems at a, a + pstride, ... (device, each row
+    major) take their power-of-two range scale in place; the factors land
+    in scratch[0, 4 batch) (for `enqueue_es_unscale_ptr`), the row maxima
+    after them (`es_strided_words`). Three launches, nothing read back."""
+    var prm = scratch + 4 * batch
+    ctx.enqueue_function[es_rowmax_strided_kernel](
+        a, prm, Int32(batch * n), Int32(n), Int32(n), Int32(pstride), grid_dim=_es_blocks(batch * n), block_dim=ES_TPB
+    )
+    ctx.enqueue_function[es_fold_kernel](prm, scratch, Int32(n), grid_dim=max(batch, 1), block_dim=ES_TPB)
+    ctx.enqueue_function[es_apply_strided_kernel](
+        a, scratch, Int32(n * n), Int32(batch * n * n), Int32(pstride), grid_dim=_es_blocks(batch * n * n), block_dim=ES_TPB
+    )
+
+
+def enqueue_es_unscale_ptr(ctx: DeviceContext, w: F32Ptr, fac: F32Ptr, batch: Int, n: Int) raises:
+    """`enqueue_es_unscale` with the factors at a device pointer."""
+    ctx.enqueue_function[es_unscale_kernel](
+        w, fac, Int32(n), Int32(batch * n), grid_dim=_es_blocks(batch * n), block_dim=ES_TPB
     )
