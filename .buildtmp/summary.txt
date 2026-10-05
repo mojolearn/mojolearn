@@ -1,0 +1,1 @@
+rc=1 tag=all defines=-D MOJOLEARN_SYM_CTR_ALL
