@@ -100,79 +100,13 @@ py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	n
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	return sorted(counts.items())
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	first = min(first, int(mask.argmax()))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	addresses = [*(addr_ro(value, name='input') for value in inputs),
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	addresses = [addr_ro(value, name='state') for value in inputs]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	arrays = [_array(value[name], shape, name) for name, shape in zip(shape.parameter_names, shape.parameter_shapes)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	arrays = {key: (state[key].copy() if copy else state[key]) for key in ('parameters', 'm', 'v', 'flags')}
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	before = tuple(array.tobytes() for array in inputs)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for child in item.values():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for child in item:
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for chunk in iter(lambda: stream.read(1024 * 1024), b''):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for code, name in names.items()}
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for i in range(len(self.free)):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))}
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))})
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for key in ('parameters', 'm', 'v', 'flags')):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for key in ('parameters', 'm', 'v', 'flags'):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	1	for key in ('parameters', 'm', 'v', 'flags'):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for key, value in pairs:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for layer in range(n_layers)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	1	for layer in range(n_layers)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	2	for layer in range(n_layers)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for mask in (threshold_codes(flat, -0.5, strict=True, below=1, above=0),
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for offset, key in ((0, 'forward_status'), (1, 'backward_status')):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	for value in arrays:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	if any(saved != array.tobytes() for saved, array in zip(before, inputs)):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	if any(st is store for st in self.free):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	if len(item) > 128 or any(type(key) is not str or len(key) > 2048 for key in item):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	inventory = {name: _sha(root / name) for name in names if (root / name).is_file()}
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	missing = [name for name in _SESSION_ENTRIES + (_SESSION_LOGITS_ENTRY,)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	missing = [name for name in _SESSION_ENTRIES if not callable(getattr(binding, name, None))]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	or cfg['nesterov'] or any(_float32(cfg[key], key) != 0 for key in ('momentum', 'dampening', 'max_norm'))):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	or value['parameter_shapes'] != [list(shape) for shape in shape.parameter_shapes]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	parameter_shapes=[list(shape) for shape in shape.parameter_shapes],
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	1	parameter_shapes=[list(shape) for shape in shape.parameter_shapes],
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	parameter_shapes=[list(shape) for shape in shape.parameter_shapes], parameter_offsets=list(shape.offsets))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	values = [int(info[12 + 3 * layer + offset]) for layer in range(n_layers)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	values = {name: _float32(value, name) for name, value in
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_ann.py	0	"fitted": Array.from_list([int(getattr(self, a)) for a in self._SAVE_FITTED], "<i8"),
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -218,135 +152,7 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_clust
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cluster.py	0	nodes = [int(v) for v in _buffer.flat_bytes(self._tree_nodes).cast("i")]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	dxh = dev.get(name, int(np.prod(xshape)))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	h = dev.get("idx", int(np.prod(shape)))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	hw = int(_np().prod(shape[2:]))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	hw = int(np.prod(x4.shape[2:]))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	if g.size != int(np.prod(d["_mask_shape"])):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	n1 = int(np.prod(k["s1"]))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	n1 = int(np.prod(s1))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	n2 = int(np.prod(s2))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	ny = int(_np().prod(cshape))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	plans.append((prm, pprm, int(_np().prod(shape)), int(_np().prod(oshape)),
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	row = int(np.prod(self.input_shape))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	self.n_features_in_ = int(_np().prod(X.shape[1:]))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	self.n_features_in_ = int(np.prod(self.input_shape))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	yh = dev.get(name, int(_np().prod(oshape)))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	_data_addr(a)) for a in arrays)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	a["gout"] = [R.new(p[3]) for p in plans] if (train or _LEGACY_STEP) else []
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	a["idx"] = [R.new(p[3]) for p in plans]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	a["out"] = [R.new(p[3]) for p in plans]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	a["saved"] = [[R.new(p[4]), R.new(p[5])] if save else [] for p in plans]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	and all(a is b for a, b in zip(self.refs, other.refs)) and self.sig == other.sig)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for (conv, pool), p, out, idx, sv in zip(self._blocks, plans, a["out"], a["idx"], a["saved"]):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if not lists else ():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for (layer, attr, gattr), p_, g_, buf in zip(params, hp, hg, hbuf):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for _ in range(self.max_iter):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for bn in self._bns():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for conv, pool in self._blocks:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for g in range(self.groups):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for h in self.handles:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for i, (layer, attr, _) in enumerate(params):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for i, layer in enumerate(layers):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for i, oc in enumerate(self.conv_channels):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for j in range(len(self._blocks) - 1, -1, -1):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for j, (conv, _) in enumerate(self._blocks):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for k in range(self.groups):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for k, (a, _) in h.items():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for layer in [c for c, _ in self._blocks] + [self.head_]:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for layer in layers:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for layer in self.layers_ + [self.head_]:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for layer, attr, _ in params:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for s in range(0, n, cap):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	for s in range(0, n, self.batch_size):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	k, s, d = (int(v if isinstance(v, int) else v[0]) for v in (kernel_size, stride, dilation))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	plan_full=[[list(p[0]), list(p[1])] for p in self._plan(cap)[0]],
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	plan_last=[[list(p[0]), list(p[1])] for p in self._plan(m_last)[0]])
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	return [getattr(l, a) for l, a, _ in self._params()]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	return _mixed(b) and all(c.groups == 1 and not c._explicit for c in convs)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	self._bufs = [R.get(buf, (per * getattr(l, at).size,)) for (l, at, _), buf in zip(params, hbuf)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	self.conv_channels = tuple(int(c) for c in conv_channels)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	self.input_shape = tuple(int(v) for v in input_shape)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	sizes = [int(getattr(layer, attr).size) for layer, attr, _ in params]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	v = tuple(int(t) for t in v)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	bound = np.sqrt(6.0 / (self.in_channels + self.out_channels)) # glorot, PyG's Linear(weight_initializer='glorot')
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	dst = np.concatenate([dst[keep], np.arange(n)])
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	dxh = dev.get(name, int(np.prod(xshape)))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	h = dev.get("idx", int(np.prod(shape)))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	hw = int(np.prod(x4.shape[2:]))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	hyper = np.tile(np.asarray(sgd_row, dtype=np.float64), (nsteps, 1))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	if g.size != int(np.prod(d["_mask_shape"])):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	n1 = int(np.prod(k["s1"]))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	n1 = int(np.prod(s1))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	n2 = int(np.prod(s2))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	row = int(np.prod(self.input_shape))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	running = np.concatenate([np.zeros(C, np.float32), np.ones(C, np.float32)])
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	running = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	self.n_features_in_ = int(np.prod(self.input_shape))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	src = np.concatenate([src[keep], np.arange(n)])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -354,19 +160,13 @@ py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for _ in range(80):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for _ in range(int(n_iter)):
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for _ in range(int(self.iterations)):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for _ in range(max_iter):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for _ in range(n // bs):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for _ in range(n // self.batch_size_):
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for _c in range(nc):
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for a in range(self._knn):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for ii in range(1, max_iter + 1):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
@@ -396,8 +196,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for j in zero_cols:
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for m in ms:
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for r, Y0 in enumerate(starts):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for step in range(n_steps):
@@ -406,25 +204,9 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for t in range(nc):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for t, j in enumerate(idx):
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for v in values:
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	return [v < 0 for v in out.s]
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	1	return [v < 0 for v in out.s]
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], 1, self.c))
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], self.r, 1))
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	starts = [k.rand(n, nc, seed, 70 + r, 0) for r in range(int(self.n_init))]
-# why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	terms = [k.ew("add", k.ew("add", zero, ddt.cols(t, t + 1)), dcomp.rows(t, t + 1)) for t in range(nc)]
-# why: k-sized folds over singular values, components or restarts (rank counts, max of nc values, NMF component permutation); owed to x_decomp count/max moves
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	if a.ndim != 2 or min(a.shape) == 0:
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-array-method	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_linear.py	0	if n == 0 or not (w.min() >= 0) or not (w.sum() > 0):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
