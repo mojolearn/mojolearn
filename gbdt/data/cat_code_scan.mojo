@@ -114,11 +114,34 @@ def _scan_column(
     mut codes_out: List[UInt32],
     lenient: Bool = False,
 ) raises -> CatColumnScan:
+    var d_codes = ctx.enqueue_create_buffer[DType.uint32](
+        n_rows if want_codes and n_rows > 0 else 1
+    )
+    return _scan_column_into(
+        ctx, src, n_rows, feature, want_codes, True, codes_out, d_codes,
+        lenient,
+    )
+
+
+def _scan_column_into(
+    ctx: DeviceContext,
+    src: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    feature: Int,
+    want_codes: Bool,
+    want_host_codes: Bool,
+    mut codes_out: List[UInt32],
+    mut d_codes: DeviceBuffer[DType.uint32],
+    lenient: Bool = False,
+) raises -> CatColumnScan:
+    """`_scan_column` writing the codes into the caller's `d_codes` (at
+    least `n_rows` words when `want_codes`), so a caller can keep them
+    resident (lane cpu4-gbdt); `want_host_codes` also reads them back into
+    `codes_out`."""
     if n_rows <= 0:
         return CatColumnScan(0, -1)
     var d_x = ctx.enqueue_create_buffer[DType.float32](n_rows)
     ctx.enqueue_copy(dst_buf=d_x, src_ptr=src)
-    var d_codes = ctx.enqueue_create_buffer[DType.uint32](n_rows if want_codes else 1)
     var h = ctx.enqueue_create_host_buffer[DType.int32](_CAT_WORDS)
     h.unsafe_ptr().unsafe_store(0, CAT_NO_ROW)
     h.unsafe_ptr().unsafe_store(1, Int32(0))
@@ -171,8 +194,12 @@ def _scan_column(
             grid_dim=(_grid(n_codes), 1, 1),
             block_dim=(CAT_SCAN_TPB, 1, 1),
         )
-        codes_out.resize(n_rows, UInt32(0))
-        ctx.enqueue_copy(dst_ptr=codes_out.unsafe_ptr(), src_buf=d_codes)
+        if want_host_codes:
+            codes_out.resize(n_rows, UInt32(0))
+            ctx.enqueue_copy(
+                dst_ptr=codes_out.unsafe_ptr(),
+                src_buf=d_codes.create_sub_buffer[DType.uint32](0, n_rows),
+            )
         ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_w)
         ctx.synchronize()
         var absent = h.unsafe_ptr().unsafe_load(2)
@@ -180,7 +207,6 @@ def _scan_column(
             first_absent = Int(absent)
         _ = d_seen^
     _ = d_x^
-    _ = d_codes^
     _ = d_w^
     _ = h^
     return CatColumnScan(max_code, first_absent)
@@ -210,6 +236,39 @@ def cat_column_codes(
     The codes come back to the host only because the CTR calcers still take
     a host list."""
     return _scan_column(ctx, src, n_rows, feature, True, codes_out)
+
+
+def cat_column_codes_device(
+    ctx: DeviceContext,
+    src: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    feature: Int,
+    mut d_codes: DeviceBuffer[DType.uint32],
+) raises -> CatColumnScan:
+    """`cat_column_codes` with the codes left ONLY on the device, in the
+    caller's `d_codes` (`n_rows` words), nothing read back but the three
+    scan words (lane cpu4-gbdt, the tensor CTR fit)."""
+    var unused = List[UInt32]()
+    return _scan_column_into(
+        ctx, src, n_rows, feature, True, False, unused, d_codes
+    )
+
+
+def cat_column_codes_resident(
+    ctx: DeviceContext,
+    src: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    feature: Int,
+    mut codes_out: List[UInt32],
+    mut d_codes: DeviceBuffer[DType.uint32],
+) raises -> CatColumnScan:
+    """`cat_column_codes` that ALSO leaves the codes on the device, in the
+    caller's `d_codes` (`n_rows` words), for the CTR calcers to read in
+    place (lane cpu4-gbdt). The host copy in `codes_out` is still written:
+    the apply-time `build_ctr_tables` takes it."""
+    return _scan_column_into(
+        ctx, src, n_rows, feature, True, True, codes_out, d_codes
+    )
 
 
 def onehot_column_max_code(

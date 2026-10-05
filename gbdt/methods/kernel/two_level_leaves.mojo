@@ -120,11 +120,11 @@ def two_level_leaf_values_kernel(
     partials: MutPointer[Float32, MutAnyOrigin],
     learning_rate: Float32,
     l2_leaf_reg: Float32,
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
 ):
     """Stage 2 of the leaf estimate and the leaf value. Grid
     `(n_leaves, 1, 1)`, block `(TL_GRID, 1, 1)` (one partial per thread).
-    `out[L] = learning_rate * total / (weight + l2)`, or 0 for a leaf with
+    `dst[L] = learning_rate * total / (weight + l2)`, or 0 for a leaf with
     no weight (the old `two_level_weighted_leaf_value` statements)."""
     var t = Int(thread_idx.x)
     var leaf = Int(block_idx.x)
@@ -138,4 +138,4 @@ def two_level_leaf_values_kernel(
             v = identical_div(
                 identical_mul(learning_rate, total), total_weight + l2_leaf_reg
             )
-        out.unsafe_store(leaf, v)
+        dst.unsafe_store(leaf, v)

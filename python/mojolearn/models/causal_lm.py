@@ -258,20 +258,15 @@ def _float_weight(a, name):
 def _argmax_last(logits, b, l, v):
     """The argmax of row `b`'s LAST position, ties to the lowest index, as an
     int32 `(b,)` Array: a sequential scan with a strict `>`
-    (`_greedy_next_bytes`'s rule). The scan runs in the base binding's
-    `argmax_rows_f32` (DEVIATION 2500, the same rule: strict `>` from index
-    0, so a NaN never replaces and a NaN at index 0 stays); at `l > 1` the
-    last-position rows are first gathered by the base binding's
-    `gather_rows_bytes` (pyglue-text-io: no Python loop over rows)."""
-    from .._labels import argmax_rows
-    if l == 1:
-        rows = logits.reshape((b, v))
-    else:
-        rows = empty((b, v), "<f4")
-        index = _pyarray.array("q", range(l - 1, b * l, l))
-        _native("gather_rows_bytes")(addr_ro(logits, name="logits"), addr(rows, name="rows"),
-                                     index.buffer_info()[0], b * l, b, v * 4)
-    return argmax_rows(rows).astype("<i4")
+    (`_greedy_next_bytes`'s rule). The base binding's `argmax_last_rows_f32`
+    reads position `l - 1` of each row on the device (the `argmax_rows_f32`
+    rule, DEVIATION 2500: strict `>` from index 0, so a NaN never replaces
+    and a NaN at index 0 stays); lane cpu4-python: the host row gather
+    `gather_rows_bytes` is gone."""
+    out = empty((b,), "<i8")
+    if b:
+        _native("argmax_last_rows_f32")(addr_ro(logits, name="logits"), [b, l, v], addr(out, name="next ids"))
+    return out.astype("<i4")
 
 
 def _prompt_then_new(prompt, b, l, n_new, new_addr, new_step_major):

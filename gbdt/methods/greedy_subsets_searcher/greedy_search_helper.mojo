@@ -42,6 +42,7 @@ from gbdt.methods.greedy_subsets_searcher.split_properties_helper import (
     zero_leaves,
 )
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from std.sys.info import size_of
 from core.device_liveness import (
     DEAD_DEVICE_CANARY_MAGIC,
@@ -500,12 +501,53 @@ comptime FAST_REPLICATION_PIN_2040 = is_defined[
 # catches numbering).
 # ====================================================
 comptime SYM_RIDX_MAX_FEATURES = 64
-"""trees-apple2: `run_tree_layout_traced` takes DEVIATION 2031 only when the
-layout has at most this many features (see `use_ridx` there). A RANGE rule,
-not a board row: gathered stat loads scale with the feature groups a level
-walks, the saved reorder does not. Measured at 16 and 220 features only:
-NEEDS NEIGHBOR-SHAPE VALIDATION (32, 48, 64, 65, 96, 128 features).
-Bit-inert either side (same digests)."""
+"""trees-apple2's old bound (arm B only, see `ridx_schedule_pays`): the
+ridx schedule was taken only when the layout had at most this many features,
+a cut placed between the two board widths it was measured at (16 and 220)."""
+
+comptime RIDX_FEATURE_CUT_OFF = is_defined[
+    "MOJOLEARN_GBDT_RIDX_COST_RULE_OFF"
+]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+"""lane/no-dim-idn (2026-10-04): `-D MOJOLEARN_GBDT_RIDX_COST_RULE_OFF`
+restores the old 64-feature cut in the symmetric and the depthwise drivers
+(A/B arm B; also under `MOJOLEARN_IDN_ALL_OFF`). Bit-inert either way: both schedules give the same digests."""
+
+comptime RIDX_GATHER_COST = get_defined_int["MOJOLEARN_GBDT_RIDX_GATHER_COST", 2]()
+"""The cost of one gathered 4-byte stat load in units of one contiguous
+4-byte load (`ridx_schedule_pays`). 2 is the smallest integer ratio at which
+a gather costs more than a streamed load (a leaf's rows are visited in
+ascending row order, so most gathers share a sector or line with a
+neighbor); it is a hardware assumption, not fitted to a dataset. The A/B
+sweeps it through the define."""
+
+
+@always_inline
+def ridx_schedule_pays(n_features: Int) -> Bool:
+    """lane/no-dim-idn (2026-10-04): whether the ridx-only split schedule
+    (DEVIATION 2031 symmetric, 1902 depthwise) moves fewer bytes per row per
+    level than the stat-plane reorder it replaces, for ANY width. Replaces
+    the fixed 64-feature cut (`SYM_RIDX_MAX_FEATURES`), which sat between
+    the board widths 16 and 220.
+
+    Per row per level, in units of one contiguous 4-byte load (r =
+    RIDX_GATHER_COST for a gathered one):
+      saved by ridx: the reorder's copy out (read + write) and gather back
+                     (gathered read + write) of every stat plane:
+                     stat_count * (r + 3);
+      added by ridx: every 4-feature group's histogram pass gathers each
+                     stat plane instead of streaming it:
+                     groups * stat_count * (r - 1).
+    ridx pays when groups * (r - 1) <= r + 3; stat_count cancels. r = 2:
+    groups <= 5, i.e. up to 20 features. Covers neighboring widths smoothly
+    (one more group can flip it, at any width), and the decision is
+    bit-inert, so the edge only picks the faster same-order schedule."""
+    comptime if RIDX_FEATURE_CUT_OFF:
+        return n_features <= SYM_RIDX_MAX_FEATURES
+    var groups = (n_features + 3) // 4
+    var r = RIDX_GATHER_COST
+    if r <= 1:
+        return True
+    return groups * (r - 1) <= r + 3
 
 comptime SYM_RIDX_SPLITS_2031 = (
     (
@@ -5286,12 +5328,12 @@ def run_tree_layout_traced[
     # 1790609918603: taxi 16 features 1024 -> 941 ms, Istella 220 features
     # 2813 -> 2992 ms, the same digests). One decision per call, so a tree
     # never mixes the two schedules.
-    # FAST: any width (SYM_RIDX_GENERAL). IDENTICAL still uses the
-    # board-shaped rule; generalize it on every vendor together (same-bits
-    # rule), owed to the IDENTICAL program.
+    # lane/no-dim-idn: the cut is now the byte rule `ridx_schedule_pays`
+    # (old 64-feature cut under -D MOJOLEARN_GBDT_RIDX_COST_RULE_OFF).
+    # FAST: any width (SYM_RIDX_GENERAL, lane apple-fast-no-narrow-2).
     var use_ridx = SYM_RIDX_SPLITS_2031 and (
         SYM_RIDX_GENERAL
-        or len(fold_counts) + len(dynamic_fold_counts) <= SYM_RIDX_MAX_FEATURES
+        or ridx_schedule_pays(len(fold_counts) + len(dynamic_fold_counts))
     )
     # `statCount` is `1 + point.GetColumnCount()` -- their `StochasticDer`
     # sizes `StatsToAggregate` as one weight column plus one der column

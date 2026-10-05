@@ -97,11 +97,17 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #: which is why it is an arm to time and to compare on a categorical fixture
 #: before it becomes a default. The two-level FeatureFreq tensor path
 #: (`estimator.mojo`, `tensor_ctr_value_table.mojo`) is not touched.
-comptime IDN_CTR_BORDERS_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_GBDT_CTR_BORDERS_DEVICE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#:
+#: lane cpu4-gbdt (2026-10-04): THE ONLY ROUTE, every mode and vendor. The
+#: GPU fit's simple-CTR columns are now resident on the device
+#: (`gbdt/train.mojo`), so their grids come from the device build over the
+#: resident column; `compute_ctr_borders`' host pass is no longer reachable
+#: from the GPU fit and the candidate define is retired (no `_OFF`: the
+#: owner's rule, no CPU data work in a GPU fit). The host column keeps
+#: reading this constant and so takes `_ctr_borders_host_grid`, the device
+#: build's restatement, with it. BITS MOVE against the old default
+#: (`compute_ctr_borders`), on every column together.
+comptime IDN_CTR_BORDERS_DEVICE = True
 
 
 # --- EBorderSelectionType (`grid_creator/binarization.h:13-21`) ----------
@@ -177,12 +183,23 @@ def uniform_borders(
         if values[i] > max_value:
             max_value = values[i]
 
+    return uniform_borders_from_range(min_value, max_value, max_borders_count)
+
+
+def uniform_borders_from_range(
+    min_value: Float32, max_value: Float32, max_borders_count: Int
+) -> List[Float32]:
+    """`uniform_borders` after its min/max scan: the grid reads nothing of
+    the column but its two extremes, so a caller that reduced them on the
+    device (lane cpu4-gbdt, the two-level FeatureFreq fit) gets the same
+    borders from the same arithmetic."""
+    var out = List[Float32]()
     if min_value == max_value:
         return out^
 
     var lo = Float64(min_value)
     var hi = Float64(max_value)
-    for i in range(max_borders_count):
+    for i in range(max_borders_count):  # small-loop(max_borders_count: grid borders, the CTR description's count): border arithmetic, model parameters
         var current_value = lo + Float64(i + 1) * (hi - lo) / Float64(
             max_borders_count + 1
         )

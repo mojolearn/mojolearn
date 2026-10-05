@@ -170,26 +170,18 @@ class _RecurrentBase:
         return X
 
     def _schedule(self, n, rng):
-        """(order, steps): every epoch's row order (int32, one permutation
-        per epoch drawn in epoch order) and each step's (offset, count) pair
-        into it (int32). The order was float32, which refused a schedule of
-        2^24 rows or more (17 epochs at 1M rows); the step offsets bound it
-        now, below 2^31 - 1."""
+        """(epochs, bs, shuffle, seed): the minibatch schedule's scalars.
+        Every epoch's row order is built on the executor by `rnn_fit` (lane
+        cpu4-python: `op_mlp_perm`, the MLP's Feistel permutation keyed by
+        the epoch, or the identity without shuffle; the host Fisher-Yates
+        `epoch_schedule` is gone); step k of epoch e covers rows
+        [j bs, j bs + min(bs, n - j bs)) of it, j = k mod ceil(n / bs)."""
         bs = max(1, min(int(self.batch_size), n))
         epochs = int(self.max_epochs)
         if epochs * n >= 2 ** 31 - 1:
             raise ValueError(f"max_epochs * n_samples must be below 2^31 - 1, got {epochs} * {n}")
-        # one 64-bit seed from the estimator's stream; every epoch's order and
-        # every step's (offset, count) built in Mojo (`epoch_schedule`,
-        # sequence/schedule.mojo; lane cgr4-py-compute)
         seed = rng.child_seed() if hasattr(rng, "child_seed") else int(rng.integers(0, 2 ** 63, dtype=np.int64))
-        per = -(-n // bs)
-        order = np.empty(max(epochs * n, 1), dtype=np.int32)
-        steps = np.empty(max(2 * epochs * per, 2), dtype=np.int32)
-        got = binding(self.numeric_mode).epoch_schedule(
-            [order.ctypes.data, steps.ctypes.data],
-            [n, epochs, bs, int(bool(self.shuffle)), seed & 0xFFFFFFFF, seed >> 32])
-        return order[:epochs * n], steps[:2 * got]
+        return epochs, bs, bool(self.shuffle), seed
 
     def _lrs(self, n_steps):
         """The learning rate of every optimizer step: `lr_schedule.lr_at(t)`
@@ -206,14 +198,15 @@ class _RecurrentBase:
         from ._buffer import InitStream
         rng = InitStream(None if self.random_state is None else int(self.random_state))
         self.params_ = self._init_params(rng)
-        order, steps = self._schedule(n, rng)
-        n_steps = len(steps) // 2
+        epochs, bs, shuffle, seed = self._schedule(n, rng)
+        n_steps = epochs * (-(-n // bs))
         kind, flags, fp = optimizer_arguments(self.optimizer, self.optimizer_options)
         lrs = self._lrs(n_steps)
         losses = np.zeros(n_steps, dtype=np.float32)
-        ip = self._ints() + [self._TASK, n, T, len(order), n_steps, kind, flags]
+        ip = self._ints() + [self._TASK, n, T, epochs, bs, kind, flags,
+                             int(shuffle), seed & 0xFFFFFFFF, seed >> 32]
         b = binding(self.numeric_mode)
-        b.rnn_fit([X.ctypes.data, target.ctypes.data, order.ctypes.data, steps.ctypes.data,
+        b.rnn_fit([X.ctypes.data, target.ctypes.data,
                    self.params_.ctypes.data, losses.ctypes.data, lrs.ctypes.data],
                   ip, [float(v) for v in fp])  # glue: the optimizer float arguments
         self.loss_curve_ = losses

@@ -43,7 +43,7 @@ from gbdt.models.kernel.resident_link import (
 )
 from gbdt.data.group_layout import device_group_layout
 from gbdt.data.cat_code_scan import (
-    cat_column_codes,
+    cat_column_codes_resident,
     cat_column_max_code,
     onehot_column_max_code,
 )
@@ -56,14 +56,11 @@ from gbdt.ctrs.ctr_binarization import (
     TBinarizationOptions,
     build_binarized_target,
     build_target_borders,
-    compute_ctr_borders,
-    IDN_CTR_BORDERS_DEVICE,
     ctr_border_type_code,
 )
 from gbdt.ctrs.ctr_calcers import (
-    compute_simple_ctrs,
-    compute_simple_ctrs_device,
-    compute_simple_ctrs_gpu,
+    compute_simple_ctrs_device_resident,
+    compute_simple_ctrs_gpu_resident,
 )
 from gbdt.ctrs.ctr import CTR_BORDERS, CTR_FEATURE_FREQ
 from gbdt.ctrs.fast_prep import (
@@ -82,10 +79,8 @@ from gbdt.ctrs.fast_prep import (
     read_codes,
     upload_codes,
 )
-from gbdt.data.permutation import (
-    DEFAULT_PERMUTATION_COUNT,
-    ctrs_estimation_permutation,
-)
+from gbdt.ctrs.kernel.ctr_order import launch_ctr_estimation_order
+from gbdt.data.permutation import DEFAULT_PERMUTATION_COUNT
 from gbdt.grid_creator.binarization import (
     IDN_ORDERED_RMSE_DEVICE_GRID,
     BORDER_TYPE_GREEDY_LOG_SUM,
@@ -151,46 +146,20 @@ from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-#: lane/apple-fast-trees-depthwise (2026-10-02), CTR_FAST_FREQ: FAST + Apple
-#: only, the default since the M3 A/B (tdw-cat-freq: gbdt-categorical
-#: taxicat 33,043 -> 27,761 ms, -16%, auc same); `-D
-#: MOJOLEARN_GBDT_CTR_FAST_FREQ_OFF` keeps the host calcer, and the old
-#: `-D MOJOLEARN_GBDT_CTR_FAST_FREQ` name is harmless. The permutation-INDEPENDENT simple CTR
-#: (the GPU default's FeatureFreq / Counter column) was computed on the
-#: HOST inside the fit: `compute_simple_ctrs` (`ctrs/ctr_calcers.mojo:81`)
-#: runs `TCtrBinBuilder`'s host stable sort of every row by category and
-#: the host frequency calcer, once per cat feature, at the categorical
-#: lane's 4.1M taxi rows. The arm takes `compute_simple_ctrs_device`
-#: (`ctrs/ctr_calcers.mojo:1065`, their own device calcer, wired here as
-#: its docstring asks) under the default `counter_calc_method` (SkipTest);
-#: the `Full` method keeps the host calcer (no device arm). Same columns:
-#: the device freq calcer's sums are integer counts, exact in any order.
-comptime CTR_FAST_FREQ = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_GBDT_CTR_FAST_FREQ_OFF"]()
-)
-
-#: lane/fam-gbdt (2026-10-04), IDN_CTR_FREQ_DEVICE: IDENTICAL, every vendor,
-#: default on. The same routing as CTR_FAST_FREQ above: the
-#: permutation-INDEPENDENT simple CTR (FeatureFreq) takes
-#: `compute_simple_ctrs_device` instead of the host stable sort and host
-#: frequency calcer, once per categorical feature. No bit moves: the device
-#: calcer's bin sums are integer-valued float counts, exact in any reduction
-#: order while they stay below 2^24, and the final `(sum + prior) / (total +
-#: prior_observations)` is one float32 divide per row on both sides. The
-#: call site keeps the host calcer for `n_rows >= 2^24` (where a count could
-#: leave the exact range) and for `counter_calc_method == Full` (no device
-#: arm). The host column (`gbdt/host/gbdt_oracle_ctr.mojo`) restates the
-#: host calcer and is unchanged. `-D MOJOLEARN_IDN_GBDT_CTR_FREQ_DEVICE_OFF`
-#: (or the master `-D MOJOLEARN_IDN_ALL_OFF`) restores the host calcer.
-comptime IDN_CTR_FREQ_DEVICE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_CTR_FREQ_DEVICE_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: lane cpu4-gbdt (2026-10-04): the permutation-INDEPENDENT simple CTR
+#: (FeatureFreq) is written by `compute_simple_ctrs_device_resident` in every
+#: mode, on every vendor, for `counter_calc_method` SkipTest AND Full and at
+#: any row count; the host calcer `compute_simple_ctrs` is the host column
+#: only (checks). The routing switches that kept it in the fit
+#: (`CTR_FAST_FREQ` / `MOJOLEARN_GBDT_CTR_FAST_FREQ_OFF`,
+#: `IDN_CTR_FREQ_DEVICE` / `MOJOLEARN_IDN_GBDT_CTR_FREQ_DEVICE_OFF`, and the
+#: `n_rows < 2^24` gate) are gone. The device calcer now divides the
+#: INTEGER bin count (`ctr_calcers.mojo`, `TWeightedBinFreqCalcerGpu`), so
+#: the column is exact at any size; below 2^24 rows it is the same word as
+#: before, and the host column (`TWeightedBinFreqCalcer`,
+#: `gbdt/host/gbdt_oracle_ctr.mojo::_feature_freq_column`) counts the same
+#: way. The CTR columns themselves stay ON THE DEVICE through the border
+#: build and the compressed-index build (`train`'s column loop).
 
 #: lane/apple-fast-sym-feat (2026-10-03): the switches live in
 #: `gbdt/gpu_data/sym_feat_switches.mojo` (FAST + Apple only, default OFF).
@@ -846,6 +815,12 @@ def _build_cindex_from_columns(
     ](),
     dev_cols: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     dev_col_of: List[Int] = List[Int](),
+    # lane cpu4-gbdt: separately held resident columns (`train`'s CTR
+    # columns) and each column's index into them, -1 for none
+    dev_col_bufs: List[DeviceBuffer[DType.float32]] = List[
+        DeviceBuffer[DType.float32]
+    ](),
+    column_dev_slot: List[Int] = List[Int](),
 ) raises -> DeviceBuffer[DType.uint32]:
     """`_build_cindex_from_floats` without the flat pack and without the
     per-feature drain. The flat buffer exists so PERMUTATION-DEPENDENT
@@ -859,6 +834,12 @@ def _build_cindex_from_columns(
     FEATURE, which was ~0.4 s of the 1.69 s cindex bill at 2000
     features. Same kernels, same borders, same writes: bit-identical
     output to the flat-path builder, which the train-mse gate holds.
+
+    RESIDENT COLUMNS (lane cpu4-gbdt): a column `c` with
+    `column_dev_slot[c] >= 0` is already on the device, in
+    `dev_col_bufs[column_dev_slot[c]]` (`n_rows` long; `train`'s CTR columns);
+    it is binarized in place, never staged or uploaded. An empty
+    `column_dev_slot` means no column is resident.
     """
     var n_features = len(borders)
     if len(fold_counts) != n_features:
@@ -920,6 +901,39 @@ def _build_cindex_from_columns(
             ctx.synchronize()
         var hx = hxs[slot].unsafe_ptr()
         var hbo = hbos[slot].unsafe_ptr()
+        var dev_slot = -1
+        if len(column_dev_slot) == n_features:
+            dev_slot = column_dev_slot[f]
+        if dev_slot >= 0:
+            # a RESIDENT column: only its borders are staged; the values
+            # are binarized where they are (a NaN treatment, never set for
+            # a CTR column, substitutes on a device-side copy)
+            hbo.unsafe_store(0, Float32(len(borders[f])))
+            for b in range(len(borders[f])):  # small-loop(borders: one column's borders, at most 255): kernel argument staging, model parameters
+                hbo.unsafe_store(1 + b, borders[f][b])
+            ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
+            if treat != NAN_TREATMENT_AS_IS:
+                ctx.enqueue_copy(
+                    dst_buf=xdevs[slot], src_buf=dev_col_bufs[dev_slot]
+                )
+                _enqueue_nan_substitute(ctx, xdevs[slot], n_rows, sub)
+                ctx.enqueue_function[binarize_float_feature_kernel](
+                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                    xdevs[slot].unsafe_ptr(), Int32(n_rows),
+                    bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
+                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[binarize_float_feature_kernel](
+                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                    dev_col_bufs[dev_slot].unsafe_ptr(), Int32(n_rows),
+                    bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
+                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+                )
+            staged += 1
+            continue
         var src = cps[f]
         # the raw column is a byte move into the pinned slot; a treatment
         # that substitutes NaNs does so on the device after the upload
@@ -1315,9 +1329,11 @@ def train(
     This function does the same split, off
     `IsPermutationDependentCtrType` (`ctr_type.cpp:44-58`), which is what
     their `SplitByPermutationDependence` (`:81`) keys on. The independent
-    half runs on the host (`compute_simple_ctrs`); the dependent half runs
-    on the device (`compute_simple_ctrs_gpu`) over
-    `ctrs_estimation_permutation(n_rows, ctr_estimation_permutation_id)`.
+    half runs on the device (`compute_simple_ctrs_device_resident`); the
+    dependent half runs on the device (`compute_simple_ctrs_gpu_resident`)
+    over permutation `ctr_estimation_permutation_id`'s CTR estimation
+    order, written on the device (`gbdt/ctrs/ctr_order.mojo`; lane
+    cpu4-gbdt). Every CTR column stays on the device.
 
     **`ctr_estimation_permutation_id` defaults to `permutation_count - 1`,
     and it is NOT the identity.** Their permutation 0 IS the
@@ -1769,7 +1785,16 @@ def train(
     #: ESTIMATION permutation's values, which is the set the exported model
     #: is trained on.
     var dep_col_index = List[Int]()
-    var dep_by_perm = List[List[List[Float32]]]()
+    #: lane cpu4-gbdt: every CTR column is a DEVICE buffer, resident from
+    #: its calcer through the border build and the compressed-index build.
+    #: `dep_dev_by_perm[p][k]` is the k-th permutation-dependent column of
+    #: permutation p; `ctr_dev_cols` holds the columns `columns` would have
+    #: (the independent ones and the estimation permutation's dependent
+    #: ones, sharing that permutation's buffers), and `column_dev_slot[c]`
+    #: is column c's index into it, -1 for a raw or one-hot column.
+    var dep_dev_by_perm = List[List[DeviceBuffer[DType.float32]]]()
+    var ctr_dev_cols = List[DeviceBuffer[DType.float32]]()
+    var column_dev_slot = List[Int]()
 
     var configs = cat_params.simple_ctr_configs()
 
@@ -1914,10 +1939,13 @@ def train(
         )
 
     for _ in range(perm_count):  # small-loop(perm_count: permutations): one empty list per permutation, no data
-        dep_by_perm.append(List[List[Float32]]())
+        dep_dev_by_perm.append(List[DeviceBuffer[DType.float32]]())
 
     var binarized_target = List[UInt8]()
-    var ctr_orders = List[List[UInt32]]()
+    #: the binarized target and one CTR estimation order per permutation,
+    #: ON THE DEVICE, written once per fit (lane cpu4-gbdt)
+    var d_btarget = ctx.enqueue_create_buffer[DType.uint8](1)
+    var d_orders = List[DeviceBuffer[DType.uint32]]()
     var target_classes_count = 0
     # DEVIATION 2634 (see `CTR_TARGET_PREP_NEEDS_CAT_2634`): the binarized
     # target, its borders and the CTR orders are read only inside the
@@ -1948,14 +1976,35 @@ def train(
         # because their classifier counts the borders it holds.
         target_classes_count = len(target_borders) + 1
         binarized_target = build_binarized_target(y, target_borders)
+        if len(binarized_target) != n_rows:
+            raise Error(
+                "binarized target has " + String(len(binarized_target))
+                + " entries for " + String(n_rows) + " rows"
+            )
+        # uploaded ONCE (lane cpu4-gbdt); every feature and permutation
+        # copies it device to device
+        d_btarget = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+        var h_bt = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
+        ctx.synchronize()
+        memcpy(
+            dest=h_bt.unsafe_ptr(),
+            src=binarized_target.unsafe_ptr(),
+            count=n_rows,
+        )
+        ctx.enqueue_copy(dst_buf=d_btarget, src_ptr=h_bt.unsafe_ptr())
+        ctx.synchronize()
+        _ = h_bt^  # past the drain (step-33 race class)
         # ONE ORDER PER PERMUTATION, their loop's
         # `ctrsEstimationPermutation.WriteOrder(ctrEstimationOrder)`
-        # (`doc_parallel_dataset_builder.cpp:255`) with the permutation
-        # from `GetPermutation(DataProvider, permutationId)` (`:48`).
-        for p in range(perm_count):
-            ctr_orders.append(
-                ctrs_estimation_permutation(n_rows, p).fill_order()
-            )
+        # (`doc_parallel_dataset_builder.cpp:255`), written ON THE DEVICE
+        # one row per thread (`gbdt/ctrs/ctr_order.mojo`: identity for
+        # permutation 0, a keyed Feistel bijection for the others) instead
+        # of the host Fisher-Yates `fill_order` (lane cpu4-gbdt; bits move,
+        # the host column takes the same order).
+        for p in range(perm_count):  # small-loop(perm_count: permutations): one order launch per permutation, written on the device
+            var d_ord = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+            launch_ctr_estimation_order(ctx, d_ord, n_rows, p)
+            d_orders.append(d_ord^)
 
     # DEVIATION 2634, THE REACH MARKER (see `CTR_TRACE_ENV`). Every term of
     # the gate, plus what the prep produced, so an A/B on this switch can say
@@ -1994,7 +2043,7 @@ def train(
             + " binarized_target_rows="
             + String(len(binarized_target))
             + " ctr_orders="
-            + String(len(ctr_orders))
+            + String(len(d_orders))
         )
 
     # lane/apple-fast-sym-ctr (FAST + Apple only; gbdt/ctrs/fast_prep.mojo,
@@ -2025,7 +2074,7 @@ def train(
             use_fast_dep = (
                 len(dependent_configs) > 0
                 and len(binarized_target) == n_rows
-                and len(ctr_orders) == perm_count
+                and len(d_orders) == perm_count
             )
         var sort_once_ok = False
         comptime if CTR_SORT_ONCE:
@@ -2042,9 +2091,13 @@ def train(
             device_out = use_fast_dep
         comptime if CTR_PREP_SHARED:
             if use_fast_dep:
-                fprep.set_target(ctx, binarized_target)
+                # lane cpu4-gbdt: the fit's resident target and device
+                # orders, shared by handle (no host order, no re-upload)
+                fprep.target = d_btarget
+                fprep.has_target = True
                 for p in range(perm_count):
-                    fprep.ensure_order(ctx, p, ctr_orders[p])
+                    fprep.orders[p] = d_orders[p]
+                    fprep.order_ready[p] = True
         var wants_histogram = False
         for c in range(len(configs)):
             if configs[c].ctr_type == CTR_BORDERS:
@@ -2066,6 +2119,7 @@ def train(
                 column_src_feature.append(f)
                 column_one_hot.append(flagged_one_hot)
                 column_ctr_grid.append(-1)
+                column_dev_slot.append(-1)
                 continue
 
             var unique_values = 0
@@ -2103,6 +2157,7 @@ def train(
                     column_src_feature.append(f)
                     column_one_hot.append(True)
                     column_ctr_grid.append(-1)
+                    column_dev_slot.append(-1)
                     continue
             else:
                 var col = List[Float32]()
@@ -2143,71 +2198,65 @@ def train(
                     column_src_feature.append(-1)
                     column_one_hot.append(True)
                     column_ctr_grid.append(-1)
+                    column_dev_slot.append(-1)
                     continue
 
-            if not host_codes and (
-                (len(independent_configs) > 0 and not sort_once_ok)
-                or (len(dependent_configs) > 0 and not use_fast_dep)
-            ):
-                codes = read_codes(ctx, dcodes, n_rows)
-                host_codes = True
-            if not have_dcodes and (use_fast_dep or sort_once_ok):
+            # lane cpu4-gbdt: every calcer below reads the codes on the
+            # device; the host codes feed only the host table builder
+            if not have_dcodes:
                 dcodes = upload_codes(ctx, codes)
                 have_dcodes = True
+            _ = host_codes
 
             var base_col = len(columns)
-            var ctr_columns = List[List[Float32]]()
-            for _ in range(len(configs)):
-                ctr_columns.append(List[Float32]())
+            # `slot_dev[c]`: config c's resident column, an index into
+            # `ctr_dev_cols` (lane cpu4-gbdt; was a host column per config)
+            var slot_dev = List[Int](length=len(configs), fill=-1)
 
             if len(independent_configs) > 0 and not sort_once_ok:
-                var indep: List[List[Float32]]
-                var indep_on_device = False
-                comptime if CTR_FAST_FREQ:
-                    indep_on_device = (
-                        cat_params.counter_calc_method != COUNTER_CALC_FULL
-                    )
-                if indep_on_device:
-                    indep = compute_simple_ctrs_device(
-                        ctx, codes, unique_values, independent_configs
-                    )
-                else:
-                    indep = compute_simple_ctrs(
-                        codes,
-                        unique_values,
-                        independent_configs,
-                        List[UInt8](),
-                        cat_params.counter_calc_method == COUNTER_CALC_FULL,
-                    )
-                for c in range(len(independent_slots)):
-                    ctr_columns[independent_slots[c]] = indep[c].copy()
+                # the device FeatureFreq writer, SkipTest and Full alike
+                # (lane cpu4-gbdt; the host calcer is the host column only)
+                var indep = compute_simple_ctrs_device_resident(
+                    ctx, dcodes, n_rows, unique_values, independent_configs
+                )
+                for c in range(len(independent_slots)):  # small-loop(independent_slots: CTR config slots): one device column handle per config, no element copy
+                    slot_dev[independent_slots[c]] = len(ctr_dev_cols)
+                    ctr_dev_cols.append(indep[c])
 
             if len(dependent_configs) > 0:
                 if use_fast_dep:
                     for p in range(perm_count):
                         comptime if not CTR_PREP_SHARED:
                             # one context per (feature, permutation): the
-                            # uploads and scratch main pays per call
+                            # scratch main pays per call; the target and
+                            # order are the fit's resident ones
                             fprep = CtrPrepFast(ctx, n_rows, perm_count)
-                            fprep.set_target(ctx, binarized_target)
-                            fprep.ensure_order(ctx, p, ctr_orders[p])
+                            fprep.target = d_btarget
+                            fprep.has_target = True
+                            fprep.orders[p] = d_orders[p]
+                            fprep.order_ready[p] = True
                         var got = fast_dependent_ctrs(
                             ctx, fprep, p, dcodes, unique_values,
                             dependent_configs, device_out,
                         )
-                        for c in range(len(dependent_slots)):
+                        for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one device column handle per config
+                            var col_dev: DeviceBuffer[DType.float32]
                             if device_out:
                                 symctr_dep_dev[p].append(
                                     len(symctr_dev_cols)
                                 )
                                 symctr_dev_cols.append(got.dev[c])
-                                dep_by_perm[p].append(List[Float32]())
+                                col_dev = got.dev[c]
                             else:
-                                dep_by_perm[p].append(got.host[c].copy())
-                                if p == est_perm:
-                                    ctr_columns[dependent_slots[c]] = (
-                                        got.host[c].copy()
-                                    )
+                                col_dev = _upload_ctr_column(
+                                    ctx, got.host[c], n_rows
+                                )
+                            if p == est_perm:
+                                slot_dev[dependent_slots[c]] = len(
+                                    ctr_dev_cols
+                                )
+                                ctr_dev_cols.append(col_dev)
+                            dep_dev_by_perm[p].append(col_dev)
                     if device_out:
                         # a dependent column's grid is permutation 0's
                         # (`GetOrComputeBorders`, see
@@ -2231,21 +2280,29 @@ def train(
                             symctr_pre_folds.append(len(bs))
                             symctr_pre_borders.append(bs^)
                 else:
+                    if len(d_orders) != perm_count:
+                        raise Error(
+                            "a Borders ctr is a statistic OF the target and"
+                            " cannot be computed without its grid and the"
+                            " permutations' orders"
+                        )
                     for p in range(perm_count):
-                        var dep = compute_simple_ctrs_gpu(
+                        var dep = compute_simple_ctrs_gpu_resident(
                             ctx,
-                            codes,
+                            dcodes,
+                            n_rows,
                             unique_values,
                             dependent_configs,
-                            binarized_target,
-                            ctr_orders[p],
+                            d_btarget,
+                            d_orders[p],
                         )
-                        for c in range(len(dependent_slots)):
-                            dep_by_perm[p].append(dep[c].copy())
+                        for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one device column handle per config
                             if p == est_perm:
-                                ctr_columns[dependent_slots[c]] = (
-                                    dep[c].copy()
+                                slot_dev[dependent_slots[c]] = len(
+                                    ctr_dev_cols
                                 )
+                                ctr_dev_cols.append(dep[c])
+                            dep_dev_by_perm[p].append(dep[c])
 
             if sort_once_ok:
                 # FeatureFreq off the LAST permutation's sorted order
@@ -2254,14 +2311,19 @@ def train(
                     ctx, fprep, unique_values, independent_configs,
                     device_out,
                 )
-                for c in range(len(independent_slots)):
-                    ctr_columns[independent_slots[c]] = gotf.host[c].copy()
+                for c in range(len(independent_slots)):  # small-loop(independent_slots: CTR config slots): one device column handle per config
+                    var fcol: DeviceBuffer[DType.float32]
                     if device_out:
                         symctr_shared_col.append(
                             base_col + independent_slots[c]
                         )
                         symctr_shared_dev.append(len(symctr_dev_cols))
                         symctr_dev_cols.append(gotf.dev[c])
+                        fcol = gotf.dev[c]
+                    else:
+                        fcol = _upload_ctr_column(ctx, gotf.host[c], n_rows)
+                    slot_dev[independent_slots[c]] = len(ctr_dev_cols)
+                    ctr_dev_cols.append(fcol)
 
             var tables = List[TCtrValueTable]()
             comptime if CTR_ONEHOT_DEVICE:
@@ -2270,7 +2332,8 @@ def train(
                     target_classes_count >= 1
                 ):
                     if not fprep.has_target:
-                        fprep.set_target(ctx, binarized_target)
+                        fprep.target = d_btarget
+                        fprep.has_target = True
                     hist = device_target_histogram(
                         ctx, dcodes, n_rows, unique_values, fprep.target,
                         target_classes_count,
@@ -2299,8 +2362,9 @@ def train(
                 ctr_tables.append(tables[c].copy())
             for c in range(len(dependent_slots)):
                 dep_col_index.append(base_col + dependent_slots[c])
-            for c in range(len(ctr_columns)):
-                columns.append(ctr_columns[c].copy())
+            for c in range(len(configs)):  # small-loop(configs: CTR config slots): plan entries per config; the column itself stays on the device
+                columns.append(List[Float32]())
+                column_dev_slot.append(slot_dev[c])
                 column_src_feature.append(-1)
                 column_one_hot.append(False)
                 ctr_grids.append(cat_params.ctr_binarization_for(configs[c]))
@@ -2327,21 +2391,19 @@ def train(
             column_src_feature.append(f)
             column_one_hot.append(flagged_one_hot)
             column_ctr_grid.append(-1)
+            column_dev_slot.append(-1)
             continue
-
-        var col = List[Float32]()
-        col.resize(n_rows, Float32(0.0))
-        memcpy(
-            dest=col.unsafe_ptr(),
-            src=x_src + f * n_rows,
-            count=n_rows,
-        )
 
         # dense codes: cardinality is max + 1
         # validated, converted, maxed and density-checked on the device
-        # (`gbdt/data/cat_code_scan.mojo`)
+        # (`gbdt/data/cat_code_scan.mojo`); the codes STAY on the device in
+        # `d_codes` for the CTR calcers (lane cpu4-gbdt), and the host copy
+        # in `codes` feeds the apply-time `build_ctr_tables` only
         var codes = List[UInt32]()
-        var cscan = cat_column_codes(ctx, x_src + f * n_rows, n_rows, f, codes)
+        var d_codes = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        var cscan = cat_column_codes_resident(
+            ctx, x_src + f * n_rows, n_rows, f, codes, d_codes
+        )
         var maxc = cscan.max_code
         var unique_values = maxc + 1
         if unique_values <= 1:
@@ -2361,69 +2423,59 @@ def train(
 
         if unique_values <= cat_params.one_hot_max_size:
             # `UseForOneHotEncoding` (`binarizations_manager.cpp:106-109`):
-            # one-hot features never get CTRs.
-            columns.append(col^)
-            column_src_feature.append(-1)
+            # one-hot features never get CTRs. The column is the caller's
+            # values, read in place like a raw column (lane cpu4-gbdt; was a
+            # host copy of the same floats).
+            columns.append(List[Float32]())
+            column_src_feature.append(f)
             column_one_hot.append(True)
             column_ctr_grid.append(-1)
+            column_dev_slot.append(-1)
             continue
 
-        var ctr_columns = List[List[Float32]]()
-        for _ in range(len(configs)):  # small-loop(configs: CTR configs): one empty column slot per config, no data
-            ctr_columns.append(List[Float32]())
+        # `slot_dev[c]`: config c's column, as an index into `ctr_dev_cols`
+        var slot_dev = List[Int](length=len(configs), fill=-1)
 
         if len(independent_configs) > 0:
             # their `writeCtrs(..., permutationIndependent)` (`:229`),
-            # over the identity `ctrEstimationOrder` (`:206`)
-            var indep: List[List[Float32]]
-            var indep_on_device = False
-            comptime if CTR_FAST_FREQ:
-                indep_on_device = (
-                    cat_params.counter_calc_method != COUNTER_CALC_FULL
-                )
-            comptime if IDN_CTR_FREQ_DEVICE:
-                indep_on_device = (
-                    cat_params.counter_calc_method != COUNTER_CALC_FULL
-                    and n_rows < (1 << 24)
-                )
-            if indep_on_device:
-                indep = compute_simple_ctrs_device(
-                    ctx, codes, unique_values, independent_configs
-                )
-            else:
-                indep = compute_simple_ctrs(
-                    codes,
-                    unique_values,
-                    independent_configs,
-                    List[UInt8](),
-                    cat_params.counter_calc_method == COUNTER_CALC_FULL,
-                )
-            # moved, not copied (lane/cpu3-gbdt-b): no element is touched
-            for c in range(len(independent_slots)):  # small-loop(independent_slots: CTR config slots): moves one column object per config, no element copy
-                swap(ctr_columns[independent_slots[c]], indep[c])
+            # over the identity `ctrEstimationOrder` (`:206`), on the
+            # device for SkipTest and Full alike (see the note above
+            # `gbdt.gpu_util.kernel.bootstrap`'s import)
+            var indep = compute_simple_ctrs_device_resident(
+                ctx, d_codes, n_rows, unique_values, independent_configs
+            )
+            for c in range(len(independent_slots)):  # small-loop(independent_slots: CTR config slots): one device column handle per config, no element copy
+                slot_dev[independent_slots[c]] = len(ctr_dev_cols)
+                ctr_dev_cols.append(indep[c])
 
         if len(dependent_configs) > 0:
             # their `writeCtrs(..., permutationDependent)` (`:257`), ONCE
             # PER PERMUTATION, over that permutation's order written at
-            # `:255`. `columns` takes the estimation permutation's values;
-            # the rest are kept beside it for the boosting loop, which
-            # estimates leaf values separately on each.
+            # `:255`. The model column takes the estimation permutation's
+            # buffer (shared, not copied); every permutation's set stays
+            # on the device for its own compressed index.
+            if len(d_orders) != perm_count:
+                raise Error(
+                    "a Borders ctr is a statistic OF the target and cannot"
+                    " be computed without its grid and the permutations'"
+                    " orders"
+                )
             for p in range(perm_count):
-                var dep = compute_simple_ctrs_gpu(
+                var dep = compute_simple_ctrs_gpu_resident(
                     ctx,
-                    codes,
+                    d_codes,
+                    n_rows,
                     unique_values,
                     dependent_configs,
-                    binarized_target,
-                    ctr_orders[p],
+                    d_btarget,
+                    d_orders[p],
                 )
-                for c in range(len(dependent_slots)):
+                for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one device column handle per config, no element copy
                     if p == est_perm:
-                        ctr_columns[dependent_slots[c]] = dep[c].copy()
-                    # moved, not copied (lane/cpu3-gbdt-b)
-                    var moved = List[Float32]()
-                    swap(moved, dep[c])
-                    dep_by_perm[p].append(moved^)
+                        slot_dev[dependent_slots[c]] = len(ctr_dev_cols)
+                        ctr_dev_cols.append(dep[c])
+                    dep_dev_by_perm[p].append(dep[c])
+        _ = d_codes^
         # the APPLY-TIME half of the same statistic: their
         # `CalcFinalCtrs` writes a `TCtrValueTable` beside every CTR the
         # model uses, because the learn column cannot score a new row.
@@ -2446,10 +2498,11 @@ def train(
         var base_col = len(columns)
         for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one column index per config
             dep_col_index.append(base_col + dependent_slots[c])
-        for c in range(len(ctr_columns)):  # small-loop(ctr_columns: CTR config slots): moves one column object and appends plan entries per config, no element copy
-            var moved_col = List[Float32]()
-            swap(moved_col, ctr_columns[c])
-            columns.append(moved_col^)
+        for c in range(len(configs)):  # small-loop(configs: CTR config slots): appends plan entries per config; the column itself stays on the device
+            # the CTR column lives on the device (`ctr_dev_cols`); its host
+            # slot stays empty and its read pointer is never dereferenced
+            columns.append(List[Float32]())
+            column_dev_slot.append(slot_dev[c])
             column_src_feature.append(-1)
             column_one_hot.append(False)
             ctr_grids.append(cat_params.ctr_binarization_for(configs[c]))
@@ -2469,7 +2522,10 @@ def train(
 
     # DEVIATION 2550: one read pointer per column, into `x_src` for a
     # borrowed column and into `columns` for an owned one. `columns` takes
-    # no further appends, so its element buffers stay put.
+    # no further appends, so its element buffers stay put. A CTR column's
+    # host slot is empty (its values are `ctr_dev_cols`' buffer) and its
+    # pointer is never read: every reader takes the device buffer through
+    # `column_dev_slot` first.
     var column_ptrs = List[MutPointer[Float32, MutUntrackedOrigin]](
         capacity=n_columns
     )
@@ -2532,10 +2588,12 @@ def train(
             symctr_pre_f[symctr_pre_col[k]] = symctr_pre_folds[k]
     var grid = _quantize_training_columns(
         ctx, columns, column_one_hot, column_ctr_grid,
-        dep_ordinal_of_column, dep_by_perm, ctr_grids, n_rows,
+        dep_ordinal_of_column, dep_dev_by_perm, ctr_grids, n_rows,
         border_count, border_build_max_samples, random_seed, nan_mode,
         column_ptrs=column_ptrs,
         border_type=border_type_code,
+        ctr_dev_cols=ctr_dev_cols,
+        column_dev_slot=column_dev_slot,
         dev_cols=qd_cols,
         pre_has=symctr_pre_has,
         pre_borders=symctr_pre_b,
@@ -2589,62 +2647,40 @@ def train(
                     column_ptrs=column_ptrs,
                     dev_cols=qd_cols,
                     dev_col_of=qd_col_of,
+                    dev_col_bufs=ctr_dev_cols,
+                    column_dev_slot=column_dev_slot,
                 )
             )
             continue
-        comptime if CTR_INDEX_FUSED:
-            # lane/apple-fast-sym-ctr: the CTR columns never left the
-            # device; binarize them in place, the rest as the pointer path
-            if len(symctr_dev_cols) > 0:
-                var slot_p = List[Int]()
-                for _ in range(n_columns):
-                    slot_p.append(-1)
-                for k in range(len(symctr_shared_col)):
-                    slot_p[symctr_shared_col[k]] = symctr_shared_dev[k]
-                if len(symctr_dep_dev[p]) != len(dep_col_index):
-                    raise Error(
-                        "CTR_INDEX_FUSED: permutation " + String(p)
-                        + " has " + String(len(symctr_dep_dev[p]))
-                        + " device columns for "
-                        + String(len(dep_col_index))
-                        + " permutation-dependent columns"
-                    )
-                for k in range(len(dep_col_index)):
-                    slot_p[dep_col_index[k]] = symctr_dep_dev[p][k]
-                cindexes.append(
-                    _build_cindex_fused(
-                        ctx, n_rows, borders, fold_counts,
-                        column_nan_treatment, column_ptrs, symctr_dev_cols,
-                        slot_p,
-                    )
-                )
-                continue
-        # lane/cpu3-gbdt-b: the dependent columns are read IN PLACE from this
-        # permutation's CTR lists, every other column from `column_ptrs`,
-        # through the same in-place builder as above (its docstring: same
-        # kernels, same borders, same writes, so the same bits as the flat
-        # pack this replaces, without the host copy of every column)
-        var perm_ptrs = List[MutPointer[Float32, MutUntrackedOrigin]](
-            capacity=n_columns
-        )
-        for c in range(n_columns):  # small-loop(n_columns: column pointers): one pointer per column, no data read
+        # the dependent columns are read IN PLACE from this permutation's
+        # RESIDENT CTR buffers (lane cpu4-gbdt), the other CTR columns from
+        # `ctr_dev_cols`, every raw and one-hot column from `column_ptrs`
+        # (or the resident float matrix under GBDT_QUANT_DEVICE), through
+        # the same builder as above (same kernels, same borders, same
+        # writes, so the same bits, with no column crossing the bus). This
+        # subsumes lane/apple-fast-sym-ctr's CTR_INDEX_FUSED arm: its walk
+        # now hands its device columns to the same resident lists.
+        var perm_dev = List[DeviceBuffer[DType.float32]]()
+        var perm_slot = List[Int](length=n_columns, fill=-1)
+        for c in range(n_columns):  # small-loop(n_columns: column plan entries): one device buffer handle per CTR column, no element read
             var ord = dep_ordinal_of_column[c]
             if ord >= 0:
-                perm_ptrs.append(
-                    rebind[MutPointer[Float32, MutUntrackedOrigin]](
-                        dep_by_perm[p][ord].unsafe_ptr()
-                    )
-                )
-            else:
-                perm_ptrs.append(column_ptrs[c])
+                perm_slot[c] = len(perm_dev)
+                perm_dev.append(dep_dev_by_perm[p][ord])
+            elif column_dev_slot[c] >= 0:
+                perm_slot[c] = len(perm_dev)
+                perm_dev.append(ctr_dev_cols[column_dev_slot[c]])
         cindexes.append(
             _build_cindex_from_columns(
                 ctx, columns, n_rows, borders, fold_counts,
                 column_nan_treatment,
-                column_ptrs=perm_ptrs,
+                column_ptrs=column_ptrs,
+                dev_cols=qd_cols,
+                dev_col_of=qd_col_of,
+                dev_col_bufs=perm_dev,
+                column_dev_slot=perm_slot,
             )
         )
-        _ = len(dep_by_perm)
     var cindex = cindexes[est_perm].copy()
     # DEVIATION 2550: `column_ptrs` points into `columns`; hold both to here
     _ = len(columns)
@@ -3184,22 +3220,49 @@ def train(
     )
 
 
+def _upload_ctr_column(
+    ctx: DeviceContext, col: List[Float32], n_rows: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """A host CTR column onto the device, one bulk copy (lane cpu4-gbdt:
+    the FAST + Apple sym-ctr walk's host-returning drivers feed the same
+    resident column lists as every other route)."""
+    if len(col) != n_rows:
+        raise Error(
+            "CTR column has " + String(len(col)) + " values for "
+            + String(n_rows) + " rows"
+        )
+    var h = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    ctx.synchronize()
+    memcpy(dest=h.unsafe_ptr(), src=col.unsafe_ptr(), count=n_rows)
+    var d = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+    _ = h^  # past the drain (step-33 race class)
+    return d^
+
+
 def _ctr_borders_device(
     ctx: DeviceContext,
-    col: MutPointer[Float32, MutUntrackedOrigin],
+    col: DeviceBuffer[DType.float32],
     n_rows: Int,
     description: TBinarizationOptions,
 ) raises -> List[Float32]:
     """`IDN_CTR_BORDERS_DEVICE` (`gbdt/ctrs/ctr_binarization.mojo`): one
     CTR column's grid from `device_float_borders` over every row at NaN mode
     Forbidden, with `compute_ctr_borders`' constant-feature 0.5. The host
-    column's twin is `gbdt/host/gbdt_oracle_ctr.mojo::_ctr_borders_host_grid`."""
-    var one = List[MutPointer[Float32, MutUntrackedOrigin]](capacity=1)
+    column's twin is `gbdt/host/gbdt_oracle_ctr.mojo::_ctr_borders_host_grid`.
+
+    lane cpu4-gbdt: the column is RESIDENT (`train`'s CTR buffers), read
+    device to device by `device_float_borders`' `dev_col_bufs` input; this is
+    the CTR grid's only route in the GPU fit."""
+    var one = List[DeviceBuffer[DType.float32]](capacity=1)
     one.append(col)
     var got = device_float_borders(
-        ctx, one, n_rows, n_rows, description.border_count,
+        ctx, List[MutPointer[Float32, MutUntrackedOrigin]](), n_rows, n_rows,
+        description.border_count,
         NAN_MODE_FORBIDDEN, generate_seed_for_borders(UInt64(0)),
         ctr_border_type_code(description),
+        dev_col_bufs=one,
     )
     var grids = got[0].copy()
     if len(grids) != 1:
@@ -3221,7 +3284,7 @@ def _quantize_training_columns(
     column_one_hot: List[Bool],
     column_ctr_grid: List[Int],
     dep_ordinal_of_column: List[Int],
-    dep_by_perm: List[List[List[Float32]]],
+    dep_dev_by_perm: List[List[DeviceBuffer[DType.float32]]],
     ctr_grids: List[TBinarizationOptions],
     n_rows: Int,
     border_count: Int,
@@ -3234,6 +3297,13 @@ def _quantize_training_columns(
     # `feature_border_type` (`binarization.mojo` BORDER_TYPE_*), for the
     # float columns only: the CTR columns keep their own grids
     border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
+    # lane cpu4-gbdt: the RESIDENT CTR columns (`train`) and each column's
+    # index into them (-1 for a raw or one-hot column); empty when there
+    # is no CTR column
+    ctr_dev_cols: List[DeviceBuffer[DType.float32]] = List[
+        DeviceBuffer[DType.float32]
+    ](),
+    column_dev_slot: List[Int] = List[Int](),
     dev_cols: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     # lane/apple-fast-sym-ctr: grids `train`'s fast categorical walk already
     # built (one-hot from the device cardinality, dependent CTR columns
@@ -3249,7 +3319,9 @@ def _quantize_training_columns(
     the ordinary training path. Prepared pools freeze this result explicitly.
 
     DEVIATION 2550: raw columns are read through `column_ptrs` (empty means
-    every column is owned by `columns`). CTR columns are always owned.
+    every column is owned by `columns`). CTR columns are device buffers
+    (`dep_dev_by_perm`, `ctr_dev_cols`; lane cpu4-gbdt) and their grids
+    are built on the device from them.
     """
     var n_columns = len(columns)
     var cps = _resolve_column_ptrs(columns, column_ptrs)
@@ -3365,20 +3437,11 @@ def _quantize_training_columns(
             # written first -- and their loop starts at 0
             # (`doc_parallel_dataset_builder.cpp:250`). The grid is a
             # property of the feature, not of the permutation.
-            var bs: List[Float32]
-            comptime if IDN_CTR_BORDERS_DEVICE:
-                bs = _ctr_borders_device(
-                    ctx,
-                    rebind[MutPointer[Float32, MutUntrackedOrigin]](
-                        dep_by_perm[0][dep_ordinal_of_column[f]].unsafe_ptr()
-                    ),
-                    n_rows, ctr_grids[column_ctr_grid[f]],
-                )
-            else:
-                bs = compute_ctr_borders(
-                    dep_by_perm[0][dep_ordinal_of_column[f]],
-                    ctr_grids[column_ctr_grid[f]],
-                )
+            var bs = _ctr_borders_device(
+                ctx,
+                dep_dev_by_perm[0][dep_ordinal_of_column[f]],
+                n_rows, ctr_grids[column_ctr_grid[f]],
+            )
             fold_counts.append(len(bs))
             borders.append(bs^)
         elif column_ctr_grid[f] >= 0:
@@ -3391,15 +3454,15 @@ def _quantize_training_columns(
             # for Borders). Reading `border_count` here instead would be
             # the numeric GreedyLogSum grid on a CTR column, which is what
             # `tools/ctr_prep.py` used to do.
-            var bs: List[Float32]
-            comptime if IDN_CTR_BORDERS_DEVICE:
-                bs = _ctr_borders_device(
-                    ctx, cps[f], n_rows, ctr_grids[column_ctr_grid[f]],
+            if len(column_dev_slot) != n_columns or column_dev_slot[f] < 0:
+                raise Error(
+                    "CTR column " + String(f) + " has no resident device"
+                    " buffer"
                 )
-            else:
-                bs = compute_ctr_borders(columns[f], ctr_grids[
-                    column_ctr_grid[f]
-                ])
+            var bs = _ctr_borders_device(
+                ctx, ctr_dev_cols[column_dev_slot[f]], n_rows,
+                ctr_grids[column_ctr_grid[f]],
+            )
             fold_counts.append(len(bs))
             borders.append(bs^)
         else:
@@ -3737,10 +3800,10 @@ def predict_multi_linked_into(
     x_colmajor: List[Float32],
     n_rows: Int,
     link_mode: Int,
-    out: MutPointer[Float32, MutUntrackedOrigin],
+    dst: MutPointer[Float32, MutUntrackedOrigin],
 ) raises -> Int:
     """lane/cpu3-gbdt-b: `predict_multi_floats` with the row-major reshape
-    and the probability link ON THE DEVICE, written straight into `out`.
+    and the probability link ON THE DEVICE, written straight into `dst`.
     `link_mode` is `LINK_RAW` (`approx_dim` wide, the reshape the host loop
     did), `LINK_SOFTMAX` (`approx_dim + 1` wide, `multiclass_probabilities`'
     words) or `LINK_SIGMOID` (`approx_dim` wide, `one_vs_all_probabilities`'
@@ -3798,7 +3861,7 @@ def predict_multi_linked_into(
         Int32(0), Int32(0),
         grid_dim=link_blocks, block_dim=LINK_BLOCK,
     )
-    ctx.enqueue_copy(dst_ptr=out, src_buf=d_out)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=d_out)
     ctx.synchronize()
     # past the drain (step-33 race class)
     _ = cursor^

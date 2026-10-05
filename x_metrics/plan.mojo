@@ -17,6 +17,13 @@ group_sort wrote) runs its sequential unit unchanged.
 from x_metrics.common import IP, STAGE_INTS, PARAMS, LEAF
 from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM
 from x_metrics.cls_epi import OP_CLS_EPI
+from x_metrics.curve_out import (
+    OP_CURVE_OUT, OP_CO_KEEP, OP_CO_EMIT, OP_CO_DET, CO_DET, OP_AUC_XY, OP_AX_CHUNK, OP_AX_FINAL, AX_REC,
+)
+from x_metrics.contingency import (
+    OP_CONT_STATS, OP_CT_CELL, OP_CT_ROW, OP_CT_COL, OP_CT_ISUM, OP_CT_PAIRS, OP_CT_ENT, OP_FF_CHUNK, OP_FF_FIN,
+    OP_MI_CELL, OP_EMI_CELL, CT_CH, CT_IREC, FF_REC, FF_ENT, FF_MI, FF_SUM,
+)
 
 comptime OP_GROUP_SORT = 0
 comptime OP_GROUP_SUM = 1
@@ -105,7 +112,7 @@ def is_user_op(op: Int) -> Bool:
     label layout units onehot, rep_rows and pair_cols."""
     return ((op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64 or op == OP_STRAT_CODES
             or op == OP_CURVE_FOLD or op == OP_ONEHOT or op == OP_REP_ROWS or op == OP_PAIR_COLS
-            or (op >= OP_CLS_EPI and op <= OP_LAST_TAIL))
+            or (op >= OP_CLS_EPI and op <= OP_LAST_TAIL) or op == OP_CURVE_OUT or op == OP_AUC_XY or op == OP_CONT_STATS)
 #: the chunk length the counting sort aims for, and the bound on its
 #: (groups x chunks) count table
 comptime CS_CHUNK = 256
@@ -199,6 +206,89 @@ def _plan_keep(mut pl: Plan, r: IP, n: Int, total: Int):
             pl.emit(OP_CK_OFF, total, [S, C, _a(r, 13)])
             pl.emit(OP_CK_FILL, C * total, [n, _a(r, 10), _a(r, 9), S, C, CK_CHUNK,
                                             _a(r, 6), _a(r, 7), _a(r, 8), CF, n * total])
+
+
+def _plan_curve_out(mut pl: Plan, r: IP, total: Int) raises:
+    """curve_out (lane cpu4-python, x_metrics/curve_out.mojo): q = [kind, n,
+    FPS, TPS, THR, CNT, DROP, OUT, LEN], one problem. DROP (precision-recall
+    and DET): the drop rule's flags (co_keep), then the curve compaction
+    (ck_cnt, ck_off, ck_fill) into scratch; DET: its slice (co_det); then
+    one co_emit unit per output index."""
+    var kind = _a(r, 0)
+    var n = _a(r, 1)
+    if total != 1 or n <= 0:
+        raise Error("x_metrics: curve_out takes one problem of at least one point")
+    var fps = _a(r, 2)
+    var tps = _a(r, 3)
+    var thr = _a(r, 4)
+    var cnt = _a(r, 5)
+    var C = (n + CK_CHUNK - 1) // CK_CHUNK
+    if not pl.fits(n + C + 3 * n + 2):
+        raise Error("x_metrics: curve_out exceeds the arena bound")
+    if _a(r, 6) != 0:
+        var KEEP = pl.alloc(n)
+        var S = pl.alloc(C)
+        var CF = pl.alloc(3 * n)
+        var CM = pl.alloc(1)
+        pl.emit(OP_CO_KEEP, n, [n, tps, cnt, KEEP])
+        pl.emit(OP_CK_CNT, C, [n, KEEP, cnt, S, C, CK_CHUNK])
+        pl.emit(OP_CK_OFF, 1, [S, C, CM])
+        pl.emit(OP_CK_FILL, C, [n, KEEP, cnt, S, C, CK_CHUNK, fps, tps, thr, CF, n])
+        fps = CF
+        tps = CF + n
+        thr = CF + 2 * n
+        cnt = CM
+    var B = pl.alloc(1)
+    if kind == CO_DET:
+        pl.emit(OP_CO_DET, 1, [fps, tps, cnt, _a(r, 8), B])
+    pl.emit(OP_CO_EMIT, n + 1, [kind, n, fps, tps, thr, cnt, _a(r, 7), _a(r, 8), B])
+
+
+def _plan_ff(mut pl: Plan, src: Int, m: Int, out: Int, mode: Int, x: Int):
+    """The float-float fold of m records at src (x_metrics/contingency.mojo
+    ff_chunk, ff_fin) into the binary64 at out."""
+    var NC = (m + CT_CH - 1) // CT_CH
+    var S = pl.alloc(FF_REC * NC)
+    if NC > 0:
+        pl.emit(OP_FF_CHUNK, NC, [src, m, S, CT_CH, NC])
+    pl.emit(OP_FF_FIN, 1, [S, NC, out, mode, x])
+
+
+def _plan_cont_stats(mut pl: Plan, r: IP, total: Int) raises:
+    """cont_stats (lane cpu4-python, x_metrics/contingency.mojo): q = [OFF,
+    ka, kb, kk, EPS, C, F, R, K, P, E, MI, EMI, n], one problem."""
+    var ka = _a(r, 1)
+    var kb = _a(r, 2)
+    var n = _a(r, 13)
+    if total != 1 or ka < 0 or kb < 0 or _a(r, 3) < ka or _a(r, 3) < kb:
+        raise Error("x_metrics: cont_stats sizes")
+    var m = ka * kb
+    var NI = (max(max(ka, kb), 1) + CT_CH - 1) // CT_CH
+    if not pl.fits(2 * ka + CT_IREC * NI + FF_REC * (ka + kb + 2 * m) + 4 * FF_REC * (NI + m // CT_CH + 4)):
+        raise Error("x_metrics: cont_stats exceeds the arena bound")
+    var C = _a(r, 5)
+    var R = _a(r, 7)
+    var K = _a(r, 8)
+    var SQ = pl.alloc(2 * ka)
+    pl.emit(OP_CT_CELL, m, [_a(r, 0), kb, _a(r, 3), _a(r, 4), C, _a(r, 6), ka])
+    pl.emit(OP_CT_ROW, ka, [C, ka, kb, R, SQ])
+    pl.emit(OP_CT_COL, kb, [C, ka, kb, K])
+    var S = pl.alloc(CT_IREC * NI)
+    pl.emit(OP_CT_ISUM, NI, [R, K, SQ, ka, kb, S, CT_CH, NI])
+    pl.emit(OP_CT_PAIRS, 1, [S, NI, n, _a(r, 9)])
+    var T = pl.alloc(FF_REC * (ka + kb))
+    pl.emit(OP_CT_ENT, ka + kb, [R, K, ka, kb, n, T])
+    var E = _a(r, 10)
+    _plan_ff(pl, T, ka, E, FF_ENT, n)
+    _plan_ff(pl, T + FF_REC * ka, kb, E + 2, FF_ENT, n)
+    if _a(r, 11) >= 0:
+        var TM = pl.alloc(FF_REC * m)
+        pl.emit(OP_MI_CELL, m, [C, R, K, ka, kb, n, TM])
+        _plan_ff(pl, TM, m, _a(r, 11), FF_MI, 1 if (ka == 1 or kb == 1) else 0)
+    if _a(r, 12) >= 0:
+        var TE = pl.alloc(FF_REC * m)
+        pl.emit(OP_EMI_CELL, m, [R, K, ka, kb, n, TE])
+        _plan_ff(pl, TE, m, _a(r, 12), FF_SUM, 0)
 
 
 def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
@@ -353,6 +443,22 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             pl.emit(OP_FR_CNT, K * C, [n, K, _a(r, 2), S, C, FR_CHUNK])
             pl.emit(OP_FR_OFF, K, [S, C, _a(r, 5)])
             pl.emit(OP_FR_FILL, K * C, [n, K, _a(r, 2), S, C, FR_CHUNK, _a(r, 4), _a(r, 5)])
+        elif op == OP_CURVE_OUT:
+            _plan_curve_out(pl, r, total)
+        elif op == OP_CONT_STATS:
+            _plan_cont_stats(pl, r, total)
+        elif op == OP_AUC_XY:
+            # q = [n, X, Y, OUT, CH] (lane cpu4-python, x_metrics/curve_out.mojo)
+            var n = _a(r, 0)
+            var CH = _a(r, 4)
+            if total != 1 or n < 2 or CH < 1:
+                raise Error("x_metrics: auc_xy takes one problem of at least 2 points")
+            var C = (n + CH - 1) // CH
+            if not pl.fits(AX_REC * C):
+                raise Error("x_metrics: auc_xy exceeds the arena bound")
+            var S = pl.alloc(AX_REC * C)
+            pl.emit(OP_AX_CHUNK, C, [n, _a(r, 1), _a(r, 2), S, C, CH])
+            pl.emit(OP_AX_FINAL, 1, [S, C, _a(r, 3)])
         else:
             pl.copy_stage(q, s)
     return pl^

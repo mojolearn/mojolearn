@@ -291,10 +291,9 @@ def _oracle_eval_weighted(
     for leaf in range(len(sizes)):
         gradient.append(Float64(_partition_stat(stats, n_rows, 0, offsets[leaf], sizes[leaf])))
         cached_der2.append(Float64(_partition_stat(stats, n_rows, 1, offsets[leaf], sizes[leaf])) + lambda_reg)
-    var fv32 = Float32(0.0)
-    for b in range(blocks):
-        fv32 += fv[b]
-    value = Float64(fv32)
+    # lane cpu4-gbdt: the oracle's value fold is the device's
+    # `deterministic_sum_lanes_kernel[1]` order (was an ascending chain)
+    value = Float64(_deterministic_sum_lanes(fv, 1, blocks)[0])
 
 
 def gbdt_pointwise_host_fit(

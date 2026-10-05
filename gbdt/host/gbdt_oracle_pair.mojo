@@ -35,7 +35,12 @@ walker's lambda in `gbdt_oracle_losses.mojo`, so every PairLogit leaf moves.
 from std.math import isfinite
 
 from checks.numerics import ftz, identical_exp, identical_log, identical_mul
-from gbdt.host.gbdt_oracle import GBDT_MSE_BLOCK, _halving_fold, _partition_stat
+from gbdt.host.gbdt_oracle import (
+    GBDT_MSE_BLOCK,
+    _deterministic_sum_lanes,
+    _halving_fold,
+    _partition_stat,
+)
 from gbdt.data.pairs import MAX_PAIR_COUNT_ON_GPU, PairPrep, prepare_pairs
 
 
@@ -416,7 +421,6 @@ def pair_logit_eval(
             Float64(_partition_stat(stats, n_rows, 1, offsets_leaf[leaf], sizes_leaf[leaf]))
             + lambda_reg
         )
-    var fv32 = Float32(0.0)
-    for b in range(pairs.blocks()):
-        fv32 += fv[b]
-    value = Float64(fv32)
+    # lane cpu4-gbdt: the oracle's value fold is the device's
+    # `deterministic_sum_lanes_kernel[1]` order (was an ascending chain)
+    value = Float64(_deterministic_sum_lanes(fv, 1, pairs.blocks())[0])

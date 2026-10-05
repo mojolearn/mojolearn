@@ -119,7 +119,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.os import getenv
 from std.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite, sqrt
-from std.memory import bitcast, stack_allocation
+from std.memory import bitcast, memcpy, stack_allocation
+from gbdt.methods.leaves_estimation.device_walker import enqueue_scale_in_place
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
@@ -308,9 +309,9 @@ def _ord_std_scale_kernel(
     mult_bits: UInt64,
     random_strength: Float32,
     row_count: Int32,
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
 ):
-    """IDN_ORD_STD_SCALE_DEVICE: `out[0]` = the score std dev, `out[1]` =
+    """IDN_ORD_STD_SCALE_DEVICE: `dst[0]` = the score std dev, `dst[1]` =
     the fixed-point scale. One thread; control plane, not compute.
 
     std (`has_std`), the host's binary64 statements in soft-float64 (no
@@ -336,14 +337,14 @@ def _ord_std_scale_kernel(
             sf64_mul(mult_bits, sf64_sqrt(q)), sf64_from_f32(random_strength)
         )
         std = sf64_to_f32(v)
-    out.unsafe_store(0, std)
+    dst.unsafe_store(0, std)
     var w = mags.unsafe_load(Int(mag_at))
     var g = mags.unsafe_load(Int(mag_at) + 1)
     var m = w
     if g > m:
         m = g
     if m == Float32(0.0):
-        out.unsafe_store(1, Float32(1.0))
+        dst.unsafe_store(1, Float32(1.0))
         return
     var limit = Int64((1 << 30) - 1) - Int64(Int(row_count))
     var floor_limit = Int64((1 << 28) - 1)
@@ -371,7 +372,7 @@ def _ord_std_scale_kernel(
     else:
         for _ in range(-k):
             scale = scale * Float32(0.5)
-    out.unsafe_store(1, scale)
+    dst.unsafe_store(1, scale)
 
 
 @fieldwise_init
@@ -1554,6 +1555,10 @@ def _ordered_estimate_complete(
             block_dim=(ORDERED_BLOCK, 1, 1),
         )
         if want_leaves:
+            # the model's `leaf * learning_rate` rescale on the device, after
+            # the apply above read the unscaled leaves (lane cpu4-gbdt): the
+            # host model receives the rescaled leaves as they are
+            enqueue_scale_in_place(ctx, d_est, n_leaves, opts.learning_rate)
             ctx.enqueue_copy(
                 dst_ptr=est_ws[0].h_est.unsafe_ptr(), src_buf=d_est
             )
@@ -1585,12 +1590,16 @@ def _ordered_estimate_complete(
 def _ordered_device_leaves(
     mut est_ws: List[TEstimationWorkspace], n_leaves: Int
 ) -> List[Float32]:
-    """IDN_ORD_ONE_STEP_DEVICE: a device-estimated task's leaves, from the
-    `h_est` copy `_ordered_estimate_complete` enqueued. The caller has
-    drained since."""
-    var leaves = List[Float32]()
-    for leaf in range(n_leaves):
-        leaves.append(est_ws[0].h_est.unsafe_ptr().unsafe_load(leaf))
+    """A device-estimated task's RESCALED leaves (`leaf * learning_rate`,
+    formed on the device), from the `h_est` copy `_ordered_estimate_complete`
+    enqueued. The caller has drained since. One memcpy: the host model's
+    download."""
+    var leaves = List[Float32](length=n_leaves, fill=Float32(0.0))
+    memcpy(
+        dest=leaves.unsafe_ptr(),
+        src=est_ws[0].h_est.unsafe_ptr(),
+        count=n_leaves,
+    )
     return leaves^
 
 
@@ -2061,16 +2070,19 @@ def _ord_fast_estimate_tree(
         Int32(est_task), Int32(leaf_cap), opts.learning_rate,
         grid_dim=(_grid(n_rows), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
     )
+    # the model's `leaf * learning_rate` rescale on the device, in place, after
+    # the apply launches above read the unscaled leaves (lane cpu4-gbdt)
+    enqueue_scale_in_place(ctx, fast_est_view[0], n_leaves, opts.learning_rate)
     ctx.enqueue_copy(dst_buf=fast_h_leaves[0], src_buf=fast_est_view[0])
 
 
 def _ord_fast_take_leaves(
     fast_h_leaves: List[HostBuffer[DType.float32]], n_leaves: Int
 ) -> List[Float32]:
-    """The estimation task's leaves, after the drain that ran the copy."""
-    var out = List[Float32]()
-    for leaf in range(n_leaves):
-        out.append(fast_h_leaves[0].unsafe_ptr().unsafe_load(leaf))
+    """The estimation task's RESCALED leaves (`leaf * learning_rate`, formed
+    on the device), after the drain that ran the copy; one memcpy."""
+    var out = List[Float32](length=n_leaves, fill=Float32(0.0))
+    memcpy(dest=out.unsafe_ptr(), src=fast_h_leaves[0].unsafe_ptr(), count=n_leaves)
     return out^
 
 
@@ -2553,9 +2565,12 @@ def fit_ordered(
                     )
             comptime if IDN_ORD_STD_SCALE_DEVICE:
                 # d_sums = (noise sum, weight magnitude, gradient magnitude)
-                var sums_p = d_sums.unsafe_ptr()
+                # the same buffer is read (sums) and written (scale) by
+                # design; two untracked views pass the aliasing check (box-run-2).
+                var sums_p = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+                var sums_w = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
                 ctx.enqueue_function[_ord_std_scale_kernel](
-                    sums_p, Int32(0), Int32(1), sums_p, Int32(1),
+                    sums_p, Int32(0), Int32(1), sums_w, Int32(1),
                     Int32(ord_count), bitcast[DType.uint64](Float64(1e-100)),
                     bitcast[DType.uint64](ord_mult), opts.random_strength,
                     Int32(total), d_ss.unsafe_ptr(),
@@ -2938,22 +2953,20 @@ def fit_ordered(
         _ = held^
         losses.append(-Float64(h_fv[0]) / Float64(n_rows))
         if ord_dev_leaves:
-            leaves = _ordered_device_leaves(est_pools[ord_dev_slot], n_leaves)
+            # already `leaf * learning_rate` (rescaled on the device)
             var weak_dev = weak_later.pop()
-            for leaf in range(n_leaves):  # small-loop(n_leaves: one oblivious tree, 2^depth leaves): scale the read-back leaf values
-                weak_dev.leaf_values.append(
-                    identical_mul(leaves[leaf], opts.learning_rate)
-                )
+            weak_dev.leaf_values = _ordered_device_leaves(
+                est_pools[ord_dev_slot], n_leaves
+            )
             model.add_weak_model(weak_dev^)
             trace.record_device(ctx, tag + ".estimation_cursor", est_cursor)
         if fast_on:
             comptime if ORDERED_BATCH_EST:
-                leaves = _ord_fast_take_leaves(fast_h_leaves, n_leaves)
+                # already `leaf * learning_rate` (rescaled on the device)
                 var weak_fast = weak_later.pop()
-                for leaf in range(n_leaves):  # small-loop(n_leaves: one oblivious tree, 2^depth leaves): scale the read-back leaf values
-                    weak_fast.leaf_values.append(
-                        identical_mul(leaves[leaf], opts.learning_rate)
-                    )
+                weak_fast.leaf_values = _ord_fast_take_leaves(
+                    fast_h_leaves, n_leaves
+                )
                 model.add_weak_model(weak_fast^)
         times.end(ctx, "ord.learn_loss")
         _ = bins^

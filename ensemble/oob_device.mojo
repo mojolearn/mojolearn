@@ -55,6 +55,7 @@ from checks.soft_f64 import (
     sf64_sub,
 )
 from xtrees.oob import E64_LIMBS, E64_THREADS, e64_add
+from ensemble.flatnode import SparseTreeNode
 
 comptime OOB_TPB = 256
 #: words slots of the epilogue: [0] fsum(y), [1] den, [2] num, [3] mean,
@@ -62,6 +63,45 @@ comptime OOB_TPB = 256
 comptime OOB_WORDS = 5
 #: stats: [0] valid rows, [1] correct rows (classifier)
 comptime OOB_STATS = 2
+
+
+def rf_oob_append_tree_kernel[
+    dtype: DType
+](
+    tree: MutPointer[SparseTreeNode[dtype], MutAnyOrigin],
+    tree_leaves: MutPointer[Scalar[dtype], MutAnyOrigin],
+    offsets: MutPointer[Int32, MutAnyOrigin],
+    colid: MutPointer[Int32, MutAnyOrigin],
+    quesval: MutPointer[Float32, MutAnyOrigin],
+    left: MutPointer[Int32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin],
+    n_nodes: Int32,
+    n_out: Int32,
+    base: Int32,
+    tree_idx: Int32,
+):
+    """One finished tree into the forest's flat OOB model (cpu4-forest),
+    straight from the builder's device tree (`leaf_d_tree`,
+    `leaf_d_leaves`), one thread per node: the column, the left child and
+    the threshold and leaf row narrowed to float32, at node `base + j`;
+    thread 0 records the tree's base. What the host flatten wrote, field
+    for field (`ColumnId`, `LeftChildId`, `QueryValue().cast`,
+    `vector_leaf[...].cast`), without the model crossing the bus."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j == 0:
+        offsets[unsafe_offset = Int(tree_idx)] = base
+    if j >= Int(n_nodes):
+        return
+    var nd = tree[unsafe_offset=j]
+    var g = Int(base) + j
+    colid[unsafe_offset=g] = nd.ColumnId()
+    left[unsafe_offset=g] = Int32(Int(nd.LeftChildId()))
+    quesval[unsafe_offset=g] = nd.QueryValue().cast[DType.float32]()
+    var no = Int(n_out)
+    for k in range(no):
+        leaves[unsafe_offset = g * no + k] = tree_leaves[
+            unsafe_offset = j * no + k
+        ].cast[DType.float32]()
 
 
 def rf_oob_rows_kernel(

@@ -490,8 +490,10 @@ def _seg_radix8_sort(
     comptime assert (R8_PASSES % 2) == 0, "an odd pass count would leave the answer in work_b"
     for p in range(R8_PASSES):
         var shift = p * R8_BITS
-        var src = work_a.unsafe_ptr() if p % 2 == 0 else work_b.unsafe_ptr()
-        var dst = work_b.unsafe_ptr() if p % 2 == 0 else work_a.unsafe_ptr()
+        # untracked: the ping-pong select merges both origins, which the
+        # aliasing check reads as src == dst (box-run-2 compile fix).
+        var src = (work_a.unsafe_ptr() if p % 2 == 0 else work_b.unsafe_ptr()).unsafe_origin_cast[MutUntrackedOrigin]()
+        var dst = (work_b.unsafe_ptr() if p % 2 == 0 else work_a.unsafe_ptr()).unsafe_origin_cast[MutUntrackedOrigin]()
         log_launch("seg_sort_r8_count")
         ctx.enqueue_function[seg_r8_count_kernel](
             src,

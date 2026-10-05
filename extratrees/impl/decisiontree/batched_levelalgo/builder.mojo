@@ -92,6 +92,45 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.partition_multiblock
     partition_scatter_kernel,
     partition_writeback_kernel,
 )
+from extratrees.impl.decisiontree.batched_levelalgo.kernels.et_loop_kernels import (
+    ETL_HDR_WORDS,
+    ETL_H_CUR,
+    ETL_H_GCOUNT,
+    ETL_H_HEAD,
+    ETL_H_NODES,
+    ETL_H_NSUB,
+    ETL_H_OVERFLOW,
+    ETL_H_POPS,
+    ETL_H_ROWS,
+    ETL_H_STAT_NODES,
+    ETL_H_STAT_RESCUED,
+    ETL_H_STAT_RETRY,
+    ETL_H_TAIL,
+    ETL_META_INTS,
+    ETL_Q_INTS,
+    ETL_SHARED_FITS,
+    ETL_STAT_INTS,
+    ETL_ST_DEPTH,
+    ETL_ST_FRONT,
+    ETL_ST_LEAVES,
+    ETL_ST_NODES,
+    ETL_TPB,
+    etl_copy_splits_kernel,
+    etl_dummy_item,
+    etl_init_kernel,
+    etl_map_kernel,
+    etl_merge_kernel,
+    etl_pop_kernel,
+    etl_push_commit_kernel,
+    etl_push_mark_kernel,
+    etl_push_rank_kernel,
+    etl_push_slot_kernel,
+    etl_push_write_kernel,
+    etl_retry_kernel,
+    etl_scatter_kernel,
+    etl_stage_kernel,
+    etl_tree_base_kernel,
+)
 from extratrees.impl.decisiontree.batched_levelalgo.split import (
     ExactKey,
     SPLIT_SAB_NONE,
@@ -106,6 +145,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
 from std.atomic import Atomic
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator, size_of
 
@@ -597,6 +639,13 @@ struct NodeQueue[dtype: DType](Movable):
     def push(
         mut self, work_items: List[NodeWorkItem], splits: List[Split]
     ) raises:
+        """cpu4-forest: the HOST COLUMN body lives in `push_host` (the checker's
+        host-column naming); this name is kept for its callers."""
+        self.push_host(work_items, splits)
+
+    def push_host(
+        mut self, work_items: List[NodeWorkItem], splits: List[Split]
+    ) raises:
         """`builder.cuh:93-140`: turn a batch of splits into nodes and work.
 
         Transcribed in their order. ONE HALF of that order is load-bearing and
@@ -937,6 +986,16 @@ def set_leaf_predictions_classification(
     mut tree: TreeMetaDataNode[DType.float32],
     node_instances: List[InstanceRange],
 ) raises:
+    """cpu4-forest: the HOST COLUMN body lives in `set_leaf_predictions_classification_host` (the checker's
+    host-column naming); this name is kept for its callers."""
+    set_leaf_predictions_classification_host(dataset, tree, node_instances)
+
+
+def set_leaf_predictions_classification_host(
+    dataset: Dataset,
+    mut tree: TreeMetaDataNode[DType.float32],
+    node_instances: List[InstanceRange],
+) raises:
     """`builder.cuh:556-599` (`SetLeafPredictions`) plus the `leafKernel` it
     launches (`kernels/builder_kernels_impl.cuh:391-417`), for the
     classification objective.
@@ -1000,6 +1059,16 @@ def set_leaf_predictions_regression(
     mut tree: TreeMetaDataNode[DType.float32],
     node_instances: List[InstanceRange],
 ) raises:
+    """cpu4-forest: the HOST COLUMN body lives in `set_leaf_predictions_regression_host` (the checker's
+    host-column naming); this name is kept for its callers."""
+    set_leaf_predictions_regression_host(dataset, tree, node_instances)
+
+
+def set_leaf_predictions_regression_host(
+    dataset: Dataset,
+    mut tree: TreeMetaDataNode[DType.float32],
+    node_instances: List[InstanceRange],
+) raises:
     """The same pass for the MSE objective: the leaf value is the mean of its
     rows' labels (`objectives.cuh:259-264`).
 
@@ -1058,6 +1127,14 @@ def n_sampled_cols_for(params: DecisionTreeParams, n_cols: Int32) -> Int32:
 
 
 def rescue_columns(
+    dataset: Dataset, work_item: NodeWorkItem
+) raises -> List[Int32]:
+    """cpu4-forest: the HOST COLUMN body lives in `rescue_columns_host` (the checker's
+    host-column naming); this name is kept for its callers."""
+    return rescue_columns_host(dataset, work_item)
+
+
+def rescue_columns_host(
     dataset: Dataset, work_item: NodeWorkItem
 ) raises -> List[Int32]:
     """This node's non-constant columns, in ASCENDING column order.
@@ -1254,7 +1331,7 @@ def _exact_extent(
     return node_feature_min_max(dataset, item, col)
 
 
-def _exact_rescue_columns(
+def _exact_rescue_columns_host(
     dataset: Dataset, item: NodeWorkItem, bins: HostBins,
     is_classification: Bool,
 ) raises -> List[Int32]:
@@ -1268,7 +1345,7 @@ def _exact_rescue_columns(
     return out^
 
 
-def _exact_all_constant(
+def _exact_all_constant_host(
     dataset: Dataset, item: NodeWorkItem, colids: List[Int32],
     bins: HostBins, is_classification: Bool,
 ) -> Bool:
@@ -1281,7 +1358,7 @@ def _exact_all_constant(
     return True
 
 
-def set_leaf_predictions_exact(
+def set_leaf_predictions_exact_host(
     dataset: Dataset,
     labels_q: MutPointer[Int32, MutAnyOrigin],
     mut tree: TreeMetaDataNode[DType.float32],
@@ -1348,6 +1425,25 @@ def train_tree_exact(
     inv_scale: Float32,
     bins: HostBins,
 ) raises -> TreeMetaDataNode[DType.float32]:
+    """cpu4-forest: the HOST COLUMN body lives in `train_tree_exact_host` (the checker's
+    host-column naming); this name is kept for its callers."""
+    return train_tree_exact_host(
+        dataset, labels_q, params, tree_id, seed, is_classification, n_acc,
+        inv_scale, bins,
+    )
+
+
+def train_tree_exact_host(
+    dataset: Dataset,
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    params: DecisionTreeParams,
+    tree_id: Int32,
+    seed: UInt64,
+    is_classification: Bool,
+    n_acc: Int,
+    inv_scale: Float32,
+    bins: HostBins,
+) raises -> TreeMetaDataNode[DType.float32]:
     """One tree grown as the device grows it, on the host: the block comment
     above. `labels_q` is the device's label plane (class ids for a
     classifier, `quantize_labels_host`'s fixed point for a regressor; `n_acc`
@@ -1396,11 +1492,11 @@ def train_tree_exact(
             # alone.
             if (
                 item.instances.count > 0
-                and _exact_all_constant(
+                and _exact_all_constant_host(
                     dataset, item, my_colids, bins, is_classification
                 )
             ):
-                var nonconst = _exact_rescue_columns(
+                var nonconst = _exact_rescue_columns_host(
                     dataset, item, bins, is_classification
                 )
                 if len(nonconst) > 0:
@@ -1425,7 +1521,7 @@ def train_tree_exact(
                 partition_samples(dataset, split, item)
         queue.push(work_items, splits)
     var tree = queue.get_tree()
-    set_leaf_predictions_exact(
+    set_leaf_predictions_exact_host(
         dataset, labels_q, tree, queue.node_instances, inv_scale, is_classification
     )
     return tree^
@@ -1457,10 +1553,10 @@ def _exact_search_one(
         dataset, labels_q, item, colids, n_acc, is_classification,
         params.split_criterion, params.min_samples_leaf, seed, tree_id, bins,
     )
-    if item.instances.count > 0 and _exact_all_constant(
+    if item.instances.count > 0 and _exact_all_constant_host(
         dataset, item, colids, bins, is_classification
     ):
-        var nonconst = _exact_rescue_columns(
+        var nonconst = _exact_rescue_columns_host(
             dataset, item, bins, is_classification
         )
         if len(nonconst) > 0:
@@ -1541,7 +1637,7 @@ def train_tree_exact_bestfirst(
         partition_samples(dataset, rec.split, rec.item)
         pending = queue.bestfirst_expand(rec.item, rec.split)
     var tree = queue.get_tree()
-    set_leaf_predictions_exact(
+    set_leaf_predictions_exact_host(
         dataset, labels_q, tree, queue.node_instances, inv_scale, is_classification
     )
     return tree^
@@ -2011,18 +2107,26 @@ comptime ET_BINNED_REG = (
 ) or IDN_ET_BINNED
 comptime ET_BINS = ET_QSTRIDE
 comptime ET_CODE = DType.uint16
-#: IDENTICAL (`et_identical_bins_wanted`, device and host column): binning
-#: pays in bytes per row, so it is taken only on wide data: the
-#: border pass is a fixed cost per column, while the saving (uint16 codes
-#: for float32 values) is per row read; a row of 64 float32 columns is 256 B,
-#: four 64-byte lines, where halving the bytes per row starts to save whole
-#: lines per row. A RANGE rule measured at 16 columns (loses) and 220 (wins)
-#: only: NEEDS NEIGHBOR-SHAPE VALIDATION (32, 48, 64, 96, 128 columns). The
-#: device and the host column read this same gate (`et_identical_bins_wanted`),
-#: so moving it moves bits on every vendor and the host together.
-#: (2026-10-05 merge: split from the FAST gate below, which main moved to
-#: every width; IDENTICAL keeps 64 so its bits do not move in the merge.)
-comptime ET_IDN_BINNED_MIN_COLS = 64
+#: IDENTICAL (`et_identical_bins_wanted`, device and host column).
+#: lane/no-dim-idn (2026-10-04): the old floor of 64 columns sat between the
+#: two board widths it was measured at (16 loses, 220 wins), so it was a
+#: board cut, not a cost rule. Cost reasoning at any width: the border pass
+#: reads every row of a column once per FIT, while the uint16 codes halve the
+#: bytes of every column value the range and score passes read at every
+#: level of every tree, so the saving is (trees x levels) reads per value
+#: against one: it is per value, not per row line, and does not depend on the
+#: column count. The fit-shape gate that remains is the tiled search's own
+#: `2k >= n_cols` (the sampled features cover at least half the row). This
+#: matches the FAST gate below, already moved to every width.
+#: `-D MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF` (and `MOJOLEARN_IDN_ALL_OFF`)
+#: restore the old floor of 64 (A/B arm B). Bits: the arm is a default-OFF
+#: candidate (`MOJOLEARN_IDN_ET_BINNED_U16`); under it, fits with 2..63
+#: columns now bin, and the device and the host column read this one gate,
+#: so NVIDIA, AMD, Apple and the host move together.
+comptime ET_IDN_BINNED_ANY_WIDTH = not is_defined[
+    "MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF"
+]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime ET_IDN_BINNED_MIN_COLS = 1 if ET_IDN_BINNED_ANY_WIDTH else 64
 #: FAST + Apple: LEGACY, default OFF: binning was taken only at n_cols >= 64, chosen
 #: between taxi (16 columns, slower) and istella (220, faster). Removed as
 #: benchmark-tuned on 2026-10-04: binning now applies at every width;
@@ -2064,6 +2168,11 @@ struct HostBins(ImplicitlyCopyable, Movable):
     var nb: MutPointer[Int32, MutUntrackedOrigin]
 
     def extent(self, dataset: Dataset, item: NodeWorkItem, col: Int32) -> FeatureRange:
+        """cpu4-forest: the HOST COLUMN body lives in `extent_host` (the checker's
+        host-column naming); this name is kept for its callers."""
+        return self.extent_host(dataset, item, col)
+
+    def extent_host(self, dataset: Dataset, item: NodeWorkItem, col: Int32) -> FeatureRange:
         """`node_feature_range_tiled_kernel`'s code arm then the decode: the
         borders of the node's lowest and highest codes, no missing count (a
         code is never NaN). An empty node keeps `node_feature_min_max`'s
@@ -2355,8 +2464,8 @@ struct DeviceDataset(Movable):
             return
         if self.has_rm:
             return
-        # ET_RM_NARROW (trial arm): a row whose floats fit one 64-byte line
-        # also takes the row-major copy, whatever k is.
+        # ET_RM_NARROW: a row whose floats fit one cache line (ET_RM_LINE_BYTES)
+        # also takes the row-major copy when a quarter of it is sampled.
         var narrow = False
         comptime if ET_RM_NARROW:
             comptime if ET_RM_NARROW_GENERAL:
@@ -2368,10 +2477,12 @@ struct DeviceDataset(Movable):
                 # benchmark-tuned on 2026-10-04, replacement UNMEASURED.
                 narrow = False
             else:
-                # IDENTICAL still uses the board-shaped rule; generalize it
-                # on every vendor together (same-bits rule), owed to the
-                # IDENTICAL program.
-                narrow = Int(self.n_cols) * 4 <= 64 and 4 * k >= Int(self.n_cols)
+                # IDENTICAL: main's line rule (lane/no-dim-idn,
+                # ET_RM_LINE_BYTES) with the quarter gate.
+                narrow = (
+                    Int(self.n_cols) * 4 <= ET_RM_LINE_BYTES
+                    and 4 * k >= Int(self.n_cols)
+                )
         if 2 * k < Int(self.n_cols) and not narrow:
             return
         var nr = Int(self.n_rows)
@@ -2699,100 +2810,6 @@ def train_classification_device(
     return train_classification_device_resident(
         ctx, dataset, row_ids, params, tree_id, seed
     )
-
-
-def sample_features_for_device[
-    os: MutOrigin, orp: MutOrigin, ow: MutOrigin, ot: MutOrigin, //
-](
-    ctx: DeviceContext,
-    mut d_colids_buf: DeviceBuffer[DType.int32],
-    d_scratch: MutPointer[Int32, os],
-    d_report: MutPointer[Int32, orp],
-    d_work_items: MutPointer[NodeWorkItem, ow],
-    d_tree_ids: MutPointer[Int32, ot],
-    mut h_colids_stage: HostBuffer[DType.int32],
-    work_items: List[NodeWorkItem],
-    item_trees: List[Int32],
-    seed: UInt64,
-    n: Int,
-    k: Int,
-) raises -> FeatureSamplerPlan:
-    """Sample this batch's features WHERE cuML SAMPLES THEM, with one arm that
-    cannot run there and is named rather than hidden.
-
-    ==================================================================
-    DEVIATION BLOCK 201 -- the excess arm and the all-features arm run
-    on the DEVICE; ALGORITHM L runs on the HOST, because Metal has no
-    `double`.
-
-    THEIRS: `builder.cuh:398-471` computes `n_parallel_samples` on the
-    host and then launches one of three kernels. The `colids` array is
-    produced on the device and the host never sees it.
-
-    OURS, per arm:
-      * `SAMPLE_EXCESS` and `SAMPLE_ALL_FEATURES` -- `sample_features_device`,
-        which enqueues their kernel. Bit-identical to the host oracle over
-        23,462 asserted slots.
-      * `SAMPLE_ALGO_L` -- the HOST transcription, uploaded.
-
-    WHY ALGORITHM L CANNOT RUN THERE, measured rather than assumed:
-    cuML's algorithm L is a `double` algorithm in four places
-    (`builder_kernels.cuh:291`, `:306` twice, `:313`) and Metal rejects
-    `double` AT COMPILE TIME -- "function's return type 'double' is not
-    supported", "llvm.fma.f64 has Metal-unsupported instructions". This
-    is the same wall as no streams and no `threadfence`, and it is in the
-    traps register.
-
-    WHY NOT A FLOAT32 SUBSTITUTE: at the `k/n` their dispatch actually
-    routes to this arm, `W` is about `1 - 1e-4`, so forming `1 - W` in
-    `Float32` is catastrophic cancellation -- roughly 13 bits survive.
-    That would be a DIFFERENT ALGORITHM wearing this one's name, on the
-    one arm nobody would look at. Tracking `V = 1 - W` through `expm1f`
-    was rejected for the opposite reason: it is numerically BETTER than
-    cuML, and this is an implementation.
-
-    WHY NOT REFUSE THE ARM: refusing would make the device path unusable
-    whenever `k/n` is near 1 at large `n`, and the host transcription is
-    not a guess -- it is the checked oracle the device kernels are
-    verified against, cell for cell, over 1,063,780 cells. Running THEIR
-    algorithm on the host is a placement difference; refusing to fit is a
-    capability loss. The placement is reported in the returned plan, so a
-    caller can see which arm ran and where.
-
-    THE PRICE, stated: on a target without `double` the algo-L arm costs
-    one `work_items_size * k` H2D copy per level that the reference does
-    not have. On CUDA and ROCm, where `double` exists, the same call
-    takes the device kernel and the copy disappears -- the code is one
-    source and the branch is a host-side capability query, never an
-    `if apple` inside a kernel.
-    ==================================================================
-    """
-    var plan = plan_feature_sampling(n, k)
-    if plan.arm != SAMPLE_ALGO_L or device_has_float64():
-        return sample_features_device(
-            ctx,
-            d_colids_buf.unsafe_ptr(),
-            d_scratch,
-            d_report,
-            d_work_items,
-            d_tree_ids,
-            len(work_items),
-            seed,
-            n,
-            k,
-        )
-    var host_colids = List[Int32](
-        length=len(work_items) * k, fill=Int32(0)
-    )
-    _ = sample_features_pertree(
-        host_colids, work_items, item_trees, seed, n, k
-    )
-    for i in range(len(host_colids)):
-        h_colids_stage.unsafe_ptr().unsafe_store(i, host_colids[i])
-    ctx.enqueue_copy(
-        dst_buf=d_colids_buf, src_ptr=h_colids_stage.unsafe_ptr()
-    )
-    return plan
 
 
 @fieldwise_init
@@ -3326,12 +3343,30 @@ M4 IDENTICAL (steward 1790610860810, always-on arm): ExtraTreesClassifier
 taxi 3904 -> 3745 ms, same hash; RandomTreesEmbedding (k = 1) 469 -> 1086
 ms, hence the quarter gate. `-D MOJOLEARN_ET_RM_NARROW_OFF` turns it off."""
 
+comptime ET_RM_LINE_BYTES = (
+    64
+    if (
+        is_defined["MOJOLEARN_ET_RM_LINE_HW_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+    else 128
+)
+"""lane/no-dim-idn (2026-10-04): the line `ET_RM_NARROW` compares a row
+against. It was a literal 64 bytes, i.e. `n_cols <= 16`, exactly the board's
+taxi width. It is now the cache line of the targets this arm runs on: 128
+bytes on Apple GPUs, the NVIDIA L1 line and the CDNA3 L2 line alike, so
+a row of up to 32 float32 columns is one line fetch however many of its
+features are sampled, and the quarter gate (`4k >= n_cols`, from the
+RandomTreesEmbedding k = 1 slowdown) still bounds the wasted bytes per line
+at three quarters at any width. Bit-inert: the range cells are the same
+either way. `-D MOJOLEARN_ET_RM_LINE_HW_OFF` (and `MOJOLEARN_IDN_ALL_OFF`)
+restore 64 (A/B arm B)."""
 comptime ET_RM_NARROW_GENERAL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and not is_defined["MOJOLEARN_LEGACY_NARROW_ET_RM"]()
 )
 """lane apple-fast-no-narrow-2 (2026-10-04): FAST drops the quarter gate
-(see `ensure_row_major`); IDENTICAL keeps it byte for byte. `-D
+(see `ensure_row_major`); IDENTICAL keeps it, over main's ET_RM_LINE_BYTES line. `-D
 MOJOLEARN_LEGACY_NARROW_ET_RM` restores the quarter gate in FAST."""
 
 
@@ -3940,6 +3975,26 @@ def _enqueue_classification_score[MAX_ACC: Int](
     )
 
 
+def split_tie_tally_kernel(
+    out_tally: MutPointer[Int32, MutAnyOrigin],
+    r_c: MutPointer[Int32, MutAnyOrigin],
+    ties: MutPointer[Int32, MutAnyOrigin],
+    n_nodes: Int32,
+):
+    """`MOJOLEARN_ET_TIE_STATS` only (a measurement define): one thread per
+    node adds to `out_tally[0]` when the node's reduce decided a column and
+    to `out_tally[1]` when two or more candidates tied exactly. Integer
+    atomics, so the two counts are exact in any order. Replaces the host
+    walk over the per-node readback (cpu4-forest)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_nodes):
+        return
+    if r_c[unsafe_offset=i] >= 0:
+        _ = Atomic.fetch_add(out_tally, Int32(1))
+        if ties[unsafe_offset=i] >= Int32(2):
+            _ = Atomic.fetch_add(out_tally.unsafe_offset(1), Int32(1))
+
+
 def pack_splits_kernel(
     out_splits: MutPointer[Split, MutAnyOrigin],
     r_q: MutPointer[Float32, MutAnyOrigin],
@@ -3966,69 +4021,37 @@ def pack_splits_kernel(
     )
 
 
-def search_batch(
+def search_batch_enqueue(
     ctx: DeviceContext,
     mut ws: LevelWorkspace,
     mut dataset: DeviceDataset,
     mut d_row_ids: DeviceBuffer[DType.int32],
-    work_items: List[NodeWorkItem],
+    n_nodes: Int,
+    n_blocks: Int,
     k: Int,
     params: DecisionTreeParams,
     n_classes: Int32,
     n_rows: Int32,
     n_cols: Int32,
-    item_trees: List[Int32],
     seed: UInt64,
     use_sampler: Bool,
-    host_colids: List[Int32],
     range_only: Bool,
     mut clock: PhaseClock,
-) raises -> Tuple[
-    List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
-]:
-    """One batch through the split search: steps 2 to 8 of `doSplit`.
-
-    DEVIATION 211: `item_trees` carries one tree id PER WORK ITEM, because
-    the forest trainer merges every in-flight tree's frontier into one batch.
-    Every draw was already keyed by `(seed, tree, node, col)`; the only thing
-    that changed is where the tree component comes from.
-
-    Extracted from the level loop so DEVIATION 205's rescue can run the SAME
-    passes on a sub-batch instead of a second copy of the launch code. A copy
-    drifts from its constant; this is the one copy.
-
-    `use_sampler` selects deviation 201's device sampler (the normal path) or
-    an upload of `host_colids` (the rescue, whose column the host chose).
-    `range_only` returns after the range pass with the cells, which is the
-    survey the rescue needs and nothing more.
-
-    Returns `(splits, any_nonconstant_per_node, min, max, n_missing)`. The
-    ranges are empty unless `range_only`.
+) raises:
+    """`search_batch`'s launch sequence on a batch that is ALREADY STAGED on
+    the device (cpu4-forest): steps 2 to 8 of `doSplit` with no host list,
+    no host staging and no readback. `n_nodes` items sit in `ws.d_items`
+    (and `d_tree`, `d_tsalt`, `d_nb`, `d_nc`), `n_blocks` workload entries
+    in `ws.d_wl`. The host-list wrapper stages with `stage_batch` and reads
+    the splits back; the device level loop (`EtDeviceLoop`) stages with its
+    own kernels, launches at proven bounds (dummy items own no block, map
+    entries past the live total carry `nodeid == -1`) and reads nothing.
+    Outputs stay on the device: `ws.d_splits` (packed), `ws.d_nonconst`,
+    and the range cells (`d_min`, `d_max`, `d_missing`) for the survey.
     """
     comptime TPB = DEVICE_TPB
-    var n_nodes = len(work_items)
     if n_nodes == 0:
-        # DEVIATION 466: a best-first cycle can have NOTHING to search --
-        # every node popped last cycle had two unexpandable children -- and
-        # still have nodes left to pop. An empty batch is a well-formed
-        # request for no work, not an error. The depth-wise loop breaks
-        # before it can ever ask, so this arm belongs to best-first alone.
-        return (
-            List[Split](),
-            List[Int32](),
-            List[Float32](),
-            List[Float32](),
-            List[Int32](),
-        )
-    # --- 2. the ragged-batch flattening ------------------------------
-    # Search tiles may cover multiple rows per thread. Coverage remains
-    # complete and disjoint through the kernels' existing grid-stride loops;
-    # score accumulation is integer, range merging is integer min/max, and
-    # the local range fold uses total-order keys. Partitioning retains its
-    # own TPB tile and therefore must restage its workload plan when R > 1.
-    var plan = build_workload_info(
-        work_items, TPB * SEARCH_ROWS_PER_THREAD
-    )
+        return
     var n_cells = n_nodes * Int(k)
 
     # --- per-batch device buffers ------------------------------------
@@ -4071,21 +4094,6 @@ def search_batch(
     ref d_samp_report = ws.d_samp_report
     ref d_items = ws.d_items
     ref d_wl = ws.d_wl
-
-    # One host staging buffer per copy: they are asynchronous, and a
-    # shared one would be rewritten under an in-flight copy. The items and
-    # workload staging moved into `stage_batch`; only `h_colids` is still
-    # written here (the rescue's host-chosen columns).
-    #
-    # DEVIATION 450: no entry synchronize. Every path that enqueued a copy
-    # READING an `h_*` staging buffer drained before returning to the
-    # caller (the reduce readback's sync, or the survey's), so no such
-    # copy can be in flight when this call rewrites the staging; the
-    # workspace constructor's own drain covers the first write ever.
-    ref h_colids = ws.h_colids
-
-    stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
-    clock.tick(ctx, PHASE_STAGE_BATCH)
 
     # =================================================================
     # DEVIATION 470 -- TWO fused seeder launches replace this cycle's
@@ -4179,11 +4187,6 @@ def search_batch(
     # survey walk and its host column table are gone): the survey's identity
     # columns are written by `ident_colids_kernel`, the rescue's by
     # `rescue_pick_kernel` (already queued by the caller).
-    if len(host_colids) != 0:
-        raise Error(
-            "host_colids: caller-chosen columns were the host rescue walk,"
-            " removed (cpu3-trees); pass an empty list"
-        )
     var dev_colids = not use_sampler
     if range_only and not dev_colids:
         raise Error("the survey (range_only) runs on the device columns only")
@@ -4203,19 +4206,18 @@ def search_batch(
             )
     if use_sampler:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
-        # `d_report` is the DEVICE's own statement of which kernel ran;
-        # DEVIATION 470's half-A seeder staged `SAMPLER_UNVISITED` into it
-        # above, a value no kernel can produce.
-        _ = sample_features_for_device(
+        # cpu4-forest: the device sampler only. The batch's items are
+        # staged on the device (by `stage_batch` or the device level loop),
+        # so no host list exists to sample from; a target without float64
+        # refuses the algo-L arm by name inside `sample_features_device`.
+        _ = sample_features_device(
             ctx,
-            d_colids,
+            d_colids.unsafe_ptr(),
             d_samp_scratch.unsafe_ptr(),
             d_samp_report.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
             ws.d_tree.unsafe_ptr(),
-            h_colids,
-            work_items,
-            item_trees,
+            n_nodes,
             seed,
             Int(n_cols),
             Int(k),
@@ -4242,7 +4244,7 @@ def search_batch(
             n_cols,
             Int32(k),
             dataset.d_quant.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            grid_dim=(n_blocks, ceildiv(Int(k), ET_FEATURE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     else:
@@ -4260,7 +4262,7 @@ def search_batch(
             n_cols,
             Int32(k),
             Int32(0),
-            grid_dim=search_grid(plan.n_blocks_dimx, Int(k)),
+            grid_dim=search_grid(n_blocks, Int(k)),
             block_dim=(TPB, 1, 1),
         )
     # DEVIATION 204: the merge produced order-preserving KEYS; this
@@ -4292,7 +4294,6 @@ def search_batch(
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
     )
-    ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
     # DEVIATION 450: the range pass drains only when the caller wants the
     # survey NOW. On the full path `h_nonconst` is not READ until after
     # the reduce readback's sync below, so its copy rides the queue and
@@ -4302,12 +4303,7 @@ def search_batch(
     clock.tick(ctx, PHASE_RANGE)
 
     if range_only:
-        # The device rescue: the cells stay on the device for
-        # `rescue_pick_kernel`; nothing drains and nothing is read here.
-        return (
-            List[Split](), List[Int32](), List[Float32](), List[Float32](),
-            List[Int32](),
-        )
+        return
 
     # --- 4. the draw and score pass ----------------------------------
     # DEVIATION 470: the score cells and class accumulators were seeded
@@ -4323,28 +4319,28 @@ def search_batch(
     comptime if FIXED_ACC:
         _enqueue_classification_score[DEVICE_MAX_ACC](
             ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
-            params, n_cells, plan.n_blocks_dimx,
+            params, n_cells, n_blocks,
         )
     else:
         if n_classes <= 4:
             _enqueue_classification_score[4](
                 ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
-                params, n_cells, plan.n_blocks_dimx,
+                params, n_cells, n_blocks,
             )
         elif n_classes <= 8:
             _enqueue_classification_score[8](
                 ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
-                params, n_cells, plan.n_blocks_dimx,
+                params, n_cells, n_blocks,
             )
         elif n_classes <= 16:
             _enqueue_classification_score[16](
                 ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
-                params, n_cells, plan.n_blocks_dimx,
+                params, n_cells, n_blocks,
             )
         else:
             _enqueue_classification_score[32](
                 ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
-                params, n_cells, plan.n_blocks_dimx,
+                params, n_cells, n_blocks,
             )
 
     # --- 5. scored cells into candidates (DEVIATION 182) -------------
@@ -4423,7 +4419,29 @@ def search_batch(
             grid_dim=ceildiv(n_nodes, 64),
             block_dim=64,
         )
-        ctx.enqueue_copy(dst_buf=ws.o_ties, src_buf=ws.d_ties)
+        # cpu4-forest: the tally runs ON THE DEVICE (two integer counters),
+        # so no per-node host walk reads the readback; one line per batch.
+        var d_tally = ctx.enqueue_create_buffer[DType.int32](2)
+        ctx.enqueue_memset(d_tally, Int32(0))
+        ctx.enqueue_function[split_tie_tally_kernel](
+            d_tally.unsafe_ptr(),
+            r_c.unsafe_ptr(),
+            ws.d_ties.unsafe_ptr(),
+            Int32(n_nodes),
+            grid_dim=ceildiv(n_nodes, 64),
+            block_dim=64,
+        )
+        var h_tally = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_copy(dst_buf=h_tally, src_buf=d_tally)
+        ctx.synchronize()
+        print(
+            "ET_TIE_STATS batch decided=",
+            h_tally.unsafe_ptr()[unsafe_offset=0],
+            " tied=",
+            h_tally.unsafe_ptr()[unsafe_offset=1],
+        )
+        _ = d_tally^
+        _ = h_tally^
 
     # --- 7. the splits come back to the host, as `:492-494` does ------
     # ONLY THE SPLITS CROSS, which is exactly what
@@ -4445,13 +4463,96 @@ def search_batch(
         grid_dim=ceildiv(n_nodes, 64),
         block_dim=64,
     )
+
+
+def search_batch(
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    work_items: List[NodeWorkItem],
+    k: Int,
+    params: DecisionTreeParams,
+    n_classes: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    item_trees: List[Int32],
+    seed: UInt64,
+    use_sampler: Bool,
+    host_colids: List[Int32],
+    range_only: Bool,
+    mut clock: PhaseClock,
+) raises -> Tuple[
+    List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
+]:
+    """One batch through the split search: steps 2 to 8 of `doSplit`.
+
+    DEVIATION 211: `item_trees` carries one tree id PER WORK ITEM, because
+    the forest trainer merges every in-flight tree's frontier into one batch.
+    Every draw was already keyed by `(seed, tree, node, col)`; the only thing
+    that changed is where the tree component comes from.
+
+    Extracted from the level loop so DEVIATION 205's rescue can run the SAME
+    passes on a sub-batch instead of a second copy of the launch code. A copy
+    drifts from its constant; this is the one copy.
+
+    `use_sampler` selects deviation 201's device sampler (the normal path) or
+    an upload of `host_colids` (the rescue, whose column the host chose).
+    `range_only` returns after the range pass with the cells, which is the
+    survey the rescue needs and nothing more.
+
+    Returns `(splits, any_nonconstant_per_node, min, max, n_missing)`. The
+    ranges are empty unless `range_only`.
+    """
+    comptime TPB = DEVICE_TPB
+    var n_nodes = len(work_items)
+    if n_nodes == 0:
+        # DEVIATION 466: a best-first cycle can have NOTHING to search --
+        # every node popped last cycle had two unexpandable children -- and
+        # still have nodes left to pop. An empty batch is a well-formed
+        # request for no work, not an error. The depth-wise loop breaks
+        # before it can ever ask, so this arm belongs to best-first alone.
+        return (
+            List[Split](),
+            List[Int32](),
+            List[Float32](),
+            List[Float32](),
+            List[Int32](),
+        )
+    if len(host_colids) != 0:
+        raise Error(
+            "host_colids: caller-chosen columns were the host rescue walk,"
+            " removed (cpu3-trees); pass an empty list"
+        )
+    # --- 2. the ragged-batch flattening ------------------------------
+    # Search tiles may cover multiple rows per thread. Coverage remains
+    # complete and disjoint through the kernels' existing grid-stride loops;
+    # score accumulation is integer, range merging is integer min/max, and
+    # the local range fold uses total-order keys. Partitioning retains its
+    # own TPB tile and therefore must restage its workload plan when R > 1.
+    var plan = build_workload_info(
+        work_items, TPB * SEARCH_ROWS_PER_THREAD
+    )
+    stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
+    clock.tick(ctx, PHASE_STAGE_BATCH)
+    search_batch_enqueue(
+        ctx, ws, dataset, d_row_ids, n_nodes, plan.n_blocks_dimx, Int(k),
+        params, n_classes, n_rows, n_cols, seed, use_sampler, range_only,
+        clock,
+    )
+    ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
+    if range_only:
+        return (
+            List[Split](), List[Int32](), List[Float32](), List[Float32](),
+            List[Int32](),
+        )
     ctx.enqueue_copy(dst_buf=ws.h_splits, src_buf=ws.d_splits)
     ref o_c = ws.o_c
     ref o_nu = ws.o_nu
     ref o_de = ws.o_de
-    ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
-    ctx.enqueue_copy(dst_buf=o_nu, src_buf=r_nu)
-    ctx.enqueue_copy(dst_buf=o_de, src_buf=r_de)
+    ctx.enqueue_copy(dst_buf=o_c, src_buf=ws.r_c)
+    ctx.enqueue_copy(dst_buf=o_nu, src_buf=ws.r_nu)
+    ctx.enqueue_copy(dst_buf=o_de, src_buf=ws.r_de)
     ctx.synchronize()
     clock.tick(ctx, PHASE_REDUCE)
 
@@ -4474,19 +4575,6 @@ def search_batch(
         count=n_nodes,
     )
 
-    # DEVIATION 463: report the batch's exact-tie tally. The counter cells
-    # rode the queue with the reduce readback, so the sync above completed
-    # them; one line per batch, summed by whoever asked for the define.
-    comptime if is_defined["MOJOLEARN_ET_TIE_STATS"]():
-        var tie_decided = 0
-        var tie_tied = 0
-        for i in range(n_nodes):
-            if o_c.unsafe_ptr()[unsafe_offset=i] >= 0:
-                tie_decided += 1
-                if ws.o_ties.unsafe_ptr()[unsafe_offset=i] >= Int32(2):
-                    tie_tied += 1
-        print("ET_TIE_STATS batch decided=", tie_decided, " tied=", tie_tied)
-
     clock.tick(ctx, PHASE_HOST_SPLITS)
     return (
         splits^,
@@ -4495,6 +4583,1368 @@ def search_batch(
         List[Float32](),
         List[Int32](),
     )
+
+
+# =============================================================================
+# cpu4-forest: THE LEVEL LOOP ON THE DEVICE, for the merged-frontier forest.
+#
+# The forest trainers below used to pop every batch on the host (one
+# `NodeQueue` per in-flight tree), read the batch's splits back, build the
+# DEVIATION 205 retry list, its sub-batch and the merge on the host, and push
+# the children on the host -- a node list across the bus every level. The
+# queue, the retry compaction, the rescue merge, the push and (best-first)
+# the frontier are now device state (`kernels/et_loop_kernels.mojo` and the
+# best-first kernels here); the host enqueues `ET_LOOP_K` batches, then
+# drains ONE fixed-size header (`ETL_HDR_WORDS` scalar control words) and
+# reads it, never a node list. The finished trees come back once per group,
+# as the model (`EtDeviceLoop.download_trees`).
+#
+# SAME BITS: node ids, queue order per tree and every draw are the host
+# queue's (see the kernel module's doc), so the trees equal what the host
+# queue produced and the host column (`train_tree_exact*`) is unchanged. This
+# is the default on every vendor in IDENTICAL and FAST; there is no arm that
+# restores the host queue on the GPU route. `NodeQueue` stays as the host
+# column's queue (`host_builder.mojo`, `train_tree_exact`) and the checks'.
+# =============================================================================
+
+comptime ET_LOOP_K = (
+    1 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K1"]() else (
+        2 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K2"]() else (
+            8 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K8"]() else 4
+        )
+    )
+)
+"""Batches (best-first: cycles) enqueued per header drain. A scheduling
+parameter: it moves no bit. `-D MOJOLEARN_ET_DEVICE_LOOP_K1/_K2/_K8`."""
+
+comptime ETL_SRC_BATCH = 0
+comptime ETL_SRC_SUB = 1
+comptime ETL_SRC_PART = 2
+
+comptime ET_BF_FRONTIER_BYTES = 1 << 28
+"""Best-first: the device frontier budget per group (`g * f_cap` records).
+The group width is capped to fit it -- a scheduling cap, like `group_cap`."""
+
+
+def et_root_expandable(params: DecisionTreeParams, slot_rows: Int32) -> Int32:
+    """`NodeQueue.is_expandable(root, 0)` with `leaf_counter == 1`."""
+    if Int32(0) >= params.max_depth:
+        return Int32(0)
+    if slot_rows < params.min_samples_split:
+        return Int32(0)
+    if params.max_leaves != -1 and Int32(1) >= params.max_leaves:
+        return Int32(0)
+    return Int32(1)
+
+
+def et_bf_frontier_cap(
+    params: DecisionTreeParams, slot_rows: Int32, bf_sabotage: Int32
+) -> Int:
+    """Records one tree's frontier can hold: every record is a current leaf,
+    and the leaf count never passes `max_leaf_nodes` (nor the tree's rows,
+    each leaf holding at least one). Plus slack."""
+    var cap = Int(slot_rows)
+    if bf_sabotage != BESTFIRST_SAB_NO_BUDGET and Int(
+        params.max_leaf_nodes
+    ) < cap:
+        cap = Int(params.max_leaf_nodes)
+    if cap < 1:
+        cap = 1
+    return cap + 2
+
+
+def et_bf_admit_kernel(
+    hdr: MutPointer[Int32, MutAnyOrigin],
+    b_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    b_slot: MutPointer[Int32, MutAnyOrigin],
+    b_gpos: MutPointer[Int32, MutAnyOrigin],
+    b_splits: MutPointer[Split, MutAnyOrigin],
+    slot_stat: MutPointer[Int32, MutAnyOrigin],
+    slot_tree: MutPointer[Int32, MutAnyOrigin],
+    f_rec: MutPointer[FrontierRecord, MutAnyOrigin],
+    f_gpos: MutPointer[Int32, MutAnyOrigin],
+    n_items: Int32,
+    f_cap: Int32,
+    slot_rows: Int32,
+    min_impurity_decrease: Float32,
+    min_samples_leaf: Int32,
+):
+    """`NodeQueue.bestfirst_admit` for every searched node, one thread each:
+    a valid split joins its tree's frontier with `frontier_key`'s
+    improvement. A record's POSITION in the frontier array is an atomic
+    ticket, and is unobservable: the pop takes the maximum under
+    `bestfirst_before`, a total order, which is what the host heap pops.
+    Thread 0 also clears this cycle's pop count."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j == 0:
+        hdr[unsafe_offset=ETL_H_POPS] = Int32(0)
+    if j >= Int(n_items):
+        return
+    var item = b_items[unsafe_offset=j]
+    var count = item.instances.count
+    if count <= Int32(0):
+        return
+    var sp = b_splits[unsafe_offset=j]
+    var s = Int(b_slot[unsafe_offset=j])
+    if split_not_valid(sp, min_impurity_decrease, min_samples_leaf, count):
+        _ = Atomic.fetch_add(hdr.unsafe_offset(ETL_H_ROWS), -count)
+        return
+    var pos = Int(
+        Atomic.fetch_add(
+            slot_stat.unsafe_offset(s * ETL_STAT_INTS + ETL_ST_FRONT), Int32(1)
+        )
+    )
+    if pos >= Int(f_cap):
+        hdr[unsafe_offset=ETL_H_OVERFLOW] = Int32(4)
+        return
+    var at = s * Int(f_cap) + pos
+    f_rec[unsafe_offset=at] = FrontierRecord(
+        item,
+        sp,
+        frontier_key(sp.best_metric_val, count, slot_rows),
+        slot_tree[unsafe_offset=s],
+    )
+    f_gpos[unsafe_offset=at] = b_gpos[unsafe_offset=j]
+
+
+def et_bf_pop_kernel[
+    TPB: Int
+](
+    hdr: MutPointer[Int32, MutAnyOrigin],
+    slot_stat: MutPointer[Int32, MutAnyOrigin],
+    f_rec: MutPointer[FrontierRecord, MutAnyOrigin],
+    f_gpos: MutPointer[Int32, MutAnyOrigin],
+    pt_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    pt_slot: MutPointer[Int32, MutAnyOrigin],
+    pt_gpos: MutPointer[Int32, MutAnyOrigin],
+    pt_splits: MutPointer[Split, MutAnyOrigin],
+    f_cap: Int32,
+    max_leaf_nodes: Int32,
+    bf_sabotage: Int32,
+):
+    """`NodeQueue.bestfirst_pop` for every tree, block `s` = tree slot `s`:
+    if the tree can pop (`bestfirst_can_pop`), the frontier's first record
+    under `bestfirst_before` (a block argmax over the records; the order is
+    total, so the winner is the heap's), which leaves the frontier (the last
+    record takes its place) and becomes partition slot `s`. A tree that
+    cannot pop leaves a dummy there (count 0, invalid split)."""
+    comptime assert TPB * 4 <= ETL_SHARED_FITS, "best-first pop page"
+    var sh_best = stack_allocation[
+        TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED
+    ]()
+    var s = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var base = s * Int(f_cap)
+    var fsz = Int(slot_stat[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_FRONT])
+    var leaves = slot_stat[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_LEAVES]
+    var budget = bf_sabotage == BESTFIRST_SAB_NO_BUDGET or leaves < max_leaf_nodes
+    if fsz > Int(f_cap):
+        fsz = Int(f_cap)
+    if fsz <= 0 or not budget:
+        if tid == 0:
+            pt_items[unsafe_offset=s] = etl_dummy_item()
+            pt_slot[unsafe_offset=s] = Int32(s)
+            pt_gpos[unsafe_offset=s] = Int32(-1)
+            pt_splits[unsafe_offset=s] = Split()
+        return
+    var best = -1
+    var i = tid
+    while i < fsz:
+        if best < 0 or bestfirst_before(
+            f_rec[unsafe_offset = base + i],
+            f_rec[unsafe_offset = base + best],
+            bf_sabotage,
+        ):
+            best = i
+        i += TPB
+    sh_best[unsafe_offset=tid] = Int32(best)
+    barrier()
+    var stride = TPB // 2
+    while stride > 0:
+        if tid < stride:
+            var o = Int(sh_best[unsafe_offset = tid + stride])
+            var m = Int(sh_best[unsafe_offset=tid])
+            if o >= 0 and (
+                m < 0
+                or bestfirst_before(
+                    f_rec[unsafe_offset = base + o],
+                    f_rec[unsafe_offset = base + m],
+                    bf_sabotage,
+                )
+            ):
+                sh_best[unsafe_offset=tid] = Int32(o)
+        barrier()
+        stride //= 2
+    if tid == 0:
+        var b = Int(sh_best[unsafe_offset=0])
+        var rec = f_rec[unsafe_offset = base + b]
+        pt_items[unsafe_offset=s] = rec.item
+        pt_slot[unsafe_offset=s] = Int32(s)
+        pt_gpos[unsafe_offset=s] = f_gpos[unsafe_offset = base + b]
+        pt_splits[unsafe_offset=s] = rec.split
+        var last = fsz - 1
+        f_rec[unsafe_offset = base + b] = f_rec[unsafe_offset = base + last]
+        f_gpos[unsafe_offset = base + b] = f_gpos[unsafe_offset = base + last]
+        slot_stat[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_FRONT] = Int32(last)
+        _ = Atomic.fetch_add(hdr.unsafe_offset(ETL_H_POPS), Int32(1))
+        _ = Atomic.fetch_add(
+            hdr.unsafe_offset(ETL_H_ROWS), -rec.item.instances.count
+        )
+
+
+def et_bf_expand_kernel(
+    hdr: MutPointer[Int32, MutAnyOrigin],
+    slot_stat: MutPointer[Int32, MutAnyOrigin],
+    pt_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    pt_gpos: MutPointer[Int32, MutAnyOrigin],
+    pt_splits: MutPointer[Split, MutAnyOrigin],
+    g_nodes: MutPointer[SparseTreeNode[DType.float32], MutAnyOrigin],
+    g_meta: MutPointer[Int32, MutAnyOrigin],
+    b_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    b_slot: MutPointer[Int32, MutAnyOrigin],
+    b_gpos: MutPointer[Int32, MutAnyOrigin],
+    g_in: Int32,
+    node_cap: Int32,
+    max_depth: Int32,
+    min_samples_split: Int32,
+    max_leaves: Int32,
+    max_leaf_nodes: Int32,
+    bf_sabotage: Int32,
+):
+    """`NodeQueue.bestfirst_expand`, one thread per tree slot `s`: the popped
+    node becomes a split node, its two children are appended as leaves with
+    local ids `n_nodes, n_nodes + 1` (adjacent, left first), the leaf and
+    depth counters move, and the expandable children of a tree with budget
+    left become search slots `2 s`, `2 s + 1` of the next cycle (dummies
+    otherwise). One writer per tree, so the per-tree counters need no
+    atomics; arena records are atomic tickets (the scatter orders them)."""
+    var s = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if s >= Int(g_in):
+        return
+    b_slot[unsafe_offset = 2 * s] = Int32(s)
+    b_slot[unsafe_offset = 2 * s + 1] = Int32(s)
+    b_items[unsafe_offset = 2 * s] = etl_dummy_item()
+    b_items[unsafe_offset = 2 * s + 1] = etl_dummy_item()
+    b_gpos[unsafe_offset = 2 * s] = Int32(-1)
+    b_gpos[unsafe_offset = 2 * s + 1] = Int32(-1)
+    var gpos = Int(pt_gpos[unsafe_offset=s])
+    if gpos < 0:
+        return
+    var item = pt_items[unsafe_offset=s]
+    var sp = pt_splits[unsafe_offset=s]
+    var st = s * ETL_STAT_INTS
+    var bn = slot_stat[unsafe_offset = st + ETL_ST_NODES]
+    var leaves = slot_stat[unsafe_offset = st + ETL_ST_LEAVES] + Int32(1)
+    var gl = Int(Atomic.fetch_add(hdr.unsafe_offset(ETL_H_NODES), Int32(2)))
+    if gl + 2 > Int(node_cap):
+        hdr[unsafe_offset=ETL_H_OVERFLOW] = Int32(1)
+        return
+    slot_stat[unsafe_offset = st + ETL_ST_NODES] = bn + Int32(2)
+    slot_stat[unsafe_offset = st + ETL_ST_LEAVES] = leaves
+    var d1 = item.depth + Int32(1)
+    if d1 > slot_stat[unsafe_offset = st + ETL_ST_DEPTH]:
+        slot_stat[unsafe_offset = st + ETL_ST_DEPTH] = d1
+    var begin = item.instances.begin
+    var count = item.instances.count
+    var nl = sp.n_left
+    var nr = count - nl
+    g_nodes[unsafe_offset=gpos] = SparseTreeNode[
+        DType.float32
+    ].CreateSplitNode(
+        sp.colid, sp.quesval, sp.best_metric_val, Int64(Int(bn)), count
+    )
+    g_nodes[unsafe_offset=gl] = SparseTreeNode[DType.float32].CreateLeafNode(
+        nl
+    )
+    g_meta[unsafe_offset = gl * ETL_META_INTS + 0] = Int32(s)
+    g_meta[unsafe_offset = gl * ETL_META_INTS + 1] = bn
+    g_meta[unsafe_offset = gl * ETL_META_INTS + 2] = begin
+    g_meta[unsafe_offset = gl * ETL_META_INTS + 3] = nl
+    g_nodes[unsafe_offset = gl + 1] = SparseTreeNode[
+        DType.float32
+    ].CreateLeafNode(nr)
+    g_meta[unsafe_offset = (gl + 1) * ETL_META_INTS + 0] = Int32(s)
+    g_meta[unsafe_offset = (gl + 1) * ETL_META_INTS + 1] = bn + Int32(1)
+    g_meta[unsafe_offset = (gl + 1) * ETL_META_INTS + 2] = begin + nl
+    g_meta[unsafe_offset = (gl + 1) * ETL_META_INTS + 3] = nr
+    var budget = (
+        bf_sabotage == BESTFIRST_SAB_NO_BUDGET or leaves < max_leaf_nodes
+    )
+    if not budget:
+        return
+    var cuml_ok = max_leaves == Int32(-1) or leaves < max_leaves
+    if d1 < max_depth and nl >= min_samples_split and cuml_ok:
+        b_items[unsafe_offset = 2 * s] = NodeWorkItem(
+            bn, d1, InstanceRange(begin, nl)
+        )
+        b_gpos[unsafe_offset = 2 * s] = Int32(gl)
+        _ = Atomic.fetch_add(hdr.unsafe_offset(ETL_H_ROWS), nl)
+    if d1 < max_depth and nr >= min_samples_split and cuml_ok:
+        b_items[unsafe_offset = 2 * s + 1] = NodeWorkItem(
+            bn + Int32(1), d1, InstanceRange(begin + nl, nr)
+        )
+        b_gpos[unsafe_offset = 2 * s + 1] = Int32(gl + 1)
+        _ = Atomic.fetch_add(hdr.unsafe_offset(ETL_H_ROWS), nr)
+
+
+struct EtDeviceLoop(Movable):
+    """One group's device level loop: the header, the shared FIFO, the node
+    arena, the per-tree counters, the batch / rescue / partition arrays and
+    (best-first) the frontiers. See the block comment above."""
+
+    var g: Int
+    var max_batch: Int
+    var n_chunks_cap: Int
+    var node_cap: Int
+    var queue_cap: Int
+    var f_cap: Int
+    var hdr: DeviceBuffer[DType.int32]
+    var h_hdr: HostBuffer[DType.int32]
+    var queue: DeviceBuffer[DType.int32]
+    var g_nodes: DeviceBuffer[DType.uint8]
+    var g_meta: DeviceBuffer[DType.int32]
+    var slot_stat: DeviceBuffer[DType.int32]
+    var slot_base: DeviceBuffer[DType.int32]
+    var slot_tree: DeviceBuffer[DType.int32]
+    var b_items: DeviceBuffer[DType.uint8]
+    var b_slot: DeviceBuffer[DType.int32]
+    var b_gpos: DeviceBuffer[DType.int32]
+    var b_splits: DeviceBuffer[DType.uint8]
+    var s_items: DeviceBuffer[DType.uint8]
+    var s_slot: DeviceBuffer[DType.int32]
+    var s_idx: DeviceBuffer[DType.int32]
+    var d_pick: DeviceBuffer[DType.int32]
+    var x_off: DeviceBuffer[DType.int32]
+    var x_nb: DeviceBuffer[DType.int32]
+    var x_large: DeviceBuffer[DType.int32]
+    var p_rank: DeviceBuffer[DType.int32]
+    var p_valid: DeviceBuffer[DType.int32]
+    var p_left: DeviceBuffer[DType.int32]
+    var p_kids: DeviceBuffer[DType.int32]
+    var p_aoff: DeviceBuffer[DType.int32]
+    var p_eoff: DeviceBuffer[DType.int32]
+    var x_chunk: DeviceBuffer[DType.int32]
+    var cnt: DeviceBuffer[DType.int32]
+    var f_rec: DeviceBuffer[DType.uint8]
+    var f_gpos: DeviceBuffer[DType.int32]
+    var pt_items: DeviceBuffer[DType.uint8]
+    var pt_slot: DeviceBuffer[DType.int32]
+    var pt_gpos: DeviceBuffer[DType.int32]
+    var pt_splits: DeviceBuffer[DType.uint8]
+    var tree_base: DeviceBuffer[DType.int32]
+
+    def __init__(
+        out self, ctx: DeviceContext, g: Int, max_batch: Int, f_cap: Int
+    ) raises:
+        """Every buffer the loop needs, sized once per group. `f_cap` is the
+        per-tree frontier capacity (0 for depth-wise growth). The arena and
+        the FIFO start at `g + 2 * ET_LOOP_K * max_batch` and grow at
+        drains (`ensure`)."""
+        var nb = max_batch if max_batch > 2 * g else 2 * g
+        if nb < 1:
+            nb = 1
+        var chunks = (nb + ETL_TPB - 1) // ETL_TPB
+        var fcap = f_cap if f_cap > 0 else 1
+        var cap0 = g + 2 * ET_LOOP_K * nb
+        self.g = g
+        self.max_batch = nb
+        self.n_chunks_cap = chunks
+        self.node_cap = cap0
+        self.queue_cap = cap0
+        self.f_cap = f_cap
+        self.hdr = ctx.enqueue_create_buffer[DType.int32](ETL_HDR_WORDS)
+        self.h_hdr = ctx.enqueue_create_host_buffer[DType.int32](ETL_HDR_WORDS)
+        self.queue = ctx.enqueue_create_buffer[DType.int32](cap0 * ETL_Q_INTS)
+        self.g_nodes = ctx.enqueue_create_buffer[DType.uint8](
+            cap0 * size_of[SparseTreeNode[DType.float32]]()
+        )
+        self.g_meta = ctx.enqueue_create_buffer[DType.int32](
+            cap0 * ETL_META_INTS
+        )
+        self.slot_stat = ctx.enqueue_create_buffer[DType.int32](
+            g * ETL_STAT_INTS
+        )
+        self.slot_base = ctx.enqueue_create_buffer[DType.int32](2 * g)
+        self.slot_tree = ctx.enqueue_create_buffer[DType.int32](g)
+        self.b_items = ctx.enqueue_create_buffer[DType.uint8](
+            nb * size_of[NodeWorkItem]()
+        )
+        self.b_slot = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.b_gpos = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.b_splits = ctx.enqueue_create_buffer[DType.uint8](
+            nb * size_of[Split]()
+        )
+        self.s_items = ctx.enqueue_create_buffer[DType.uint8](
+            nb * size_of[NodeWorkItem]()
+        )
+        self.s_slot = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.s_idx = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.d_pick = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.x_off = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.x_nb = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.x_large = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.p_rank = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.p_valid = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.p_left = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.p_kids = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.p_aoff = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.p_eoff = ctx.enqueue_create_buffer[DType.int32](nb)
+        self.x_chunk = ctx.enqueue_create_buffer[DType.int32](3 * chunks)
+        self.cnt = ctx.enqueue_create_buffer[DType.int32](chunks * g)
+        self.f_rec = ctx.enqueue_create_buffer[DType.uint8](
+            g * fcap * size_of[FrontierRecord]()
+        )
+        self.f_gpos = ctx.enqueue_create_buffer[DType.int32](g * fcap)
+        self.pt_items = ctx.enqueue_create_buffer[DType.uint8](
+            g * size_of[NodeWorkItem]()
+        )
+        self.pt_slot = ctx.enqueue_create_buffer[DType.int32](g)
+        self.pt_gpos = ctx.enqueue_create_buffer[DType.int32](g)
+        self.pt_splits = ctx.enqueue_create_buffer[DType.uint8](
+            g * size_of[Split]()
+        )
+        self.tree_base = ctx.enqueue_create_buffer[DType.int32](g + 1)
+
+    def word(self, w: Int) -> Int:
+        """Header word `w` as of the last drain."""
+        return Int(self.h_hdr.unsafe_ptr()[unsafe_offset=w])
+
+    def drain(mut self, ctx: DeviceContext) raises:
+        """The loop's one readback: the header, then a synchronize."""
+        ctx.enqueue_copy(dst_buf=self.h_hdr, src_buf=self.hdr)
+        ctx.synchronize()
+        var ov = self.word(ETL_H_OVERFLOW)
+        if ov != 0:
+            raise Error(
+                "ET device level loop: header overflow code "
+                + String(ov)
+                + " (1 arena/FIFO capacity, 2 block-map bound, 3 pop bound,"
+                " 4 best-first frontier capacity) -- a host bound bug"
+            )
+
+    def init_roots(
+        mut self,
+        ctx: DeviceContext,
+        tree_ids: List[Int32],
+        first: Int,
+        slot_rows: Int32,
+        shared_base: Int32,
+        root_expandable: Int32,
+        bestfirst: Bool,
+    ) raises:
+        """`NodeQueue.__init__` for the group: tree ids, roots, header."""
+        var h_tree = ctx.enqueue_create_host_buffer[DType.int32](self.g)
+        ctx.synchronize()
+        memcpy(
+            dest=h_tree.unsafe_ptr(),
+            src=tree_ids.unsafe_ptr() + first,
+            count=self.g,
+        )
+        ctx.enqueue_copy(dst_buf=self.slot_tree, src_ptr=h_tree.unsafe_ptr())
+        ctx.enqueue_function[etl_init_kernel](
+            self.hdr.unsafe_ptr(),
+            self.queue.unsafe_ptr(),
+            self.g_nodes.unsafe_ptr().unsafe_bitcast[
+                SparseTreeNode[DType.float32]
+            ](),
+            self.g_meta.unsafe_ptr(),
+            self.slot_stat.unsafe_ptr(),
+            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.b_slot.unsafe_ptr(),
+            self.b_gpos.unsafe_ptr(),
+            Int32(self.g),
+            slot_rows,
+            shared_base,
+            root_expandable,
+            Int32(1) if bestfirst else Int32(0),
+            grid_dim=ceildiv(self.g, ETL_TPB),
+            block_dim=ETL_TPB,
+        )
+        self.drain(ctx)
+        _ = h_tree^
+
+    def ensure(mut self, ctx: DeviceContext, extra: Int) raises:
+        """Call right after a drain. Grows the node arena so `extra` more
+        records fit, and re-packs the FIFO's live stretch `[head, tail)` to
+        the front of a buffer with `extra` more entries of room (its header
+        words rewritten to match). Rare (doubling), so it synchronizes."""
+        comptime NB = size_of[SparseTreeNode[DType.float32]]()
+        var used = self.word(ETL_H_NODES)
+        if used + extra > self.node_cap:
+            var cap = 2 * self.node_cap
+            if cap < used + extra:
+                cap = used + extra
+            var nn = ctx.enqueue_create_buffer[DType.uint8](cap * NB)
+            var nm = ctx.enqueue_create_buffer[DType.int32](cap * ETL_META_INTS)
+            if used > 0:
+                var dn = nn.create_sub_buffer[DType.uint8](0, used * NB)
+                var sn = self.g_nodes.create_sub_buffer[DType.uint8](
+                    0, used * NB
+                )
+                ctx.enqueue_copy(dst_buf=dn, src_buf=sn)
+                var dm = nm.create_sub_buffer[DType.int32](
+                    0, used * ETL_META_INTS
+                )
+                var sm = self.g_meta.create_sub_buffer[DType.int32](
+                    0, used * ETL_META_INTS
+                )
+                ctx.enqueue_copy(dst_buf=dm, src_buf=sm)
+                ctx.synchronize()
+                _ = dn^
+                _ = sn^
+                _ = dm^
+                _ = sm^
+            self.g_nodes = nn^
+            self.g_meta = nm^
+            self.node_cap = cap
+        var head = self.word(ETL_H_HEAD)
+        var tail = self.word(ETL_H_TAIL)
+        if tail + extra > self.queue_cap:
+            var live = tail - head
+            var qcap = 2 * live
+            if qcap < live + extra:
+                qcap = live + extra
+            var nq = ctx.enqueue_create_buffer[DType.int32](qcap * ETL_Q_INTS)
+            if live > 0:
+                var dq = nq.create_sub_buffer[DType.int32](0, live * ETL_Q_INTS)
+                var sq = self.queue.create_sub_buffer[DType.int32](
+                    head * ETL_Q_INTS, live * ETL_Q_INTS
+                )
+                ctx.enqueue_copy(dst_buf=dq, src_buf=sq)
+                ctx.synchronize()
+                _ = dq^
+                _ = sq^
+            self.queue = nq^
+            self.queue_cap = qcap
+            # The device header equals `h_hdr` here (drained, nothing queued
+            # since): shift the two FIFO words and put the header back.
+            self.h_hdr.unsafe_ptr()[unsafe_offset=ETL_H_HEAD] = Int32(0)
+            self.h_hdr.unsafe_ptr()[unsafe_offset=ETL_H_TAIL] = Int32(live)
+            ctx.enqueue_copy(dst_buf=self.hdr, src_ptr=self.h_hdr.unsafe_ptr())
+            ctx.synchronize()
+
+    def enqueue_pop(
+        mut self,
+        ctx: DeviceContext,
+        n_bound: Int,
+        bound_s: Int,
+        tile_s: Int,
+        bound_p: Int,
+        tile_p: Int,
+    ) raises:
+        ctx.enqueue_function[etl_pop_kernel[ETL_TPB]](
+            self.hdr.unsafe_ptr(),
+            self.queue.unsafe_ptr(),
+            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.b_slot.unsafe_ptr(),
+            self.b_gpos.unsafe_ptr(),
+            Int32(n_bound),
+            Int32(bound_s),
+            Int32(tile_s),
+            Int32(bound_p),
+            Int32(tile_p),
+            grid_dim=1,
+            block_dim=ETL_TPB,
+        )
+
+    def enqueue_stage(
+        mut self,
+        ctx: DeviceContext,
+        mut ws: LevelWorkspace,
+        src: Int,
+        count_word: Int,
+        n_bound: Int,
+        k: Int,
+        tile: Int,
+        part_tile: Int,
+        blocks_bound: Int,
+        scalar_tree: Int32,
+    ) raises:
+        """`stage_batch` from a device list (`ETL_SRC_*`) into the search
+        workspace, then its block map. The host staging's shadow copies no
+        longer describe the device buffers, so they are invalidated."""
+        var src_items = (
+            self.b_items.unsafe_ptr()
+            .unsafe_bitcast[NodeWorkItem]()
+            .unsafe_origin_cast[MutAnyOrigin]()
+        )
+        var src_slot = self.b_slot.unsafe_ptr().unsafe_origin_cast[
+            MutAnyOrigin
+        ]()
+        if src == ETL_SRC_SUB:
+            src_items = (
+                self.s_items.unsafe_ptr()
+                .unsafe_bitcast[NodeWorkItem]()
+                .unsafe_origin_cast[MutAnyOrigin]()
+            )
+            src_slot = self.s_slot.unsafe_ptr().unsafe_origin_cast[
+                MutAnyOrigin
+            ]()
+        elif src == ETL_SRC_PART:
+            src_items = (
+                self.pt_items.unsafe_ptr()
+                .unsafe_bitcast[NodeWorkItem]()
+                .unsafe_origin_cast[MutAnyOrigin]()
+            )
+            src_slot = self.pt_slot.unsafe_ptr().unsafe_origin_cast[
+                MutAnyOrigin
+            ]()
+        ctx.enqueue_function[etl_stage_kernel[ETL_TPB]](
+            self.hdr.unsafe_ptr(),
+            Int32(count_word),
+            src_items,
+            src_slot,
+            self.slot_tree.unsafe_ptr(),
+            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            ws.d_tree.unsafe_ptr(),
+            ws.d_tsalt.unsafe_ptr(),
+            ws.d_nb.unsafe_ptr(),
+            ws.d_nc.unsafe_ptr(),
+            ws.d_blk_base.unsafe_ptr(),
+            self.x_off.unsafe_ptr(),
+            self.x_nb.unsafe_ptr(),
+            self.x_large.unsafe_ptr(),
+            Int32(n_bound),
+            Int32(k),
+            Int32(tile),
+            Int32(part_tile),
+            Int32(blocks_bound),
+            scalar_tree,
+            grid_dim=1,
+            block_dim=ETL_TPB,
+        )
+        ctx.enqueue_function[etl_map_kernel](
+            self.hdr.unsafe_ptr(),
+            self.x_off.unsafe_ptr(),
+            self.x_nb.unsafe_ptr(),
+            self.x_large.unsafe_ptr(),
+            ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            Int32(n_bound),
+            Int32(blocks_bound),
+            grid_dim=ceildiv(blocks_bound, ETL_TPB),
+            block_dim=ETL_TPB,
+        )
+        ws.stage_valid = False
+
+    def enqueue_save_splits(
+        mut self, ctx: DeviceContext, mut ws: LevelWorkspace, n_bound: Int
+    ) raises:
+        ctx.enqueue_function[etl_copy_splits_kernel](
+            self.b_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            Int32(n_bound),
+            grid_dim=ceildiv(n_bound, ETL_TPB),
+            block_dim=ETL_TPB,
+        )
+
+    def enqueue_retry(
+        mut self, ctx: DeviceContext, mut ws: LevelWorkspace, n_bound: Int
+    ) raises:
+        ctx.enqueue_function[etl_retry_kernel[ETL_TPB]](
+            self.hdr.unsafe_ptr(),
+            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.b_slot.unsafe_ptr(),
+            self.b_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            ws.d_nonconst.unsafe_ptr(),
+            self.s_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.s_slot.unsafe_ptr(),
+            self.s_idx.unsafe_ptr(),
+            Int32(n_bound),
+            grid_dim=1,
+            block_dim=ETL_TPB,
+        )
+
+    def enqueue_merge(
+        mut self, ctx: DeviceContext, mut ws: LevelWorkspace, n_bound: Int
+    ) raises:
+        ctx.enqueue_function[etl_merge_kernel](
+            self.hdr.unsafe_ptr(),
+            self.b_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            self.d_pick.unsafe_ptr(),
+            self.s_idx.unsafe_ptr(),
+            Int32(n_bound),
+            grid_dim=ceildiv(n_bound, ETL_TPB),
+            block_dim=ETL_TPB,
+        )
+
+    def enqueue_push(
+        mut self, ctx: DeviceContext, params: DecisionTreeParams, n_bound: Int
+    ) raises:
+        """`NodeQueue.push` for every tree of the batch: rank, per-tree
+        offsets, marks, commit, write (see the kernels)."""
+        var chunks = (n_bound + ETL_TPB - 1) // ETL_TPB
+        ctx.enqueue_memset(self.cnt, Int32(0))
+        ctx.enqueue_function[etl_push_rank_kernel[ETL_TPB]](
+            self.hdr.unsafe_ptr(),
+            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.b_slot.unsafe_ptr(),
+            self.b_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            self.cnt.unsafe_ptr(),
+            self.p_rank.unsafe_ptr(),
+            self.p_valid.unsafe_ptr(),
+            Int32(n_bound),
+            Int32(self.g),
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            grid_dim=chunks,
+            block_dim=ETL_TPB,
+        )
+        ctx.enqueue_function[etl_push_slot_kernel](
+            self.cnt.unsafe_ptr(),
+            self.slot_stat.unsafe_ptr(),
+            self.slot_base.unsafe_ptr(),
+            Int32(chunks),
+            Int32(self.g),
+            params.max_leaves,
+            grid_dim=ceildiv(self.g, ETL_TPB),
+            block_dim=ETL_TPB,
+        )
+        ctx.enqueue_function[etl_push_mark_kernel[ETL_TPB]](
+            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.b_slot.unsafe_ptr(),
+            self.b_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            self.cnt.unsafe_ptr(),
+            self.p_rank.unsafe_ptr(),
+            self.p_valid.unsafe_ptr(),
+            self.slot_base.unsafe_ptr(),
+            self.slot_stat.unsafe_ptr(),
+            self.p_left.unsafe_ptr(),
+            self.p_kids.unsafe_ptr(),
+            self.p_aoff.unsafe_ptr(),
+            self.p_eoff.unsafe_ptr(),
+            self.x_chunk.unsafe_ptr(),
+            Int32(n_bound),
+            Int32(self.g),
+            params.max_depth,
+            params.min_samples_split,
+            params.max_leaves,
+            grid_dim=chunks,
+            block_dim=ETL_TPB,
+        )
+        ctx.enqueue_function[etl_push_commit_kernel[ETL_TPB]](
+            self.hdr.unsafe_ptr(),
+            self.x_chunk.unsafe_ptr(),
+            Int32(chunks),
+            Int32(self.node_cap),
+            Int32(self.queue_cap),
+            grid_dim=1,
+            block_dim=ETL_TPB,
+        )
+        ctx.enqueue_function[etl_push_write_kernel[ETL_TPB]](
+            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.b_slot.unsafe_ptr(),
+            self.b_gpos.unsafe_ptr(),
+            self.b_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            self.p_left.unsafe_ptr(),
+            self.p_kids.unsafe_ptr(),
+            self.p_aoff.unsafe_ptr(),
+            self.p_eoff.unsafe_ptr(),
+            self.x_chunk.unsafe_ptr(),
+            self.g_nodes.unsafe_ptr().unsafe_bitcast[
+                SparseTreeNode[DType.float32]
+            ](),
+            self.g_meta.unsafe_ptr(),
+            self.queue.unsafe_ptr(),
+            Int32(n_bound),
+            Int32(self.node_cap),
+            Int32(self.queue_cap),
+            grid_dim=chunks,
+            block_dim=ETL_TPB,
+        )
+
+    def enqueue_bf_admit(
+        mut self,
+        ctx: DeviceContext,
+        params: DecisionTreeParams,
+        n_items: Int,
+        slot_rows: Int32,
+    ) raises:
+        ctx.enqueue_function[et_bf_admit_kernel](
+            self.hdr.unsafe_ptr(),
+            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.b_slot.unsafe_ptr(),
+            self.b_gpos.unsafe_ptr(),
+            self.b_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            self.slot_stat.unsafe_ptr(),
+            self.slot_tree.unsafe_ptr(),
+            self.f_rec.unsafe_ptr().unsafe_bitcast[FrontierRecord](),
+            self.f_gpos.unsafe_ptr(),
+            Int32(n_items),
+            Int32(self.f_cap),
+            slot_rows,
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            grid_dim=ceildiv(n_items, ETL_TPB),
+            block_dim=ETL_TPB,
+        )
+
+    def enqueue_bf_pop(
+        mut self,
+        ctx: DeviceContext,
+        params: DecisionTreeParams,
+        bf_sabotage: Int32,
+    ) raises:
+        ctx.enqueue_function[et_bf_pop_kernel[ETL_TPB]](
+            self.hdr.unsafe_ptr(),
+            self.slot_stat.unsafe_ptr(),
+            self.f_rec.unsafe_ptr().unsafe_bitcast[FrontierRecord](),
+            self.f_gpos.unsafe_ptr(),
+            self.pt_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.pt_slot.unsafe_ptr(),
+            self.pt_gpos.unsafe_ptr(),
+            self.pt_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            Int32(self.f_cap),
+            params.max_leaf_nodes,
+            bf_sabotage,
+            grid_dim=self.g,
+            block_dim=ETL_TPB,
+        )
+
+    def enqueue_bf_expand(
+        mut self,
+        ctx: DeviceContext,
+        params: DecisionTreeParams,
+        bf_sabotage: Int32,
+    ) raises:
+        ctx.enqueue_function[et_bf_expand_kernel](
+            self.hdr.unsafe_ptr(),
+            self.slot_stat.unsafe_ptr(),
+            self.pt_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.pt_gpos.unsafe_ptr(),
+            self.pt_splits.unsafe_ptr().unsafe_bitcast[Split](),
+            self.g_nodes.unsafe_ptr().unsafe_bitcast[
+                SparseTreeNode[DType.float32]
+            ](),
+            self.g_meta.unsafe_ptr(),
+            self.b_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            self.b_slot.unsafe_ptr(),
+            self.b_gpos.unsafe_ptr(),
+            Int32(self.g),
+            Int32(self.node_cap),
+            params.max_depth,
+            params.min_samples_split,
+            params.max_leaves,
+            params.max_leaf_nodes,
+            bf_sabotage,
+            grid_dim=ceildiv(self.g, ETL_TPB),
+            block_dim=ETL_TPB,
+        )
+
+    def enqueue_scatter(
+        mut self,
+        ctx: DeviceContext,
+        mut d_nodes: DeviceBuffer[DType.uint8],
+        mut d_ranges: DeviceBuffer[DType.uint8],
+        total_nodes: Int,
+    ) raises:
+        """The finished arena, tree by tree in local-id order (call after the
+        last drain): `tree_base`, then the scatter."""
+        ctx.enqueue_function[etl_tree_base_kernel[ETL_TPB]](
+            self.slot_stat.unsafe_ptr(),
+            self.tree_base.unsafe_ptr(),
+            Int32(self.g),
+            grid_dim=1,
+            block_dim=ETL_TPB,
+        )
+        if total_nodes > 0:
+            ctx.enqueue_function[etl_scatter_kernel](
+                self.g_nodes.unsafe_ptr().unsafe_bitcast[
+                    SparseTreeNode[DType.float32]
+                ](),
+                self.g_meta.unsafe_ptr(),
+                self.tree_base.unsafe_ptr(),
+                d_nodes.unsafe_ptr().unsafe_bitcast[
+                    SparseTreeNode[DType.float32]
+                ](),
+                d_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange](),
+                Int32(total_nodes),
+                grid_dim=ceildiv(total_nodes, ETL_TPB),
+                block_dim=ETL_TPB,
+            )
+
+    def download_trees(
+        mut self,
+        ctx: DeviceContext,
+        mut d_nodes: DeviceBuffer[DType.uint8],
+        mut d_leaves: DeviceBuffer[DType.float32],
+        total_nodes: Int,
+        k_out: Int,
+        tree_ids: List[Int32],
+        first: Int,
+        mut trees_out: List[TreeMetaDataNode[DType.float32]],
+    ) raises:
+        """The group's model, once: per-tree counters and bases, the
+        concatenated nodes and leaf values, one synchronize, then each tree's
+        `sparsetree` and `vector_leaf` as two block copies."""
+        var g = self.g
+        var h_stat = ctx.enqueue_create_host_buffer[DType.int32](
+            g * ETL_STAT_INTS
+        )
+        var h_base = ctx.enqueue_create_host_buffer[DType.int32](g + 1)
+        var n_alloc = total_nodes if total_nodes > 0 else 1
+        var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
+            n_alloc * size_of[SparseTreeNode[DType.float32]]()
+        )
+        var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
+            n_alloc * k_out
+        )
+        ctx.enqueue_copy(dst_buf=h_stat, src_buf=self.slot_stat)
+        ctx.enqueue_copy(dst_buf=h_base, src_buf=self.tree_base)
+        if total_nodes > 0:
+            ctx.enqueue_copy(dst_buf=h_nodes, src_buf=d_nodes)
+            ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
+        ctx.synchronize()
+        var sp = h_stat.unsafe_ptr()
+        var bp = h_base.unsafe_ptr()
+        var np = h_nodes.unsafe_ptr().unsafe_bitcast[
+            SparseTreeNode[DType.float32]
+        ]()
+        var lp = h_leaves.unsafe_ptr()
+        for s in range(g):  # small-loop(g: tree slots in this group): one output tree per slot as two block copies, g capped by group_cap
+            var n_s = Int(sp[unsafe_offset = s * ETL_STAT_INTS + ETL_ST_NODES])
+            var base = Int(bp[unsafe_offset=s])
+            var nodes = List[SparseTreeNode[DType.float32]](
+                length=n_s,
+                fill=SparseTreeNode[DType.float32].CreateLeafNode(Int32(0)),
+            )
+            memcpy(dest=nodes.unsafe_ptr(), src=np + base, count=n_s)
+            var leaves = List[Float32](length=n_s * k_out, fill=Float32(0.0))
+            memcpy(
+                dest=leaves.unsafe_ptr(),
+                src=lp + base * k_out,
+                count=n_s * k_out,
+            )
+            trees_out.append(
+                TreeMetaDataNode[DType.float32](
+                    treeid=tree_ids[first + s],
+                    depth_counter=sp[
+                        unsafe_offset = s * ETL_STAT_INTS + ETL_ST_DEPTH
+                    ],
+                    leaf_counter=sp[
+                        unsafe_offset = s * ETL_STAT_INTS + ETL_ST_LEAVES
+                    ],
+                    num_outputs=Int32(k_out),
+                    vector_leaf=leaves^,
+                    sparsetree=nodes^,
+                )
+            )
+        _ = h_stat^
+        _ = h_base^
+        _ = h_nodes^
+        _ = h_leaves^
+
+
+def _et_search[
+    IS_CLF: Bool
+](
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    n_nodes: Int,
+    n_blocks: Int,
+    k: Int,
+    params: DecisionTreeParams,
+    n_classes: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    seed: UInt64,
+    use_sampler: Bool,
+    range_only: Bool,
+    mut clock: PhaseClock,
+) raises:
+    """The objective's device search on an already-staged batch."""
+    comptime if IS_CLF:
+        search_batch_enqueue(
+            ctx, ws, dataset, d_row_ids, n_nodes, n_blocks, k, params,
+            n_classes, n_rows, n_cols, seed, use_sampler, range_only, clock,
+        )
+    else:
+        search_batch_regression_enqueue(
+            ctx, ws, dataset, d_row_ids, n_nodes, n_blocks, k, params,
+            n_rows, n_cols, seed, use_sampler, range_only, clock,
+        )
+
+
+def _et_enqueue_partition(
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    splits: MutPointer[Split, MutAnyOrigin],
+    n_part: Int,
+    n_blocks: Int,
+    params: DecisionTreeParams,
+    n_rows: Int32,
+) raises:
+    """THE PARTITION, on the device (deviation 203), over the batch staged
+    with the partition tile: count, scan, scatter, write back. Range-
+    addressed, so nodes of different trees partition side by side; `splits`
+    is the batch's split per item (an invalid split leaves its node's rows
+    alone, `_skip_node`)."""
+    comptime TPB = DEVICE_TPB
+    ctx.enqueue_function[
+        partition_count_kernel[TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS]
+    ](
+        ws.d_blk_left.unsafe_ptr(),
+        d_row_ids.unsafe_ptr(),
+        dataset.d_data.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+        splits,
+        n_rows,
+        params.min_impurity_decrease,
+        params.min_samples_leaf,
+        PART_MB_SAB_NONE,
+        ws.d_part_flags.unsafe_ptr(),
+        grid_dim=(n_blocks, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
+    ctx.enqueue_function[partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]](
+        ws.d_blk_off.unsafe_ptr(),
+        ws.d_blk_left.unsafe_ptr(),
+        ws.d_blk_base.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        splits,
+        params.min_impurity_decrease,
+        params.min_samples_leaf,
+        PART_MB_SAB_NONE,
+        grid_dim=(n_part, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
+    ctx.enqueue_function[
+        partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS]
+    ](
+        ws.d_row_alt.unsafe_ptr(),
+        d_row_ids.unsafe_ptr(),
+        ws.d_blk_off.unsafe_ptr(),
+        dataset.d_data.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+        splits,
+        n_rows,
+        params.min_impurity_decrease,
+        params.min_samples_leaf,
+        PART_MB_SAB_NONE,
+        ws.d_part_flags.unsafe_ptr(),
+        grid_dim=(n_blocks, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
+    ctx.enqueue_function[partition_writeback_kernel[TPB, PART_ROWS_PER_THREAD]](
+        d_row_ids.unsafe_ptr(),
+        ws.d_row_alt.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+        splits,
+        params.min_impurity_decrease,
+        params.min_samples_leaf,
+        PART_MB_SAB_NONE,
+        grid_dim=(n_blocks, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
+
+
+def _et_rescue[
+    IS_CLF: Bool
+](
+    ctx: DeviceContext,
+    mut lp: EtDeviceLoop,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    params: DecisionTreeParams,
+    n_classes: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    seed: UInt64,
+    scalar_tree: Int32,
+    n_bound: Int,
+    bound_s: Int,
+    tile_s: Int,
+    tile_p: Int,
+    mut clock: PhaseClock,
+) raises:
+    """DEVIATION 205 on the device (THE DEVICE RESCUE, unchanged in what it
+    computes): the nodes whose sampled columns were all constant are
+    compacted into a sub-batch, surveyed over every column, given a column
+    by `rescue_pick_kernel`, searched with `k = 1`, and the rescued splits
+    replace theirs where a column was found. Launched at the batch's bounds;
+    an empty sub-batch is all dummies and does nothing."""
+    lp.enqueue_retry(ctx, ws, n_bound)
+    lp.enqueue_stage(
+        ctx, ws, ETL_SRC_SUB, ETL_H_NSUB, n_bound, Int(n_cols), tile_s,
+        tile_p, bound_s, scalar_tree,
+    )
+    _et_search[IS_CLF](
+        ctx, ws, dataset, d_row_ids, n_bound, bound_s, Int(n_cols), params,
+        n_classes, n_rows, n_cols, seed, False, True, clock,
+    )
+    ctx.enqueue_function[rescue_pick_kernel](
+        lp.d_pick.unsafe_ptr(),
+        ws.d_colids.unsafe_ptr(),
+        ws.d_min.unsafe_ptr(),
+        ws.d_max.unsafe_ptr(),
+        ws.d_missing.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        ws.d_tree.unsafe_ptr(),
+        Int32(n_bound),
+        n_cols,
+        seed,
+        grid_dim=ceildiv(n_bound, 64),
+        block_dim=64,
+    )
+    lp.enqueue_stage(
+        ctx, ws, ETL_SRC_SUB, ETL_H_NSUB, n_bound, 1, tile_s, tile_p,
+        bound_s, scalar_tree,
+    )
+    _et_search[IS_CLF](
+        ctx, ws, dataset, d_row_ids, n_bound, bound_s, 1, params, n_classes,
+        n_rows, n_cols, seed, False, False, clock,
+    )
+    lp.enqueue_merge(ctx, ws, n_bound)
+
+
+def _et_trace_search[
+    IS_CLF: Bool
+](
+    ctx: DeviceContext,
+    mut lp: EtDeviceLoop,
+    mut ws: LevelWorkspace,
+    mut trace: IdentityTrace,
+    tag_pre: String,
+    k: Int,
+) raises:
+    """DEVIATION 454's hazard stages for one batch, traced runs only (rule 4:
+    a traced run drains per record and is never a timing). The live count
+    comes from the header, so the records hold the batch's logical slots."""
+    lp.drain(ctx)
+    var n = lp.word(ETL_H_CUR)
+    if n <= 0:
+        return
+    trace.record_device(ctx, tag_pre + "colids", ws.d_colids, n * k)
+    trace.record_device(ctx, tag_pre + "range.min", ws.d_min, n * k)
+    trace.record_device(ctx, tag_pre + "range.max", ws.d_max, n * k)
+    trace.record_device(ctx, tag_pre + "draw.thresh", ws.d_thresh, n * k)
+    trace.record_device(ctx, tag_pre + "reduce.colid", ws.r_c, n)
+    comptime if IS_CLF:
+        trace.record_device(ctx, tag_pre + "reduce.num", ws.r_nu, n)
+        trace.record_device(ctx, tag_pre + "reduce.den", ws.r_de, n)
+    else:
+        trace.record_device(ctx, tag_pre + "reduce.gain", ws.r_m, n)
+
+
+def _et_run_depthwise[
+    IS_CLF: Bool
+](
+    ctx: DeviceContext,
+    mut lp: EtDeviceLoop,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    params: DecisionTreeParams,
+    k: Int,
+    n_classes: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    seed: UInt64,
+    sabotage: Int32,
+    mut clock: PhaseClock,
+    mut trace: IdentityTrace,
+    gi: Int,
+) raises -> Int:
+    """`Builder::train`'s loop for the whole group, depth-wise: per drain,
+    `ET_LOOP_K` batches of pop, stage, search, rescue, partition, push.
+
+    Batch `j` after a drain holds at most `min(max_batch, Q * 2^j)` items
+    (the FIFO at most doubles per batch) and at most `rows / min_samples_split`
+    (queued items are disjoint ranges of at least `min_samples_split` rows);
+    every batch's rows are a subset of the queued rows `R`, so its block map
+    has at most `1 + n + R / tile` entries. Returns the batch count."""
+    comptime TPB = DEVICE_TPB
+    var tile_s = TPB * SEARCH_ROWS_PER_THREAD
+    var tile_p = TPB * PART_ROWS_PER_THREAD
+    var max_batch = Int(params.max_batch_size)
+    var msp = Int(params.min_samples_split)
+    if msp < 1:
+        msp = 1
+    var scalar = Int32(1) if sabotage == FOREST_SAB_SCALAR_TREE else Int32(0)
+    var k_drain = 1 if trace.enabled else ET_LOOP_K
+    var cyc = 0
+    while True:
+        var head = lp.word(ETL_H_HEAD)
+        var tail = lp.word(ETL_H_TAIL)
+        if head >= tail:
+            break
+        var rows = lp.word(ETL_H_ROWS)
+        var item_cap = rows // msp
+        if item_cap < 1:
+            item_cap = 1
+        var extra = 0
+        var qb = tail - head
+        for _ in range(k_drain):  # small-loop(k_drain: batches per drain): sums per-launch bounds, k_drain <= 8
+            var nb = qb if qb < max_batch else max_batch
+            if nb > item_cap:
+                nb = item_cap
+            extra += 2 * nb
+            if qb < max_batch:
+                qb *= 2
+        lp.ensure(ctx, extra)
+        qb = tail - head
+        for _ in range(k_drain):  # small-loop(k_drain: batches per drain): enqueues one batch each, k_drain <= 8
+            var nb = qb if qb < max_batch else max_batch
+            if nb > item_cap:
+                nb = item_cap
+            if nb < 1:
+                nb = 1
+            var bound_s = 1 + nb + rows // tile_s
+            if bound_s > ws.cap_blocks:
+                bound_s = ws.cap_blocks
+            var bound_p = 1 + nb + rows // tile_p
+            if bound_p > ws.cap_blocks:
+                bound_p = ws.cap_blocks
+            var tag_pre = String("g") + String(gi) + ".c" + String(cyc) + "."
+            lp.enqueue_pop(ctx, nb, bound_s, tile_s, bound_p, tile_p)
+            clock.tick(ctx, PHASE_HOST_QUEUE)
+            lp.enqueue_stage(
+                ctx, ws, ETL_SRC_BATCH, ETL_H_CUR, nb, k, tile_s, tile_p,
+                bound_s, scalar,
+            )
+            clock.tick(ctx, PHASE_STAGE_BATCH)
+            _et_search[IS_CLF](
+                ctx, ws, dataset, d_row_ids, nb, bound_s, k, params,
+                n_classes, n_rows, n_cols, seed, True, False, clock,
+            )
+            lp.enqueue_save_splits(ctx, ws, nb)
+            if trace.enabled:
+                _et_trace_search[IS_CLF](ctx, lp, ws, trace, tag_pre, k)
+            _et_rescue[IS_CLF](
+                ctx, lp, ws, dataset, d_row_ids, params, n_classes, n_rows,
+                n_cols, seed, scalar, nb, bound_s, tile_s, tile_p, clock,
+            )
+            if trace.enabled:
+                lp.drain(ctx)
+                var n_live = lp.word(ETL_H_CUR)
+                if n_live > 0:
+                    trace.record_device(
+                        ctx,
+                        tag_pre + "split.records",
+                        lp.b_splits,
+                        n_live * size_of[Split](),
+                    )
+            lp.enqueue_stage(
+                ctx, ws, ETL_SRC_BATCH, ETL_H_CUR, nb, k, tile_p, tile_p,
+                bound_p, scalar,
+            )
+            _et_enqueue_partition(
+                ctx, ws, dataset, d_row_ids,
+                lp.b_splits.unsafe_ptr()
+                .unsafe_bitcast[Split]()
+                .unsafe_origin_cast[MutAnyOrigin](),
+                nb, bound_p, params, n_rows,
+            )
+            clock.tick(ctx, PHASE_PARTITION)
+            if trace.enabled:
+                trace.record_device(
+                    ctx, tag_pre + "partition.rowids", d_row_ids
+                )
+            lp.enqueue_push(ctx, params, nb)
+            clock.tick(ctx, PHASE_HOST_PUSH)
+            cyc += 1
+            if qb < max_batch:
+                qb *= 2
+        lp.drain(ctx)
+    return cyc
+
+
+def _et_run_bestfirst[
+    IS_CLF: Bool
+](
+    ctx: DeviceContext,
+    mut lp: EtDeviceLoop,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    params: DecisionTreeParams,
+    k: Int,
+    n_classes: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    seed: UInt64,
+    bf_sabotage: Int32,
+    slot_rows: Int32,
+    mut clock: PhaseClock,
+    mut trace: IdentityTrace,
+    gi: Int,
+) raises -> Int:
+    """DEVIATION 466's best-first growth for the whole group, on the device:
+    per cycle, search the children the last expansions created (two search
+    slots per tree), rescue, ADMIT the valid ones to their trees'
+    frontiers, POP each tree's best record, partition the popped nodes and
+    EXPAND them. The fit ends when a cycle pops nothing (no frontier with
+    budget left), read from the header every `ET_LOOP_K` cycles; cycles
+    enqueued after the end are inert. Returns the cycle count."""
+    comptime TPB = DEVICE_TPB
+    var tile_s = TPB * SEARCH_ROWS_PER_THREAD
+    var tile_p = TPB * PART_ROWS_PER_THREAD
+    var g = lp.g
+    var n_s = 2 * g
+    var k_drain = 1 if trace.enabled else ET_LOOP_K
+    var cyc = 0
+    while True:
+        if cyc > 0 and lp.word(ETL_H_POPS) == 0:
+            break
+        var rows = lp.word(ETL_H_ROWS)
+        if rows < 0:
+            rows = 0
+        lp.ensure(ctx, 2 * g * k_drain)
+        var bound_s = 1 + n_s + rows // tile_s
+        if bound_s > ws.cap_blocks:
+            bound_s = ws.cap_blocks
+        var bound_p = 1 + g + rows // tile_p
+        if bound_p > ws.cap_blocks:
+            bound_p = ws.cap_blocks
+        for _ in range(k_drain):  # small-loop(k_drain: cycles per drain): enqueues one cycle each, k_drain <= 8
+            var tag_pre = String("g") + String(gi) + ".c" + String(cyc) + "."
+            lp.enqueue_stage(
+                ctx, ws, ETL_SRC_BATCH, ETL_H_CUR, n_s, k, tile_s, tile_p,
+                bound_s, Int32(0),
+            )
+            _et_search[IS_CLF](
+                ctx, ws, dataset, d_row_ids, n_s, bound_s, k, params,
+                n_classes, n_rows, n_cols, seed, True, False, clock,
+            )
+            lp.enqueue_save_splits(ctx, ws, n_s)
+            if trace.enabled:
+                _et_trace_search[IS_CLF](ctx, lp, ws, trace, tag_pre, k)
+            _et_rescue[IS_CLF](
+                ctx, lp, ws, dataset, d_row_ids, params, n_classes, n_rows,
+                n_cols, seed, Int32(0), n_s, bound_s, tile_s, tile_p, clock,
+            )
+            lp.enqueue_bf_admit(ctx, params, n_s, slot_rows)
+            lp.enqueue_bf_pop(ctx, params, bf_sabotage)
+            clock.tick(ctx, PHASE_HOST_QUEUE)
+            lp.enqueue_stage(
+                ctx, ws, ETL_SRC_PART, ETL_H_GCOUNT, g, k, tile_p, tile_p,
+                bound_p, Int32(0),
+            )
+            _et_enqueue_partition(
+                ctx, ws, dataset, d_row_ids,
+                lp.pt_splits.unsafe_ptr()
+                .unsafe_bitcast[Split]()
+                .unsafe_origin_cast[MutAnyOrigin](),
+                g, bound_p, params, n_rows,
+            )
+            clock.tick(ctx, PHASE_PARTITION)
+            if trace.enabled:
+                trace.record_device(
+                    ctx, tag_pre + "partition.rowids", d_row_ids
+                )
+            lp.enqueue_bf_expand(ctx, params, bf_sabotage)
+            clock.tick(ctx, PHASE_HOST_PUSH)
+            cyc += 1
+        lp.drain(ctx)
+    return cyc
 
 
 def train_forest_classification_device(
@@ -4714,6 +6164,17 @@ def train_forest_classification_device_timed(
                 bf_cap = 1
             if g > bf_cap:
                 g = bf_cap
+            # cpu4-forest: the device frontiers hold `f_cap` records per tree;
+            # the group is narrowed to fit `ET_BF_FRONTIER_BYTES` (a
+            # scheduling cap: the trees do not depend on the grouping).
+            var bf_rec = et_bf_frontier_cap(params, slot_rows, bf_sabotage) * (
+                size_of[FrontierRecord]() + 4
+            )
+            var bf_mem_cap = ET_BF_FRONTIER_BYTES // bf_rec
+            if bf_mem_cap < 1:
+                bf_mem_cap = 1
+            if g > bf_mem_cap:
+                g = bf_mem_cap
         var total_rows = g * Int(slot_rows)
 
         # ONE row-id buffer for the whole group, slot `s` holding tree
@@ -4748,483 +6209,60 @@ def train_forest_classification_device_timed(
             TPB,
         )
 
-        var queues = List[NodeQueue[DType.float32]]()
-        for s in range(g):  # small-loop(g: tree slots in this group): one queue per in-flight tree, g capped by group_cap
-            var base = Int32(s) * slot_rows
-            if sabotage == FOREST_SAB_SHARED_ROW_BASE:
-                base = Int32(0)
-            queues.append(
-                NodeQueue[DType.float32](
-                    params, slot_rows, n_classes, tree_ids[first + s], base
-                )
-            )
-            queues[s].bf_sabotage = bf_sabotage
-
-        clock.tick(ctx, PHASE_SETUP)
-        # The trace's LEVEL-CYCLE counter: one merged frontier batch per
-        # iteration. `gN.cM.` prefixes keep every tag unique within the
-        # trace (the differ's alignment invariant) while naming a position
-        # in the ALGORITHM -- group N, cycle M -- never a machine property.
-        var cyc = 0
-        # DEVIATION 2663: per-group tallies printed only under
-        # `-D MOJOLEARN_ET_CYCLE_STATS=1` (a measurement define, never set by a
-        # build script): searched nodes, DEVIATION 205 survey nodes, rescues.
-        var st_nodes = 0
-        var st_retry = 0
-        var st_rescued = 0
-        # DEVIATION 466: the best-first carry between cycles -- the nodes
-        # admitted-but-unsearched, and which queue each belongs to. Empty
-        # and never read in depth-wise mode.
-        var bf_pending = List[NodeWorkItem]()
-        var bf_pending_q = List[Int]()
+        # cpu4-forest: THE LEVEL LOOP ON THE DEVICE (`EtDeviceLoop`, see the
+        # block comment above it). The group's queue, retry list, rescue
+        # merge, push and (best-first) frontiers live on the device; the
+        # host enqueues `ET_LOOP_K` batches per drain and reads one header.
+        var f_cap = 0
         if bestfirst:
-            for s in range(g):  # small-loop(g: tree slots in this group): one root seed per tree, g capped by group_cap
-                var seeds = queues[s].bestfirst_seed()
-                for i in range(len(seeds)):  # small-loop(seeds: one tree's root work item): bestfirst_seed returns at most the root
-                    bf_pending.append(seeds[i])
-                    bf_pending_q.append(s)
-        while True:
-            # --- ONE merged batch across every queue with work ----------
-            var work_items = List[NodeWorkItem]()
-            var item_trees = List[Int32]()
-            var seg_queue = List[Int]()
-            var seg_start = List[Int]()
-            var seg_count = List[Int]()
-            # DEVIATION 466 step 1: the best-first SEARCH batch is the set
-            # of nodes admitted since the last cycle -- the children the
-            # last expansions created, or the roots on cycle 0 -- and not a
-            # FIFO pop. `seg_*` stays empty; the best-first expansion is per
-            # popped node and does not use it.
-            if bestfirst:
-                for i in range(len(bf_pending)):  # small-loop(bf_pending: children of the last pops): at most two per tree slot, g capped
-                    work_items.append(bf_pending[i])
-                    item_trees.append(tree_ids[first + bf_pending_q[i]])
-            else:
-                for s in range(g):
-                    if len(work_items) >= Int(params.max_batch_size):
-                        break
-                    if not queues[s].has_work():
-                        continue
-                    var got = queues[s].pop_up_to(
-                        Int(params.max_batch_size) - len(work_items)
-                    )
-                    if len(got) == 0:
-                        continue
-                    seg_queue.append(s)
-                    seg_start.append(len(work_items))
-                    seg_count.append(len(got))
-                    for i in range(len(got)):
-                        work_items.append(got[i])
-                        item_trees.append(tree_ids[first + s])
-            if len(work_items) == 0:
-                # DEVIATION 466: an empty SEARCH batch does NOT end a
-                # best-first fit. Both children of every node popped last
-                # cycle can be unexpandable while frontiers still hold
-                # splittable nodes, so the fit ends only when no tree can
-                # pop -- `while not frontier.empty()` (`_tree.pyx:445`)
-                # plus the budget test at `:454`.
-                var bf_more = False
-                if bestfirst:
-                    for s in range(g):  # small-loop(g: tree slots in this group): one flag test per tree, g capped by group_cap
-                        if queues[s].bestfirst_can_pop():
-                            bf_more = True
-                if not bf_more:
-                    clock.tick(ctx, PHASE_HOST_QUEUE)
-                    break
-            if sabotage == FOREST_SAB_SCALAR_TREE and len(item_trees) > 0:
-                item_trees = List[Int32](
-                    length=len(item_trees), fill=item_trees[0]
-                )
-            var n_nodes = len(work_items)
-            st_nodes += n_nodes
-
-            clock.tick(ctx, PHASE_HOST_QUEUE)
-            var found = search_batch(
-                ctx,
-                ws,
-                dataset,
-                d_row_ids,
-                work_items,
-                Int(k),
-                params,
-                n_classes,
-                n_rows,
-                n_cols,
-                item_trees,
-                seed,
-                True,
-                List[Int32](),
-                False,
-                clock,
+            f_cap = et_bf_frontier_cap(params, slot_rows, bf_sabotage)
+        var lp = EtDeviceLoop(ctx, g, Int(params.max_batch_size), f_cap)
+        var shared_base = (
+            Int32(1) if sabotage == FOREST_SAB_SHARED_ROW_BASE else Int32(0)
+        )
+        lp.init_roots(
+            ctx,
+            tree_ids,
+            first,
+            slot_rows,
+            shared_base,
+            et_root_expandable(params, slot_rows),
+            bestfirst,
+        )
+        clock.tick(ctx, PHASE_SETUP)
+        var cyc: Int
+        if bestfirst:
+            cyc = _et_run_bestfirst[True](
+                ctx, lp, ws, dataset, d_row_ids, params, Int(k), n_classes,
+                n_rows, n_cols, seed, bf_sabotage, slot_rows, clock, trace,
+                gi,
             )
-            var splits = found[0].copy()
-            var any_nonconst = found[1].copy()
-
-            var tag_pre = String("")
-            if trace.enabled:
-                # The tag is set whether or not there is anything to record
-                # under it: DEVIATION 466's empty search batch still runs a
-                # partition, and a cycle that fell back to the bare
-                # "partition.rowids" tag would collide with the next one and
-                # break the differ's uniqueness invariant.
-                tag_pre = String("g") + String(gi) + ".c" + String(cyc) + "."
-            # `n_nodes > 0`: an empty search batch has no cells to record,
-            # and a zero-length record would break the differ's alignment
-            # invariant rather than inform it.
-            if trace.enabled and n_nodes > 0:
-                # DEVIATION 454: the identity audit's hazard stages, in
-                # PIPELINE order, so the cross-vendor differ bisects by
-                # mechanism -- colids differ = the sampler (or its host
-                # libm dispatch); ranges differ with colids equal = the
-                # range fold; thresholds differ with ranges equal = the
-                # draw; reduce differs with thresholds equal = score or
-                # reduction. Each buffer is the batch's LOGICAL first
-                # `n_cells` slots of a capacity-sized workspace buffer
-                # (rule 3), recorded BEFORE deviation 205's rescue can
-                # reuse the staging.
-                var n_cells_t = n_nodes * Int(k)
-                trace.record_device(
-                    ctx, tag_pre + "colids", ws.d_colids, n_cells_t
-                )
-                trace.record_device(
-                    ctx, tag_pre + "range.min", ws.d_min, n_cells_t
-                )
-                trace.record_device(
-                    ctx, tag_pre + "range.max", ws.d_max, n_cells_t
-                )
-                trace.record_device(
-                    ctx, tag_pre + "draw.thresh", ws.d_thresh, n_cells_t
-                )
-                # The level's REDUCED per-node winners, straight off the
-                # `o_*` readback and BEFORE deviation 205's rescue can
-                # reuse the staging. Rule 3: this is the logical reduced
-                # buffer (one winner per node), never the per-cell
-                # candidate scratch behind it.
-                trace.record_host(
-                    tag_pre + "reduce.colid", ws.o_c.unsafe_ptr(), n_nodes
-                )
-                trace.record_host(
-                    tag_pre + "reduce.num", ws.o_nu.unsafe_ptr(), n_nodes
-                )
-                trace.record_host(
-                    tag_pre + "reduce.den", ws.o_de.unsafe_ptr(), n_nodes
-                )
-
-            # --- DEVIATION 205: the nodes whose whole sample was constant.
-            # Identical to the one-tree flow; the rescue key and the survey
-            # simply use each item's OWN tree.
-            var retry = List[Int]()
-            for i in range(n_nodes):
-                if any_nonconst[i] == 0 and work_items[i].instances.count > 0:
-                    retry.append(i)
-
-            if len(retry) > 0:
-                st_retry += len(retry)
-                var sub = List[NodeWorkItem]()
-                var sub_trees = List[Int32]()
-                for j in range(len(retry)):
-                    sub.append(work_items[retry[j]])
-                    sub_trees.append(item_trees[retry[j]])
-
-                # The survey, the pick and the rescued search, queued
-                # back to back (see THE DEVICE RESCUE).
-                var n_sub = len(sub)
-                _ = search_batch(
-                    ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                    n_classes, n_rows, n_cols, sub_trees, seed, False,
-                    List[Int32](), True, clock,
-                )
-                var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
-                var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
-                    n_sub
-                )
-                ctx.enqueue_function[rescue_pick_kernel](
-                    d_pick.unsafe_ptr(),
-                    ws.d_colids.unsafe_ptr(),
-                    ws.d_min.unsafe_ptr(),
-                    ws.d_max.unsafe_ptr(),
-                    ws.d_missing.unsafe_ptr(),
-                    ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                    ws.d_tree.unsafe_ptr(),
-                    Int32(n_sub),
-                    n_cols,
-                    seed,
-                    grid_dim=ceildiv(n_sub, 64),
-                    block_dim=64,
-                )
-                ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
-                # Drains at its reduce readback, `h_pick` with it.
-                var res2 = search_batch(
-                    ctx, ws, dataset, d_row_ids, sub, 1, params,
-                    n_classes, n_rows, n_cols, sub_trees, seed, False,
-                    List[Int32](), False, clock,
-                )
-                var rescued = res2[0].copy()
-                for j in range(n_sub):
-                    if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
-                        splits[retry[j]] = rescued[j]
-                        st_rescued += 1
-                _ = d_pick^
-                _ = h_pick^
-
-            if trace.enabled and n_nodes > 0:
-                # The SELECTED splits -- post-rescue. Under depth-wise
-                # growth this is exactly what the partition and the queues
-                # consume; under DEVIATION 466 it is what is ADMITTED to
-                # the frontiers, and the partition consumes `part_splits`,
-                # which are records admitted in an earlier cycle.
-                var t_q = List[Float32]()
-                var t_c = List[Int32]()
-                var t_l = List[Int32]()
-                var t_m = List[Float32]()
-                for i in range(n_nodes):
-                    t_q.append(splits[i].quesval)
-                    t_c.append(splits[i].colid)
-                    t_l.append(splits[i].n_left)
-                    t_m.append(splits[i].best_metric_val)
-                trace.record_list_f32(tag_pre + "split.thresh", t_q)
-                trace.record_list_i32(tag_pre + "split.colid", t_c)
-                trace.record_list_i32(tag_pre + "split.nleft", t_l)
-                trace.record_list_f32(tag_pre + "split.gain", t_m)
-
-            # --- DEVIATION 466 steps 2 and 3: ADMIT, then POP ------------
-            # `part_*` is the PARTITION batch. In depth-wise mode it is the
-            # search batch, item for item, which is what it always was; in
-            # best-first it is the ONE node each tree pops, whose split was
-            # found in an earlier cycle and is still correct because a
-            # node's rows are permuted only by its own partition or an
-            # ancestor's, and neither has happened while it waited.
-            var part_items = List[NodeWorkItem]()
-            var part_trees = List[Int32]()
-            var part_splits = List[Split]()
-            var part_queue = List[Int]()
-            if bestfirst:
-                for i in range(n_nodes):
-                    _ = queues[bf_pending_q[i]].bestfirst_admit(
-                        work_items[i], splits[i], item_trees[i]
-                    )
-                for s in range(g):  # small-loop(g: tree slots in this group): one best-first pop per tree, g capped by group_cap
-                    if not queues[s].bestfirst_can_pop():
-                        continue
-                    var rec = queues[s].bestfirst_pop()
-                    part_items.append(rec.item)
-                    part_trees.append(tree_ids[first + s])
-                    part_splits.append(rec.split)
-                    part_queue.append(s)
-                if len(part_items) == 0:
-                    # Every frontier is empty or every budget is spent.
-                    clock.tick(ctx, PHASE_HOST_QUEUE)
-                    break
-            else:
-                part_items = work_items.copy()
-                part_trees = item_trees.copy()
-                part_splits = splits.copy()
-            var n_part = len(part_items)
-
-            var plan = build_workload_info(
-                part_items, TPB * PART_ROWS_PER_THREAD
+        else:
+            cyc = _et_run_depthwise[True](
+                ctx, lp, ws, dataset, d_row_ids, params, Int(k), n_classes,
+                n_rows, n_cols, seed, sabotage, clock, trace, gi,
             )
-            if bestfirst:
-                # DEVIATION 469's synchronization price: the search batch
-                # and the partition batch are DIFFERENT SETS here, so
-                # `ws.h_items` is re-staged every cycle and DEVIATION 455's
-                # drain runs every cycle rather than only when DEVIATION
-                # 205's rescue fires.
-                stage_batch(ctx, ws, part_items, part_trees, plan, Int(k))
-                ctx.synchronize()
-            elif (
-                len(retry) > 0
-                or SEARCH_ROWS_PER_THREAD != PART_ROWS_PER_THREAD
-            ):
-                # The sub-batches left THEIR work items on the device. The
-                # partition below reads `d_items` and `d_wl`, so put this
-                # batch's back.
-                #
-                # Search and partition use different workload tiles when
-                # R > 1, so the partition plan must be restaged before its
-                # kernels read `d_wl`. The R == 1 path keeps the reusable
-                # byte-identical plan.
-                stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
-                # Drain before the next cycle rewrites the host staging that
-                # these queued copies still read.
-                ctx.synchronize()
-
-            # --- the PARTITION, on the device (deviation 203) -------------
-            # Range-addressed: every item's rows live in its own tree's
-            # slot of `d_row_ids`, so nodes of different trees partition
-            # side by side without seeing each other.
-            #
-            # DEVIATION 450: no synchronize before writing `h_splits`. The
-            # last copy READING it was enqueued a full cycle ago and this
-            # cycle's reduce readback drained the queue since; the copy
-            # below is queue-ordered ahead of the partition kernels that
-            # read `d_splits`.
-            var splits_ptr = ws.h_splits.unsafe_ptr().unsafe_bitcast[Split]()
-            memcpy(dest=splits_ptr, src=part_splits.unsafe_ptr(), count=n_part)
-            ctx.enqueue_copy(
-                dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
-            )
-            ctx.enqueue_function[
-                partition_count_kernel[
-                    TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS
-                ]
-            ](
-                ws.d_blk_left.unsafe_ptr(),
-                d_row_ids.unsafe_ptr(),
-                dataset.d_data.unsafe_ptr(),
-                ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-                ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
-                n_rows,
-                params.min_impurity_decrease,
-                params.min_samples_leaf,
-                PART_MB_SAB_NONE,
-                ws.d_part_flags.unsafe_ptr(),
-                grid_dim=(plan.n_blocks_dimx, 1, 1),
-                block_dim=(TPB, 1, 1),
-            )
-            ctx.enqueue_function[
-                partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]
-            ](
-                ws.d_blk_off.unsafe_ptr(),
-                ws.d_blk_left.unsafe_ptr(),
-                ws.d_blk_base.unsafe_ptr(),
-                ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
-                params.min_impurity_decrease,
-                params.min_samples_leaf,
-                PART_MB_SAB_NONE,
-                grid_dim=(n_part, 1, 1),
-                block_dim=(TPB, 1, 1),
-            )
-            ctx.enqueue_function[
-                partition_scatter_kernel[
-                    TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS
-                ]
-            ](
-                ws.d_row_alt.unsafe_ptr(),
-                d_row_ids.unsafe_ptr(),
-                ws.d_blk_off.unsafe_ptr(),
-                dataset.d_data.unsafe_ptr(),
-                ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-                ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
-                n_rows,
-                params.min_impurity_decrease,
-                params.min_samples_leaf,
-                PART_MB_SAB_NONE,
-                ws.d_part_flags.unsafe_ptr(),
-                grid_dim=(plan.n_blocks_dimx, 1, 1),
-                block_dim=(TPB, 1, 1),
-            )
-            ctx.enqueue_function[
-                partition_writeback_kernel[TPB, PART_ROWS_PER_THREAD]
-            ](
-                d_row_ids.unsafe_ptr(),
-                ws.d_row_alt.unsafe_ptr(),
-                ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-                ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
-                params.min_impurity_decrease,
-                params.min_samples_leaf,
-                PART_MB_SAB_NONE,
-                grid_dim=(plan.n_blocks_dimx, 1, 1),
-                block_dim=(TPB, 1, 1),
-            )
-            # DEVIATION 450: no post-partition synchronize. Nothing on the
-            # host reads the partition's output; the next cycle's kernels
-            # are queue-ordered behind it, and the leaf pass drains before
-            # its own host writes. `clock.tick` still serializes when the
-            # clock is ENABLED, so the timed attribution is unchanged.
-            clock.tick(ctx, PHASE_PARTITION)
-
-            if trace.enabled:
-                # The partition's output: the group's whole row-id buffer,
-                # a permutation per tree slot. Logical content -- the same
-                # bytes on any backend that partitioned identically.
-                trace.record_device(
-                    ctx, tag_pre + "partition.rowids", d_row_ids
-                )
-            cyc += 1
-
-            # --- the push, PER QUEUE, in the order each was popped --------
-            # --- DEVIATION 466 step 5, or cuML's Push --------------------
-            if bestfirst:
-                bf_pending.clear()
-                bf_pending_q.clear()
-                for t in range(n_part):
-                    var kids = queues[part_queue[t]].bestfirst_expand(
-                        part_items[t], part_splits[t]
-                    )
-                    for j in range(len(kids)):
-                        bf_pending.append(kids[j])
-                        bf_pending_q.append(part_queue[t])
-            else:
-                for t in range(len(seg_queue)):
-                    var items_s = List[NodeWorkItem]()
-                    var splits_s = List[Split]()
-                    for j in range(seg_count[t]):
-                        items_s.append(work_items[seg_start[t] + j])
-                        splits_s.append(splits[seg_start[t] + j])
-                    queues[seg_queue[t]].push(items_s, splits_s)
-            clock.tick(ctx, PHASE_HOST_PUSH)
 
         # --- the LEAF VALUES, ONE launch for the whole group --------------
-        # `SetLeafPredictions` (`builder.cuh:556-599`). DEVIATION 214: the
-        # per-tree loop allocated seven buffers and synchronized once PER
-        # TREE -- the per-level-allocation disease deviation 202 cured in the
-        # level loop, still alive in the tail, and the phase clock priced it
-        # at 8% of a 100-tree fit. The kernel was batch-ready all along
-        # (deviation 180: slice pointers, shrink the grid -- here the grid
-        # GROWS instead): every tree's ranges already point into its own
-        # slot of the shared `d_row_ids`, and the kernel reads nothing
-        # tree-relative but `left_child_id == -1`. So the group's trees are
-        # concatenated and the tail is one allocation set, one launch, one
-        # readback, one synchronize.
-        var trees_g = List[TreeMetaDataNode[DType.float32]]()
-        var leaf_base = List[Int]()
-        var total_nodes = 0
-        for s in range(g):  # small-loop(g: tree slots in this group): collects one output tree per slot, g capped by group_cap
-            leaf_base.append(total_nodes)
-            total_nodes += len(queues[s].node_instances)
-            trees_g.append(queues[s].get_tree())
+        # `SetLeafPredictions` (`builder.cuh:556-599`), DEVIATION 214: the
+        # group's trees concatenated, one allocation set, one launch. The
+        # concatenation is built ON THE DEVICE now (`etl_scatter_kernel`:
+        # each tree's nodes in local-id order, its ranges beside them), and
+        # the model comes back once (`download_trees`).
         var k_out = Int(n_classes)
+        var total_nodes = lp.word(ETL_H_NODES)
+        var n_alloc = total_nodes if total_nodes > 0 else 1
         var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
-            total_nodes * size_of[SparseTreeNode[DType.float32]]()
+            n_alloc * size_of[SparseTreeNode[DType.float32]]()
         )
         var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
-            total_nodes * size_of[InstanceRange]()
+            n_alloc * size_of[InstanceRange]()
         )
         var d_leaves = ctx.enqueue_create_buffer[DType.float32](
-            total_nodes * k_out
+            n_alloc * k_out
         )
-        var d_visit = ctx.enqueue_create_buffer[DType.int32](total_nodes)
-        var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
-            total_nodes * size_of[SparseTreeNode[DType.float32]]()
-        )
-        var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
-            total_nodes * size_of[InstanceRange]()
-        )
-        var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
-            total_nodes * k_out
-        )
-        ctx.synchronize()
-        var nodes_ptr = h_nodes.unsafe_ptr().unsafe_bitcast[
-            SparseTreeNode[DType.float32]
-        ]()
-        var ranges_ptr = h_ranges.unsafe_ptr().unsafe_bitcast[
-            InstanceRange
-        ]()
-        for s in range(g):
-            for i in range(trees_g[s].num_nodes()):
-                nodes_ptr[unsafe_offset = leaf_base[s] + i] = trees_g[
-                    s
-                ].sparsetree[i]
-                ranges_ptr[unsafe_offset = leaf_base[s] + i] = queues[
-                    s
-                ].node_instances[i]
-        ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
+        var d_visit = ctx.enqueue_create_buffer[DType.int32](n_alloc)
+        lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
         # `builder.cuh:582` memsets the leaf array before the launch, and an
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
         # folds that memset and `d_visit`'s into the launch itself -- each
@@ -5242,18 +6280,9 @@ def train_forest_classification_device_timed(
                 ctx, d_leaves, d_visit, d_nodes, d_ranges, d_row_ids,
                 dataset, k_out, total_nodes,
             )
-        ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
-        ctx.synchronize()
-        for s in range(g):
-            var n_s = trees_g[s].num_nodes()
-            trees_g[s].vector_leaf = List[Float32](
-                length=n_s * k_out, fill=Float32(0.0)
-            )
-            for i in range(n_s * k_out):
-                trees_g[s].vector_leaf[i] = h_leaves.unsafe_ptr()[
-                    unsafe_offset = leaf_base[s] * k_out + i
-                ]
-            out.append(trees_g[s].copy())
+        lp.download_trees(
+            ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first, out
+        )
         if trace.enabled:
             # The leaf pass's output for the whole group: the values the
             # model returns, still concatenated across the group's trees.
@@ -5261,15 +6290,25 @@ def train_forest_classification_device_timed(
                 ctx, String("g") + String(gi) + ".leaves", d_leaves
             )
         clock.tick(ctx, PHASE_LEAF)
-        # DEVIATION 2663's measurement define: what the group's level loop did.
+        # DEVIATION 2663's measurement define: what the group's level loop
+        # did, from the device header's tallies.
         comptime if is_defined["MOJOLEARN_ET_CYCLE_STATS"]():
             print(
                 "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=", cyc,
-                " nodes=", st_nodes, " survey_nodes=", st_retry,
-                " rescued=", st_rescued, " max_batch=", params.max_batch_size,
+                " nodes=", lp.word(ETL_H_STAT_NODES),
+                " survey_nodes=", lp.word(ETL_H_STAT_RETRY),
+                " rescued=", lp.word(ETL_H_STAT_RESCUED),
+                " max_batch=", params.max_batch_size,
             )
+        else:
+            _ = cyc
         # Mojo frees a buffer at its LAST USE; these must outlive every
-        # launch that read them, and every launch has synchronized above.
+        # launch that read them, and `download_trees` synchronized.
+        _ = d_nodes^
+        _ = d_ranges^
+        _ = d_leaves^
+        _ = d_visit^
+        _ = lp^
         _ = d_row_ids^
         _ = ws^
         gi += 1
@@ -5312,63 +6351,37 @@ def dataset_len_ok(
     return len(x_col_major) == Int(n_rows) * Int(n_cols)
 
 
-def search_batch_regression(
+def search_batch_regression_enqueue(
     ctx: DeviceContext,
     mut ws: LevelWorkspace,
     mut dataset: DeviceDataset,
     mut d_row_ids: DeviceBuffer[DType.int32],
-    work_items: List[NodeWorkItem],
+    n_nodes: Int,
+    n_blocks: Int,
     k: Int,
     params: DecisionTreeParams,
     n_rows: Int32,
     n_cols: Int32,
-    item_trees: List[Int32],
     seed: UInt64,
     use_sampler: Bool,
-    host_colids: List[Int32],
     range_only: Bool,
     mut clock: PhaseClock,
-) raises -> Tuple[
-    List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
-]:
-    """One batch through the REGRESSION split search.
-
-    DEVIATION 211: `item_trees` is one tree id per work item -- see
-    `search_batch`'s docstring; the two twins changed together.
-
-    `search_batch`'s twin, and it exists for the same reason: DEVIATION 205's
-    rescue has to run the SAME passes on a sub-batch, and a second copy of the
-    launch code would drift. The two are not merged because the score pass is
-    genuinely different -- fixed-point sums (DEVIATION 135) against class
-    counts, and cuML's MSE gain against Gini (DEVIATION 189) -- and merging
-    them would mean a runtime branch inside every launch rather than one
-    function per objective, which is how cuML templates it
-    (`builder.cuh:142`).
+) raises:
+    """`search_batch_regression`'s launch sequence on a batch that is ALREADY STAGED on
+    the device (cpu4-forest): steps 2 to 8 of `doSplit` with no host list,
+    no host staging and no readback. `n_nodes` items sit in `ws.d_items`
+    (and `d_tree`, `d_tsalt`, `d_nb`, `d_nc`), `n_blocks` workload entries
+    in `ws.d_wl`. The host-list wrapper stages with `stage_batch` and reads
+    the splits back; the device level loop (`EtDeviceLoop`) stages with its
+    own kernels, launches at proven bounds (dummy items own no block, map
+    entries past the live total carry `nodeid == -1`) and reads nothing.
+    Outputs stay on the device: `ws.d_splits` (packed), `ws.d_nonconst`,
+    and the range cells (`d_min`, `d_max`, `d_missing`) for the survey.
     """
     comptime TPB = DEVICE_TPB
     comptime MAX_ACC = DEVICE_MAX_ACC
-    var n_nodes = len(work_items)
     if n_nodes == 0:
-        # DEVIATION 466: a best-first cycle can have NOTHING to search --
-        # every node popped last cycle had two unexpandable children -- and
-        # still have nodes left to pop. An empty batch is a well-formed
-        # request for no work, not an error. The depth-wise loop breaks
-        # before it can ever ask, so this arm belongs to best-first alone.
-        return (
-            List[Split](),
-            List[Int32](),
-            List[Float32](),
-            List[Float32](),
-            List[Int32](),
-        )
-    # DEVIATION 2020: the search tile is `TPB * SEARCH_ROWS_PER_THREAD`
-    # (default 1 = the exact pre-2020 program). The full block, with the
-    # bit argument and the required-RED arm, is at the classification
-    # twin's call site; the two twins must widen together or the two
-    # objectives would launch different grids for the same frontier.
-    var plan = build_workload_info(
-        work_items, TPB * SEARCH_ROWS_PER_THREAD
-    )
+        return
     var n_cells = n_nodes * Int(k)
 
     ref d_min = ws.d_min
@@ -5410,9 +6423,6 @@ def search_batch_regression(
     ref d_samp_report = ws.d_samp_report
     ref d_items = ws.d_items
     ref d_wl = ws.d_wl
-    # DEVIATION 450: no entry synchronize -- see the classification twin.
-    ref h_colids = ws.h_colids
-    stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
 
     # DEVIATION 470: TWO fused seeder launches (halves A and B) replace
     # this cycle's six setup enqueues -- the full argument (bit-inert hoist
@@ -5480,11 +6490,6 @@ def search_batch_regression(
     # survey walk and its host column table are gone): the survey's identity
     # columns are written by `ident_colids_kernel`, the rescue's by
     # `rescue_pick_kernel` (already queued by the caller).
-    if len(host_colids) != 0:
-        raise Error(
-            "host_colids: caller-chosen columns were the host rescue walk,"
-            " removed (cpu3-trees); pass an empty list"
-        )
     var dev_colids = not use_sampler
     if range_only and not dev_colids:
         raise Error("the survey (range_only) runs on the device columns only")
@@ -5504,19 +6509,18 @@ def search_batch_regression(
             )
     else:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
-        # `d_report` is the DEVICE's own statement of which kernel ran;
-        # DEVIATION 470's half-A seeder staged `SAMPLER_UNVISITED` into it
-        # above, a value no kernel can produce.
-        _ = sample_features_for_device(
+        # cpu4-forest: the device sampler only. The batch's items are
+        # staged on the device (by `stage_batch` or the device level loop),
+        # so no host list exists to sample from; a target without float64
+        # refuses the algo-L arm by name inside `sample_features_device`.
+        _ = sample_features_device(
             ctx,
-            d_colids,
+            d_colids.unsafe_ptr(),
             d_samp_scratch.unsafe_ptr(),
             d_samp_report.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
             ws.d_tree.unsafe_ptr(),
-            h_colids,
-            work_items,
-            item_trees,
+            n_nodes,
             seed,
             Int(n_cols),
             Int(k),
@@ -5543,7 +6547,7 @@ def search_batch_regression(
             n_cols,
             Int32(k),
             dataset.d_quant.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_CODE_TILE), 1),
+            grid_dim=(n_blocks, ceildiv(Int(k), ET_CODE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     elif tiled_range:
@@ -5562,7 +6566,7 @@ def search_batch_regression(
             n_cols,
             Int32(k),
             dataset.d_quant.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            grid_dim=(n_blocks, ceildiv(Int(k), ET_FEATURE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     else:
@@ -5580,7 +6584,7 @@ def search_batch_regression(
             n_cols,
             Int32(k),
             Int32(0),
-            grid_dim=search_grid(plan.n_blocks_dimx, Int(k)),
+            grid_dim=search_grid(n_blocks, Int(k)),
             block_dim=(TPB, 1, 1),
         )
     # DEVIATION 204: the merge produced order-preserving KEYS; this
@@ -5611,18 +6615,12 @@ def search_batch_regression(
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
     )
-    ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
     # DEVIATION 450: drain only for the survey -- see the classification
     # twin's range pass.
     clock.tick(ctx, PHASE_RANGE)
 
     if range_only:
-        # The device rescue: the cells stay on the device for
-        # `rescue_pick_kernel`; nothing drains and nothing is read here.
-        return (
-            List[Split](), List[Int32](), List[Float32](), List[Float32](),
-            List[Int32](),
-        )
+        return
     # DEVIATION 470: the score cells and the one-output accumulators were
     # seeded by fused half B above (the survey skips half B and returned
     # already).
@@ -5653,7 +6651,7 @@ def search_batch_regression(
             seed,
             dataset.d_quant.unsafe_ptr(),
             dataset.d_nbins.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_CODE_TILE), 1),
+            grid_dim=(n_blocks, ceildiv(Int(k), ET_CODE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     elif tiled_score:
@@ -5680,7 +6678,7 @@ def search_batch_regression(
             seed,
             dataset.d_quant.unsafe_ptr(),
             dataset.d_nbins.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            grid_dim=(n_blocks, ceildiv(Int(k), ET_FEATURE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     else:
@@ -5708,7 +6706,7 @@ def search_batch_regression(
             seed,
             Int32(0),
             dataset.n_cols,
-            grid_dim=search_grid(plan.n_blocks_dimx, Int(k)),
+            grid_dim=search_grid(n_blocks, Int(k)),
             block_dim=(TPB, 1, 1),
         )
     ctx.enqueue_function[
@@ -5815,7 +6813,29 @@ def search_batch_regression(
             grid_dim=ceildiv(n_nodes, 64),
             block_dim=64,
         )
-        ctx.enqueue_copy(dst_buf=ws.o_ties, src_buf=ws.d_ties)
+        # cpu4-forest: the tally runs ON THE DEVICE (two integer counters),
+        # so no per-node host walk reads the readback; one line per batch.
+        var d_tally = ctx.enqueue_create_buffer[DType.int32](2)
+        ctx.enqueue_memset(d_tally, Int32(0))
+        ctx.enqueue_function[split_tie_tally_kernel](
+            d_tally.unsafe_ptr(),
+            r_c.unsafe_ptr(),
+            ws.d_ties.unsafe_ptr(),
+            Int32(n_nodes),
+            grid_dim=ceildiv(n_nodes, 64),
+            block_dim=64,
+        )
+        var h_tally = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_copy(dst_buf=h_tally, src_buf=d_tally)
+        ctx.synchronize()
+        print(
+            "ET_TIE_STATS batch decided=",
+            h_tally.unsafe_ptr()[unsafe_offset=0],
+            " tied=",
+            h_tally.unsafe_ptr()[unsafe_offset=1],
+        )
+        _ = d_tally^
+        _ = h_tally^
 
     if dataset.bins_active():
         ctx.enqueue_function[et_code_threshold_kernel](
@@ -5837,11 +6857,86 @@ def search_batch_regression(
         grid_dim=ceildiv(n_nodes, 64),
         block_dim=64,
     )
+
+
+def search_batch_regression(
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    work_items: List[NodeWorkItem],
+    k: Int,
+    params: DecisionTreeParams,
+    n_rows: Int32,
+    n_cols: Int32,
+    item_trees: List[Int32],
+    seed: UInt64,
+    use_sampler: Bool,
+    host_colids: List[Int32],
+    range_only: Bool,
+    mut clock: PhaseClock,
+) raises -> Tuple[
+    List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
+]:
+    """One batch through the REGRESSION split search.
+
+    DEVIATION 211: `item_trees` is one tree id per work item -- see
+    `search_batch`'s docstring; the two twins changed together.
+
+    `search_batch`'s twin, and it exists for the same reason: DEVIATION 205's
+    rescue has to run the SAME passes on a sub-batch, and a second copy of the
+    launch code would drift. The two are not merged because the score pass is
+    genuinely different -- fixed-point sums (DEVIATION 135) against class
+    counts, and cuML's MSE gain against Gini (DEVIATION 189) -- and merging
+    them would mean a runtime branch inside every launch rather than one
+    function per objective, which is how cuML templates it
+    (`builder.cuh:142`).
+    """
+    comptime TPB = DEVICE_TPB
+    comptime MAX_ACC = DEVICE_MAX_ACC
+    var n_nodes = len(work_items)
+    if n_nodes == 0:
+        # DEVIATION 466: a best-first cycle can have NOTHING to search --
+        # every node popped last cycle had two unexpandable children -- and
+        # still have nodes left to pop. An empty batch is a well-formed
+        # request for no work, not an error. The depth-wise loop breaks
+        # before it can ever ask, so this arm belongs to best-first alone.
+        return (
+            List[Split](),
+            List[Int32](),
+            List[Float32](),
+            List[Float32](),
+            List[Int32](),
+        )
+    if len(host_colids) != 0:
+        raise Error(
+            "host_colids: caller-chosen columns were the host rescue walk,"
+            " removed (cpu3-trees); pass an empty list"
+        )
+    # DEVIATION 2020: the search tile is `TPB * SEARCH_ROWS_PER_THREAD`
+    # (default 1 = the exact pre-2020 program). The full block, with the
+    # bit argument and the required-RED arm, is at the classification
+    # twin's call site; the two twins must widen together or the two
+    # objectives would launch different grids for the same frontier.
+    var plan = build_workload_info(
+        work_items, TPB * SEARCH_ROWS_PER_THREAD
+    )
+    stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
+    search_batch_regression_enqueue(
+        ctx, ws, dataset, d_row_ids, n_nodes, plan.n_blocks_dimx, Int(k),
+        params, n_rows, n_cols, seed, use_sampler, range_only, clock,
+    )
+    ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
+    if range_only:
+        return (
+            List[Split](), List[Int32](), List[Float32](), List[Float32](),
+            List[Int32](),
+        )
     ctx.enqueue_copy(dst_buf=ws.h_splits, src_buf=ws.d_splits)
     ref o_c = ws.o_c
     ref o_m = ws.o_m
-    ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
-    ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
+    ctx.enqueue_copy(dst_buf=o_c, src_buf=ws.r_c)
+    ctx.enqueue_copy(dst_buf=o_m, src_buf=ws.r_m)
     ctx.synchronize()
     clock.tick(ctx, PHASE_REDUCE)
 
@@ -5859,19 +6954,6 @@ def search_batch_regression(
         src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
         count=n_nodes,
     )
-
-    # DEVIATION 463: report the batch's exact-tie tally. The counter cells
-    # rode the queue with the reduce readback, so the sync above completed
-    # them; one line per batch, summed by whoever asked for the define.
-    comptime if is_defined["MOJOLEARN_ET_TIE_STATS"]():
-        var tie_decided = 0
-        var tie_tied = 0
-        for i in range(n_nodes):
-            if o_c.unsafe_ptr()[unsafe_offset=i] >= 0:
-                tie_decided += 1
-                if ws.o_ties.unsafe_ptr()[unsafe_offset=i] >= Int32(2):
-                    tie_tied += 1
-        print("ET_TIE_STATS batch decided=", tie_decided, " tied=", tie_tied)
 
     clock.tick(ctx, PHASE_HOST_SPLITS)
     return (
@@ -6075,6 +7157,17 @@ def train_forest_regression_device_timed(
                 bf_cap = 1
             if g > bf_cap:
                 g = bf_cap
+            # cpu4-forest: the device frontiers hold `f_cap` records per tree;
+            # the group is narrowed to fit `ET_BF_FRONTIER_BYTES` (a
+            # scheduling cap: the trees do not depend on the grouping).
+            var bf_rec = et_bf_frontier_cap(params, slot_rows, bf_sabotage) * (
+                size_of[FrontierRecord]() + 4
+            )
+            var bf_mem_cap = ET_BF_FRONTIER_BYTES // bf_rec
+            if bf_mem_cap < 1:
+                bf_mem_cap = 1
+            if g > bf_mem_cap:
+                g = bf_mem_cap
         var total_rows = g * Int(slot_rows)
 
         var d_row_ids = ctx.enqueue_create_buffer[DType.int32](total_rows)
@@ -6113,439 +7206,60 @@ def train_forest_regression_device_timed(
             TPB,
         )
 
-        var queues = List[NodeQueue[DType.float32]]()
-        for s in range(g):  # small-loop(g: tree slots in this group): one queue per in-flight tree, g capped by group_cap
-            var base = Int32(s) * slot_rows
-            if sabotage == FOREST_SAB_SHARED_ROW_BASE:
-                base = Int32(0)
-            queues.append(
-                NodeQueue[DType.float32](
-                    params, slot_rows, 1, tree_ids[first + s], base
-                )
-            )
-            queues[s].bf_sabotage = bf_sabotage
-
-        clock.tick(ctx, PHASE_SETUP)
-        # The trace's level-cycle counter -- see the classification twin.
-        var cyc = 0
-        # DEVIATION 466: the best-first carry between cycles -- the nodes
-        # admitted-but-unsearched, and which queue each belongs to. Empty
-        # and never read in depth-wise mode.
-        var bf_pending = List[NodeWorkItem]()
-        var bf_pending_q = List[Int]()
+        # cpu4-forest: THE LEVEL LOOP ON THE DEVICE (`EtDeviceLoop`, see the
+        # block comment above it). The group's queue, retry list, rescue
+        # merge, push and (best-first) frontiers live on the device; the
+        # host enqueues `ET_LOOP_K` batches per drain and reads one header.
+        var f_cap = 0
         if bestfirst:
-            for s in range(g):  # small-loop(g: tree slots in this group): one root seed per tree, g capped by group_cap
-                var seeds = queues[s].bestfirst_seed()
-                for i in range(len(seeds)):  # small-loop(seeds: one tree's root work item): bestfirst_seed returns at most the root
-                    bf_pending.append(seeds[i])
-                    bf_pending_q.append(s)
-        while True:
-            var work_items = List[NodeWorkItem]()
-            var item_trees = List[Int32]()
-            var seg_queue = List[Int]()
-            var seg_start = List[Int]()
-            var seg_count = List[Int]()
-            # DEVIATION 466 step 1: the best-first SEARCH batch is the set
-            # of nodes admitted since the last cycle -- the children the
-            # last expansions created, or the roots on cycle 0 -- and not a
-            # FIFO pop. `seg_*` stays empty; the best-first expansion is per
-            # popped node and does not use it.
-            if bestfirst:
-                for i in range(len(bf_pending)):  # small-loop(bf_pending: children of the last pops): at most two per tree slot, g capped
-                    work_items.append(bf_pending[i])
-                    item_trees.append(tree_ids[first + bf_pending_q[i]])
-            else:
-                for s in range(g):
-                    if len(work_items) >= Int(params.max_batch_size):
-                        break
-                    if not queues[s].has_work():
-                        continue
-                    var got = queues[s].pop_up_to(
-                        Int(params.max_batch_size) - len(work_items)
-                    )
-                    if len(got) == 0:
-                        continue
-                    seg_queue.append(s)
-                    seg_start.append(len(work_items))
-                    seg_count.append(len(got))
-                    for i in range(len(got)):
-                        work_items.append(got[i])
-                        item_trees.append(tree_ids[first + s])
-            if len(work_items) == 0:
-                # DEVIATION 466: an empty SEARCH batch does NOT end a
-                # best-first fit. Both children of every node popped last
-                # cycle can be unexpandable while frontiers still hold
-                # splittable nodes, so the fit ends only when no tree can
-                # pop -- `while not frontier.empty()` (`_tree.pyx:445`)
-                # plus the budget test at `:454`.
-                var bf_more = False
-                if bestfirst:
-                    for s in range(g):  # small-loop(g: tree slots in this group): one flag test per tree, g capped by group_cap
-                        if queues[s].bestfirst_can_pop():
-                            bf_more = True
-                if not bf_more:
-                    clock.tick(ctx, PHASE_HOST_QUEUE)
-                    break
-            if sabotage == FOREST_SAB_SCALAR_TREE and len(item_trees) > 0:
-                item_trees = List[Int32](
-                    length=len(item_trees), fill=item_trees[0]
-                )
-            var n_nodes = len(work_items)
-
-            clock.tick(ctx, PHASE_HOST_QUEUE)
-            var rfound = search_batch_regression(
-                ctx,
-                ws,
-                dataset,
-                d_row_ids,
-                work_items,
-                Int(k),
-                params,
-                n_rows,
-                n_cols,
-                item_trees,
-                seed,
-                True,
-                List[Int32](),
-                False,
-                clock,
+            f_cap = et_bf_frontier_cap(params, slot_rows, bf_sabotage)
+        var lp = EtDeviceLoop(ctx, g, Int(params.max_batch_size), f_cap)
+        var shared_base = (
+            Int32(1) if sabotage == FOREST_SAB_SHARED_ROW_BASE else Int32(0)
+        )
+        lp.init_roots(
+            ctx,
+            tree_ids,
+            first,
+            slot_rows,
+            shared_base,
+            et_root_expandable(params, slot_rows),
+            bestfirst,
+        )
+        clock.tick(ctx, PHASE_SETUP)
+        var cyc: Int
+        if bestfirst:
+            cyc = _et_run_bestfirst[False](
+                ctx, lp, ws, dataset, d_row_ids, params, Int(k), Int32(1),
+                n_rows, n_cols, seed, bf_sabotage, slot_rows, clock, trace,
+                gi,
             )
-            var splits = rfound[0].copy()
-            var any_nonconst = rfound[1].copy()
-
-            var tag_pre = String("")
-            if trace.enabled:
-                # The tag is set whether or not there is anything to record
-                # under it: DEVIATION 466's empty search batch still runs a
-                # partition, and a cycle that fell back to the bare
-                # "partition.rowids" tag would collide with the next one and
-                # break the differ's uniqueness invariant.
-                tag_pre = String("g") + String(gi) + ".c" + String(cyc) + "."
-            # `n_nodes > 0`: an empty search batch has no cells to record,
-            # and a zero-length record would break the differ's alignment
-            # invariant rather than inform it.
-            if trace.enabled and n_nodes > 0:
-                # DEVIATION 454: the hazard stages in pipeline order --
-                # see the classification twin for the bisection argument.
-                var n_cells_t = n_nodes * Int(k)
-                trace.record_device(
-                    ctx, tag_pre + "colids", ws.d_colids, n_cells_t
-                )
-                trace.record_device(
-                    ctx, tag_pre + "range.min", ws.d_min, n_cells_t
-                )
-                trace.record_device(
-                    ctx, tag_pre + "range.max", ws.d_max, n_cells_t
-                )
-                trace.record_device(
-                    ctx, tag_pre + "draw.thresh", ws.d_thresh, n_cells_t
-                )
-                # The level's REDUCED per-node winners (rule 3: the logical
-                # reduced buffer). Regression's readback carries no exact
-                # num/den pair -- the gain travels with the candidate
-                # (deviation 183) -- so the winner's column and gain are
-                # the reduced record.
-                trace.record_host(
-                    tag_pre + "reduce.colid", ws.o_c.unsafe_ptr(), n_nodes
-                )
-                trace.record_host(
-                    tag_pre + "reduce.gain", ws.o_m.unsafe_ptr(), n_nodes
-                )
-
-            # --- DEVIATION 205, the regression half ----------------------
-            var retry = List[Int]()
-            for i in range(n_nodes):
-                if any_nonconst[i] == 0 and work_items[i].instances.count > 0:
-                    retry.append(i)
-
-            if len(retry) > 0:
-                var sub = List[NodeWorkItem]()
-                var sub_trees = List[Int32]()
-                for j in range(len(retry)):
-                    sub.append(work_items[retry[j]])
-                    sub_trees.append(item_trees[retry[j]])
-                # The survey, the pick and the rescued search, queued
-                # back to back (see THE DEVICE RESCUE).
-                var n_sub = len(sub)
-                _ = search_batch_regression(
-                    ctx, ws, dataset, d_row_ids, sub, Int(n_cols), params,
-                    n_rows, n_cols, sub_trees, seed, False,
-                    List[Int32](), True, clock,
-                )
-                var d_pick = ctx.enqueue_create_buffer[DType.int32](n_sub)
-                var h_pick = ctx.enqueue_create_host_buffer[DType.int32](
-                    n_sub
-                )
-                ctx.enqueue_function[rescue_pick_kernel](
-                    d_pick.unsafe_ptr(),
-                    ws.d_colids.unsafe_ptr(),
-                    ws.d_min.unsafe_ptr(),
-                    ws.d_max.unsafe_ptr(),
-                    ws.d_missing.unsafe_ptr(),
-                    ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                    ws.d_tree.unsafe_ptr(),
-                    Int32(n_sub),
-                    n_cols,
-                    seed,
-                    grid_dim=ceildiv(n_sub, 64),
-                    block_dim=64,
-                )
-                ctx.enqueue_copy(dst_buf=h_pick, src_buf=d_pick)
-                # Drains at its reduce readback, `h_pick` with it.
-                var res2 = search_batch_regression(
-                    ctx, ws, dataset, d_row_ids, sub, 1, params,
-                    n_rows, n_cols, sub_trees, seed, False,
-                    List[Int32](), False, clock,
-                )
-                var rescued = res2[0].copy()
-                for j in range(n_sub):
-                    if h_pick.unsafe_ptr()[unsafe_offset=j] >= 0:
-                        splits[retry[j]] = rescued[j]
-                _ = d_pick^
-                _ = h_pick^
-
-            if trace.enabled and n_nodes > 0:
-                # The SELECTED splits -- post-rescue; see the twin, and
-                # DEVIATION 466's note there about what this is under
-                # best-first growth.
-                var t_q = List[Float32]()
-                var t_c = List[Int32]()
-                var t_l = List[Int32]()
-                var t_m = List[Float32]()
-                for i in range(n_nodes):
-                    t_q.append(splits[i].quesval)
-                    t_c.append(splits[i].colid)
-                    t_l.append(splits[i].n_left)
-                    t_m.append(splits[i].best_metric_val)
-                trace.record_list_f32(tag_pre + "split.thresh", t_q)
-                trace.record_list_i32(tag_pre + "split.colid", t_c)
-                trace.record_list_i32(tag_pre + "split.nleft", t_l)
-                trace.record_list_f32(tag_pre + "split.gain", t_m)
-
-            # --- DEVIATION 466 steps 2 and 3: ADMIT, then POP ------------
-            # `part_*` is the PARTITION batch. In depth-wise mode it is the
-            # search batch, item for item, which is what it always was; in
-            # best-first it is the ONE node each tree pops, whose split was
-            # found in an earlier cycle and is still correct because a
-            # node's rows are permuted only by its own partition or an
-            # ancestor's, and neither has happened while it waited.
-            var part_items = List[NodeWorkItem]()
-            var part_trees = List[Int32]()
-            var part_splits = List[Split]()
-            var part_queue = List[Int]()
-            if bestfirst:
-                for i in range(n_nodes):
-                    _ = queues[bf_pending_q[i]].bestfirst_admit(
-                        work_items[i], splits[i], item_trees[i]
-                    )
-                for s in range(g):  # small-loop(g: tree slots in this group): one best-first pop per tree, g capped by group_cap
-                    if not queues[s].bestfirst_can_pop():
-                        continue
-                    var rec = queues[s].bestfirst_pop()
-                    part_items.append(rec.item)
-                    part_trees.append(tree_ids[first + s])
-                    part_splits.append(rec.split)
-                    part_queue.append(s)
-                if len(part_items) == 0:
-                    # Every frontier is empty or every budget is spent.
-                    clock.tick(ctx, PHASE_HOST_QUEUE)
-                    break
-            else:
-                part_items = work_items.copy()
-                part_trees = item_trees.copy()
-                part_splits = splits.copy()
-            var n_part = len(part_items)
-
-            var plan = build_workload_info(
-                part_items, TPB * PART_ROWS_PER_THREAD
+        else:
+            cyc = _et_run_depthwise[False](
+                ctx, lp, ws, dataset, d_row_ids, params, Int(k), Int32(1),
+                n_rows, n_cols, seed, sabotage, clock, trace, gi,
             )
-            if bestfirst:
-                # DEVIATION 469's synchronization price: the search batch
-                # and the partition batch are DIFFERENT SETS here, so
-                # `ws.h_items` is re-staged every cycle and DEVIATION 455's
-                # drain runs every cycle rather than only when DEVIATION
-                # 205's rescue fires.
-                stage_batch(ctx, ws, part_items, part_trees, plan, Int(k))
-                ctx.synchronize()
-            elif (
-                len(retry) > 0
-                or SEARCH_ROWS_PER_THREAD != PART_ROWS_PER_THREAD
-            ):
-                # DEVIATION 2020 (restage leg) -- see the classification
-                # twin for the full block: the plain cycle's restage skip
-                # was sound only while the partition's TPB plan was
-                # byte-identical to the plan the search staged, and the
-                # widened search tile broke that premise; at R > 1 the
-                # plain cycle restages `d_wl` (472's byte-compare keeps it
-                # to the one changed slot) and pays 455's drain. The
-                # comptime disjunct folds away at R = 1.
-                stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
-                # DEVIATION 455 -- see the classification twin: the
-                # re-stage's copies must be drained before the next cycle
-                # rewrites the staging.
-                ctx.synchronize()
-
-            # --- the PARTITION (deviation 203, the regression half) -------
-            # DEVIATION 450: no pre-partition synchronize -- see the twin.
-            var splits_ptr = ws.h_splits.unsafe_ptr().unsafe_bitcast[Split]()
-            memcpy(dest=splits_ptr, src=part_splits.unsafe_ptr(), count=n_part)
-            ctx.enqueue_copy(
-                dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
-            )
-            ctx.enqueue_function[
-                partition_count_kernel[
-                    TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS
-                ]
-            ](
-                ws.d_blk_left.unsafe_ptr(),
-                d_row_ids.unsafe_ptr(),
-                dataset.d_data.unsafe_ptr(),
-                ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-                ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
-                n_rows,
-                params.min_impurity_decrease,
-                params.min_samples_leaf,
-                PART_MB_SAB_NONE,
-                ws.d_part_flags.unsafe_ptr(),
-                grid_dim=(plan.n_blocks_dimx, 1, 1),
-                block_dim=(TPB, 1, 1),
-            )
-            ctx.enqueue_function[
-                partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]
-            ](
-                ws.d_blk_off.unsafe_ptr(),
-                ws.d_blk_left.unsafe_ptr(),
-                ws.d_blk_base.unsafe_ptr(),
-                ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
-                params.min_impurity_decrease,
-                params.min_samples_leaf,
-                PART_MB_SAB_NONE,
-                grid_dim=(n_part, 1, 1),
-                block_dim=(TPB, 1, 1),
-            )
-            ctx.enqueue_function[
-                partition_scatter_kernel[
-                    TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS
-                ]
-            ](
-                ws.d_row_alt.unsafe_ptr(),
-                d_row_ids.unsafe_ptr(),
-                ws.d_blk_off.unsafe_ptr(),
-                dataset.d_data.unsafe_ptr(),
-                ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-                ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
-                n_rows,
-                params.min_impurity_decrease,
-                params.min_samples_leaf,
-                PART_MB_SAB_NONE,
-                ws.d_part_flags.unsafe_ptr(),
-                grid_dim=(plan.n_blocks_dimx, 1, 1),
-                block_dim=(TPB, 1, 1),
-            )
-            ctx.enqueue_function[
-                partition_writeback_kernel[TPB, PART_ROWS_PER_THREAD]
-            ](
-                d_row_ids.unsafe_ptr(),
-                ws.d_row_alt.unsafe_ptr(),
-                ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-                ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-                ws.d_splits.unsafe_ptr().unsafe_bitcast[Split](),
-                params.min_impurity_decrease,
-                params.min_samples_leaf,
-                PART_MB_SAB_NONE,
-                grid_dim=(plan.n_blocks_dimx, 1, 1),
-                block_dim=(TPB, 1, 1),
-            )
-            # DEVIATION 450: no post-partition synchronize -- see the twin.
-            clock.tick(ctx, PHASE_PARTITION)
-
-            if trace.enabled:
-                # The partition's output permutation -- see the twin.
-                trace.record_device(
-                    ctx, tag_pre + "partition.rowids", d_row_ids
-                )
-            cyc += 1
-
-            # --- DEVIATION 466 step 5, or cuML's Push --------------------
-            if bestfirst:
-                bf_pending.clear()
-                bf_pending_q.clear()
-                for t in range(n_part):
-                    var kids = queues[part_queue[t]].bestfirst_expand(
-                        part_items[t], part_splits[t]
-                    )
-                    for j in range(len(kids)):
-                        bf_pending.append(kids[j])
-                        bf_pending_q.append(part_queue[t])
-            else:
-                for t in range(len(seg_queue)):
-                    var items_s = List[NodeWorkItem]()
-                    var splits_s = List[Split]()
-                    for j in range(seg_count[t]):
-                        items_s.append(work_items[seg_start[t] + j])
-                        splits_s.append(splits[seg_start[t] + j])
-                    queues[seg_queue[t]].push(items_s, splits_s)
-            clock.tick(ctx, PHASE_HOST_PUSH)
 
         # --- the LEAF VALUES, ONE launch for the whole group --------------
-        # `SetLeafPredictions` (`builder.cuh:556-599`). DEVIATION 214: the
-        # per-tree loop allocated seven buffers and synchronized once PER
-        # TREE -- the per-level-allocation disease deviation 202 cured in the
-        # level loop, still alive in the tail, and the phase clock priced it
-        # at 8% of a 100-tree fit. The kernel was batch-ready all along
-        # (deviation 180: slice pointers, shrink the grid -- here the grid
-        # GROWS instead): every tree's ranges already point into its own
-        # slot of the shared `d_row_ids`, and the kernel reads nothing
-        # tree-relative but `left_child_id == -1`. So the group's trees are
-        # concatenated and the tail is one allocation set, one launch, one
-        # readback, one synchronize.
-        var trees_g = List[TreeMetaDataNode[DType.float32]]()
-        var leaf_base = List[Int]()
-        var total_nodes = 0
-        for s in range(g):  # small-loop(g: tree slots in this group): collects one output tree per slot, g capped by group_cap
-            leaf_base.append(total_nodes)
-            total_nodes += len(queues[s].node_instances)
-            trees_g.append(queues[s].get_tree())
+        # `SetLeafPredictions` (`builder.cuh:556-599`), DEVIATION 214: the
+        # group's trees concatenated, one allocation set, one launch. The
+        # concatenation is built ON THE DEVICE now (`etl_scatter_kernel`:
+        # each tree's nodes in local-id order, its ranges beside them), and
+        # the model comes back once (`download_trees`).
         var k_out = 1
+        var total_nodes = lp.word(ETL_H_NODES)
+        var n_alloc = total_nodes if total_nodes > 0 else 1
         var d_nodes = ctx.enqueue_create_buffer[DType.uint8](
-            total_nodes * size_of[SparseTreeNode[DType.float32]]()
+            n_alloc * size_of[SparseTreeNode[DType.float32]]()
         )
         var d_ranges = ctx.enqueue_create_buffer[DType.uint8](
-            total_nodes * size_of[InstanceRange]()
+            n_alloc * size_of[InstanceRange]()
         )
         var d_leaves = ctx.enqueue_create_buffer[DType.float32](
-            total_nodes * k_out
+            n_alloc * k_out
         )
-        var d_visit = ctx.enqueue_create_buffer[DType.int32](total_nodes)
-        var h_nodes = ctx.enqueue_create_host_buffer[DType.uint8](
-            total_nodes * size_of[SparseTreeNode[DType.float32]]()
-        )
-        var h_ranges = ctx.enqueue_create_host_buffer[DType.uint8](
-            total_nodes * size_of[InstanceRange]()
-        )
-        var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](
-            total_nodes * k_out
-        )
-        ctx.synchronize()
-        var nodes_ptr = h_nodes.unsafe_ptr().unsafe_bitcast[
-            SparseTreeNode[DType.float32]
-        ]()
-        var ranges_ptr = h_ranges.unsafe_ptr().unsafe_bitcast[
-            InstanceRange
-        ]()
-        for s in range(g):
-            for i in range(trees_g[s].num_nodes()):
-                nodes_ptr[unsafe_offset = leaf_base[s] + i] = trees_g[
-                    s
-                ].sparsetree[i]
-                ranges_ptr[unsafe_offset = leaf_base[s] + i] = queues[
-                    s
-                ].node_instances[i]
-        ctx.enqueue_copy(dst_buf=d_nodes, src_ptr=h_nodes.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
+        var d_visit = ctx.enqueue_create_buffer[DType.int32](n_alloc)
+        lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
         # `builder.cuh:582` memsets the leaf array before the launch, and an
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
         # folds that memset and `d_visit`'s into the launch itself -- the
@@ -6569,24 +7283,35 @@ def train_forest_regression_device_timed(
             grid_dim=(total_nodes, 1, 1),
             block_dim=(TPB, 1, 1),
         )
-        ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
-        ctx.synchronize()
-        for s in range(g):
-            var n_s = trees_g[s].num_nodes()
-            trees_g[s].vector_leaf = List[Float32](
-                length=n_s * k_out, fill=Float32(0.0)
-            )
-            for i in range(n_s * k_out):
-                trees_g[s].vector_leaf[i] = h_leaves.unsafe_ptr()[
-                    unsafe_offset = leaf_base[s] * k_out + i
-                ]
-            out.append(trees_g[s].copy())
+        lp.download_trees(
+            ctx, d_nodes, d_leaves, total_nodes, k_out, tree_ids, first, out
+        )
         if trace.enabled:
-            # The leaf pass's output for the whole group -- see the twin.
+            # The leaf pass's output for the whole group: the values the
+            # model returns, still concatenated across the group's trees.
             trace.record_device(
                 ctx, String("g") + String(gi) + ".leaves", d_leaves
             )
         clock.tick(ctx, PHASE_LEAF)
+        # DEVIATION 2663's measurement define: what the group's level loop
+        # did, from the device header's tallies.
+        comptime if is_defined["MOJOLEARN_ET_CYCLE_STATS"]():
+            print(
+                "ET_CYCLE_STATS group=", gi, " trees=", g, " cycles=", cyc,
+                " nodes=", lp.word(ETL_H_STAT_NODES),
+                " survey_nodes=", lp.word(ETL_H_STAT_RETRY),
+                " rescued=", lp.word(ETL_H_STAT_RESCUED),
+                " max_batch=", params.max_batch_size,
+            )
+        else:
+            _ = cyc
+        # Mojo frees a buffer at its LAST USE; these must outlive every
+        # launch that read them, and `download_trees` synchronized.
+        _ = d_nodes^
+        _ = d_ranges^
+        _ = d_leaves^
+        _ = d_visit^
+        _ = lp^
         _ = d_row_ids^
         _ = ws^
         gi += 1

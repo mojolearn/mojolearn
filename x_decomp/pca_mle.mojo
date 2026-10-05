@@ -163,15 +163,15 @@ def mle_base_at(sp: F32Ptr, d: Int, n: Int, r: Int, s: F32Ptr):
     var sl = SF64_ZERO
     for i in range(r):
         sl = sf64_add(sl, _ld(s, mle_off_lsp(d) + 2 * i))
-    var fn = sf64_from_int(n)
-    var pl = sf64_div(sf64_mul(sf64_neg(sl), fn), _M_TWO)
+    var fn_ = sf64_from_int(n)
+    var pl = sf64_div(sf64_mul(sf64_neg(sl), fn_), _M_TWO)
     var sv = SF64_ZERO
     for j in range(r, d):
         sv = sf64_add(sv, _ld(sp, 2 * j))
     var v = sf64_div(sv, sf64_from_int(d - r))
     if sf64_is_nan(v) or sf64_lt(v, _M_EPS):
         v = _M_EPS
-    var pv = sf64_div(sf64_mul(sf64_mul(sf64_neg(sf64_log(v)), fn), sf64_from_int(d - r)), _M_TWO)
+    var pv = sf64_div(sf64_mul(sf64_mul(sf64_neg(sf64_log(v)), fn_), sf64_from_int(d - r)), _M_TWO)
     # m = d * rank - rank * (rank + 1.0) / 2.0; pp = log(2 pi) * (m + rank) / 2.0
     var mm = sf64_sub(sf64_from_int(d * r), sf64_div(sf64_mul(fr, sf64_add(fr, SF64_ONE)), _M_TWO))
     var pp = sf64_div(sf64_mul(_M_LOG2PI, sf64_add(mm, fr)), _M_TWO)
@@ -278,10 +278,10 @@ def mle_cand_kernel(d: Int32, s: F32Ptr):
         mle_cand_at(Int(d), t, s)
 
 
-def mle_pick_kernel(d: Int32, s: F32Ptr, out: F32Ptr):
+def mle_pick_kernel(d: Int32, s: F32Ptr, dst: F32Ptr):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t == 0:
-        out.unsafe_store(0, Float32(mle_pick(Int(d), s)))
+        dst.unsafe_store(0, Float32(mle_pick(Int(d), s)))
 
 
 # -------------------------------------------------------- host column ----

@@ -985,7 +985,7 @@ def next_combination_i64_binding(addr: PythonObject, p: PythonObject, n: PythonO
     return PythonObject(1)
 
 
-def ic_running_min_f32_binding(
+def ic_running_min_f32_host_binding(
     llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
     ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
 ) raises -> PythonObject:
@@ -1030,7 +1030,7 @@ def ic_running_min_f32_binding(
     return PythonObject(0)
 
 
-def ic_running_min_f64_binding(
+def ic_running_min_f64_host_binding(
     llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
     ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
 ) raises -> PythonObject:
@@ -1051,6 +1051,10 @@ def ic_running_min_f64_binding(
     with GILReleased(Python()):
         for b in range(count):
             var v = -2.0 * Float64(lp.unsafe_load(b)) + pen
+            # lane cpu4-python: a NaN criterion is the canonical quiet NaN,
+            # as the device form (core/ic_min_device.mojo, soft binary64)
+            if v != v:
+                v = bitcast[DType.float64](UInt64(0x7FF8000000000000))
             ip.unsafe_store(b, v)
             if k == 0:
                 bp.unsafe_store(b, v)
@@ -1380,7 +1384,7 @@ def split_table_i32_binding(
     return PythonObject(0)
 
 
-def scatter_rows_bytes_binding(
+def scatter_rows_bytes_host_binding(
     src_addr: PythonObject, rows_addr: PythonObject, m: PythonObject, row_bytes: PythonObject,
     dst_addr: PythonObject, dst_rows: PythonObject,
 ) raises -> PythonObject:
@@ -1824,6 +1828,97 @@ def strat_group_assign_i32_binding(addrs: PythonObject, dims: PythonObject) rais
     for f in range(K):
         sp.unsafe_store(f, Int64(fold_n[f]))
     return PythonObject(0)
+
+
+def strat_group_plan_i32_binding(addrs: PythonObject, dims: PythonObject) raises -> PythonObject:
+    """`strat_group_assign_i32` from the group x class table (lane
+    cpu4-python): the table is the device's (`bincount2_i32`, int64
+    dist[g * k + c]); this is the group-level plan only, the same statements
+    in the same order as `strat_group_assign_i32` after its row loop (the
+    same folds, the same sizes). Returns 1 when the largest class has fewer
+    rows than n_folds, else 0.
+    addrs = [dist, perm (0: none), dst, sizes]; dims = [k, m, n_folds]."""
+    if len(addrs) != 4 or len(dims) != 3:
+        raise Error("strat_group_plan_i32: addrs [dist, perm, dst, sizes], dims [k, m, n_folds]")
+    var kk = Int(py=dims[0])
+    var mm = Int(py=dims[1])
+    var K = Int(py=dims[2])
+    if kk < 1 or mm < 1 or K < 1:
+        raise Error("strat_group_plan_i32: bad sizes")
+    var tp = _ptr[DType.int64](Int(py=addrs[0]))
+    var pa = Int(py=addrs[1])
+    var dp = _ptr[DType.int32](Int(py=addrs[2]))
+    var sp = _ptr[DType.int64](Int(py=addrs[3]))
+    var counts = List[Int](length=kk, fill=0)
+    var dist = List[Int](length=mm * kk, fill=0)
+    for g in range(mm):
+        for c in range(kk):
+            var v = Int(tp.unsafe_load(g * kk + c))
+            dist[g * kk + c] = v
+            counts[c] += v
+    var most = 0
+    for c in range(kk):
+        most = max(most, counts[c])
+    if most < K:
+        return PythonObject(1)
+    var order = List[Int](capacity=mm)
+    if pa != 0:
+        var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pa)
+        for j in range(mm):
+            order.append(Int(pp.unsafe_load(j)))
+    else:
+        for j in range(mm):
+            order.append(j)
+    # -std per group in `order`'s positions, stably sorted ascending
+    var keys = List[Float64](capacity=mm)
+    for j in range(mm):
+        var g = order[j]
+        var tot = Float64(0)
+        for c in range(kk):
+            tot += Float64(dist[g * kk + c])
+        var mu = tot / Float64(kk)
+        var ss = Float64(0)
+        for c in range(kk):
+            var dv = Float64(dist[g * kk + c]) - mu
+            ss += dv * dv
+        keys.append(-sqrt(ss / Float64(kk)))
+    var pos = _stable_order_f64(keys)
+    var fold_dist = List[Int](length=K * kk, fill=0)
+    var fold_n = List[Int](length=K, fill=0)
+    var col = List[Float64](length=K, fill=0)
+    for t in range(mm):
+        var g = order[pos[t]]
+        var best = -1
+        var best_score = Float64(0)
+        var best_n = 0
+        for f in range(K):
+            var score = Float64(0)
+            for c in range(kk):
+                var mu = Float64(0)
+                for j in range(K):
+                    var v = fold_dist[j * kk + c] + (dist[g * kk + c] if j == f else 0)
+                    col[j] = Float64(v) / Float64(counts[c])
+                    mu += col[j]
+                mu = mu / Float64(K)
+                var ss = Float64(0)
+                for j in range(K):
+                    var dv = col[j] - mu
+                    ss += dv * dv
+                score += sqrt(ss / Float64(K))
+            score = score / Float64(kk)
+            if best < 0 or score < best_score or (score == best_score and fold_n[f] < best_n):
+                best = f
+                best_score = score
+                best_n = fold_n[f]
+        for c in range(kk):
+            fold_dist[best * kk + c] += dist[g * kk + c]
+            fold_n[best] += dist[g * kk + c]
+        dp.unsafe_store(g, Int32(best))
+    for f in range(K):
+        sp.unsafe_store(f, Int64(fold_n[f]))
+    return PythonObject(0)
+
+
 
 
 @always_inline

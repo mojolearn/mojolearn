@@ -43,7 +43,7 @@ flags: `LABELS_SAMPLED_ORDER` on, `ROWS_SORTED_SAMPLE` off,
   6. `Builder.begin_tree` / `advance_tree` (`builder.mojo:2719-2841`) over
      `NodeQueue` (`:167-433`): FIFO pops of `max_batch_size`, the
      `_is_expandable` test, `push`'s six mutations in their order.
-  7. Per batch, `begin_batch` / `advance_batch` (`:2179-2320`): the
+  7. Per batch, `begin_batch_replay` / `advance_batch_replay` (`:2179-2320`): the
      sampling rounds (`max_sampling_rounds_for`, `sampled_cols_in_round`,
      `:143-164`), the column sample of `sampled_column_at`
      (`kernels/builder_kernels.mojo:315-335`, the per-node FNV seed
@@ -58,9 +58,9 @@ flags: `LABELS_SAMPLED_ORDER` on, `ROWS_SORTED_SAMPLE` off,
      (`split.mojo:686-779`, width 32, phase 1 per group and phase 2 over
      the group results, each step a lockstep read then update),
      `_publish_to_global` (`:614-683`, the range midpoint then the slot's
-     `update`), `_read_splits`' terminal rule (`builder.mojo:1733-1763`)
+     `update`), `_read_splits_host`' terminal rule (`builder.mojo:1733-1763`)
      and the retry of the invalid, non-terminal nodes.
-  8. `enqueue_node_split` (`builder.mojo:2357-2452`) through
+  8. `enqueue_node_split_replay` (`builder.mojo:2357-2452`) through
      `launch_node_split_kernel` (`builder_kernels_impl.mojo:1472-1702`):
      the local left count of `count_local_left_kernel` (`:915-966`, the
      `value(row, colid) <= quesval` test on valid splits only) and the
@@ -1895,7 +1895,7 @@ def _rf_host_tree(
                     p, criterion, label_scale, tree_id, k, sample_offset,
                     weights, wscale,
                 )
-                # `_read_splits` (`builder.mojo:1733-1763`): a pure node
+                # `_read_splits_host` (`builder.mojo:1733-1763`): a pure node
                 # is a leaf whatever its slot holds.
                 var terminal = s.pure != Int32(0)
                 if terminal:
@@ -1903,14 +1903,14 @@ def _rf_host_tree(
                 final_splits[orig] = s
                 if not s.is_valid() and not terminal:
                     retry.append(orig)
-            # `advance_batch`'s retry test (`:2290-2301`).
+            # `advance_batch_replay`'s retry test (`:2290-2301`).
             if len(retry) > 0 and sampling_round + 1 < max_rounds:
                 active = retry^
                 sampling_round += 1
                 continue
             break
 
-        # `enqueue_node_split` (`builder.mojo:2357-2452`): the splits go
+        # `enqueue_node_split_replay` (`builder.mojo:2357-2452`): the splits go
         # back with `split_start`/`split_end` -1 and `pure` 0, the local
         # left count is taken on valid splits, and each valid node's
         # range is stably partitioned.

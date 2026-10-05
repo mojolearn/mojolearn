@@ -131,7 +131,7 @@ from extratrees.impl.decisiontree.decisiontree import (
 )
 from extratrees.impl.randomforest.randomforest import (
     Forest,
-    class_ids_for,
+    class_ids_for_host,
     fit_classification_device,
     fit_regression_device,
     fit_regression_device_f32,

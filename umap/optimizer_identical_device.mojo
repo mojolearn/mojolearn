@@ -1314,20 +1314,15 @@ def _optimize_sparse_layout_device_csr(
     var g = umap_sparse_graph_to_device(
         ctx, initial_embedding, offsets, indices, values, n_samples, False
     )
-    var g_first = g.first^
-    var g_offsets = g.offsets^
-    var g_tails = g.tails^
-    var g_weights = g.weights^
+    # the graph's buffers are used in place: moving fields out of g is refused
+    # (box-run-2 compile fix); g lives until after the download.
     var second = ctx.enqueue_create_buffer[DType.float32](n_init)
     var out = _umap_epochs_download(
-        ctx, g_first, second, g_offsets, g_tails, g_weights, n_init, n_samples, n_components,
+        ctx, g.first, second, g.offsets, g.tails, g.weights, n_init, n_samples, n_components,
         n_epochs, learning_rate, negative_rate, neg2ab, rep2b, a, b, seed,
     )
     _ = second^
-    _ = g_first^
-    _ = g_offsets^
-    _ = g_tails^
-    _ = g_weights^
+    _ = g^
     return out^
 
 

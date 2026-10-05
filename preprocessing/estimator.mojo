@@ -27,165 +27,11 @@ def validate_dimensions(n: Int, d: Int, lower: Float32, upper: Float32) raises:
         raise Error("MinMaxScaler: finite increasing Float32 feature range required")
 
 
-def finite_values(values: List[Float32]) raises:
-    for value in values:
-        if not isfinite(value):
-            raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
-
-
-def minmax_fit_host(x: List[Float32], n: Int, d: Int, lower: Float32, upper: Float32) raises -> List[Float32]:
-    validate_dimensions(n,d,lower,upper)
-    if len(x) < n*d:
-        raise Error("MinMaxScaler: short input")
-    finite_values(x)
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dx = upload_f32(ctx,x)
-    var result = minmax_fit(ctx,dx,n,d,lower,upper)
-    _ = dx^
-    _ = ctx^
-    finite_values(result)
-    for c in range(d):
-        if result[3*d+c] <= 0:
-            raise Error("MinMaxScaler: Float32 scale underflow")
-    return result^
-
-
-def minmax_transform_host(
-    x: List[Float32], scale: List[Float32], offset: List[Float32], n: Int, d: Int,
-    inverse: Int, clip: Int, lower: Float32, upper: Float32,
-) raises -> List[Float32]:
-    validate_dimensions(n,d,lower,upper)
-    if len(x) < n*d or len(scale) < d or len(offset) < d or inverse < 0 or inverse > 1 or clip < 0 or clip > 1:
-        raise Error("MinMaxScaler: invalid transform parameters")
-    finite_values(x)
-    finite_values(scale)
-    finite_values(offset)
-    for c in range(d):
-        if scale[c] <= 0:
-            raise Error("MinMaxScaler: scale must be positive")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dx = upload_f32(ctx,x)
-    var ds = upload_f32(ctx,scale)
-    var dm = upload_f32(ctx,offset)
-    var result = minmax_transform(ctx,dx,ds,dm,n,d,inverse,clip,lower,upper)
-    _ = dm^
-    _ = ds^
-    _ = dx^
-    _ = ctx^
-    finite_values(result)
-    return result^
-
-
 def validate_standard(n: Int, d: Int, with_mean: Int, with_std: Int) raises:
     if n <= 0 or d <= 0 or d > 2147483647 or n > 2147483647 // d:
         raise Error("StandardScaler: positive dimensions with n*d<=Int32.max required")
     if with_mean < 0 or with_mean > 1 or with_std < 0 or with_std > 1:
         raise Error("StandardScaler: flags must be 0 or 1")
-
-
-def standard_finite(values: List[Float32]) raises:
-    for value in values:
-        if not isfinite(value):
-            raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
-
-
-def standard_fit_host(x: List[Float32], n: Int, d: Int, with_mean: Int, with_std: Int) raises -> List[Float32]:
-    validate_standard(n,d,with_mean,with_std)
-    if len(x) < n*d:
-        raise Error("StandardScaler: short input")
-    standard_finite(x)
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dx = upload_f32(ctx,x)
-    var result = standard_fit(ctx,dx,n,d,with_mean,with_std)
-    _ = dx^
-    _ = ctx^
-    standard_finite(result)
-    for c in range(d):
-        if result[d+c] < 0 or result[2*d+c] <= 0:
-            raise Error("StandardScaler: invalid variance or scale")
-    return result^
-
-
-def standard_transform_host(
-    x: List[Float32], mean: List[Float32], scale: List[Float32], n: Int, d: Int,
-    inverse: Int, with_mean: Int, with_std: Int,
-) raises -> List[Float32]:
-    validate_standard(n,d,with_mean,with_std)
-    if len(x) < n*d or len(mean) < d or len(scale) < d or inverse < 0 or inverse > 1:
-        raise Error("StandardScaler: invalid transform parameters")
-    standard_finite(x)
-    if with_mean != 0:
-        standard_finite(mean)
-    if with_std != 0:
-        standard_finite(scale)
-        for c in range(d):
-            if scale[c] <= 0:
-                raise Error("StandardScaler: scale must be positive")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dx = upload_f32(ctx,x)
-    var dm = upload_f32(ctx,mean)
-    var ds = upload_f32(ctx,scale)
-    var result = standard_transform(ctx,dx,dm,ds,n,d,inverse,with_mean,with_std)
-    _ = ds^
-    _ = dm^
-    _ = dx^
-    _ = ctx^
-    standard_finite(result)
-    return result^
-
-
-def standard_transform_host_into[out_origin: MutOrigin, //](
-    mut x: List[Float32], mut mean: List[Float32], mut scale: List[Float32],
-    output: MutPointer[Float32, out_origin], n: Int, d: Int, inverse: Int,
-    with_mean: Int, with_std: Int,
-) raises:
-    validate_standard(n,d,with_mean,with_std)
-    if len(x) < n*d or len(mean) < d or len(scale) < d or inverse < 0 or inverse > 1:
-        raise Error("StandardScaler: invalid transform parameters")
-    standard_finite(x)
-    if with_mean != 0:
-        standard_finite(mean)
-    if with_std != 0:
-        standard_finite(scale)
-        for c in range(d):
-            if scale[c] <= 0:
-                raise Error("StandardScaler: scale must be positive")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dx = upload_f32(ctx,x)
-    var dm = upload_f32(ctx,mean)
-    var ds = upload_f32(ctx,scale)
-    var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
-    standard_transform_into(ctx,dx,dm,ds,dout,n,d,inverse,with_mean,with_std)
-    if device_first_nonfinite(ctx,dout,n*d) >= 0:
-        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
-    ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
-    ctx.synchronize()
-    _ = dout^; _ = ds^; _ = dm^; _ = dx^; _ = ctx^
-
-
-def minmax_transform_host_into[out_origin: MutOrigin, //](
-    mut x: List[Float32], mut scale: List[Float32], mut offset: List[Float32],
-    output: MutPointer[Float32, out_origin], n: Int, d: Int, inverse: Int,
-    clip: Int, lower: Float32, upper: Float32,
-) raises:
-    validate_dimensions(n,d,lower,upper)
-    if len(x) < n*d or len(scale) < d or len(offset) < d or inverse < 0 or inverse > 1 or clip < 0 or clip > 1:
-        raise Error("MinMaxScaler: invalid transform parameters")
-    finite_values(x); finite_values(scale); finite_values(offset)
-    for c in range(d):
-        if scale[c] <= 0:
-            raise Error("MinMaxScaler: scale must be positive")
-    var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dx = upload_f32(ctx,x)
-    var ds = upload_f32(ctx,scale)
-    var dm = upload_f32(ctx,offset)
-    var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
-    minmax_transform_into(ctx,dx,ds,dm,dout,n,d,inverse,clip,lower,upper)
-    if device_first_nonfinite(ctx,dout,n*d) >= 0:
-        raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
-    ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
-    ctx.synchronize()
-    _ = dout^; _ = dm^; _ = ds^; _ = dx^; _ = ctx^
 
 
 # ---- the direct fits (lane gap-prep2, 2026-10-02) ---------------------------------------------
@@ -448,3 +294,102 @@ def standard_transform_direct(
         ctx.synchronize()
     _ = dout^; _ = ds^; _ = dm^; _ = dx^; _ = ctx^
     return ok
+
+
+# ---- the refusing entries of the GPU binding (lane cpu4-python) ----------
+# `minmax_fit` / `standard_fit` / `minmax_transform` / `standard_transform`
+# of the GPU binding used to copy X into a host List, walk every word (and
+# the fitted or given rows) on the host for a nonfinite one, and upload the
+# List: the `*_host` routes, named like the host column but serving the GPU
+# binding. They are the direct entries now (X straight from the caller's
+# buffer, every scan a device pass, the same kernels and words: no bit
+# moves) with the old refusals kept: a nonfinite X, a nonfinite or
+# nonpositive parameter row and a Float32 overflow raise as before. The
+# host column is `bindings/_mojolearn_preprocessing_host.mojo`.
+
+
+def _prep_params_check(
+    ctx: DeviceContext, pos: MutPointer[Float32, MutUntrackedOrigin], pos_on: Bool,
+    fin: MutPointer[Float32, MutUntrackedOrigin], fin_on: Bool, d: Int,
+) raises -> SIMD[DType.int32, 4]:
+    """The d-word parameter rows checked on the device: `pos` (when
+    `pos_on`) finite and > 0, `fin` (when `fin_on`) finite. Both go up into
+    one 2d buffer; `prep_rows_check_kernel` returns the flags."""
+    var k = (1 if pos_on else 0) + (1 if fin_on else 0)
+    if k == 0:
+        return SIMD[DType.int32, 4](0)
+    var buf = ctx.enqueue_create_buffer[DType.float32](k * d)
+    var at = 0
+    if pos_on:
+        var head = buf.create_sub_buffer[DType.float32](0, d)
+        ctx.enqueue_copy(dst_buf=head, src_ptr=pos)
+        _ = head^
+        at = d
+    if fin_on:
+        var tail = buf.create_sub_buffer[DType.float32](at, d)
+        ctx.enqueue_copy(dst_buf=tail, src_ptr=fin)
+        _ = tail^
+    var f = _prep_rows_check(ctx,buf,k*d,0,d if pos_on else 0,0,0,0,0)
+    _ = buf^
+    return f
+
+
+def minmax_fit_refusing(
+    x: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, lower: Float32, upper: Float32,
+    output: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`minmax_fit_direct`, a nonfinite X refused (the old binding's error)."""
+    if minmax_fit_direct(x,n,d,lower,upper,output) == 0:
+        raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+
+
+def standard_fit_refusing(
+    x: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, with_mean: Int, with_std: Int,
+    output: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`standard_fit_direct`, a nonfinite X refused (the old binding's error)."""
+    if standard_fit_direct(x,n,d,with_mean,with_std,output) == 0:
+        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
+
+
+def minmax_transform_refusing(
+    x: MutPointer[Float32, MutUntrackedOrigin], scale: MutPointer[Float32, MutUntrackedOrigin],
+    offset: MutPointer[Float32, MutUntrackedOrigin], output: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int, d: Int, inverse: Int, clip: Int, lower: Float32, upper: Float32,
+) raises:
+    """`minmax_transform_direct` after a device check of scale (finite,
+    positive) and offset (finite); a nonfinite X or output refused."""
+    validate_dimensions(n,d,lower,upper)
+    if inverse < 0 or inverse > 1 or clip < 0 or clip > 1:
+        raise Error("MinMaxScaler: invalid transform parameters")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var f = _prep_params_check(ctx,scale,True,offset,True,d)
+    _ = ctx^
+    if f[0] != 0:
+        raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+    if f[1] != 0:
+        raise Error("MinMaxScaler: scale must be positive")
+    if minmax_transform_direct(x,scale,offset,output,n,d,inverse,clip,lower,upper) != 1:
+        raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+
+
+def standard_transform_refusing(
+    x: MutPointer[Float32, MutUntrackedOrigin], mean: MutPointer[Float32, MutUntrackedOrigin],
+    scale: MutPointer[Float32, MutUntrackedOrigin], output: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int, d: Int, inverse: Int, with_mean: Int, with_std: Int,
+) raises:
+    """`standard_transform_direct` after a device check of scale (finite,
+    positive; with_std) and mean (finite; with_mean); a nonfinite X or
+    output refused."""
+    validate_standard(n,d,with_mean,with_std)
+    if inverse < 0 or inverse > 1:
+        raise Error("StandardScaler: invalid transform parameters")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var f = _prep_params_check(ctx,scale,with_std != 0,mean,with_mean != 0,d)
+    _ = ctx^
+    if f[0] != 0:
+        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
+    if f[1] != 0:
+        raise Error("StandardScaler: scale must be positive")
+    if standard_transform_direct(x,mean,scale,output,n,d,inverse,with_mean,with_std) != 1:
+        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
