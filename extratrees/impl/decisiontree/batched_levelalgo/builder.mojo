@@ -2359,7 +2359,19 @@ struct DeviceDataset(Movable):
         # also takes the row-major copy, whatever k is.
         var narrow = False
         comptime if ET_RM_NARROW:
-            narrow = Int(self.n_cols) * 4 <= 64 and 4 * k >= Int(self.n_cols)
+            comptime if ET_RM_NARROW_GENERAL:
+                # FAST: no narrow term. A one-line row is still read whole
+                # by the row-major copy (n_cols floats to use k), so the
+                # byte rule is the wide one below, `2k >= n_cols`: at least
+                # half the fetched bytes used. The quarter gate (`4k >=
+                # n_cols`) landed on taxi's k = 4 of 16; removed as
+                # benchmark-tuned on 2026-10-04, replacement UNMEASURED.
+                narrow = False
+            else:
+                # IDENTICAL still uses the board-shaped rule; generalize it
+                # on every vendor together (same-bits rule), owed to the
+                # IDENTICAL program.
+                narrow = Int(self.n_cols) * 4 <= 64 and 4 * k >= Int(self.n_cols)
         if 2 * k < Int(self.n_cols) and not narrow:
             return
         var nr = Int(self.n_rows)
@@ -3313,6 +3325,14 @@ The range kernel's cells are the same min/max/NaN counts either way.
 M4 IDENTICAL (steward 1790610860810, always-on arm): ExtraTreesClassifier
 taxi 3904 -> 3745 ms, same hash; RandomTreesEmbedding (k = 1) 469 -> 1086
 ms, hence the quarter gate. `-D MOJOLEARN_ET_RM_NARROW_OFF` turns it off."""
+
+comptime ET_RM_NARROW_GENERAL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_LEGACY_NARROW_ET_RM"]()
+)
+"""lane apple-fast-no-narrow-2 (2026-10-04): FAST drops the quarter gate
+(see `ensure_row_major`); IDENTICAL keeps it byte for byte. `-D
+MOJOLEARN_LEGACY_NARROW_ET_RM` restores the quarter gate in FAST."""
 
 
 @always_inline
