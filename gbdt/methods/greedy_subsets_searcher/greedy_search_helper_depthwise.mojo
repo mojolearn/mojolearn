@@ -24,6 +24,7 @@ from gbdt.gpu_util.kernel.partition_stats_gather import (
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     CFEATURE_BYTES,
+    ridx_schedule_pays,
     TTreeWorkspace,
     acc_i32_is_live,
     compute_target_std_dev,
@@ -241,7 +242,8 @@ comptime NONSYM_GROUP_WIDTH_2661 = is_defined[
 # spelled (hist build, split apply, end-of-tree sweep) and default to the
 # old body everywhere else.
 comptime RIDX_IDENTICAL_MAX_FEATURES = 64
-"""See `use_ridx` in `fit_non_symmetric_tree`. A RANGE rule, not a board
+"""UNUSED since lane/no-dim-idn (the cut is `ridx_schedule_pays`; its arm B
+restores this same 64). See `use_ridx` in `fit_non_symmetric_tree`. A RANGE rule, not a board
 row: the ridx schedule pays one gathered stat load per row per feature group
 a level walks, against one stat-plane reorder per split, so it wins on
 narrow layouts and loses once the groups per level grow. Measured at 16 and
@@ -1746,14 +1748,16 @@ def fit_non_symmetric_tree[
     ===============================================
     """
     # DEVIATION 1902's schedule is a comptime row (RIDX_ONLY_SPLITS); under
-    # IDENTICAL (Apple, trees-apple2) it is taken only on layouts of at most
-    # RIDX_IDENTICAL_MAX_FEATURES features, where its gathered stat loads
-    # cost less than the reorder they save (M4 Pro, steward 1790608373786:
-    # depthwise taxi 0.969, Istella 1.024). FAST keeps it at every width.
-    # One decision per tree, so a tree never mixes the two schedules.
+    # IDENTICAL (Apple, trees-apple2) it is taken only where its gathered
+    # stat loads cost less than the reorder they save. lane/no-dim-idn: that
+    # is the byte rule `ridx_schedule_pays` (shared with the symmetric
+    # driver), not the old 64-feature cut placed between the board widths
+    # 16 and 220 (M4 Pro, steward 1790608373786: depthwise taxi 0.969,
+    # Istella 1.024); -D MOJOLEARN_GBDT_RIDX_COST_RULE_OFF restores the cut.
+    # FAST keeps it at every width. One decision per tree, so a tree never
+    # mixes the two schedules.
     var use_ridx = RIDX_ONLY_SPLITS and (
-        not SPLIT_COST_IDENTICAL
-        or len(fold_counts) <= RIDX_IDENTICAL_MAX_FEATURES
+        not SPLIT_COST_IDENTICAL or ridx_schedule_pays(len(fold_counts))
     )
     if options.policy != GROW_DEPTHWISE and options.policy != GROW_LOSSGUIDE:
         raise Error(
