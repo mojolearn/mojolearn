@@ -152,19 +152,11 @@ def _ip(o: PythonObject) raises -> I32Ptr:
     return I32Ptr(unsafe_from_address=a)
 
 
-def mds_setup_host_py(
-    dis: PythonObject, keys: PythonObject, idx: PythonObject, gid: PythonObject, gst: PythonObject, p: PythonObject
-) raises -> PythonObject:
+def mds_setup_host(pd: F32Ptr, pk: F32Ptr, pi: I32Ptr, pg: I32Ptr, ps: I32Ptr, n: Int) raises -> Tuple[Int, Int]:
     """The setup on host buffers (p = [n]; keys, idx, gid hold n (n - 1) / 2,
     gst n (n - 1) / 2 + 1). Returns (m, G)."""
-    var n = Int(py=p[0])
     if n < 1 or n * n > 2147483647:
         raise Error("x_decomp: mds setup size out of range")
-    var pd = _fp(dis)
-    var pk = _fp(keys)
-    var pi = _ip(idx)
-    var pg = _ip(gid)
-    var ps = _ip(gst)
     var vals = List[Float32]()
     var pos = List[Int32]()
     for i in range(n):
@@ -193,31 +185,34 @@ def mds_setup_host_py(
     ps.unsafe_store(g, Int32(m))
     _ = len(vals)
     _ = len(order)
-    return Python.tuple(m, g)
+    return (m, g)
 
 
-def mds_disp_host_py(d: PythonObject, dst: PythonObject, a: PythonObject, p: PythonObject) raises -> PythonObject:
+def mds_setup_host_py(
+    dis: PythonObject, keys: PythonObject, idx: PythonObject, gid: PythonObject, gst: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """The setup on host buffers (p = [n]; keys, idx, gid hold n (n - 1) / 2,
+    gst n (n - 1) / 2 + 1). Returns (m, G)."""
+    var r = mds_setup_host(_fp(dis), _fp(keys), _ip(idx), _ip(gid), _ip(gst), Int(py=p[0]))
+    return Python.tuple(r[0], r[1])
+
+
+def mds_disp_host(pd: F32Ptr, po: F32Ptr, a: List[Int], n: Int, m: Int, G: Int, first: Bool) raises:
     """One iteration's upper-triangle disparities into dst (n x n, zeroed
     here) on host buffers. a = [keys, idx, gid, gst, sm, wt, end, prv,
     last, hf, gv] addresses; p = [n, m, G, first]."""
-    var n = Int(py=p[0])
-    var m = Int(py=p[1])
-    var G = Int(py=p[2])
-    var first = Int(py=p[3]) != 0
-    var pd = _fp(d)
-    var po = _fp(dst)
-    var pk = _fp(a[0])
-    var pi = _ip(a[1])
-    var pg = _ip(a[2])
-    var ps = _ip(a[3])
-    var sm = _fp(a[4])
-    var wt = _ip(a[5])
-    var endp = _ip(a[6])
-    var prv = _ip(a[7])
-    var last = _ip(a[8])
-    var hf = _ip(a[9])
-    var gv = _fp(a[10])
-    with GILReleased(Python()):
+    var pk = F32Ptr(unsafe_from_address=a[0])
+    var pi = I32Ptr(unsafe_from_address=a[1])
+    var pg = I32Ptr(unsafe_from_address=a[2])
+    var ps = I32Ptr(unsafe_from_address=a[3])
+    var sm = F32Ptr(unsafe_from_address=a[4])
+    var wt = I32Ptr(unsafe_from_address=a[5])
+    var endp = I32Ptr(unsafe_from_address=a[6])
+    var prv = I32Ptr(unsafe_from_address=a[7])
+    var last = I32Ptr(unsafe_from_address=a[8])
+    var hf = I32Ptr(unsafe_from_address=a[9])
+    var gv = F32Ptr(unsafe_from_address=a[10])
+    if True:
         for q in range(n * n):
             po.unsafe_store(q, Float32(0))
         if first:
@@ -245,4 +240,21 @@ def mds_disp_host_py(d: PythonObject, dst: PythonObject, a: PythonObject, p: Pyt
                 gv.unsafe_store(g, iso_mean(sm, wt, h))
             for t in range(m):
                 po.unsafe_store(Int(pi.unsafe_load(t)), gv.unsafe_load(Int(pg.unsafe_load(t)) - 1))
+
+
+def mds_disp_host_py(d: PythonObject, dst: PythonObject, a: PythonObject, p: PythonObject) raises -> PythonObject:
+    """One iteration's upper-triangle disparities into dst (n x n, zeroed
+    here) on host buffers. a = [keys, idx, gid, gst, sm, wt, end, prv,
+    last, hf, gv] addresses; p = [n, m, G, first]."""
+    var li = List[Int]()
+    for i in range(11):
+        li.append(Int(py=a[i]))
+    var m = Int(py=p[1])
+    var pd = _fp(d)
+    var po = _fp(dst)
+    var n = Int(py=p[0])
+    var G = Int(py=p[2])
+    var first = Int(py=p[3]) != 0
+    with GILReleased(Python()):
+        mds_disp_host(pd, po, li, n, m, G, first)
     return PythonObject(m)

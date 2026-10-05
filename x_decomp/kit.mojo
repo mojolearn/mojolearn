@@ -11,7 +11,7 @@ matrices instead (x_decomp/kit_device.mojo), the same cells to the same
 bits (every x-decomp lane's GPU == CPU claim)."""
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
-from x_decomp.moves import MOVE_TRANSPOSE, move_src
+from x_decomp.moves import MOVE_TAKE_COLS, MOVE_TRANSPOSE, move_src, order_f
 from x_decomp.select_ops import SEL_ORDER_MAX, order_rank, sel_fold
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
@@ -35,6 +35,10 @@ comptime OP_SQDIFF = 21
 comptime OP_GTS = 23
 comptime OP_SELECT = 35
 comptime OP_MUZ = 36
+comptime OP_FMA = 15
+comptime OP_LE = 34
+comptime OP_MAX = 30
+comptime OP_SIGN = 33
 comptime OP_TANH = 11
 comptime OP_ONEMSQ = 12
 comptime OP_EXPG = 25
@@ -123,6 +127,24 @@ def take_rows(X: Mat, sel: List[Int]) -> Mat:
         for j in range(c):
             out.d[a * c + j] = X.d[src + j]
     return out^
+
+
+def svd_order(s: Mat, v: Mat, mut sd: Mat, mut vt: Mat) raises:
+    """`_Kit.svd`'s tail: o = the stable ascending order of -s (NaN refused,
+    `order_f`), S = s[o] (1 x n) and Vt = the rows of v^T in that order."""
+    var n = s.c
+    var neg = Mat(1, n)
+    for i in range(n):
+        neg.d[i] = -s.d[i]
+    var o = Mat(n, 1)
+    order_f(neg.p(), n, o.p())
+    sd = Mat(1, n)
+    vt = Mat(n, n)
+    for a in range(n):
+        var j = Int(o.d[a])
+        sd.d[a] = s.d[j]
+        for i in range(n):
+            vt.d[a * n + i] = v.d[i * n + j]
 
 
 struct Kit[E: Exec](Movable):
@@ -217,6 +239,82 @@ struct Kit[E: Exec](Movable):
         var pp = I32Ptr(unsafe_from_address=Int(perm.unsafe_ptr()))
         Self.E.cd_rows(W.p(), HHt.p(), XHt.p(), pp, viol.p(), W.r, W.c)
         return self.word(self.total(viol))
+
+    # ---- lane py-runtime-b: the matrix moves and small helpers the drivers
+    # share with DKit under the same names (exact copies)
+    def t(self, A: Mat) -> Mat:
+        return mat_t(A)
+
+    def vec_t(self, var A: Mat) -> Mat:
+        return mat_vec_t(A^)
+
+    def rows(self, A: Mat, a: Int, b: Int) -> Mat:
+        return mat_rows(A, a, b)
+
+    def cols(self, A: Mat, a: Int, b: Int) -> Mat:
+        """`_M.cols(a, b)`: exact copies."""
+        var w = b - a
+        var out = Mat(A.r, w)
+        for i in range(A.r):
+            for j in range(w):
+                out.d[i * w + j] = A.d[i * A.c + a + j]
+        return out^
+
+    def copy(self, A: Mat) -> Mat:
+        return A.copy()
+
+    def const(self, v: Float64, r: Int, c: Int) -> Mat:
+        return mat_const(v, r, c)
+
+    def zeros(self, r: Int, c: Int) -> Mat:
+        return Mat(r, c)
+
+    def take_col(self, A: Mat, j: Int) -> Mat:
+        """`take_cols_m(A, idx, 1)` with idx[0] = j: column j (A.r x 1)."""
+        var out = Mat(A.r, 1)
+        for i in range(A.r):
+            out.d[i] = A.d[i * A.c + j]
+        return out^
+
+    def neg_signs(self, V: Mat) raises -> Mat:
+        """`_Kit.neg_signs`: select(-V > 0, -1, +1)."""
+        return self.ew3(OP_SELECT, self.ew1(OP_SCALE, V, -1.0), mat_const(-1.0, 1, 1), mat_const(1.0, 1, 1), 0.0)
+
+    def absmax_signs(self, A: Mat, by_col: Bool) raises -> Mat:
+        """`_Kit.absmax_signs`: per column (1 x c) or row (r x 1) of A."""
+        var cnt = A.c if by_col else A.r
+        var out = Mat(1, cnt)
+        if cnt > 0 and A.n() > 0:
+            Self.E.absmax_sign(A.p(), out.p(), A.r, A.c, by_col)
+        if not by_col:
+            out = mat_vec_t(out^)
+        return self.neg_signs(out)
+
+    def count_gt(self, A: Mat, s: Float64) raises -> Int:
+        """`_Kit.count_gt`: how many values of A are > s (one word)."""
+        if A.n() == 0:
+            return 0
+        return Int(self.word(self.total(self.ew1(OP_GTS, A, s))))
+
+    def svd(self, A: Mat, mut S: Mat, mut Vt: Mat) raises:
+        """`_Kit.svd`: (S 1 x n descending, Vt n x n) of a tall A, the stable
+        descending order of the values (ties to the lower index, NaN refused)."""
+        var m = A.r
+        var n = A.c
+        if n <= 0 or m < n:
+            raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
+        var c = A.copy()
+        var s = Mat(1, n)
+        var v = Mat(n, n)
+        Self.E.svd(c.p(), m, n, s.p(), v.p())
+        svd_order(s, v, S, Vt)
+
+    def sqdist(self, A: Mat, B: Mat) raises -> Mat:
+        """`_Kit.sqdist(A, B)`: the squared distances (A.r x B.r)."""
+        var out = Mat(A.r, B.r)
+        if A.r * B.r > 0 and A.c > 0:
+            Self.E.sqdist(A.p(), B.p(), out.p(), A.r, B.r, A.c)
+        return out^
 
     def mm(self, A: Mat, B: Mat, ta: Bool, tb: Bool) raises -> Mat:
         var m = A.c if ta else A.r

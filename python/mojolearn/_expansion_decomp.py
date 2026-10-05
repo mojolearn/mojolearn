@@ -3181,48 +3181,6 @@ class _PLS(_Base):
             std = k.const(1.0, 1, A.c)
         return Ac, mean, std
 
-    def _power(self, k, X, Y, norm_y):
-        eps = _F32_EPS
-        # the first column of Y with some |y| > eps (lane cpu2-l8-decomp,
-        # re-audit L8 `_PLS._power`): per-column counts on the device, one
-        # word for "any", and the column found by the stable order of the
-        # 0 (live) / 1 (dead) keys, gathered where Y lives (no column download)
-        cnt = k.colsum(k.ew("gts", k.ew("abs", Y), s=eps))
-        if k.count_gt(cnt, 0.0) == 0:
-            raise StopIteration("y residual is constant")
-        first = k.order_small(k.ew("adds", k.ew("scale", k.ew("gts", cnt, s=0.0), s=-1.0), s=1.0))
-        y_score = k.take_cols_m(Y, first, 1)
-        xw_old = None
-        if self._pmode == "B":
-            Xp, Yp = _pinv(k, X), _pinv(k, Y)
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            if self._pmode == "B":
-                xw = k.mm(Xp, y_score)
-            else:
-                xw = k.ew("div", k.mm(X, y_score, ta=True), _dot(k, y_score, y_score))
-            xw = k.ew("div", xw, k.ew("adds", k.ew("sqrt", _dot(k, xw, xw)), s=eps))
-            x_score = k.mm(X, xw)
-            if self._pmode == "B":
-                yw = k.mm(Yp, x_score)
-            else:
-                yw = k.ew("div", k.mm(Y, x_score, ta=True), _dot(k, x_score, x_score))
-            if norm_y:
-                yw = k.ew("div", yw, k.ew("adds", k.ew("sqrt", _dot(k, yw, yw)), s=eps))
-            y_score = k.ew("div", k.mm(Y, yw), k.ew("adds", _dot(k, yw, yw), s=eps))
-            if Y.c == 1:
-                break
-            if xw_old is not None:
-                diff = k.ew("sub", xw, xw_old)
-                if _dot(k, diff, diff).s[0] < self.tol:
-                    break
-            else:
-                diff = k.ew("adds", xw, s=-100.0)
-                if _dot(k, diff, diff).s[0] < self.tol:
-                    break
-            xw_old = xw
-        return xw, yw, it
-
     def fit(self, X, Y):
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
@@ -3238,55 +3196,25 @@ class _PLS(_Base):
         Xk, self._x_mean, self._x_std = self._center_scale(k, M)
         Yk, self._y_mean, self._y_std = self._center_scale(k, Ym)
         norm_y = self._deflation == "canonical"
-        xw_c, yw_c, xs_c, ys_c, xl_c, yl_c = [], [], [], [], [], []
-        self.n_iter_ = []
-        thr = 10 * _F32_EPS
-        for _c in range(nc):
-            # Yk columns that are all below 10 eps are set to zero: per
-            # column, the count of |y| >= thr (-|y| <= -thr, exact) on the
-            # device; q values come back
-            live = k.colsum(k.ew("le", k.ew("scale", k.ew("abs", Yk), s=-1.0), _M.of([-thr], 1, 1)))
-            # lane cpu2-l8-decomp: one word ("is any column dead?") and the
-            # 0/1 mask made on the device (live count > 0), not q flags
-            if k.count_gt(live, 0.0) < q:
-                Yk = k.ew("mul", Yk, k.ew("gts", live, s=0.0))
-            try:
-                if getattr(self, "algorithm", "nipals") == "svd":
-                    # `_get_first_singular_vectors_svd`: the first singular pair of X^T Y
-                    Cxy = k.mm(Xk, Yk, ta=True)
-                    U, _, Vt = _thin_svd(k, Cxy, 1, u_based=True)
-                    xw, yw, it = U.cols(0, 1), Vt.rows(0, 1).T, 0
-                else:
-                    xw, yw, it = self._power(k, Xk, Yk, norm_y)
-            except StopIteration:
-                import warnings
-                warnings.warn(f"y residual is constant at iteration {_c}", stacklevel=2)
-                break
-            if getattr(self, "algorithm", "nipals") != "svd":
-                self.n_iter_.append(it)
-            # _svd_flip_1d: the largest-|.| entry of x_weights (the first on
-            # a tie) positive; its sign as a 1 x 1 device value (lane
-            # cpu2-l8-decomp: absmax_sign_cell over xw's one column)
-            sg = k.absmax_signs(xw, True)
-            xw, yw = k.ew("mul", xw, sg), k.ew("mul", yw, sg)
-            x_scores = k.mm(Xk, xw)
-            y_ss = k.const(1.0) if norm_y else _dot(k, yw, yw)
-            y_scores = k.ew("div", k.mm(Yk, yw), y_ss)
-            x_load = k.ew("div", k.mm(Xk, x_scores, ta=True), _dot(k, x_scores, x_scores))
-            Xk = k.ew("sub", Xk, k.mm(x_scores, x_load, tb=True))
-            if self._deflation == "canonical":
-                y_load = k.ew("div", k.mm(Yk, y_scores, ta=True), _dot(k, y_scores, y_scores))
-                Yk = k.ew("sub", Yk, k.mm(y_scores, y_load, tb=True))
-            else:
-                y_load = k.ew("div", k.mm(Yk, x_scores, ta=True), _dot(k, x_scores, x_scores))
-                Yk = k.ew("sub", Yk, k.mm(x_scores, y_load, tb=True))
-            xw_c.append(xw); yw_c.append(yw); xs_c.append(x_scores); ys_c.append(y_scores)
-            xl_c.append(x_load); yl_c.append(y_load)
-        self.x_weights_m_ = k.hstack(xw_c)
-        self.y_weights_m_ = k.hstack(yw_c)
-        self.x_loadings_m_ = k.hstack(xl_c)
-        self.y_loadings_m_ = k.hstack(yl_c)
-        self._x_scores_m, self._y_scores_m = k.hstack(xs_c), k.hstack(ys_c)
+        # the component loop (NIPALS `_power` or the SVD pair, the flips and
+        # the deflations) in ONE binding call (lane py-runtime-b:
+        # x_decomp/pls.mojo on the host column, pls_dev.mojo on resident
+        # device matrices), the same cells, counts and tolerance tests
+        svd_algo = getattr(self, "algorithm", "nipals") == "svd"
+        outs = [_M.zeros(r, nc) for r in (p, q, n, n, p, q)]  # glue: six output blocks
+        its = array.array("i", [0]) * nc
+        done, nits = k.b.x_decomp_pls_fit(
+            Xk.addr, Yk.addr, [o.addr for o in outs], its.buffer_info()[0],  # glue: six output addresses
+            [n, p, q, nc, int(self.max_iter), 1 if self._pmode == "B" else 0, int(norm_y),
+             int(self._deflation == "canonical"), int(svd_algo)], [float(self.tol)])
+        done, nits = int(done), int(nits)
+        if done < nc:
+            import warnings
+            warnings.warn(f"y residual is constant at iteration {done}", stacklevel=2)
+            outs = [o.cols(0, done) for o in outs]  # glue: the fitted columns of six blocks
+        self.n_iter_ = its.tolist()[:nits]
+        (self.x_weights_m_, self.y_weights_m_, self._x_scores_m, self._y_scores_m, self.x_loadings_m_,
+         self.y_loadings_m_) = outs
         self.x_rotations_m_ = k.mm(self.x_weights_m_, _pinv(k, k.mm(self.x_loadings_m_, self.x_weights_m_, ta=True)))
         self.y_rotations_m_ = k.mm(self.y_weights_m_, _pinv(k, k.mm(self.y_loadings_m_, self.y_weights_m_, ta=True)))
         coef = k.mm(self.x_rotations_m_, self.y_loadings_m_, tb=True)          # p x q
@@ -3453,7 +3381,11 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
     # division (the same cell as the old host constant); the per-atom
     # used/unused decision is one word, read only when some atom is unused.
     Dm = k.copy(D)
-    zero_cols = []
+    # an unused atom's code column is zeroed as the atom is resampled (lane
+    # py-runtime-b: inside the atom loop, one FILL0 move each, on the one
+    # copy of code; the loop never reads code, so the same values as the
+    # separate pass over the zeroed columns after it)
+    code_out = None
     for j in range(nc):  # glue: sklearn's atom order, each atom a chain of kit cells on the resident D
         ajj = dg.cols(j, j + 1)
         if used == nc or k.word(ajj) > 1e-6:
@@ -3464,17 +3396,15 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
             row = _resample_atom(k, Y, seed, c)
             if counter is not None:
                 counter[0] += 1
-            zero_cols.append(j)
+            if code_out is None:
+                code_out = k.copy(code)
+            k.fill0(code_out, j, code_out.c, code_out.r)
         if positive:
             row = k.ew("maxs", row, s=0.0)
         nrm = k.ew("sqrt", k.total(k.ew("sq", row)))
         row = k.ew("div", row, k.ew("maxs", nrm, s=1.0))
         k.place_rows(Dm, row, j)
-    if zero_cols:
-        code = k.copy(code)
-        for j in zero_cols:
-            k.fill0(code, j, code.c, code.r)
-    return Dm, code
+    return Dm, (code if code_out is None else code_out)
 
 
 def _cost(k, X, code, D, alpha):
@@ -4430,105 +4360,6 @@ class MDS(_Base):
     def _dist(self, k, Y):
         return k.ew("sqrt", k.sqdist(Y, Y))
 
-    def _nm_native(self, k, Dis, n):
-        """Non-metric SMACOF's disparity function (lane cpu2-l8-decomp,
-        re-audit L8 `MDS._nm_native`): one Mojo entry a fit for the setup and
-        one an iteration for the disparities (x_decomp/mds_iso.mojo, the
-        device form x_decomp/mds_iso_dev.mojo, the same words), the pairs
-        and the isotonic fit never leaving where the kit keeps them. The old
-        bookkeeping (host-address triu/gather/sort helpers and x_linear's
-        isotonic fit and predict on host buffers, every iteration) is
-        deleted. Returns disparities(d, first) -> the symmetric n x n P,
-        normalized to sum of squares n (n - 1) / 2 over the upper triangle."""
-        if k._res():
-            N2 = 1 << max(0, (n * n - 1).bit_length())
-            keys, idx, gid = k._dout(1, N2), k._dout(1, N2), k._dout(1, N2)
-            tmp, gst, word = k._dout(1, N2), k._dout(1, N2 + 1), k._dout(1, 1)
-            m, G = k.b.x_decomp_dev_mds_setup(
-                k._did(Dis), [keys._d.id, idx._d.id, gid._d.id, tmp._d.id, gst._d.id, word._d.id], [n, N2])
-            del tmp, word
-            m, G = int(m), int(G)
-            # sm, wt, end, prv, last, hf, hd0, hd1, gv: G values each
-            work = [k._dout(1, max(G, 1)) for _ in range(9)]  # glue: nine scratch matrices
-            hold = (keys, idx, gid, gst, work)
-            ids = [keys._d.id, idx._d.id, gid._d.id, gst._d.id] + [w._d.id for w in work]  # glue: the scratch buffer ids
-
-            def run(d, first):
-                _ = hold                # the buffers live as long as this function
-                P = k._dout(n, n)
-                k.b.x_decomp_dev_mds_disp(P._d.id if first else k._did(d), P._d.id, ids,
-                                          [n, m, G, 1 if first else 0])
-                return P
-        else:
-            cap = max(n * (n - 1) // 2, 1)
-            keys = array.array("f", [0.0]) * cap
-            idx, gid = array.array("i", [0]) * cap, array.array("i", [0]) * cap
-            gst = array.array("i", [0]) * (cap + 1)
-            m, G = k.b.x_decomp_mds_setup(Dis.addr, keys.buffer_info()[0], idx.buffer_info()[0],
-                                          gid.buffer_info()[0], gst.buffer_info()[0], [n])
-            m, G = int(m), int(G)
-            gw = max(G, 1)
-            ints = [array.array("i", [0]) * gw for _ in range(5)]  # glue: five int32 scratch buffers
-            work = [array.array("f", [0.0]) * gw] + ints + [array.array("f", [0.0]) * gw]
-            addrs = [a.buffer_info()[0] for a in [keys, idx, gid, gst] + work]  # glue: the scratch buffer addresses
-
-            def run(d, first):
-                _ = (keys, idx, gid, gst, work)     # alive as long as this function
-                P = _M.zeros(n, n)
-                k.b.x_decomp_mds_disp(P.addr if first else d.addr, P.addr, addrs, [n, m, G, 1 if first else 0])
-                return P
-
-        def disparities(d, first):
-            P = run(d, first)
-            ss = k.total(k.ew("sq", P)).s[0]
-            P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss))
-            return k.ew("add", P, P.T)          # the mirror: u + 0 above, 0 + u below
-
-        return disparities
-
-    def _single(self, k, Dis, Y, run):
-        n = Dis.r
-        # cgfin-c-decomp: non-metric SMACOF's bookkeeping is the native
-        # calls only (`_nm_native`); the Python pair lists and the
-        # MOJOLEARN_XD_MDS_PYTHON switch are deleted
-        native = not self.metric_mds
-        if native:
-            if n * n > 2147483647:
-                raise ValueError(f"MDS(metric_mds=False): {n} rows exceed the 32-bit pair index (n * n <= 2**31 - 1)")
-            nm = self._nm_native(k, Dis, n)
-        disp = Dis
-        d = self._dist(k, Y)
-        old = None
-        it = 0
-        # The Guttman transform's diagonal (lane hr2-mds-agglo): B's diagonal
-        # gets the row sums by fma(I, rs, B) (1 * rs + B, one rounding;
-        # 0 * rs + B is B off it), so the n x n matrix stays resident. The
-        # host binding takes the same fma on a host identity.
-        eye = k.diag_mask(n)
-        if eye is None:
-            eye = _eye(n)
-        floor = k.const(1e-5)
-        for it in range(1, self.max_iter + 1):
-            if native:
-                disp = nm(d, it == 1)
-            dz = k.ew("select", d, d, floor, s=0.0)
-            ratio = k.ew("div", disp, dz)
-            B = k.ew("scale", ratio, s=-1.0)
-            rs = k.rowsum(ratio)
-            B = k.ew("fma", eye, rs, B)
-            Y = k.ew("scale", k.mm(B, Y), s=1.0 / n)
-            d = self._dist(k, Y)
-            stress = k.total(k.ew("sqdiff", d, disp)).s[0] / 2
-            if old is not None:
-                ssd = k.total(k.ew("sq", d)).s[0]
-                if (old - stress) / (ssd / 2) < self.eps:
-                    break
-            old = stress
-        if self._norm:
-            ssd = k.total(k.ew("sq", d)).s[0]
-            stress = math.sqrt(stress / (ssd / 2)) if ssd else 0.0
-        return Y, stress, it
-
     def fit_transform(self, X, y=None, init=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
@@ -4552,12 +4383,17 @@ class MDS(_Base):
             starts = [k.rand(n, nc, seed, 70 + r, 0) for r in range(int(self.n_init))]  # glue: draws one device start per restart (n_init-sized: random restarts)
         else:
             raise ValueError("init must be 'random', 'classical_mds' or an array")
-        best = None
-        for r, Y0 in enumerate(starts):
-            Y, stress, it = self._single(k, Dis, Y0, r)
-            if best is None or stress < best[1]:
-                best = (Y, stress, it)
-        Y, self.stress_, self.n_iter_ = best
+        if not self.metric_mds and n * n > 2147483647:
+            raise ValueError(f"MDS(metric_mds=False): {n} rows exceed the 32-bit pair index (n * n <= 2**31 - 1)")
+        # every start's SMACOF and the restart pick in ONE binding call (lane
+        # py-runtime-b: x_decomp/mds.mojo on the host column, mds_dev.mojo on
+        # resident device matrices): the same cells and float64 stress tests
+        S = k.vstack(starts) if len(starts) > 1 else starts[0]
+        Y = _M.zeros(n, nc)
+        st, it = k.b.x_decomp_mds_fit(Dis.addr, S.addr, Y.addr,
+                                      [n, nc, len(starts), int(self.max_iter), int(bool(self.metric_mds)),
+                                       int(bool(self._norm))], [float(self.eps)])
+        self.stress_, self.n_iter_ = float(st), int(it)
         self.embedding_ = Y.out()
         self.n_features_in_ = M.c
         return self.embedding_
@@ -4739,7 +4575,7 @@ def _lle_smallest(k, F, nc, max_iter, seed=0, Xd=None):
         return k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
 
     while True:
-        X, Y, S, null = _lle_iterate(k, F0, Fhat, dev_f0, solve, solve_t, z, n, n1, nc, p, max_iter, seed, floor)
+        X, Y, S, null = _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor)
         if not (canon and null):
             break
         # N = the Ritz vectors whose values are numerically zero (under
@@ -4776,41 +4612,24 @@ def _lle_smallest(k, F, nc, max_iter, seed=0, Xd=None):
     return k.ew("mul", V, k.absmax_signs(V, True)), sv
 
 
-def _lle_iterate(k, F0, Fhat, dev_f0, solve, solve_t, z, n, n1, nc, p, max_iter, seed, floor):
-    """`_lle_smallest`'s subspace iteration with p columns: (X n1 x p the Ritz
-    vectors by descending Ritz value, Y n1 x nc the wanted ones, S 1 x p
-    their values, whether it stopped on the null floor)."""
-    X = _lle_orth(k, k.ew("adds", k.rand(n1, p, seed, 0x11E, 0), s=-0.5))
-    want = list(range(p - 1, p - 1 - nc, -1))
-    prev, e_prev = None, float("inf")
-    for it in range(max(1, int(max_iter))):
-        # (F^T F^)^-1 X in two orthonormalized halves: F^+T X = P_z F0^-T
-        # [X; 0] (range(F^), n x p), then F^+ of that = the first n - 1 rows
-        # of F0^-1; each half stretches the block by 1 / sigma, not
-        # 1 / sigma^2, so the columns stay far from float32 dependence
-        Y = solve_t(k.pad_zero_row(X))      # [X; 0] (lane fix-d1-decomp: on the device, IDN_LLE_PAD_DEV)
-        Y = _lle_orth(k, k.ew("sub", Y, k.mm(z, k.mm(z, Y, ta=True))))
-        X = _lle_orth(k, solve(Y).rows(0, n1))
-        if dev_f0:          # F^ X = F0 [X; 0] (the last column of F0 meets a zero row)
-            S, Vt = k.svd(k.mm(F0, k.pad_zero_row(X)))
-        else:
-            S, Vt = k.svd(k.mm(Fhat, X))
-        X = k.mm(X, Vt, tb=True)
-        Y = X.take_cols(want)
-        if it >= 2 and k.word(k.reduce(S.take_cols(want), k._SEL_MAX)) <= floor:
-            return X, Y, S, True
-        if prev is not None:
-            E = k.ew("sub", Y, k.mm(prev, k.mm(prev, Y, ta=True)))
-            e = math.sqrt(max(float(k.total(k.ew("sq", E)).s[0]), 0.0))
-            if e <= _LLE_SUBSPACE_TOL or (e <= _LLE_STALL_TOL and e >= e_prev):
-                return X, Y, S, False
-            e_prev = e
-        prev = Y
-    else:
+def _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor):
+    """`_lle_smallest`'s subspace iteration with p columns on the F0 route:
+    (X n1 x p the Ritz vectors by descending Ritz value, Y n1 x nc the wanted
+    ones, S 1 x p their values, whether it stopped on the null floor). The
+    loop runs in ONE binding call (lane py-runtime-b: x_decomp/lle_iter.mojo
+    on the host column, lle_iter_dev.mojo on the GPU binding): the same
+    cells, solves on the LU factor (pm the pivots' row order, im its
+    inverse), Householder QR and descending SVD, and the same float64 tests."""
+    X, Y, S = _M.zeros(n1, p), _M.zeros(n1, nc), _M.zeros(1, p)
+    st, e_prev = k.b.x_decomp_lle_iterate(F0.addr, lu.addr, pm.addr, im.addr, z.addr, [X.addr, Y.addr, S.addr],
+                                          [n, n1, nc, p, max(1, int(max_iter)), int(seed) & 0xFFFFFFFF],
+                                          [float(floor), _LLE_SUBSPACE_TOL, _LLE_STALL_TOL])
+    if int(st) == 2:
         raise RuntimeError(
             f"LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in {max_iter} "
-            f"iterations (last subspace change {e_prev:.3g}); pass eigen_solver='dense' for the full SVD. "
+            f"iterations (last subspace change {float(e_prev):.3g}); pass eigen_solver='dense' for the full SVD. "
             "An unconverged embedding is not returned as if it were one.")
+    return X, Y, S, int(st) == 1
 
 
 class LocallyLinearEmbedding(_Base):
@@ -5256,26 +5075,23 @@ class AlternatingLeastSquares(_Base):
         R = _M.from_input(user_items, "user_items")
         n, m = R.r, R.c
         C = R if self.alpha == 1.0 else k.ew("scale", R, s=self.alpha)
-        # resident (lane gap-lda-als): C stays on the device and the item
-        # half-sweep reads it through strides; the host column transposes
-        res = not self.use_cg and k.als_resident(C)
-        Ct = None if res else C.T
         seed = _seed_of(self.random_state)
         f = int(self.factors)
         X = k.ew("scale", k.rand(n, f, seed, 80, 0), s=0.01)
         Y = k.ew("scale", k.rand(m, f, seed, 81, 0), s=0.01)
-        losses = []
         if self.use_cg and int(self.cg_steps) < 1:
             raise ValueError("AlternatingLeastSquares: cg_steps must be >= 1")
-        for _ in range(int(self.iterations)):
-            if self.use_cg:
-                X = k.als_cg(C, Y, X, self.regularization, self.cg_steps)
-                Y = k.als_cg(Ct, X, Y, self.regularization, self.cg_steps)
-            else:
-                X = k.als(C, Y, self.regularization)
-                Y = k.als(C, X, self.regularization, trans=True) if res else k.als(Ct, X, self.regularization)
-            if self.calculate_training_loss:
-                losses.append(self._loss(k, C, X, Y))
+        # the sweeps (and the losses) in ONE binding call (lane py-runtime-b:
+        # x_decomp/als.mojo on the host column, the item half-sweep on C^T;
+        # x_decomp/als_dev.mojo on the GPU binding, C resident and the item
+        # half-sweep through strides, as the kit ran them)
+        X, Y = X.copy(), Y.copy()
+        iters = int(self.iterations)
+        la = array.array("d", [0.0]) * max(iters, 1)
+        cnt = int(k.b.x_decomp_als_fit(C.addr, X.addr, Y.addr, la.buffer_info()[0],
+                                       [n, m, f, iters, int(bool(self.use_cg)), int(self.cg_steps),
+                                        int(bool(self.calculate_training_loss))], [float(self.regularization)]))
+        losses = la.tolist()[:cnt]
         if self.calculate_training_loss:
             self.training_loss_ = losses
         self.user_factors_m_, self.item_factors_m_ = X, Y
@@ -5284,17 +5100,6 @@ class AlternatingLeastSquares(_Base):
         self.user_factors_, self.item_factors_ = self.user_factors, self.item_factors
         self.components_m_ = Y
         return self
-
-    def _loss(self, k, C, X, Y):
-        P = k.mm(X, Y, tb=True)
-        seen = k.ew("gts", k.ew("abs", C), s=0.0)                     # 1 where c_ui != 0
-        obs = k.ew("mul", C, k.ew("sq", k.ew("adds", k.ew("scale", P, s=-1.0), s=1.0)))
-        term = k.ew("select", seen, obs, k.ew("sq", P), s=0.5)
-        reg = k.ew("add", k.total(k.ew("sq", X)), k.total(k.ew("sq", Y)))
-        tot = k.ew("add", k.total(term), k.ew("scale", reg, s=self.regularization)).s[0]
-        nnz = k.total(seen).s[0]
-        conf = k.total(k.ew("mul", C, seen)).s[0]
-        return tot / (conf + (C.r * C.c - nnz))
 
     def _check_fit(self):
         if not hasattr(self, "user_factors_m_"):
