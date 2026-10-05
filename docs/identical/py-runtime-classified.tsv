@@ -178,7 +178,7 @@ python/mojolearn/_expansion_decomp.py	3763	runtime-fixed	zero-column fill folded
 python/mojolearn/_expansion_decomp.py	3792	runtime	dictionary learning driver with the Python error test; owed to a Mojo solver driver
 python/mojolearn/_expansion_decomp.py	3943	runtime	MiniBatchDictionaryLearning batch driver with Python cost arithmetic; owed to a Mojo solver driver
 python/mojolearn/_expansion_decomp.py	3951	runtime	MiniBatchDictionaryLearning step driver with Python cost and diff arithmetic; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	4231	runtime	LDA EM driver with the Python bound test; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	4231	runtime-fixed	LDA fit loop with e-step, bound, loglik and perplexity in Mojo (x_decomp_lda_fit: x_decomp/lda_fit.mojo, lda_fit_dev.mojo)
 python/mojolearn/_expansion_decomp.py	4299	runtime-fixed	LDA bound host terms by x_decomp_lda_bound (CPU twin of lda_bound_kernel, same cells)
 python/mojolearn/_expansion_decomp.py	4301	runtime-fixed	LDA bound host terms by x_decomp_lda_bound (see 4299)
 python/mojolearn/_expansion_decomp.py	4304	runtime-fixed	LDA bound host terms by x_decomp_lda_bound (see 4299)
