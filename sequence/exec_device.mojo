@@ -39,7 +39,7 @@ from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_A
 from sequence.coop import COOP_W, apply_coop
 from sequence.ops import OP_THETA
 from sequence.theta_spec import THETA_SPEC
-from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR
+from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
 from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
 from sequence.ets_team import ETS_TEAM, ets_team
@@ -95,6 +95,14 @@ comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
 #: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 50.2 -> 79.8 ms.
 #: DROPPED-slower: stays off.
 comptime SEQ_MAP_DOWN = SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_MAP_DOWN"]()
+#: SEQ_FAST_VAR_COOP (sequence/ops.mojo): VAR's long folds as coop cells, routed in `launch`.
+#: MOJOLEARN_SEQ_FAST_VAR_NODRAIN (FAST + Apple, default off, READY-AB): every
+#: binding call's DeviceExec drains the queue again in __deinit__, a second
+#: synchronize after the call's own final wait. VAR's fit and forecast end on
+#: a sync with nothing queued after it, so they mark the executor drained
+#: (`mark_drained`) and __deinit__ skips the empty wait: one Metal wait fewer
+#: per call, two per board fit + forecast.
+comptime SEQ_FAST_VAR_NODRAIN = _SEQ_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_VAR_NODRAIN"]()
 comptime SEQ_RAW_DOWN = SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]() and not SEQ_MAP_DOWN
 
 
@@ -387,6 +395,8 @@ struct DeviceExec(Exec):
     var pipe_dst: List[Int]
     var pipe_src: List[Int]
     var pipe_n: List[Int]
+    #: SEQ_FAST_VAR_NODRAIN: the caller ended on a sync and queued nothing after
+    var drained: Bool
 
     def __init__(out self) raises:
         self.ctx = sequence_ctx()
@@ -404,6 +414,12 @@ struct DeviceExec(Exec):
         self.pipe_dst = List[Int]()
         self.pipe_src = List[Int]()
         self.pipe_n = List[Int]()
+        self.drained = False
+
+    def mark_drained(mut self):
+        """SEQ_FAST_VAR_NODRAIN: the last call on this executor was a sync and
+        nothing has been queued since, so __deinit__ need not wait again."""
+        self.drained = True
 
     def alloc(mut self, n: Int) raises -> FP:
         return self._alloc(n, True)
@@ -439,10 +455,14 @@ struct DeviceExec(Exec):
     def __deinit__(deinit self):
         # The context outlives this Exec: drain its queue before the buffers
         # go, so no queued kernel reads a freed buffer.
-        try:
-            self.ctx.synchronize()
-        except:
-            pass
+        var drain = True
+        comptime if SEQ_FAST_VAR_NODRAIN:
+            drain = not self.drained
+        if drain:
+            try:
+                self.ctx.synchronize()
+            except:
+                pass
         try:
             for i in range(len(self.pstaged)):
                 _pool_release_host(self.pstaged[i])
@@ -748,10 +768,13 @@ struct DeviceExec(Exec):
                 return
         comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
                                   or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ
-                                  or (THETA_SPEC and OP == OP_THETA)):
+                                  or (THETA_SPEC and OP == OP_THETA)
+                                  or (SEQ_FAST_VAR_COOP and (OP == OP_COLSCALE or OP == OP_VAR_SIGMA))):
             var coop = True
             comptime if OP == OP_GEMM:
                 coop = a.i0 * a.i1 <= 1024 and a.i2 >= 32768
+                comptime if SEQ_FAST_VAR_COOP:
+                    coop = coop or a.i11 == 1
             elif OP == OP_AF_ALPHA or OP == OP_AF_DENOM:
                 coop = a.i0 >= 4096
             if coop:

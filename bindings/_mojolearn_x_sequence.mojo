@@ -10,7 +10,7 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
-from sequence.exec_device import DeviceExec
+from sequence.exec_device import DeviceExec, SEQ_FAST_VAR_NODRAIN
 from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
@@ -92,12 +92,20 @@ def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
 
 def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
-    return var_fit_py(ex, addrs, ip)
+    var r = var_fit_py(ex, addrs, ip)
+    comptime if SEQ_FAST_VAR_NODRAIN:
+        # every var_fit_py return follows its final sync (sequence/exec_device.mojo)
+        ex.mark_drained()
+    return r
 
 
 def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
-    return var_forecast_py(ex, addrs, ip)
+    var r = var_forecast_py(ex, addrs, ip)
+    comptime if SEQ_FAST_VAR_NODRAIN:
+        # var_forecast_py returns after its blocking download (a sync)
+        ex.mark_drained()
+    return r
 
 
 def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
