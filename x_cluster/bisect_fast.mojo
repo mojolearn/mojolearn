@@ -282,10 +282,6 @@ def bisect_entry_ptr(
             ops.shrink(ds)
             tree.left[pick] = lid
             tree.right[pick] = rid
-        # every launch that reads X has been drained by the last read
-        ops.ctx.synchronize()
-        pool_give["MojoXClusterClus3BisectX"](ops.f.pop(xs))
-
         var leaves = tree.leaves()
         var nl = len(leaves)
         var nn = len(tree.left)
@@ -311,6 +307,10 @@ def bisect_entry_ptr(
         var labels = ops.get_i(lab_s, n)
         var centers = ops.get(cl_s, nl * d)
         tree.centers = ops.get(cent_all, nn * d)
+        # Removing X shifts every later float-buffer slot. Keep it in the
+        # slot table until the final center readbacks have used their saved
+        # indices; those reads also drain all launches that reference X.
+        pool_give["MojoXClusterClus3BisectX"](ops.f.pop(xs))
         var nodes = List[Int32](capacity=3 * nn)
         for t in range(nn):  # small-loop(nn: tree nodes): 2k - 1 nodes of tree metadata
             nodes.append(Int32(tree.left[t]))
