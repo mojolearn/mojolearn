@@ -1454,8 +1454,8 @@ QUALITY_TEXT = {
               "scikit-learn's",
     "multilabel": "exact agreement with scikit-learn's output",
     "vs-sklearn": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
-    "subspace": "mean cosine of the principal angles between transform(Xq)'s column space and "
-                "scikit-learn's",
+    "subspace": "RBF feature-distance relative stress over seeded query pairs (lower is better); "
+                "principal-angle cosine vs scikit-learn when a stored reference is available",
     "pca": "explained-variance fraction of the centered rows by the components",
     "distortion": "mean |projected / original squared distance - 1| over 2,000 row pairs",
     "nmf": "relative reconstruction error ||X - W H|| / ||X|| on the fit rows",
@@ -4353,6 +4353,30 @@ def _subspace(A, B):
     return float(np.clip(sv, 0, 1).mean())
 
 
+def _rbf_embedding_stress(X, Z):
+    """Untimed RBF feature-distance loss, independent of opponent outputs.
+
+    Kernel centering preserves pairwise distances. Truncating kernel PCA
+    loses some of that distance; report the loss, not an accuracy guarantee.
+    A fixed seeded pair sample bounds quality work on large query sets.
+    """
+    np = _np()
+    X, Z = np.asarray(X, dtype=np.float64), np.asarray(Z, dtype=np.float64)
+    if (X.ndim != 2 or Z.ndim != 2 or len(X) != len(Z) or len(X) < 2
+            or X.shape[1] == 0 or Z.shape[1] == 0
+            or not np.isfinite(X).all() or not np.isfinite(Z).all()):
+        raise ValueError("kernel PCA quality requires finite aligned query embeddings")
+    rng = np.random.default_rng(SEED)
+    i = rng.integers(0, len(X), 2048)
+    j = (i + rng.integers(1, len(X), 2048)) % len(X)
+    distances = ((X[i] - X[j]) ** 2).sum(1)
+    target = -2 * np.expm1(-distances / X.shape[1])
+    actual = ((Z[i] - Z[j]) ** 2).sum(1)
+    denominator = float(np.linalg.norm(target))
+    loss = float(np.linalg.norm(actual - target))
+    return loss / denominator if denominator else loss
+
+
 def _kernel_exact(kind, Xc, D):
     np = _np()
     X = Xc.astype(np.float64)
@@ -4496,6 +4520,8 @@ def quality(lane, D, outs):
                 if ref is not None and arm != "sklearn-cpu" and ref["pred"].shape == o["pred"].shape:
                     e["count_agreement_vs_sklearn"] = float((P == ref["pred"].reshape(-1)).mean())
             elif qk == "subspace":
+                if lane == "kernel-pca":
+                    e["rbf_feature_distance_relative_stress"] = _rbf_embedding_stress(D["Xq"], o["pred"])
                 if ref is not None:
                     e["subspace_cos_vs_sklearn"] = _subspace(o["pred"], ref["pred"])
             elif qk == "pca":
