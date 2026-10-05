@@ -252,7 +252,7 @@ def arima_order_search_multi_binding(y_addrs: PythonObject, out_addrs: PythonObj
         if len(g) % 3 != 0:
             raise Error("arima_order_search_multi: a grid is not (p, q, k) triples")
         var orders = List[ARIMAOrder]()
-        for i in range(len(g) // 3):
+        for i in range(len(g) // 3):  # small-loop(g: one d group's (p, q, k) order triples, a few dozen): plan entries, no series data
             orders.append(ARIMAOrder(Int(py=g[3*i]), d, Int(py=g[3*i+1]),
                                      0, 0, 0, 0, Int(py=g[3*i+2]), 0))
         task_orders.append(orders^)
