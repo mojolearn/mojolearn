@@ -37,7 +37,9 @@ from sequence.moe_reg import MOE_DEVGROUP
 
 #: MOE_FAST_MMA is the FAST + Apple default since M3 A/B rab10-moemma (2026-10-05, afc_ab_def, full board
 #: size, 1 run per arm): moe synthetic 71.39 -> 53.48 ms (-25.1%), output digest identical.
-#: `-D MOJOLEARN_MOE_FAST_MMA_OFF` turns it off. KB32/WIDE/PF geometry variants stay opt-in (rab10-moemmaall pending).
+#: `-D MOJOLEARN_MOE_FAST_MMA_OFF` turns it off. KB32/WIDE/PF geometry variants stay opt-in:
+#: the bundle KB32 + WIDE + PF (rab10-moemmaall, same A/B setup) was slower, moe 71.3 -> 146.8 ms;
+#: recorded as a bundle loss (no single-variant A/B yet).
 # See docs/apple-fast/EXPERIMENTS.md (MOE_FAST_MMA); neural lane owns validation.
 comptime MM_KB32 = is_defined["MOJOLEARN_MOE_FAST_MMA_KB32"]()
 comptime MM_WIDE = is_defined["MOJOLEARN_MOE_FAST_MMA_WIDE"]()
