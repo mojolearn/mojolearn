@@ -287,11 +287,11 @@ def build_parser():
                         "identity) and, where the lane has one, the batch part "
                         "(batch invariance, a different axis). 'quick' is one "
                         "lane per family on the base fixture, seconds; the "
-                        "default is up to 24 lanes, minutes, capped because one "
-                        "Apple Metal process may not run a full column outside "
-                        "a release; 'all' is the whole 79-lane intersection and "
-                        "is refused on Apple by that same rule. --lanes and "
-                        "--fixtures widen or narrow any of them. On a CPU-only "
+                        "default is up to 24 lanes on the base fixture; "
+                        "'all' runs every eligible lane on every fixture, "
+                        "including on Apple, in sequential process batches. "
+                        "--lanes and --fixtures explicitly select a custom "
+                        "scope. Missing or failed checks exit nonzero. On a CPU-only "
                         "install it says so rather than silently skipping")
     v.add_argument("--par", nargs="?", const="default",
                    choices=("quick", "default", "all"), default=None,

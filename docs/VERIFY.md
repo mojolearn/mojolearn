@@ -470,14 +470,30 @@ It compares two different things, where the lane has both:
   batching dynamically: a prediction that changes with traffic is a real
   problem. A lane that declares `n/a` for batch keeps its `n/a`.
 
-**Scope.** The intersection is every lane with both a shipped GPU path and a
-shipped host family, and that is **all 79 declared inference lanes: every one
-is reachable from a binding the wheel already carries.** `quick` is one lane
-per family on the base fixture, seconds. The default is up to 24 lanes,
-minutes, capped because one Apple Metal process may not run a full column
-outside a release, which `tools/identity_break.py` enforces rather than merely
-advising. `all` runs the whole intersection, and on Apple is refused by that
-same rule. `--lanes` and `--fixtures` narrow or widen any of them.
+**Scope.** The intersection is every registered lane with both a shipped GPU
+path and a reachable host inference route. Its size is derived from the
+installed wheel, not a fixed historical count.
+
+| Tier | Lanes | Fixtures |
+| --- | --- | --- |
+| `quick` | One eligible lane per family | Base |
+| `default` (also bare `--cross-check`) | Up to 24 eligible lanes | Base |
+| `all` | Every eligible lane | Every fixture |
+
+`all` works on Apple Metal as well as CUDA and HIP. It runs sequential batches
+in fresh processes to bound accumulated resources without truncating coverage.
+The 24-lane default is a routine runtime budget, not a hardware restriction.
+
+```sh
+python -m mojolearn verify --cross-check all --cpu-threads 1 --json
+```
+
+Explicit `--lanes` or `--fixtures` selections override the tier and are labeled
+`custom` in the report. Reports include the requested lanes, requested fixtures,
+missing cell parts and completeness. A skipped lane, missing fixture or failed
+batch prevents a successful exit even if every completed comparison agrees.
+These checks cover GPU-fitted models' inference and batch behavior;
+`verify --all` is the separate comparison against bundled reference hashes.
 
 **On a CPU-only install it says so and exits 4.** There is no second piece of
 hardware to compare against, so the cross-check did not run: that is neither a
