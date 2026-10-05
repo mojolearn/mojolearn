@@ -27,6 +27,10 @@ from x_metrics.rank_epi import rank_epi_unit, cl_epi_unit
 from x_metrics.curve_out import (
     curve_out_unit, co_keep_unit, co_emit_unit, co_det_unit, auc_xy_unit, ax_chunk_unit, ax_final_unit,
 )
+from x_metrics.contingency import (
+    cont_stats_unit, ct_cell_unit, ct_row_unit, ct_col_unit, ct_isum_unit, ct_pairs_unit, ct_ent_unit,
+    ff_chunk_unit, ff_fin_unit, mi_cell_unit, emi_cell_unit,
+)
 
 #: ops 0..10, 36 (fold_rows), 41 (rows64), 45 (strat_codes) (lane metrics-apple2) and 46
 #: (curve_fold, lane cgr2-metrics-shap) are the caller's (x_metrics/plan.mojo
@@ -41,7 +45,9 @@ from x_metrics.curve_out import (
 #: 63 (curve_out, lane cpu4-python) is the caller's; 64..66 (co_keep, co_emit, co_det) are
 #: its planned schedule (x_metrics/curve_out.mojo): the curve arrays on the device.
 #: 67 (auc_xy, the public auc's trapezoid sum) is the caller's; 68, 69 (ax_chunk, ax_final) its schedule.
-comptime N_OPS = 70
+#: 70 (cont_stats, x_metrics/contingency.mojo) is the caller's; 71..80 its schedule: the
+#: contingency counts, sums, pair confusion, entropies, MI and expected MI on the device.
+comptime N_OPS = 81
 
 
 @always_inline
@@ -182,3 +188,25 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         ax_chunk_unit(t, f, q)
     comptime if OP == 69:
         ax_final_unit(t, f, q)
+    comptime if OP == 70:
+        cont_stats_unit(t, f, q)
+    comptime if OP == 71:
+        ct_cell_unit(t, f, q)
+    comptime if OP == 72:
+        ct_row_unit(t, f, q)
+    comptime if OP == 73:
+        ct_col_unit(t, f, q)
+    comptime if OP == 74:
+        ct_isum_unit(t, f, q)
+    comptime if OP == 75:
+        ct_pairs_unit(t, f, q)
+    comptime if OP == 76:
+        ct_ent_unit(t, f, q)
+    comptime if OP == 77:
+        ff_chunk_unit(t, f, q)
+    comptime if OP == 78:
+        ff_fin_unit(t, f, q)
+    comptime if OP == 79:
+        mi_cell_unit(t, f, q)
+    comptime if OP == 80:
+        emi_cell_unit(t, f, q)

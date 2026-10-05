@@ -59,7 +59,10 @@ _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wperc
             # (x_metrics/tail.mojo, cm_epi.mojo, reg_epi.mojo, rank_epi.mojo)
             off_diff=56, flag_scan=57, proba_rows=58, cm_epi=59, reg_epi=60, rank_epi=61, cl_epi=62,
             # lane cpu4-python: the curve arrays on the device (x_metrics/curve_out.mojo)
-            curve_out=63, auc_xy=67)
+            curve_out=63, auc_xy=67,
+            # lane cpu4-python: the contingency statistics, MI and expected MI
+            # on the device (x_metrics/contingency.mojo)
+            cont_stats=70)
 _PARAMS = 14
 _NONE = -1
 
@@ -2742,17 +2745,18 @@ def _clusterings(labels_true, labels_pred, caller):
 
 class _Contingency:
     """The exact contingency counts of two clusterings and what the
-    clustering metrics read from them, all formed by the binding
-    (x_metrics/epilogue.mojo contingency_stats, lane pyglue-sweep): `C`
-    (ka x kb Int64, rows = classes of `a`, columns = classes of `b`), `F`
-    (C + eps as Float64, when eps is given), `rows` and `cols` (Int64
-    sums), `pairs` (the 2 x 2 pair confusion counts, Int64) and `ent` (the
-    row and column entropies, Float64)."""
+    clustering metrics read from them, all formed on the device (lane
+    cpu4-python: x_metrics/contingency.mojo cont_stats, units the host
+    column runs too): `C` (ka x kb Int64, rows = classes of `a`, columns =
+    classes of `b`), `F` (C + eps as Float64, when eps is given), `rows` and
+    `cols` (Int64 sums), `pairs` (the 2 x 2 pair confusion counts, Int64),
+    `ent` (the row and column entropies, Float64), and, when asked, `mi`
+    (the MI in nats) and `emi` (the expected MI)."""
 
-    __slots__ = ("ka", "kb", "C", "F", "rows", "cols", "pairs", "ent")
+    __slots__ = ("ka", "kb", "C", "F", "rows", "cols", "pairs", "ent", "mi", "emi")
 
 
-def _contingency(a, b, ca, cb, numeric_mode, eps=None):
+def _contingency(a, b, ca, cb, numeric_mode, eps=None, mi=False, emi=False):
     n, ka, kb = len(a), len(ca), len(cb)
     if ka * kb > 16777216:
         raise ValueError("mojolearn metrics: the contingency matrix exceeds 2^24 cells")
@@ -2763,19 +2767,30 @@ def _contingency(a, b, ca, cb, numeric_mode, eps=None):
     kk = max(ka, kb)
     prog.stage("pair_key", n, A, B, key, kk, 0)
     m = kk * kk
-    off, _ = _group(prog, key, n, m)
+    off = prog.scratch(m + 1)
+    prog.stage("group_sort", 1, key, n, m, off, prog.scratch(n))
+    cells = ka * kb
+    EPS = prog.put_i32(_words64([float(eps)])) if eps is not None else _NONE
+    C = prog.want(prog.alloc(2 * cells), 2 * cells)
+    F = prog.want(prog.alloc(2 * cells), 2 * cells) if eps is not None else _NONE
+    R = prog.want(prog.alloc(2 * ka), 2 * ka)
+    K = prog.want(prog.alloc(2 * kb), 2 * kb)
+    P = prog.want(prog.alloc(8), 8)
+    E = prog.want(prog.alloc(4), 4)
+    MI = prog.want(prog.alloc(2), 2) if mi else _NONE
+    EMI = prog.want(prog.alloc(2), 2) if emi else _NONE
+    prog.stage("cont_stats", 1, off, ka, kb, kk, EPS, C, F, R, K, P, E, MI, EMI, n)
     _execute(prog, numeric_mode)
-    o = prog.words(off, m + 1, "i")
     r = _Contingency()
     r.ka, r.kb = ka, kb
-    r.C = empty((ka, kb), "<i8")
-    r.F = empty((ka, kb), "<f8") if eps is not None else None
-    r.rows, r.cols = empty((ka,), "<i8"), empty((kb,), "<i8")
-    r.pairs, r.ent = empty((2, 2), "<i8"), empty((2,), "<f8")
-    _binding(numeric_mode).x_metrics_contingency_stats(
-        o.buffer_info()[0], (ka, kb, kk), float(eps) if eps is not None else 0.0,
-        (r.C._addr, r.F._addr if r.F is not None else 0, r.rows._addr, r.cols._addr, r.pairs._addr,
-         r.ent._addr))
+    r.C = Array._owned(prog.words(C, 2 * cells, "q"), (ka, kb), "<i8", "C")
+    r.F = Array._owned(prog.words(F, 2 * cells, "d"), (ka, kb), "<f8", "C") if eps is not None else None
+    r.rows = Array._owned(prog.words(R, 2 * ka, "q"), (ka,), "<i8", "C")
+    r.cols = Array._owned(prog.words(K, 2 * kb, "q"), (kb,), "<i8", "C")
+    r.pairs = Array._owned(prog.words(P, 8, "q"), (2, 2), "<i8", "C")
+    r.ent = Array._owned(prog.words(E, 4, "d"), (2,), "<f8", "C")
+    r.mi = float(prog.words(MI, 2, "d")[0]) if mi else None
+    r.emi = float(prog.words(EMI, 2, "d")[0]) if emi else None
     return r
 
 
@@ -2806,13 +2821,6 @@ def pair_confusion_matrix(labels_true, labels_pred, *, numeric_mode=None):
     return _contingency(a, b, ca, cb, numeric_mode).pairs
 
 
-def _mi_from_contingency(r, numeric_mode=None):
-    """MI of the counts in nats (x_metrics/epilogue.mojo mi_contingency, lane
-    py-misc-metrics; the Python fallback is gone, lane pyglue-sweep: the
-    counts of a clustering are never negative and total below 2^31)."""
-    return float(_binding(numeric_mode).x_metrics_mi_contingency(r.C._addr, r.ka, r.kb))
-
-
 def _generalized_average(U, V, method):
     if method == "min":
         return min(U, V)
@@ -2833,29 +2841,12 @@ def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="ar
     a, b, ca, cb = _clusterings(labels_true, labels_pred, "normalized_mutual_info_score")
     if len(ca) == len(cb) == 1 or len(ca) == len(cb) == 0:
         return 1.0
-    r = _contingency(a, b, ca, cb, numeric_mode)
-    mi = _mi_from_contingency(r, numeric_mode)
+    r = _contingency(a, b, ca, cb, numeric_mode, mi=True)
+    mi = r.mi
     if mi == 0:
         return 0.0
     ht, hp = r.ent[0], r.ent[1]
     return float(mi / _generalized_average(ht, hp, average_method))
-
-
-def _expected_mi(a_counts, b_counts, n, numeric_mode=None):
-    """E[MI] under the permutation model (Vinh, Epps and Bailey 2010), the sum
-    scikit-learn's `expected_mutual_information` evaluates through gammaln.
-    Here each hypergeometric pmf is built by its ratio recurrence from the
-    mode and normalized by its own sum over the full support: no difference
-    of large log-gamma values, portable binary64 log / exp only."""
-    if a_counts.size == 1 or b_counts.size == 1:
-        return 0.0
-    # the walks and terms in the binding's host binary64, the log the C of
-    # mojolearn._portable_math.log (x_metrics/epilogue.mojo expected_mi; lane
-    # metrics-apple2). The Python walk is gone (lane apple-fast-py2mojo-core):
-    # every install's binding carries it, and its refusals (n outside
-    # [1, 2**31), a non-finite term) cannot occur for a clustering's counts.
-    return float(_binding(numeric_mode).x_metrics_expected_mi(a_counts._addr, a_counts.size, b_counts._addr,
-                                                              b_counts.size, n))
 
 
 def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
@@ -2867,10 +2858,12 @@ def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arit
         return 1.0
     if len(ca) == 1 or len(cb) == 1:
         return 0.0
-    r = _contingency(a, b, ca, cb, numeric_mode)
-    n = len(a)
-    mi = _mi_from_contingency(r, numeric_mode)
-    emi = _expected_mi(r.rows, r.cols, n, numeric_mode)
+    # MI and E[MI] under the permutation model (Vinh, Epps and Bailey 2010):
+    # each hypergeometric pmf built by its ratio recurrence from the mode and
+    # normalized by its own sum, portable binary64 log only, on the device
+    # (lane cpu4-python: x_metrics/contingency.mojo mi_cell, emi_cell)
+    r = _contingency(a, b, ca, cb, numeric_mode, mi=True, emi=True)
+    mi, emi = r.mi, r.emi
     norm = _generalized_average(r.ent[0], r.ent[1], average_method)
     eps = 2.220446049250313e-16
     den = norm - emi
