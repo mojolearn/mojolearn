@@ -126,6 +126,7 @@ from bindings.hotpath_helpers import (
     weighted_draw_rows_i32_binding,
     group_fold_assign_i32_binding,
     strat_group_assign_i32_binding,
+    strat_group_plan_i32_binding,
 )
 # lane fam2-shared (2026-10-04): these eighteen helpers run on the device in
 # this binding (bindings/hotpath_device.mojo, same names and signatures; each
@@ -146,6 +147,7 @@ from bindings.hotpath_device import (
     fold_pair_f32_binding,
     threshold_labels_i64_binding,
     bincount_i64_binding,
+    bincount2_i32_binding,
     first_seen_i32_binding,
     strat_fold_assign_i32_binding,
     hpdev_try_cast_f64_to_f32,
@@ -1863,6 +1865,8 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[weighted_draw_rows_i32_binding]("weighted_draw_rows_i32")
         m.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
         m.def_function[strat_group_assign_i32_binding]("strat_group_assign_i32")
+        m.def_function[strat_group_plan_i32_binding]("strat_group_plan_i32")
+        m.def_function[bincount2_i32_binding]("bincount2_i32")
         m.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
         m.def_function[check_lengths_i64_binding]("check_lengths_i64")
         m.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")

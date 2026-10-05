@@ -102,6 +102,7 @@ from core.hotpath_device import (
     device_all_integral,
     device_arange_skip_i64,
     device_bincount_i64,
+    device_bincount2_i32,
     device_cast_elements,
     device_cast_f64_to_f32,
     device_check_indices_i64,
@@ -279,6 +280,41 @@ def bincount_i64_binding(
             if ok:
                 return PythonObject(0)
     return host_bincount_i64_binding(src_addr, code, n, k, counts_addr, accumulate)
+
+
+def bincount2_i32_binding(
+    a_addr: PythonObject, b_addr: PythonObject, dims: PythonObject, counts_addr: PythonObject,
+) raises -> PythonObject:
+    """dims = [n, ka, kb]: int64 counts[b * ka + a] over the n rows of two
+    int32 code columns, on the device (lane cpu4-python: StratifiedGroupKFold's
+    group x class table; there is no host route in this binding). Raises when
+    a code is outside [0, ka) x [0, kb)."""
+    if len(dims) != 3:
+        raise Error("bincount2_i32: dims [n, ka, kb]")
+    var count = Int(py=dims[0])
+    var ka = Int(py=dims[1])
+    var kb = Int(py=dims[2])
+    if count < 0 or ka < 1 or kb < 1 or ka > HPD_MAX_N // kb or count > HPD_MAX_N:
+        raise Error("bincount2_i32: 0 <= n, 1 <= ka, kb and ka * kb within the device bound")
+    var ca = Int(py=counts_addr)
+    if ca == 0:
+        raise Error("bincount2_i32: null counts address")
+    if count == 0:
+        var cp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ca)
+        for j in range(ka * kb):  # small-loop(ka * kb: zero rows, the table is groups x classes): zeroes the empty table, no row data
+            cp.unsafe_store(j, Int64(0))
+        return PythonObject(0)
+    var a = Int(py=a_addr)
+    var b = Int(py=b_addr)
+    if a == 0 or b == 0:
+        raise Error("bincount2_i32: null code address")
+    var ctx = process_ctx[_HPDEV_SLOT]()
+    var ok = False
+    with GILReleased(Python()):
+        ok = device_bincount2_i32(ctx, a, b, count, ka, kb, ca)
+    if not ok:
+        raise Error("bincount2_i32: a code is out of range")
+    return PythonObject(0)
 
 
 def count_mask_u8_binding(mask_addr: PythonObject, n: PythonObject) raises -> PythonObject:

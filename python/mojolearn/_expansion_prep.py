@@ -1777,7 +1777,7 @@ class TargetEncoder(_PrepBase):
         if len(splits) < 1:
             raise ValueError(cover)
         fold = full((n,), -1, "<i4")
-        assign = _native_helper("assign_fold_i64")
+        assign = _native_helper("assign_fold_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
         trains = []
         for k, (train, test) in enumerate(splits):
             te = as_index_i64(test, name="test")
@@ -1789,7 +1789,7 @@ class TargetEncoder(_PrepBase):
             raise ValueError(cover)
         sizes = _class_counts(fold, len(splits))
         check = _native_helper("check_indices_i64")
-        hits = _native_helper("count_fold_hits_i64")
+        hits = _native_helper("count_fold_hits_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
         for k, tr in enumerate(trains):
             # every row outside fold k exactly once: as many as there are,
             # distinct, in range and none in fold k

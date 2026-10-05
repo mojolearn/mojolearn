@@ -431,6 +431,59 @@ def device_bincount_i64(
     return ok
 
 
+def _bincount2_i32_kernel(a: _I32, b: _I32, n_: Int32, ka: Int32, kb: Int32, cnt: _I32, status: _I32):
+    """cnt[b[i] * ka + a[i]] += 1 (Int32 atomics: exact in any order); a
+    code outside [0, ka) x [0, kb) sets status[0]."""
+    var i = _tid()
+    if i >= Int(n_):
+        return
+    var u = Int(a.unsafe_load(i))
+    var v = Int(b.unsafe_load(i))
+    if u < 0 or u >= Int(ka) or v < 0 or v >= Int(kb):
+        status.unsafe_store(0, Int32(1))
+        return
+    _ = Atomic[DType.int32].fetch_add(cnt + (v * Int(ka) + u), Int32(1))
+
+
+def device_bincount2_i32(
+    ctx: DeviceContext, a_addr: Int, b_addr: Int, n: Int, ka: Int, kb: Int, counts_addr: Int,
+) raises -> Bool:
+    """The 2-D bincount of two int32 code columns (lane cpu4-python:
+    StratifiedGroupKFold's group x class table, a host row loop before):
+    int64 counts[v * ka + u] for each row's (u = a[i], v = b[i]), `n >= 1`,
+    `ka * kb >= 1`. False (counts untouched) when a code is out of range."""
+    var k = ka * kb
+    var d_cnt = ctx.enqueue_create_buffer[DType.int32](k)
+    var d_base = ctx.enqueue_create_buffer[DType.int64](k)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, d_cnt, Int32(0))
+    enqueue_fill(ctx, d_base, Int64(0))
+    enqueue_fill(ctx, d_status, Int32(0))
+    var d_a = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_b = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_buf=d_a, src_ptr=_I32(unsafe_from_address=a_addr))
+    ctx.enqueue_copy(dst_buf=d_b, src_ptr=_I32(unsafe_from_address=b_addr))
+    ctx.enqueue_function[_bincount2_i32_kernel](
+        d_a.unsafe_ptr(), d_b.unsafe_ptr(), Int32(n), Int32(ka), Int32(kb),
+        d_cnt.unsafe_ptr(), d_status.unsafe_ptr(),
+        grid_dim=_blocks(n), block_dim=HPD_TPB,
+    )
+    var ok = _read_status(ctx, d_status, 0) == 0
+    if ok:
+        ctx.enqueue_function[_widen_counts_kernel](
+            d_cnt.unsafe_ptr(), Int32(k), d_base.unsafe_ptr(), Int32(0),
+            grid_dim=_blocks(k), block_dim=HPD_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=_I64(unsafe_from_address=counts_addr), src_buf=d_base)
+    ctx.synchronize()
+    _ = d_a^
+    _ = d_b^
+    _ = d_cnt^
+    _ = d_base^
+    _ = d_status^
+    return ok
+
+
 def _count_u8_kernel(mask: _U8, n_: Int32, total: _I32):
     """total[0] += the nonzero bytes this thread's grid-stride walk meets."""
     var i = _tid()
