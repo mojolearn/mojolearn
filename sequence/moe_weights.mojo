@@ -69,7 +69,7 @@ def moe_weights_put(router: FP, gate_up: FP, down: FP, E: Int, D: Int, F: Int) r
 
 def _find(h: Int) raises -> Int:
     var s = MOE_WEIGHTS.get_or_create_ptr()
-    for i in range(len(s[].ids)):
+    for i in range(len(s[].ids)):  # small-loop(ids: the live MoE weight handles): a handle lookup, no data
         if s[].ids[i] == h:
             return i
     raise Error("moe_weights: no weights under handle " + String(h))

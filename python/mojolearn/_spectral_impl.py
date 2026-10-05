@@ -112,7 +112,7 @@ def _coo_triples(A, who="SpectralClustering"):
     # buffers this side allocates. The Python loop this replaced
     # (DEVIATION 2373) lives on only as the oracle in
     # tests/test_native_nonzero.py, which holds the two to byte equality.
-    nnz = int(_native("nonzero_f64_count")(addr_ro(dense, name="X"), dense.size)) if dense.size else 0
+    nnz = int(_native("nonzero_f64_count")(addr_ro(dense, name="X"), dense.size)) if dense.size else 0  # cpu-route: CPU-only host binding COO route (dense device entry absent)
     rows = empty((nnz,), "<i4")
     cols = empty((nnz,), "<i4")
     vals = empty((nnz,), "<f4")
@@ -120,7 +120,7 @@ def _coo_triples(A, who="SpectralClustering"):
         # Nothing to write, and an empty Array has no address to hand the
         # binding (its pointer helpers refuse a null by design).
         return rows, cols, vals, n
-    wrote = int(_native("nonzero_f64_fill")(
+    wrote = int(_native("nonzero_f64_fill")(  # cpu-route: CPU-only host binding COO route (dense device entry absent)
         addr_ro(dense, name="X"), n, n,
         [addr(rows, name="rows"), addr(cols, name="cols"),
          addr(vals, name="vals")],
@@ -1005,13 +1005,13 @@ class _DenseCOO:
     def __init__(self, m):
         n_r, n_c = m.r, m.c
         src = m.addr
-        nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0
+        nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0  # cpu-route: CPU-only host binding COO route (dense device entry absent)
         self.shape = (n_r, n_c)
         self.row = empty((nnz,), "<i4")
         self.col = empty((nnz,), "<i4")
         self.data = empty((nnz,), "<f4")
         if nnz:
-            wrote = int(_native("nonzero_f32_fill")(
+            wrote = int(_native("nonzero_f32_fill")(  # cpu-route: CPU-only host binding COO route (dense device entry absent)
                 src, n_r, n_c,
                 [addr(self.row, name="rows"), addr(self.col, name="cols"), addr(self.data, name="vals")],
                 nnz))

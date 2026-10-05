@@ -1145,7 +1145,7 @@ class PolynomialCountSketch(_XNeighbors):
         draw_idn = (getattr(self._bind(), "x_neighbors_kfeat_pcs_draw_idn", None)
                     if isinstance(seed, int) and not isinstance(seed, bool) and nf > 0 else None)
         if draw_idn is not None:
-            # IDN_XN_SKETCH_CTR (IDENTICAL, default; _OFF rollback;
+            # IDN_XN_SKETCH_CTR (IDENTICAL default with an _OFF A/B; FAST always;
             # x_neighbors/kfeat_rng.mojo): the tables from the counter-based
             # generator on the device, not the MT19937 Python loop
             ih = empty((deg, nf), "<i4")
@@ -1281,17 +1281,23 @@ class SkewedChi2Sampler(_XNeighbors):
         flags = (_kfeat_flags(self) if isinstance(seed, int) and not isinstance(seed, bool)
                  and d > 0 and nc > 0 else 0)
         self.__dict__.pop("_schi2_z", None)
-        if flags & 4:
-            # XN_FAST_SCHI2_LAZYW (default, rollback _OFF; x_neighbors/kfeat_dev.mojo):
-            # main's z = pi/2 * u and offsets drawn into our arrays, no device
-            # work; the weights come from z in the first transform's one call
-            # (or on the first read of random_weights_)
-            z = empty((d, nc), "<f4")
+        # lane cpu3-python: the counter-based device draw first, on every
+        # tier that compiles it (IDENTICAL, and since this lane FAST on every
+        # vendor: x_neighbors/kfeat_rng.mojo XN_IDN_SKETCH_CTR). FAST + Apple's
+        # SCHI2_LAZYW route drew z and the offsets with sklearn's sequential
+        # stream on the host (`x_neighbors_kfeat_schi2_draw`); it has left the
+        # GPU route.
+        fit_idn = (getattr(self._bind(), "x_neighbors_kfeat_schi2_fit_idn", None)
+                   if isinstance(seed, int) and not isinstance(seed, bool) and d > 0 and nc > 0 else None)
+        if fit_idn is not None:
+            # IDN_XN_SKETCH_CTR (IDENTICAL default with an _OFF A/B; FAST always;
+            # x_neighbors/kfeat_rng.mojo): z, the weights and the offsets
+            # from the counter-based generator on the device, one call
+            w = _empty_out((d, nc), "<f4")
             off = empty((nc,), "<f4")
-            self._bind().x_neighbors_kfeat_schi2_draw([seed & 0xFFFFFFFF, d, nc], addr(z, name="schi2 z"),
-                                                      addr(off, name="random_offset_"))
-            self.__dict__.pop("_random_weights", None)
-            self.__dict__["_schi2_z"] = z
+            fit_idn([seed & 0xFFFFFFFF, d, nc], addr(w, name="random_weights_"),
+                    addr(off, name="random_offset_"))
+            self.random_weights_ = w
             self.random_offset_ = off
             self.n_features_in_ = d
             return self
@@ -1303,20 +1309,6 @@ class SkewedChi2Sampler(_XNeighbors):
             off = empty((nc,), "<f4")
             self._bind().x_neighbors_kfeat_schi2_fit([seed & 0xFFFFFFFF, d, nc], addr(w, name="random_weights_"),
                                                      addr(off, name="random_offset_"))
-            self.random_weights_ = w
-            self.random_offset_ = off
-            self.n_features_in_ = d
-            return self
-        fit_idn = (getattr(self._bind(), "x_neighbors_kfeat_schi2_fit_idn", None)
-                   if isinstance(seed, int) and not isinstance(seed, bool) and d > 0 and nc > 0 else None)
-        if fit_idn is not None:
-            # IDN_XN_SKETCH_CTR (IDENTICAL, default; _OFF rollback;
-            # x_neighbors/kfeat_rng.mojo): z, the weights and the offsets
-            # from the counter-based generator on the device, one call
-            w = _empty_out((d, nc), "<f4")
-            off = empty((nc,), "<f4")
-            fit_idn([seed & 0xFFFFFFFF, d, nc], addr(w, name="random_weights_"),
-                    addr(off, name="random_offset_"))
             self.random_weights_ = w
             self.random_offset_ = off
             self.n_features_in_ = d

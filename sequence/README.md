@@ -31,7 +31,7 @@ lane still DISAGREEd on m4-a and m3ultra-b (steward 1790564279351); with all
 four, Metal == CPU on both (speed probes 1790565936440, 1790565937835). New
 kernels spell every such clamp `max` / `min`.
 
-## Seams (IDENTITY_PATHS.md rows 150-159 and 240; 5517-5518 in row 159, 5536-5540 in row 154, 5541-5543 in row 240, 5544 (host GEMM) in row 150)
+## Seams (IDENTITY_PATHS.md rows 150-159 and 240; 5517-5518 in row 159, 5536-5540 in row 154, 5541-5543 in row 240, 5544 (host GEMM) in row 150, 5545 (MLP device epoch order) in row 155)
 
 Each seam's host oracle is in `checks/oracle.mojo`, written from the reference
 semantics, not from this directory; `checks/seams_check.mojo` requires the
@@ -69,6 +69,7 @@ oracle and host == oracle bit for bit. One sabotage arm per seam,
 | 5542 | GARCH variance recursion (`garch.mojo::garch_sigma2`) | omega, alpha, gamma, beta terms in order, each one fma | the ARCH term's product rounded, then the add |
 | 5543 | Prophet Fourier argument (`prophet.mojo::op_prophet_features`) | `(2 pi i) frac` | `2 pi (i frac)` |
 | 5544 | host GEMM vector cells (`host_gemm.mojo`, the CPU column only) | `op_gemm`'s cell per lane: k ascending, one fused fma per term, the same flush | the product rounded before the add |
+| 5545 | MLP device epoch order (`mlp.mojo::op_mlp_perm`, MLP_EPOCH_DEV) | six Feistel rounds of the splitmix64 epoch key, cycle-walked below n | five rounds (a dropped round) |
 
 ## ARIMA, ExponentialSmoothing (Holt-Winters) and KPSS
 

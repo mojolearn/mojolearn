@@ -421,6 +421,7 @@ class Tree:
         # module graph
         self.edges = collections.defaultdict(set)
         self.sym_src = {}  # (path, alias) -> (module path it came from, name)
+        self.mod_alias = {}  # (path, alias) -> module path (`from pkg import mod as alias`)
         for p, imps in self.imps.items():
             for _, mod, names in imps:
                 mods, base = _resolve(mod, p, files)
@@ -431,6 +432,8 @@ class Tree:
                         sub, _ = _resolve(mod + name if mod.endswith(".") else mod + "." + name, p, files)
                         for s in sub:
                             self.edges[p].add(s)
+                        if sub:
+                            self.mod_alias[(p, alias)] = sub[0]
                     if mods:
                         self.sym_src[(p, alias)] = (mods[0], name)
         scripts = [p for p in files if re.fullmatch(r"bindings/build(_\w+)?\.sh", p)]
@@ -508,10 +511,13 @@ class Tree:
     _REGISTER = re.compile(r"def_function\[\s*([\w.]+)[^\]]*\]\s*\(\s*\"(\w+)\"")
     # device work in a function body: a context, a buffer, a launch, a
     # device-side helper call (`device_x(`, `x_device(`) or a kernel index
-    _ON_DEVICE = re.compile(r"process_ctx|DeviceContext|DeviceBuffer|enqueue_\w+|\bctx\b"
+    # (or a device executor whose methods launch on its own context: the
+    # resident decomp kit `DKit`, x_decomp/kit_device.mojo; `DeviceExec`)
+    _ON_DEVICE = re.compile(r"process_ctx|DeviceContext|DeviceBuffer|enqueue_\w+|\bctx\b|\bDKit\s*\(|\bDeviceExec\s*\("
                             r"|\bdevice_\w+\s*\(|\w+_device\w*\s*\(|thread_idx|block_idx")
     _LOOP = re.compile(r"^\s*for\s+\w+\s+in\s+range\(([^)]*)\)|^\s*while\b")
     _CALLEE = re.compile(r"\b([A-Za-z_]\w*)\s*[\[(]")
+    _QCALLEE = re.compile(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*[\[(]")
 
     def _top_bodies(self, p):
         k = ("tb", p)
@@ -547,6 +553,13 @@ class Tree:
                     r = self._resolve_fn(q, m.group(1))
                     if r[0] is not None and r not in seen:
                         stack.append((r[0], r[1], d + 1))
+                # a module-qualified call (`from pkg import mod as m`, `m.f(`)
+                for m in self._QCALLEE.finditer(t):
+                    mp = self.mod_alias.get((q, m.group(1)))
+                    if mp is not None:
+                        r = self._resolve_fn(mp, m.group(2))
+                        if r[0] is not None and r not in seen:
+                            stack.append((r[0], r[1], d + 1))
         return seen
 
     def host_exports(self):

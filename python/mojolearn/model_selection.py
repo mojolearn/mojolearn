@@ -696,7 +696,7 @@ def _first_seen_native(y):
     if gc is None or gc.m < 1:
         return None
     first = array.array('q', bytes(8 * gc.m))
-    _expansion_metrics_binding().x_metrics_first_rows(_addr_ro(gc.codes), n, gc.m, first.buffer_info()[0])
+    _expansion_metrics_binding().x_metrics_first_rows(_addr_ro(gc.codes), n, gc.m, first.buffer_info()[0])  # cpu-route: first-seen class order for label encoding at splitter entry
     order = sorted(range(gc.m), key=first.__getitem__)
     table = [0] * gc.m
     for rank, c in enumerate(order):
@@ -1032,7 +1032,7 @@ class StratifiedKFold(_KFoldBase):
         K = self.n_splits
         alloc = empty((K, k), '<i8')
         cnt = array.array('q', counts)
-        _native('strat_alloc_i64')(cnt.buffer_info()[0], k, K, _addr(alloc))
+        _native('strat_alloc_i64')(cnt.buffer_info()[0], k, K, _addr(alloc))  # cpu-route: fold allocation plan over folds x classes, not rows
         return enc, k, counts, alloc
 
     def _fold_of_rows(self, enc, k, counts, alloc, rng):
@@ -1084,7 +1084,7 @@ class GroupKFold(_KFoldBase):
                                                 perm.buffer_info()[0], to_fold.buffer_info()[0],
                                                 sizes.buffer_info()[0])
         else:
-            _native('group_fold_assign_i32')(counts.buffer_info()[0], m, self.n_splits, 0,
+            _native('group_fold_assign_i32')(counts.buffer_info()[0], m, self.n_splits, 0,  # cpu-route: sequential greedy fold plan over groups, not rows
                                              to_fold.buffer_info()[0], sizes.buffer_info()[0])
         yield from gc.split_by_fold(to_fold, self.n_splits, sizes)
 
@@ -1273,7 +1273,7 @@ class LeavePOut(_Splitter):
             return
         # the combinations in lexicographic order, advanced in Mojo
         combo = _arange_rows(0, p)
-        step = _native('next_combination_i64')
+        step = _native('next_combination_i64')  # cpu-route: LeavePOut combinatorics, one p-sized step per split
         while True:
             yield _split_indices(combo, n)
             if not int(step(_addr(combo), p, n)):

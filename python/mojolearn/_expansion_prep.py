@@ -1941,9 +1941,6 @@ class SimpleImputer(_PrepBase):
         if callable(self.strategy) and comp is not None:
             ncol = pr.get_i32(ctot, d).tolist()
             return self._fit_callable(None, counts, mode, [pr.get(comp + j * n, ncol[j]) for j in range(d)], n, d)
-        if callable(self.strategy):
-            # missing_values NaN: the marked block is the input itself, which never comes back
-            return self._fit_callable(arr if xo == x_in else pr.get(xo, (n, d)), counts, mode)
         if konst or any(empty):
             self.statistics_ = pr.get(so2, d)
             self._fill = pr.get(fo2, d)
@@ -1955,24 +1952,13 @@ class SimpleImputer(_PrepBase):
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
-    def _fit_callable(self, marked, counts, mode, kept=None, n=0, d=0):
+    def _fit_callable(self, marked, counts, mode, kept, n=0, d=0):
         """strategy=<callable>: the reference's `strategy(masked_X[:, j].compressed())`
         per column over the missing-marked X (NaN = missing). kept (lane
         apple-fast-py2mojo-prep): the columns' non-NaN words already compacted
-        by the program, one float32 Array per column; else each column's
-        non-NaN values compacted by the base binding (`compact_notnan_f32`)."""
-        if kept is None:
-            n, d = marked.shape
-            mk, _ = as_f32_c(marked, ndim=2, name="X")
-            compact = _native_helper("compact_notnan_f32")
-            kept = []
-            for j in range(d):
-                v = Array((0,), "<f4")
-                if counts[j]:
-                    buf = empty((n,), "<f4")
-                    m = int(compact(addr_ro(mk, name="X") + 4 * j, n, d, _addr_rw(buf, name="column")))
-                    v = buf[:m]
-                kept.append(v)
+        by the program (`p2m_sel_*`, on the device), one float32 Array per
+        column. Lane cpu3-python: the host compaction arm (`compact_notnan_f32`)
+        was unreachable (the program always compacts for a callable) and is gone."""
         stats = []
         for j in range(d):
             stats.append(float(self.strategy(kept[j])))

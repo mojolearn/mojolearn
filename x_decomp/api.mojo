@@ -5,6 +5,7 @@ both executors: `bindings/_mojolearn_x_decomp.mojo` registers `*_py[DevExec]`,
 `bindings/_mojolearn_x_decomp_host.mojo` registers `*_py[HostExec]` under the
 same names, so the GPU binding and the CPU host binding share the address
 contract by construction. Every address is a host buffer the caller owns."""
+from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
@@ -16,10 +17,11 @@ from x_decomp.kit import mat_from
 from x_decomp.mcd import fast_mcd
 from x_decomp.lda_online import lda_online_pass
 from x_decomp.moves import (
-    F64Ptr, PY2MOJO_DECOMP, accuracy, argmin_all, argsort_f32, dsum_sq, gather, iso_order, move_host, order_f, pca_mle_pa,
-    pca_mle_terms, scatter, select_smallest, sign_labels, topn_desc, triu_nonzero,
+    F64Ptr, PY2MOJO_DECOMP, accuracy, argmin_all, argsort_f32, dsum_sq_host, gather, iso_order, move_host, order_f,
+    scatter, select_smallest, sign_labels, topn_desc, triu_nonzero,
 )
 from x_decomp.tsqr_core import TS_MAX_N
+from x_decomp.pca_mle import mle_scratch_words, pca_mle_rank_host
 
 
 def _f(addr: PythonObject) raises -> F32Ptr:
@@ -894,15 +896,16 @@ def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonOb
 
 
 def dsum_sq_py(x: PythonObject, m: PythonObject) raises -> PythonObject:
-    """The in-order float64 sum of the squares of m float32 values."""
+    """The binary64 sum of the squares of m float32 values in the device
+    form's chunked order (`dsum_sq_host`): the host column."""
     var n = Int(py=m)
     if n <= 0:
         return PythonObject(Float64(0))
     var px = _f(x)
-    var t = Float64(0)
+    var t = UInt64(0)
     with GILReleased(Python()):
-        t = dsum_sq(px, n)
-    return PythonObject(t)
+        t = dsum_sq_host(px, n)
+    return PythonObject(bitcast[DType.float64](t))
 
 
 def order_f_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
@@ -951,21 +954,18 @@ def accuracy_py(y: PythonObject, pred: PythonObject, w: PythonObject, m: PythonO
     return Python.tuple(r[0], r[1])
 
 
-def pca_mle_rank_terms_py(sp: PythonObject, p: PythonObject, v: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """p = [d, rank]: the float32 cross terms of Minka's rank `rank`; their count."""
+def pca_mle_rank_host_py(sp: PythonObject, p: PythonObject) raises -> PythonObject:
+    """The host column of `x_decomp_dev_pca_mle_rank` (x_decomp/pca_mle.mojo):
+    sp = the address of d binary64 spectrum values, p = [d, n_samples]; the
+    Minka MLE rank (0 when d < 2)."""
     var d = _n(p, 0)
-    var rank = _n(p, 1)
-    if rank < 1 or rank >= d:
-        raise Error("x_decomp: pca_mle rank out of range")
-    return PythonObject(pca_mle_terms(_d(sp), d, rank, Float64(py=v), _f(dst)))
-
-
-def pca_mle_pa_py(lt: PythonObject, m: PythonObject, logn: PythonObject) raises -> PythonObject:
-    """sum over t of (t + logn) in order, float64."""
-    var n = Int(py=m)
-    if n <= 0:
-        return PythonObject(Float64(0))
-    return PythonObject(pca_mle_pa(_f(lt), n, Float64(py=logn)))
+    var n = _n(p, 1)
+    if d < 2:
+        return PythonObject(0)
+    var scratch = List[Float32](length=mle_scratch_words(d), fill=Float32(0))
+    var r = pca_mle_rank_host(_f(sp), d, n, F32Ptr(unsafe_from_address=Int(scratch.unsafe_ptr())))
+    _ = scratch^
+    return PythonObject(r)
 
 
 def topn_desc_py(x: PythonObject, p: PythonObject, skip: PythonObject, dst: PythonObject) raises -> PythonObject:

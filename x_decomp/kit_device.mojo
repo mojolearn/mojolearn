@@ -648,7 +648,7 @@ def lda_online_dev(
     var wts = Mat(nb, 1)
     if nb > 0:
         var base = Mat(nb, 1)
-        for j in range(nb):
+        for j in range(nb):  # small-loop(nb: the pass's mini-batches, n / batch_size): one launch-group scalar per mini-batch, uploaded once
             base.d[j] = Float32(offset + Float64(n_batch_iter + j))
         var bd = k.upload(base)
         var wd = k.ew1(OP_EXP, k.ew1(OP_SCALE, k.ew1(OP_LOGS, bd, 1e-30), -decay), 0.0)
