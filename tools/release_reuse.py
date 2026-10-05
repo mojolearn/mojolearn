@@ -450,7 +450,7 @@ def bindings(target):
                     rows.append(Binding(target, vendor, arch, tier, name))
     else:
         for tier in TIERS:
-            for name in tier_names(tier, True):
+            for name in tier_names(tier, True, vendor="metal"):
                 rows.append(Binding(target, "metal", "apple", tier, name))
     for name in HOST_NAMES:
         rows.append(Binding(target, "host", "", "host", name))

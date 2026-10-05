@@ -200,20 +200,20 @@ IDENTICAL_ONLY_NAMES = (
 TIERS = ("fast", "deterministic", "identical")
 
 
-def tier_names(tier, include_byte_lm=False):
+def tier_names(tier, include_byte_lm=False, *, vendor=None):
     """Every extension expected in `tier`, in pack order.
 
-    Every binding but the three tree lanes, and the optional byte LM, exist
-    in `identical` alone; a lower tier carries none of them. A set on disk that does not match this
-    EXACTLY is refused, in both directions.
+    Trees exist in all tiers; classical/neural bindings in FAST and IDENTICAL.
+    Optional ByteLM is IDENTICAL on Linux, FAST and IDENTICAL on Metal.
+    A set on disk that does not match this exactly is refused in both directions.
     """
     names = EXT_NAMES
     if tier in ("identical", "fast"):
         names = names + FAST_CLASSICAL_NAMES
     if tier == "identical":
         names = names + IDENTICAL_ONLY_NAMES
-        if include_byte_lm:
-            names = names + ("_mojolearn_byte_lm",)
+    if include_byte_lm and (tier == "identical" or (tier == "fast" and vendor == "metal")):
+        names = names + ("_mojolearn_byte_lm",)
     return names
 ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
 PYPI_LIMIT = 100 * 1024 * 1024
