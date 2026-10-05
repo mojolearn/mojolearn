@@ -33,7 +33,7 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32, f32_ptr
+from bindings.hostptr import copy_f32, f32_ptr, i32_ptr
 from resample.gather_fast import gather_rows_f32_kernel
 from resample.fast_apple import (
     RESAMPLE_FAST_APPLE,
@@ -44,6 +44,7 @@ from resample.fast_apple import (
 from std.math import ceildiv
 from std.os import getenv
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
@@ -280,7 +281,8 @@ comptime CV_FAST_TRUST_FOLDS = (
 def resample_fast_defines() -> Int:
     """The FAST + Apple candidate defines this build was compiled with, as a
     bit mask (0 on every IDENTICAL and every non-Apple build): 1 RANK_SORT,
-    2 ONE_FOLD, 4 PERM_SELECT, 32 CV_SLICE, 64 CV_TRUST_FOLDS (8 and 16 were
+    2 ONE_FOLD, 4 PERM_SELECT, 32 CV_SLICE, 64 CV_TRUST_FOLDS, 128
+    GATHER_NARROW (8 and 16 were
     the old branch's IDX_BULK and GATHER, not ported). Read by the
     `resample_fast_defines` binding; python/mojolearn/model_selection.py
     switches on it instead of an environment variable."""
@@ -295,6 +297,8 @@ def resample_fast_defines() -> Int:
         m |= 32
     comptime if CV_FAST_TRUST_FOLDS:
         m |= 64
+    comptime if RESAMPLE_FAST_GATHER_NARROW:
+        m |= 128
     return m
 
 
@@ -2352,3 +2356,78 @@ def resample_gather_gpu(
         return True
     else:
         return False
+
+
+#: `-D MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW` (lane apple-fast-s-shap,
+#: 2026-10-04; READY-AB, opt-in, FAST + Apple): resample(replace=True)'s
+#: gather on the device for NARROW rows only. RESAMPLE_GPU_GATHER (above)
+#: was mixed: taxi (11 floats = 44 B a row) 68.5 -> 58.8 ms, istella (220
+#: floats = 880 B) 390.8 -> 805.4 ms. Why, from the Apple transfer costs
+#: (memory metal-transfer-costs-on-apple): the host gather (numpy fancy
+#: indexing, main's route) pays about one cache miss per row plus its
+#: bytes, so narrow rows are latency-bound; the device route pays bytes:
+#: a raw upload at ~30 GB/s and a raw download at ~3 GB/s. At 44 B a row the
+#: download (~15 ms for 1M rows) undercuts ~1M row misses; at 880 B the
+#: 880 MB download (~290 ms) loses to the host's streaming copy. The
+#: crossover sits near 100-150 B a row, so arrays whose row is at most
+#: GATHER_NARROW_MAX_BYTES gather here and wider ones keep the host gather
+#: with the same indices. Also unlike RESAMPLE_GPU_GATHER: no pinned host
+#: copies (raw upload from the caller's array, raw download into the
+#: caller's output), and the indices come back in the same launch. The draw
+#: is `resample_indices_replace_into`'s launch: the same integers, the same
+#: rows, bit-identical outputs.
+comptime RESAMPLE_FAST_GATHER_NARROW = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW"]())
+comptime GATHER_NARROW_MAX_BYTES = get_defined_int["MOJOLEARN_RESAMPLE_GATHER_NARROW_BYTES", 128]()
+
+
+def resample_gather_narrow(
+    n: Int, count: Int, seed: UInt64, idx_dst: Int, srcs: List[Int], dsts: List[Int], widths: List[Int],
+) raises -> Int:
+    """RESAMPLE_FAST_GATHER_NARROW: the `count` replace=True row indices into
+    the caller's int32 buffer idx_dst, and every array a with 0 < widths[a]
+    and widths[a] * 4 <= GATHER_NARROW_MAX_BYTES gathered on the device into
+    dsts[a] (count x widths[a] float32). Returns the bit mask of the arrays
+    gathered (the caller gathers the rest with the indices), -1 in a build
+    without the define. Synchronized; nothing retained."""
+    comptime if RESAMPLE_FAST_GATHER_NARROW:
+        utils_validate(n, count, True)
+        if count <= 0:
+            return 0
+        var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE)
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var rows = ctx.enqueue_create_buffer[DType.int32](count)
+        var keys = ctx.enqueue_create_buffer[DType.uint64](1)
+        ctx.enqueue_function[utils_draw_kernel](
+            rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
+            Int32(n), Int32(count), Int32(1),
+            grid_dim=(ceildiv(count, 256), 1, 1), block_dim=(256, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=i32_ptr(idx_dst), src_buf=rows.create_sub_buffer[DType.int32](0, count))
+        var keep = List[DeviceBuffer[DType.float32]]()
+        var done = 0
+        for a in range(len(srcs)):
+            var d = widths[a]
+            if d <= 0 or d * 4 > GATHER_NARROW_MAX_BYTES or count * d > 2147483647 or n * d > 2147483647:
+                continue
+            var dsrc = ctx.enqueue_create_buffer[DType.float32](n * d)
+            ctx.enqueue_copy(dst_buf=dsrc, src_ptr=f32_ptr(srcs[a]))
+            var dout = ctx.enqueue_create_buffer[DType.float32](count * d)
+            ctx.enqueue_function[gather_rows_f32_kernel](
+                dout.unsafe_ptr(), dsrc.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
+                grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=f32_ptr(dsts[a]), src_buf=dout)
+            keep.append(dsrc^)
+            keep.append(dout^)
+            done |= 1 << a
+        ctx.synchronize()
+        _ = keep^
+        _ = rows^
+        _ = keys^
+        # DEVIATION 1946: the context dies LAST.
+        _ = ctx^
+        return done
+    else:
+        return -1

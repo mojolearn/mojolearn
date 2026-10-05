@@ -4886,6 +4886,13 @@ _LLE_NULL_GUARD = 1e-3
 #: constant, and any basis of it is the answer (sklearn's ARPACK returns
 #: its own); the iteration stops there from its third step.
 _LLE_NULL_FLOOR = 8.0
+#: LLE_FAST_NULL_CANON (x_decomp/w4_fast.mojo): a Ritz value at most
+#: _LLE_CANON_NULL floors is in the null space N; one in (_LLE_CANON_NULL,
+#: _LLE_CANON_GAP] floors means N has no clear edge (no canonical answer);
+#: when every column is null, p widens 4x up to _LLE_CANON_MAX_P columns.
+_LLE_CANON_NULL = 4.0
+_LLE_CANON_GAP = 64.0
+_LLE_CANON_MAX_P = 160
 
 
 def _lle_orth(k, Z):
@@ -4903,7 +4910,7 @@ def _lle_orth(k, Z):
     return k.orgqr(h, tau, Z.c)
 
 
-def _lle_smallest(k, F, nc, max_iter, seed=0):
+def _lle_smallest(k, F, nc, max_iter, seed=0, Xd=None):
     """The nc smallest right singular pairs of the square LLE factor F
     (n x n, M = F^T F) past its null vector, the constant: (V n x nc, unit
     columns, ascending singular value, each signed so its largest-|.| entry
@@ -5011,6 +5018,59 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
         return None
     z = k.ew("scale", z, s=1.0 / zn)
 
+    # lane/apple-fast-s-shap LLE_FAST_NULL_CANON (-D MOJOLEARN_LLE_FAST_NULL_CANON,
+    # FAST + Apple, x_decomp/w4_fast.mojo): a null space wider than nc gets a
+    # canonical answer (a function of N and Xd) instead of the one the LU's
+    # last-bit rounding picks inside N
+    canon = Xd is not None and bool(k.w4_flags() & 4)
+
+    def back(Yc):           # back to R^n: H [Yc; 0] = [Yc; 0] - coef h (h^T [Yc; 0])
+        t = k.mm(hrow, Yc)
+        full = k.pad_zero_row(Yc)
+        return k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
+
+    while True:
+        X, Y, S, null = _lle_iterate(k, F0, Fhat, dev_f0, solve, solve_t, z, n, n1, nc, p, max_iter, seed, floor)
+        if not (canon and null):
+            break
+        # N = the Ritz vectors whose values are numerically zero (under
+        # _LLE_CANON_NULL floors). A value in the band up to _LLE_CANON_GAP
+        # floors leaves N's edge unclear: the iteration's answer stays.
+        sl = [float(v) for v in S.s]  # glue: the p Ritz values
+        if any(_LLE_CANON_NULL * floor < v <= _LLE_CANON_GAP * floor for v in sl):  # glue: p <= 160 scalars
+            break
+        idx = [j for j in range(p) if sl[j] <= _LLE_CANON_NULL * floor]  # glue: p <= 160 column numbers
+        if len(idx) == p and p < min(n1, _LLE_CANON_MAX_P):
+            p = min(n1, 4 * p, _LLE_CANON_MAX_P)    # every column null: N may be wider, iterate wider
+            continue
+        if nc < len(idx) < p:
+            # all of N (c orthonormal columns): its nc directions along which
+            # the data varies most, the top left singular vectors of
+            # V_N^T Xd (c x d), from the c x c Gram's SVD (descending)
+            Z = X.take_cols(idx)
+            C = k.mm(back(Z), Xd, ta=True)
+            _, Ut = k.svd(k.mm(C, C, tb=True))
+            Y = k.mm(Z, Ut.rows(0, nc), tb=True)
+        break
+    sv = S.take_cols(list(range(p - 1, p - 1 - nc, -1)))
+    V = back(Y)
+    # the columns are unit vectors or the solve is not an answer (an
+    # overflow, a dropped launch): refuse rather than return them
+    # the unit-norm and finiteness guard as three words (lane cpu2-l8-decomp:
+    # min and max of the squared norms, max |sv|, reduced where they live)
+    sq = k.colsum(k.ew("sq", V))
+    lo, hi = k.word(k.reduce(sq, k._SEL_MIN)), k.word(k.reduce(sq, k._SEL_MAX))
+    if not (0.9 <= lo and hi <= 1.1) or not math.isfinite(k.word(k.reduce(sv, k._SEL_MAXABS))):
+        raise RuntimeError(
+            "LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of squared norm "
+            f"{[float(v) for v in sq.s]} (not unit); pass eigen_solver='dense' for the full SVD.")
+    return k.ew("mul", V, k.absmax_signs(V, True)), sv
+
+
+def _lle_iterate(k, F0, Fhat, dev_f0, solve, solve_t, z, n, n1, nc, p, max_iter, seed, floor):
+    """`_lle_smallest`'s subspace iteration with p columns: (X n1 x p the Ritz
+    vectors by descending Ritz value, Y n1 x nc the wanted ones, S 1 x p
+    their values, whether it stopped on the null floor)."""
     X = _lle_orth(k, k.ew("adds", k.rand(n1, p, seed, 0x11E, 0), s=-0.5))
     want = list(range(p - 1, p - 1 - nc, -1))
     prev, e_prev = None, float("inf")
@@ -5029,12 +5089,12 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
         X = k.mm(X, Vt, tb=True)
         Y = X.take_cols(want)
         if it >= 2 and k.word(k.reduce(S.take_cols(want), k._SEL_MAX)) <= floor:
-            break
+            return X, Y, S, True
         if prev is not None:
             E = k.ew("sub", Y, k.mm(prev, k.mm(prev, Y, ta=True)))
             e = math.sqrt(max(float(k.total(k.ew("sq", E)).s[0]), 0.0))
             if e <= _LLE_SUBSPACE_TOL or (e <= _LLE_STALL_TOL and e >= e_prev):
-                break
+                return X, Y, S, False
             e_prev = e
         prev = Y
     else:
@@ -5042,22 +5102,6 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
             f"LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in {max_iter} "
             f"iterations (last subspace change {e_prev:.3g}); pass eigen_solver='dense' for the full SVD. "
             "An unconverged embedding is not returned as if it were one.")
-    sv = S.take_cols(want)
-    # back to R^n: H [Y; 0] = [Y; 0] - coef h (h^T [Y; 0])
-    t = k.mm(hrow, Y)
-    full = k.pad_zero_row(Y)
-    V = k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
-    # the columns are unit vectors or the solve is not an answer (an
-    # overflow, a dropped launch): refuse rather than return them
-    # the unit-norm and finiteness guard as three words (lane cpu2-l8-decomp:
-    # min and max of the squared norms, max |sv|, reduced where they live)
-    sq = k.colsum(k.ew("sq", V))
-    lo, hi = k.word(k.reduce(sq, k._SEL_MIN)), k.word(k.reduce(sq, k._SEL_MAX))
-    if not (0.9 <= lo and hi <= 1.1) or not math.isfinite(k.word(k.reduce(sv, k._SEL_MAXABS))):
-        raise RuntimeError(
-            "LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of squared norm "
-            f"{[float(v) for v in sq.s]} (not unit); pass eigen_solver='dense' for the full SVD.")
-    return k.ew("mul", V, k.absmax_signs(V, True)), sv
 
 
 class LocallyLinearEmbedding(_Base):
@@ -5121,7 +5165,7 @@ class LocallyLinearEmbedding(_Base):
         got = None
         if (self.method == "standard" and self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N
                 and nc + 1 < _LLE_ITER_MAX_K):
-            got = _lle_smallest(k, IW, nc, int(self.max_iter), _seed_of(self.random_state))
+            got = _lle_smallest(k, IW, nc, int(self.max_iter), _seed_of(self.random_state), M)
         if got is not None:
             self.embedding_m_, sv = got
         else:
