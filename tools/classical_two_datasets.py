@@ -2393,7 +2393,7 @@ def _worker_env(arm, root):
     return env
 
 
-def quality(lane, data, outs, rec):
+def quality(lane, data, outs, rec, *, knn_k=None):
     """Arm name -> quality dict, one float64 NumPy function per lane."""
     q = {}
     if lane == "kmeans":
@@ -2440,19 +2440,25 @@ def quality(lane, data, outs, rec):
                       "rmse": float(np.sqrt(ss_res / yq.shape[0])),
                       "finite": bool(np.all(np.isfinite(pred)))}
     elif lane == "knn":
+        k = KNN_K if knn_k is None else int(knn_k)
+        if k < 1 or k > data["index"].shape[0]:
+            raise ValueError("recall k must be within the index row count")
+        for arm, output in outs.items():
+            if output["ind"].shape != (data["queries"].shape[0], k):
+                raise ValueError("recall output shape does not match requested k for " + arm)
         index = data["index"].astype(np.float64)
         Q = data["queries"].astype(np.float64)
         nq = Q.shape[0]
-        shortlist = min(4 * KNN_K, index.shape[0])
+        shortlist = min(4 * k, index.shape[0])
 
         def d64(qrows, ids):
             diff = Q[qrows][:, None, :] - index[ids]
             return (diff * diff).sum(axis=2)
 
         # THE REFERENCE IS OURS TO COMPUTE, NOT AN ARM'S: float64 NumPy brute
-        # force. A norm-expansion shortlist of 40 per query, unioned with every
+        # force. A norm-expansion shortlist of 4*k per query, unioned with every
         # arm's returned ids, then exact float64 differences over that union;
-        # the reference is its 10th smallest distance. An id an arm found that
+        # the reference is its kth smallest distance. An id an arm found that
         # the shortlist missed is in the union, so it cannot be scored a miss.
         x2 = (index * index).sum(axis=1)
         kth = np.empty(nq)
@@ -2466,18 +2472,18 @@ def quality(lane, data, outs, rec):
             exact = d64(np.arange(s, e), union)
             for r in range(e - s):
                 _u, first = np.unique(union[r], return_index=True)
-                kth[s + r] = np.sort(exact[r, first])[KNN_K - 1]
+                kth[s + r] = np.sort(exact[r, first])[k - 1]
         for arm, o in outs.items():
             ids = o["ind"].astype(np.int64)
-            entry = {"reference": "float64 NumPy brute force (shortlist 40 plus every arm's ids, exact differences)"}
+            entry = {"reference": "float64 NumPy brute force (shortlist %d plus every arm's ids, exact differences)" % shortlist}
             srt = np.sort(ids, axis=1)
             distinct = 1 + (np.diff(srt, axis=1) != 0).sum(axis=1)
-            entry["rows_with_repeated_ids"] = int((distinct < KNN_K).sum())
+            entry["rows_with_repeated_ids"] = int((distinct < k).sum())
             d = np.concatenate([d64(np.arange(s, min(s + 256, nq)), ids[s:s + 256])
                                 for s in range(0, nq, 256)], axis=0)
             within = d <= kth[:, None] * (1.0 + 1e-9) + 1e-12
             hits = np.minimum(within.sum(axis=1), distinct)
-            entry["recall_at_k"] = float(hits.mean() / KNN_K)
+            entry["recall_at_k"] = float(hits.mean() / k)
             q[arm] = entry
     elif lane == "kde":
         sentinel = -3.0e38
