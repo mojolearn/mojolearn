@@ -92,7 +92,10 @@ def rf_oob_append_tree_kernel[
         offsets[unsafe_offset = Int(tree_idx)] = base
     if j >= Int(n_nodes):
         return
-    var nd = tree[unsafe_offset=j]
+    # A reference, not `var nd = tree[j]`: a whole SparseTreeNode copy out of
+    # the device pointer crashes Apple's Metal compiler ("failed to compile
+    # metallib"); the fields read are the same words.
+    ref nd = tree[unsafe_offset=j]
     var g = Int(base) + j
     colid[unsafe_offset=g] = nd.ColumnId()
     left[unsafe_offset=g] = Int32(Int(nd.LeftChildId()))
