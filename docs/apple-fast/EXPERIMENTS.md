@@ -1237,3 +1237,23 @@ Rows from board-quality-audit-2026-10-04 where FAST quality trailed the best opp
 | `SEQ_FAST_LSTM_SCAN + _SCAN_SMEM` | as above | lane/apple-fast-s-seq @ 8bb42b7de | - | - | READY-AB | re-judge after the fix |
 | `SEQ_FAST_LSTM_SCAN + _SCAN_SMEM + _WGRAD` (bundle) | as above | lane/apple-fast-s-seq @ 8bb42b7de | - | - | READY-AB | re-judge after the fix (was 1877 -> 1315 ms, broken quality) |
 | `SEQ_FAST_LSTM_SCAN + _SCAN_WIDE (+ _WGRAD)` | as above | lane/apple-fast-s-seq @ 826305835 | - | - | READY-AB | G H lanes per row (256 for H 64): forward gate columns folded one per lane (same fold), backward dh split by gate then summed in g order (FAST fold); 4x shorter serial chain per step |
+
+## Benchmark-shaped limits removed, round 2 (lane/apple-fast-no-narrow-2, 2026-10-04)
+
+A (default) = the new general rule; B = the old board-shaped rule behind the define. All UNBUILT and UNMEASURED.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_LEGACY_NARROW_CD_GRAM` | lasso, elasticnet / istella (binding solver) | lane/apple-fast-no-narrow-2 @ f1ea1b2ee | - | - | OWED | CD Gram cap 256 -> 16384 (grid scratch no larger than X) |
+| `MOJOLEARN_LEGACY_NARROW_FIVF_DIM` | ivf / istella (binding ivf) | @ c25fcc008 | - | - | OWED | FAST batched scan dim 256 -> 2048 (32 KB tile instantiation above 256); IDENTICAL keeps IIVF_MAX_DIM |
+| `MOJOLEARN_LEGACY_NARROW_ACHI2_DEVSCAN` | additive-chi2 / taxi, istella (binding x_neighbors) | @ 487760554 | - | - | OWED | 2^22-entry host/device gate removed: device scan at every size |
+| `MOJOLEARN_LEGACY_NARROW_SL_BORUVKA` | agglomerative (binding solver), hdbscan (binding hdbscan) / tiny 5k | @ 06702ad87 | - | - | OWED | FAST Boruvka for m > 1 instead of m > 4096 |
+| `MOJOLEARN_LEGACY_NARROW_SPECTRAL_NCV` | spectral-embedding, umap init / board graphs (binding metrics) | @ 44a21ae33 | - | - | OWED | wide basis from n >= 32 * 48 (basis <= 1/32 of space) instead of 8192 |
+| `MOJOLEARN_LEGACY_NARROW_MC_HESS_BATCH` | gbdt-multiclass / taximc, taxi-zones (binding gbdt) | @ af3c9ebc7 | - | - | OWED | batched Hessian by 1 GiB triangle budget instead of K <= 8; reg kernel only to MC_REG_MAX_CLASSES |
+| `MOJOLEARN_LEGACY_NARROW_ET_RM` | extratrees clf / taxi (binding trees) | @ bb20ac01b | - | - | OWED | FAST quarter-gate narrow row-major term removed; IDENTICAL unchanged |
+| `MOJOLEARN_LEGACY_NARROW_SYM_RIDX` | gbdt symmetric (catboost-style) / istella (binding gbdt) | @ 439bebd9c | - | - | OWED | FAST ridx-only schedule at any width; IDENTICAL keeps 64 |
+| `MOJOLEARN_LEGACY_NARROW_GEMV_PINNED` | gemv_n callers (core.gemm; linalg/metrics bindings) | @ cb0374259 | - | - | OWED | thread-per-row gemv k <= 32 (SIMD width) instead of 64 |
+| `MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS` | power-transform / taxi, istella (binding x_prep) | @ b0144d135 | - | - | OWED | 64-row chunks only for one-SIMD-group blocks (d <= 32) instead of d < 64 |
+| `MOJOLEARN_LEGACY_NARROW_EIGH_TD` | eigh, pca-style callers (binding x_decomp, linalg) | @ 456829d15 | - | - | OWED | tridiagonal route from n >= 64 (two panels) instead of 512 |
+| `MOJOLEARN_LEGACY_NARROW_IVFG_MIN_N` | cagra / taxi, istella (binding x_ann) | @ 78f80f17c | - | - | OWED | IVFG when n >= 2 * PROBES * 384 (half the exact pairs) instead of 65536 |
+| `MOJOLEARN_LEGACY_NARROW_FX_D` | logistic regression (QN) / istella (binding estimators) | @ f9a864c91 | - | - | OWED | fast_xtdz d <= 256 gate removed; wider rows stage fewer rows |
