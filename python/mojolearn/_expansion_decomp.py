@@ -2425,47 +2425,16 @@ def _logdet(k, A):
     return k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
 
 
-def _polar(k, A):
-    """U V^T of the SVD of a square A, and the sum of its singular values:
-    A V S^-1 V^T through the eigh of A^T A.
-
-    A is first scaled by a power of two, 2^-e with 2^(e-1) <= max|A| < 2^e,
-    and the singular-value sum scaled back by 2^e. The polar factor is
-    scale-invariant and a power-of-two scale is exact, so a finite A^T A
-    gives the same words as before; what changes is that A^T A can no longer
-    overflow. Varimax on large loadings (FactorAnalysis on the identity
-    reference's `wide` fixture, columns up to 1e4) cubed them into an A whose
-    A^T A was inf in float32, and eigh refused it (DEVIATION 590) on every
-    column. A is n_components x n_components: the max is a k x k host read."""
-    # lane fix-d1-decomp: one word down; lane cpu2-l8-decomp: in every mode
-    m = k.word(k.reduce(A, k._SEL_MAXABS)) if A.r * A.c else 0.0
-    # clamped so 2^-e stays a normal float32 in the device's scale
-    e = max(-120, min(120, math.frexp(m)[1])) if m > 0.0 and math.isfinite(m) else 0
-    if e:
-        A = k.ew("scale", A, s=math.ldexp(1.0, -e))
-    w, V = k.eigh(k.mm(A, A, ta=True))
-    sv = k.ew("sqrt", w)
-    AV = k.ew("div", k.mm(A, V), sv)
-    return k.mm(AV, V, tb=True), math.ldexp(k.total(sv).s[0], e)
-
-
 def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
-    """sklearn `_factor_analysis.py::_ortho_rotation`; C is n_features x n_components."""
-    nrow, ncol = C.r, C.c
-    R = _eye(ncol)
-    var = 0.0
-    for _ in range(max_iter):
-        cr = k.mm(C, R)
-        if method == "varimax":
-            tmp = k.ew("mul", cr, k.ew("scale", k.colsum(k.ew("sq", cr)), s=1.0 / nrow))
-            target = k.ew("sub", k.ew("cube", cr), tmp)
-        else:
-            target = k.ew("cube", cr)
-        R, var_new = _polar(k, k.mm(C, target, ta=True))
-        if var != 0 and var_new < var * (1 + tol):
-            break
-        var = var_new
-    return k.mm(C, R).T
+    """sklearn `_factor_analysis.py::_ortho_rotation`; C is n_features x
+    n_components. The rotation loop (with `_polar`: the power-of-two
+    prescale, the eigh of A^T A) runs in ONE binding call (lane
+    py-runtime-b: x_decomp/rotation.mojo, x_decomp/rotation_dev.mojo on
+    resident device matrices), the same cells and stopping test."""
+    out = _M.zeros(C.c, C.r)
+    k.b.x_decomp_ortho_rotation(C.addr, out.addr, [C.r, C.c, 1 if method == "varimax" else 0, int(max_iter)],
+                                [float(tol)])
+    return out
 
 
 #: x_decomp/fa_fast.mojo's limits (kernel-derived): FA_MAX_D, FA_TR_MAXK, FA_TR_FLOATS
