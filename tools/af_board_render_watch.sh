@@ -6,7 +6,11 @@
 repo=${1:-$HOME/CascadeProjects/mojolearn}
 d=$HOME/mojolearn-evidence/.render-check
 rm -rf "$d"; mkdir -p "$d"
-if ! (cd "$repo" && git archive origin/main tools bench/results/bench_board/m3ultra-0834 docs/apple-fast | tar -x -C "$d"); then
+# git archive skips bench/results (export-ignore), so the board files come through git show
+B=bench/results/bench_board/m3ultra-0834
+if ! (cd "$repo" && git archive origin/main tools | tar -x -C "$d" && mkdir -p "$d/$B" "$d/docs/apple-fast" \
+      && for f in $B/board.json $B/BOARD.md docs/apple-fast/BOARD_M3_FAST.md docs/apple-fast/BOARD_M3_IDENTICAL.md; do
+           git show "origin/main:$f" > "$d/$f" 2>/dev/null || exit 1; done); then
   echo "ALERT board render check: could not export origin/main"; rm -rf "$d"; exit 1
 fi
 if [ ! -f "$d/tools/af_board_render.py" ]; then
