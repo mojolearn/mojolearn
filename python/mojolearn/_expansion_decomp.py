@@ -4989,36 +4989,16 @@ def _mahal(k, X, loc, P):
 
 
 def _chi2_cdf(k, dof, m):
-    """P(chi2_dof <= m): the regularized lower incomplete gamma P(dof/2, m/2),
-    its series summed in float64 and its prefactor x^a e^-x / Gamma(a + 1)
-    through the cells' exp, log and lgamma."""
-    a = dof / 2.0
-    x = m / 2.0
-    if x <= 0:
-        return 0.0
-    pref = k.ew("exp", k.const(_f32(a * k.ew("logs", k.const(x), s=1e-30).s[0] - x
-                                     - k.ew("lgamma", k.const(a + 1)).s[0]))).s[0]
-    term, tot, n = 1.0, 1.0, 1
-    while n < 4000:
-        term *= x / (a + n)
-        tot += term
-        if term < 1e-17 * tot:
-            break
-        n += 1
-    return pref * tot
+    """P(chi2_dof <= m): the regularized lower incomplete gamma P(dof/2, m/2)
+    (lane py-runtime-b: x_decomp/chi2.mojo `chi2_cdf`, the prefactor through
+    the cells' logs, lgamma and exp on float32 words, the series in float64)."""
+    return float(k.b.x_decomp_chi2_cdf(float(dof), float(m)))
 
 
 def _chi2_quantile(k, dof, upper):
-    """The point m with P(chi2_dof > m) = upper (scipy chi2.isf), by bisection."""
-    target = 1.0 - upper
-    lo, hi = 0.0, max(1.0, 4.0 * dof + 40.0)
-    for _ in range(80):
-        mid = 0.5 * (lo + hi)
-        if _chi2_cdf(k, dof, mid) < target:
-            lo = mid
-        else:
-            hi = mid
-    return _f32(0.5 * (lo + hi))
+    """The point m with P(chi2_dof > m) = upper (scipy chi2.isf), by bisection
+    (lane py-runtime-b: x_decomp/chi2.mojo `chi2_quantile`)."""
+    return float(k.b.x_decomp_chi2_quantile(float(dof), float(upper)))
 
 
 def _consistency_factor(k, p, alpha):
