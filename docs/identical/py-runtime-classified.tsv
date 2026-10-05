@@ -442,10 +442,10 @@ python/mojolearn/_labels.py	431	glue	converts a classes_ member
 python/mojolearn/_labels.py	432	glue	converts a classes_ member
 python/mojolearn/_labels.py	514	glue	reads the class table
 python/mojolearn/_linalg_impl.py	1023	glue	one C-level zero fill per row
-python/mojolearn/_linalg_impl.py	1132	runtime	reads the R diagonal signs into Python; owed to a device sign normalization of R
-python/mojolearn/_linalg_impl.py	1133	runtime	flips R rows in Python; owed to a device sign normalization of R
-python/mojolearn/_linalg_impl.py	1135	runtime	negates R row values in Python; owed to a device sign normalization of R
-python/mojolearn/_linalg_impl.py	1137	runtime	builds the sign diagonal in Python; owed to a device sign normalization of R
+python/mojolearn/_linalg_impl.py	1132	runtime-fixed	R sign normalization now x_decomp_r_signs (x_decomp/api.mojo r_signs_py, both x_decomp bindings)
+python/mojolearn/_linalg_impl.py	1133	runtime-fixed	R sign normalization now x_decomp_r_signs (x_decomp/api.mojo r_signs_py, both x_decomp bindings)
+python/mojolearn/_linalg_impl.py	1135	runtime-fixed	R sign normalization now x_decomp_r_signs (x_decomp/api.mojo r_signs_py, both x_decomp bindings)
+python/mojolearn/_linalg_impl.py	1137	runtime-fixed	R sign normalization now x_decomp_r_signs (x_decomp/api.mojo r_signs_py, both x_decomp bindings)
 python/mojolearn/_linalg_impl.py	1461	runtime	counts the numerical rank over singular values in Python; owed to a device count
 python/mojolearn/_linalg_impl.py	1481	runtime	tests the orth diagonal for zeros in Python to pick the route; owed to a device test
 python/mojolearn/_linalg_impl.py	1482	runtime	reads orth diagonal signs into Python flags; owed to a device sign flip

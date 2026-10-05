@@ -538,6 +538,26 @@ def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: Pyt
     return PythonObject(n)
 
 
+def r_signs_py(r: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
+    """Lane py-runtime (2026-10-05): R's diagonal made non-negative for
+    `linalg.qr` (it was Python in `_linalg_impl._qr_tsqr`). r is n x n row
+    major and is rewritten: every row j whose R[j, j] < 0 is negated (an
+    exact sign flip; -0.0 and NaN count as non-negative, as the Python `<`
+    did). c (n x n) gets the diagonal of the signs, zeros elsewhere: Q C is
+    then the matching Q. p = [n]. Host Mojo on every column: n^2 sign moves
+    after the TSQR, no arithmetic."""
+    var n = _n(p, 0)
+    var pr = _f(r)
+    var pc = _f(c)
+    for j in range(n):  # small-loop(n: R order, the feature count): one sign per R row
+        var neg = pr[j * n + j] < 0.0
+        for t in range(n):  # small-loop(n: R order, the feature count): one row of R and of C
+            if neg:
+                pr[j * n + t] = -pr[j * n + t]
+            pc[j * n + t] = Float32(0.0)
+        pc[j * n + j] = Float32(-1.0) if neg else Float32(1.0)
+    return PythonObject(0)
+
 # lane idn-dense-linalg (2026-10-04): the one-entry routes Python takes when
 # `idn_flags_py` says so (both bindings; the same words as the calls they
 # replace). -D MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF / -D MOJOLEARN_IDN_LU_GESV_OFF
