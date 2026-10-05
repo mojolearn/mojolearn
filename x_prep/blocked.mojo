@@ -270,10 +270,52 @@ def csb_part_unit(t: Int, f: FP, q: IP):
 def _csb1_x(f: FP, at: Int, THR: Int, thr: Float32) -> Float32:
     """The flushed word csb_part would load: X's, or `binarize_unit`'s of it
     when THR >= 0 (1 when X > THR, else 0; a NaN is kept)."""
-    var x = raw(f, at)
+    return _csb1_v(raw(f, at), THR, thr)
+
+
+@always_inline
+def _csb1_v(x: Float32, THR: Int, thr: Float32) -> Float32:
+    """`_csb1_x` of an already loaded raw word."""
     if THR >= 0 and not is_nan(x):
         return Float32(1) if ftz(x) > thr else Float32(0)
     return ftz(x)
+
+
+@always_inline
+def _csb1_reg_take(
+    x: Float32, k: Int, w: Float32, W: Int,
+    mut s: SIMD[DType.float32, CSB1_REG], mut cw: SIMD[DType.float32, CSB1_REG],
+):
+    """One row of csb1_part's register path (K <= CSB1_REG): the row's word
+    onto its class's chain (csb_part's adds: acc_add on the unweighted sum,
+    whose accumulator is already flushed, as csb_part)."""
+    if W < 0:
+        comptime for u in range(CSB1_REG):
+            if k == u:
+                s[u] = acc_add(s[u], x)
+                cw[u] = cw[u] + Float32(1)
+    else:
+        comptime for u in range(CSB1_REG):
+            if k == u:
+                s[u] = add(s[u], mul(w, x))
+                cw[u] = add(cw[u], w)
+
+
+@always_inline
+def _csb1_mem_take(
+    f: FP, x: Float32, k: Int, w: Float32, W: Int, PS: Int, PC: Int, base: Int, d: Int, K: Int
+):
+    """One row of csb1_part's table path (K > CSB1_REG): the same adds on
+    the partial table's words."""
+    if k < 0 or k >= K:
+        return
+    var at = base + k * d
+    if W < 0:
+        st(f, PS + at, add(ld(f, PS + at), x))
+        st(f, PC + at, ld(f, PC + at) + Float32(1))
+    else:
+        st(f, PS + at, add(ld(f, PS + at), mul(w, x)))
+        st(f, PC + at, add(ld(f, PC + at), w))
 
 
 def csb1_part_unit(t: Int, f: FP, q: IP):
@@ -303,25 +345,35 @@ def csb1_part_unit(t: Int, f: FP, q: IP):
     if THR >= 0:
         thr = ld(f, THR)
     var neg = False
+    # lane idn-regress (2026-10-05): RUN rows' X, label and weight words are
+    # loaded together before any is used (`run_block`, csb_part's loads):
+    # one GPU thread per (block, column) otherwise waits one memory latency
+    # per row (M3 IDENTICAL MultinomialNB / ComplementNB fit 2-3x slower
+    # than csb_part's RUN loads). Each word still goes onto its class's chain
+    # one row at a time, ascending: the same adds, the same bits.
+    var full = r[0] + (r[1] - r[0]) - (r[1] - r[0]) % RUN
     if K <= CSB1_REG:
         var s = SIMD[DType.float32, CSB1_REG](0)
         var cw = SIMD[DType.float32, CSB1_REG](0)
-        for i in range(r[0], r[1]):
+        for i0 in range(r[0], full, RUN):
+            var bx = run_block[RUN](f, X + i0 * d + c, d)
+            var by = run_block[RUN](f, Y + i0, 1)
+            var bw = SIMD[DType.float32, RUN](0)
+            if W >= 0:
+                bw = run_block[RUN](f, W + i0, 1)
+            comptime for u in range(RUN):
+                var x = _csb1_v(bx[u], THR, thr)
+                if x < Float32(0):
+                    neg = True
+                _csb1_reg_take(x, Int(ftz(by[u])), ftz(bw[u]), W, s, cw)
+        for i in range(full, r[1]):
             var x = _csb1_x(f, X + i * d + c, THR, thr)
             if x < Float32(0):
                 neg = True
-            var k = Int(ld(f, Y + i))
-            if W < 0:
-                comptime for u in range(CSB1_REG):
-                    if k == u:
-                        s[u] = add(s[u], x)
-                        cw[u] = cw[u] + Float32(1)
-            else:
-                var w = ld(f, W + i)
-                comptime for u in range(CSB1_REG):
-                    if k == u:
-                        s[u] = add(s[u], mul(w, x))
-                        cw[u] = add(cw[u], w)
+            var w = Float32(0)
+            if W >= 0:
+                w = ld(f, W + i)
+            _csb1_reg_take(x, Int(ld(f, Y + i)), w, W, s, cw)
         comptime for u in range(CSB1_REG):
             if u < K:
                 st(f, PS + base + u * d, s[u])
@@ -330,21 +382,25 @@ def csb1_part_unit(t: Int, f: FP, q: IP):
         for k in range(K):
             st(f, PS + base + k * d, Float32(0))
             st(f, PC + base + k * d, Float32(0))
-        for i in range(r[0], r[1]):
+        for i0 in range(r[0], full, RUN):
+            var bx = run_block[RUN](f, X + i0 * d + c, d)
+            var by = run_block[RUN](f, Y + i0, 1)
+            var bw = SIMD[DType.float32, RUN](0)
+            if W >= 0:
+                bw = run_block[RUN](f, W + i0, 1)
+            comptime for u in range(RUN):
+                var x = _csb1_v(bx[u], THR, thr)
+                if x < Float32(0):
+                    neg = True
+                _csb1_mem_take(f, x, Int(ftz(by[u])), ftz(bw[u]), W, PS, PC, base, d, K)
+        for i in range(full, r[1]):
             var x = _csb1_x(f, X + i * d + c, THR, thr)
             if x < Float32(0):
                 neg = True
-            var k = Int(ld(f, Y + i))
-            if k < 0 or k >= K:
-                continue
-            var at = base + k * d
-            if W < 0:
-                st(f, PS + at, add(ld(f, PS + at), x))
-                st(f, PC + at, ld(f, PC + at) + Float32(1))
-            else:
-                var w = ld(f, W + i)
-                st(f, PS + at, add(ld(f, PS + at), mul(w, x)))
-                st(f, PC + at, add(ld(f, PC + at), w))
+            var w = Float32(0)
+            if W >= 0:
+                w = ld(f, W + i)
+            _csb1_mem_take(f, x, Int(ld(f, Y + i)), w, W, PS, PC, base, d, K)
     if NG >= 0:
         st(f, NG + t, Float32(1) if neg else Float32(0))
 
