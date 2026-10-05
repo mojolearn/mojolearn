@@ -100,17 +100,42 @@ comptime SVM_WS_MAX = 2048 if (
 ) else 1024
 """FAST on Apple: a working set of up to 2048 (the grid solve carries it
 over eight blocks of 256, `smoblocksolve.mojo`), half
-the SMO outer iterations of 1024 on a hard problem. Taken from
-SVM_WS_BIG_MIN training rows: the larger set needs at least SVM_WS_MAX rows
-to fill (kernel limit, not a board window)."""
+the SMO outer iterations of 1024 on a hard problem. The set a fit takes is
+`svm_ws_cap` (SVM_WS_ROWS_PER_SLOT rows per slot)."""
 #: LEGACY, default OFF: the old floor 8192 rows sat just below the board's
-#: 10k kernel-fit rows. Removed as benchmark-tuned on 2026-10-04; the new
-#: floor (SVM_WS_MAX rows) is UNMEASURED.
+#: 10k kernel-fit rows; with the define a set of SVM_WS_MAX from 8192 rows,
+#: else 1024, as before.
 comptime SVM_WS_BIG_MIN = 8192 if is_defined["MOJOLEARN_LEGACY_NARROW_SVM_WS"]() else SVM_WS_MAX
+#: Rows per working-set slot (lane apple-fast-general-speed, 2026-10-04).
+#: An SMO outer iteration costs n-wide work (the kernel rows n x ws, the f
+#: update, the sort of n keys, the gathers) plus the grid solve of the set,
+#: whose inner SMO steps are latency-bound grid-wide reductions: about ws
+#: steps per outer iteration whatever n is. A set twice as large halves the
+#: outer iterations only while it is a small slice of the rows; once ws is a
+#: large fraction of n, the outer count sits near its floor and the doubled
+#: inner solve is pure cost. Measured: 2048 pays at n / ws = 24 (M4 taxi 50k
+#: SVC, 8.2-10.5 s -> 6.5-7.6 s) and loses below n / ws = 4 (M3, a floor of
+#: SVM_WS_MAX rows put the one-vs-one subproblems of the 10k board fits on
+#: 2048: svc istella 197.7 -> 210.1 ms, taxi 1625.9 -> 1650.7 ms, accuracy
+#: same). So the set is n / SVM_WS_ROWS_PER_SLOT rows, rounded down to the
+#: grid solve's block width (SMO_GRID_TPB, 256 threads, `smoblocksolve.mojo`)
+#: and clamped to [1024, SVM_WS_MAX]: a ramp, not a size window. The steps
+#: between 1024 and 2048 (1280, 1536, 1792) are UNMEASURED.
+comptime SVM_WS_ROWS_PER_SLOT = 4
+#: The grid solve's block width (`smoblocksolve.mojo` SMO_GRID_TPB).
+comptime SVM_WS_STEP = 256
 
 
 def svm_ws_cap(n_train: Int) -> Int:
-    return SVM_WS_MAX if n_train >= SVM_WS_BIG_MIN else 1024
+    comptime if is_defined["MOJOLEARN_LEGACY_NARROW_SVM_WS"]() or SVM_WS_MAX <= 1024:
+        return SVM_WS_MAX if n_train >= SVM_WS_BIG_MIN else 1024
+    else:
+        var ws = n_train // SVM_WS_ROWS_PER_SLOT // SVM_WS_STEP * SVM_WS_STEP
+        if ws < 1024:
+            return 1024
+        if ws > SVM_WS_MAX:
+            return SVM_WS_MAX
+        return ws
 comptime FAST_WS_SELECT = FAST_WS_SORT and not is_defined[
     "MOJOLEARN_SVM_FAST_WS_SELECT_OFF"
 ]()
