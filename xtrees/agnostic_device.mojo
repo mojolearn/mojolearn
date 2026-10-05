@@ -114,6 +114,8 @@ comptime SHAP_PERM_CACHE = PSHAP_DELTA and not is_defined["MOJOLEARN_SHAP_PERM_C
 #: `kshap_synth_wait` (or the next call on the stream) waits. The chunk's
 #: device buffers wait in KS_PEND until then. The same kernels on the same
 #: words in the same order: no bit moves (phi byte-identical expected).
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
+#: verdicts batch 6): kernel-shap neutral. DROPPED: stays off (opt-in only).
 comptime KSHAP_FAST_OVERLAP = KSHAP_FAST_BATCH and is_defined["MOJOLEARN_KSHAP_FAST_OVERLAP"]()
 #: PSHAP_FAST_OVERLAP (lane apple-fast-s-shap, 2026-10-04; READY-AB, opt-in
 #: `-D MOJOLEARN_PSHAP_FAST_OVERLAP`, needs SHAP_PERM_CACHE): the same overlap
@@ -126,6 +128,9 @@ comptime KSHAP_FAST_OVERLAP = KSHAP_FAST_BATCH and is_defined["MOJOLEARN_KSHAP_F
 #: meanwhile; chunk r's `pshap_dvalues` takes chunk r's cached `_Delta`
 #: (SHAP_PERM_CACHE's slot), and `pshap_dsynth_wait` then moves chunk r + 1's
 #: into that slot. The same kernels on the same words: no bit moves.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
+#: verdicts batch 6): permutation-shap taxi +26.6% slower. DROPPED: stays off
+#: (opt-in only).
 comptime PSHAP_FAST_OVERLAP = SHAP_PERM_CACHE and is_defined["MOJOLEARN_PSHAP_FAST_OVERLAP"]()
 comptime AGN_MAX_BLOCKS = 65535 * 16
 comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"

@@ -81,6 +81,9 @@ comptime LLE_FAST_DEV_LU = (
 #: the floor, p widened when every column is null) and returns the nc
 #: directions of N along which the input data varies most (top left singular
 #: vectors of V_N^T X): a function of N and X only, the same on any LU.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
+#: verdicts batch 6): lle trustworthiness down on both datasets. DROPPED:
+#: stays off (opt-in only).
 comptime LLE_FAST_NULL_CANON = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()

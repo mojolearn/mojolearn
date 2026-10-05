@@ -118,6 +118,10 @@ comptime AFN_APPLE_FAST = (
 #: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): sgd 331.2 -> 329.2 ms, adam
 #: 336.3 -> 325.6, adamw 331.6 -> 326.4 (gain 1-3%); the output digest changes
 #: and the lane has no quality metric. HOLD (no quality evidence): stays off.
+#: AFN_OPT_FUSE_SCAN / AFN_OPT_VEC4 / AFN_OPT_RESIDENT_STATE OUTCOME (M3
+#: afc_ab_def, full board size, 1 run per arm, 2026-10-05, rab19): adam within
+#: +-2%, the output digest changes, no quality metric. DROPPED: each stays off
+#: (opt-in only).
 comptime AFN_OPTIM_ALL = is_defined["MOJOLEARN_AFN_OPTIM_ALL"]()
 comptime AFN_OPT_FUSE_SCAN = AFN_APPLE_FAST and (
     AFN_OPTIM_ALL or is_defined["MOJOLEARN_AFN_OPT_FUSE_SCAN"]()
