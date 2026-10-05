@@ -81,7 +81,7 @@ from ._labels import (
 from ._mode import NumericModeMixin
 from ._forest_protocol import (ForestProtocol, forest_estimator,
                                _forest_fit_function, _forest_fit_arrays,
-                               _rowmajor_fit_function)
+                               _rowmajor_fit_function, _export_fit_result)
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
@@ -845,6 +845,34 @@ class RandomForestRegressor(_RandomForestBase):
         (self._offsets, self._colid, self._quesval, self._left_child,
          self._leaves, meta) = _forest_fit_arrays(out)
         self.n_features_in_ = int(n_features)
+        self._n_trees = int(meta[0])
+        self._num_outputs = int(meta[1])
+        return self
+
+    def _fit_in_dart(self, handle, cls, n_rows, n_features, rows=None, cols=None):
+        """The squared-error member fit of a DART round on the DART
+        session's device buffers (cpu4-forest): X and class `cls`'s fit
+        target stay where `x_trees_dart_step` left them; `rows` (int32 bag
+        rows) and `cols` (int32 sampled columns) select them on the device.
+        Same params and model export as `fit(X[rows][:, cols], target)`."""
+        self._refresh_config()
+        self._capture_fit_mode()
+        code = self._cfg["criterion"]
+        if code != _REG_CRITERIA["squared_error"]:
+            raise ValueError("a DART member fits squared_error")
+        binding = self._bind("_mojolearn_rf")
+        entry = getattr(binding, "rf_regressor_fit_dart_export", None)
+        if not callable(entry):
+            raise RuntimeError("rebuild the forest binding for DART member fits on the device")
+        m = int(n_rows) if rows is None else len(rows)
+        dc = int(n_features) if cols is None else len(cols)
+        params = self._fit_params(m, dc, 0)
+        out = _export_fit_result(binding, entry(
+            int(handle), int(cls), 0 if rows is None else addr_ro(rows, name="rows"),
+            0 if cols is None else addr_ro(cols, name="cols"), params, code))
+        (self._offsets, self._colid, self._quesval, self._left_child,
+         self._leaves, meta) = _forest_fit_arrays(out)
+        self.n_features_in_ = int(dc)
         self._n_trees = int(meta[0])
         self._num_outputs = int(meta[1])
         return self

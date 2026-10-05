@@ -30,6 +30,8 @@ sampler's first Python caller.
 from std.memory import memcpy
 from hostptr import copy_f32, list_f32, list_i32, store_f32
 from ensemble.device_layout import device_has_nan_f32, upload_forest_x
+from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
+from xtrees.dart_device import DART_SESSIONS, _DART_CTX
 from ensemble.nan_refusal import RF_NAN_REFUSAL
 
 from std.os import abort
@@ -801,6 +803,114 @@ def rf_regressor_fit_session_binding(
     return _retain_rf_export(export_trees^)
 
 
+def rf_regressor_fit_dart_binding(
+    dart_handle: PythonObject, cls: PythonObject, rows_addr: PythonObject,
+    cols_addr: PythonObject, params: PythonObject, criterion: PythonObject,
+) raises -> PythonObject:
+    """cpu4-forest: a DART round's member fit for class `cls` on the DART
+    session's device buffers (`x_trees_dart_open`'s X and the `target`
+    plane `x_trees_dart_step` wrote), on the DART context, so the K
+    n-sized targets never cross to the host. `rows_addr` (int32,
+    `params[0]` bag rows, repeats allowed) and `cols_addr` (int32,
+    `params[1]` sampled columns) are 0 when the round has none; X is laid
+    out column-major at them and the target gathered at the rows on the
+    device (`ensemble/dart_member.mojo`). Same params, checks and export
+    descriptor as `rf_regressor_fit_session_export`."""
+    if len(params) != N_RF_FIT_PARAMS:
+        raise Error(
+            "rf_regressor_fit_dart: params must hold "
+            + String(N_RF_FIT_PARAMS)
+            + " values, got "
+            + String(len(params))
+        )
+    if Int(py=params[2]) != 0:
+        raise Error("rf_regressor_fit_dart: n_classes (slot 2) must be 0")
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var crit = Int(py=criterion)
+    _check_criterion("rf_regressor_fit_dart", crit, _reg_criteria())
+    var rf_params = _rf_params_from(params, crit)
+    var hid = Int(py=dart_handle)
+    var c = Int(py=cls)
+    var rows_a = Int(py=rows_addr)
+    var cols_a = Int(py=cols_addr)
+    var dreg = DART_SESSIONS.get_or_create_ptr()
+    var di = dreg[].find(hid)
+    var n = dreg[].sessions[di].n
+    var d = dreg[].sessions[di].d
+    var k = dreg[].sessions[di].k
+    if c < 0 or c >= k:
+        raise Error("rf_regressor_fit_dart: class out of range")
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("rf_regressor_fit_dart: invalid shape")
+    if (rows_a == 0 and n_rows != n) or (cols_a == 0 and n_cols != d):
+        raise Error(
+            "rf_regressor_fit_dart: params name a shape the DART session"
+            " does not hold"
+        )
+    if cols_a != 0 and n_cols > d:
+        raise Error("rf_regressor_fit_dart: more columns than X holds")
+
+    var forest: RandomForestMetaData[DT, RLT]
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DART_CTX]()
+        var drows = ctx.enqueue_create_buffer[DType.int32](
+            n_rows if rows_a != 0 else 1
+        )
+        var dcols = ctx.enqueue_create_buffer[DType.int32](
+            n_cols if cols_a != 0 else 1
+        )
+        if rows_a != 0:
+            ctx.enqueue_copy(dst_buf=drows, src_ptr=_i32_ptr(rows_a))
+        if cols_a != 0:
+            ctx.enqueue_copy(dst_buf=dcols, src_ptr=_i32_ptr(cols_a))
+        var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
+        launch_dart_member_x(
+            ctx, dreg[].sessions[di].x, drows, dcols, dx, d, n_rows, n_cols,
+            rows_a != 0, cols_a != 0,
+        )
+        var dy: DeviceBuffer[RLT]
+        if rows_a != 0:
+            dy = ctx.enqueue_create_buffer[RLT](n_rows)
+            var tsub = dreg[].sessions[di].target.create_sub_buffer[RLT](
+                c * n, n
+            )
+            launch_dart_member_y(ctx, tsub, drows, dy, n_rows)
+            ctx.synchronize()
+            _ = tsub^
+        else:
+            # a device copy of the class plane: the fit owns its labels
+            dy = ctx.enqueue_create_buffer[RLT](n_rows)
+            var tall = dreg[].sessions[di].target.create_sub_buffer[RLT](
+                c * n, n
+            )
+            ctx.enqueue_copy(dst_buf=dy, src_buf=tall)
+            ctx.synchronize()
+            _ = tall^
+        var dsw = ctx.enqueue_create_buffer[DT](1)
+        # the label scale, as `_rf_regressor_fit` chooses it, on the device
+        var mag = device_abs_sum_blocked(ctx, dy, n_rows)
+        var scales = BinScales(
+            Float32(choose_scale(mag, n_rows)), Float32(1.0)
+        )
+        var prep = List[ForestPrep]()
+        forest = fit_forest_prepared[RegObj](
+            ctx, dx, dy, dsw, n_rows, n_cols, 1, rf_params, prep, False,
+            scales,
+        )
+        ctx.synchronize()
+        _ = dx^
+        _ = dy^
+        _ = dsw^
+        _ = drows^
+        _ = dcols^
+        _ = prep^
+        _ = ctx^
+    var export_trees = forest.trees^
+    forest.trees = RFExportTrees()
+    return _retain_rf_export(export_trees^)
+
+
 def rf_regressor_fit_session_rows_binding(
     handle: PythonObject, rows_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject,
@@ -1449,6 +1559,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_data_session_close_binding]("rf_data_session_close")
         m.def_function[rf_regressor_fit_session_binding]("rf_regressor_fit_session_export")
         m.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
+        m.def_function[rf_regressor_fit_dart_binding]("rf_regressor_fit_dart_export")
         m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
