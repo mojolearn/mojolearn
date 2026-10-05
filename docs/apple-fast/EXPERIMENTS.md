@@ -7,7 +7,7 @@ Process: [experiment validation, toggle lifecycle and promotion](EXPERIMENT_PROC
 
 ## Untried candidates (2026-10-05)
 
-The OPEN / READY-AB rows below had no result in this file, in the M3 A/B extract (`~/mojolearn-evidence/briefs-2026-10-04/ab_all_latest.txt`, tags rab*), in `~/mojolearn-evidence/apple-fast/LEDGER.md`, or in a `#:` comment beside the define. Every other OPEN / READY-AB row was reconciled on 2026-10-05: its verdict cell now holds the verdict, and its note starts with "reconciled 2026-10-05:" and the evidence tag. Their rows still say OPEN.
+The OPEN / READY-AB rows below had no result in this file, in the M3 A/B extract (`~/mojolearn-evidence/briefs-2026-10-04/ab_all_latest.txt`, tags rab*), in `~/mojolearn-evidence/apple-fast/LEDGER.md`, or in a `#:` comment beside the define. Every other OPEN / READY-AB row was reconciled on 2026-10-05: its verdict cell now holds the verdict, and its note starts with "reconciled 2026-10-05:" and the evidence tag. The rows listed here still say OPEN, with the note "no result found 2026-10-05".
 
 | define | lane | branch @ sha | what it needs (build, quality tool, A/B line) |
 |---|---|---|---|
