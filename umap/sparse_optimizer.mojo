@@ -297,10 +297,13 @@ def optimize_sparse_layout_fast(
         ctx, initial, graph.offsets, graph.indices, graph.values, n_samples, True
     )
     var max_weight = g.max_weight
-    ref g_first = g.first
-    ref g_offsets = g.offsets
-    ref g_tails = g.tails
-    ref g_weights = g.weights
+    # shared handles (DeviceBuffer copies retain the same allocation, no data
+    # copy): Mojo 1.0 refuses moving a field out of g, and the mut calls
+    # need distinct locals, not refs into one value; g lives to the end.
+    var g_first = g.first.copy()
+    var g_offsets = g.offsets.copy()
+    var g_tails = g.tails.copy()
+    var g_weights = g.weights.copy()
     var second = ctx.enqueue_create_buffer[DType.float32](len(initial))
     # the fused kernel is 2D/3D; other dimensions take the per-component
     # kernel, which reads the dimension at run time
@@ -349,8 +352,10 @@ def optimize_sparse_layout_fast(
         ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=second)
     ctx.synchronize()
     _ = second^
-    # refs into g, not moved-out fields: a partial move of g is refused
-    # (box-run-2 compile fix); g lives to here.
+    _ = g_first^
+    _ = g_offsets^
+    _ = g_tails^
+    _ = g_weights^
     _ = g^
     return out^
 
