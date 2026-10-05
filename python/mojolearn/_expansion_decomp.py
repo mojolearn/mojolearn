@@ -5151,24 +5151,23 @@ class EllipticEnvelope(MinCovDet):
     def score(self, X, y, sample_weight=None):
         """sklearn OutlierMixin/ClassifierMixin.score: accuracy_score(y,
         predict(X), sample_weight), the (weighted) share of exact label
-        matches as an IEEE double (weights summed in order)."""
-        k = self._kit()
+        matches. Lane cpu4-python: the x_metrics device program
+        (`accuracy_fraction`: exact match counts, the weight total its
+        PairSum, the ratio binary64 on the device; the host column runs the
+        same units) replaces the host loop `x_decomp_accuracy`."""
+        from ._expansion_metrics import accuracy_fraction
         pa = self.predict(X)
         n = len(pa)
         ya = as_f64_c(y, ndim=1, name="y")[0]
         if len(ya) != n:
             raise ValueError("y and X have different numbers of rows")
-        if sample_weight is None:
-            hit, tot = k.b.x_decomp_accuracy(addr_ro(ya, name="y"), addr_ro(pa, name="pred"), 0, n)
-            return float(hit) / n
-        wa = as_f64_c(sample_weight, ndim=1, name="sample_weight")[0]
-        if len(wa) != n:
+        if sample_weight is not None and len(as_f64_c(sample_weight, ndim=1, name="sample_weight")[0]) != n:
             raise ValueError("sample_weight and X have different numbers of rows")
-        hit, tw = k.b.x_decomp_accuracy(addr_ro(ya, name="y"), addr_ro(pa, name="pred"),
-                                        addr_ro(wa, name="sample_weight"), n)
-        if float(tw) == 0:
-            raise ZeroDivisionError("Weights sum to zero, can't be normalized")
-        return float(hit) / float(tw)
+        # both sides Float64 labels: one label kind for the encoder
+        try:
+            return accuracy_fraction(ya, pa.astype("<f8"), sample_weight, self.numeric_mode_)
+        except ZeroDivisionError:
+            raise ZeroDivisionError("Weights sum to zero, can't be normalized") from None
 
 
 # ================================================================ implicit ALS
