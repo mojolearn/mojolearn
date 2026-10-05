@@ -389,6 +389,7 @@ def pinned_gemv_n_tiled_kernel(
 
 
 comptime GEMM_IDENT_SWAP_537 = is_defined["MOJOLEARN_537_GEMM_IDENT_SWAP"]()
+comptime APPLE_GEMM_EXPERIMENT = is_defined["MOJOLEARN_APPLE_GEMM_EXPERIMENT"]()
 
 
 comptime PINNED_GEMM_TPB = 256
@@ -467,6 +468,10 @@ def gemm_nt(
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
         return
+    comptime if APPLE_GEMM_EXPERIMENT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        from experiments.apple_fast.gemm.dispatch import selected_apple_gemm_nt
+        selected_apple_gemm_nt(ctx, z, x, y, m, n, k)
+        return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(x, row_major(m, k))
     var ty = TileTensor(y, row_major(n, k))
@@ -504,6 +509,12 @@ def gemm_nt_gram(
             grid_dim=((m * n + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
+        return
+    comptime if APPLE_GEMM_EXPERIMENT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        from experiments.apple_fast.gemm.dispatch import selected_apple_gemm_nt
+        var left = xt
+        var right = xt
+        selected_apple_gemm_nt(ctx, z, left, right, m, n, k)
         return
     var tz = TileTensor(z, row_major(m, n))
     var tx = TileTensor(xt, row_major(m, k))
