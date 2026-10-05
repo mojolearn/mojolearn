@@ -78,6 +78,572 @@
         "a4d01a130 SGD launch-bound metadata"
       ],
       "main_promoted": false
+    },
+    {
+      "candidate": "IDENTICAL ON (all switches) vs MOJOLEARN_IDN_ALL_OFF, medium wave, frozen af93ebe0a",
+      "status": "MEASURED",
+      "source_sha": "af93ebe0a",
+      "boxes": {
+        "nvidia": "RunPod RTX 4090 sm_89 aqxujpku19f133",
+        "amd": "DigitalOcean MI325X gfx942 606153646"
+      },
+      "contract": "one untimed warmup + one measured sample per arm (fit+infer ms), our source build only, no opponents, under /root/lq/TIMING_LOCK",
+      "identity": {
+        "proof": "bench/results/box-run-2-20261005/identity/proof-partial-af93ebe0a.json",
+        "DIFFER": 0,
+        "PROVEN_both_arms": 36,
+        "not_proven": "dart/dart-reg (host column broken by cpu4-forest, fixed after the freeze in 27be5f683, GPU NV==AMD); eigh (host n=4096 single thread > 1800 s case timeout); autoarima (no CPU ARIMA q=2; OFF GPU arm hit the case timeout); mamba3/transformer-forward (no host builder); moe/embedding/layernorm/batchnorm1d/conv2d (torch inputs)"
+      },
+      "quality": {
+        "nvidia": "bench/results/box-run-2-20261005/timing/nv-quality-reconciled-af93ebe0a.json",
+        "amd": "bench/results/box-run-2-20261005/timing/amd-quality-reconciled-af93ebe0a.json",
+        "dart_adjudication": "bench/results/box-run-2-20261005/dart-adjudication-carry-af93ebe0a.json"
+      },
+      "evidence": "bench/results/box-run-2-20261005/timing-verdict-af93ebe0a.json",
+      "verdict_rules": {
+        "tool": "KEEP only if ON faster than OFF on both vendors (identical_wave_timing_verdict.py)",
+        "owner_2026-10-05": "combined NV+AMD faster and neither vendor more than 5% slower"
+      },
+      "cases": [
+        {
+          "case": "adam--synthetic",
+          "nvidia_on_ms": 256.901,
+          "nvidia_off_ms": 254.459,
+          "amd_on_ms": 90.851,
+          "amd_off_ms": 87.997,
+          "on_over_off": {
+            "nvidia": 1.0096,
+            "amd": 1.0324,
+            "combined": 1.0155
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "additive-chi2--taxi",
+          "nvidia_on_ms": 2.075,
+          "nvidia_off_ms": 1.178,
+          "amd_on_ms": 1.068,
+          "amd_off_ms": 0.58,
+          "on_over_off": {
+            "nvidia": 1.7606,
+            "amd": 1.8432,
+            "combined": 1.7878
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "bayesian-gmm--taxi",
+          "nvidia_on_ms": 82.447,
+          "nvidia_off_ms": 317.004,
+          "amd_on_ms": 194.794,
+          "amd_off_ms": 848.501,
+          "on_over_off": {
+            "nvidia": 0.2601,
+            "amd": 0.2296,
+            "combined": 0.2379
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "cross-entropy--synthetic",
+          "nvidia_on_ms": 325.24,
+          "nvidia_off_ms": 311.768,
+          "amd_on_ms": 106.159,
+          "amd_off_ms": 101.533,
+          "on_over_off": {
+            "nvidia": 1.0432,
+            "amd": 1.0456,
+            "combined": 1.0438
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "decision-tree-clf--taxi",
+          "nvidia_on_ms": 16.946,
+          "nvidia_off_ms": 14.183,
+          "amd_on_ms": 29.452,
+          "amd_off_ms": 14.375,
+          "on_over_off": {
+            "nvidia": 1.1949,
+            "amd": 2.0488,
+            "combined": 1.6247
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "elasticnet--taxi",
+          "nvidia_on_ms": 3.504,
+          "nvidia_off_ms": 5.847,
+          "amd_on_ms": 2.164,
+          "amd_off_ms": 8.289,
+          "on_over_off": {
+            "nvidia": 0.5993,
+            "amd": 0.261,
+            "combined": 0.4009
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "factor-analysis--istella",
+          "nvidia_on_ms": 1068.182,
+          "nvidia_off_ms": 1092.722,
+          "amd_on_ms": 1585.273,
+          "amd_off_ms": 1592.396,
+          "on_over_off": {
+            "nvidia": 0.9775,
+            "amd": 0.9955,
+            "combined": 0.9882
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "gaussian-rp--taxi",
+          "nvidia_on_ms": 0.724,
+          "nvidia_off_ms": 1.104,
+          "amd_on_ms": 0.402,
+          "amd_off_ms": 0.557,
+          "on_over_off": {
+            "nvidia": 0.656,
+            "amd": 0.7219,
+            "combined": 0.6781
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "gbdt-clf--taxi",
+          "nvidia_on_ms": 49.633,
+          "nvidia_off_ms": 46.928,
+          "amd_on_ms": 61.014,
+          "amd_off_ms": 57.055,
+          "on_over_off": {
+            "nvidia": 1.0576,
+            "amd": 1.0694,
+            "combined": 1.0641
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "gbdt-reg--taxi",
+          "nvidia_on_ms": 41.127,
+          "nvidia_off_ms": 41.028,
+          "amd_on_ms": 50.155,
+          "amd_off_ms": 49.612,
+          "on_over_off": {
+            "nvidia": 1.0024,
+            "amd": 1.0109,
+            "combined": 1.0071
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "gmm--taxi",
+          "nvidia_on_ms": 13.681,
+          "nvidia_off_ms": 35.997,
+          "amd_on_ms": 20.02,
+          "amd_off_ms": 51.567,
+          "on_over_off": {
+            "nvidia": 0.38,
+            "amd": 0.3882,
+            "combined": 0.3849
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "huber--taxi",
+          "nvidia_on_ms": 95.835,
+          "nvidia_off_ms": 97.138,
+          "amd_on_ms": 213.522,
+          "amd_off_ms": 214.641,
+          "on_over_off": {
+            "nvidia": 0.9866,
+            "amd": 0.9948,
+            "combined": 0.9922
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "kernel-pca--taxi",
+          "nvidia_on_ms": 1565.747,
+          "nvidia_off_ms": 1570.178,
+          "amd_on_ms": 575.547,
+          "amd_off_ms": 575.879,
+          "on_over_off": {
+            "nvidia": 0.9972,
+            "amd": 0.9994,
+            "combined": 0.9978
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "kmeans--taxi",
+          "nvidia_on_ms": 7.45,
+          "nvidia_off_ms": 7.676,
+          "amd_on_ms": 13.651,
+          "amd_off_ms": 4.267,
+          "on_over_off": {
+            "nvidia": 0.9706,
+            "amd": 3.1993,
+            "combined": 1.7668
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "knn-imputer--taxi",
+          "nvidia_on_ms": 41.593,
+          "nvidia_off_ms": 41.726,
+          "amd_on_ms": 73.182,
+          "amd_off_ms": 73.69,
+          "on_over_off": {
+            "nvidia": 0.9968,
+            "amd": 0.9931,
+            "combined": 0.9944
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "kpss--taxi-hourly",
+          "nvidia_on_ms": 3.246,
+          "nvidia_off_ms": 1.742,
+          "amd_on_ms": 0.607,
+          "amd_off_ms": 0.982,
+          "on_over_off": {
+            "nvidia": 1.8639,
+            "amd": 0.6181,
+            "combined": 1.4148
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "lasso-cv--taxi",
+          "nvidia_on_ms": 8.763,
+          "nvidia_off_ms": 9.199,
+          "amd_on_ms": 25.137,
+          "amd_off_ms": 24.339,
+          "on_over_off": {
+            "nvidia": 0.9526,
+            "amd": 1.0328,
+            "combined": 1.0108
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "maxabs-scaler--taxi",
+          "nvidia_on_ms": 3.397,
+          "nvidia_off_ms": 5.77,
+          "amd_on_ms": 1.083,
+          "amd_off_ms": 2.137,
+          "on_over_off": {
+            "nvidia": 0.5888,
+            "amd": 0.5069,
+            "combined": 0.5667
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "mean-squared-error--taxi",
+          "nvidia_on_ms": 1.255,
+          "nvidia_off_ms": 1.26,
+          "amd_on_ms": 0.549,
+          "amd_off_ms": 0.548,
+          "on_over_off": {
+            "nvidia": 0.9955,
+            "amd": 1.0004,
+            "combined": 0.997
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "meanshift--taxi",
+          "nvidia_on_ms": 21.535,
+          "nvidia_off_ms": 24.458,
+          "amd_on_ms": 25.18,
+          "amd_off_ms": 38.733,
+          "on_over_off": {
+            "nvidia": 0.8805,
+            "amd": 0.6501,
+            "combined": 0.7393
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "minibatch-kmeans--taxi",
+          "nvidia_on_ms": 14.751,
+          "nvidia_off_ms": 16.226,
+          "amd_on_ms": 18.832,
+          "amd_off_ms": 16.782,
+          "on_over_off": {
+            "nvidia": 0.909,
+            "amd": 1.1222,
+            "combined": 1.0174
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "nearest-centroid--taxi",
+          "nvidia_on_ms": 8.357,
+          "nvidia_off_ms": 9.114,
+          "amd_on_ms": 8.732,
+          "amd_off_ms": 12.114,
+          "on_over_off": {
+            "nvidia": 0.9169,
+            "amd": 0.7208,
+            "combined": 0.805
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "ocsvm--taxi",
+          "nvidia_on_ms": 22.487,
+          "nvidia_off_ms": 408.87,
+          "amd_on_ms": 20.619,
+          "amd_off_ms": 138.137,
+          "on_over_off": {
+            "nvidia": 0.055,
+            "amd": 0.1493,
+            "combined": 0.0788
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "ols--taxi",
+          "nvidia_on_ms": 4.195,
+          "nvidia_off_ms": 7.629,
+          "amd_on_ms": 5.167,
+          "amd_off_ms": 6.748,
+          "on_over_off": {
+            "nvidia": 0.5499,
+            "amd": 0.7657,
+            "combined": 0.6512
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "pca--istella",
+          "nvidia_on_ms": 27.518,
+          "nvidia_off_ms": 463.062,
+          "amd_on_ms": 28.209,
+          "amd_off_ms": 861.406,
+          "on_over_off": {
+            "nvidia": 0.0594,
+            "amd": 0.0327,
+            "combined": 0.0421
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "poisson--taxi",
+          "nvidia_on_ms": 5.94,
+          "nvidia_off_ms": 7.24,
+          "amd_on_ms": 8.258,
+          "amd_off_ms": 8.803,
+          "on_over_off": {
+            "nvidia": 0.8203,
+            "amd": 0.938,
+            "combined": 0.8849
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "prophet--taxi-hourly",
+          "nvidia_on_ms": 24.915,
+          "nvidia_off_ms": 217.86,
+          "amd_on_ms": 57.123,
+          "amd_off_ms": 627.411,
+          "on_over_off": {
+            "nvidia": 0.1144,
+            "amd": 0.091,
+            "combined": 0.0971
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "qr--istella",
+          "nvidia_on_ms": 103.494,
+          "nvidia_off_ms": 270.235,
+          "amd_on_ms": 172.775,
+          "amd_off_ms": 586.067,
+          "on_over_off": {
+            "nvidia": 0.383,
+            "amd": 0.2948,
+            "combined": 0.3226
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "random-forest--taxi",
+          "nvidia_on_ms": 169.307,
+          "nvidia_off_ms": 108.319,
+          "amd_on_ms": 504.78,
+          "amd_off_ms": 166.713,
+          "on_over_off": {
+            "nvidia": 1.563,
+            "amd": 3.0278,
+            "combined": 2.4509
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "robust-scaler--taxi",
+          "nvidia_on_ms": 9.157,
+          "nvidia_off_ms": 6.326,
+          "amd_on_ms": 10.02,
+          "amd_off_ms": 2.645,
+          "on_over_off": {
+            "nvidia": 1.4476,
+            "amd": 3.7885,
+            "combined": 2.1378
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "sgd-clf--taxi",
+          "nvidia_on_ms": 59.276,
+          "nvidia_off_ms": 60.329,
+          "amd_on_ms": 119.843,
+          "amd_off_ms": 120.788,
+          "on_over_off": {
+            "nvidia": 0.9825,
+            "amd": 0.9922,
+            "combined": 0.989
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "sparse-rp--taxi",
+          "nvidia_on_ms": 0.807,
+          "nvidia_off_ms": 1.132,
+          "amd_on_ms": 0.473,
+          "amd_off_ms": 0.58,
+          "on_over_off": {
+            "nvidia": 0.7129,
+            "amd": 0.8152,
+            "combined": 0.7475
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "svd--istella",
+          "nvidia_on_ms": 130.655,
+          "nvidia_off_ms": 295.903,
+          "amd_on_ms": 218.453,
+          "amd_off_ms": 635.941,
+          "on_over_off": {
+            "nvidia": 0.4415,
+            "amd": 0.3435,
+            "combined": 0.3746
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "svgp--taxi",
+          "nvidia_on_ms": 253.998,
+          "nvidia_off_ms": 824.02,
+          "amd_on_ms": 832.784,
+          "amd_off_ms": 2084.561,
+          "on_over_off": {
+            "nvidia": 0.3082,
+            "amd": 0.3995,
+            "combined": 0.3736
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        },
+        {
+          "case": "var--taxi-hourly",
+          "nvidia_on_ms": 0.933,
+          "nvidia_off_ms": 0.912,
+          "amd_on_ms": 1.619,
+          "amd_off_ms": 1.388,
+          "on_over_off": {
+            "nvidia": 1.0232,
+            "amd": 1.1661,
+            "combined": 1.1094
+          },
+          "tool_verdict": "DROP",
+          "owner_rule_verdict": "DROP"
+        },
+        {
+          "case": "variance-threshold--taxi",
+          "nvidia_on_ms": 5.815,
+          "nvidia_off_ms": 8.024,
+          "amd_on_ms": 2.418,
+          "amd_off_ms": 11.875,
+          "on_over_off": {
+            "nvidia": 0.7246,
+            "amd": 0.2036,
+            "combined": 0.4137
+          },
+          "tool_verdict": "KEEP",
+          "owner_rule_verdict": "KEEP"
+        }
+      ],
+      "main_promoted": false
+    },
+    {
+      "candidate": "KMeans accumulate rows 256 (MOJOLEARN_IDN_KMEANS_ACC_ROWS_256)",
+      "status": "KEEP",
+      "source_sha": "af93ebe0a",
+      "evidence": {
+        "timing": "bench/results/box-run-2-20261005/candidate/",
+        "identity": "base == candidate == host digest 0454b9f3 on NVIDIA and AMD"
+      },
+      "fit_ms": {
+        "nvidia": {
+          "base": 15.889,
+          "candidate": 10.055
+        },
+        "amd": {
+          "base": 58.659,
+          "candidate": 44.347
+        }
+      },
+      "note": "faster on both vendors, same bits as the baseline on both GPUs and the host column; GMM E-step stack and OCSVM chunk256 stay DROP from the AMD-only a4d timing (not faster on AMD).",
+      "main_promoted": false
+    },
+    {
+      "candidate": "GMM E-step stack (MOJOLEARN_IDN_GMM_ESTEP_STACK)",
+      "status": "DROP",
+      "evidence": "bench/results/identical-integration-20261004 (AMD a4d: fit 19.91 -> 24.06 ms, slower)",
+      "main_promoted": false
+    },
+    {
+      "candidate": "OCSVM chunk256 (MOJOLEARN_IDN_OCSVM_CHUNK256)",
+      "status": "DROP",
+      "evidence": "bench/results/identical-integration-20261004 (AMD a4d: fit 19.75 -> 19.75 ms, no gain)",
+      "main_promoted": false
     }
   ],
   "correctness_repairs": [
@@ -90,6 +656,21 @@
       "commit": "be3348860",
       "change": "Export x_linear Python module initializer instead of helper; native import failed without it.",
       "evidence": "Native build/import receipts under ~/mojolearn-evidence/identical-all/amd/lq and ~/mojolearn-evidence/identical-blackwell/nv/lq."
+    },
+    {
+      "commit": "e5cc5f4a6+174d7887a",
+      "change": "ensemble DeviceArgs.upload and node-split ops staging drain the queue before overwriting pinned bytes a queued async copy still reads (MI325X DART memory fault, both arms)",
+      "evidence": "bench/results/box-run-2-20261005/"
+    },
+    {
+      "commit": "368fc68ba",
+      "change": "KDE tiled and fused routes fold in the staged route's 256-row chunks (kde_chunked_host gate: 4124/33300 scores differed by 1 ulp)",
+      "evidence": "bench/results/box-run-2-20261005/"
+    },
+    {
+      "commit": "27be5f683",
+      "change": "DART host column: dart_step keeps targets in the host session and rf host gains rf_regressor_fit_dart_export (host identity failed after cpu4-forest)",
+      "evidence": "bench/results/box-run-2-20261005/ (compile rc=0 on AMD host column; identity owed)"
     }
   ],
   "evidence_storage": {

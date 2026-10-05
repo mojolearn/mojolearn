@@ -1,0 +1,429 @@
+{
+  "identity": {
+    "sha": "af93ebe0ab05676c550f02f68741261018c0751b",
+    "vendor": "nvidia",
+    "gpu_arch": "sm_89",
+    "plan_sha256": "a2fde2fca175210c597e478d3785e84fd45f8a42f4972991deaea65f9db65828",
+    "data_manifest_sha256": "08b39f9422842634895fba03008b1be7e1fc0d50361648e82aa4aec86628a7f9",
+    "neural_fixture_sha256": {
+      "mamba3-forward-small.npz": "3194cf74795006ecfa8d889052a457cad23a21127ca2e2fd16d244f1fb3d92c0",
+      "transformer-forward-small.npz": "16646ee3d0cc741f43606150dcccdb2024508cc90007744fbdf5ca294ee50aaa"
+    }
+  },
+  "phase": "timing",
+  "status": "PASS",
+  "arms": {
+    "on": [
+      {
+        "id": "gbdt-reg--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gbdt-clf--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "random-forest--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "decision-tree-clf--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sgd-clf--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "huber--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "poisson--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "lasso-cv--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "elasticnet--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "pca--istella--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ols--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kmeans--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "factor-analysis--istella--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "qr--istella--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svd--istella--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "minibatch-kmeans--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "bayesian-gmm--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "meanshift--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gmm--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "nearest-centroid--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "knn-imputer--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ocsvm--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "maxabs-scaler--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "robust-scaler--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "variance-threshold--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "mean-squared-error--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svgp--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kernel-pca--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "additive-chi2--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gaussian-rp--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sparse-rp--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "var--taxi-hourly--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "prophet--taxi-hourly--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kpss--taxi-hourly--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "adam--synthetic--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "cross-entropy--synthetic--cuda",
+        "rc": 0,
+        "status": "PASS"
+      }
+    ],
+    "off": [
+      {
+        "id": "gbdt-reg--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gbdt-clf--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "random-forest--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "decision-tree-clf--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sgd-clf--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "huber--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "poisson--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "lasso-cv--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "elasticnet--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "pca--istella--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ols--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kmeans--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "factor-analysis--istella--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "qr--istella--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svd--istella--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "minibatch-kmeans--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "bayesian-gmm--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "meanshift--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gmm--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "nearest-centroid--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "knn-imputer--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "ocsvm--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "maxabs-scaler--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "robust-scaler--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "variance-threshold--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "mean-squared-error--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "svgp--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kernel-pca--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "additive-chi2--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "gaussian-rp--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "sparse-rp--taxi--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "var--taxi-hourly--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "prophet--taxi-hourly--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "kpss--taxi-hourly--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "adam--synthetic--cuda",
+        "rc": 0,
+        "status": "PASS"
+      },
+      {
+        "id": "cross-entropy--synthetic--cuda",
+        "rc": 0,
+        "status": "PASS"
+      }
+    ]
+  },
+  "opponents": "store only; never executed",
+  "cross_vendor_proof_sha256": "2911d066fb443c29065b5bb3527c706efdf28675f0f975656aef15e6582e0192",
+  "identity_receipt": {
+    "path": "/root/lq/br2-wave-af93ebe0a/identity.json",
+    "sha256": "e36a6b8bd9d14ebf5abf785c07b5911963db06ded4274f9426b52123a53471a5"
+  },
+  "worker": {
+    "path": "frozen source tools/identical_wave_worker.py",
+    "sha256": null
+  },
+  "cases": [
+    "adam--synthetic",
+    "additive-chi2--taxi",
+    "bayesian-gmm--taxi",
+    "cross-entropy--synthetic",
+    "decision-tree-clf--taxi",
+    "elasticnet--taxi",
+    "factor-analysis--istella",
+    "gaussian-rp--taxi",
+    "gbdt-clf--taxi",
+    "gbdt-reg--taxi",
+    "gmm--taxi",
+    "huber--taxi",
+    "kernel-pca--taxi",
+    "kmeans--taxi",
+    "knn-imputer--taxi",
+    "kpss--taxi-hourly",
+    "lasso-cv--taxi",
+    "maxabs-scaler--taxi",
+    "mean-squared-error--taxi",
+    "meanshift--taxi",
+    "minibatch-kmeans--taxi",
+    "nearest-centroid--taxi",
+    "ocsvm--taxi",
+    "ols--taxi",
+    "pca--istella",
+    "poisson--taxi",
+    "prophet--taxi-hourly",
+    "qr--istella",
+    "random-forest--taxi",
+    "robust-scaler--taxi",
+    "sgd-clf--taxi",
+    "sparse-rp--taxi",
+    "svd--istella",
+    "svgp--taxi",
+    "var--taxi-hourly",
+    "variance-threshold--taxi"
+  ]
+}
