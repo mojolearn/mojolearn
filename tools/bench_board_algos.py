@@ -2181,7 +2181,7 @@ def _ours_class(lane):
 # these modules do not load "_mojolearn_x_<xlane>" (resample.py, model_selection.py _SPLIT_BINDING,
 # _training_impl.py _EXT_NAME).
 _READBACK_BINDING = {"resample": "_mojolearn_resample", "model_selection": "_mojolearn_x_metrics",
-                     "training": "_mojolearn_training"}
+                     "training": "_mojolearn_training", "embedding": "_mojolearn_embedding"}
 
 
 def _ours_info(lane, est=None):
