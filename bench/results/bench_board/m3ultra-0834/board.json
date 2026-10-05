@@ -42595,6 +42595,11 @@
    "identical_same": 342,
    "identical_opp_from_board": 14,
    "identical_refresh": 8
+  },
+  {
+   "fast_apply": "af-apply-rab25.tsv",
+   "date": "2026-10-05",
+   "updated_cells": 2
   }
  ],
  "config": {
@@ -54459,13 +54464,13 @@
      "lane": "autoarima",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 13688.0,
-     "median_ms": 13688.0,
+     "max_ms": 18265.17,
+     "median_ms": 18265.17,
      "memory": {
       "gpu_method": "not sampled",
       "host_method": "not sampled"
      },
-     "min_ms": 13688.0,
+     "min_ms": 18265.17,
      "mode": "fast",
      "mode_witness": "fast",
      "neural_shape": null,
@@ -54480,7 +54485,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": null,
      "quality": {
-      "forecast_rmse": 2.46453
+      "forecast_rmse": 2.464525991208866
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -54529,23 +54534,37 @@
      "shape": "Yfit 64x1392; Yhold 64x48",
      "status": "ok",
      "times_ms": [
-      13688.0
+      18265.17
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": null,
-     "quality_text": "forecast_rmse=2.46453",
+     "quality_text": "forecast_rmse=2.464525991208866",
      "source": {
-      "tag": "ARIMA_FAST_SEARCH_REUSE rab16 M3 A/B 2026-10-05",
-      "kind": "A/B",
-      "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
-      "synced": "2026-10-04",
-      "previous_median_ms": null,
-      "previous_quality": {},
-      "previous_status": "REFUSED(error: {\"error\": \"NotImplementedError(\\\"AutoARIMA: seasonal_test='seas' (statsmodels' STL in the reference) is not implemented; pass D as one integer\\\")\", \"event\": \"error\", \"stage\": \"round 0\"})",
+      "tag": "rab25 M3 2026-10-05 main default after ARIMA_FAST_SEARCH_REUSE back to opt-in (9a2a7a5bf)",
+      "kind": "apply",
+      "applied": "2026-10-05",
+      "previous_median_ms": 13688.0,
+      "previous_quality": {
+       "forecast_rmse": 2.46453
+      },
       "previous_hash": null,
       "baseline_ms": null,
       "baseline_quality_text": "-",
-      "display_rounded": true
+      "history": [
+       {
+        "tag": "ARIMA_FAST_SEARCH_REUSE rab16 M3 A/B 2026-10-05",
+        "kind": "A/B",
+        "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
+        "synced": "2026-10-04",
+        "previous_median_ms": null,
+        "previous_quality": {},
+        "previous_status": "REFUSED(error: {\"error\": \"NotImplementedError(\\\"AutoARIMA: seasonal_test='seas' (statsmodels' STL in the reference) is not implemented; pass D as one integer\\\")\", \"event\": \"error\", \"stage\": \"round 0\"})",
+        "previous_hash": null,
+        "baseline_ms": null,
+        "baseline_quality_text": "-",
+        "display_rounded": true
+       }
+      ]
      }
     },
     {
@@ -54596,7 +54615,7 @@
      "quality": {
       "forecast_rmse": 17.546479851114224
      },
-     "ratio_ours_fast_over": 4.752797511793369,
+     "ratio_ours_fast_over": 6.342099249596937,
      "ratio_ours_identical_over": 13.770761083605835,
      "rounds": 1,
      "rows": null,
@@ -54786,7 +54805,7 @@
    "wall_s": 1.9,
    "fast_page": {
     "family": "algos",
-    "status": "ok; ARIMA_FAST_SEARCH_REUSE rab16 M3 A/B 2026-10-05; Q: >main >=opp"
+    "status": "ok; ARIMA_FAST_SEARCH_REUSE rab16 M3 A/B 2026-10-05; rab25 M3 2026-10-05 main default after ARIMA_FAST_SEARCH_REUSE back to opt-in (9a2a7a5bf); Q: =main >=opp"
    },
    "identical_page": {
     "family": "algos",
@@ -54924,13 +54943,13 @@
      "lane": "autoarima",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 9872.0,
-     "median_ms": 9872.0,
+     "max_ms": 16512.87,
+     "median_ms": 16512.87,
      "memory": {
       "gpu_method": "not sampled",
       "host_method": "not sampled"
      },
-     "min_ms": 9872.0,
+     "min_ms": 16512.87,
      "mode": "fast",
      "mode_witness": "fast",
      "neural_shape": null,
@@ -54945,7 +54964,7 @@
      "peak_gpu_mb": null,
      "peak_host_mb": null,
      "quality": {
-      "forecast_rmse": 75.7063
+      "forecast_rmse": 75.70630464512689
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -54994,23 +55013,37 @@
      "shape": "Yfit 64x1392; Yhold 64x48",
      "status": "ok",
      "times_ms": [
-      9872.0
+      16512.87
      ],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": null,
-     "quality_text": "forecast_rmse=75.7063",
+     "quality_text": "forecast_rmse=75.70630464512689",
      "source": {
-      "tag": "ARIMA_FAST_SEARCH_REUSE rab16 (board search maxiter 1000) M3 A/B 2026-10-05",
-      "kind": "A/B",
-      "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
-      "synced": "2026-10-04",
-      "previous_median_ms": null,
-      "previous_quality": {},
-      "previous_status": "REFUSED(error: {\"error\": \"NotImplementedError(\\\"AutoARIMA: seasonal_test='seas' (statsmodels' STL in the reference) is not implemented; pass D as one integer\\\")\", \"event\": \"error\", \"stage\": \"round 0\"})",
+      "tag": "rab25 M3 2026-10-05 main default after ARIMA_FAST_SEARCH_REUSE back to opt-in (9a2a7a5bf); quality drop allowed: forecast_rmse unchanged from the board row (75.7063); Andrew chose the converged search 2026-10-05",
+      "kind": "apply",
+      "applied": "2026-10-05",
+      "previous_median_ms": 9872.0,
+      "previous_quality": {
+       "forecast_rmse": 75.7063
+      },
       "previous_hash": null,
       "baseline_ms": null,
       "baseline_quality_text": "-",
-      "display_rounded": true
+      "history": [
+       {
+        "tag": "ARIMA_FAST_SEARCH_REUSE rab16 (board search maxiter 1000) M3 A/B 2026-10-05",
+        "kind": "A/B",
+        "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
+        "synced": "2026-10-04",
+        "previous_median_ms": null,
+        "previous_quality": {},
+        "previous_status": "REFUSED(error: {\"error\": \"NotImplementedError(\\\"AutoARIMA: seasonal_test='seas' (statsmodels' STL in the reference) is not implemented; pass D as one integer\\\")\", \"event\": \"error\", \"stage\": \"round 0\"})",
+        "previous_hash": null,
+        "baseline_ms": null,
+        "baseline_quality_text": "-",
+        "display_rounded": true
+       }
+      ]
      }
     },
     {
@@ -55061,7 +55094,7 @@
      "quality": {
       "forecast_rmse": 68.21164778700305
      },
-     "ratio_ours_fast_over": 3.470998488255343,
+     "ratio_ours_fast_over": 5.805930592256585,
      "ratio_ours_identical_over": 20.32131304093415,
      "rounds": 1,
      "rows": null,
@@ -55251,7 +55284,7 @@
    "wall_s": 2.8,
    "fast_page": {
     "family": "algos",
-    "status": "ok; ARIMA_FAST_SEARCH_REUSE rab16 (board search maxiter 1000) M3 A/B 2026-10-05; quality drop allowed: converged 1000-iteration search (Andrew: higher quality): synthetic forecast_rmse 2.624 -> 2.465 (better), taxi-hourly 74.66 -> 75.71; flag itself quality-identical; Q: < opp < main"
+    "status": "ok; ARIMA_FAST_SEARCH_REUSE rab16 (board search maxiter 1000) M3 A/B 2026-10-05; quality drop allowed: converged 1000-iteration search (Andrew: higher quality): synthetic forecast_rmse 2.624 -> 2.465 (better), taxi-hourly 74.66 -> 75.71; flag itself quality-identical; rab25 M3 2026-10-05 main default after ARIMA_FAST_SEARCH_REUSE back to opt-in (9a2a7a5bf); quality drop allowed: forecast_rmse unchanged from the board row (75.7063); Andrew chose the converged search 2026-10-05; Q: < opp"
    },
    "identical_page": {
     "family": "algos",
@@ -337428,7 +337461,7 @@
   }
  },
  "schema": "mojolearn-bench-board/1",
- "updated": "2026-10-05T03:47:16Z",
+ "updated": "2026-10-05T04:26:19Z",
  "extra_races": {
   "trees/gbdt-depthwise/taxi/page": {
    "id": "trees/gbdt-depthwise/taxi/page",
@@ -340575,8 +340608,9 @@
   }
  },
  "fast_page": {
-  "updated": "2026-10-04",
+  "updated": "2026-10-05",
   "headline_history": [
+   "- Board apply 2026-10-05 (`tools/af_board_apply.py`): autoarima synthetic 13688 -> 18265 ms (ratio 4.75 -> 6.34; rab25 M3 2026-10-05 main default after ARIMA_FAST_SEARCH_REUSE back to opt-in (9a2a7a5bf); Q: =main >=opp); autoarima taxi-hourly 9872 -> 16513 ms (ratio 3.47 -> 5.81; rab25 M3 2026-10-05 main default after ARIMA_FAST_SEARCH_REUSE back to opt-in (9a2a7a5bf); quality drop allowed: forecast_rmse unchanged from the board row (75.7063); Andrew chose the converged search 2026-10-05; Q: < opp).",
    "- Hand-made headline, last before the page was generated: Canonical full-board summary (2026-10-04): 407 FAST rows, 377 eligible opponent comparisons, 358 faster, geometric-mean ratio 0.217. The full page combines this refresh table with the original board. MaxAbs istella and KernelPCA taxi/istella added three speed flips; KNN imputer taxi added a fourth after GPU-only fit counts. Separately, ARD istella is now excluded for its existing opponent-quality deficit; this accounting correction removes one winner and one comparison, without changing timings.",
    "- Hand-made quality paragraph, last before generation: Quality (2026-10-04, `tools/af_board_quality_audit.py`): of 463 lane/dataset pairs, FAST quality is WORSE than the best opponent on 68 (50 by more than 1%) and FAST after is WORSE than FAST before on 10 (6 by more than 1%); 2 rows carry metrics of unknown direction (1 metrics), 61 have no parseable FAST quality. Tolerance rel 1e-3, abs 1e-6. `tools/af_board_apply.py` refuses a row whose quality is WORSE than main or the opponent and tags every applied row Q: ...",
    "- Board apply 2026-10-04 (`tools/af_board_apply.py`): autoarima taxi-hourly 13747 -> 9872 ms (ratio 4.83 -> 3.47; ARIMA_FAST_SEARCH_REUSE rab16 (board search maxiter 1000) M3 A/B 2026-10-05; quality drop allowed: converged 1000-iteration search (Andrew: higher quality): synthetic forecast_rmse 2.624 -> 2.465 (better), taxi-hourly 74.66 -> 75.71; flag itself quality-identical; Q: < opp < main); autoarima synthetic 9287 -> 13688 ms (ratio 3.22 -> 4.75; ARIMA_FAST_SEARCH_REUSE rab16 M3 A/B 2026-10-05; Q: >main >=opp).",
