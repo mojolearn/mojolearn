@@ -175,9 +175,9 @@ python/mojolearn/_expansion_decomp.py	3253	glue	drives the fixed randomized-SVD 
 python/mojolearn/_expansion_decomp.py	3487	runtime-fixed	PLS component loop with _power/_thin_svd/_pinv in Mojo (x_decomp_pls_fit: x_decomp/pls.mojo, pls_dev.mojo)
 python/mojolearn/_expansion_decomp.py	3532	runtime-fixed	PLS component loop with _power/_thin_svd/_pinv in Mojo (x_decomp_pls_fit: x_decomp/pls.mojo, pls_dev.mojo)
 python/mojolearn/_expansion_decomp.py	3763	runtime-fixed	zero-column fill folded into the atom loop of kit launches (one FILL0 move per resampled atom); no Python pass
-python/mojolearn/_expansion_decomp.py	3792	runtime	dictionary learning driver with the Python error test; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	3943	runtime	MiniBatchDictionaryLearning batch driver with Python cost arithmetic; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	3951	runtime	MiniBatchDictionaryLearning step driver with Python cost and diff arithmetic; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	3792	runtime-fixed	dictionary learning loops with sparse encode, atom update and cost in Mojo (x_decomp_dict_learning / x_decomp_dict_minibatch: x_decomp/dictl.mojo, dictl_dev.mojo)
+python/mojolearn/_expansion_decomp.py	3943	runtime-fixed	dictionary learning loops with sparse encode, atom update and cost in Mojo (x_decomp_dict_learning / x_decomp_dict_minibatch: x_decomp/dictl.mojo, dictl_dev.mojo)
+python/mojolearn/_expansion_decomp.py	3951	runtime-fixed	dictionary learning loops with sparse encode, atom update and cost in Mojo (x_decomp_dict_learning / x_decomp_dict_minibatch: x_decomp/dictl.mojo, dictl_dev.mojo)
 python/mojolearn/_expansion_decomp.py	4231	runtime-fixed	LDA fit loop with e-step, bound, loglik and perplexity in Mojo (x_decomp_lda_fit: x_decomp/lda_fit.mojo, lda_fit_dev.mojo)
 python/mojolearn/_expansion_decomp.py	4299	runtime-fixed	LDA bound host terms by x_decomp_lda_bound (CPU twin of lda_bound_kernel, same cells)
 python/mojolearn/_expansion_decomp.py	4301	runtime-fixed	LDA bound host terms by x_decomp_lda_bound (see 4299)
