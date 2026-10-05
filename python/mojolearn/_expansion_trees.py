@@ -492,6 +492,12 @@ _TE_ADA_SESSION_SHARE = 4
 #     the synthetic rows across chunks and KernelExplainer solves many rows
 #     per launch sweep (`x_trees_kshap_means` + `x_trees_kshap_solve_ey`).
 _KSHAP_FAST_BATCH = 8
+#   MOJOLEARN_KSHAP_FAST_OVERLAP (lane apple-fast-s-shap, opt-in, needs
+#     KSHAP_FAST_BATCH): KernelExplainer enqueues the next chunk's synthetic
+#     rows and their download into a second host buffer
+#     (`x_trees_kshap_synth_async`) before the model runs on the current
+#     chunk, so the download overlaps the model; the same words.
+_KSHAP_FAST_OVERLAP = 64
 #   MOJOLEARN_PSHAP_DELTA (FAST Apple default; _OFF rollback): the
 #     PermutationExplainer model runs only on the synthetic rows that differ
 #     from the previous coalition's (`x_trees_pshap_dsynth` +
@@ -3230,17 +3236,20 @@ class KernelExplainer(_AgnosticExplainer):
         ey = zeros((n * m * k,), "<f8")
         e0 = addr(ey, name="ey")
         x0, bg0 = addr_ro(Xa, name="X"), addr_ro(self._bg, name="data")
-        syn = empty((R * m * nb * d,), "<f4")
-        for r0 in range(0, n, R):
-            rows = min(R, n - r0)
-            if rows < R:
-                syn = empty((rows * m * nb * d,), "<f4")
-            b.x_trees_kshap_synth(x0 + 4 * r0 * d, bg0, taddr, addr(syn, name="synthetic"),
-                                  [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits])
-            out = self._model_rows(syn, rows * m * nb, d)
-            b.x_trees_kshap_means(addr_ro(out, name="y"), e0 + 8 * r0 * m * k, [rows, nb, m, k, link])
-            del out
-        del syn
+        if n > R and _trees_switch(self, _KSHAP_FAST_OVERLAP):
+            self._overlapped(b, x0, bg0, taddr, e0, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R, link)
+        else:
+            syn = empty((R * m * nb * d,), "<f4")
+            for r0 in range(0, n, R):
+                rows = min(R, n - r0)
+                if rows < R:
+                    syn = empty((rows * m * nb * d,), "<f4")
+                b.x_trees_kshap_synth(x0 + 4 * r0 * d, bg0, taddr, addr(syn, name="synthetic"),
+                                      [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits])
+                out = self._model_rows(syn, rows * m * nb, d)
+                b.x_trees_kshap_means(addr_ro(out, name="y"), e0 + 8 * r0 * m * k, [rows, nb, m, k, link])
+                del out
+            del syn
         f0, p0 = addr_ro(fx, name="fx"), addr(phi, name="phi")
         nl = addr_ro(self._fnull, name="fnull")
         S = self._chunk(m * d, n)
@@ -3248,6 +3257,43 @@ class KernelExplainer(_AgnosticExplainer):
             rows = min(S, n - s0)
             b.x_trees_kshap_solve_ey(e0 + 8 * s0 * m * k, f0 + 4 * s0 * k, nl, taddr, p0 + 8 * s0 * d * k,
                                      [rows, nb, d, nfixed, m, nfull, L, npaired, s0, seed, wbits, k, link])
+
+
+    def _overlapped(self, b, x0, bg0, taddr, e0, n, d, k, nb, m, nfixed, nfull, npaired, L, seed, wbits, R, link):
+        """MOJOLEARN_KSHAP_FAST_OVERLAP: `_batched`'s chunk loop with two host
+        buffers: chunk r + 1's synthetic rows are enqueued (device build and
+        download into the other buffer, no wait) before the model runs on
+        chunk r; `x_trees_kshap_means` (the same stream) and
+        `x_trees_kshap_synth_wait` then find them in place. The same calls on
+        the same words as `_batched`."""
+        bufs = [empty((R * m * nb * d,), "<f4"), empty((R * m * nb * d,), "<f4")]
+
+        def start(r0, buf):
+            rows = min(R, n - r0)
+            b.x_trees_kshap_synth_async(x0 + 4 * r0 * d, bg0, taddr, addr(buf, name="synthetic"),
+                                        [rows, nb, d, nfixed, m, nfull, L, npaired, r0, seed, wbits])
+
+        try:
+            start(0, bufs[0])
+            b.x_trees_kshap_synth_wait()
+            cur = 0
+            for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
+                rows = min(R, n - r0)
+                if r0 + R < n:
+                    start(r0 + R, bufs[1 - cur])        # in flight while the model runs
+                syn = bufs[cur]
+                if rows < R:
+                    syn = memory_at(addr(syn, name="synthetic"), 4 * rows * m * nb * d, writable=True).cast("f")
+                    syn = Array.from_buffer(syn)
+                out = self._model_rows(syn, rows * m * nb, d)
+                del syn
+                b.x_trees_kshap_means(addr_ro(out, name="y"), e0 + 8 * r0 * m * k, [rows, nb, m, k, link])
+                del out
+                b.x_trees_kshap_synth_wait()
+                cur = 1 - cur
+        finally:
+            b.x_trees_kshap_synth_wait()        # never leave a download aimed at a freed buffer
+        del bufs
 
 
 class PermutationExplainer(_AgnosticExplainer):

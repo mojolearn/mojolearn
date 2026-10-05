@@ -862,14 +862,15 @@ comptime XTREES_FAST_SWITCHES = (
     + (4 if _XT_ADA_SESSION_SHARE else 0)
     + (8 if agn_dev.KSHAP_FAST_BATCH else 0)
     + (32 if agn_dev.PSHAP_DELTA else 0)
+    + (64 if agn_dev.KSHAP_FAST_OVERLAP else 0)
 )
 
 
 def fast_switches_binding() raises -> PythonObject:
     """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2
     MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
-    MOJOLEARN_KSHAP_FAST_BATCH, bit 32 MOJOLEARN_PSHAP_DELTA
-    (xtrees/agnostic_device.mojo)."""
+    MOJOLEARN_KSHAP_FAST_BATCH, bit 32 MOJOLEARN_PSHAP_DELTA, bit 64
+    MOJOLEARN_KSHAP_FAST_OVERLAP (xtrees/agnostic_device.mojo)."""
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
@@ -1172,6 +1173,29 @@ def kshap_means_binding(yout: PythonObject, ey: PythonObject, params: PythonObje
     return PythonObject(p[0])
 
 
+def kshap_synth_async_binding(x: PythonObject, bg: PythonObject, tables: PythonObject, syn: PythonObject,
+                              params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_KSHAP_FAST_OVERLAP: `x_trees_kshap_synth` without the final
+    wait (the rows reach syn by `x_trees_kshap_synth_wait`); the same params.
+    Refused in a build without the define (x_trees_fast_switches bit 64)."""
+    var p = _agn_ints(params, 11, "x_trees_kshap_synth_async")
+    _kshap_check(p, "x_trees_kshap_synth_async")
+    comptime if agn_dev.KSHAP_FAST_OVERLAP:
+        agn_dev.kshap_synth_async(Int(py=x), Int(py=bg), Int(py=tables[0]), Int(py=tables[1]), Int(py=tables[2]),
+                                  Int(py=syn), p[0], p[1], p[2], p[4], p[3], p[5], p[7], p[6], p[9], p[8],
+                                  UInt64(p[10]))
+    else:
+        raise Error("x_trees_kshap_synth_async: built without MOJOLEARN_KSHAP_FAST_OVERLAP")
+    return PythonObject(p[0])
+
+
+def kshap_synth_wait_binding() raises -> PythonObject:
+    """MOJOLEARN_KSHAP_FAST_OVERLAP: wait for the chunk in flight."""
+    comptime if agn_dev.KSHAP_FAST_OVERLAP:
+        agn_dev.kshap_synth_wait()
+    return PythonObject(0)
+
+
 def kshap_solve_ey_binding(ey: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
                            phi: PythonObject, params: PythonObject) raises -> PythonObject:
     """MOJOLEARN_KSHAP_FAST_BATCH: `x_trees_kshap_solve` from the rows'
@@ -1316,6 +1340,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
     m.def_function[kshap_means_binding]("x_trees_kshap_means")
     m.def_function[kshap_solve_ey_binding]("x_trees_kshap_solve_ey")
+    m.def_function[kshap_synth_async_binding]("x_trees_kshap_synth_async")
+    m.def_function[kshap_synth_wait_binding]("x_trees_kshap_synth_wait")
     m.def_function[pshap_synth_binding]("x_trees_pshap_synth")
     m.def_function[pshap_values_binding]("x_trees_pshap_values")
     m.def_function[pshap_dsynth_binding]("x_trees_pshap_dsynth")
