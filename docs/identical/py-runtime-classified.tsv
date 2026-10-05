@@ -160,16 +160,16 @@ python/mojolearn/_expansion_decomp.py	1523	runtime	reads device signs into Pytho
 python/mojolearn/_expansion_decomp.py	1527	runtime	reads host signs into Python flags that steer the result; owed to a device sign-flip stage
 python/mojolearn/_expansion_decomp.py	1638	glue	drives one device partial fit per batch
 python/mojolearn/_expansion_decomp.py	1866	glue	shape check of the input argument
-python/mojolearn/_expansion_decomp.py	2147	runtime	NNDSVD init per component with Python scalar arithmetic on device results; owed to a Mojo NMF init driver
-python/mojolearn/_expansion_decomp.py	2216	runtime	NMF multiplicative-update driver with the Python convergence test on read-back errors; owed to a Mojo solver driver (x_decomp/mcd.mojo style)
-python/mojolearn/_expansion_decomp.py	2249	runtime	NMF beta-update driver with Python arithmetic on read-back sums; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	2322	runtime	NMF coordinate-descent driver with the Python violation test; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	2456	runtime	FastICA parallel driver with the Python convergence test; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	2479	runtime	FastICA deflation per component with Python arithmetic on read-back dots; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	2486	runtime	FastICA deflation iterations with the Python convergence test; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	2626	runtime	sequential float64 sum in Python over d-sized device outputs; owed to the kit total fold
-python/mojolearn/_expansion_decomp.py	2683	runtime	varimax/quartimax rotation driver with the Python convergence test; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	2782	runtime	FactorAnalysis driver with Python log-likelihood sums; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	2147	runtime-fixed	NNDSVD per-component loop in Mojo (x_decomp_nmf_nndsvd: x_decomp/nmf.mojo Kit, nmf_dev.mojo DKit), same cells
+python/mojolearn/_expansion_decomp.py	2216	runtime-fixed	NMF mu loop in Mojo (x_decomp_nmf_solve: x_decomp/nmf.mojo, nmf_dev.mojo), same cells and float64 test
+python/mojolearn/_expansion_decomp.py	2249	runtime-fixed	NMF beta (KL/IS) loop in Mojo (x_decomp_nmf_solve), same cells and float64 test
+python/mojolearn/_expansion_decomp.py	2322	runtime-fixed	NMF cd loop in Mojo (x_decomp_nmf_solve, cd_rows on Kit/DKit), same cells and violation test
+python/mojolearn/_expansion_decomp.py	2456	runtime-fixed	FastICA parallel loop in Mojo (x_decomp_ica_solve: x_decomp/ica.mojo, ica_dev.mojo), same cells and limit
+python/mojolearn/_expansion_decomp.py	2479	runtime-fixed	FastICA deflation in Mojo (x_decomp_ica_solve), same cells
+python/mojolearn/_expansion_decomp.py	2486	runtime-fixed	FastICA deflation iterations in Mojo (x_decomp_ica_solve), same cells and limit
+python/mojolearn/_expansion_decomp.py	2626	runtime-fixed	_dsum by x_decomp_dsum_f32 (x_decomp/fa_em.mojo), the same sequential binary64 adds
+python/mojolearn/_expansion_decomp.py	2683	runtime-fixed	varimax/quartimax rotation and _polar in Mojo (x_decomp_ortho_rotation: x_decomp/rotation.mojo, rotation_dev.mojo)
+python/mojolearn/_expansion_decomp.py	2782	runtime-fixed	FactorAnalysis EM loop in Mojo (x_decomp_fa_em_main: x_decomp/fa_em.mojo, fa_em_dev.mojo), same cells and float64 log-likelihood
 python/mojolearn/_expansion_decomp.py	2830	glue	converts the noise_variance_init argument
 python/mojolearn/_expansion_decomp.py	3253	glue	drives the fixed randomized-SVD power iterations on the device
 python/mojolearn/_expansion_decomp.py	3487	runtime	PLS power driver with the Python convergence test; owed to a Mojo solver driver
@@ -179,15 +179,15 @@ python/mojolearn/_expansion_decomp.py	3792	runtime	dictionary learning driver wi
 python/mojolearn/_expansion_decomp.py	3943	runtime	MiniBatchDictionaryLearning batch driver with Python cost arithmetic; owed to a Mojo solver driver
 python/mojolearn/_expansion_decomp.py	3951	runtime	MiniBatchDictionaryLearning step driver with Python cost and diff arithmetic; owed to a Mojo solver driver
 python/mojolearn/_expansion_decomp.py	4231	runtime	LDA EM driver with the Python bound test; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	4299	runtime	LDA approximate bound per component with Python arithmetic on read-back totals; owed to a Mojo bound stage
-python/mojolearn/_expansion_decomp.py	4301	runtime	LDA approximate bound per component (see line 4299)
-python/mojolearn/_expansion_decomp.py	4304	runtime	LDA approximate bound per component (see line 4299)
+python/mojolearn/_expansion_decomp.py	4299	runtime-fixed	LDA bound host terms by x_decomp_lda_bound (CPU twin of lda_bound_kernel, same cells)
+python/mojolearn/_expansion_decomp.py	4301	runtime-fixed	LDA bound host terms by x_decomp_lda_bound (see 4299)
+python/mojolearn/_expansion_decomp.py	4304	runtime-fixed	LDA bound host terms by x_decomp_lda_bound (see 4299)
 python/mojolearn/_expansion_decomp.py	4630	glue	one device gather-and-min step per neighbor rank
 python/mojolearn/_expansion_decomp.py	4802	runtime	SMACOF driver with the Python stress test; owed to a Mojo solver driver
 python/mojolearn/_expansion_decomp.py	4843	glue	draws one device start per restart
 python/mojolearn/_expansion_decomp.py	4847	runtime	MDS restart loop comparing read-back stress in Python; owed with the SMACOF driver
 python/mojolearn/_expansion_decomp.py	5077	runtime	LLE iteration driver with Python arithmetic on read-back norms; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	5303	runtime	chi2 quantile by Python bisection (parameter-only math, still a computed number); owed to a Mojo chi2 quantile routine
+python/mojolearn/_expansion_decomp.py	5303	runtime-fixed	chi2 CDF and quantile in Mojo (x_decomp_chi2_cdf / x_decomp_chi2_quantile: x_decomp/chi2.mojo), same cells and float64 steps
 python/mojolearn/_expansion_decomp.py	5581	runtime	ALS driver with Python loss arithmetic on read-back totals; owed to a Mojo solver driver
 python/mojolearn/_expansion_linear.py	105	glue	converts the int parameter list
 python/mojolearn/_expansion_linear.py	106	glue	converts the float parameter list
