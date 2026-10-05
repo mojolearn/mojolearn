@@ -167,6 +167,7 @@ from gemm.host.identical_gemm import OP_TN, gemm_oracle
 from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_SWEEPS
 from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
 from x_decomp.rr import host_eigh_rr
+from x_decomp.eigh_scale import host_es_scale, host_es_unscale_diag
 
 
 #: The gate's negative control (the CPU training lane, brief section 3.4):
@@ -648,10 +649,14 @@ def host_eig_and_truncate(
     flip, the convergence refusal in its words, the Float64 tail.
     PCA_RR_EIGH (decomposition/pca_rr_switch.mojo, the IDENTICAL default):
     the round-robin Jacobi's rounds (`host_eigh_rr`, the device driver's
-    order and tests) in place of the cyclic replay."""
+    order and tests) in place of the cyclic replay. Both take the device's
+    power-of-two range scale (x_decomp/eigh_scale.mojo) and unscale the
+    diagonal after the solve."""
+    var fac = host_es_scale(cov, n_cols)
     comptime if PCA_RR_EIGH:
         var rv = List[Float32](length=n_cols * n_cols, fill=Float32(0.0))
         var got = host_eigh_rr(cov, rv, n_cols, PCA_RR_SWEEPS, Float32(JACOBI_TOL))
+        host_es_unscale_diag(cov, n_cols, fac)
         if not got[0]:
             # the cyclic solver's refusal, in its words (the device column
             # raises the same: decomposition/impl/linalg/detail/pca.mojo)
@@ -677,6 +682,7 @@ def host_eig_and_truncate(
             rdiag, rvecs, n_cols, n_components, singular_scale
         )
     var jac = host_jacobi_eigh(cov, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+    host_es_unscale_diag(cov, n_cols, fac)
     var vecs32 = jac.vectors.copy()
     host_sign_flip(vecs32, n_cols)
     if not jac.converged:

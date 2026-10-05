@@ -97,6 +97,7 @@ from decomposition.host.pca_oracle import (
 )
 from gemm.host.identical_gemm import OP_NN, OP_NT, gemm_oracle
 from x_decomp.rr import RR_EIGH_SWEEPS, host_eigh_rr
+from x_decomp.eigh_scale import host_es_scale, host_es_unscale_diag
 from core.host_gemm_simd import host_gemm_identical
 from kernel_methods.checks.random_features import (
     km_basis_indices,
@@ -634,6 +635,9 @@ def kmh_nystroem_fit(
             comp.append(x[srow * d + f])
 
     var raw = kmh_kernel_matrix(kernel, degree, gamma, coef0, comp, comp, q, q, d)
+    # the device's power-of-two range scale (x_decomp/eigh_scale.mojo),
+    # the diagonal unscaled after the solve
+    var fac = host_es_scale(raw, q)
     var vecs = List[Float32]()
     var sweeps = 0
     comptime if KMH_NYS_RR:
@@ -665,6 +669,7 @@ def kmh_nystroem_fit(
                 + String(JACOBI_TOL)
             )
         sweeps = jac.executed
+    host_es_unscale_diag(raw, q, fac)
 
     var values_raw = List[Float32]()
     var mags = List[Float32]()

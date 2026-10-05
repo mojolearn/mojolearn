@@ -152,6 +152,8 @@ from core.column_stats import (
     shift_columns_kernel,
 )
 from core.householder_qr import fold_and_broadcast, qr_factor, qr_slice_count, QR_TPB, qr_reflector_u1, qr_reflector_tau
+from x_decomp.cells import F32Ptr
+from x_decomp.eigh_scale import enqueue_es_scale_rect, enqueue_es_unscale
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
@@ -472,8 +474,17 @@ def pca_fit_full(
     if n_rows < n_cols:
         _pca_wide_basis(ctx, x, r_out, v_buf, s_buf, n_rows, n_cols)
     else:
+        # lane idn-cov-overflow: the power-of-two range scale of
+        # x_decomp/eigh_scale.mojo on the centered X (no write while max
+        # |x| is in [2^-33, 2^32)) so the QR's column norms and the
+        # Jacobi's ||r_i||^2 stay finite; s unscaled after, V unmoved.
+        # `host_pca_fit_full` takes the same.
+        var dfac = enqueue_es_scale_rect(ctx, F32Ptr(unsafe_from_address=Int(x.unsafe_ptr())), 1, n_rows, n_cols)
         _ = qr_factor(ctx, x, r_scratch, r_out, n_rows, n_cols)
         svd_of_r(ctx, r_out, v_buf, s_buf, n_cols)
+        enqueue_es_unscale(ctx, F32Ptr(unsafe_from_address=Int(s_buf.unsafe_ptr())), dfac, 1, n_cols)
+        ctx.synchronize()
+        _ = dfac^
 
     # `signFlipKernel` on the RIGHT basis, which is where DEVIATION 525 pins
     # it for both shipped arms: largest-absolute-value entry, ties to the

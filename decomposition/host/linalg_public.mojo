@@ -80,6 +80,8 @@ purpose: the fold order is the oracles' business, the ORDER a public name
 promises is settled once, here.
 """
 from decomposition.spectrum_order_device import spectrum_rank_desc
+from x_decomp.cells import F32Ptr
+from x_decomp.eigh_scale import host_es_scale_ptr, host_es_unscale
 from decomposition.linalg_types import EighHostResult, _validate_shape, _validate_square
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,
@@ -210,10 +212,13 @@ def host_svdvals(a: List[Float32], n_rows: Int, n_cols: Int) raises -> List[Floa
     """
     _validate_shape(n_rows, n_cols, "svdvals")
     var work = a.copy()
+    # the device's power-of-two range scale (x_decomp/eigh_scale.mojo)
+    var fac = host_es_scale_ptr(F32Ptr(unsafe_from_address=Int(work.unsafe_ptr())), n_rows * n_cols)
     var r = host_qr_factor(work, n_rows, n_cols)
     var got = host_one_sided_jacobi_svd(
         r, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL)
     )
+    host_es_unscale(got.s, fac)
     if not got.converged:
         raise Error(
             "svdvals: the one-sided Jacobi SVD did not converge in "

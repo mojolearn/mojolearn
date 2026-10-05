@@ -12,6 +12,7 @@ QR slices and the shortest-path rows have the host spellings of
 x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
 from x_decomp.rr_solve import host_eigh_rr_sorted
+from x_decomp.eigh_scale import host_es_scale_ptr, host_es_unscale_ptr
 from x_decomp.rr_svd import host_rr_svd
 from std.memory import bitcast
 from std.builtin.sort import sort
@@ -575,8 +576,15 @@ struct HostExec(Exec):
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
         """PCA(svd_solver='full')'s tall route: Householder QR of a (m x n,
         m >= n), then the one-sided Jacobi SVD of R. Unordered values, V in
-        columns: the host replay of DevExec.svd."""
-        var r = HostExec._qr_r(a, m, n)
+        columns: the host replay of DevExec.svd, with its power-of-two
+        range scale (x_decomp/eigh_scale.mojo) on a copy of A and s
+        unscaled after the solve."""
+        var ac = List[Float32](length=max(m * n, 1), fill=Float32(0.0))
+        for i in range(m * n):
+            ac[i] = a.unsafe_load(i)
+        var pac = F32Ptr(unsafe_from_address=Int(ac.unsafe_ptr()))
+        var fac = host_es_scale_ptr(pac, m * n)
+        var r = HostExec._qr_r(pac, m, n)
         # the device's round-robin rounds (x_decomp/rr_svd.mojo)
         var rt = List[Float32](length=max(n * n, 1), fill=Float32(0.0))
         var vt = List[Float32](length=max(n * n, 1), fill=Float32(0.0))
@@ -589,6 +597,8 @@ struct HostExec(Exec):
         )
         if not got[0]:
             raise Error("x_decomp svd: the round-robin one-sided Jacobi did not converge")
+        host_es_unscale_ptr(s, n, fac)
+        _ = ac^
         for i in range(n):
             for j in range(n):
                 v.unsafe_store(i * n + j, vt[j * n + i])

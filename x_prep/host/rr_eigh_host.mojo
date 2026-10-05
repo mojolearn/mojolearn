@@ -40,6 +40,7 @@ from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import spectrum_rank_desc
 from x_decomp.cells import F32Ptr
+from x_decomp.eigh_scale import host_es_scale_ptr, host_es_unscale_ptr
 from x_decomp.rr import rr_cs, rr_block, rr_vrow, rr_off_fold, rr_converged
 from x_prep.common import FP, IP, p
 from x_prep.eigh import eigh_unit
@@ -108,6 +109,8 @@ def eigh_rr_host_unit(t: Int, f: FP, q: IP):
     var cs = F32Ptr(unsafe_from_address=Int(csl.unsafe_ptr()))
     for i in range(n):
         vp.unsafe_store(i * n + i, Float32(1.0))
+    # the device's power-of-two range scale (x_decomp/eigh_scale.mojo)
+    var fac = host_es_scale_ptr(ap, n * n)
     for sweep in range(IDN_RR_SWEEPS + 1):
         # the test: the diagonal of its source, then the folded sums
         for k in range(n):
@@ -140,6 +143,7 @@ def eigh_rr_host_unit(t: Int, f: FP, q: IP):
         if vp.unsafe_load(first * n + col) < Float32(0.0):
             for r in range(n):
                 vp.unsafe_store(r * n + col, -vp.unsafe_load(r * n + col))
+    host_es_unscale_ptr(dp, n, fac)
     # rre_order_kernel: eigenpair i to its descending position
     for i in range(n):
         var r = spectrum_rank_desc(dp, n, i)

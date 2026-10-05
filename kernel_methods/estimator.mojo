@@ -134,6 +134,7 @@ from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.svm_parameter import KernelParams
 from x_decomp.cells import F32Ptr
+from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale, enqueue_es_unscale_diag
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
 from x_decomp.rr import rr_block, rr_cs, rr_vrow
 from kernel_methods.rbf_fused import (
@@ -1361,6 +1362,12 @@ def _nystroem_rr_eigh_idn(
     ctx.enqueue_function[pj_identity_kernel](
         dvec.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
     )
+    # lane idn-cov-overflow: the power-of-two range scale of
+    # x_decomp/eigh_scale.mojo (no write while max |k| is in [2^-33, 2^32);
+    # a linear or polynomial kernel can leave it) so the test's folded
+    # squares stay finite; the eigenvalues unscaled after the solve, in
+    # doff and on dk's diagonal. `kmh_nystroem_fit` takes the same.
+    var dfac = enqueue_es_scale(ctx, F32Ptr(unsafe_from_address=Int(dk.unsafe_ptr())), 1, n)
     var tol = Float32(JACOBI_TOL)
     var converged = False
     var executed = 0
@@ -1434,6 +1441,8 @@ def _nystroem_rr_eigh_idn(
             grid_dim=(n, 1, 1),
             block_dim=(SIGNFLIP_TPB, 1, 1),
         )
+    enqueue_es_unscale(ctx, F32Ptr(unsafe_from_address=Int(doff.unsafe_ptr())) + 2 * n, dfac, 1, n)
+    enqueue_es_unscale_diag(ctx, F32Ptr(unsafe_from_address=Int(dk.unsafe_ptr())), dfac, n)
     # the last test's kernel left the diagonal of the converged A in
     # doff[2 n, 3 n)
     if want_host:
@@ -1448,6 +1457,7 @@ def _nystroem_rr_eigh_idn(
         # NYS_IDN_DEV_ORDER: the caller orders the pairs where they lie
         # (`dk`'s diagonal, `dvec`); nothing is read back here.
         ctx.synchronize()
+    _ = dfac^
     _ = dcs^
     _ = doff^
     _ = hoff^
@@ -1578,6 +1588,9 @@ def _nystroem_rr_eigh_idn_devstop(
     ctx.enqueue_function[pj_identity_kernel](
         dvec.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
     )
+    # the power-of-two range scale (x_decomp/eigh_scale.mojo), as
+    # `_nystroem_rr_eigh_idn`
+    var dfac = enqueue_es_scale(ctx, F32Ptr(unsafe_from_address=Int(dk.unsafe_ptr())), 1, n)
     ctx.synchronize()
     var tol = Float32(JACOBI_TOL)
     var done = Float32(0.0)
@@ -1650,6 +1663,8 @@ def _nystroem_rr_eigh_idn_devstop(
             grid_dim=(n, 1, 1),
             block_dim=(SIGNFLIP_TPB, 1, 1),
         )
+    enqueue_es_unscale(ctx, F32Ptr(unsafe_from_address=Int(doff.unsafe_ptr())) + 2 * n, dfac, 1, n)
+    enqueue_es_unscale_diag(ctx, F32Ptr(unsafe_from_address=Int(dk.unsafe_ptr())), dfac, n)
     if want_host:
         # the last test's kernel left the diagonal of the converged A in
         # doff[2 n, 3 n)
@@ -1662,6 +1677,7 @@ def _nystroem_rr_eigh_idn_devstop(
             vecs.append(got[i])
     else:
         ctx.synchronize()
+    _ = dfac^
     _ = dcs^
     _ = doff^
     _ = hoff^
@@ -1702,6 +1718,9 @@ def _nystroem_device_eigh(
         var ran = _nystroem_rr_eigh_idn(ctx, dk, dvec, q, sabotage, eig_diag, vecs, want_host)
         trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
         return ran
+    # the power-of-two range scale (x_decomp/eigh_scale.mojo), as above
+    var dk_p = F32Ptr(unsafe_from_address=Int(dk.unsafe_ptr()))
+    var dfac = enqueue_es_scale(ctx, dk_p, 1, q)
     ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
         dk.unsafe_ptr(),
         dvec.unsafe_ptr(),
@@ -1712,6 +1731,7 @@ def _nystroem_device_eigh(
         grid_dim=(1, 1, 1),
         block_dim=(JACOBI_ROT_TPB, 1, 1),
     )
+    enqueue_es_unscale_diag(ctx, dk_p, dfac, q)
     if sabotage != KMSAB_NO_SIGN_FLIP:
         ctx.enqueue_function[sign_flip_kernel](
             dvec.unsafe_ptr(),
@@ -1720,6 +1740,7 @@ def _nystroem_device_eigh(
             block_dim=(SIGNFLIP_TPB, 1, 1),
         )
     ctx.synchronize()
+    _ = dfac^
     trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
 
     var info_h = _download(ctx, dinfo, 3)

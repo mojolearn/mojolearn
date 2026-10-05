@@ -45,6 +45,7 @@ from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import spectrum_rank_desc
 from x_decomp.rr import RR_OFF_TPB, pj_first, pj_second, rr_add, rr_converged, rr_cs, rr_row_off, rr_sub
 from x_prep.common import FP
+from x_decomp.eigh_scale import enqueue_es_scale_strided, enqueue_es_unscale_ptr, es_strided_words
 
 comptime RRE_TPB = 256
 """Launch width of the per-cell kernels."""
@@ -71,7 +72,7 @@ def rre_nb(n: Int) -> Int:
 def rre_words(n: Int, batch: Int) -> Int:
     """Scratch words for `rr_eigh_into`: A's ping-pong copy, V, partials,
     diagonal, state."""
-    return batch * (2 * n * n + 2 * rre_nb(n) + n + RRE_STATE)
+    return batch * (2 * n * n + 2 * rre_nb(n) + n + RRE_STATE) + es_strided_words(batch, n)
 
 
 @always_inline
@@ -347,7 +348,13 @@ def rr_eigh_into(mut ctx: DeviceContext, f: FP, a_off: Int, n: Int, astride: Int
     var part = v + batch * n * n
     var dg = part + batch * 2 * nb
     var stt = dg + batch * n
+    var esc = stt + batch * RRE_STATE
     var a0 = f + a_off
+    # lane idn-cov-overflow: each matrix's power-of-two range scale
+    # (x_decomp/eigh_scale.mojo; no write while max |a| is in [2^-33, 2^32))
+    # so the test's folded squares stay finite; the eigenvalues unscaled
+    # before the order. `eigh_rr_host_unit` takes the same.
+    enqueue_es_scale_strided(ctx, a0, astride, batch, n, esc)
     ctx.enqueue_function[rre_init_kernel](v, stt, Int32(n), Int32(batch), grid_dim=_blocks(batch * n * n),
                                           block_dim=RRE_TPB)
     var units = h * h + n * h
@@ -375,5 +382,6 @@ def rr_eigh_into(mut ctx: DeviceContext, f: FP, a_off: Int, n: Int, astride: Int
                 ctx.synchronize()
     ctx.enqueue_function[rre_sign_kernel](v, Int32(n), Int32(batch), grid_dim=_blocks(batch * n),
                                           block_dim=RRE_TPB)
+    enqueue_es_unscale_ptr(ctx, dg, esc, batch, n)
     ctx.enqueue_function[rre_order_kernel](f, dg, v, Int32(w_off), Int32(v_off), Int32(n), Int32(batch),
                                            grid_dim=_blocks(batch * n), block_dim=RRE_TPB)

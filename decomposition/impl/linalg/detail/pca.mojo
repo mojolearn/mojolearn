@@ -55,6 +55,7 @@ from x_decomp.jacobi_par import (
     pj_identity_kernel,
 )
 from x_decomp.cells import F32Ptr
+from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale_diag
 from x_decomp.rr import RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_vrow
 from core.gram_splitk import gram_centered_splitk_into, gram_splitk_applies
 from core.xtdz_coalesced import column_mean_launch
@@ -535,6 +536,13 @@ def eig_and_truncate(
     """`calEig` + `truncCompExpVars`, shared by PCA and truncated SVD."""
     var vec_buf = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
+    # lane idn-cov-overflow: the power-of-two range scale of
+    # x_decomp/eigh_scale.mojo (no write while max |cov| is in
+    # [2^-33, 2^32)), so the Jacobi's folded squares stay finite (an
+    # uncentered TruncatedSVD Gram overflowed them); the diagonal is
+    # unscaled after the solve. `host_eig_and_truncate` takes the same.
+    var cov_p = F32Ptr(unsafe_from_address=Int(cov.unsafe_ptr()))
+    var dfac = enqueue_es_scale(ctx, cov_p, 1, n_cols)
     ctx.synchronize()
     comptime if PCA_RR_EIGH:
         # the round-robin rounds (every rotation of a round in parallel),
@@ -552,6 +560,7 @@ def eig_and_truncate(
             block_dim=(JACOBI_ROT_TPB, 1, 1),
         )
 
+    enqueue_es_unscale_diag(ctx, cov_p, dfac, n_cols)
     ctx.enqueue_function[sign_flip_kernel](
         vec_buf.unsafe_ptr(),
         Int32(n_cols),
@@ -559,6 +568,7 @@ def eig_and_truncate(
         block_dim=(SIGNFLIP_TPB, 1, 1),
     )
     ctx.synchronize()
+    _ = dfac^
 
     var h_cov = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)
     var h_vec = ctx.enqueue_create_host_buffer[DType.float32](n_cols * n_cols)

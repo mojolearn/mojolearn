@@ -84,6 +84,7 @@ from std.memory import bitcast
 
 from checks.numerics import ftz, identical_mul_add, identical_mul_add_simd, identical_sqrt
 from core.classical_host_predict import host_gemm_nt
+from x_decomp.eigh_scale import host_es_scale, host_es_unscale
 from decomposition.spectrum_order_device import spectrum_rank_desc
 from core.host_predict_threads import HostF32Ptr, host_list_ptr
 from core.host_tile_fold import IDN_XTY_TILED, host_xty_tiled
@@ -293,9 +294,12 @@ def host_svd_eig(
 ) raises -> SVDHostResult:
     """`svd_eig_traced` with `gen_left_vec = True`."""
     var cov = host_gemm_tn(a, n_cols, n_rows)
+    # the device's power-of-two range scale (x_decomp/eigh_scale.mojo)
+    var fac = host_es_scale(cov, n_cols)
     var jac = host_jacobi_eigh(cov, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
     var v_raw = jac.vectors.copy()
     var s_raw = _diagonal(cov, n_cols)
+    host_es_unscale(s_raw, fac)
     if not jac.converged:
         raise Error(
             "svdEig: the device Jacobi did not converge in "
