@@ -719,7 +719,9 @@ def _ours_info(ml, module_path, mode_used, device="gpu"):
         info["vendor_used"] = "unavailable (%r)" % (exc,)
     if mode_used != want:
         raise RuntimeError("ours is not %s: read back %r" % (want.upper(), mode_used))
-    if want == "fast" and info["vendor_used"] != "apple":
+    # The public library reports the API (metal); the board names its column
+    # apple. Accept either spelling, while refusing CUDA/HIP/CPU FAST here.
+    if want == "fast" and info["vendor_used"] not in ("metal", "apple"):
         raise RuntimeError("REFUSED: ours-fast is the Apple FAST neural tier; this box's vendor "
                            "reads back %r" % (info["vendor_used"],))
     return info
