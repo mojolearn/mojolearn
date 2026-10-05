@@ -88,11 +88,18 @@ comptime EIGH_FAST_PANEL_DF = (
     and is_defined["MOJOLEARN_EIGH_FAST_PANEL_DF"]()
     and not is_defined["MOJOLEARN_EIGH_FAST_PANEL_DF_OFF"]()
 )
-#: Smallest n routed here; below it main's Jacobi is cheap.
-comptime TD_MIN_N = 512
 #: Panel width (reflectors per WY block). TD_TPB == 8 TD_NB is assumed by
 #: the tile loads below.
 comptime TD_NB = 32
+#: Smallest n routed here. Was 512 ("below it main's Jacobi is cheap"; it
+#: split the board's 11- and 220-wide matrices from 4096); removed as
+#: benchmark-tuned on 2026-10-04, replacement UNMEASURED. The rule is now
+#: the kernel's: one full TD_NB panel plus a trailing matrix for its rank-2
+#: update, n >= 2 TD_NB. A refusal still falls back to the Jacobi. `-D
+#: MOJOLEARN_LEGACY_NARROW_EIGH_TD` restores 512.
+comptime TD_MIN_N = 512 if is_defined[
+    "MOJOLEARN_LEGACY_NARROW_EIGH_TD"
+]() else 2 * TD_NB
 comptime TD_NBP = TD_NB + 1
 comptime TD_TPB = 256
 #: Threads per block of the one-thread-per-eigenvalue kernels (small blocks
