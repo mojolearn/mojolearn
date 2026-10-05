@@ -779,6 +779,10 @@ def child_env(ctx, extra=None):
     env["MOJOLEARN_BOARD_VENDOR"] = ctx["vendor"]     # tools/bench_board_probe.py
     if ctx["vendor"] == "nvidia" and ctx.get("ptxas"):
         env.setdefault("MODULAR_NVPTX_COMPILER_PATH", ctx["ptxas"])
+    if ctx.get("artifact_manifest"):
+        env["MOJOLEARN_BOARD_ARTIFACT_MANIFEST"] = ctx["artifact_manifest"]
+        if ctx.get("receipt_dir"):
+            env["MOJOLEARN_BOARD_RECEIPTS"] = ctx["receipt_dir"]
     if extra:
         env.update(extra)
     return env
@@ -977,6 +981,9 @@ def box_key(box):
            "hostname": (box.get("host") or {}).get("hostname"),
            "mojolearn": (box.get("mojolearn") or {}).get("version"),
            "wheel_sha256": w.get("sha256")}
+    if box.get("artifact_identity"):
+        key["artifact_identity"] = box["artifact_identity"]
+        key["artifact_hardware"] = box.get("artifact_hardware")
     if gpu.get("vendor") == "nvidia":
         del key["hostname"]
         key["driver_major"] = str(gpu.get("driver") or "").split(".")[0] or None
@@ -2316,7 +2323,26 @@ def run_race(ctx, race):
         print("bench_board:   opponents not stored, not raced (ours-only default; "
               "--with-opponents races them): %s" % ", ".join(skipped), flush=True)
     mark = len(HOST_MEMORY_KILLS)
+    if ctx.get("artifact_identity"):
+        import tempfile
+        ctx = dict(ctx)
+        root = os.path.join(ctx["out"], "provenance")
+        os.makedirs(root, exist_ok=True)
+        ctx["receipt_dir"] = tempfile.mkdtemp(prefix="race-", dir=root)
     rec = _run_race(ctx, race)
+    if ctx.get("artifact_identity"):
+        try:
+            rows = _load_tool("bench_board_provenance").read_receipts(
+                ctx["receipt_dir"], ctx["artifact_identity"], race["our_arms"])
+            if any(row.get("hardware") != ctx["artifact_hardware"] for row in rows):
+                raise ValueError("Worker ran on a different physical GPU or driver")
+            rec["worker_provenance"] = rows
+        except (OSError, ValueError) as exc:
+            rec.update(status="failed", failure="WORKER PROVENANCE: " + str(exc))
+            for cell in rec.get("cells", []) + (rec.get("infer_cells") or []):
+                if cell.get("arm") in race["our_arms"]:
+                    _refuse_cell(cell, "WORKER PROVENANCE: " + str(exc))
+        rec["provenance_dir"] = os.path.relpath(ctx["receipt_dir"], ctx["out"])
     note_host_memory(rec, HOST_MEMORY_KILLS[mark:], race["arms"])
     rec["arms"] = [a for a in full["arms"] if a not in skipped]
     rec["stored_arms"] = sorted(stored)
@@ -2932,7 +2958,10 @@ def smoke_verdict(race, rec, vendor):
     key = smoke_key(race)
     cells = {c.get("arm"): c for c in rec.get("cells") or []}
     exempt = any(fnmatch.fnmatch(key, g) for g in QUALITY_EXEMPT)
+    skipped = set(rec.get("skipped_opponents") or []) & set(race.get("opponents") or [])
     for arm in race["arms"]:
+        if arm in skipped:
+            continue
         c = cells.get(arm)
         if c is None:
             fails.append((arm, "no cell"))
@@ -2961,6 +2990,7 @@ def write_smoke(out, races, result, vendor, shard):
     bad = sorted(k for k, v in verdicts.items() if not v["pass"])
     doc = {"schema": SMOKE_SCHEMA, "created": now_utc(), "commit": repo_commit(),
            "files_sha256": smoke_files_sha256(), "vendor": vendor, "shard": shard,
+           "artifact_identity": (result.get("config") or {}).get("artifact_identity"),
            "rows": SMOKE_ROWS, "total": len(verdicts), "passed": len(verdicts) - len(bad),
            "races": verdicts}
     with open(os.path.join(out, "smoke.json"), "w") as fh:
@@ -2975,7 +3005,7 @@ def write_smoke(out, races, result, vendor, shard):
     return len(bad)
 
 
-def smoke_gate(out, vendor, races, extra_paths=()):
+def smoke_gate(out, vendor, races, extra_paths=(), artifact_identity=None):
     """None when every planned race passed a smoke run of the same board and
     driver files on this vendor (the union of every smoke.json found: the
     <out>-smoke* directories beside --out and --smoke-json), else why not."""
@@ -2991,6 +3021,8 @@ def smoke_gate(out, vendor, races, extra_paths=()):
             continue
         if doc.get("schema") != SMOKE_SCHEMA or doc.get("vendor") != vendor \
                 or doc.get("files_sha256") != want:
+            continue
+        if doc.get("artifact_identity") != artifact_identity:
             continue
         seen.append(p)
         passed |= {k for k, v in (doc.get("races") or {}).items() if v.get("pass")}
@@ -3092,6 +3124,7 @@ def build_parser():
     p.add_argument("--backfill-store", default=None, metavar="BOARD_JSON",
                    help="import the opponent cells of an existing board.json into the store, "
                         "print how many were imported and skipped, and exit")
+    p.add_argument("--artifact-manifest", help="pin installed numerical artifacts and require actual worker path receipts; mandatory for forced PTX")
     p.add_argument("--smoke", action="store_true",
                    help="the measurement check: every planned race at --rows %d, one round, the "
                         "small neural shape, into <out>-smoke (never the board's own directory), "
@@ -3378,11 +3411,19 @@ def main(argv=None):
     # after every planned race passed a smoke run of these board and driver files
     full = not args.smoke and rows is None and not (
         any(r["family"] == "neural" for r in races) and args.neural_shape != "full")
+    try:
+        artifact_identity = _load_tool("bench_board_provenance").identity(args.artifact_manifest)
+    except (OSError, ValueError) as exc:
+        raise SystemExit("bench_board: artifact guard: " + str(exc))
+    if artifact_identity and args.no_smoke_gate:
+        raise SystemExit("bench_board: guarded path comparison cannot bypass smoke")
+    if artifact_identity and (vendor != "nvidia" or modes != ["identical"]):
+        raise SystemExit("bench_board: guarded path comparison requires NVIDIA IDENTICAL only")
     gate = None
     if full:
         gate = "overridden (--no-smoke-gate)" if args.no_smoke_gate else None
         if not args.no_smoke_gate:
-            why = smoke_gate(out, vendor, races, args.smoke_json)
+            why = smoke_gate(out, vendor, races, args.smoke_json, artifact_identity)
             if why:
                 raise SystemExit("bench_board: REFUSING to start a full board: " + why)
             gate = "passed (SMOKE PASS for every planned race, files %s)" % smoke_files_sha256()[:16]
@@ -3396,6 +3437,14 @@ def main(argv=None):
     if why:
         raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "
                          "so every race would refuse our arm:\n%s" % (vendor, why))
+    if artifact_identity:
+        # Validate installed bytes before spending GPU time, using the exact
+        # interpreter handed to workers. This is not a worker-load receipt.
+        verify = subprocess.run([python, os.path.join(HERE, "bench_board_provenance.py"),
+                                 "--verify", os.path.abspath(args.artifact_manifest)],
+                                capture_output=True, text=True)
+        if verify.returncode:
+            raise SystemExit("bench_board: installed artifact guard: " + verify.stderr[-1500:])
     if wheel is None and result:
         wheel = ((result.get("box") or {}).get("mojolearn") or {}).get("wheel")
     ptxas = None
@@ -3421,7 +3470,16 @@ def main(argv=None):
            "more_data": os.path.abspath(args.more_data or os.path.join(cache_dir(args, out), "more-data")),
            "algos_driver": os.path.abspath(args.algos_driver), "arm_python": arm_python,
            "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data"))}
+    ctx["artifact_manifest"] = os.path.abspath(args.artifact_manifest) if args.artifact_manifest else None
+    ctx["artifact_identity"] = artifact_identity
     box = box_fingerprint(ctx)
+    if artifact_identity:
+        box["artifact_identity"] = artifact_identity
+        box["artifact_hardware"] = capture(["nvidia-smi", "--query-gpu=uuid,name,compute_cap,driver_version",
+                                             "--format=csv,noheader,nounits"], timeout=30).strip()
+        if not box["artifact_hardware"] or "\n" in box["artifact_hardware"]:
+            raise SystemExit("bench_board: guarded run requires exactly one physical NVIDIA GPU")
+        ctx["artifact_hardware"] = box["artifact_hardware"]
     ctx["box"] = box
     ctx["retime"] = args.retime_opponents
     ctx["with_opponents"] = bool(args.with_opponents or args.retime_opponents)
@@ -3444,7 +3502,8 @@ def main(argv=None):
                 % (out, json.dumps(old, sort_keys=True), json.dumps(new, sort_keys=True)))
         result.setdefault("box_history", []).append({"resumed": now_utc(), "packages": box["packages"]})
         result["box"] = box
-    result["config"] = {"vendor": vendor, "modes": modes, "families": families,
+    result["config"] = {"artifact_identity": artifact_identity,
+                        "harness_sha256": smoke_files_sha256(), "vendor": vendor, "modes": modes, "families": families,
                         "lanes": lanes, "datasets": datasets, "rows": rows,
                         "rounds": args.rounds, "seed": SEED, "infer": not args.no_infer,
                         "neural_shape": args.neural_shape if "neural" in families else None,
