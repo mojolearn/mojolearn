@@ -355,7 +355,7 @@ def compare_boards(native, ptx):
                     raise ValueError('Missing timing: ' + rid + '/' + arm)
                 compared.append(dict(race=rid, arm=arm, phase=phase, native_ms=ms[0], ptx_ms=ms[1], ptx_over_native=ms[1]/ms[0]))
     return dict(schema='mojolearn-paired-board-comparison/1', source_commit=identities[0]['source_commit'],
-                experimental_overlay=overlay_key,
+                experimental_overlay=overlay_key, artifact_identities=identities,
                 hardware=hardware, races=len(native['plan']), comparisons=compared,
                 missing_output_digests=missing_hashes, identical_qualified=False, release_qualified=False)
 
