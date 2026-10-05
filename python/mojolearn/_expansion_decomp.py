@@ -477,6 +477,20 @@ class _Kit:
             self._w4_flags = f
         return f
 
+    def s_flags(self):
+        """lane/apple-fast-s-linalg: the binding's compiled speed candidates
+        (`x_decomp_s_flags`, x_decomp/s_linalg_fast.mojo: bit 1
+        RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS; 0 on a binding without
+        the entry)."""
+        f = self.__dict__.get("_s_flags")
+        if f is None:
+            try:
+                f = int(getattr(self._raw(), "x_decomp_s_flags")())
+            except Exception:
+                f = 0
+            self._s_flags = f
+        return f
+
     def qfix_flags(self):
         """lane/apple-fast-q-linalg: the binding's FAST quality repairs
         (`x_decomp_qfix_flags`, x_decomp/qfix.mojo: bit 1 SVD_QFIX, bit 2
@@ -847,7 +861,10 @@ class _Kit:
         Householder R and a row-parallel A R^-1 (DEVIATION 5309)."""
         if A.r * A.c and self._use(A):
             Q = self._dout(A.r, A.c)
-            self.b.x_decomp_dev_orth(self._did(A), Q._d.id, [A.r, A.c])
+            # DECOMP_FAST_ORTH_WS (default off, FAST + Apple): the same passes
+            # with pooled device work buffers (x_decomp/s_linalg_fast.mojo)
+            fn = self.b.x_decomp_dev_orth_ws if self.s_flags() & 2 else self.b.x_decomp_dev_orth
+            fn(self._did(A), Q._d.id, [A.r, A.c])
             return Q
         Q = A.copy()
         self.b.x_decomp_orth(Q.addr, [A.r, A.c])
@@ -2715,6 +2732,13 @@ def _rsvd_direct_input(k, M, transpose):
         raise ValueError("M: a nonempty two-dimensional input is required")
     if transpose is True or (transpose == "auto" and a.shape[0] < a.shape[1]):
         return None     # `_rsvd_core` transposes on the host: main's route
+    if k.s_flags() & 1:
+        # RSVD_FAST_DEVSCAN (default off, FAST + Apple; x_decomp/s_linalg_fast.mojo):
+        # upload, then the finiteness scan on the device copy (the same refusal)
+        A = _M._on_device(_DevBuf(k._raw(), a.size), a.shape[0], a.shape[1])
+        if int(k.b.x_decomp_dev_upload_scan(A._d.id, addr_ro(a, name="M"), a.size)) >= 0:
+            raise ValueError("M: input must be finite; NaN/inf are unsupported")
+        return A
     fin = _host_all_finite(a)
     if fin is None:
         return None

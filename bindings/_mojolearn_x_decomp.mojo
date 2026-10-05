@@ -45,6 +45,7 @@ from x_decomp.lanczos_dev import dev_lanczos_py, ipca_dev_on_py, kpca_lanczos_de
 from x_decomp.w4_fast import LLE_FAST_DEV_LU, dev_lu_aux_py, w4_flags_py
 from x_decomp.qfix import LU_QFIX, lu_resid_py, qfix_flags_py
 from x_decomp.tsvd_fast import TSVD_FAST_CHOLQR3, tsvd_cholqr_r_py
+from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, RSVD_FAST_DEVSCAN, dev_orth_ws_py, dev_upload_scan_py, s_flags_py
 
 
 @export
@@ -140,6 +141,13 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         # (default off, FAST + Apple): TSVD_QFIX's R by shifted CholeskyQR3
         comptime if TSVD_FAST_CHOLQR3:
             m.def_function[tsvd_cholqr_r_py]("x_decomp_tsvd_cholqr_r")
+        # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 1 RSVD_FAST_DEVSCAN,
+        # bit 2 DECOMP_FAST_ORTH_WS (each default off, FAST + Apple)
+        m.def_function[s_flags_py]("x_decomp_s_flags")
+        comptime if RSVD_FAST_DEVSCAN:
+            m.def_function[dev_upload_scan_py]("x_decomp_dev_upload_scan")
+        comptime if DECOMP_FAST_ORTH_WS:
+            m.def_function[dev_orth_ws_py]("x_decomp_dev_orth_ws")
         comptime if LLE_FAST_DEV_LU:
             m.def_function[dev_lu_aux_py]("x_decomp_dev_lu_aux")
         m.def_function[dev_knn_select_py]("x_decomp_dev_knn_select")
