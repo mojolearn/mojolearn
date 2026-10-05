@@ -190,5 +190,8 @@ def dsum_f32_py(a: PythonObject, n: PythonObject) raises -> PythonObject:
     var m = Int(py=n)
     if m <= 0:
         return PythonObject(0.0)
-    var A = mat_from(_f(a), 1, m)
-    return PythonObject(dsum(A, 0, m))
+    var pa = _f(a)
+    var t = 0.0
+    for i in range(m):  # small-loop(m: features): the d float32 words of one log-likelihood term
+        t += Float64(pa.unsafe_load(i))
+    return PythonObject(t)

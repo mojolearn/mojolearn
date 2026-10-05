@@ -17,6 +17,9 @@ comptime _OP_MAX = 30
 comptime _OP_EXP = 9
 comptime _OP_LOGS = 10
 comptime _OP_LGAMMA = 37
+#: the series's term bound and the bisection count of `_chi2_cdf` / `_chi2_quantile`
+comptime CHI2_TERMS = 4000
+comptime CHI2_BISECT = 80
 
 
 def chi2_cdf(dof: Float64, m: Float64) -> Float64:
@@ -31,7 +34,7 @@ def chi2_cdf(dof: Float64, m: Float64) -> Float64:
     var pref = Float64(ew_cell(_OP_EXP, Float32(a * lx - x - lg), z, z, z))
     var term = 1.0
     var tot = 1.0
-    for n in range(1, 4000):
+    for n in range(1, CHI2_TERMS):  # small-loop(CHI2_TERMS: series terms): float64 scalar series, no data
         term *= x / (a + Float64(n))
         tot += term
         if term < 1e-17 * tot:
@@ -47,7 +50,7 @@ def chi2_quantile(dof: Float64, upper: Float64) -> Float64:
     var hi = 4.0 * dof + 40.0
     if not (hi > 1.0):
         hi = 1.0
-    for _ in range(80):
+    for _ in range(CHI2_BISECT):  # small-loop(CHI2_BISECT: bisection steps): float64 scalar search, no data
         var mid = 0.5 * (lo + hi)
         if chi2_cdf(dof, mid) < target:
             lo = mid
@@ -91,7 +94,7 @@ def lda_bound_host_py(
     var pc = _fp(dcomp)
     var po = _fp(dst)
     var z = Float32(0)
-    for c in range(n * vv):
+    for c in range(n * vv):  # host column only (registered in the host binding)
         var i = c // vv
         var w = c - i * vv
         var mx = Float32(0)
