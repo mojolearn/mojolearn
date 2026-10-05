@@ -671,12 +671,20 @@ class TruncatedSVD(NumericModeMixin):
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn TruncatedSVD requires at least 2 rows and 2 features")
         nc = _component_count(self.n_components, x.shape)
-        self.components_ = empty((nc, x.shape[1]), "<f4")
-        self.singular_values_ = empty((nc,), "<f4")
-        self._bind("_mojolearn_estimators").tsvd_fit(
-            addr_ro(x, name="x"), addr(self.components_, name="components_"), addr(self.singular_values_, name="singular_values_"),
-            [x.shape[0], x.shape[1], nc],
-        )
+        # lane/apple-fast-q-linalg TSVD_QFIX (FAST default; -D
+        # MOJOLEARN_TSVD_QOLD restores the Gram): the TSQR R's right singular
+        # vectors on a tall x (`_linalg_impl._tsvd_tsqr_components`)
+        from ._linalg_impl import _tsvd_tsqr_components
+        got = _tsvd_tsqr_components(x, nc, self.numeric_mode_used())
+        if got is not None:
+            self.components_, self.singular_values_ = got
+        else:
+            self.components_ = empty((nc, x.shape[1]), "<f4")
+            self.singular_values_ = empty((nc,), "<f4")
+            self._bind("_mojolearn_estimators").tsvd_fit(
+                addr_ro(x, name="x"), addr(self.components_, name="components_"), addr(self.singular_values_, name="singular_values_"),
+                [x.shape[0], x.shape[1], nc],
+            )
         # scikit-learn's explained_variance_ / _ratio_ (np.var of X V^T per
         # column, ddof 0, against the summed column variances of X), in this
         # class's own binding (`tsvd_explained`, decomposition/estimator.mojo

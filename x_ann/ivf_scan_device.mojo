@@ -33,6 +33,7 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_SCAN_SELECT
+from x_ann.vsearch_fast import PQ_LUT_TILED, PQ_SCAN_FUSED
 from x_ann.ivf_pq_core import (
     F32P, I32P, ivf_row_removed, pq_better, pq_coarse_dist, pq_inf, pq_insert, pq_lut_entry, pq_probe_takes,
 )
@@ -656,6 +657,270 @@ def select_group_kernel(
             out_n.unsafe_store(qi, Int32(total))
 
 
+#: slots per thread per window of the fused scan (lane af-vsearch): SEL_T x
+#: PQ_FUSED_R = 1,024 slots per window; a longer list takes more windows, each
+#: staging the table tiles again
+comptime PQ_FUSED_R = 8
+
+
+def pq_score_tiled_kernel(
+    q0: Int32, n_probes: Int32, queries: F32P, dim: Int32, centers: F32P, offsets: I32P, list_indices: I32P,
+    codes: I32P, cb: F32P, pq_dim: Int32, pq_len: Int32, n_codes: Int32, probes: I32P,
+    pstart: I32P, stride: Int32, mask: I32P, cand: F32P,
+):
+    """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, `PQ_LUT_TILED`; `_OFF` rolls back): `pq_score_kernel`
+    with the lookup table staged in TILES of at most LUT_MAX entries (whole
+    subspaces per tile), so Istella's 55 x 256 table (14,080 entries, which
+    main evaluates per candidate from device memory because it does not fit)
+    is read from threadgroup memory in four tiles. The query residual
+    `ftz(ftz(q) - ftz(center))` (0 past dim) is formed once per threadgroup
+    into threadgroup memory; each entry is `pq_lut_entry`'s fold over the
+    same words; each candidate's total is `ts_ftz_nonneg(total + v)` over j
+    ascending, carried between tiles in the candidate buffer: the same words
+    as main. The launch checks pq_dim * pq_len <= SCORE_DIM_MAX and
+    n_codes <= LUT_MAX."""
+    var b = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var lq = b // Int(n_probes)
+    var l = Int(probes.unsafe_load(b))
+    var lut = stack_allocation[LUT_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var qr = stack_allocation[SCORE_DIM_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    if l < 0:
+        return
+    var d = Int(dim)
+    var pd = Int(pq_dim)
+    var pl = Int(pq_len)
+    var nc = Int(n_codes)
+    var rot = pd * pl
+    var q_off = (Int(q0) + lq) * d
+    for c in range(t, rot, STPB):
+        var v = Float32(0.0)
+        if c < d:
+            v = ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(l * d + c)))
+        qr[c] = v
+    var start = Int(offsets.unsafe_load(l))
+    var stop = Int(offsets.unsafe_load(l + 1))
+    var base = lq * Int(stride) + Int(pstart.unsafe_load(b)) - start
+    var jt = LUT_MAX // nc
+    var j0 = 0
+    while j0 < pd:
+        var jn = pd - j0
+        if jn > jt:
+            jn = jt
+        # the previous tile's readers (and the residual's writers) are done
+        barrier()
+        for e in range(t, jn * nc, STPB):
+            var j = j0 + e // nc
+            var code = e % nc
+            var cbase = (j * nc + code) * pl
+            var acc = Float32(0.0)
+            for u in range(pl):
+                var diff = ftz(qr[j * pl + u] - ftz(cb.unsafe_load(cbase + u)))
+                acc = ftz(identical_mul_add(diff, diff, acc))
+            lut[e] = acc
+        barrier()
+        for slot in range(start + t, stop, STPB):
+            if ivf_row_removed(mask, slot):
+                continue
+            var total = Float32(0.0)
+            if j0 > 0:
+                total = cand.unsafe_load(base + slot)
+            for j in range(j0, j0 + jn):
+                var code = Int(codes.unsafe_load(slot * pd + j))
+                total = ts_ftz_nonneg(total + lut[(j - j0) * nc + code])
+            cand.unsafe_store(base + slot, total)
+        j0 += jn
+
+
+@always_inline
+def _pq_fused_seq(
+    lq: Int, qi: Int, np: Int, queries: F32P, q_off: Int, dim: Int, centers: F32P, offsets: I32P,
+    list_indices: I32P, codes: I32P, cb: F32P, pd: Int, pl: Int, nc: Int, mask: I32P, probes: I32P,
+    kk: Int, out_d: F32P, out_i: I32P, out_n: I32P,
+):
+    """The cell's query on one thread (`pq_search_cell`'s probe and slot
+    order, each candidate's `ts_ftz_nonneg` code sum of `pq_lut_entry`
+    values, `pq_insert`): the fused kernel's answer for a query with a NaN
+    candidate, where the result depends on insertion order. `codes` and
+    `mask` are the list-order arrays, indexed by slot."""
+    var base = qi * kk
+    for s in range(kk):
+        out_d.unsafe_store(base + s, pq_inf())
+        out_i.unsafe_store(base + s, Int32(-1))
+    var n_cand = 0
+    for p in range(np):
+        var l = Int(probes.unsafe_load(lq * np + p))
+        if l < 0:
+            break
+        var start = Int(offsets.unsafe_load(l))
+        var stop = Int(offsets.unsafe_load(l + 1))
+        for slot in range(start, stop):
+            if ivf_row_removed(mask, slot):
+                continue
+            var total = Float32(0.0)
+            for j in range(pd):
+                var code = Int(codes.unsafe_load(slot * pd + j))
+                total = ts_ftz_nonneg(total + pq_lut_entry(queries, q_off, centers, l, dim, cb, j, code, pl, nc))
+            pq_insert(kk, base, total, list_indices.unsafe_load(slot), out_d, out_i)
+            n_cand += 1
+    out_n.unsafe_store(qi, Int32(n_cand))
+
+
+def pq_scan_fused_kernel(
+    q0: Int32, n_probes: Int32, queries: F32P, dim: Int32, centers: F32P, offsets: I32P, list_indices: I32P,
+    codes: I32P, cb: F32P, pq_dim: Int32, pq_len: Int32, n_codes: Int32, probes: I32P, mask: I32P,
+    k: Int32, out_d: F32P, out_i: I32P, out_n: I32P,
+):
+    """FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, `PQ_SCAN_FUSED`; `_OFF` rolls back): the IVF-PQ
+    score and top-k in ONE launch, one threadgroup of SEL_T per query, for
+    k <= SEL_KM. For each probed list, in windows of SEL_T x PQ_FUSED_R
+    slots: the lookup table is staged in tiles (`pq_score_tiled_kernel`'s
+    tiles and words, the query residual staged once per list), thread t
+    accumulates the code sums of slots t, t + SEL_T, ... of the window in
+    registers over the tiles, then inserts each finished total into its
+    register top-k (`select_group_kernel`'s statements). The SEL_T lists are
+    joined in threadgroup memory (the table's memory, which is free by then)
+    by `select_group_kernel`'s tree, and thread 0 writes list 0 and the
+    summed count. No candidate buffer, no select launches. Row ids are
+    distinct, so (distance, row id) is a total order and the k least are the
+    entries main keeps, whatever the scan order: the same words. A NaN
+    candidate sends the query to the cell's own sequential insertion
+    (`_pq_fused_seq`), as `select_group_kernel` does. `codes` and `mask` are
+    the list-order arrays."""
+    var lq = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var np = Int(n_probes)
+    var kk = Int(k)
+    var d = Int(dim)
+    var pd = Int(pq_dim)
+    var pl = Int(pq_len)
+    var nc = Int(n_codes)
+    var rot = pd * pl
+    var qi = Int(q0) + lq
+    var q_off = qi * d
+    # the table tile; after the scan it holds the partial top-k distances
+    var lut = stack_allocation[LUT_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var qr = stack_allocation[SCORE_DIM_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var si = stack_allocation[SEL_T * SEL_KM, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var sn = stack_allocation[SEL_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var ld = InlineArray[Float32, SEL_KM](fill=pq_inf())
+    var li = InlineArray[Int32, SEL_KM](fill=Int32(-1))
+    var n_cand = 0
+    var has_nan = False
+    var jt = LUT_MAX // nc
+    for p in range(np):
+        var l = Int(probes.unsafe_load(lq * np + p))
+        if l < 0:
+            break
+        # the previous list's readers of the residual and the table are done
+        barrier()
+        for c in range(t, rot, SEL_T):
+            var v = Float32(0.0)
+            if c < d:
+                v = ftz(ftz(queries.unsafe_load(q_off + c)) - ftz(centers.unsafe_load(l * d + c)))
+            qr[c] = v
+        var start = Int(offsets.unsafe_load(l))
+        var stop = Int(offsets.unsafe_load(l + 1))
+        var w0 = start
+        while w0 < stop:
+            var accs = InlineArray[Float32, PQ_FUSED_R](fill=Float32(0.0))
+            var j0 = 0
+            while j0 < pd:
+                var jn = pd - j0
+                if jn > jt:
+                    jn = jt
+                barrier()
+                for e in range(t, jn * nc, SEL_T):
+                    var j = j0 + e // nc
+                    var code = e % nc
+                    var cbase = (j * nc + code) * pl
+                    var acc = Float32(0.0)
+                    for u in range(pl):
+                        var diff = ftz(qr[j * pl + u] - ftz(cb.unsafe_load(cbase + u)))
+                        acc = ftz(identical_mul_add(diff, diff, acc))
+                    lut[e] = acc
+                barrier()
+                for r in range(PQ_FUSED_R):
+                    var slot = w0 + t + r * SEL_T
+                    if slot < stop and not ivf_row_removed(mask, slot):
+                        var total = accs[r]
+                        for j in range(j0, j0 + jn):
+                            var code = Int(codes.unsafe_load(slot * pd + j))
+                            total = ts_ftz_nonneg(total + lut[(j - j0) * nc + code])
+                        accs[r] = total
+                j0 += jn
+            for r in range(PQ_FUSED_R):
+                var slot = w0 + t + r * SEL_T
+                if slot < stop and not ivf_row_removed(mask, slot):
+                    var v = accs[r]
+                    var row = list_indices.unsafe_load(slot)
+                    if _nan_bits(v):
+                        has_nan = True
+                    n_cand += 1
+                    if pq_better(v, row, ld[kk - 1], li[kk - 1]):
+                        var s = kk - 1
+                        while s > 0 and pq_better(v, row, ld[s - 1], li[s - 1]):
+                            ld[s] = ld[s - 1]
+                            li[s] = li[s - 1]
+                            s -= 1
+                        ld[s] = v
+                        li[s] = row
+            w0 += SEL_T * PQ_FUSED_R
+    # every thread is done with the table before it holds the lists
+    barrier()
+    for s in range(kk):
+        lut[t * SEL_KM + s] = ld[s]
+        si[t * SEL_KM + s] = li[s]
+    sn[t] = Int32(-1) if has_nan else Int32(n_cand)
+    barrier()
+    var lists = SEL_T
+    while lists > 1:
+        var pairs = lists // 2
+        if t < pairs:
+            var xa = 2 * t * SEL_KM
+            var xb = xa + SEL_KM
+            var u = 0
+            var w = 0
+            for s in range(kk):
+                var ud = lut[xa + u]
+                var ui = si[xa + u]
+                var vd = lut[xb + w]
+                var vi = si[xb + w]
+                # take u's entry when it is first (an empty slot is last)
+                if ui >= 0 and (vi < 0 or pq_better(ud, ui, vd, vi)):
+                    ld[s] = ud
+                    li[s] = ui
+                    u += 1
+                else:
+                    ld[s] = vd
+                    li[s] = vi
+                    w += 1
+        barrier()
+        if t < pairs:
+            for s in range(kk):
+                lut[t * SEL_KM + s] = ld[s]
+                si[t * SEL_KM + s] = li[s]
+        barrier()
+        lists = pairs
+    if t == 0:
+        var any_nan = False
+        var total = 0
+        for u in range(SEL_T):
+            var c = Int(sn[u])
+            if c < 0:
+                any_nan = True
+            else:
+                total += c
+        if any_nan:
+            _pq_fused_seq(lq, qi, np, queries, q_off, d, centers, offsets, list_indices, codes, cb, pd, pl, nc,
+                          mask, probes, kk, out_d, out_i, out_n)
+        else:
+            for s in range(kk):
+                out_d.unsafe_store(qi * kk + s, lut[s])
+                out_i.unsafe_store(qi * kk + s, si[s])
+            out_n.unsafe_store(qi, Int32(total))
+
+
 def scan_stride(offsets: List[Int32], n_lists: Int, n_probes: Int) -> Int:
     """The longest candidate row a query can have: the n_probes longest
     lists, summed (at least 1)."""
@@ -728,7 +993,13 @@ def ivf_scan_search[KIND: Int](
     var dcd = ctx.enqueue_create_buffer[DType.float32](mc * n_lists)
     var dprobes = ctx.enqueue_create_buffer[DType.int32](mc * np)
     var dpstart = ctx.enqueue_create_buffer[DType.int32](mc * np)
-    var dcand = ctx.enqueue_create_buffer[DType.float32](mc * stride)
+    # lane af-vsearch, FAST on Apple, DEFAULT since 2026-10-04 (`PQ_SCAN_FUSED`): the score and
+    # the top-k in one launch per chunk; no candidate buffer, no select
+    # launches (k <= SEL_KM; the table tile and the residual fit)
+    var fused = False
+    comptime if KIND == 0 and PQ_SCAN_FUSED and not is_defined["MOJOLEARN_ANN_SERIAL_SCAN"]():
+        fused = k <= SEL_KM and pq_dim * pq_len <= SCORE_DIM_MAX and n_codes <= LUT_MAX
+    var dcand = ctx.enqueue_create_buffer[DType.float32](1 if fused else mc * stride)
     var dws = ctx.enqueue_create_buffer[DType.float32]((mc * np * D) if KIND == 2 else 1)
     var dqn = ctx.enqueue_create_buffer[DType.float32]((mc * np) if KIND == 2 else 1)
     comptime SERIAL = is_defined["MOJOLEARN_ANN_SERIAL_SCAN"]()
@@ -737,8 +1008,8 @@ def ivf_scan_search[KIND: Int](
     # in threadgroup memory and these device buffers are one word
     var grouped = False
     comptime if SCAN_SELECT_GROUP:
-        grouped = k <= SEL_KM
-    var no_parts = SERIAL or grouped
+        grouped = k <= SEL_KM and not fused
+    var no_parts = SERIAL or grouped or fused
     var dpd = ctx.enqueue_create_buffer[DType.float32](1 if no_parts else mc * SEL_T * k)
     var dpi = ctx.enqueue_create_buffer[DType.int32](1 if no_parts else mc * SEL_T * k)
     var dpn = ctx.enqueue_create_buffer[DType.int32](1 if no_parts else mc * SEL_T)
@@ -797,12 +1068,32 @@ def ivf_scan_search[KIND: Int](
             )
         st.mark(ctx, "probe")
         comptime if KIND == 0:
-            ctx.enqueue_function[pq_score_kernel](
-                Int32(q0), Int32(np), dq, Int32(dim), dc, doff,
-                dli, gcodes, fa, Int32(pq_dim), Int32(pq_len),
-                Int32(n_codes), Int32(use_lut), dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
-                gmask, dcand.unsafe_ptr(), grid_dim=c * np, block_dim=STPB,
-            )
+            # lane af-vsearch, FAST on Apple, DEFAULT since 2026-10-04: the fused scan
+            # (`PQ_SCAN_FUSED`) or the tiled-table score (`PQ_LUT_TILED`)
+            var tiled = False
+            comptime if PQ_LUT_TILED:
+                tiled = (not fused) and pq_dim * pq_len <= SCORE_DIM_MAX and n_codes <= LUT_MAX
+            comptime if PQ_SCAN_FUSED:
+                if fused:
+                    ctx.enqueue_function[pq_scan_fused_kernel](
+                        Int32(q0), Int32(np), dq, Int32(dim), dc, doff, dli, gcodes, fa, Int32(pq_dim),
+                        Int32(pq_len), Int32(n_codes), dprobes.unsafe_ptr(), gmask, Int32(k), dd, di, dn,
+                        grid_dim=c, block_dim=SEL_T,
+                    )
+            comptime if PQ_LUT_TILED:
+                if tiled:
+                    ctx.enqueue_function[pq_score_tiled_kernel](
+                        Int32(q0), Int32(np), dq, Int32(dim), dc, doff, dli, gcodes, fa, Int32(pq_dim),
+                        Int32(pq_len), Int32(n_codes), dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
+                        gmask, dcand.unsafe_ptr(), grid_dim=c * np, block_dim=STPB,
+                    )
+            if not fused and not tiled:
+                ctx.enqueue_function[pq_score_kernel](
+                    Int32(q0), Int32(np), dq, Int32(dim), dc, doff,
+                    dli, gcodes, fa, Int32(pq_dim), Int32(pq_len),
+                    Int32(n_codes), Int32(use_lut), dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
+                    gmask, dcand.unsafe_ptr(), grid_dim=c * np, block_dim=STPB,
+                )
         elif KIND == 1:
             ctx.enqueue_function[sq_score_kernel](
                 Int32(q0), Int32(np), dq, Int32(dim), dc, doff,
@@ -836,7 +1127,7 @@ def ivf_scan_search[KIND: Int](
                         Int32(q0), Int32(np), doff, dli, dmask, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(),
                         Int32(stride), dcand.unsafe_ptr(), Int32(k), dd, di, dn, grid_dim=c, block_dim=SEL_T,
                     )
-            if not grouped:
+            if not grouped and not fused:
                 ctx.enqueue_function[select_part_kernel](
                     Int32(np), doff, dli, dmask, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
                     dcand.unsafe_ptr(), Int32(k), dpd.unsafe_ptr(), dpi.unsafe_ptr(), dpn.unsafe_ptr(),

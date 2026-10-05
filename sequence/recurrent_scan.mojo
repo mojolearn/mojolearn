@@ -37,6 +37,17 @@ from x_linear.team import team_barrier
 from sequence.ops import FP, Args, add, fma3, gates_of, ld, op_cell_bwd, op_cell_bwd_h, op_cell_fwd, op_cell_fwd_h, st
 
 comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab2 @ 40027eb8e), the bundle SCAN + SCAN_SMEM + WGRAD:
+#: lstm-clf 1877.4 -> 1315.5 ms but accuracy 0.9608 -> 0.5002, logloss 0.0954
+#: -> 0.6931; lstm-reg 1876.9 -> 1312.2 ms but r2 0.9804 -> -0.1043. BROKEN, the
+#: model does not train: DROPPED-quality, all three stay off. Symptom: logloss
+#: = ln 2 and r2 ~ 0 are a constant predictor, so the recurrence contributes
+#: nothing (h_T or the recurrent/weight gradients come out zero or unused).
+#: The cause is not evident from reading the code (the step pointers in
+#: fwd_step / bwd_step match the per-step launches, team_barrier orders device
+#: memory on Apple); not fixed here. Next: an ID check of SCAN alone against the
+#: per-step path (it claims the same bits), then SMEM, then WGRAD.
 #: nr-small (review D2, 2026-10-04): CANDIDATE, default OFF. The one-launch
 #: scan under IDENTICAL on every GPU, for the owed NV/AMD/Apple ID check
 #: (the chain order is the T-launch path's; `team_barrier` orders device

@@ -18,7 +18,11 @@ TAG=$1 LANE=$2 DS=$3 REPS=$4 ROUNDS=$5 EA=$6 EB=${7:-}
 for b in board-0834 board-0833; do [ -d $HOME/$b/cache/algos-data/rows-full ] && { B=$HOME/$b; break; }; done
 VP=$B/cache/venv/bin/python
 # AFC_FAMILY: algos (default, tools/bench_board_algos.py), classical2
-# (tools/bench_board_more.py) or classical (tools/classical_two_datasets.py)
+# (tools/bench_board_more.py), classical (tools/classical_two_datasets.py) or
+# trees (tools/afc_trees_race.py: bench_board.py's own trees race for our one
+# arm, forest_speed_arm.py --ours-only at MOJOLEARN_SPEED_SIZE=shipped, one
+# untimed warm-up + <rounds> timed; data = GBM_BENCH_DATA, default
+# ~/datasets/gbm-bench, the Apple board's data_root)
 FAM=${AFC_FAMILY:-algos}
 case $FAM in
   algos) DRV=tools/bench_board_algos.py; PFX=ALGOS; DATA=$B/cache/algos-data/rows-full; XARGS= ;;
@@ -26,6 +30,7 @@ case $FAM in
      DATA=$(find $B -maxdepth 4 -type d -name more-data 2>/dev/null | head -1)/rows-full; XARGS= ;;
   classical) DRV=tools/classical_two_datasets.py; PFX=CTD
      DATA=$(find $B -maxdepth 4 -type d -name ctd-data 2>/dev/null | head -1)/rows-full; XARGS="--root $PWD" ;;
+  trees) DRV=tools/afc_trees_race.py; PFX=TREES; DATA=${GBM_BENCH_DATA:-$HOME/datasets/gbm-bench}; XARGS= ;;
 esac
 OUT=$HOME/mq/out/race-$TAG; mkdir -p $OUT
 LOG=$OUT/race.log

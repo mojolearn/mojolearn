@@ -128,6 +128,9 @@ comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
 #:    into the caller's array in SEQ_PIPE_CH chunks, all queued, one wait
 #:    (no stage and no host read).
 #: Copies only: the same bytes.
+#: SEQ_FAST_MAP_DOWN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 50.2 -> 79.8 ms.
+#: DROPPED-slower: stays off.
 comptime SEQ_MAP_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_MAP_DOWN"]()
 comptime SEQ_RAW_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]() and not SEQ_MAP_DOWN
 

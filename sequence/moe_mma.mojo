@@ -35,6 +35,9 @@ from checks.numerics import ftz, identical_silu
 from sequence.ops import FP, ld, mul, st
 from sequence.moe_reg import MOE_DEVGROUP
 
+# MERGED-UNMEASURED, source5e2eec7a3, gapmisc-moe-*; default OFF.
+# No judged A/B run; geometry variants are not validated winners.
+# See docs/apple-fast/EXPERIMENTS.md (MOE_FAST_MMA); neural lane owns validation.
 comptime MM_KB32 = is_defined["MOJOLEARN_MOE_FAST_MMA_KB32"]()
 comptime MM_WIDE = is_defined["MOJOLEARN_MOE_FAST_MMA_WIDE"]()
 comptime MM_PF = is_defined["MOJOLEARN_MOE_FAST_MMA_PF"]()

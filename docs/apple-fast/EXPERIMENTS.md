@@ -5,6 +5,10 @@ Sources: `~/mojolearn-evidence/apple-fast/LEDGER.md` (every KEEP / DROP / MERGED
 
 Process: [experiment validation, toggle lifecycle and promotion](EXPERIMENT_PROCESS.md).
 
+## Rule: FAST needs no identical anything (2026-10-04)
+
+FAST never needs identical results: not bits, digests or arm-A equality, and not across vendors or runs. A FAST A/B is judged on speed, and on quality not going down. The board quality metric must show no material drop against FAST main (arm A), and must be at least as good as the best opponent's. A noise-level difference, a new fold order or new bits is never a reason to hold. Any real quality loss is. Strict "B <= A on every metric, zero allowance" gates are retired for FAST verdicts; they may still be reported as information.
+
 ## How to use it
 
 - **Before you write a new experiment, search this file for the define** (and for the algorithm). If it was dropped, read the reason first. Do not re-run a dropped idea unless the code it touched has changed since.
@@ -94,22 +98,23 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `SYM_HIST_FAST + YETI_SYM_HIST_UNROLL8` | yetirank | lane/apple-fast-yetirank @ c7b35fd7c | yeti-h8unroll | yetirank 5,315 -> 5,373 | DROPPED-slower | +1.1%; SYM_HIST_FAST: code removed from main 6f5ace7fa; recover at lane/apple-fast-yetirank@c7b35fd7c; YETI_SYM_HIST_UNROLL8: code removed from main 4f634c5d0; recover at lane/apple-fast-yetirank@c7b35fd7c |
 | `SYM_NO_TAIL_DRAIN` | symmetric / istella | lane/apple-fast-trees-symmetric @ ce517b4b3 | tsym-notail-istella | symmetric istella 16,998 -> 17,106 | DROPPED-noise | +0.6% |
 | `YETI_TREE_SEARCH_SCORE_GRID` | yetirank | lane/apple-fast-yetirank @ c7b35fd7c | yeti-scoregrid | yetirank 5,304 -> 5,288 | DROPPED-noise | -0.3%, overlap; code removed from main 99da8a08f; recover at lane/apple-fast-yetirank@c7b35fd7c |
-| `CTR_INDEX_FUSED` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-index-fused-taxicat | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `CTR_ONEHOT_DEVICE` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-onehot-device-taxicat | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `CTR_PREP_SHARED` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-prep-shared-taxicat | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `CTR_SORT_ONCE` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-sort-once-taxicat | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `EST_REUSE_PART` | symmetric / istella | lane/apple-fast-sym-est @ c8518eb52 | sym-est-rp-ist | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `EST_SHRINK_FUSED` | symmetric / istella | lane/apple-fast-sym-est @ c8518eb52 | sym-est-sh-ist, sym-est-sh-1k-ist | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `EST_STATS_FUSED` | symmetric / istella | lane/apple-fast-sym-est @ c8518eb52 | sym-est-sf-ist | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `GBDT_BOOT_DEVICE` | symmetric / istella | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-boot-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `GBDT_EVAL_FUSED` | symmetric / istella | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-evfused-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `GBDT_EVAL_SKIP_EMPTY` | symmetric / istella, taxi | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-evskip-istella, sym-feat-evskip-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `GBDT_INDEX_PACK_DEVICE` | symmetric / istella, taxi | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-pack-istella, sym-feat-pack-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `GBDT_PREDICT_PACKED` | symmetric / istella, taxi | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-pred-istella, sym-feat-pred-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `GBDT_QUANT_DEVICE` | symmetric / istella, taxi | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-quant-istella, sym-feat-quant-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `MC_CLASS_BATCH_DERIV` | multiclass / pairlogit / yetirank / istella, taxi | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-mc-deriv-istella, symmulti-mc-deriv-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `MC_CLASS_BATCH_DERIV + MC_CLASS_BATCH_EST` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-mc-both-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `MC_CLASS_BATCH_EST` | multiclass / pairlogit / yetirank / istella, taxi | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-mc-est-istella, symmulti-mc-est-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `CTR_INDEX_FUSED` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-index-fused-taxicat | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; old-base HOLD 27,240 -> 25,566 (-6.1%), AUC .630808 -> .630766 (Oct 4 table); current-main A/B owed |
+| `CTR_ONEHOT_DEVICE` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-onehot-device-taxicat | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed |
+| `CTR_PREP_SHARED` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-prep-shared-taxicat | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; old-base HOLD 27,548 -> 26,357 (-4.3%), AUC .631249 -> .630964 (Oct 4 table); current-main A/B owed |
+| `CTR_SORT_ONCE` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-sort-once-taxicat | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed |
+| `EST_ITERS_DEVICE` | symmetric / istella | lane/apple-fast-sym-est @ c8518eb52 | - | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed (no row at the source); in SYM_EST_ALL |
+| `EST_REUSE_PART` | symmetric / istella | lane/apple-fast-sym-est @ c8518eb52 | sym-est-rp-ist | - | DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15) | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `EST_SHRINK_FUSED` | symmetric / istella | lane/apple-fast-sym-est @ c8518eb52 | sym-est-sh-ist, sym-est-sh-1k-ist | - | DROPPED-inconclusive (-2.8% 1k old base) | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `EST_STATS_FUSED` | symmetric / istella | lane/apple-fast-sym-est @ c8518eb52 | sym-est-sf-ist | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed; in SYM_EST_ALL |
+| `GBDT_BOOT_DEVICE` | symmetric / istella | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-boot-istella | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed |
+| `GBDT_EVAL_FUSED` | symmetric / istella | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-evfused-istella | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed |
+| `GBDT_EVAL_SKIP_EMPTY` | symmetric / istella, taxi | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-evskip-istella, sym-feat-evskip-taxi | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed |
+| `GBDT_INDEX_PACK_DEVICE` | symmetric / istella, taxi | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-pack-istella, sym-feat-pack-taxi | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed; pack kernel now compares by exact_f32_gt (main subnormal fix) |
+| `GBDT_PREDICT_PACKED` | symmetric / istella, taxi | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-pred-istella, sym-feat-pred-taxi | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed |
+| `GBDT_QUANT_DEVICE` | symmetric / istella, taxi | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-quant-istella, sym-feat-quant-taxi | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed; pack kernel compares by exact_f32_gt |
+| `MC_CLASS_BATCH_DERIV` | multiclass / pairlogit / yetirank / istella, taxi | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-mc-deriv-istella, symmulti-mc-deriv-taxi | - | DROPPED-noise | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `MC_CLASS_BATCH_DERIV + MC_CLASS_BATCH_EST` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-mc-both-istella | - | DROPPED-noise | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `MC_CLASS_BATCH_EST` | multiclass / pairlogit / yetirank / istella, taxi | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-mc-est-istella, symmulti-mc-est-taxi | - | DROPPED-noise | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
 | `ORD_ALL` (`_OFF`) | ordered / istella, taxi | lane/apple-fast-sym-ordered @ 27b912397 | sym-ordered-all-taxi, sym-ordered-all-istella | istella 75,758 -> 63,554; taxi 56,473 -> 48,163 | KEEP gated (FAST+Apple default when n_features > 32, `-D MOJOLEARN_ORD_ALL_OFF`; lane/apple-fast-ordall) | istella -16.1%, auc .979518 -> .979529, logloss .190603 -> .190385 (better); taxi -14.7% but auc .628875 -> .628572, logloss .52909 -> .529215 (worse) = DROPPED-quality on narrow data, so runtime gate `len(layout.features) > ORD_ALL_MIN_FEATURES` (32) keeps taxi on main's path; the four pieces below are its internal parts, no standalone defines |
 | `ORD_FOLD_BINS_ONE` | ordered / taxi | lane/apple-fast-sym-ordered @ 27b912397 | sym-ordered-fbo-taxi | taxi -1.0% | DROPPED-noise (standalone) | define removed; the code stays as a piece of `ORD_ALL` |
 | `ORD_FOLD_INDEX` | ordered / taxi | lane/apple-fast-sym-ordered @ 27b912397 | sym-ordered-fidx-taxi | taxi -5.9% | DROPPED-quality (standalone) | auc down on taxi; define removed; the code stays as a piece of `ORD_ALL` (wide data only) |
@@ -118,9 +123,9 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `PL_GROUP_NARROW` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-pl-narrow-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `PL_GROUP_NARROW + PL_PAIRS_ONCE` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-pl-both-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `PL_PAIRS_ONCE` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-pl-once-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `SHAP_KERNEL_DEV` | kernel-shap / istella | lane/apple-fast-shap @ 13343dd51 | shap-kernel-dev | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `SHAP_PERM_CACHE` | permutation-shap / istella | lane/apple-fast-shap @ 13343dd51 | shap-perm-cache | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `SHAP_TREE_TAB` | tree-shap / istella | lane/apple-fast-shap @ 13343dd51 | shap-tree-tab | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `SHAP_KERNEL_DEV` | kernel-shap / istella | lane/apple-fast-shap @ 13343dd51 | shap-kernel-dev (parse fail) | - | SUPERSEDED (not ported, lane/apple-fast-rec-shap) | it moved the per-row host draws, mask gather, mask_expand and kernel_solve normal equations to the device; main has since replaced that whole path: coalition masks drawn on the device (kshap_synth mask_kernel), synthetic rows, gram/rhs/pivot/elim/back solve on the device (kshap_solve), batched under KSHAP_FAST_BATCH (board 15,325 ms). x_trees_mask_expand / kernel_solve / perm_synthetic are no longer on the KernelExplainer path, so the old entry points would be dead code |
+| `SHAP_PERM_CACHE` (rollback `SHAP_PERM_CACHE_OFF`) | permutation-shap / taxi, istella | lane/apple-fast-shap @ 13343dd51, recovered on lane/apple-fast-rec-shap; A/B ab1 d51f4b4bf | M3 afc_ab_def, full board, 1 run/arm, 2026-10-04 | taxi 102.77 -> 85.42; istella 15229.5 -> 14991.0 | KEEP (FAST+Apple default, `_OFF`) on lane/apple-fast-recovery | rel_error_vs_exact identical; pshap_dsynth keeps its chunk _Delta, the matching pshap_dvalues reuses it (xtrees/agnostic_device.mojo) |
+| `SHAP_TREE_TAB` | tree-shap / istella, taxi | lane/apple-fast-shap @ 13343dd51, recovered on lane/apple-fast-rec-shap | (owed) | - | READY-AB (ported, awaiting M2 build + M3 A/B) | never compiled before (old branch failed to parse at xtrees/api.mojo:715/811); the "21.4 vs 25.1" lead was the pre-table taxi number, not this. Rebuilt on top of TREESHAP_FAST_TABLE: only the row unit changes, one decision word per (row, tree) instead of a root-path walk per leaf; trees with > 64 internal nodes use the table row unit in the same launch; same adds and order = same bits (xtrees/shap_tab.mojo) |
 | `SYM_BUF_ARENA` | symmetric / taxi | lane/apple-fast-sym-iter @ 4956a2234 | sym-iter-arena-1000-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `SYM_CTR_ALL` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-all-taxicat | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `SYM_CTR_PERM_BATCH` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-perm-batch-taxicat | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
@@ -139,6 +144,30 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `SYM_SCAN_SUB_FUSED` | symmetric / istella, taxi | lane/apple-fast-sym-hist @ 3bb4db314 | symhist-scan-sub-fused-istella, symhist-scan-sub-fused-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `SYM_SORT_SWAP` | symmetric / istella, taxi | lane/apple-fast-sym-hist @ 3bb4db314 | symhist-sort-swap-istella, symhist-sort-swap-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `YR_TASK_FUSED` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-yr-fused-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `PL_GROUP_NARROW` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-pl-narrow-istella | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed alone (pl-both within noise); in SYM_MULTI_ALL |
+| `PL_GROUP_NARROW + PL_PAIRS_ONCE` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-pl-both-istella | - | DROPPED-noise | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `PL_PAIRS_ONCE` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-pl-once-istella | - | DROPPED-noise | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `SHAP_KERNEL_DEV` | kernel-shap / istella | lane/apple-fast-shap @ 13343dd51 | shap-kernel-dev | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `SHAP_PERM_CACHE` | permutation-shap / istella | lane/apple-fast-shap @ 13343dd51 | shap-perm-cache | - | superseded | see the recovered row above (KEEP, default with `_OFF`) |
+| `SHAP_TREE_TAB` | tree-shap / istella | lane/apple-fast-shap @ 13343dd51 | shap-tree-tab | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `SYM_BUF_ARENA` | symmetric / taxi | lane/apple-fast-sym-iter @ 4956a2234 | sym-iter-arena-1000-taxi | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed; in SYM_ITER_ALL |
+| `SYM_CTR_ALL` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-all-taxicat | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed; the four CTR prep switches (SYM_CTR_PERM_BATCH not ported) |
+| `SYM_CTR_PERM_BATCH` | categorical / taxicat | lane/apple-fast-sym-ctr @ 39c3c9daf | sym-ctr-perm-batch-taxicat | - | DROPPED-speed (+0.1%) | sym-ctr-perm-batch-taxicat-x 27,161 -> 27,196 ms (Oct 4 table); NOT ported to lane/apple-fast-rec-sym (reverted there), code stays at the source sha |
+| `SYM_DERIV_FUSED` | symmetric / istella, taxi | lane/apple-fast-sym-iter @ 4956a2234 | sym-iter-fused-1000-taxi, sym-iter-fused-istella | - | DROPPED-noise (-0.1%) | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `SYM_EST_ALL` | symmetric / istella, taxi | lane/apple-fast-sym-est @ c8518eb52 | sym-est-all-ist, sym-est-all-1k-ist, sym-est-all-1k-taxi, sym-est-all-ord-taxi | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; umbrella narrowed to STATS_FUSED + ITERS_DEVICE (old umbrella DROP: -3.5% but auc .980177 -> .980164, carried EST_REUSE_PART bug) |
+| `SYM_FEAT_ALL` | symmetric / istella, taxi | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-all-istella, sym-feat-all-taxi, sym-feat-all-1000-taxi | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed; all six |
+| `SYM_GATHER_FUSED` | symmetric / istella, taxi | lane/apple-fast-sym-hist @ 3bb4db314 | symhist-gather-fused-istella, symhist-gather-fused-taxi | - | DROPPED-noise | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `SYM_HIST_ALL` | symmetric / istella, taxi | lane/apple-fast-sym-hist @ 3bb4db314 | symhist-all-istella, symhist-all-taxi, symhist-all-1000-istella | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; umbrella narrowed to SORT_SWAP + RESOLVE_BLOCK (old six-switch umbrella: noise DROP, LEDGER 10-03) |
+| `SYM_HIST_MULT` | symmetric / istella, taxi | lane/apple-fast-sym-hist @ 3bb4db314 | symhist-hist-mult-istella, symhist-hist-mult-taxi | - | DROPPED-noise | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `SYM_ITER_ALL` | symmetric / istella, taxi | lane/apple-fast-sym-iter @ 4956a2234 | sym-iter-all-1000-taxi, sym-iter-all-istella | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; umbrella narrowed to SYM_BUF_ARENA (old four-switch umbrella: DROP, auc .980163 -> .980122, LEDGER 10-03) |
+| `SYM_LEAF_FROM_STATS` | symmetric / istella, taxi | lane/apple-fast-sym-iter @ 4956a2234 | sym-iter-leaf-1000-taxi, sym-iter-leaf-istella | - | DROPPED-noise (-0.2%) | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `SYM_MULTI_ALL` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-all-mc-istella, symmulti-all-pl-istella, symmulti-all-yr-istella | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; umbrella narrowed to PL_GROUP_NARROW + YR_TASK_FUSED (all-mc DROP -1.2%, all-yr no B result: the YR memory bug) |
+| `SYM_PART_STATS_PAR` | symmetric / istella, taxi | lane/apple-fast-sym-hist @ 3bb4db314 | symhist-part-stats-par-istella, symhist-part-stats-par-taxi | - | DROPPED-noise | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `SYM_RESOLVE_BLOCK` | symmetric / istella, taxi | lane/apple-fast-sym-hist @ 3bb4db314 | symhist-resolve-block-istella, symhist-resolve-block-taxi | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; no named verdict (batch "DROPPED: symhist x2" names no tags); in SYM_HIST_ALL |
+| `SYM_REUSE_PARTITION` | symmetric / taxi | lane/apple-fast-sym-iter @ 4956a2234 | sym-iter-reuse-1000-taxi | - | DROPPED-noise (+0.3%) | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `SYM_SCAN_SUB_FUSED` | symmetric / istella, taxi | lane/apple-fast-sym-hist @ 3bb4db314 | symhist-scan-sub-fused-istella, symhist-scan-sub-fused-taxi | - | DROPPED-noise | apple-fast LEDGER 2026-10-03/04, old base; ported with its branch to lane/apple-fast-rec-sym, OFF, outside every umbrella, not re-queued |
+| `SYM_SORT_SWAP` | symmetric / istella, taxi | lane/apple-fast-sym-hist @ 3bb4db314 | symhist-sort-swap-istella, symhist-sort-swap-taxi | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; no named verdict (batch "DROPPED: symhist x2" names no tags); in SYM_HIST_ALL |
+| `YR_TASK_FUSED` | multiclass / pairlogit / yetirank / istella | lane/apple-fast-sym-multi @ d2c832da0 | symmulti-yr-fused-istella | - | READY-AB | ported to lane/apple-fast-rec-sym (current main), default OFF; awaiting M2 build + M3 A/B; never timed: Metal refused 32,832 B threadgroup memory (LEDGER 10-03); fixed (magnitude sums fold in the kernel's own shared buffers); sorts with main's YETI_FAST_SORT; in SYM_MULTI_ALL |
 
 ## Linear (46)
 
@@ -178,19 +207,29 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `BAYES_FAST_CLS1_BATCH + BAYES_FAST_CLS1_PARTS + BAYES_FAST_CLS1_STATS` | bayesian-ridge / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-brall-taxi | bayesian-ridge taxi 102 -> 15.3 | OPEN | judged KEEP (-85%, r2 same); merge pending |
 | `BAYES_FAST_CLS1_PARTS` | bayesian-ridge / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-brparts-taxi | bayesian-ridge taxi -3% | OPEN | kept as part of all three (judged KEEP); merge pending |
 | `BAYES_FAST_CLS1_STATS` | bayesian-ridge / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-brstats-taxi | bayesian-ridge taxi 99 -> 21.6 | OPEN | judged KEEP (-78%); cls1 merge pending |
-| `HUBER_DEVICE_LBFGS` | huber / taxi | lane/apple-fast-robust @ cfdb95e48 | robust-huber-dev-taxi | huber taxi 242 -> 225 | OPEN | candidate (-7%, n=1); merge waits on the other robust lines |
+| `HUBER_DEVICE_LBFGS` | huber / taxi | lane/apple-fast-robust @ cfdb95e48 | robust-huber-dev-taxi | huber taxi 242 -> 225 (source main) | ACCEPT/DEFAULT 2026-10-04 (see verdicts batch 3) | ported to lane/apple-fast-rec-fa-robust (x_linear/huber_fast.mojo); main now has its own device L-BFGS, so the A/B measures the batched stop reads; awaiting M2 build + M3 A/B |
+| `HUBER_DEVICE_LBFGS + HUBER_FAST_BLOCK512` | huber / taxi | lane/apple-fast-robust @ cfdb95e48 | robust-huber-blk-taxi | huber taxi 226 -> 196 | READY-AB | ported to lane/apple-fast-rec-fa-robust; BLOCK512 alone implies DEVICE_LBFGS; awaiting M2 build + M3 A/B |
+| `ARD_FAST_CLS1_BATCH` | ard / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-ardbatch-taxi | ard taxi +21% alone | KEPT 9decae29f | rec-misc 2026-10-04: merged as a FAST+Apple default (`_OFF`) in 9decae29f; the board FAST value equals the B arm (part of the three-define bundle, ard taxi 8.3 = board 8.3) |
+| `ARD_FAST_CLS1_BATCH + ARD_FAST_CLS1_PARTS + ARD_FAST_CLS1_STATS` | ard / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-ardall-taxi | ard taxi 14.4 -> 8.3 | KEPT 9decae29f | rec-misc 2026-10-04: merged as a FAST+Apple default (`_OFF`) in 9decae29f; the board FAST value equals the B arm (ard taxi 8.3 = board 8.3) |
+| `ARD_FAST_CLS1_PARTS` | ard / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-ardparts-taxi | ard taxi 14.3 -> 12.0 | KEPT 9decae29f | rec-misc 2026-10-04: merged as a FAST+Apple default (`_OFF`) in 9decae29f; the board FAST value equals the B arm |
+| `ARD_FAST_CLS1_STATS` | ard / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-ardstats-taxi | ard taxi 19.4 -> 13.6 | KEPT 9decae29f | rec-misc 2026-10-04: merged as a FAST+Apple default (`_OFF`) in 9decae29f; the board FAST value equals the B arm |
+| `BAYES_FAST_CLS1_BATCH` | bayesian-ridge / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-brbatch-taxi | bayesian-ridge taxi -4% | KEPT 9decae29f | rec-misc 2026-10-04: merged as a FAST+Apple default (`_OFF`) in 9decae29f; the board FAST value equals the B arm (bayesian-ridge taxi 15.3 = board 15.3) |
+| `BAYES_FAST_CLS1_BATCH + BAYES_FAST_CLS1_PARTS + BAYES_FAST_CLS1_STATS` | bayesian-ridge / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-brall-taxi | bayesian-ridge taxi 102 -> 15.3 | KEPT 9decae29f | rec-misc 2026-10-04: merged as a FAST+Apple default (`_OFF`) in 9decae29f; the board FAST value equals the B arm (bayesian-ridge taxi 15.3 = board 15.3) |
+| `BAYES_FAST_CLS1_PARTS` | bayesian-ridge / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-brparts-taxi | bayesian-ridge taxi -3% | KEPT 9decae29f | rec-misc 2026-10-04: merged as a FAST+Apple default (`_OFF`) in 9decae29f; the board FAST value equals the B arm |
+| `BAYES_FAST_CLS1_STATS` | bayesian-ridge / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-brstats-taxi | bayesian-ridge taxi 99 -> 21.6 | KEPT 9decae29f | rec-misc 2026-10-04: merged as a FAST+Apple default (`_OFF`) in 9decae29f; the board FAST value equals the B arm |
+| `HUBER_DEVICE_LBFGS` | huber / taxi | lane/apple-fast-robust @ cfdb95e48 | robust-huber-dev-taxi | huber taxi 242 -> 225 | ACCEPT/DEFAULT 2026-10-04 (see verdicts batch 3) | candidate (-7%, n=1); merge waits on the other robust lines |
 | `HUBER_DEVICE_LBFGS + HUBER_FAST_BLOCK512` | huber / taxi | lane/apple-fast-robust @ cfdb95e48 | robust-huber-blk-taxi | huber taxi 226 -> 196 | OPEN | candidate (-13%); not merged yet |
 | `LSVR_ALL` | linearsvr / taxi; linearsvr / istella | lane/apple-fast-linsvr @ c649076a4 (via lane/apple-fast-m2b1 65c454c87) | M3 linearsvr taxi; M3 istella (M2: linsvr-all-taxi-x 292.2 -> 58.6) | M3 taxi 117.2 -> 27.0; M3 istella +6.2% | KEEP for n_features <= 32 (FAST+Apple default, `_OFF`; lane/apple-fast-m2b1-m3) | -77% on taxi (d ~ 11), r2 / rmse identical; slower on istella (d ~ 220), so `QN_ALL_MAX_D = 32` gates the tiled objective and the device convergence (`qn_tiled_applies`, `dconv_applies`); wider data keeps LS_BATCH + EVAL_SLIM; `-D MOJOLEARN_LSVR_ALL_OFF` reverts |
-| `LSVR_DEVICE_CONVERGE` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-dconv-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `LSVR_DEVICE_CONVERGE + LSVR_EVAL_SLIM + LSVR_LINESEARCH_BATCH` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-dconv-vs-batch-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `LSVR_DUAL_CD` | linearsvr / istella; linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-dualcd-taxi, linsvr-dualcd-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `LSVR_DEVICE_CONVERGE` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-dconv-taxi | linearsvr taxi 26.2 vs board 27 | DROPPED-noise | rec-misc 2026-10-04: -3% at n=1 against a board that already has device convergence inside LSVR_ALL (d <= 32); not merged |
+| `LSVR_DEVICE_CONVERGE + LSVR_EVAL_SLIM + LSVR_LINESEARCH_BATCH` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-dconv-vs-batch-taxi | linearsvr taxi 26.2 vs board 27 | DROPPED-noise | rec-misc 2026-10-04: all three already on main via LSVR_ALL / EVAL_SLIM / LINESEARCH_BATCH; no separate gain |
+| `LSVR_DUAL_CD` | linearsvr / istella; linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | linsvr-dualcd-taxi, linsvr-dualcd-istella | taxi 27 -> 57.1; istella 217 -> 218 | DROPPED-slower | rec-misc 2026-10-04: taxi 2.1x slower, istella inside noise; not merged |
 | `LSVR_EVAL_SLIM` | linearsvr / taxi; linearsvr / istella | lane/apple-fast-linsvr @ c649076a4 | M3 taxi; linsvr-slim-istella-x (M2) | M3 taxi -17.4%; M2 istella -4.5% | KEPT lane/apple-fast-m2b1-main | quality identical; default, `-D MOJOLEARN_LSVR_EVAL_SLIM_OFF` reverts |
 | `LSVR_FASTPATH_FIX` | linearsvr / taxi; linearsvr / istella | lane/apple-fast-linsvr @ c649076a4 | linsvr-fix-taxi-x (M2); M3 istella | M2 taxi -0.2%; M3 istella +1.5% | DROPPED-slower | not merged |
 | `LSVR_FUSED_GRAD` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 | M3 taxi | -1.9% | DROPPED-noise | not merged |
 | `LSVR_LINESEARCH_BATCH` | linearsvr / taxi | lane/apple-fast-linsvr @ c649076a4 (via lane/apple-fast-m2b1) | M3 linearsvr taxi A/B (M2: linsvr-lsbatch-taxi-x -38.8%) | 116.7 -> 79.4 | KEEP (FAST+Apple default, `_OFF`; lane/apple-fast-m2b1-m3) | -32%; r2 / rmse identical; carries the fused-gradient pass (QN_FAST_FUSED) with it; `-D MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF` reverts |
 | `NB_CAT_ATOMIC` | categorical-nb / taxi | lane/apple-fast-nb @ be2ea3a05 | nb-cat-atomic-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `NB_TEXT_CSR` | multinomial-nb / text | lane/apple-fast-nb @ be2ea3a05 (via lane/apple-fast-m2b1) | M3 multinomial-nb text A/B (M2: nb-mnb-csr-text-x 221.7 -> 47.7) | 186.9 -> 35.4 | KEEP (FAST+Apple default, `_OFF`; lane/apple-fast-m2b1-m3) | -81%; accuracy .9831 / logloss .5595 identical; `-D MOJOLEARN_NB_TEXT_CSR_OFF` reverts |
-| `RIDGE_FAST_CLS1_CODES` | ridge-clf / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-rccodes-taxi | ridge-clf taxi 120 -> 19.0 | OPEN | judged KEEP (-84%); merge pending |
+| `RIDGE_FAST_CLS1_CODES` | ridge-clf / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-rccodes-taxi | ridge-clf taxi 120 -> 19.0 | KEPT 9decae29f | rec-misc 2026-10-04: merged as a FAST+Apple default (`_OFF`) in 9decae29f; the board FAST value equals the B arm (ridge-clf taxi 19.0 = board 19) |
 | `ISOTONIC_FAST_NOLIST` (env `MOJOLEARN_ISOTONIC_FAST_NOLIST_OFF=1` off) | isotonic / istella | lane/apple-fast-gap-manprep @ 1db219f01 | gmp-iso-nolist-istella | isotonic istella 50.9 -> 29.4 | KEPT (FAST+Apple default) | -42%; r2/rmse same; fit's 3 + 2n output words were `tolist()`ed (2,000,000 Python floats at 1M rows), sliced and rebuilt; now three byte copies; same words |
 
 ## Neighbors (42)
@@ -211,29 +250,30 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | (baseline, no switch) | knn / istella | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-k64chk-istella | knn istella (main) 357 | OPEN | baseline re-time only (K64 default); row flipped faster than sklearn 566 |
 | `ANN_FAST_KNN_BIGD` | cagra / istella | lane/apple-fast-ann @ 70833546a | ann-cagra-knnbigd-istella | - | OPEN | A/B queued, no judged result yet |
 | `CAGRA_FAST_TEAM` | cagra / istella | lane/apple-fast-ann @ 70833546a | ann-cagra-team-istella | - | OPEN | A/B queued, no judged result yet |
-| `CAGRA_FAST_WIDE` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-wide-istella | cagra istella 21,239 -> ? | OPEN | A/B queued, no judged result yet |
-| `CAGRA_FAST_DOT` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-dot-istella | cagra istella 21,239 -> ? | OPEN | A/B queued, no judged result yet |
+| `CAGRA_FAST_WIDE` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-wide-istella | cagra istella 21,239 -> ? | DROPPED-semantics | rec-misc 2026-10-04: arm deleted from main in 3852df59b; never judged alone; superseded by the IVFG + EXACTD + SEEDS + ITERS bundle |
+| `CAGRA_FAST_DOT` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-dot-istella | cagra istella 21,239 -> ? | DROPPED-semantics | rec-misc 2026-10-04: arm deleted from main in 3852df59b; never judged alone; superseded by the IVFG + EXACTD + SEEDS + ITERS bundle |
 | `CAGRA_FAST_IVFG` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-ivfg-istella | cagra istella 21,239 -> 1,294 | DROPPED-quality | recall .9838 -> .9595 |
 | `CAGRA_FAST_IVFG + CAGRA_FAST_IVFG_P32` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-ivfg32-istella | cagra istella 21,239 -> 1,793 | DROPPED-quality | recall .9597; probes are not the loss |
-| `CAGRA_FAST_SEEDS` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seeds-taxi | 2,887 -> ? | OPEN | A/B queued, no judged result yet |
-| `CAGRA_FAST_SEEDS4` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seeds4-taxi | 2,887 -> ? | OPEN | A/B queued, no judged result yet |
-| `CAGRA_FAST_ITERS` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-iters-taxi | 2,887 -> ? | OPEN | A/B queued, no judged result yet |
-| `CAGRA_FAST_SEEDS + CAGRA_FAST_ITERS` | cagra / taxi, istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seedsiters-{taxi,istella} | 2,887 / 21,239 -> ? | OPEN | A/B queued, no judged result yet |
-| `CAGRA_FAST_IVFG + CAGRA_FAST_IVFG_EXACTD` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgx-istella | 21,239 -> ? | OPEN | A/B queued, no judged result yet |
-| `CAGRA_FAST_IVFG + IVFG_EXACTD + IVFG_P8` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgx8-istella | 21,239 -> ? | OPEN | A/B queued, no judged result yet |
-| `CAGRA_FAST_IVFG + IVFG_EXACTD + SEEDS + ITERS` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgxsi-istella | 21,239 -> ? | OPEN | A/B queued, no judged result yet |
+| `CAGRA_FAST_SEEDS` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seeds-taxi | 2,887 -> ? | KEPT 3852df59b (in the bundle) | rec-misc 2026-10-04: IVFG + EXACTD + SEEDS + ITERS merged as FAST+Apple defaults (`_OFF`) in 3852df59b; cagra istella B 1,254.3 = board 1,254 |
+| `CAGRA_FAST_SEEDS4` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seeds4-taxi | 2,887 -> ? | DROPPED-semantics | rec-misc 2026-10-04: never judged alone; SEEDS (in the 3852df59b bundle) kept; `_CAGRA_SEEDS4` survives only inside the opt-in LOWD_SEEDS4 candidate |
+| `CAGRA_FAST_ITERS` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-iters-taxi | 2,887 -> ? | KEPT 3852df59b (in the bundle) | rec-misc 2026-10-04: IVFG + EXACTD + SEEDS + ITERS merged as FAST+Apple defaults (`_OFF`) in 3852df59b; cagra istella B 1,254.3 = board 1,254 |
+| `CAGRA_FAST_SEEDS + CAGRA_FAST_ITERS` | cagra / taxi, istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seedsiters-{taxi,istella} | 2,887 / 21,239 -> ? | KEPT 3852df59b (in the bundle) | rec-misc 2026-10-04: IVFG + EXACTD + SEEDS + ITERS merged as FAST+Apple defaults (`_OFF`) in 3852df59b; cagra istella B 1,254.3 = board 1,254 |
+| `CAGRA_FAST_IVFG + CAGRA_FAST_IVFG_EXACTD` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgx-istella | 21,239 -> ? | KEPT 3852df59b (in the bundle) | rec-misc 2026-10-04: IVFG + EXACTD + SEEDS + ITERS merged as FAST+Apple defaults (`_OFF`) in 3852df59b; cagra istella B 1,254.3 = board 1,254 |
+| `CAGRA_FAST_IVFG + IVFG_EXACTD + IVFG_P8` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgx8-istella | 21,239 -> ? | DROPPED-semantics | rec-misc 2026-10-04: arm deleted from main in 3852df59b; never judged alone; superseded by the IVFG + EXACTD + SEEDS + ITERS bundle |
+| `CAGRA_FAST_IVFG + IVFG_EXACTD + SEEDS + ITERS` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgxsi-istella | cagra istella 21,239 -> 1,254.3 | KEPT 3852df59b | rec-misc 2026-10-04: IVFG + EXACTD + SEEDS + ITERS merged as FAST+Apple defaults (`_OFF`) in 3852df59b; cagra istella B 1,254.3 = board 1,254 |
 | `CAGRA_FAST_IVFG_LOWD` | cagra / taxi (istella must be identical) | lane/apple-fast-w2-cagra (base b2b1c22bc) | w2-cagra-lowd-q, w2-cagra-lowd-taxi | cagra taxi 2,900 -> ? | OPEN | IVFG graph for d <= 64 (taxi d = 11 still built the exact 1.6e11-pair graph); gate recall@10 B >= A (tools/cagra_lowd_pair.py) |
 | `CAGRA_FAST_IVFG_LOWD_SEEDS4` | cagra / taxi, istella | lane/apple-fast-w2-cagra (base b2b1c22bc) | w2-cagra-lowds4-q, w2-cagra-lowds4-taxi | M3 one run per arm: cagra taxi build 2,879.2 -> 714.9 ms (faiss-cpu 1,015.6) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_CAGRA_FAST_IVFG_LOWD_SEEDS4_OFF` | LOWD + SEEDS4 (search only); w2-cagra-lowds4-q PASS (recall@10 B >= A on taxi and istella). Plain LOWD stays opt-in (failed recall) |
 | `ISOTONIC_FAST_PAIRMERGE + ISOTONIC_FAST_PAR` | isotonic / istella | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-iso-pair-istella-b (M2) | PAR alone timed out -> 165.5 | HELD (M2 only) | r2 .188; owes an M3 A/B; ported on lane/apple-fast-m2b1 |
 | `ISOTONIC_FAST_PAR` | isotonic / istella | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-iso-par-istella | - | OPEN | A/B queued, no judged result yet |
 | `IVFPQ_FAST_DEVICE_CODEBOOKS` | ivf-filter / istella; ivf-pq / istella; ivf-refine / istella | lane/apple-fast-ann @ 70833546a | ann-ivfpq-devcb-istella, ann-ivfrefine-devcb-istella, ann-ivffilter-devcb-istella | - | OPEN | A/B queued, no judged result yet |
-| `IVF_COARSE_RANDOM_INIT` | ivf / istella; ivf / taxi; ivf-pq / istella | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-rinit-istella, vsearch-ivf-rinit-istella, vsearch-ivf-rinit-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `IVF_DEVICE_VALIDATE` | ivf / istella; ivf / taxi; ivf-pq / istella | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-dval-istella, vsearch-ivf-dval-istella, vsearch-ivf-dval-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `IVF_COARSE_RANDOM_INIT (_OFF)` | ivf / istella; ivf / taxi; ivf-pq / istella | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-rinit-istella, vsearch-ivf-rinit-istella, vsearch-ivf-rinit-taxi | see `VSEARCH_ALL` row (bundle) | KEPT (FAST+Apple default, `_OFF`) lane/apple-fast-vsv-promote | promoted 2026-10-04 via the VSEARCH_ALL bundle A/B (afc_ab_def, ad265a028, 9/9 faster, recall_at_10 identical); rollback `MOJOLEARN_IVF_COARSE_RANDOM_INIT_OFF`; component not measured alone; 2026-10-04: the start rows are gathered on the device (`ivf_gather_rows_kernel`) from the same seeded ids, so the same rows as the measured arm; host gather removed |
+| `IVF_DEVICE_VALIDATE (_OFF)` | ivf / istella; ivf / taxi; ivf-pq / istella | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-dval-istella, vsearch-ivf-dval-istella, vsearch-ivf-dval-taxi | see `VSEARCH_ALL` row (bundle) | KEPT (FAST+Apple default, `_OFF`) lane/apple-fast-vsv-promote | promoted 2026-10-04 via the VSEARCH_ALL bundle A/B (afc_ab_def, ad265a028, 9/9 faster, recall_at_10 identical); rollback `MOJOLEARN_IVF_DEVICE_VALIDATE_OFF`; component not measured alone |
 | `IVF_FAST_DEVICE_CSR` | ivf / istella; ivf-pq / istella | lane/apple-fast-ann @ 70833546a | ann-ivfpq-csr-istella, ann-ivf-csr-istella | - | OPEN | A/B queued, no judged result yet |
 | `IVF_FAST_DEVICE_TRAINSET` | ivf / istella; ivf-pq / istella; ivf-sq / istella | lane/apple-fast-ann @ 70833546a | ann-ivfpq-trainset-istella, ann-ivfsq-trainset-istella, ann-ivf-trainset-istella | - | OPEN | A/B queued, no judged result yet |
 | `IVF_FAST_SCAN_SELECT` | ivf-pq / istella; ivf-rabitq / istella; ivf-sq / istella | lane/apple-fast-ann @ 70833546a | ann-ivfpq-select-istella, ann-ivfsq-select-istella, ann-ivfrq-select-istella | - | OPEN | A/B queued, no judged result yet |
-| `IVF_KMEANS_LAZY_SHIFT` | ivf / istella; ivf / taxi; ivf-pq / istella | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-lazy-istella, vsearch-ivf-lazy-istella, vsearch-ivf-lazy-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `IVF_REFINE_TEAM` | ivf-refine / istella; ivf-refine / taxi | lane/apple-fast-vsearch @ 86925aef9 | vsearch-refine-team-istella, vsearch-refine-team-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `IVF_KMEANS_LAZY_SHIFT (_OFF)` | ivf / istella; ivf / taxi; ivf-pq / istella | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-lazy-istella, vsearch-ivf-lazy-istella, vsearch-ivf-lazy-taxi | see `VSEARCH_ALL` row (bundle) | KEPT (FAST+Apple default, `_OFF`) lane/apple-fast-vsv-promote | promoted 2026-10-04 via the VSEARCH_ALL bundle A/B (afc_ab_def, ad265a028, 9/9 faster, recall_at_10 identical); rollback `MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF`; component not measured alone; scoped 2026-10-04 to callers that set `KMeansParams.lazy_shift` (IVF coarse quantizer + its k-means|| recluster, IVF-PQ codebooks); the KMeans estimator and other k-means callers keep the per-iteration read |
+| `KMEANS_FAST_LAZY_SHIFT` | kmeans / taxi, istella | lane/apple-fast-vsv-promote | M3 afc_ab_def, full board, 1 run/arm, 2026-10-04 | istella 1451.5 -> 1527.7; taxi 977.6 -> 974.8 | DROPPED-slower | slower on istella, flat on taxi; inertia equal. Stays opt-in OFF (cluster/impl/detail/kmeans.mojo) |
+| `IVF_REFINE_TEAM` | ivf-refine / taxi | lane/apple-fast-batch @ 3150d75c1 | vsearch-refine-team-istella, vsearch-refine-team-taxi | ivf-refine taxi 1,208.3 -> 1,201.8 (-0.5%) | DROPPED-noise | NEUTRAL (M3, 2026-10-04, 1 run per arm); stays opt-in under its own define, no default change; no longer in VSEARCH_ALL |
 | `KDE2_ALL` | kde / istella; kde / taxi | lane/apple-fast-batch @ 3150d75c1 | kde2-all-istella-x, kde2-all-vs-dimtile-istella-x | istella 139.5 -> 63.1; vs DIMTILE alone -0.6% | DROP | includes SAMPLE_FUSED (taxi +354%); the gain is DIMTILE |
 | `KDE2_ALL + KDE_DIMTILE` | kde / istella | lane/apple-fast-kde2 @ 659400b94 | kde2-all-vs-dimtile-istella | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only |
 | `KDE_DIMTILE` | kde / istella; kde / taxi | lane/apple-fast-batchv @ c8251211d | batchv-kde-dimtile-istella3, batchv-kde-dimtile-taxi3 | istella 137.2 -> 69.2 (-50%); taxi 9.0 -> 17.8 (+98%, ~10 ms scale) | KEEP for n_features > 32 (FAST + Apple default, _OFF) | mean_log_likelihood -222.27058 both; quality score_samples <= 9e-8 of scale (M2); d <= 32 keeps main fused pass |
@@ -243,10 +283,14 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `KDE_DIMTILE + KDE_SAMPLE_FUSED` | kde / istella | lane/apple-fast-kde2 @ 659400b94 | kde2-sample-ontile-istella | taxi ~10 ms, jitter-dominated (lane/apple-fast-batch) | DROP | inconclusive on taxi, no istella gain over DIMTILE; opt-in only |
 | `KDE_SAMPLE_FUSED` | kde / istella; kde / taxi | lane/apple-fast-batch @ 3150d75c1 | kde2-sample-taxi-x | taxi +354% | DROP | opt-in only |
 | `NC_FAST_CLS1_LABELS` | nearest-centroid / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-nclabels-taxi | nearest-centroid taxi 105 -> 21 | OPEN | judged KEEP (-80%, acc same); cls1 merge pending |
+| `PQ_LUT_TILED (_OFF)` | ivf-pq / istella; ivf-pq / taxi | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-lut-istella, vsearch-pq-lut-taxi | see `VSEARCH_ALL` row (bundle) | KEPT (FAST+Apple default, `_OFF`) lane/apple-fast-vsv-promote | promoted 2026-10-04 via the VSEARCH_ALL bundle A/B (afc_ab_def, ad265a028, 9/9 faster, recall_at_10 identical); rollback `MOJOLEARN_PQ_LUT_TILED_OFF`; component not measured alone |
+| `PQ_SCAN_FUSED (_OFF)` | ivf-filter / istella; ivf-pq / istella; ivf-pq / taxi | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-fused-istella, vsearch-filter-fused-istella, vsearch-pq-fused-taxi | see `VSEARCH_ALL` row (bundle) | KEPT (FAST+Apple default, `_OFF`) lane/apple-fast-vsv-promote | promoted 2026-10-04 via the VSEARCH_ALL bundle A/B (afc_ab_def, ad265a028, 9/9 faster, recall_at_10 identical); rollback `MOJOLEARN_PQ_SCAN_FUSED_OFF`; component not measured alone |
+| `NC_FAST_CLS1_LABELS` | nearest-centroid / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-nclabels-taxi | nearest-centroid taxi 105 -> 21 | KEPT 9decae29f | rec-misc 2026-10-04: merged as a FAST+Apple default (`_OFF`) in 9decae29f; the board FAST value equals the B arm (nearest-centroid taxi 20.9 = board 20.9); later carried by the device glue 34af88859 |
 | `PQ_LUT_TILED` | ivf-pq / istella; ivf-pq / taxi | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-lut-istella, vsearch-pq-lut-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `PQ_SCAN_FUSED` | ivf-filter / istella; ivf-pq / istella; ivf-pq / taxi | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-fused-istella, vsearch-filter-fused-istella, vsearch-pq-fused-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `TSNE_FAST_SPLIT` | tsne / istella | lane/apple-fast-ann @ 70833546a | ann-tsne-split-istella | - | OPEN | A/B queued, no judged result yet |
-| `VSEARCH_ALL` | ivf / istella; ivf / taxi; ivf-filter / istella; ivf-filter / taxi; ivf-pq / istella; i... | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-all-istella, vsearch-ivf-all-istella, vsearch-ivf-all-taxi (+8) | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `VSEARCH_ALL` | ivf-filter / taxi; ivf-rabitq, ivf-pq, ivf-sq, ivf / istella, taxi | lane/apple-fast-vsv @ ad265a028 | afc_ab_def (full board size, 1 run per arm, 2026-10-04) | ivf-filter taxi 235.9 -> 226.2; ivf-rabitq istella 1,167.1 -> 1,144.1, taxi 176.7 -> 167.8; ivf-pq istella 1,675.9 -> 1,648.9, taxi 229.4 -> 220.6; ivf-sq istella 1,355.7 -> 1,334.9, taxi 181.5 -> 176.1; ivf istella 1,760.1 -> 1,739.9, taxi 194.6 -> 187.8 | KEPT (FAST+Apple default, `_OFF`) lane/apple-fast-vsv-promote | ACCEPT: 9/9 faster, recall_at_10 identical in every row; PQ_LUT_TILED, PQ_SCAN_FUSED, IVF_COARSE_RANDOM_INIT, IVF_DEVICE_VALIDATE, IVF_KMEANS_LAZY_SHIFT promoted with `_OFF` rollbacks; `MOJOLEARN_VSEARCH_ALL` kept as a no-op alias |
+| `PY2MOJO_cluster_OFF` | ivf-refine / taxi | lane/apple-fast-py2mojo-cluster @ 2b6f3bfd4 | - | 1,196.0 -> 1,198.9 (with the flag) | DROPPED-noise | NEUTRAL (M3, 2026-10-04, 1 run per arm); default unchanged (py2mojo on) |
 | `XN_FAST_IMPUTE_TILED2` | knn-imputer / taxi | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-imp-t2-taxi-b (M2); M3 re-check | M2 +1.5%; M3 +5.6% | DROPPED-slower | slower on the M2 and the M3; never merged to main or lane/apple-fast-m2b1 (code only on its lane branch) |
 | `XN_FAST_MMA_ROUTE` | lof / taxi; lle / taxi | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-lof-mma-taxi-b, ik-lle-mma-taxi-b (M2) | lof taxi 120.7 -> 2,659 (22x slower); lle -1.8% | DROPPED-slower | never on main; not merged |
 | MOJOLEARN_XN_FAST_CLS2_OCSVM_RES | ocsvm / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-res-ocsvm-taxi | -77% alone | KEEP, FAST+Apple default (`_OFF` off) | Gram formed and solved on the device, no 400 MB round trip; quality identical (n=1) |
@@ -264,8 +308,8 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `SELECT_FREG` | select-f-regression / taxi; select-r-regression / taxi | lane/apple-fast-select @ 99fad7a5d | sel-freg-taxi, sel-rreg-taxi | select-r-regression taxi 100.5 -> 10.1; select-f-regression 102.6 -> 15.0 | KEPT 4198d5a9c | -90% / -85% |
 | `X_PREP_FAST_UNIQUE` | - | lane/apple-fast-prep @ a11e43a5e | prep-onehot-uniq-taxi, prep-ordinal-uniq-taxi | onehot taxi 69.7 -> 30.4; ordinal taxi 67.2 -> 25.3 | KEPT f419ea9f1 | -56% / -62% |
 | `X_PREP_FAST_NONEG` | - | lane/apple-fast-prep @ a11e43a5e | prep-onehot-noneg-taxi, prep-ordinal-noneg-taxi | onehot -2.1%; ordinal -0.1% | DROPPED-noise | <5%; code removed from main 10a9ab8eb; recover at lane/apple-fast-prep@a11e43a5e |
-| `CV_FAST_SLICE` | cross-val-score / taxi | lane/apple-fast-resample @ 50b96e795 | resample-cv-slice-taxi | - | OPEN | A/B queued, no judged result yet |
-| `CV_FAST_TRUST_FOLDS` | cross-val-score / taxi | lane/apple-fast-resample @ 50b96e795 | resample-cv-trust-taxi | - | OPEN | A/B queued, no judged result yet |
+| `CV_FAST_SLICE` | cross-val-score / taxi, istella | lane/apple-fast-resample @ 50b96e795 | resample-cv-slice-taxi | - | READY-AB | ported, awaiting M2 build + M3 A/B; recovered on lane/apple-fast-rec-resample (2026-10-04); resample binding define read by model_selection.py via `resample_fast_defines`; only on native default folds (exact endpoint check), read-only views |
+| `CV_FAST_TRUST_FOLDS` | cross-val-score / taxi, istella | lane/apple-fast-resample @ 50b96e795 | resample-cv-trust-taxi | - | READY-AB | ported, awaiting M2 build + M3 A/B; recovered on lane/apple-fast-rec-resample (2026-10-04); early return in `_prepare_folds` for the native default folds |
 | `MI_ALL` | select-mutual-info(-reg) / istella; taxi | lane/apple-fast-miv @ 514401169 | miv-reg-all-*, miv-clf-all-* | reg istella 46,430 -> 1,151, taxi 2,316 -> 81; clf istella 715 -> 552, taxi 203 -> 145 | DROP (quality) | includes MI_FAST_FOLDS, which fails the selected-set gate; opt-in only |
 | `MI_CLF_RANKMAJOR` | select-mutual-info / istella; taxi | lane/apple-fast-miv @ 5e26b1008 | miv-clf-rank-istella, miv-clf-rank-taxi | istella 715.2 -> 645.2 (-9.8%); taxi 202.2 -> 196.4 (-2.9%) | KEEP (FAST + Apple default, _OFF) | vs main; quality tools/miv_quality.sh (M2, 30k x 48 tie-heavy, cont / 5-value / 2-class y): scores bit-identical |
 | `MI_REG_TIES` | select-mutual-info-reg / istella; taxi | lane/apple-fast-miv @ 514401169 | miv-reg-ties-istella, miv-reg-ties-taxi (old base: mi-reg-ties-istella-x 70,202 -> 1,414) | istella 46,465 -> 1,340 (-97%); taxi 2,339 -> 160 (-93%) | KEEP (FAST + Apple default, _OFF) | vs main; main istella swings 46-70 s, gap 35x; quality tools/miv_quality.sh (M2): scores bit-identical, set identical |
@@ -274,10 +318,10 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `MI_REG_SORTCOUNT` | select-mutual-info-reg / istella; select-mutual-info-reg / taxi | lane/apple-fast-mi @ 6944ebb57 | mi-reg-sortcount-istella, mi-reg-sortcount-taxi | - | NOT A DEFAULT ALONE | SORTCOUNT is on under MI_REG_TIES (default); RANKMAJOR not A/B-ed vs main; opt-in |
 | `MI_REG_SORTCOUNT + MI_REG_TIES` | select-mutual-info-reg / istella; select-mutual-info-reg / taxi | lane/apple-fast-mi @ 6944ebb57 | mi-reg-ties-istella, mi-reg-ties-taxi | old base 70,202 -> 1,414 | KEEP (see MI_REG_TIES row) | vs main on lane/apple-fast-miv: MI_REG_TIES row |
 | `MI_WORK` | - | lane/apple-fast-mi @ 6944ebb57 | mi-reg-work-istella, mi-reg-work-taxi, mi-clf-work-istella, mi-clf-work-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `PREP2_FAST_EIGH_BLOCK` | iterative-imputer / taxi | lane/apple-fast-prep2 @ 8762eb33f | prep2-ii-eigh-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `PREP2_FAST_EIGH_BLOCK` | iterative-imputer / taxi | lane/apple-fast-prep2 @ 8762eb33f | prep2-ii-eigh-taxi | B 185.1 (board 218) | ACCEPT/DEFAULT 2026-10-04 (see verdicts batch 3) | already on main; re-read in lane/apple-fast-rec-fa-robust, comment updated; awaiting M2 build + M3 A/B |
 | `PREP3_LABELS` | label-binarizer / taxi | lane/apple-fast-prep3 @ ec65873e3 | prep3-lb-taxi-x (M2); M3 re-check | M2 +1.0%; M3 -1.9% | DROPPED-noise | under 5% at n=1 on the M3, signs mixed with the M2; never merged to main or lane/apple-fast-m2b1 (code only on its lane branch) |
 | `PREP3_MAXABS` | maxabs-scaler / istella | lane/apple-fast-prep3 @ ec65873e3 (via lane/apple-fast-m2b1) | prep3-maxabs-istella-x-m3 (M2: prep3-maxabs-istella-x 133.0 -> 99.1) | 121.7 -> 104.2 | KEEP (FAST+Apple default, `_OFF`; lane/apple-fast-m2b1-m3) | -14.4%; output digest bit-identical (same max_abs_ / scale_ words); `-D MOJOLEARN_PREP3_MAXABS_OFF` reverts |
-| `PREP3_SPLINE` | spline / istella | lane/apple-fast-prep3 @ ec65873e3 | prep3-spline-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `PREP3_SPLINE` | spline / istella | lane/apple-fast-prep3 @ ec65873e3 | prep3-spline-istella | spline istella 11.8 -> 11.6 | DROPPED-noise | rec-misc 2026-10-04: -1.7% at n=1, under 5%; not merged |
 | `PREP_FAST_CLS2_MINMAX_FUSED / _MINMAX_POOL` | minmax-scaler | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | - | OPEN |  |
 | `PTIMPUTE_ALL` | power-transformer / istella; power-transformer / taxi | lane/apple-fast-batchv @ 77f1f5afb | batchv-pt-all-istella, batchv-pt-all-taxi | istella 2,258 -> 512 (-77%); taxi B 65.5 (main arm crashed: core/staged_download bug, fixed) | DROP (quality) | PT quality (tools/batchv_quality.sh + batchv_quality_sk.sh, M2, 100k x 220 / x 11): lambdas vs define-off max rel 9.5e-3 (abs 2.2e-3), transform 8.4e-4 of scale; vs sklearn float64 lambdas 6.3e-3 rel (main 5.7e-3): fails the 1e-4 gate; stays opt-in |
 | `PT_COLBATCH` | power-transformer / istella; power-transformer / taxi | lane/apple-fast-batchv @ 30aa43339 | batchv-pt-nospec-istella, batchv-pt-nospec-taxi2 (COLBATCH + FUSED_TRANSFORM + SI_ONEPASS) | istella 2,262 -> 425 (-81%); taxi 305 -> 54.5 (-82%) | DROP (quality) | PT quality (tools/batchv_quality.sh + batchv_quality_sk.sh, M2, 100k x 220 / x 11): lambdas vs define-off max rel 9.5e-3 (abs 2.2e-3), transform 8.4e-4 of scale; vs sklearn float64 lambdas 6.3e-3 rel (main 5.7e-3): fails the 1e-4 gate; the lambda shift comes from COLBATCH (the SI arm alone keeps lambdas exact); stays opt-in |
@@ -286,17 +330,17 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `PT_FUSED_TRANSFORM` | power-transformer / istella; power-transformer / taxi | lane/apple-fast-batchv | (in batchv-pt-nospec-*) | see PT_COLBATCH | DROP (quality, with COLBATCH) | not A/B-ed alone vs main; stays opt-in |
 | `PT_SPEC` | power-transformer / istella; power-transformer / taxi | lane/apple-fast-batch @ 3150d75c1 | ptimpute-pt-spec-istella | +10% vs COLBATCH | DROP | opt-in only |
 | `RESAMPLE_FAST_GATHER` | resample / taxi | lane/apple-fast-resample @ 50b96e795 | resample-rs-gather-taxi | - | OPEN | A/B queued, no judged result yet |
-| `RESAMPLE_FAST_IDX_BULK` | resample / taxi | lane/apple-fast-resample @ 50b96e795 | resample-rs-idxbulk-taxi | - | OPEN | A/B queued, no judged result yet |
-| `RESAMPLE_FAST_ONE_FOLD` | bootstrap / taxi | lane/apple-fast-resample @ 50b96e795 | resample-boot-onefold-taxi | - | OPEN | A/B queued, no judged result yet |
-| `RESAMPLE_FAST_PERM_SELECT` | permutation-test / taxi | lane/apple-fast-resample @ 50b96e795 | resample-perm-select-taxi | - | OPEN | A/B queued, no judged result yet |
-| `RESAMPLE_FAST_RANK_SORT` | bootstrap / taxi | lane/apple-fast-resample @ 50b96e795 | resample-boot-rank-taxi | - | OPEN | A/B queued, no judged result yet |
+| `RESAMPLE_FAST_IDX_BULK` | resample / taxi | lane/apple-fast-resample @ 50b96e795 | resample-rs-idxbulk-taxi | - | DROPPED-semantics | never compiled (parse error estimator.mojo:2096, a parameter named `out`); duplicate of main's KEPT `RESAMPLE_FAST_IDX_DIRECT` (gmp-rs-idx-*, same one-copy into the caller's buffer). Not ported |
+| `RESAMPLE_FAST_ONE_FOLD` | bootstrap / taxi, istella | lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf | M3 afc_ab_def, full board, 1 run/arm, 2026-10-04 | taxi 16.31 -> 13.89; istella 12.84 -> 14.23 | DROPPED-slower | mixed: slower on istella. Stays opt-in OFF (resample/estimator.mojo) |
+| `RESAMPLE_FAST_PERM_SELECT` (rollback `RESAMPLE_FAST_PERM_SELECT_OFF`) | permutation-test / taxi, istella | lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf | M3 afc_ab_def, full board, 1 run/arm, 2026-10-04 | taxi 55.41 -> 35.49; istella 55.28 -> 35.28 | KEEP (FAST+Apple default, `_OFF`) on lane/apple-fast-recovery | pvalue identical; 4-bit select vs main's perm_select_stat_kernel, same permutation, FAST fold |
+| `RESAMPLE_FAST_RANK_SORT` | bootstrap / taxi, istella | lane/apple-fast-resample @ 50b96e795; A/B ab1 d51f4b4bf | M3 afc_ab_def, full board, 1 run/arm, 2026-10-04 | taxi 14.38 -> 13.64; istella 11.59 -> 14.46 | DROPPED-slower | mixed: slower on istella. Stays opt-in OFF (resample/estimator.mojo) |
 | `SI_ONEPASS` | simple-imputer / istella; simple-imputer / taxi | lane/apple-fast-batchv @ 77f1f5afb | batchv-si-onepass-istella, batchv-si-onepass-taxi | istella 303.7 -> 273.7 (-9.9%); taxi 26.4 -> 21.0 (-20%) | KEEP (FAST + Apple default, _OFF) | vs main; quality tools/batchv_quality.sh (M2): median stats exact, mean stats <= 1.2e-7 abs (1 ulp), PT lambdas exact |
 | `X_PREP_FAST_CLS2_PACK / _PRESENT` | onehot, ordinal | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | - | OPEN |  |
 | `X_PREP_FAST_II_CONV` | - | lane/apple-fast-prep2 @ 8762eb33f | prep2-ii-conv-taxi | both arms status=error | OPEN | env-form line; define-form -b relaunch pending |
 | `X_PREP_FAST_II_GRAM_TILE` | - | lane/apple-fast-prep2 @ 8762eb33f | prep2-ii-gram-taxi | both arms status=error | OPEN | env-form line; -b relaunch pending |
 | `X_PREP_FAST_QSELECT` | - | lane/apple-fast-prep2 @ 8762eb33f | prep2-si-qsel-istella, prep2-rs-qsel-istella | both arms status=error | OPEN | env-form line; -b relaunch pending |
-| `X_PREP_FAST_TE_ENC` | - | lane/apple-fast-prep2 @ 8762eb33f | prep2-te-enc-taxi | both arms status=error | OPEN | env-form line; -b relaunch pending |
-| `X_PREP_FAST_TE_GLOBAL` | - | lane/apple-fast-prep2 @ 8762eb33f | prep2-te-global-taxi | both arms status=error | OPEN | env-form line; -b relaunch pending |
+| `X_PREP_FAST_TE_ENC` | target-encoder / taxi | lane/apple-fast-prep2 @ 8762eb33f | prep2-te-enc-taxi | env-form line: both arms status=error; B-only 359.6 | ACCEPT/DEFAULT 2026-10-04 (see verdicts batch 3) | now a build define in lane/apple-fast-rec-fa-robust (was an env read), Int32 counts; awaiting M2 build + M3 A/B |
+| `X_PREP_FAST_TE_GLOBAL` | target-encoder / taxi | lane/apple-fast-prep2 @ 8762eb33f | prep2-te-global-taxi | env-form line: both arms status=error | ACCEPT/DEFAULT 2026-10-04 (see verdicts batch 3) | now a build define in lane/apple-fast-rec-fa-robust (was an env read), Int32 counts; awaiting M2 build + M3 A/B |
 | MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL | minmax-scaler / istella | lane/apple-fast-gap-cls2@72602a339 | gapcls2-pool-minmax-istella | 106 -> 21.9 | KEEP, FAST+Apple default (`_OFF` off) | pooled X buffer, no 880 MB allocation per fit; quality identical (n=1) |
 | MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED | minmax-scaler / istella | lane/apple-fast-gap-cls2@72602a339 | gapcls2-{fused,fusedpool}-minmax-istella | -3% alone; 104.7 -> 19.1 with POOL | KEEP, FAST+Apple default (`_OFF` off) | NaN scan folded into the extrema pass; quality identical (n=1) |
 | MOJOLEARN_X_PREP_FAST_CLS2_PACK | onehot, ordinal / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-pack-{onehot,ordinal}-taxi | -19%, -33% | KEEP, FAST+Apple default (`_OFF` off) | distinct values packed into a small host region; quality identical (n=1) |
@@ -325,28 +369,39 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `CHOL_FAST_TALL` | cholesky / synthetic | lane/apple-fast-w3-linalg @ 97b7bcb7e | w2-cholt-quality, w2-cholt-synthetic | cholesky synthetic 275.9 -> 260.8 ms; quality PASS | DEFAULT (FAST+Apple), rollback MOJOLEARN_CHOL_FAST_TALL_OFF | panel as one tall 64-step blocked factor (threadgroup-memory diag factor + inverse, matrix-unit in-place solve and panel update): drops the 256x256 inverse, its pack/unpack and ~19 of ~30 launches per panel; outer trailing update unchanged (differs from the DROPPED triangular-SYRK attempt, which changed only the trailing update). Quality: tools/chol_fast_tall_pair.py |
 | `DECOMP_FAST_GEMM_MMA` | randomized-svd / istella, taxi; nmf / istella | lane/apple-fast-gap-linalg2-pca @ 474241154 | gl2p-rsvd-gemmmma-istella, gl2p-rsvd-gemmmma-taxi, gl2p-nmf-gemmmma-istella | randomized-svd istella 711 -> 533; taxi -1.3%; nmf istella 8,155 -> 6,333 | KEPT | -25% / -22%; reconstruction error the same (rsvd .0002359 / .0272, nmf .3252); FAST+Apple default for every x_decomp kit GEMM, -D MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF reverts |
 | `PCA_FAST_GRAM_MMA` | pca / istella | lane/apple-fast-gap-linalg2-pca @ 474241154 | gl2p-pca-grammma-istella-r, gl2p-pca-quality (M2) | pca istella 606 -> 490 | KEPT | -19%; quality-only check: explained_variance_ rel diff 3.4e-06, subspace angle 1.8e-06 rad (nondeterministic MMA/atomic sum); FAST+Apple default, -D MOJOLEARN_PCA_FAST_GRAM_MMA_OFF reverts |
-| `CHOL_FAST_BLOCKED` | cholesky / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-chol-blocked-synthetic | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `CHOL_FAST_BLOCKED + SVD_FAST_CHOLQR` | svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-svd-cholqr-chol-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `DECOMP_FAST_DICT_UPDATE` | dict-learning / istella; mb-dict-learning / istella; mb-sparse-pca / istella; sparse-pc... | lane/apple-fast-decomp-sparse @ 5fb1740cd | dsp-mbdl-upd-istella, dsp-dl-upd-istella, dsp-mbspca-upd-istella, dsp-spca-upd-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `DECOMP_FAST_GEMM_TILED` | als / taxi-zones; lstsq / istella; nmf / istella; randomized-svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-lstsq-tiled-istella, dlin-rsvd-tiled-istella, dlin-nmf-tiled-istella, dlin-als-tiled-taxizones | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `DECOMP_FAST_LASSO_BLOCK` | dict-learning / istella; mb-dict-learning / istella; sparse-pca / taxi | lane/apple-fast-decomp-sparse @ 5fb1740cd | dsp-mbdl-lasso-istella, dsp-dl-lasso-istella, dsp-spca-lasso-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `CHOL_FAST_BLOCKED` | cholesky / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp | dlin-chol-blocked-synthetic | old-head B 476 vs board FAST 261 (no same-build A) | DROPPED-slower+quality 2026-10-04 (see verdicts batch 3) | ported to main (x_decomp/fast_chol.mojo, potrf_lower + DevExec.chol); default off; potrf route only for defer_ok callers with CHOL_FAST_NOSYNC on (LAPACK partial factor kept via the redo); awaiting M2 build + M3 A/B |
+| `CHOL_FAST_BLOCKED + SVD_FAST_CHOLQR` | svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp | dlin-svd-cholqr-chol-istella | - | READY-AB | both ported (rows above); the Gram Cholesky takes the blocked kernel when both are defined; awaiting M2 build + M3 A/B |
+| `DECOMP_FAST_DICT_UPDATE` | dict-learning / istella; mb-dict-learning / istella; mb-sparse-pca / istella; sparse-pca / taxi | lane/apple-fast-decomp-sparse @ 5fb1740cd | dsp-mbdl-upd-istella, dsp-dl-upd-istella, dsp-mbspca-upd-istella, dsp-spca-upd-taxi | old-head B mbdl istella 5,902 vs board FAST 3,185 | SUPERSEDED | not ported (lane/apple-fast-rec-decomp, 2026-10-04): main's DECOMP_FAST_DICT_DEV (FAST + Apple default, x_decomp/dict_fast.mojo) runs the same atom loop on the device in 2 launches an atom against this Python loop's 11 |
+| `DECOMP_FAST_GEMM_TILED` | als / taxi-zones; lstsq / istella; nmf / istella; randomized-svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp | dlin-lstsq-tiled-istella, dlin-rsvd-tiled-istella, dlin-nmf-tiled-istella, dlin-als-tiled-taxizones | old-head B rsvd istella 683 vs board FAST 533 (no same-build A) | READY-AB | ported to main (x_decomp/fast_gemm.mojo, launch_gemm ahead of DECOMP_FAST_GEMM_MMA, so the A/B is tiled vs MMA); default off; awaiting M2 build + M3 A/B |
+| `DECOMP_FAST_LASSO_BLOCK` | dict-learning / istella; mb-dict-learning / istella; sparse-pca / taxi | lane/apple-fast-decomp-sparse @ 5fb1740cd | dsp-mbdl-lasso-istella, dsp-dl-lasso-istella, dsp-spca-lasso-taxi | old-head B mbdl 3,243 vs board FAST 3,185 | SUPERSEDED | not ported (lane/apple-fast-rec-decomp, 2026-10-04): main's DECOMP_FAST_LASSO_GRP (FAST + Apple default, x_decomp/lasso_grp.mojo) is the same 32-thread-block-per-row Lasso |
 | `DECOMP_FAST_DICT_DEV` | mb-dict-learning / istella | lane/apple-fast-gap-clus3 @ 43bc2906c | clus3-mbdl-dictdev-istella | 6,832 -> 5,193 | KEPT, FAST+Apple default (`_OFF` off) | -24%; sparsity .08636, recon err .6483 identical (n=1); `_update_dict` atom loop as 2 resident launches an atom (x_decomp/dict_fast.mojo), no per-atom vstack download / re-upload; resample + positive_dict keep the loop. Not decomp-sparse's DICT_UPDATE (never compiled) |
 | `DECOMP_FAST_LASSO_GRP` | mb-dict-learning / istella | lane/apple-fast-gap-clus3 @ 43bc2906c | clus3-mbdl-lassogrp-istella | 6,827 -> 3,185 | KEPT, FAST+Apple default (`_OFF` off) | -53%; sparsity .08636, recon err .6483 identical (n=1); measured alone, combined number from the main retime; Lasso CD a 32-thread block per row, G/w/q/H in threadgroup memory (x_decomp/lasso_grp.mojo); was a thread per row (2 blocks at batch 256) with H in device memory; k <= 64 |
 | `DECOMP_FAST_OMP_BLOCK` | sparse-coder / istella | lane/apple-fast-decomp-sparse @ 5fb1740cd | dsp-omp-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `FA_ALL` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-all-taxi, fa-all-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `FA_ALL` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-all-taxi, fa-all-istella | - | HOLD-quality 2026-10-04 (see verdicts batch 3) | ported to lane/apple-fast-rec-fa-robust; every FA define; awaiting M2 build + M3 A/B |
+| `FA_EIG_SMALL + FA_ITER_DEVICE` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-eig-taxi, fa-eig-istella | taxi 39.5, istella 5884 (board 308 / 10351) | READY-AB | ported to lane/apple-fast-rec-fa-robust (x_decomp/fa_fast.mojo) with main's two-pass mean and cancellation-free psi; EIG_SMALL implies ITER_DEVICE; awaiting M2 build + M3 A/B |
+| `FA_EIG_SMALL + FA_ITER_DEVICE + FA_LL_DEVICE` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-lldev-taxi, fa-lldev-istella | taxi 30.2, istella 5879 | READY-AB | ported to lane/apple-fast-rec-fa-robust; awaiting M2 build + M3 A/B |
+| `FA_FAST_QRR` | factor-analysis / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-fa-qrr-istella | - | ACCEPT/DEFAULT 2026-10-04 (see verdicts batch 3) | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `FA_GRAM_ONCE` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-gram-taxi, fa-gram-istella | taxi 277, istella 1262 (board 308 / 10351) | HOLD-quality 2026-10-04 (see verdicts batch 3) | ported to lane/apple-fast-rec-fa-robust with main's psi update on the Python loop; awaiting M2 build + M3 A/B |
+| `FA_ITER_DEVICE` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-iter-taxi, fa-iter-istella | istella about 1253 (board 10351) | HOLD-quality 2026-10-04 (see verdicts batch 3) | ported to lane/apple-fast-rec-fa-robust; psi update in fa_finish_kernel is main's cancellation-free form; awaiting M2 build + M3 A/B |
+| `FA_ITER_DEVICE + FA_LIVEBUF` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-livebuf-taxi, fa-livebuf-istella | istella 1258, taxi 168.7 | READY-AB | ported to lane/apple-fast-rec-fa-robust; LIVEBUF implies ITER_DEVICE; awaiting M2 build + M3 A/B |
+| `FA_TRANSFORM_FUSED` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-tr-taxi, fa-tr-istella | istella 6201, taxi 243 | READY-AB | ported to lane/apple-fast-rec-fa-robust; awaiting M2 build + M3 A/B |
+| `LU_FAST_PIVOT_GRID` | lu-factor / synthetic; lu-solve / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-lu-pivot-synthetic, dlin-lusolve-pivot-synthetic | lu-factor synthetic 1,377 -> 1,233; lu-solve 1,367 -> 1,234 | OPEN | candidate (-10%); merge waits on the other decomp-linalg lines |
+| `DECOMP_FAST_OMP_BLOCK` | sparse-coder / istella | lane/apple-fast-decomp-sparse @ 5fb1740cd -> lane/apple-fast-rec-decomp | dsp-omp-istella | - (no result recorded; board 0831 6,669 vs sklearn 29) | READY-AB | ported to main (x_decomp/omp_block.mojo, DevExec.omp_rows); W row now written once per cell by its owner thread (the branch relied on barrier() ordering device stores, which Metal does not give); default off; awaiting M2 build + M3 A/B |
+| `DECOMP_SDK_NNNT` | pca / istella; decomp GEMM | lane/apple-fast-decomp-sdk-control @ 73bb9ac6e | - | - | PARKED | not ported (lane/apple-fast-rec-decomp, 2026-10-04): an uncompiled WIP checkpoint (SDK matmul adapter for the decomp kit's buffers) whose own notes list a quality binding, an FP64 gate, route counters and alias/offset controls still owed; not small. The scoped G1/G5 GEMM timings cover the same pca lane |
+| `FA_ALL` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-all-taxi, fa-all-istella | - | HOLD-quality 2026-10-04 (see verdicts batch 3) | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `FA_EIG_SMALL + FA_ITER_DEVICE` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-eig-taxi, fa-eig-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `FA_EIG_SMALL + FA_ITER_DEVICE + FA_LL_DEVICE` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-lldev-taxi, fa-lldev-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `FA_FAST_QRR` | factor-analysis / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-fa-qrr-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `FA_GRAM_ONCE` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-gram-taxi, fa-gram-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `FA_ITER_DEVICE` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-iter-taxi, fa-iter-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `FA_FAST_QRR` | factor-analysis / istella | lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp | dlin-fa-qrr-istella | - (no result recorded; board FAST 10,351) | ACCEPT/DEFAULT 2026-10-04 (see verdicts batch 3) | ported to main (DevExec.qr_r: upload from the caller's floats, no host List copy; same kernels, same R bits); default off; awaiting M2 build + M3 A/B |
+| `FA_GRAM_ONCE` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-gram-taxi, fa-gram-istella | - | HOLD-quality 2026-10-04 (see verdicts batch 3) | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `FA_ITER_DEVICE` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-iter-taxi, fa-iter-istella | - | HOLD-quality 2026-10-04 (see verdicts batch 3) | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `FA_ITER_DEVICE + FA_LIVEBUF` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-livebuf-taxi, fa-livebuf-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `FA_TRANSFORM_FUSED` | factor-analysis / istella; factor-analysis / taxi | lane/apple-fast-fa @ 3efbce2af | fa-tr-taxi, fa-tr-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `LU_FAST_PIVOT_GRID` | lu-factor / synthetic; lu-solve / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-lu-pivot-synthetic, dlin-lusolve-pivot-synthetic | lu-factor synthetic 1,377 -> 1,233; lu-solve 1,367 -> 1,234 | OPEN | candidate (-10%); merge waits on the other decomp-linalg lines |
+| `LU_FAST_PIVOT_GRID` | lu-factor / synthetic; lu-solve / synthetic | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-lu-pivot-synthetic, dlin-lusolve-pivot-synthetic | lu-factor synthetic 1,377 -> 1,233; lu-solve 1,367 -> 1,234 (old head); board FAST 654 / 734 | SUPERSEDED | not ported (lane/apple-fast-rec-decomp, 2026-10-04): it fused 2 of the per-step loop's 3 pivot/swap launches, and main's FAST + Apple defaults LU_FAST_STEP1 (one launch a panel column) and LU_FAST_MMA no longer run that loop |
 | `LU_FAST_MMA` | lu-factor / synthetic; lu-solve / synthetic | lane/apple-fast-w2-linalg @ 91a6573f5 (base 254e50a01) | w2-lumma-quality, w2-lumma-lufactor-synthetic, w2-lumma-lusolve-synthetic | 971.7 -> 849.3 (lu-factor); 971.9 -> 852.1 (lu-solve) | DEFAULT (FAST+Apple), rollback `MOJOLEARN_LU_FAST_MMA_OFF`; w2-lumma-quality PASS (factor/solve residual gates, info, finite) | hypothesis: main's 256 scalar k=32 trailing passes (lu_trail_rb_kernel, ~46 GB traffic at n=8192) become 32 k=256 matrix-unit GEMMs (LAPACK getrf delayed update, 32-col inner panels unchanged via LU_FAST_STEP1); quality gate tools/lu_fast_mma_quality.py (factor + solve residual <= max(1.5x A, A+2e-7), info equal, board8192 bytes must differ) |
 | `MCD_DEVICE_CSTEPS` | min-cov-det / taxi; elliptic-envelope / taxi | lane/apple-fast-robust @ cfdb95e48 | M3 min-cov-det taxi; robust-ee-taxi-x (M2) | M3 mcd 79,925 -> 215; M2 ee 64,578 -> 267.5 | DROPPED-quality (Oct 3; code kept opt-in `-D MOJOLEARN_MCD_DEVICE_CSTEPS` for a future correct parallel C-step) | tools/mcd_quality_ab.sh (M2, taxi 100k, mcdq4): Jaccard flagged Xq vs OFF .8805 mcd / .9645 ee (bar .99); OFF vs IDENTICAL .994 / .999; location_ 14%, covariance_ 18% rel Frobenius shift; mcd flag rate .231 -> .203; raw covariance rank 8 vs OFF/IDENTICAL 10 (all exact-fit singular) |
 | `ANN3_COARSE_SEED + IVF_FAST_SEED_DEVICE` | ivf-pq / istella | lane/apple-fast-fastonly2 @ eca3e33b6 (via lane/apple-fast-m2b1) | fastonly2-5-ivf-pq-istella-m3, fastonly2-3-ivf-pq-istella-m3 | no seed -> seed+device 5,976 -> 5,253; host seed -> device seed 5,516 -> 5,243 | KEEP (FAST+Apple default, `_OFF`; lane/apple-fast-m2b1-m3) | -12.1% / -4.9%; recall_at_10 .5995 -> .6071 and .6017 -> .6071 (better); `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` / `-D MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF` revert (M2: 18,555 -> 12,036, -1.3%) |
-| `QR_FAST_DEV` | qr / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-qr-dev-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `SVD_FAST_CHOLQR` | svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-svd-cholqr-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `QR_FAST_DEV` | qr / istella, taxi | lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp | dlin-qr-dev-istella | - (no result recorded; board FAST qr taxi 46.6) | READY-AB | ported to main (x_decomp/fast_qr.mojo, DevExec.geqrf / orgqr; linalg.qr reads the define from `x_decomp_fast_defines`); default off; awaiting M2 build + M3 A/B |
+| `SVD_FAST_CHOLQR` | svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp | dlin-svd-cholqr-istella | old-head B 15,620 vs board FAST 1,781 (no same-build A) | READY-AB | ported to main (x_decomp/device.mojo orth_on_device_diag; linalg.svd reads the define from `x_decomp_fast_defines`); guard moved to a device kernel (one flag read a pass, no host diagonal scan); default off; awaiting M2 build + M3 A/B |
 | `XD_FAST_CLS2_GRP_DEVSCAN` | gaussian-rp / istella | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | 54 -> 15.9 | OPEN | judged KEEP (-71%, keeps fit-time NaN refusal; beats sklearn 24.3); cls2 merge pending |
 | `XD_FAST_CLS2_GRP_NOSCAN (+ _GRP_LAZY)` | gaussian-rp / istella | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | 57 -> 1.1; with LAZY 54 -> 0.5 | OPEN | semantics: moves the NaN/inf error from fit to transform; Andrew asked, not default |
 | MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN | gaussian-rp / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-devscan-grp-{istella,taxi} | 54.3 -> 15.9, 4.7 -> 3.9 | KEEP, FAST+Apple default (`_OFF` off) | device NaN scan replaces the one-thread host walk; quality identical (n=1) |
@@ -375,16 +430,16 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `BGMM_FAST_MAHAL_GEMM` | bayesian-gmm / taxi | lane/apple-fast-cluster2 @ ded4ea07b | cluster2-bgmm-mahal-taxi | - | OPEN | A/B queued, no judged result yet |
 | `BGMM_FAST_MOMENTS_GEMM` | bayesian-gmm / istella | lane/apple-fast-cluster2 @ ded4ea07b | cluster2-bgmm-momgemm-istella | - | OPEN | A/B queued, no judged result yet |
 | `BISECT_FAST_RESIDENT` | bisecting-kmeans / istella | lane/apple-fast-cluster2 @ ded4ea07b | cluster2-bisect-resident-istella | - | OPEN | A/B queued, no judged result yet |
-| `CC_FAST` | connected-components / taxi | lane/apple-fast-graph @ 1fa36a7ec | graph-cc-fast-taxi | - | OPEN | A/B queued, no judged result yet |
+| `CC_FAST` | connected-components / taxi | lane/apple-fast-graph @ 1fa36a7ec; ported lane/apple-fast-rec-misc | graph-cc-fast-taxi | - (parse error, never ran) | READY-AB | rec-misc 2026-10-04: parse error `iter_device.mojo:513` was `out` as an argument name (renamed `dst`); Python half rebased on main's `_p2m_iota` / `_p2m_relabel`, info zero-filled. Awaiting M2 build + M3 A/B |
 | `DBSCAN_FAST_CC_BATCH` | dbscan / taxi | lane/apple-fast-core @ 9a31ebb4c | core-dbscan-ccbatch-taxi | dbscan taxi: both arms time out | OPEN | incomplete |
-| `DBSCAN_FAST_DENSEBALL` | dbscan / taxi, istella | lane/apple-fast-dbscantaxi @ 1febff7df | dbscantaxi-ab, dbscantaxi-ab-ist | - | OPEN | queued; arm A times out on taxi; same-bits ID owed |
+| `DBSCAN_FAST_DENSEBALL` | dbscan / taxi, istella | lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc | dbscantaxi-ab-x, dbscantaxi-ab-ist-x | n=0 on both arms (no times) | READY-AB | rec-misc 2026-10-04: arm A times out at the classical driver's 600 s warmup on taxi (expected, no board FAST row); arm B also timed out: its pair kernel stopped a whole landmark pair at the first hook, so rounds grew with rows per ball. Fixed: one hook per row per round (components at least halve per round). Awaiting M2 build + M3 A/B (AFC_FAMILY=classical, binding estimators) |
 | `DBSCAN_FAST_SCAN` | dbscan / taxi | lane/apple-fast-core @ 9a31ebb4c | core-dbscan-scan-taxi | dbscan taxi: both arms time out | OPEN | incomplete; replaced by DBSCAN_FAST_DENSEBALL lane |
 | `HDBSCAN2_ALL` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-all-taxi, hdbscan2-all6-taxi, hdbscan2-all-istella, hdbscan2-all6-istella | - | DROP (as a bundle) | its gain is HDB_SMR_TILED (KEEP); CORE_TILE and ONE_SYNC lose vs main; opt-in only |
 | `HDB_CORE_TILE` | hdbscan / taxi; hdbscan / istella | lane/apple-fast-batchv @ c7ede6e47 | batchv-hdb-core-taxi, batchv-hdb-core-istella | taxi vs main +0.8%; istella 44,717 -> 45,590 (+2%) | DROP | old-base -11% did not carry to main; clusters identical; opt-in only |
-| `HDB_DEV_BORUVKA` | hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-boruvka-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
-| `HDB_LINKAGE_DEVICE` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-linkage-taxi, hdbscan2-linkage-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `HDB_DEV_BORUVKA` | hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-boruvka-taxi | hdbscan taxi 434 -> 432.6 | DROPPED-noise | rec-misc 2026-10-04: hdbscan taxi B 432.6 vs board 434 (-0.3%, inside noise); still opt-in on main (no default), so a dead toggle for the cleanup lane |
+| `HDB_LINKAGE_DEVICE` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-linkage-taxi, hdbscan2-linkage-istella | hdbscan taxi 434 -> 432.6 | DROPPED-noise | rec-misc 2026-10-04: hdbscan taxi B 432.6 vs board 434 (-0.3%, inside noise); still opt-in on main (no default), so a dead toggle for the cleanup lane |
 | `HDB_ONE_SYNC` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-batchv @ c8251211d | batchv-hdb-onesync-taxi, batchv-hdb-onesync-istella | taxi 424.7 -> 425.5 (+0.2%); istella 3,809 -> 3,829 (+0.5%, SMR on both) | DROP | clusters identical; old-base -5% did not carry; opt-in only |
-| `HDB_SELECT_DEVICE` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-select-taxi, hdbscan2-select-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
+| `HDB_SELECT_DEVICE` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-hdbscan2 @ 2fdb9114f | hdbscan2-select-taxi, hdbscan2-select-istella | hdbscan taxi 434 -> 432.6 | DROPPED-noise | rec-misc 2026-10-04: hdbscan taxi B 432.6 vs board 434 (-0.3%, inside noise); still opt-in on main (no default), so a dead toggle for the cleanup lane |
 | `HDB_SMR_TILED` | hdbscan / istella; hdbscan / taxi | lane/apple-fast-batchv @ c7ede6e47 | batchv-hdb-smr-istella, batchv-hdb-smr-taxi | istella 44,879 -> 3,800 (-91.5%); taxi 426 -> 434 (+2%, noise: taxi takes the d <= 64 arm) | KEEP (FAST + Apple default, _OFF) | vs main, one run per arm; n_clusters 47 / noise 0.25381 (istella), 160 / 0.14222 (taxi) identical both arms |
 | `OPTICS2_ALL` | optics / istella; optics / taxi | lane/apple-fast-batch @ 3150d75c1 | optics2-all-taxi-x | taxi 411 -> 34,474 (84x slower) | DROP | includes STEP_BATCH; never merged |
 | `OPTICS_CORE_SQ` | optics / istella; optics / taxi | lane/apple-fast-batch @ 3150d75c1 | optics2-sq-taxi-x | taxi +6.1% | DROP | never merged |
@@ -449,7 +504,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `XN_PCS_SPARSE` | poly-count-sketch / taxi | lane/apple-fast-neighbors2 @ 5fb6edd3f | n2-pcs-sparse-taxi | poly-count-sketch taxi 0.3 -> 0.3 | DROPPED-noise | no change; code removed from main 3d1c6bd73; recover at lane/apple-fast-neighbors2@5fb6edd3f |
 | (baseline, no switch) | - | lane/apple-fast-kapprox @ 10d5a7970 | kap-grp-base-taxi, kap-grp-base-istella | - | OPEN | baseline lines |
 | `KERNEL_FAST_NYS_RR_EIGH` | nystroem / istella | lane/apple-fast-kernel @ 9e851777c | kernel-nys-rr-ist | - | OPEN | A/B queued, no judged result yet |
-| `KPCA_RESIDENT` | kernel-pca / istella | lane/apple-fast-kapprox @ 10d5a7970 | kap-kpca-istella | kernel-pca istella 1,014 -> 294 | OPEN | digests differ; quality vs sklearn not yet checked |
+| `KPCA_RESIDENT` | kernel-pca / istella | lane/apple-fast-kapprox @ 10d5a7970 | kap-kpca-istella | kernel-pca istella 1,014 -> 201; taxi 127.5 | KEPT 0bcc7202d | rec-misc 2026-10-04: validated and made the FAST+Apple default in 0bcc7202d (`_OFF` rolls back; quality row below, w4-decomp 34b4f6c72); board istella 201 and taxi 127.5 equal the B arm |
 | `XN_FAST_CLS2_OCSVM_RES / _2L / _CHUNK256` | ocsvm | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | - | OPEN |  |
 
 ## Neural (99)
@@ -462,7 +517,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `OPT_ZERO_OPEN` | adagrad, lamb, adamax / synthetic | lane/apple-fast-optspeed @ 7a5b3fb2c | optspeed-* | all3 adagrad 317 -> 187; lamb 340 -> 206; adamax 326 -> 195 | KEPT 5990c5946 | copy only, no bit change |
 | `SEQ_FAST_PIPE_DOWN` | adafactor, layernorm, adagrad / synthetic | lane/apple-fast-regress @ 93951fafb | regress-adafactor-down, regress-adafactor-pipe, regress-adagrad-pipe | adafactor 684 -> 390; adagrad 195.5 -> 199.1 | KEPT f6a9e7c04 | -43% adafactor; adagrad neutral |
 | `SEQ_FAST_PIPE_UP` | layernorm / synthetic | lane/apple-fast-regress @ 93951fafb | regress-layernorm-pipe | 76.0 -> 52.2 (with PIPE_DOWN) | KEPT f6a9e7c04 | helps layernorm, neutral elsewhere |
-| `OPT_RAW_UP` | adagrad / synthetic | lane/apple-fast-optspeed @ 7a5b3fb2c | optspeed-* | 310 -> 307 | DROPPED-noise | stays opt-in |
+| `OPT_RAW_UP` | adagrad / synthetic | lane/apple-fast-optspeed @ 7a5b3fb2c | optspeed-* | 310 -> 307 | DROPPED-noise alone; KEEP 2026-10-04 as the pair with OPT_FAST_STREAM (see rec-optim table) | stays opt-in |
 | (baseline, no switch) | neural | lane/apple-fast-neural @ 600237d7c | afn-tier-base-gemm, afn-tier-base-gemm-bf16, afn-tier-base-gemm-int8 (+9) | - | OPEN | neural lines run after the classical queue |
 | `AFN_ATTN_ALL` | neural | lane/apple-fast-neural @ 600237d7c | afn-attn-all, afn-w2-lmgrad-fwd-attnall-forward | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `AFN_ATTN_ARENA` | neural | lane/apple-fast-neural @ 600237d7c | afn-attn-arena | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
@@ -515,7 +570,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `AFN_MLP_FUSED_STEP` | neural | lane/apple-fast-neural @ 600237d7c | afn-mlp-fused | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `AFN_MLP_MULTISTEP` | neural | lane/apple-fast-neural @ 600237d7c | afn-mlp-multistep | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `AFN_MLP_RESIDENT` | neural | lane/apple-fast-neural @ 600237d7c | afn-mlp-resident | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
-| `AFN_OPTIM_ALL` | neural | lane/apple-fast-neural @ 600237d7c | afn-optim-all-mlp, afn-optim-all-samba, afn-optim-all-lm | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
+| `AFN_OPTIM_ALL` | neural | lane/apple-fast-neural @ 600237d7c | afn-optim-all-mlp, afn-optim-all-samba, afn-optim-all-lm | - | HOLD 2026-10-04 (see rec-optim table) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `AFN_OPT_CLIP_FUSE` | neural | lane/apple-fast-neural @ 600237d7c | afn-optim-clipfuse-mlp, afn-optim-clipfuse-samba, afn-optim-clipfuse-lm | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `AFN_OPT_FUSE_SCAN` | neural | lane/apple-fast-neural @ 600237d7c | afn-optim-fusescan-mlp, afn-optim-fusescan-samba, afn-optim-fusescan-lm | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `AFN_OPT_MULTITENSOR` | neural | lane/apple-fast-neural @ 600237d7c | afn-optim-multitensor-mlp, afn-optim-multitensor-samba, afn-optim-multitensor-lm | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
@@ -536,7 +591,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `BPE_LIVEBUF + BPE_TRAIN_DEVICE` | bpe-train / enwik8 | lane/apple-fast-bpe @ 3355d37b3 | bpe-train-livebuf | - | OPEN | neural lines run after the classical queue |
 | `BPE_MERGE_BATCH + BPE_TRAIN_DEVICE` | bpe-train / enwik8 | lane/apple-fast-bpe @ 3355d37b3 | bpe-train-batch | - | OPEN | neural lines run after the classical queue |
 | `BPE_TRAIN_DEVICE` | bpe-train / enwik8 | lane/apple-fast-bpe @ 3355d37b3 | bpe-train-dev | - | OPEN | neural lines run after the classical queue |
-| `LN_FAST_NOFILL` | layernorm / synthetic | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-nofill-layernorm | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
+| `LN_FAST_NOFILL` | layernorm / synthetic | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-nofill-layernorm | - | KEEP 2026-10-04: FAST+Apple default (see rec-optim table) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `MOE_FAST_MMA (+ _KB32, _WIDE, _PF)` | moe / synthetic | lane/apple-fast-gap-misc @ 5e2eec7a3 | gapmisc-moe-* | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `OPT_FAST_MAP_DOWN` | adagrad / synthetic; adamax / synthetic; nadam / synthetic; rmsprop / synthetic | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-mapdown-adagrad, gapoptim-mapdown-rmsprop, gapoptim-mapdown-adamax, gapoptim-mapdown-nadam | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `OPT_FAST_PIPE_CH` | adagrad / synthetic; adamax / synthetic; nadam / synthetic; rmsprop / synthetic | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-ch2m-adagrad, gapoptim-ch2m-rmsprop, gapoptim-ch2m-adamax, gapoptim-ch2m-nadam | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
@@ -544,11 +599,11 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `SCHED_FAST_INLINE` | - | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-inline-lrexp | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `SCHED_FAST_INLINE,SCHED_FAST_P64` | - | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-inlinep64-lrexp, gapoptim-schedcheck | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `SCHED_FAST_P64` | - | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-p64-lrexp | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
-| `SEQ_FAST_LSTM_SCAN` | lstm-clf / synthetic; lstm-clf / taxi-hourly; lstm-reg / synthetic; lstm-reg / taxi-hourly | lane/apple-fast-gap-lstm @ 0d6cbc821 | gaplstm-scan-regsyn, gaplstm-scan-regtaxi, gaplstm-scan-clftaxi, gaplstm-scan-clfsyn | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
-| `SEQ_FAST_LSTM_SCAN + SEQ_FAST_LSTM_SCAN_SMEM` | lstm-clf / synthetic; lstm-clf / taxi-hourly; lstm-reg / synthetic; lstm-reg / taxi-hourly | lane/apple-fast-gap-lstm @ 0d6cbc821 | gaplstm-smem-regsyn, gaplstm-smem-regtaxi, gaplstm-smem-clftaxi, gaplstm-smem-clfsyn | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
-| `SEQ_FAST_LSTM_SCAN + SEQ_FAST_LSTM_SCAN_SMEM + SEQ_FAST_LSTM_WGRAD` | lstm-clf / synthetic; lstm-clf / taxi-hourly; lstm-reg / synthetic; lstm-reg / taxi-hourly | lane/apple-fast-gap-lstm @ 0d6cbc821 | gaplstm-all-regsyn, gaplstm-all-regtaxi, gaplstm-all-clftaxi, gaplstm-all-clfsyn | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
-| `SEQ_FAST_LSTM_WGRAD` | lstm-clf / synthetic; lstm-clf / taxi-hourly; lstm-reg / synthetic; lstm-reg / taxi-hourly | lane/apple-fast-gap-lstm @ 0d6cbc821 | gaplstm-wgrad-regsyn, gaplstm-wgrad-regtaxi, gaplstm-wgrad-clftaxi, gaplstm-wgrad-clfsyn | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
-| `SEQ_FAST_MAP_DOWN` | adafactor / synthetic; layernorm / synthetic | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-mapdown-adafactor, gapoptim-mapdown-layernorm | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
+| `SEQ_FAST_LSTM_SCAN` | lstm-clf / synthetic; lstm-clf / taxi-hourly; lstm-reg / synthetic; lstm-reg / taxi-hourly | lane/apple-fast-gap-lstm @ 0d6cbc821 | gaplstm-scan-regsyn, gaplstm-scan-regtaxi, gaplstm-scan-clftaxi, gaplstm-scan-clfsyn | - | not measured alone; bundle DROPPED-quality 2026-10-04 (see rec-optim table) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
+| `SEQ_FAST_LSTM_SCAN + SEQ_FAST_LSTM_SCAN_SMEM` | lstm-clf / synthetic; lstm-clf / taxi-hourly; lstm-reg / synthetic; lstm-reg / taxi-hourly | lane/apple-fast-gap-lstm @ 0d6cbc821 | gaplstm-smem-regsyn, gaplstm-smem-regtaxi, gaplstm-smem-clftaxi, gaplstm-smem-clfsyn | - | not measured alone; bundle DROPPED-quality 2026-10-04 (see rec-optim table) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
+| `SEQ_FAST_LSTM_SCAN + SEQ_FAST_LSTM_SCAN_SMEM + SEQ_FAST_LSTM_WGRAD` | lstm-clf / synthetic; lstm-clf / taxi-hourly; lstm-reg / synthetic; lstm-reg / taxi-hourly | lane/apple-fast-gap-lstm @ 0d6cbc821 | gaplstm-all-regsyn, gaplstm-all-regtaxi, gaplstm-all-clftaxi, gaplstm-all-clfsyn | - | DROPPED-quality 2026-10-04 (BROKEN; see rec-optim table) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
+| `SEQ_FAST_LSTM_WGRAD` | lstm-clf / synthetic; lstm-clf / taxi-hourly; lstm-reg / synthetic; lstm-reg / taxi-hourly | lane/apple-fast-gap-lstm @ 0d6cbc821 | gaplstm-wgrad-regsyn, gaplstm-wgrad-regtaxi, gaplstm-wgrad-clftaxi, gaplstm-wgrad-clfsyn | - | not measured alone; bundle DROPPED-quality 2026-10-04 (see rec-optim table) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
+| `SEQ_FAST_MAP_DOWN` | adafactor / synthetic; layernorm / synthetic | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-mapdown-adafactor, gapoptim-mapdown-layernorm | - | DROPPED-slower 2026-10-04 on layernorm (see rec-optim table) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `SEQ_FAST_PIPE_CH` | layernorm / synthetic | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-ch2m-layernorm | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `SEQ_FAST_RAW_DOWN` | adafactor / synthetic; layernorm / synthetic | lane/apple-fast-gap-optim @ cf4513f8a | gapoptim-rawdown-adafactor, gapoptim-rawdown-layernorm | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run |
 | `AFN_GEMM_EPILOGUE` | neural | lane/apple-fast-neural @ 600237d7c | - | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run; the fused bias/activation/residual GEMM epilogue |
@@ -589,7 +644,7 @@ Fixes of UNOWNED rows of `tools/hooks/host_routes_baseline.tsv`. Arm A of each A
 
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
-| `PURITY2_1` (`_OFF`) | gmm / istella | lane/apple-fast-purity2 @ 6f1ad9cf7 | purity2-1-gmm-istella | owed | OPEN | FAST mean log-likelihood: up to 64 partial blocks + a fold, not one 1024-thread block over n (mixture/checks/estep.mojo) |
+| `PURITY2_1` (`_OFF`) | gmm / istella | lane/apple-fast-purity2 @ 6f1ad9cf7 | purity2-1-gmm-istella | gmm istella B 5,859 = board 5,858 | KEPT 196b61747 | rec-misc 2026-10-04: FAST+Apple default since 196b61747 (`MOJOLEARN_PURITY2_1_OFF` rolls back); the board FAST value equals the B arm. FAST mean log-likelihood: up to 64 partial blocks + a fold (mixture/checks/estep.mojo) |
 | `PURITY2_2` (`_OFF`) | logreg / istella, taxi | lane/apple-fast-purity2 @ 6f1ad9cf7 | purity2-2-logreg-{istella,taxi} | owed | OPEN | QN loss sum + bias mean in QN_TILED's tile order (two passes), not one block over n (glm/impl/qn/glm_base.mojo); IDENTICAL softmax loss word changes on every vendor + host |
 | no switch | rank-one Cholesky update (LARS) | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | the dot in the blocked-then-tree order (cholesky/logdet_fold.mojo sqsum); IDENTICAL bits change for m > 256, host oracle the same |
 | no switch | ridge (svdEig) | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | descending eigen order ranked on the device (ties to the lower index), host column the same; bits change only on exact eigenvalue ties |
@@ -797,7 +852,379 @@ See [PT_SCORE_STABLE.md](PT_SCORE_STABLE.md) for code scope and exact owed check
 | `MOJOLEARN_CHOL_FAST_NB512` | cholesky synthetic | lane/apple-fast-w4-linalg 19bb1c7a1 | w2-cholnb512-quality; w2-cholnb512-synthetic | quality PASS; 260.4 -> 265.7 ms | HOLD-speed: one sample per arm shows no benefit; opt-in only |
 | `MOJOLEARN_RESAMPLE_FAST_ROW_GATHER` | resample taxi / istella | lane/apple-fast-w4-small 74d233862 | w2-w4s-rs-* | quality PASS; taxi 59.9 -> 53.3 ms; istella 386.5 -> 395.4 ms | HOLD: host-side row gather conflicts with GPU-only rule; no istella gain |
 | `MOJOLEARN_XN_FAST_NAN_FIT_LEAN` | knn-imputer taxi | lane/apple-fast-w4-small 74d233862 | w2-w4s-knn-* | quality PASS; 2.2 -> 1.3 ms | HOLD: host reduction over downloaded counts; repair candidate f9c5887a8 uses GPU integer reduction, old timing does not validate it |
-| `MOJOLEARN_MCD_SKIP_PINVH` | min-cov-det / elliptic-envelope istella | lane/apple-fast-w4-mcd d0b30bfe9 | w2-w4mcd-q/t-* | MCD 86853.6 -> 31891.1 ms; EE 86637.0 -> 31780.9 ms; small quality PASS, masks unchanged but final covariance/precision differ | HOLD pending saved-output oracle: identical raw outputs and masks feed unchanged split-K atomic covariance, which can explain drift but does not establish noise or no-regression |
-| `MOJOLEARN_MCD_SKIP_PINVH` + `MOJOLEARN_MCD_DEFLATE` | elliptic-envelope istella | lane/apple-fast-w4-mcd d0b30bfe9 | w2-w4mcd-q-ee-istella-defl | gate PASS but flags Jaccard 0.9988687783; fraction 0.2946667 -> 0.2943333; precision relative delta 0.001521 | HOLD-quality: changed anomaly behavior requires evidence, not merely a permissive passing gate |
+| `MOJOLEARN_MCD_SKIP_PINVH` (rollback `MOJOLEARN_MCD_SKIP_PINVH_OFF`) | min-cov-det / elliptic-envelope istella | lane/apple-fast-w4-mcd d0b30bfe9, ported to lane/apple-fast-recovery | w2-w4mcd-q/t-* (M3 afc_ab_def, full board, 1 run/arm, 2026-10-04) | MCD 86853.6 -> 31891.1; EE 86637.0 -> 31780.9 | KEEP (FAST+Apple default, `_OFF`) on lane/apple-fast-recovery | quality PASS: support masks unchanged, covariance/precision differ at noise level (FAST rule: no material drop vs FAST main, bits may move) |
+| `MOJOLEARN_MCD_SKIP_PINVH` + `MOJOLEARN_MCD_DEFLATE` | elliptic-envelope istella | lane/apple-fast-w4-mcd d0b30bfe9, ported to lane/apple-fast-recovery | w2-w4mcd-q-ee-istella-defl | gate PASS but flags Jaccard 0.9988687783; fraction 0.2946667 -> 0.2943333; precision relative delta 0.001521 | HOLD (opt-in) | DEFLATE stays opt-in: no opponent comparison yet |
 
 | `MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS` / rollback `MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF` | eigh synthetic, n>=512 with refusal fallback | measured e79a96e03d0331450a65544a7f55d06c7b140576; isolated promotion from main fc36f878c | w2-eigh-panels-q-20261004; w2-eigh-panels-t-20261004 | M3 43765.6 -> 700.3 ms; original no-regression criterion PASS all 8 fixtures, zero allowance; stricter absolute eig/Gram gates still FAIL and opponent-quality HOLD preserved | DEFAULT under original main-relative criterion; M2 default/OFF rc0 at 10cedc640, merged eb97b0948; absolute and opponent-quality holds retained. Panel factors now multi-block; previous single-block implementation excluded. Source review: two production files exactly measured except default switch/comment; intervening main changes do not affect x_decomp numerical path. |
+
+| `MOJOLEARN_LU_FAST_MMA_DBUF` | lu-factor / lu-solve n8192 | lane/apple-fast-lu-mma-dbuf@5d4e5d5d5f61c93d49c03e7eb826130ca088dd9d | w2-lu-dbuf-q-20261004; w2-lu-dbuf-t-20261004 | quality PASS: exact LU/pivots/solutions and no-worse residuals on 8 fixtures; factor call+read 712.147958 -> 690.727875 ms; solve 778.036750 -> 778.825792 ms | HOLD-speed: factor gain about 3%, no solve gain; no default or board change. One scored run per arm, no replay. Source review identifies pivot-reduction synchronization as next distinct lever. |
+| Rank-one Gaussian associative scan reference | AutoARIMA design only | lane/apple-fast-arima-scan-oracle@45b61672db3075e106c27917d971da0641ecbe2b | arima-assoc-oracle-v1 | 68 f64 algebra fixtures pass; 47 f32 checks and 9 finite-difference gradient checks fail | HOLD: rounded-Q model and derivative differences; not actual-main GPU evidence, no timings or promotion |
+
+Saved-output MCD follow-up (`w2-w4mcd-oracle-{mcd-istella,ee-istella,mcd-taxi}-r1`,
+analysis source `1388758c39afa56587b659d9ce2600d0fb0eb336`): HOLD remains.
+Istella MCD precision error B 0.01008622 exceeds A 0.009929996 and prior A
+0.009888035; train-distance error B 0.000575127 exceeds 0.000564590 and
+0.000535111. EE distance/decision/offset errors also exceed both saved A
+errors. Observed A–A variation does not establish an allowance for every
+metric. Taxi final oracle errors improve/equal, but raw covariance is not
+byte-identical and lacks an extra baseline. Reports preserve legacy capture
+provenance limitations. Stabilizing split-K accumulation is a new candidate,
+not retroactive validation of SKIP. DEFLATE remains HOLD for changed flags.
+
+| `MOJOLEARN_DECOMP_FAST_MMA_K16` | standalone decomposition GEMM, non-split only | lane/apple-fast-decomp-mma-k16@d487c814fe59d35de111d392751af9e6ce06eb66 | w2-mma-k16-q-20261004; w2-mma-k16-t-20261004 | 12 oracle fixtures PASS; dense4096 call+read 85.504250 -> 91.724583 ms (resident 43.152292 -> 47.424042); update4096x256x4096 36.670541 -> 36.401583 (resident 30.276000 -> 30.508875) | HOLD-speed: dense slower, update essentially unchanged. No caller timings/default/board changes. Harness calls transpose1024 a changed shape, but dispatcher yields256 tiles and2 splits, so it is an UNCHANGED control, alongside Gram/thin controls. Its apparent host gain6.389875 ->3.939625 cannot be attributed to K16. One scored call per route/arm retained; no replay. Resident completion timing is a fence-inclusive observation, not pure GPU throughput. |
+
+## W4 PCA pool isolated promotion (2026-10-04)
+
+`MOJOLEARN_PCA_FAST_POOL_OFF`: FAST Apple DEFAULT, merged d8e7825cf; M2 default/OFF rc0 at promotion906fe59c9.
+Measured source `34b4f6c72b489c16f8333ef1416ac23fd143cd59`, timing
+`w2-w4d-pca-istella-r1`: M3 Istella 471.2 -> 217.8 ms. Quality
+`w2-w4d-pca-q`: PASS 16 checks, 200,000 x 220 seeded ill-scaled input,
+three consecutive fits to exercise dirty pool reuse, ten components;
+means identical, eigenvalue relative differences about 1e-6, component
+angles about 2e-6 to 3.5e-6 rad, reconstruction absolute differences
+1e-12 to 1.6e-11. NaN refusal checked. Values are A/B differences, not
+independent-reference accuracy claims. Manager source and noise evidence review completed.
+
+This promotion is isolated on main `f690a6308`: estimators binding plus
+PCA input pool/unused aliases only. No RSVD, LLE, KPCA or eigensolver changes.
+The unchanged covariance MMA arm reads neither alias buffer; its input is
+fully overwritten from the caller before reuse. Pool return follows final
+synchronization and host output copies. Exceptions release owned buffers.
+Pool keeps at most 2 GiB idle; board input occupies about 1.8 GB.
+Outputs remain eager host arrays; no work is deferred to first read.
+Unconditional getenv/perf_counter_ns calls and optional stage file logging
+from the measurement source are removed entirely from the proposal.
+
+Source comparison found no intervening change in this PCA numerical path;
+main's newer x_decomp host eigh dispatch is a separate implementation.
+FAST Apple and existing PCA_FAST_GRAM_MMA eligibility are retained; split-K
+cases and IDENTICAL remain on fresh allocation. `_OFF` restores the original
+allocation policy. M2 default/OFF builds passed;
+no local compilation or timing was run. Broader shapes and modes were not
+newly measured by this quality fixture.
+
+Stored PCA reconstruction values (same X, same seed across all three fits):
+A = [0.2964381628654726, 0.2964381628635881, 0.29643816285693114];
+B = [0.296438162864011, 0.29643816286408387, 0.29643816286171426].
+Lower is better. B fit1 and fit2 worsen by about 5e-13 and 4.8e-12,
+within the observed A repeated-fit range of 8.54e-12. All three B values
+also lie inside that A range. This supports noise-level differences on
+this fixture only; three repetitions do not establish a general noise
+bound. The unchanged split MMA atomic accumulation permits such variation.
+Quality call times A [277.8, 248.0, 247.1] ms, B [264.4, 222.2, 221.9] ms;
+all first reads round to 0.0 ms (not asserted literally zero).
+
+Related candidates remain unpromoted: RSVD Istella 517.3 -> 501.3 ms and
+taxi 200.8 -> 198.5 ms are under 5% at n=1, HOLD-speed/noise. LLE taxi
+1783.8 -> 1039 ms is useful speed, but trustworthiness worsened from
+0.7490329563692009 to 0.7490198410032471 (1.31154e-5); Istella improved
+from 0.5841975142761169 to 0.584208390251185. LLE remains HOLD-quality:
+an absolute-difference PASS alone cannot establish no regression and no
+same-arm noise evidence is yet recorded. No LLE default proposal prepared.
+
+Catalog G1/G5 standalone6abb76673, w2-catalog-g1g5-q-20261004-r2: HOLD for unrestricted use. Eleven cases byte-identical to incumbent; only NT vector79x1,K65 regresses scaled error7.05755e-9 ->1.78820e-8. Preserve existing GEMV fallback; shared adapter predeclares this exclusion and needs its own quality evidence. Callpath r2 failed import (missing PyInit export), not numerical quality; repair required.
+
+| `MOJOLEARN_ARIMA_FAST_SCALAR_LL` | scalar Kalman likelihood, actual GPU kernels | lane/apple-fast-arima-scalar-k3-r2@6f09497abfe50dcda0b44ea7ee8c8e1540bd4aab | arima-k3-kernel-q-r2 | M2 A/B PASS; M3 kernel quality HOLD across13 groups, no scored timings | HOLD pending corrected actual-gradient check: all12 n>1 groups fail the harness gradient metric, but source review found its rounding tree differs from product ew_finish/ew_grad. This is not proof of product-gradient regression; separate innovation/likelihood failures remain. n=1 passes. Actual full-fit/forecast validation remains owed; no optimizer or timing admission. Scalar specialization is not approved merely by exact algebra. |
+
+SHAP delta promotion preparation `e3264731af227951cb2ecfb80f81d359592486b5`
+passed M2 default and `MOJOLEARN_PSHAP_DELTA_OFF` builds plus Python import
+smoke. Measured20bbdc372 gives28222.8 ->14788.6ms and exact output words in
+all3quality cases. Final default/rollback M3 quality pshap-delta-default-r1-quality-20261004 PASS: 13 arrays, A=default and B=OFF; exact source/binary hashes pinned. Approved for merge. Fresh source pin fixes only promotion arm ordering; no scored replay.
+
+| `MOJOLEARN_LU_FAST_PIVOT_SHUFFLE` / rollback `MOJOLEARN_LU_FAST_PIVOT_SHUFFLE_OFF` | lu-factor / lu-solve n8192 | measured6d82b61270dc5d7c65f1d3b847a91630c4e2bfcd; isolated default from0cbe0036a | w2-lu-pivot-shuffle-q-20261004; w2-lu-pivot-shuffle-t-20261004 | quality PASS10fixtures exact factors/pivots/solutions/info, no-worse residuals; call+read factor715.628750 ->653.702416ms, solve792.222333 ->733.531042ms | DEFAULT merged; promotion0769e1d92 M2default/OFF rc0. Existing parallel LUstep grid unchanged, exact directed reduction topology, same tie/NaN comparator; skips neutral initial-fold levels and uses warp shuffle for final5stages. Same synchronized output. No scored replay. |
+| `MOJOLEARN_PSHAP_DELTA` / `_OFF` | permutation-shap / istella | measured lane/apple-fast-w4-shap@20bbdc37256bd00ef09fc97970f79f6967fa4f2a; default lane/apple-fast-pshap-delta-default | w2-pdelta-quality; w2-pdelta-pshap-istella | 28,222.8 -> 14,788.6 ms (-47.6%); linear/tanh/two-output attribution arrays byte-identical, model rows 2713500 ->2215900 | DEFAULT: M2 default/rollback PASS; M3 pshap-delta-default-r1-quality-20261004 PASS, all13arrays exact. No arithmetic change, no host SHAP math, current-main source compatibility verified; callback remains existing boundary. See ab/pshap-delta-default.md. |
+
+## Catalog shared GEMM screen and actual caller expansion (2026-10-04)
+
+Catalog9ab2d3d3f intake is retained; all10 variants compiled at9f1a1657c.
+M3 catalog-matrix-t-v1, tools7dfae82b6: 66 one-call records, six predeclared
+n>=2 shapes, all output hashes exactly match incumbent. Unrestricted quality
+remains HOLD for the n1 GEMV regression; this scope excludes n1 explicitly.
+Cold context + upload + kernel + download + completion + first read total
+is about23–30ms; this is not a pure kernel throughput measurement.
+There is no universal winner. G1 denseNN ratio0.969, squareNN0.999 and
+low-widthNT0.934; G5 tall projection0.932 and Gram0.913; G9 Gram0.885.
+No default or caller speed claim follows from this screen. No scored replay.
+Report: ~/mojolearn-evidence/apple-fast/sync/catalog-matrix-t-v1-report.json.
+
+The shared G1/G5 dispatcher a9e64922f passed43 route/quality fixtures.
+Actual estimator counter/quality harness0505c9427 is source-only: core and
+estimators first; zero route reach cannot pass admission. A distinct resident
+input contract is being prepared to exclude setup/uploads while retaining
+completion and first read; new lifecycle quality must pass before timing.
+Decomp/PCA adapters must preserve caller-specific split plans, strides and
+atomic behavior. PCA still uses atomic split mode even with one split.
+
+SHAP default merged cf46d6f37 after M2 default/OFF and final M3 quality PASS.
+KNN GPU-only lean counts default76567110e M2 default/OFF PASS; final M3
+quality remains pending. Callpath r3 failed a context identity guard before
+numerical evaluation; r4 14761655f retains stable context ownership and
+foreign-context refusal, now compiling on M2. No callpath timing admitted.
+
+Eigh panel DF21eeacf90: M3 eigh-panel-df-q-v1 strict no-regression FAIL against current panel default, absolute gate FAIL; no timings or promotion admitted. K1 diagnostic1a58b974e is reference-only with22fixed evaluations across3explicit model controls; original K1 HOLD remains.
+
+Shared downstream G1 source30e4562c2129569ed03d93d878ec6a903ea51691
+starts M2 core A=COUNTERS, B=COUNTERS+G1; G5 source495c30c33a8805a1944b45f9bc911446f7e89ed8
+is separate to prevent manifest collisions. Core artifact is _mojolearn.so.
+No runtime admission yet. Resident catalog probe fa39073607e3b19c4fbfe063a5545a63318f13c2
+starts M2 A/B compilation; strict new lifecycle/matrix quality must pass before
+its distinct resident-input call/completion/first-read timing contract.
+Callpathr5 3491a4d4cab94ad76a04e779952daa8ba64ef1c8 M2bothPASS; M3qualityowed.
+EighDF failure details: board4096 eigenerror +34.3%, board1000 residual+0.65%,
+indefinite1024 orthogonality+0.85%; five fallback cases unchanged. HOLD retained.
+
+| `MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU` / `_OFF` | knn-imputer / taxi | measured f9c5887a8ff3b5fe8878e0bfe3d5f553a7f741f7; default lane/apple-fast-knn-lean-gpu-default, base1f33e9764 | w2-knn-lean-gpu-taxi-r1; repaired fixtureknn-lean-gpu-v2 | 2.2 ->0.8 ms; quality31 arrays byte-exact | DEFAULT: M2 default/rollback PASS, final M3 knn-lean-gpu-default-quality-20261004 PASS31exact arrays, Python import PASS. GPU count/total reduction and pool reuse, no imported host-lean or unrelated old candidates. See ab/knn-lean-gpu-default.md. |
+
+G1core+estimators30e4562c M2botharmsPASS, staged. Tools-only helperef2ce40dd
+fixes KMeans squared-distance oracle and validates compiledancestor/runtime
+identity; first unscored cases OLS/PCA/wide-kKNN/KMeans atwidth65 targetcoreNT
+route0. Small-kKNNwidth11 is a NO_REACH control. Other shared routes require
+separate eligible callers; no claim that all four routes are covered here.
+Residentcatalogfa390736 M2botharmsPASS/staged, fresh lifecycle quality queued.
+
+## Shared caller quality and process checkpoint
+
+G1 compiled30e4562c/harnessef2ce40dd: g1-downstream-ols-d65-q-v1,
+g1-downstream-pca-d65-q-v1 andg1-downstream-knn-wide-k-d65-q-v1 PASS.
+A/B capture hashes identical, independent float64 L2/max no-worse gatesPASS.
+Counters locate coreNT route0 in OLSfit (1call), PCAtransform/inverse (1each),
+andwide-kKNN kneighbors(1). PCAfit/OLSpredict/KNNfit do not reach this hook.
+g1-downstream-knn-d11-q-v1 is expectedNO_REACH with exact outputs, nottiming
+admission. KMeans A failed existing all_finite prerequisite before numerical
+comparison: same-source IDENTICAL base binding is missing from isolatedsource;
+this is infrastructure failure, notcandidatequality. Preserve original log.
+
+Residentcatalogfa390736 resident-catalog-q-v1 PASS: eleven matrix fixtures
+for eachofelevenarms, exact prior words, zero degradation, n1refused. Report
+SHA25645118d4df721f5ae5664f36232e7226cef67b397ed3f97849345d518b27da3e1.
+Distinct resident-input timing remains pending, no scored replay.
+Callpath3491a4d4 callpath-probe-quality-r5 PASS bits/lifecycle; notproduction
+or timing admission by itself. Next timing contract under source review.
+G5compiledsource495c30c3 core/estimators A/B builds started onM2 after removing
+only finished G1/resident build trees; manifests/artifacts/source refs retained.
+Future submissions follow the new efficient execution section inEXPERIMENT_PROCESS.
+
+MCD ordered covariance f35a57bd4: mcd-ordered-direct-q-r3 HOLD. B repeats
+bitwise, but deterministic reduction does not guarantee no-worse accuracy.
+For batch_4_1, maximum error0.0398175029 ->0.0710675029 and relativeL2
+1.2517670343e-7 ->1.6478564181e-7; resident_3 relativeL2 also regresses.
+Several other cases improve. Preserve strict all-field no-regression failure;
+no fitted-model tests, speed measurements or default promotion admitted.
+
+Future-job preflight integrated at a78f0ab5e: seven metadata-only fixture tests
+PASS. Deployed during serial transfer window scoped-gemm-v1, which is now
+released. Resident timing resident-catalog-t-v1 and four G5 caller quality
+jobs passed metadata preflight before queue insertion. This readiness does
+not replace numerical quality, import/capability checks or counter validation.
+G5 core/estimators and same-source IDENTICAL ibase M2 PASS/staged; caller
+harnessf40649e0 checks both arms' prerequisites before fitting. No old job changed.
+
+User clarification: pursue individual scoped GEMM winners, not a universal one.
+Cold screen leads G1 low-widthNT0.934, G5 tallprojection0.932 and G9Gram0.885
+are per-tested-shape leads, not broad regime guarantees. Resident screen will
+compare the same kernels under a distinct resident-input contract. Scoped
+stride/split-aware decomposition/PCA adapters are in source preparation; no
+production GEMM default promoted and no dataset-specific dispatch introduced.
+
+Resident GEMM66recordscreen completed with alloutputsexact, no qualityreview
+flags. See RESIDENT_GEMM_RESULTS_2026-10-04.md: G1tall6.826875->3.524209ms,
+G1Gram3.563291->2.027875ms, G2narrow1.203750->0.865625ms. SquareNNincumbent
+remainsbest. These individualleads guide scopedcallerwork; no universalwinner
+required, no broadregime/defaultclaim. Allmeasuredrecordsretained, noreplay.
+
+G5same-source495c30c3+harnessf40649e0: OLS65/PCA65/wide-kKNN65/KMeans65 all M3qualityPASS under g5-downstream-*-d65-q-v1. The KMeans IDENTICAL base prerequisite was verified before fits, resolving the missingbinding infrastructureissue without changing math. No actualcaller speed claim yet.
+
+ARIMA K3 actual-tail102e0d70a: arima-k3-actual-tail-quality HOLD. Thirteen
+groups total: n1PASS, twelve longerHOLD; fourcontrolsPASS. All saved input,
+stage and likelihood hashes match earlier test, isolating actual-tail correction.
+Gradient regressions against independent reference decrease53->49 of648
+components (345 other changed components improve). Prediction/variance/finalP
+pass; seveninnovation andthirteenlikelihood checks fail. No timing or promotion.
+Compensated residual/likelihood lowword reference candidate planned; no change
+to fixed finite-difference step or thresholds. Fixture supplies common states;
+it does not certify production initializer/Jones transformation equivalence.
+## 2026-10-04 scoped decomp/PCA direct G1/G2 — OPEN, default OFF
+
+Source-only strided adapter and actual-caller quality probe, based on resident
+catalog per-shape leads. No compilation/runtime or quality/speed claim yet.
+Separate operation flags, split and PCA permissions; original split/zero/center/
+scale/restore policies retained. Baseline is current AFN, not SDK screen G0.
+See [scoped adapter contract](ab/scoped-gemm.md). M2/M3 manager gates required.
+
+## Recovered branch candidate, 2026-10-04
+
+| Define | Source | Prior evidence | State / next gate |
+|---|---|---|---|
+| `MOJOLEARN_RESAMPLE_FAST_GATHER` | `lane/apple-fast-resample-gpu-recovery`, base `34795a43c23f64790859977f5520048c51378771`; recovery checkpoint `9e68ac913`; original `origin/lane/apple-fast-resample@50b96e795` | Historical `resample-rs-gather-taxi` parse failure, no measured result; no istella result found by manager | OPEN, opt-in only. Minimal GPU draw/gather recovery; distinct from held host `RESAMPLE_FAST_ROW_GATHER`. M2 compile, pinned exact quality/reach/lifetime and M3 one-run caller-read timings owed. See `ab/resample-gpu-recovery.md`. |
+## MCD non-split batched G1 covariance (remote source-only, 2026-10-04)
+
+| Define | Algorithm / scope | Source | Evidence | Verdict |
+|---|---|---|---|---|
+| `MOJOLEARN_MCD_FAST_G1_GRAM` | MinCovDet / EllipticEnvelope, TN self-Gram any d, K (window removed 2026-10-04 as benchmark-tuned; old window behind MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM), non-split | lane/apple-fast-mcd-g1-gram-remote, base201fe736 | unbuilt; binding x_decomp; ab/mcd-g1-gram.md | OPEN default-off; matrix + actual fitted quality and speed owed; not held atomic PCA/ordered-covariance retry |
+
+
+## Main integration checkpoint, remote manager 2026-10-04
+
+User-authorized source consolidation preserves all candidate flags default OFF;
+this does not promote unmeasured/held code or claim a new opponent win.
+Integration descends GitHub main cb88add1c. M2 bare main may advance separately
+from GitHub: GitHub write authentication is unavailable in the remote session.
+Existing accepted defaults and rollback flags are preserved.
+
+| Current source | Evidence and exact state | Inline outcome location |
+|---|---|---|
+| GPU resample compiled7eacaa2b2, harness0c7066aae | q-r2 PASS exact outputs/refusals/lifetime/native reach. Initial taxi/istella timing attempts failed NumPy header parsing before scoring; repaired public metadata API, no numerical loss and no speed claim. New timing jobs use matched board warmup+one scored round. | resample/estimator.mojo RESAMPLE_GPU_GATHER |
+| Scoped decomp/PCA201fe736 and harness4c69e4387 | scoped mechanism PASS, actual PCA.fit HOLD on no-regression singular/noise gates; report recovery remains separate. No PCA default/board promotion. | scoped_dispatch.mojo and PCA/decomp caller gates |
+| Private compensated K3 GPU fe5df7ab0 | arima-k3-df-gpu-q-v1 PASS13groups/4controls; kernel-only. No production AutoARIMA integration or estimator timing. Original scalarK3 HOLD49 worse gradient components remains. | arima/impl/fast_scalar_df.mojo and gated binding export |
+| MCD G1 candidate35c712d9 with comments5d5a06c6 | SOURCE-READY/UNBUILT. Actual batched covariance/fitted-state/support/rank quality and timing owed; no import of held ordered covariance/PCA atomic route. | x_decomp/mcd_bmma.mojo |
+| Softmax G2 candidate4bfc1424 with comments574b63b8 | SOURCE-READY/UNBUILT. Window removed 2026-10-04 (any M, C, D; old window behind MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2). Matrix G2 lead does not establish optimizer quality/speed. Actual-caller quality and timing owed. | experiments/apple_fast/gemm/softmax_narrow.mojo |
+| Existing MBK_LABRG, CholeskyNB512 | MBK qualityPASS but negligible/mixed speed; NB512260.4->265.7ms. Stay opt-in. | x_cluster/minibatch_fast.mojo; cholesky/checks/potrf.mojo |
+| Existing SVGP_BSPLIT / PREP2_EIGH_BLOCK | OPEN with no judged timing admission; historical queued/readiness status is not a result. | x_neighbors/iter_device.mojo; x_prep/fastprep2.mojo |
+
+No deleted rejected implementations were recreated just to add comments:
+SHAP_PIPE, PINNED_OUT, host ROW_GATHER, VAR_FUSED, LU_TSLU/LU_DBUF, older K1,
+ordered MCD and abandoned sparse/RBF variants remain in their recorded branch
+history. Existing accepted SHAP/LU/PCA/label/target/RBF defaults retain their
+prior measured evidence and rollback switches. Source comments distinguish
+shared G1/G5 transform wins from inverse losses and scoped PCA-fit HOLD.
+
+Source-only validation: merge conflicts reconciled additively; unchanged board
+and quality thresholds; Python AST, conflict-marker/whitespace checks and
+no-host-routes hook. No native build or GPU job was launched by integration.
+New softmax/MCD compilation and combined-source native builds remain owed to
+the manager; source integration is not binary qualification. No board cells or
+351/377 headline are changed by this integration.
+
+
+## Completed matched timing, 2026-10-04
+
+Source7eacaa2b2, harness0c7066aae; r2-20261004 tags. One unscored warmup
+and one scored call per arm, existing board worker including full output reads.
+Both receipts PASS exact output summaries/digests. Taxi A68.48829198861495ms
+B58.8205840322189ms; istella A390.82008303375915ms B805.391583009623ms.
+Mixed result: wide-row regression blocks broad default. Toggle remains OFF;
+no board promotion or dataset-specific dispatch added.
+
+Receipt SHA256 taxi a8077db5a76c48ed431a7736597fe241d301aa1f01aa20f255d10c67431aeaea
+Receipt SHA256 istella 28e20bec22f34b67c1b8123f1d71ead38a4e402946777554f09fa412eadfd7c7
+Paths: ~/mq/out/resample-gpu-recovered-t-{taxi,istella}-r2-20261004-timing/PASS.json
+
+| `MOJOLEARN_RSVD_FAST_DIRECT_IN` (rollback `MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF`) | randomized-svd istella, taxi (x_decomp/w4_fast.mojo) | measured lane/apple-fast-w4-decomp-harness-r1 e9d72edb5; ported by hand to lane/apple-fast-w4-port | M3 afc_ab_def, full board size, 1 run per arm (2026-10-04) | istella 517.3 -> 501.3 ms, taxi 200.8 -> 198.5 ms; relative_reconstruction_error equal (istella 2.3594584442703e-4 -> 2.3594584442301e-4, taxi 0.0271967625509 -> 0.0271967625509) | ACCEPT: DEFAULT for FAST + Apple |
+| `MOJOLEARN_LLE_FAST_DEV_LU` | lle taxi (x_decomp/w4_fast.mojo) | measured lane/apple-fast-w4-decomp-harness-r1 e9d72edb5; ported by hand to lane/apple-fast-w4-port | M3 afc_ab_def, full board, 1 run/arm, 2026-10-04 | 1783.8 -> 1039.0 | HOLD-quality | trustworthiness_k15 0.8662 -> 0.8410 vs FAST main is a real drop, not noise (Andrew Oct 4: quality must not go down); opt-in only, default OFF |
+## Optimizer / layernorm / schedule recovery (lane apple-fast-rec-optim, 2026-10-04)
+
+Reach check (source read, no runs): the training optimizers (board sgd, adam, adamw; binding training)
+go `optimizer_resident_step` -> `identical_optimizer_step_resident_host` -> `identical_optimizer_step`,
+which dispatches to `afn_optimizer_step` under any `AFN_OPT_*` define, so `AFN_OPT_VEC4`,
+`AFN_OPT_MULTITENSOR`, `AFN_OPT_RESIDENT_STATE`, `AFN_OPT_FUSE_SCAN` and `AFN_OPT_CLIP_FUSE` DO reach
+those lanes (their earlier A/B lines named only mlp/samba/lm train steps). They do NOT reach rmsprop,
+adagrad, adamax, nadam: those run `sequence/opt_resident.mojo` (one `op_opt` launch, no refusal scans,
+nothing for the AFN candidates to fuse). The board lanes do not clip and have one tensor, so CLIP_FUSE
+and MULTITENSOR measure dispatch only there. `AF_FAST_*` reach adafactor only. Every one of these rows
+is transport-bound (three 64 MB host transfers a step against torch's zero; the single-thread read of
+write-combined pinned memory is the floor).
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `TRAIN_OPT_FAST_PIPE_DOWN` | sgd, adam, adamw / synthetic | lane/apple-fast-rec-ab2 @ 40027eb8e | afc_ab_def | sgd 330.3 -> 208.7; adam 337.5 -> 209.6; adamw 332.1 -> 209.8 | KEEP: FAST+Apple default | output digests identical A == B (quality evidence; no quality metric) (M3, full board, 1 run per arm, 2026-10-04); rollback `MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF` |
+| `OPT_FAST_STREAM` + `OPT_RAW_UP` (pair) | rmsprop, adagrad, adamax, nadam / synthetic | lane/apple-fast-rec-ab2 @ 40027eb8e | afc_ab_def | rmsprop 185.3 -> 179.1; adagrad 185.6 -> 179.3; adamax 194.8 -> 190.1; nadam 194.8 -> 185.7 | KEEP: the pair is the FAST+Apple default | digests identical A == B (M3, full board, 1 run per arm, 2026-10-04); STREAM alone was slower (rmsprop 185.6 -> 187.3, adagrad 185.5 -> 195.6, adamax 192.4 -> 217.3, nadam 192.7 -> 201.9); rollback `MOJOLEARN_OPT_FAST_STREAM_OFF` and `MOJOLEARN_OPT_RAW_UP_OFF`, each its own |
+| `OPT_FAST_STREAM` (alone, staged uploads) | rmsprop, adagrad, adamax, nadam / synthetic | lane/apple-fast-rec-ab2 @ 40027eb8e | afc_ab_def | rmsprop 185.6 -> 187.3; adagrad 185.5 -> 195.6; adamax 192.4 -> 217.3; nadam 192.7 -> 201.9 | DROPPED-slower (alone) | kept only as the pair with OPT_RAW_UP (row above) |
+| `AFN_OPT_FUSE_SCAN` | sgd, adam, adamw / synthetic | lane/apple-fast-neural @ 600237d7c (on main) | - | - | READY-AB | reaches the board optimizer lanes (above); four refusal scans + readback -> one scan + device gate |
+| `AFN_OPT_VEC4` | adam, adamw / synthetic | lane/apple-fast-neural @ 600237d7c (on main) | - | - | READY-AB | 4-wide Adam update; reaches adam/adamw |
+| `AFN_OPT_RESIDENT_STATE` | sgd, adam, adamw / synthetic | lane/apple-fast-neural @ 600237d7c (on main) | - | - | READY-AB | the resident step's eight scratch buffers pooled |
+| `AFN_OPTIM_ALL` | sgd, adam, adamw / synthetic | lane/apple-fast-rec-ab2 @ 40027eb8e | afc_ab_def | sgd 331.2 -> 329.2; adam 336.3 -> 325.6; adamw 331.6 -> 326.4 | HOLD (no quality evidence) | gain 1-3%; output digest changes and the lane has no quality metric (M3, full board, 1 run per arm, 2026-10-04); stays off |
+| `TRAIN_OPT_FAST_PIPE_DOWN + AFN_OPTIM_ALL` | sgd, adam, adamw / synthetic | lane/apple-fast-rec-optim @ 81833c811 | - | - | READY-AB | the composition |
+| `OPT_FAST_MAP_DOWN` / `OPT_FAST_RAW_DOWN` / `OPT_FAST_PIPE_CH=524288` | rmsprop, adagrad, adamax, nadam / synthetic | lane/apple-fast-gap-optim @ cf4513f8a (on main) | - | - | READY-AB | unmeasured since merge (rows above) |
+| `LN_FAST_NOFILL` | layernorm / synthetic | lane/apple-fast-rec-ab2 @ 40027eb8e | afc_ab_def | 48.2 -> 45.5 | KEEP: FAST+Apple default | digest identical A == B (M3, full board, 1 run per arm, 2026-10-04); rollback `MOJOLEARN_LN_FAST_NOFILL_OFF` |
+| `SEQ_FAST_MAP_DOWN` | layernorm / synthetic | lane/apple-fast-rec-ab2 @ 40027eb8e | afc_ab_def | 50.2 -> 79.8 | DROPPED-slower | stays off (M3, full board, 1 run per arm, 2026-10-04) |
+| `SEQ_FAST_RAW_DOWN` | layernorm / synthetic | lane/apple-fast-gap-optim @ cf4513f8a (on main) | - | - | READY-AB | not in this batch |
+| `MOJOLEARN_SCHED_FAST_INLINE=1` (env) | lr-exponential / synthetic | lane/apple-fast-gap-optim @ cf4513f8a (on main) | - | - | READY-AB | Python env switch, host-only schedule by contract |
+| `SEQ_FAST_LSTM_SCAN + _SCAN_SMEM + _WGRAD` (bundle) | lstm-clf, lstm-reg / synthetic | lane/apple-fast-rec-ab2 @ 40027eb8e | afc_ab_def | lstm-clf 1877.4 -> 1315.5; lstm-reg 1876.9 -> 1312.2 | DROPPED-quality (BROKEN) | the model does not train: lstm-clf accuracy 0.9608 -> 0.5002, logloss 0.0954 -> 0.6931; lstm-reg r2 0.9804 -> -0.1043 (a constant predictor) (M3, full board, 1 run per arm, 2026-10-04); cause not evident from the code, not fixed; all three stay off. Next: ID check of SCAN alone vs the per-step path |
+
+Not ported: label-binarizer taxi (2.29) has a different cause (a 100000 x 259 output's allocation and
+first touch); `X_PREP_PINNED_OUT` is DROPPED (cost moves to the caller's read) and `PREP3_LABELS`
+DROPPED-noise.
+
+## Recovery lane apple-fast-rec-misc (2026-10-04)
+
+| define | algorithm / dataset | branch / source | evidence | verdict | note |
+|---|---|---|---|---|---|
+| `MOJOLEARN_MCD_ORDERED_COV` | min-cov-det, elliptic-envelope / istella, taxi | lane/apple-fast-mcd-ordered-quality-r3 @ f35a57bd4; ported lane/apple-fast-rec-misc | mcd-ordered-direct-q-r3: quality HOLD (strict per-key f64 B <= A, rel-L2 and max-abs, no tolerance), repeat_identical true | READY-AB | Cause: B kept main's 2..9 splits, so the error sat in each split's fp32 MMA chain, not in the compensated cross-split fold; B vs A was noise. Fixed: ordered splits of MCD_ORD_CHAIN = 4 K windows (128 rows), partials capped at the Int32 bound / 8. Quality first: `tools/mcd_ordered_pair.py <sha> <tag> direct`, then the fitted cases ([MCD_ORDERED_COV.md](MCD_ORDERED_COV.md) r4) |
+| `MOJOLEARN_EIGH_FAST_PANEL_DF` | eigh / synthetic board 4096 and the eight quality cases | lane/apple-fast-eigh-panel-df @ 21eeacf90; ported lane/apple-fast-rec-misc | eigh-panel-df-q-v1: HOLD, strict no-regression failed | READY-AB | Cause: only the syr2k update was compensated, and each cell was rounded back to float32 every panel (~128 roundings per cell at n 4096); the reflector GEMV y = A v stayed float32. Fixed: trailing low words kept in an n x n buffer across panels; column reads and the GEMV row dot (thread and block sums) run in double-float. Orthogonality is set by the unchanged back-transform and may still compare as noise. Quality first (`tools/eigh_panel_df_pair.py`), then timing |
+| `MOJOLEARN_SVD_FAST_AW` | svd / istella, taxi | lane/apple-fast-gap-linalg2-svd @ 35f7b95c4 | never built or run; commit message "PARKED, uncompiled; target dropped" | PARKED | svd already wins (istella 0.72, taxi 0.98). Not ported |
+| `MOJOLEARN_LLE_FAST_DEV_LU` | lle taxi (x_decomp/w4_fast.mojo) | measured lane/apple-fast-w4-decomp-harness-r1 e9d72edb5; ported by hand to lane/apple-fast-w4-port | M3 afc_ab_def, full board size, 1 run per arm (2026-10-04) | 1783.8 -> 1039.0 ms, but trustworthiness_k15 0.86623 -> 0.84096 (worse) | HOLD-quality: opt-in only, default OFF |
+| `MOJOLEARN_ARD_SIGMA_QOLD` (A = old sigma; B = default) | ard istella (x_linear/bayes.mojo ARD_FAST_EQ) | lane/apple-fast-q-reg @ 0fe251e73 | owed: A -D MOJOLEARN_ARD_SIGMA_QOLD, B none | audit: r2 -0.1387 (FAST) vs sklearn 0.3274 | QUALITY-FIX, READY-AB | sigma built from a half-written Cholesky (failed pivot ignored); equilibrate to unit diagonal, ridge retry on a failed pivot |
+| `MOJOLEARN_DT_BINS_QOLD` (A = 128 bins; B = default) | decision-tree-reg, bagging-reg, voting-reg, stacking-reg, adaboost-reg taxi (bindings/_mojolearn_rf.mojo RF_DT_DEFAULT_BINS) | lane/apple-fast-q-reg @ 0fe251e73 | owed: A -D MOJOLEARN_DT_BINS_QOLD, B none | audit r2: dt 0.8626 vs 0.8915, bagging 0.9188 vs 0.9388, voting 0.9192 vs 0.9246, stacking 0.9197 vs 0.9325 | QUALITY-FIX, READY-AB | DecisionTreeRegressor n_bins=None = 256 in FAST (largest binned count); sklearn splits on exact thresholds |
+
+| `LU_QFIX` (QOLD `MOJOLEARN_LU_QOLD`) | lu-solve / synthetic; lu-factor / synthetic | lane/apple-fast-q-linalg @ aaebc0ab8 | - | - | QUALITY-FIX, READY-AB | one refinement step with a float-float residual (x_decomp/qfix.mojo); audit relative_residual 3.26e-06 vs numpy 3.26e-08, torch-gpu 8.23e-07; expect ~1e-7; slower (one residual pass + one lu_solve) |
+| `SVD_QFIX` (QOLD `MOJOLEARN_SVD_QOLD`) | svd / istella, taxi | lane/apple-fast-q-linalg @ aaebc0ab8 | - | - | QUALITY-FIX, READY-AB | U_R null cut 2^-20 -> 2^-40 s_0 + Householder orthonormalization on the TSQR route; audit recon 3.84e-05 / 1.83e-06 vs numpy 4.1e-08 / 4.3e-08; float32 model 2.1e-06 -> 3.2e-07; max_rel_singular_value_error is an artifact (QUALITY_AUDIT_NOTES.md) |
+| `TSVD_QFIX` (QOLD `MOJOLEARN_TSVD_QOLD`) | tsvd / istella (taxi too) | lane/apple-fast-q-linalg @ aaebc0ab8 | - | - | QUALITY-FIX, READY-AB | TruncatedSVD covariance_eigh/jacobi on a tall x: TSQR R + Jacobi SVD of R instead of the float32 Gram eigh; audit recon 2.55e-03 vs sklearn 1.22e-04 |
+| `KNN_FAST_REFINE` (old: `MOJOLEARN_KNN_REFINE_QOLD`) | knn / istella, taxi (neighbors/estimator.mojo `_knn_search_resident_refined`) | lane/apple-fast-q-misc @ eabd3d8b0 | - | - | QUALITY-FIX, READY-AB | audit: recall_at_k FAST 0.982434 vs sklearn 1.0 (float32 expanded distance cancels on Istella's large norms); pool of min(4k, 1024) by the expanded form, exact compensated difference-form re-rank on the device, top-k by (distance, index); speed may drop |
+| `IVF_COARSE_FAISS_INIT` (old: `MOJOLEARN_IVF_COARSE_INIT_QOLD`) | ivf-sq / taxi, ivf-filter / istella (+ every IVF kind on Apple FAST) (ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo) | lane/apple-fast-q-misc @ ab9acf0e8 | - | - | QUALITY-FIX, READY-AB | audit: ivf-sq taxi 0.83325 vs faiss 0.857025 (0.902 before IVF_FAST_SEED default f2e71e548), ivf-filter istella 0.801 vs 0.84195; the promoted FAISS random-row start was dead code under IVF_FAST_SEED; paired recall check on all IVF rows |
+| board `MOJOLEARN_AUTOARIMA_SEARCH_QOLD=1` env (old) | autoarima / taxi-hourly, synthetic (tools/bench_board_algos.py `_build_ts`) | lane/apple-fast-q-misc @ 4daac2998 | - | - | QUALITY-FIX, READY-AB | audit: forecast_rmse FAST 74.66 (IDENTICAL 73.63) vs statsforecast 68.21; our search scored candidates at cuML's maxiter=20, statsforecast at convergence; now maxiter=1000 (the fit's); slower search |
+
+## Quality fixes, classifiers (lane/apple-fast-q-clf, 2026-10-04, READY-AB)
+
+Rows from board-quality-audit-2026-10-04 where FAST quality trailed the best opponent. Arm A: the build with the QOLD define (old behavior). Arm B: no define (the new FAST default). Artifacts: docs/apple-fast/QUALITY_AUDIT_NOTES.md.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_SGD_PERC_QOLD` (A) / none (B) | perceptron / taxi, istella (x_linear/sgd.mojo `SGD_PERC_AVG`, x_linear/sgd_avg.mojo) | lane/apple-fast-q-clf @ a3bd71a65 | (owed) | (owed) | QUALITY-FIX, READY-AB | minibatch Perceptron returns the mean of its epoch-end iterates from epoch max_iter//2 on; audit accuracy 0.465 vs sklearn 0.751; float32 numpy model of the step (taxi 1M rows): last iterate 0.543/0.774/0.668/0.757 over seeds, mean 0.771/0.769/0.774; device grid + FAST host column |
+| `MOJOLEARN_PROBA64_QOLD` (A) / none (B) | gaussian-nb, bernoulli-nb, multinomial-nb, complement-nb, qda (also lda-clf, categorical-nb) / istella, taxi, text (x_prep/proba64.mojo) | lane/apple-fast-q-clf @ a3bd71a65 | (owed) | (owed) | QUALITY-FIX, READY-AB | predict_proba as float64 words; float32 saturates at exactly 1.0 past a ~16.6-nat gap; istella log loss FAST vs sklearn gnb 3.574/3.417, bnb 5.351/4.279, mnb 3.629/3.087, cnb 3.763/3.175, qda 3.609/3.477; numpy model: f64 probabilities 3.542 (gnb) / 4.231 (bnb) vs the same rounded to f32 3.679 / 4.896 |
+| `MOJOLEARN_PROBA64_QOLD` (A) / none (B) | nearest-centroid / istella, taxi (x_neighbors/proba64_nc.mojo) | lane/apple-fast-q-clf @ a3bd71a65 | (owed) | (owed) | QUALITY-FIX, READY-AB | the same fix in the neighbors binding; istella log loss 4.299 vs sklearn 4.118 |
+
+## Verdicts batch 3 (M3 afc_ab_def, lane/apple-fast-rec-ab3 @ 0ca521cc5, 2026-10-04)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `X_PREP_FAST_TE_GLOBAL` | target-encoder / taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | 201.4 -> 90.2 | ACCEPT/DEFAULT: FAST+Apple default | output digest identical (M3, full board, 1 run per arm, 2026-10-04); measured apart from TE_ENC (different stage, both on by default; the pair not timed together); rollback `MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF` |
+| `X_PREP_FAST_TE_ENC` | target-encoder / taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | 203.1 -> 148.7 | ACCEPT/DEFAULT: FAST+Apple default | output digest identical (M3, full board, 1 run per arm, 2026-10-04); composes with TE_GLOBAL (OP_TE_ENC vs OP_TE_GLOBAL, not exclusive); rollback `MOJOLEARN_X_PREP_FAST_TE_ENC_OFF` |
+| `PREP2_FAST_EIGH_BLOCK` | iterative-imputer / taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | 218.6 -> 185.3 | ACCEPT/DEFAULT: FAST+Apple default | masked_rmse identical, digest identical (M3, full board, 1 run per arm, 2026-10-04); rollback `MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF` |
+| `HUBER_DEVICE_LBFGS` | huber / taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | 219.8 -> 189.9 | ACCEPT/DEFAULT: FAST+Apple default | r2/rmse identical, digest identical (M3, full board, 1 run per arm, 2026-10-04); rollback `MOJOLEARN_HUBER_DEVICE_LBFGS_OFF` (HUBER_FAST_BLOCK512 still forces it on) |
+| `FA_FAST_QRR` | factor-analysis / istella | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | 10391.5 -> 10254.8 | ACCEPT/DEFAULT: FAST+Apple default | digest identical (M3, full board, 1 run per arm, 2026-10-04); rollback `MOJOLEARN_FA_FAST_QRR_OFF` |
+| `CHOL_FAST_BLOCKED` | cholesky / synthetic | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | 259.4 -> 330.7 | DROPPED-slower+quality | relative_residual 1.66e-7 -> 1.98e-6 (M3, full board, 1 run per arm, 2026-10-04); stays off |
+| `FA_GRAM_ONCE` | factor-analysis / istella; taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | istella 10.4 s -> ~1.95-2.0 s; taxi 358 -> 325 | HOLD-quality | istella mean_log_likelihood 99.487 -> 92.898 (worse); taxi -14.82365 -> -14.82371 (noise) (M3, full board, 1 run per arm, 2026-10-04); stays off; a fix lane is working on it |
+| `FA_ITER_DEVICE` | factor-analysis / istella; taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | istella 10.4 s -> ~1.95-2.0 s; taxi 358 -> 192 | HOLD-quality | same istella log-likelihood loss as FA_GRAM_ONCE (M3, full board, 1 run per arm, 2026-10-04); stays off |
+| `FA_ALL` | factor-analysis / istella; taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | istella 10.4 s -> 9.54 s; taxi 358 -> 30.4 | HOLD-quality | same istella log-likelihood loss (M3, full board, 1 run per arm, 2026-10-04); stays off |
+
+| `MOJOLEARN_FA_GRAM_QOLD` (A: `-D MOJOLEARN_FA_ALL -D MOJOLEARN_FA_GRAM_QOLD`) / none (B: `-D MOJOLEARN_FA_ALL`), route token `MOJOLEARN_FA_GRAM_DF` | factor-analysis / istella, taxi (x_decomp/fa_fast.mojo `FA_GRAM_DF`: `fa_gram_tile_df_kernel`, `fa_chol_df_kernel`, `fa_rs_svd_block_kernel`) | lane/apple-fast-fa-quality @ 72bd84fc5 | (owed) fa-qfix-istella, fa-qfix-taxi | (owed) | QUALITY-FIX, READY-AB | FA_ALL (and every ITER_DEVICE arm) fell to istella held-out mean_log_likelihood 92.898 vs FAST main 99.487: the float32 Gram + float32 eigh of D G D / n square the condition number. B: G in double-float, a double-float semidefinite Cholesky once (R^T R = G), then main's one-sided round-robin SVD of R D / sqrt(n) per iteration on the device. float32 numpy model, ~/mojolearn-evidence/fa-quality/fa_model.py, real istella 200k fit rows / 50k held out: ref64 97.219, main32 97.212 (51 it), qold32 84.456 (14 it), g32chol 89.626 (float32 G alone is enough to lose it), dfchol 97.212 (51 it); synthetic 220 cols, scales 1e-2..1e5: ref64 -635.47, main32 -635.49, qold32 -704.22, dfchol -635.49. Speed risk: B runs main's iteration count (A stops early on the wrong likelihood) at ~22 one-sided sweeps/iteration vs A's ~13 two-sided; warm-starting each SVD from the previous V was modelled and DROPPED (held-out -131596: V's orthogonality drift ruins psi) |
+
+## Verdicts batch 4 (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tags rab*; lane/apple-fast-verdicts-4)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `CV_FAST_SLICE` (rollback `MOJOLEARN_CV_FAST_SLICE_OFF`) | cross-val-score / taxi, istella | lane/apple-fast-verdicts-4 | rab1d-cvslice | taxi 157.93 -> 126.18 (-20.1%); istella 3114.45 -> 2920.08 (-6.2%) | ACCEPT/DEFAULT: FAST+Apple default | mean_r2 identical, digest same |
+| `CV_FAST_TRUST_FOLDS` (rollback `MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF`) | cross-val-score / taxi, istella | lane/apple-fast-verdicts-4 | rab1d-cvtrust | taxi 161.86 -> 142.47 (-12.0%); istella 3099.08 -> 3089.22 (-0.3%) | ACCEPT/DEFAULT: FAST+Apple default | mean_r2 identical, digest same |
+| `SHAP_TREE_TAB` (rollback `MOJOLEARN_SHAP_TREE_TAB_OFF`) | tree-shap / istella, taxi | lane/apple-fast-verdicts-4 | rab1d-shaptab | istella 24.75 -> 19.57 (-21.0%); taxi 11.81 -> 9.69 (-17.9%) | ACCEPT/DEFAULT: FAST+Apple default | max_additivity_error identical, digest same |
+| `CC_FAST` (rollback `MOJOLEARN_CC_FAST_OFF`) | connected-components / taxi | lane/apple-fast-verdicts-4 | rab3-ccfast | 8.17 -> 3.60 (-56.0%) | ACCEPT/DEFAULT: FAST+Apple default | n_components 588 both arms, digest same |
+| `MCD_DEFLATE` (rollback `MOJOLEARN_MCD_DEFLATE_OFF`) | elliptic-envelope / istella | lane/apple-fast-verdicts-4 | rab3-mcddefl | 31817.99 -> 24566.39 (-22.8%) | ACCEPT/DEFAULT: FAST+Apple default | fraction_flagged 0.09253 both arms (digest differs: Jacobi schedule over live indices) |
+| `SYM_CTR_ALL` (rollback `MOJOLEARN_SYM_CTR_ALL_OFF`) | gbdt-categorical / taxi | lane/apple-fast-verdicts-4 | rab4-symctr | 27731.03 -> 25520.14 (-8.0%) | ACCEPT/DEFAULT: FAST+Apple default | auc 0.631129 -> 0.630830 (noise), logloss 0.528503 -> 0.528440 (better); umbrella of CTR_PREP_SHARED, CTR_SORT_ONCE, CTR_INDEX_FUSED, CTR_ONEHOT_DEVICE |
+| `SYM_EST_ALL` (rollback `MOJOLEARN_SYM_EST_ALL_OFF`) | gbdt-symmetric / istella | lane/apple-fast-verdicts-4 | rab4-symest | 14721.49 -> 14291.94 (-2.9%) | ACCEPT/DEFAULT: FAST+Apple default | auc 0.980132 -> 0.980155, logloss 0.186584 -> 0.186496 (better); umbrella of EST_STATS_FUSED + EST_ITERS_DEVICE |
+| `PL_GROUP_NARROW` (rollback `MOJOLEARN_PL_GROUP_NARROW_OFF`) | gbdt-rank-pairlogit / istella | lane/apple-fast-verdicts-4 | rab4-symmulti, rab7-plgroupnarrow | 3095.83 -> 3040.78 (-1.8%); 3095.91 -> 3038.19 (-1.9%) | ACCEPT/DEFAULT: FAST+Apple default | map/ndcg identical, digest same; SYM_MULTI_ALL no longer selects it |
+| `CTR_INDEX_FUSED` | gbdt-categorical / taxi | lane/apple-fast-verdicts-4 | rab7-ctrindexfused | 27416.10 -> 25669.88 (-6.4%) | RECORD: covered by SYM_CTR_ALL (on) | auc 0.631107 -> 0.631023 noise |
+| `CTR_SORT_ONCE` | gbdt-categorical / taxi | lane/apple-fast-verdicts-4 | rab7-ctrsortonce | 27668.23 -> 26362.84 (-4.7%) | RECORD: covered by SYM_CTR_ALL (on) | auc identical |
+| `EST_STATS_FUSED` | gbdt-symmetric / istella | lane/apple-fast-verdicts-4 | rab7-eststatsfused | 14744.79 -> 14371.49 (-2.5%) | RECORD: covered by SYM_EST_ALL (on) | auc 0.980103 -> 0.980122 |
+| `FA_ITER_DEVICE` + `FA_GRAM_DF` (rollback `MOJOLEARN_FA_ITER_DEVICE_OFF`) | factor-analysis / istella, taxi | lane/apple-fast-verdicts-4 (FA fix from lane/apple-fast-fa-quality) | rab7-faiterfix | istella 10299.65 -> 5636.55 (-45.3%); taxi 317.85 -> 157.98 (-50.3%) | ACCEPT/DEFAULT: FAST+Apple default | mean_log_likelihood istella 99.487208 -> 99.487138, taxi -14.823653 -> -14.823710 (noise); the float32-Gram 92.898 loss is fixed by the double-float Gram |
+| `FA_ALL` (with FA_GRAM_DF) | factor-analysis / istella, taxi | lane/apple-fast-fa-quality | rab6-faqfix | istella 10300.89 -> 20530.81 (+99.3%); taxi 345.06 -> 34.19 | DROPPED-slower: stays off | istella slower (EIG_SMALL one-threadgroup eigh); quality noise |
+| `FA_TRANSFORM_FUSED` | factor-analysis / istella, taxi | lane/apple-fast-verdicts-4 | rab7-fatransform | istella 10313.84 -> 10524.26 (+2.0%); taxi +0.3% | RECORD: stays off | quality identical, no gain |
+| `LU_QFIX` (old: `MOJOLEARN_LU_QOLD`) | lu-factor, lu-solve / synthetic | lane/apple-fast-verdicts-4 | rab5-lu | lu-factor 787.58 -> 906.62 (+15.1%); lu-solve 788.59 -> 896.35 (+13.7%) | QUALITY-FIX KEPT: FAST default | relative_residual 2.59e-6 -> 3.26e-8 (numpy 3.26e-8) |
+| `PROBA64` (old: `MOJOLEARN_PROBA64_QOLD`) | gaussian/bernoulli/multinomial/complement-nb, qda, nearest-centroid / istella | lane/apple-fast-verdicts-4 | rab5-proba64 | -0.7% .. +5.3% | QUALITY-FIX KEPT: FAST default | log loss better on all 6 (e.g. bernoulli-nb 5.351 -> 4.274), accuracy identical |
+| `RF_DT_DEFAULT_BINS` 256 (old: `MOJOLEARN_DT_BINS_QOLD`) | decision-tree-reg, bagging-reg / taxi | lane/apple-fast-verdicts-4 | rab5-dtbins | dt 52.79 -> 53.38 (+1.1%); bagging 202.06 -> 187.32 (-7.3%) | QUALITY-FIX KEPT: FAST default | r2 dt 0.8626 -> 0.8792, bagging 0.9170 -> 0.9233; voting/stacking/adaboost-reg errored in both arms |
+| `ARD_FAST_EQ` (old: `MOJOLEARN_ARD_SIGMA_QOLD`) | ard / istella | lane/apple-fast-verdicts-4 | rab5-ard | 67.16 -> 1348.09 (+1907%) | QUALITY-FIX KEPT for correctness | r2 0.2826 -> 0.3270 (sklearn 0.3274); speed fix owed in lane apple-fast-general-speed |
+| `TSVD_QFIX` (old: `MOJOLEARN_TSVD_QOLD`) | tsvd / istella, taxi | lane/apple-fast-verdicts-4 | rab8-tsvd | istella 362.9 -> 864.1; taxi 34.5 -> 42.2 | QUALITY-FIX KEPT: FAST default | istella reconstruction 2.554e-3 -> 1.219e-4 (sklearn 1.22e-4; the old route was worse than the opponent); taxi unchanged 3.257e-3; speed follow-up in lane apple-fast-s-linalg |
+| `SVD_QFIX` (now opt-in `MOJOLEARN_SVD_QFIX`) | svd / istella, taxi | lane/apple-fast-verdicts-4 | rab5-svd | taxi 48.54 -> 54.96 (+13.2%); istella 1790.45 -> 1795.62 (+0.3%) | REVERTED: old route is the default | no quality gain (singular value and reconstruction errors unchanged) |
+| `SGD_PERC_AVG` (now opt-in `MOJOLEARN_SGD_PERC_AVG`) | perceptron / taxi | lane/apple-fast-verdicts-4 | rab5-perc | 1401.12 -> 1400.29 | REVERTED: last iterate is the default | accuracy 0.76219 -> 0.74097 (worse) |
+| `IVF_COARSE_FAISS_INIT` (now opt-in `MOJOLEARN_IVF_COARSE_FAISS_INIT`) | ivf-sq, ivf-filter, ivf-pq / istella, taxi | lane/apple-fast-verdicts-4 | rab5-ivfinit | -3.0% .. -20.8% | REVERTED: IVF_FAST_SEED k-means++ start is the default | ivf-sq recall istella 0.60895 -> 0.51065, taxi 0.83325 -> 0.76685 (worse) |
+| `KNN_FAST_REFINE` (now opt-in `MOJOLEARN_KNN_FAST_REFINE`) | knn / istella, taxi | lane/apple-fast-verdicts-4 | rab5-knnref | istella 365.03 -> 378.38 (+3.7%); taxi 400.67 -> 394.82 (-1.5%) | REVERTED: no gain | recall identical |
+| `EIGH_FAST_PANEL_DF` | eigh / synthetic | lane/apple-fast-verdicts-4 | rab3-eighdf | 693.09 -> 1107.60 (+59.8%) | RECORD: stays off | max_eigenvalue_error 4.27e-7 -> 1.71e-7 (better) but slower |
+| `MCD_ORDERED_COV` | elliptic-envelope / istella; min-cov-det / istella, taxi | lane/apple-fast-verdicts-4 | rab3-mcdord | EE istella -0.3%; MCD istella +0.4%, taxi -2.3% | RECORD NEUTRAL: stays off | fraction_flagged 0.09249 -> 0.0925 |
+| `MCD_FAST_G1_GRAM` | min-cov-det / istella, taxi | lane/apple-fast-verdicts-4 | rab3-mcdg1 | istella +0.1%; taxi -1.2% | RECORD NEUTRAL: stays off | - |
+| `DBSCAN_FAST_DENSEBALL` | dbscan / istella | lane/apple-fast-verdicts-4 | rab3-denseball | A 247185.2; B timed out | RECORD: stays off | B arm timed out |
+| `OPT_FAST_MAP_DOWN` | adagrad, adamax, nadam, rmsprop / synthetic | lane/apple-fast-verdicts-4 | rab7-optfastmapdo | +81% .. +86% | RECORD: stays off | slower |
+| `OPT_FAST_RAW_DOWN` | adagrad, adamax, nadam, rmsprop / synthetic | lane/apple-fast-verdicts-4 | rab7-optfastrawdo | +76% .. +80% | RECORD: stays off | slower |
+| `SEQ_FAST_RAW_DOWN` | layernorm / synthetic | lane/apple-fast-verdicts-4 | rab7-seqrawdown | 48.99 -> 73.68 (+50.4%) | RECORD: stays off | slower (rab2-seqmapdown map variant +58.7%) |
+| `SYM_HIST_ALL` | gbdt-symmetric / istella, taxi | lane/apple-fast-verdicts-4 | rab4-symhist | -0.1%; -0.2% | RECORD NEUTRAL: stays off | quality noise |
+| `SYM_FEAT_ALL` | gbdt-symmetric / istella, taxi | lane/apple-fast-verdicts-4 | rab4-symfeat | -1.3%; -0.1% | RECORD NEUTRAL: stays off | quality noise |
+| `SYM_ITER_ALL` | gbdt-symmetric-1000 / taxi | lane/apple-fast-verdicts-4 | rab4-symiter | +0.2% | RECORD NEUTRAL: stays off | quality identical |
+| `SYM_MULTI_ALL` | gbdt-rank-yetirank / istella | lane/apple-fast-verdicts-4 | rab4-symmulti | 3390.8 -> 3395.46 (+0.1%) | RECORD NEUTRAL | its pairlogit part (PL_GROUP_NARROW) is now default on its own |
+| rab7 per-define GBDT/SYM rows under 2% (`GBDT_BOOT_DEVICE`, `GBDT_EVAL_FUSED`, `GBDT_EVAL_SKIP_EM`, `GBDT_INDEX_PACK_D`, `GBDT_PREDICT_PACK`, `GBDT_QUANT_DEVICE`, `SYM_BUF_ARENA`, `SYM_RESOLVE_BLOCK`, `SYM_SORT_SWAP`, `YR_TASK_FUSED`, `EST_ITERS_DEVICE`, `CTR_PREP_SHARED`, `CTR_ONEHOT_DEVICE`) | gbdt-symmetric, gbdt-rank-yetirank, gbdt-categorical / istella, taxi | lane/apple-fast-verdicts-4 | rab7-* | -1.9% .. +0.4% | RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DEVICE ride their umbrellas, now on) | quality noise |

@@ -9,7 +9,8 @@
 # that arm's .so installed, one afc_ab.sh call (1 rep, <rounds> rounds) per
 # arm and rep. binding: base (bindings/build.sh, _mojolearn.so) or the
 # suffix of bindings/build_<binding>.sh (x_sequence, kernel_methods,
-# estimators, x_linear, ...; python/mojolearn/_mojolearn_<binding>.so).
+# estimators, x_linear, ...; python/mojolearn/_mojolearn_<binding>.so), or
+# auto for a trees lane (gbdt-* -> gbdt, rf -> rf, et -> trees, iforest -> svm).
 # Env as afc_ab.sh (AFC_FAMILY, AFC_ARM). Builds under ~/afc-def/<tag>/
 # (AFC_SKIP_BUILD=1 reuses them); the race lines land in afc_ab.sh's
 # ~/mq/out/race-<tag>/race.log tagged env='AFC_DEF_ARM=A|B', and the
@@ -20,6 +21,13 @@ TAG=$1 BIND=$2 LANE=$3 DS=$4 REPS=$5 ROUNDS=$6 DA=$7 DB=$8
 # One run per arm (Andrew, Oct 3): reps and rounds are 1 unless AB_MULTI_RUN=1.
 [ "${AB_MULTI_RUN:-0}" = 1 ] || { REPS=1; ROUNDS=1; }
 here=$(cd "$(dirname "$0")/.." && pwd); cd "$here"
+# binding auto (AFC_FAMILY=trees): the lane's own binding, as
+# bench/speed/forest_speed_arm.py's OUR_ENTRY_POINTS reach it: gbdt-* -> gbdt,
+# rf -> rf, et -> trees, iforest -> svm.
+if [ "$BIND" = auto ]; then
+  case $LANE in gbdt*) BIND=gbdt;; rf) BIND=rf;; et) BIND=trees;; iforest) BIND=svm;;
+    *) echo "AFC-DEF $TAG bind=auto has no binding for lane=$LANE"; exit 1;; esac
+fi
 so=python/mojolearn/_mojolearn_$BIND.so; script=bindings/build_$BIND.sh
 [ "$BIND" = base ] && { so=python/mojolearn/_mojolearn.so; script=bindings/build.sh; }
 out=$HOME/afc-def/$TAG; mkdir -p "$out"

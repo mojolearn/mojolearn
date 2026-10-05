@@ -1049,8 +1049,9 @@ comptime XTREES_FAST_SWITCHES = (
     + (4 if _XT_ADA_SESSION_SHARE else 0)
     + (8 if agn_dev.KSHAP_FAST_BATCH else 0)
     + (16 if agn_dev.AGN_IDN_SYN_POOL else 0)
-    + (32 if _XT_IDN_ADA_SESSION else 0)
+    + (32 if agn_dev.PSHAP_DELTA else 0)
     + (64 if _XT_AGN_DEVICE_MODEL else 0)
+    + (128 if _XT_IDN_ADA_SESSION else 0)
 )
 
 
@@ -1059,8 +1060,11 @@ def fast_switches_binding() raises -> PythonObject:
     MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
     MOJOLEARN_KSHAP_FAST_BATCH, bit 16 MOJOLEARN_AGN_IDN_SYN_POOL (an
     IDENTICAL build's switch; both in xtrees/agnostic_device.mojo), bit 32
-    `_XT_IDN_ADA_SESSION` (an IDENTICAL build's switch), bit 64
-    MOJOLEARN_IDN_SHAP_DEVICE_MODEL (an IDENTICAL GPU build's switch)."""
+    MOJOLEARN_PSHAP_DELTA (FAST + Apple; xtrees/agnostic_device.mojo), bit 64
+    MOJOLEARN_IDN_SHAP_DEVICE_MODEL (an IDENTICAL GPU build's switch), bit
+    128 `_XT_IDN_ADA_SESSION` (an IDENTICAL build's switch; was bit 32 on
+    the IDENTICAL integration branch, renumbered at the 2026-10-05 merge
+    because main took 32 for PSHAP_DELTA)."""
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
@@ -1502,6 +1506,38 @@ def pshap_values_model_binding(x: PythonObject, phi: PythonObject, params: Pytho
     return PythonObject(p[0])
 
 
+def pshap_dsynth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, tot: PythonObject,
+                         params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_PSHAP_DELTA: the chunk's varying synthetic rows only (in
+    full order) into syn (Float32, room for (R np (2d + 1) nb) x d), their
+    count into tot (Int64 1); params as x_trees_pshap_synth's. Refused when the FAST Apple default is inactive or _OFF is set
+    (x_trees_fast_switches bit 32 is 0 there)."""
+    var p = _agn_ints(params, 6, "x_trees_pshap_dsynth")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
+        raise Error("x_trees_pshap_dsynth: bad counts")
+    comptime if agn_dev.PSHAP_DELTA:
+        agn_dev.pshap_dsynth(Int(py=x), Int(py=bg), Int(py=syn), Int(py=tot), p[0], p[1], p[2], p[3], p[5], p[4])
+    else:
+        raise Error("x_trees_pshap_dsynth: FAST Apple delta disabled (MOJOLEARN_PSHAP_DELTA_OFF)")
+    return PythonObject(p[0])
+
+
+def pshap_dvalues_binding(x: PythonObject, bg: PythonObject, yout: PythonObject, phi: PythonObject,
+                          tot: PythonObject, params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_PSHAP_DELTA: phi float64 R x d x k from out Float32 (rows
+    x k, the model on x_trees_pshap_dsynth's rows); tot Int64 1 scratch;
+    params = [R, nb, d, np, row0, seed, k]."""
+    var p = _agn_ints(params, 7, "x_trees_pshap_dvalues")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
+        raise Error("x_trees_pshap_dvalues: bad counts")
+    comptime if agn_dev.PSHAP_DELTA:
+        agn_dev.pshap_dvalues(Int(py=x), Int(py=bg), Int(py=yout), Int(py=phi), Int(py=tot), p[0], p[1], p[2],
+                              p[6], p[3], p[5], p[4])
+    else:
+        raise Error("x_trees_pshap_dvalues: FAST Apple delta disabled (MOJOLEARN_PSHAP_DELTA_OFF)")
+    return PythonObject(p[0])
+
+
 def register(mut m: PythonModuleBuilder) raises:
     """The shared export list; both bindings call this."""
     m.def_function[sample_indices_binding]("x_trees_sample_indices")
@@ -1583,3 +1619,5 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[agn_model_release_binding]("x_trees_agn_model_release")
     m.def_function[kshap_solve_model_binding]("x_trees_kshap_solve_model")
     m.def_function[pshap_values_model_binding]("x_trees_pshap_values_model")
+    m.def_function[pshap_dsynth_binding]("x_trees_pshap_dsynth")
+    m.def_function[pshap_dvalues_binding]("x_trees_pshap_dvalues")

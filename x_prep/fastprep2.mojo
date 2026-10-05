@@ -1,25 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """FAST + Apple device paths of lane/apple-fast-prep2 (2026-10-02), one per
-switch, every switch default OFF. x_prep/device.mojo calls `prep2_fast_stage`
+switch, default OFF except EIGH_BLOCK, TE_GLOBAL and TE_ENC (FAST + Apple
+defaults since 2026-10-04). x_prep/device.mojo calls `prep2_fast_stage`
 for every stage; it enqueues the stage when its switch is on and the stage
 fits, else returns False and the stage runs as before. PREP2_FAST gates every
 call, so the IDENTICAL binding and the other vendors compile none of this.
 
-Switches (env, read on the host at dispatch time, `Prep2Switches`):
+Switches (`Prep2Switches`; build defines where marked -D, else env read on
+the host at dispatch time):
 
-  MOJOLEARN_X_PREP_FAST_TE_GLOBAL=1  te_global by a threadgroup per (fold,
+  -D MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF  (default ON since 2026-10-04; rollback define) te_global by a threadgroup per (fold,
       target) with a tree, instead of ONE thread per (fold, target) walking
       every row twice (x_prep/target.mojo te_global_unit: (F+1)*T = 5
       threads for a 1M-row fit).
-  MOJOLEARN_X_PREP_FAST_TE_ENC=1  te_enc by a threadgroup per (fold, column,
+  -D MOJOLEARN_X_PREP_FAST_TE_ENC_OFF  (default ON since 2026-10-04; rollback define) te_enc by a threadgroup per (fold, column,
       category, target) over the category's gathered bucket, instead of ONE
       thread walking the bucket (x_prep/target.mojo te_enc_unit: the largest
       category's rows, hundreds of thousands on taxi, on one thread).
   MOJOLEARN_X_PREP_FAST_II_CONV=1  ii_conv's max over the row sums by one
       threadgroup tree instead of one thread over every row
       (x_prep/iterative.mojo ii_conv_unit; a max is exact, the same word).
-  -D MOJOLEARN_PREP2_FAST_EIGH_BLOCK  (a build define, `PREP2_FAST_EIGH_BLOCK`;
+  -D MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF  (default ON since 2026-10-04; `PREP2_FAST_EIGH_BLOCK`;
       the kernel compiles only under it)  eigh (one cyclic Jacobi per matrix,
       x_prep/eigh.mojo eigh_unit on ONE thread: IterativeImputer's
       BayesianRidge runs it once per feature per round, ~465 rotations x 4
@@ -60,8 +62,57 @@ from x_prep.dradix import RUP, radix_word, radix_load_kernel
 
 #: FAST on Apple only
 comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-#: eigh on a 32-thread block: a build define (-D MOJOLEARN_PREP2_FAST_EIGH_BLOCK), FAST + Apple only
-comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and is_defined["MOJOLEARN_PREP2_FAST_EIGH_BLOCK"]()
+#: (FAST + Apple, default ON since 2026-10-04) IterativeImputer's eigh stage (one cyclic
+#: Jacobi per matrix, `eigh_unit` on ONE thread, run once per feature per
+#: round by BayesianRidge) on a 32-thread threadgroup per matrix
+#: (`eigh_block_fast_kernel`): the same sweeps and rotations in the same
+#: order, each rotation's row and column updates spread over the threads, A
+#: and V in threadgroup memory. m <= EIG_MAX (two 32 x 32 float pages, 8 KB;
+#: 64 x 64 would pass Apple's 32 KB threadgroup page). Source
+#: lane/apple-fast-prep2@8762eb33f, already on main as this define. Prior M3
+#: B arm: iterative-imputer taxi 185.1 ms against board 218 (about -15%;
+#: the lane already wins, ratio 0.21); EXPERIMENTS row OPEN, no judged A/B.
+#: No failure recorded. Recovery 2026-10-04 (lane/apple-fast-rec-fa-robust):
+#: re-read against main's eigh_unit, no change needed; READY-AB.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab3 @ 0ca521cc5): iterative-imputer taxi 218.6 -> 185.3 ms;
+#: masked_rmse identical, output digest identical. KEEP: the FAST + Apple
+#: default since then; rollback -D MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF (the
+#: old -D name is harmless).
+comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and not is_defined["MOJOLEARN_PREP2_FAST_EIGH_BLOCK_OFF"]()
+#: (FAST + Apple, default ON since 2026-10-04) TargetEncoder's te_global stage by one
+#: threadgroup per (fold, target), each thread a strided share of the rows,
+#: then a tree (`te_global_fast_kernel`), in place of ONE thread per (fold,
+#: target) walking every row twice ((F + 1) T = 5 threads on a 1M-row fit).
+#: Source lane/apple-fast-prep2@8762eb33f. Prior M3: both arms of the
+#: env-form line (tools/afc_ab.sh ... MOJOLEARN_X_PREP_FAST_TE_GLOBAL=1,
+#: prep2-te-global-taxi) ended status=error, the A arm too, so the line
+#: failed, not the kernel (later logged as ENSURE-SO); never timed. Fixed
+#: 2026-10-04 (lane/apple-fast-rec-fa-robust): a build define instead of the
+#: env read, so the A/B is the ordinary prebuilt -D pair, and the row counts
+#: as Int32 (a float32 count stops being exact past 2^24 rows).
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab3 @ 0ca521cc5): target-encoder taxi 201.4 -> 90.2 ms; output
+#: digest identical. KEEP: the FAST + Apple default since then; rollback
+#: -D MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF (the old -D name is harmless).
+#: Measured apart from TE_ENC (a different stage, OP_TE_GLOBAL vs OP_TE_ENC;
+#: the two compose, both on by default; the pair was not timed together).
+comptime X_PREP_FAST_TE_GLOBAL = PREP2_FAST and not is_defined["MOJOLEARN_X_PREP_FAST_TE_GLOBAL_OFF"]()
+#: (FAST + Apple, default ON since 2026-10-04) TargetEncoder's te_enc stage by one
+#: threadgroup per (fold, column, category, target) over the category's
+#: gathered bucket (`te_enc_fast_kernel`), in place of ONE thread walking
+#: the bucket (taxi's largest category is hundreds of thousands of rows on
+#: one thread). Source lane/apple-fast-prep2@8762eb33f. Prior M3: the
+#: env-form line (prep2-te-enc-taxi) failed both arms, as TE_GLOBAL's; a
+#: later prebuilt B-only run timed target-encoder taxi at 359.6 ms
+#: with no A arm (the lane's board ratio: 1.38). Fixed as
+#: TE_GLOBAL: a build define, Int32 counts.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab3 @ 0ca521cc5): target-encoder taxi 203.1 -> 148.7 ms; output
+#: digest identical. KEEP: the FAST + Apple default since then; rollback
+#: -D MOJOLEARN_X_PREP_FAST_TE_ENC_OFF (the old -D name is harmless).
+#: Measured apart from TE_GLOBAL (a different stage; both on by default).
+comptime X_PREP_FAST_TE_ENC = PREP2_FAST and not is_defined["MOJOLEARN_X_PREP_FAST_TE_ENC_OFF"]()
 comptime TGR = 256
 comptime OP_QUANTILE = 2
 comptime OP_TE_GLOBAL = 20
@@ -77,8 +128,9 @@ def _on(name: String) -> Bool:
 
 struct Prep2Switches(Copyable, Movable):
     """The lane's switches, read once per program on the host (every field
-    False outside FAST + Apple): env switches, and `eigh_block` the build
-    define PREP2_FAST_EIGH_BLOCK."""
+    False outside FAST + Apple): env switches, and `eigh_block`, `te_global`
+    and `te_enc` the build defines PREP2_FAST_EIGH_BLOCK,
+    X_PREP_FAST_TE_GLOBAL and X_PREP_FAST_TE_ENC."""
     var te_global: Bool
     var te_enc: Bool
     var ii_conv: Bool
@@ -86,14 +138,12 @@ struct Prep2Switches(Copyable, Movable):
     var eigh_block: Bool
 
     def __init__(out self):
-        self.te_global = False
-        self.te_enc = False
+        self.te_global = X_PREP_FAST_TE_GLOBAL
+        self.te_enc = X_PREP_FAST_TE_ENC
         self.ii_conv = False
         self.ii_gram_tile = False
         self.eigh_block = PREP2_FAST_EIGH_BLOCK
         comptime if PREP2_FAST:
-            self.te_global = _on("MOJOLEARN_X_PREP_FAST_TE_GLOBAL")
-            self.te_enc = _on("MOJOLEARN_X_PREP_FAST_TE_ENC")
             self.ii_conv = _on("MOJOLEARN_X_PREP_FAST_II_CONV")
             self.ii_gram_tile = _on("MOJOLEARN_X_PREP_FAST_II_GRAM_TILE")
 
@@ -112,8 +162,8 @@ def te_global_fast_kernel(f: FP, q: IP):
     var fi = t // T
     var tt = t % T
     var sh_s = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
-    var sh_c = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
-    var cnt = Float32(0)
+    var sh_c = stack_allocation[TGR, Int32, address_space = AddressSpace.SHARED]()
+    var cnt = Int32(0)
     var s = Float32(0)
     for i in range(tid, nn, TGR):
         if Int(ld(f, FO + i)) == fi:
@@ -130,10 +180,10 @@ def te_global_fast_kernel(f: FP, q: IP):
             sh_c[tid] = sh_c[tid] + sh_c[tid + w]
         barrier()
         w //= 2
-    var total = sh_c[0]
+    var total = Int(sh_c[0])
     var mean = Float32(0)
     if total > 0:
-        mean = div(sh_s[0], total)
+        mean = div(sh_s[0], Float32(total))
     barrier()
     var ss = Float32(0)
     if total > 0:
@@ -153,7 +203,7 @@ def te_global_fast_kernel(f: FP, q: IP):
     if tid == 0:
         var var_ = Float32(0)
         if total > 0:
-            var_ = div(sh_s[0], total)
+            var_ = div(sh_s[0], Float32(total))
         f[p(q, 4) + 2 * t] = mean
         f[p(q, 4) + 2 * t + 1] = var_
 
@@ -187,8 +237,8 @@ def te_enc_fast_kernel(f: FP, q: IP):
     var BY = gb + d * nn + (j * T + tt) * nn
     var smooth = ld(f, p(q, 9))
     var sh_s = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
-    var sh_c = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
-    var cnt = Float32(0)
+    var sh_c = stack_allocation[TGR, Int32, address_space = AddressSpace.SHARED]()
+    var cnt = Int32(0)
     var s = Float32(0)
     for k in range(lo + tid, hi, TGR):
         if Int(ld(f, BF + k)) == fi:
@@ -205,11 +255,11 @@ def te_enc_fast_kernel(f: FP, q: IP):
             sh_c[tid] = sh_c[tid] + sh_c[tid + w]
         barrier()
         w //= 2
-    var total = sh_c[0]
+    var total = Int(sh_c[0])
     var sum_ = sh_s[0]
     var mean = Float32(0)
     if total > 0:
-        mean = div(sum_, total)
+        mean = div(sum_, Float32(total))
     barrier()
     var ssd = Float32(0)
     if smooth < Float32(0) and total > 0:
@@ -227,7 +277,7 @@ def te_enc_fast_kernel(f: FP, q: IP):
         barrier()
         w2 //= 2
     if tid == 0:
-        f[p(q, 10) + t] = te_value(ymean, yvar, smooth, sum_, Int(total), mean, sh_s[0])
+        f[p(q, 10) + t] = te_value(ymean, yvar, smooth, sum_, total, mean, sh_s[0])
 
 
 # ---------------------------------------------------------- IterativeImputer
@@ -360,7 +410,9 @@ def ii_gram_tile_reduce_kernel(f: FP, q: IP, w: RUP, chunks: Int32):
 
 
 # ----------------------------------------------------------- eigh on a block
-#: the widest matrix the block Jacobi takes, and its threads (one simdgroup)
+#: the widest matrix the block Jacobi takes (two EIG_MAX^2 float pages of
+#: threadgroup memory must fit Apple's 32 KB page with room to spare), and
+#: its threads (one simdgroup)
 comptime EIG_MAX = 32
 comptime EIG_TPB = 32
 

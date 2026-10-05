@@ -27,6 +27,7 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
   Boxes: nv is the RunPod L40S, amd the DO MI325X, and apple is the M2 Pro (the M3 Ultra is the Apple FAST peer's). Each runs one job at a time. The orchestrator watches the queues and sends results back. After queuing, the lane ends with a reply listing what it queued (box, id), so the orchestrator can match the results.
 - **Compile through the slot semaphore:** `bash ~/mojolearn-evidence/compile_slot.sh <command>`. It allows 4 compiles machine-wide at `nice -n 19`. Use `-j 1` and `MOJOLEARN_COMPILE_JOBS=1`.
 - **One worktree per lane:** `~/mojolearn-wt/<lane>` on branch `lane/<lane>`. Commit after every edit and push often, because a crash or reboot loses anything uncommitted. Never `git stash`, rebase, `reset --hard` or `checkout --` someone else's edits.
+  - A lane that doesn't read old evidence can use `tools/lean_worktree.sh ~/mojolearn-wt/<lane> lane/<lane>`: a sparse worktree without `bench/results/` except the canonical board dir.
 - **Nothing in `/private/tmp`.** It's wiped on reboot. Keep briefs, notes and scripts in the worktree or `~/mojolearn-evidence/`.
 - **Use bash, not zsh, for loops and variable expansion.** zsh doesn't word-split `$FLAGS`, so defines get dropped silently.
 - **Final reply format, short:**
@@ -54,7 +55,8 @@ The orchestrator saves every lane brief as `~/mojolearn-evidence/briefs-<date>/<
 ## GPU rules (summary; the plans in docs/plans/ have the details)
 
 - The GPU path is GPU only and parallel. No host steps inside a GPU fit, transform or predict, and no serial one-thread, one-block or per-sample default.
-- Same bits on NVIDIA, AMD, Apple and the host column, within one version. Bits may change between versions: when a parallel kernel needs a different fold order, change the order on every vendor and in the host column together. Never keep a serial chain to preserve old bits.
+- (IDENTICAL) Same bits on NVIDIA, AMD, Apple and the host column, within one version. Bits may change between versions: when a parallel kernel needs a different fold order, change the order on every vendor and in the host column together. Never keep a serial chain to preserve old bits.
+- **FAST mode needs no identical anything.** Not the same bits across vendors, not the same bits as arm A, not the same digests run to run, not an exact match with IDENTICAL. FAST is judged on two things only: speed, and quality that does not go down. The board's quality metric (AUC, recall, error, trustworthiness, inertia, p-value, ...) must show no material drop against FAST main (arm A), and must be at least as good as the best opponent's. A FAST candidate is never held for a noise-level metric change, a different fold order or different bits. It is held for any real quality loss against FAST main or the opponent. The same-bits rules above apply to IDENTICAL only.
 - Never time a CPU or host route. The CPU is for verification digests, CPU-only installs and inference.
 - Never add, rent, extend or release an Apple machine.
 - Race and measure tools default to our GPU arm only; opponents are scored once, stored, and run only by an explicit opponent job.

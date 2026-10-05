@@ -1331,6 +1331,8 @@ def init_scalable_kmeans_plus_plus(
         var inner = KMeansParams.default()
         inner.n_clusters = k
         inner.init = INIT_ARRAY
+        # not a cuVS field: the caller's lazy-shift request reaches the recluster
+        inner.lazy_shift = params.lazy_shift
         var inner_res = kmeans_fit_main_traced(
             ctx,
             cand_buf,
@@ -1424,6 +1426,40 @@ def kmeans_fit_main(
         ctx, x, weights, centroids, labels, params, n_samples, n_features,
         sum_scale, weight_scale, trace, String(""),
     )
+
+
+comptime KMEANS_LAZY_SHIFT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF"]()
+)
+#: DEFAULT (FAST + Apple) since 2026-10-04: VSEARCH_ALL A/B on the M3 (afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-04, source ad265a028; x_ann/vsearch_fast.mojo has every row): 9/9
+#: IVF-family rows faster, recall_at_10 identical. ACCEPT;
+#: rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF` (shift read every iteration).
+#: SCOPE (2026-10-04): a fit takes the lazy read only when its caller sets
+#: `KMeansParams.lazy_shift` (IVF's coarse quantizer in ivf_flat_build.mojo,
+#: its k-means|| recluster through the propagated params, and IVF-PQ's
+#: subspace codebooks in x_ann/ivf_pq_device.mojo); every other caller keeps
+#: the per-iteration read.
+"""FAST on Apple, DEFAULT since 2026-10-04 (lane af-vsearch, 2026-10-03;
+rollback `-D MOJOLEARN_IVF_KMEANS_LAZY_SHIFT_OFF`): the Lloyd loop reads the centroid shift
+back and tests convergence every KMEANS_LAZY_SHIFT_EVERY iterations and at
+max_iter, instead of every iteration (one synchronize and one host round
+trip per iteration: 20 waits per IVF coarse fit, per k-means|| recluster and
+per IVF-PQ subspace codebook). The iterations between enqueue the same
+launches with no wait and no shift reduction. A fit that would have stopped
+at iteration i stops at the next tested iteration (at most
+KMEANS_LAZY_SHIFT_EVERY - 1 more Lloyd steps, which never raise the
+objective); a fit that runs to max_iter is unchanged bit for bit. Untraced
+fits without the inertia check, with `params.lazy_shift` set, only."""
+#: DROPPED-slower, stays OFF (opt-in `-D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` sets
+#: `lazy_shift` on the KMeans estimator's fits, bindings/_mojolearn.mojo
+#: `kmeans_fit` call, FAST on Apple only). M3 afc_ab_def, full board size, 1 run
+#: per arm, 2026-10-04: kmeans istella 1451.5 -> 1527.7 ms (slower), taxi
+#: 977.6 -> 974.8 ms (flat); inertia equal.
+comptime KMEANS_FAST_LAZY_SHIFT = is_defined["MOJOLEARN_KMEANS_FAST_LAZY_SHIFT"]()
+comptime KMEANS_LAZY_SHIFT_EVERY = 4
 
 
 def kmeans_fit_main_traced(
@@ -1830,85 +1866,131 @@ def kmeans_fit_main_traced(
                     ctx, acc_tag + "new_centroids", new_centroids, cd
                 )
 
-            # The shift, `:453-459`. `mapThenSumReduce` with `sqdiff_op`: the
-            # squared difference is applied INSIDE the reduction, between the
-            # buffer about to be overwritten and the one just produced, so
-            # nothing of size `n_clusters * n_features` is materialized.
-            _sum_device(
-                ctx,
-                cur_centroids,
-                new_centroids,
-                partials,
-                d_shift,
-                cd,
-                SUM_MODE_SQDIFF,
-            )
-            # `:461-462`, the scalar starts its trip to the host.
-            ctx.enqueue_copy(dst_ptr=h_shift.unsafe_ptr(), src_buf=d_shift)
-
-            # `:464-465`, the copy back over the working set, AFTER the shift
-            # has been measured against it.
-            ctx.enqueue_function[copy_f32_kernel](
-                cur_centroids.unsafe_ptr(),
-                new_centroids.unsafe_ptr(),
-                Int32(cd),
-                grid_dim=((cd + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
-            )
-
-            # `:468-489`, the whole cost half of the stopping rule, and it is
-            # OFF by default. Note their in-loop cost is UNWEIGHTED
-            # (`raft::value_op` straight over `minClusterAndDistance`); only
-            # the post-loop inertia at `:516-535` multiplies by the weights.
-            var cur_cost = Float64(0.0)
-            if params.inertia_check:
+            comptime if KMEANS_LAZY_SHIFT:
+                # lane af-vsearch: the shift crosses to the host every
+                # KMEANS_LAZY_SHIFT_EVERY iterations and at the last one; the
+                # other iterations enqueue the copy back and go on
+                var lazy_skip = (
+                    params.lazy_shift and (not params.inertia_check) and (not trace.enabled)
+                    and it % KMEANS_LAZY_SHIFT_EVERY != 0 and it != params.max_iter
+                )
+                if not lazy_skip:
+                    _sum_device(ctx, cur_centroids, new_centroids, partials, d_shift, cd, SUM_MODE_SQDIFF)
+                    ctx.enqueue_copy(dst_ptr=h_shift.unsafe_ptr(), src_buf=d_shift)
+                ctx.enqueue_function[copy_f32_kernel](
+                    cur_centroids.unsafe_ptr(),
+                    new_centroids.unsafe_ptr(),
+                    Int32(cd),
+                    grid_dim=((cd + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
+                if not lazy_skip:
+                    var cur_cost = Float64(0.0)
+                    if params.inertia_check:
+                        _sum_device(ctx, min_dist, ones, partials, d_cost, n_samples, SUM_MODE_PLAIN)
+                        ctx.enqueue_copy(dst_ptr=h_cost.unsafe_ptr(), src_buf=d_cost)
+                        ctx.synchronize()
+                        cur_cost = Float64(h_cost.unsafe_ptr().unsafe_load(0))
+                        if cur_cost == 0.0:
+                            raise Error(
+                                "Too few points and centroids being found is getting"
+                                " 0 cost from centers"
+                            )
+                    ctx.synchronize()
+                    var shift = Float64(h_shift.unsafe_ptr().unsafe_load(0))
+                    if trace.enabled:
+                        trace.record_scalar_f32(
+                            restart_tag + "iter" + _pad2(it) + ".shift",
+                            h_shift.unsafe_ptr().unsafe_load(0),
+                        )
+                    var done = check_convergence(
+                        cur_cost, prior_cost, shift, params.tol, it, params.inertia_check
+                    )
+                    if params.inertia_check:
+                        prior_cost = cur_cost
+                    if done:
+                        n_current_iter = it
+                        break
+            else:
+                # The shift, `:453-459`. `mapThenSumReduce` with `sqdiff_op`: the
+                # squared difference is applied INSIDE the reduction, between the
+                # buffer about to be overwritten and the one just produced, so
+                # nothing of size `n_clusters * n_features` is materialized.
                 _sum_device(
                     ctx,
-                    min_dist,
-                    ones,
+                    cur_centroids,
+                    new_centroids,
                     partials,
-                    d_cost,
-                    n_samples,
-                    SUM_MODE_PLAIN,
+                    d_shift,
+                    cd,
+                    SUM_MODE_SQDIFF,
                 )
-                ctx.enqueue_copy(dst_ptr=h_cost.unsafe_ptr(), src_buf=d_cost)
-                # `clusterCostD.value(stream)` at `:478` is `rmm`'s blocking
-                # scalar read: a copy AND a stream sync. Turning
-                # `inertia_check` on therefore costs a SECOND drain per
-                # iteration, which is a reason it is off by default.
+                # `:461-462`, the scalar starts its trip to the host.
+                ctx.enqueue_copy(dst_ptr=h_shift.unsafe_ptr(), src_buf=d_shift)
+
+                # `:464-465`, the copy back over the working set, AFTER the shift
+                # has been measured against it.
+                ctx.enqueue_function[copy_f32_kernel](
+                    cur_centroids.unsafe_ptr(),
+                    new_centroids.unsafe_ptr(),
+                    Int32(cd),
+                    grid_dim=((cd + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
+
+                # `:468-489`, the whole cost half of the stopping rule, and it is
+                # OFF by default. Note their in-loop cost is UNWEIGHTED
+                # (`raft::value_op` straight over `minClusterAndDistance`); only
+                # the post-loop inertia at `:516-535` multiplies by the weights.
+                var cur_cost = Float64(0.0)
+                if params.inertia_check:
+                    _sum_device(
+                        ctx,
+                        min_dist,
+                        ones,
+                        partials,
+                        d_cost,
+                        n_samples,
+                        SUM_MODE_PLAIN,
+                    )
+                    ctx.enqueue_copy(dst_ptr=h_cost.unsafe_ptr(), src_buf=d_cost)
+                    # `clusterCostD.value(stream)` at `:478` is `rmm`'s blocking
+                    # scalar read: a copy AND a stream sync. Turning
+                    # `inertia_check` on therefore costs a SECOND drain per
+                    # iteration, which is a reason it is off by default.
+                    ctx.synchronize()
+                    cur_cost = Float64(h_cost.unsafe_ptr().unsafe_load(0))
+                    # `ASSERT` at `:480-482`, message included.
+                    if cur_cost == 0.0:
+                        raise Error(
+                            "Too few points and centroids being found is getting"
+                            " 0 cost from centers"
+                        )
+
+                # `:491`. THE one stream sync of the loop body.
                 ctx.synchronize()
-                cur_cost = Float64(h_cost.unsafe_ptr().unsafe_load(0))
-                # `ASSERT` at `:480-482`, message included.
-                if cur_cost == 0.0:
-                    raise Error(
-                        "Too few points and centroids being found is getting"
-                        " 0 cost from centers"
+                var shift = Float64(h_shift.unsafe_ptr().unsafe_load(0))
+
+                # `:492`, on the host, in this iteration.
+                if trace.enabled:
+                    # The SHIFT is what the loop stops on, so a fit that takes a
+                    # different number of iterations on two machines diverged
+                    # HERE first, whatever the centroids look like afterwards.
+                    trace.record_scalar_f32(
+                        restart_tag + "iter" + _pad2(it) + ".shift",
+                        h_shift.unsafe_ptr().unsafe_load(0),
                     )
 
-            # `:491`. THE one stream sync of the loop body.
-            ctx.synchronize()
-            var shift = Float64(h_shift.unsafe_ptr().unsafe_load(0))
-
-            # `:492`, on the host, in this iteration.
-            if trace.enabled:
-                # The SHIFT is what the loop stops on, so a fit that takes a
-                # different number of iterations on two machines diverged
-                # HERE first, whatever the centroids look like afterwards.
-                trace.record_scalar_f32(
-                    restart_tag + "iter" + _pad2(it) + ".shift",
-                    h_shift.unsafe_ptr().unsafe_load(0),
+                var done = check_convergence(
+                    cur_cost, prior_cost, shift, params.tol, it, params.inertia_check
                 )
+                if params.inertia_check:
+                    prior_cost = cur_cost  # `:488`
 
-            var done = check_convergence(
-                cur_cost, prior_cost, shift, params.tol, it, params.inertia_check
-            )
-            if params.inertia_check:
-                prior_cost = cur_cost  # `:488`
-
-            # `:494-497`.
-            if done:
-                n_current_iter = it
-                break
+                # `:494-497`.
+                if done:
+                    n_current_iter = it
+                    break
             it += 1
         _km_stage(ctx, km_on, km_t, "fit.lloyd iters=" + String(min(it, params.max_iter)))
 

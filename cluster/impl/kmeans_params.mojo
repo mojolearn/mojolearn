@@ -115,6 +115,12 @@ struct KMeansParams(Copyable, ImplicitlyCopyable, Movable):
     var batch_samples: Int
     var batch_centroids: Int
     var inertia_check: Bool
+    # Not a cuVS field. The caller's request for the lazy convergence read
+    # (`KMEANS_LAZY_SHIFT`, cluster/impl/detail/kmeans.mojo): honored only in
+    # FAST on Apple. IVF's coarse quantizer and IVF-PQ's codebooks set it; the
+    # KMeans estimator leaves it False unless built with
+    # `-D MOJOLEARN_KMEANS_FAST_LAZY_SHIFT` (2026-10-04).
+    var lazy_shift: Bool
 
     @staticmethod
     def default() -> Self:
@@ -140,6 +146,7 @@ struct KMeansParams(Copyable, ImplicitlyCopyable, Movable):
             batch_samples=1 << 15,
             batch_centroids=0,
             inertia_check=False,
+            lazy_shift=False,
         )
 
     def uses_scalable_plus_plus(self) -> Bool:

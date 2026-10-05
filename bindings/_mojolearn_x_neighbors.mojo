@@ -11,12 +11,15 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.eigh_device import op_eigh
 from checks.vendor import COMPILED_VENDOR
+from x_neighbors.device_ops import op_softmax64
+from x_neighbors.proba64_nc import NC_PROBA64
 from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_class_counts, op_p2m_const_cols, op_p2m_lp_labels, op_p2m_fill, op_p2m_iota, op_p2m_negate, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
 from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain
 from x_neighbors.kapprox_dev import kpca_resident_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
+from x_neighbors.nan_cells_device import nc_fit_lean_binding
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding
 from x_neighbors.ocsvm_dev import OCSVM_IDN_RES, ocsvm_alpha_init_binding
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
@@ -387,6 +390,18 @@ def softmax_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
     var v_c = _n(i_, 1)
     with GILReleased(Python()):
         op_softmax(v_x, v_res, v_n, v_c)
+    return PythonObject(None)
+
+
+def softmax64_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    """Lane apple-fast-q-clf: registered only under NC_PROBA64 (FAST, not
+    -D MOJOLEARN_PROBA64_QOLD); NearestCentroid.predict_proba as float64."""
+    var v_x = _a(a_, 0)
+    var v_res = _a(a_, 1)
+    var v_n = _n(i_, 0)
+    var v_c = _n(i_, 1)
+    with GILReleased(Python()):
+        op_softmax64(v_x, v_res, v_n, v_c)
     return PythonObject(None)
 
 
@@ -1187,6 +1202,8 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[nc_shrink_binding]("xn_nc_shrink")
     m.def_function[nc_decision_binding]("xn_nc_decision")
     m.def_function[softmax_binding]("xn_softmax")
+    comptime if NC_PROBA64:
+        m.def_function[softmax64_binding]("xn_softmax64")
     m.def_function[log_softmax_binding]("xn_log_softmax")
     m.def_function[pcs_binding]("xn_pcs")
     m.def_function[achi2_binding]("xn_achi2")
@@ -1263,6 +1280,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
+        m.def_function[nc_fit_lean_binding]("x_neighbors_nc_fit_lean")
         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device

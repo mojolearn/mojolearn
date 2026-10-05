@@ -568,14 +568,31 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     if isinstance(scoring, str):
         scoring = get_scorer(scoring)
     X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
+    # CV_FAST_SLICE (FAST + Apple build of the resample binding, default ON
+    # since 2026-10-04, rollback -D MOJOLEARN_CV_FAST_SLICE_OFF;
+    # resample/estimator.mojo CV_FAST_SLICE): the native default
+    # folds of a regressor are contiguous ascending row blocks, so each
+    # fold's test rows are a zero-copy view and its training rows two
+    # memcpys (or a view) instead of four `_take_rows` byte gathers. Same
+    # rows in the same order.
+    ranges = None
+    if _cv_fast_on(_CV_SLICE_BIT) and _native_default_cv(cv, groups):
+        ranges = _kfold_ranges(X, y, folds)
+    range_at = iter(ranges or ())
     scores = []
-    # X, y and the fold indices resident on the device for every fold
+    # X, y and the fold indices resident on the device for every fold; the
+    # CV_FAST_SLICE contiguous-range views above (FAST + Apple) when they apply
     with _FoldRows(X, y, folds) as rows:
         for i in range(len(folds)):  # glue: one fit per fold
             fitted = _clone(estimator)
             try:
-                Xtr, ytr, Xte, yte = rows.take(i)
-                scores.append(_fit_score_fold(fitted, Xtr, ytr, Xte, yte, scoring))
+                if ranges is not None:
+                    a, b = next(range_at)
+                    fold_rows = (_rows_outside(X, a, b), _rows_outside(y, a, b),
+                                 _row_range_view(X, a, b), _row_range_view(y, a, b))
+                else:
+                    fold_rows = rows.take(i)
+                scores.append(_fit_score_fold(fitted, *fold_rows, scoring))
             finally:
                 # Release each fold before constructing the next estimator. Native
                 # contexts retain their own cleanup contract; no forced GPU reset.
@@ -605,6 +622,16 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
     if groups is not None:
         if getattr(groups, "ndim", 1) != 1 or len(groups) != len(X):
             raise ValueError('groups must be 1-D and match X rows')
+    # CV_FAST_TRUST_FOLDS (FAST + Apple build of the resample binding,
+    # default ON since 2026-10-04, rollback -D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF;
+    # resample/estimator.mojo CV_FAST_TRUST_FOLDS): the
+    # native default folds (`fold_ids` + `select_fold_i64`) are a partition
+    # of the rows by construction, so `_indices`' range/duplicate pass and
+    # `_overlap` on every fold's two int64 arrays are skipped. A splitter,
+    # groups, a bool cv or the sabotage control: validated as before.
+    if _cv_fast_on(_CV_TRUST_FOLDS_BIT) and _native_default_cv(cv, groups):
+        # n_splits >= 2 is checked inside, so this is never empty.
+        return X, y, _native_default_folds(y, 5 if cv is None else cv, _classifier(estimator))
     folds = []
     for train, test in _folds(cv, estimator, X, y, groups):
         train = _indices(train, len(X), 'train')
@@ -615,6 +642,83 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
     if not folds:
         raise ValueError('cv must produce at least one fold')
     return X, y, folds
+
+
+# ---------------------------------------------------------------------------
+# FAST + Apple cross-val candidates (recovered from
+# lane/apple-fast-resample@50b96e795, lane apple-fast-rec-resample
+# 2026-10-04). Switched by the resample binding's `resample_fast_defines`
+# mask (build-time defines), never by the environment. Off on every other
+# tier and build.
+# ---------------------------------------------------------------------------
+
+_CV_SLICE_BIT = 32        # CV_FAST_SLICE (default; _OFF rolls back)
+_CV_TRUST_FOLDS_BIT = 64  # CV_FAST_TRUST_FOLDS (default; _OFF rolls back)
+
+
+def _cv_fast_on(bit):
+    from . import resample as _resample
+    return bool(_resample.fast_defines() & bit)
+
+
+def _native_default_cv(cv, groups):
+    """Whether `_folds` takes `_native_default_folds` for this cv: the
+    default (None) or an integer, no groups, no sabotage control."""
+    return (groups is None and (cv is None or isinstance(cv, numbers.Integral))
+            and not is_bool(cv) and not _sabotage_requested())
+
+
+def _row_range_view(arr, a, b):
+    """Rows [a, b) of a C-order Array as a READ-ONLY view over the same
+    memory (no copy; `arr` stays alive through the view's `_base`). Read
+    only so an estimator that asks for a writable address is refused rather
+    than writing into the caller's X or y (`_take_rows` handed out copies)."""
+    if a == 0 and b == arr.shape[0]:
+        return arr
+    per = arr.size // arr.shape[0]
+    view = Array._view_of(arr, arr.shape, 'C')
+    view._mv = arr._mv[a * per:b * per]
+    view._addr = arr._addr + a * per * arr.itemsize
+    view._readonly = True
+    view._set_meta((b - a,) + tuple(arr.shape[1:]), arr.dtype, 'C')
+    return view
+
+
+def _rows_outside(arr, a, b):
+    """Rows [0, a) then [b, n) of a C-order Array: a view when one side is
+    empty, else one new Array filled by two memcpys."""
+    n = arr.shape[0]
+    if a == 0:
+        return _row_range_view(arr, b, n)
+    if b == n:
+        return _row_range_view(arr, 0, a)
+    per = arr.size // n
+    out = empty((n - (b - a),) + tuple(arr.shape[1:]), arr.dtype)
+    out._mv[:a * per] = arr._mv[:a * per]
+    out._mv[a * per:] = arr._mv[b * per:]
+    return out
+
+
+def _kfold_ranges(X, y, folds):
+    """Each fold's test block `(a, b)`, or None unless EVERY fold is a
+    contiguous block. Called only on `_native_default_folds`' folds, whose
+    sides are ascending, duplicate free and a partition of the rows
+    (`select_fold_i64` scans the rows in order), so test == [a, b) exactly
+    when its size is b - a with both ends a and b - 1, and train is then
+    the complement in ascending order."""
+    n = len(X)
+    if not isinstance(y, Array) or X.order != 'C' or y.order != 'C' or n < 2:
+        return None
+    ranges = []
+    for train, test in folds:  # glue: one O(1) endpoint check per fold
+        if not test.size or not train.size:
+            return None
+        a = int(test._mv[0])
+        b = int(test._mv[test.size - 1]) + 1
+        if b - a != test.size or train.size != n - test.size:
+            return None
+        ranges.append((a, b))
+    return ranges
 
 
 def _fit_score_fold(fitted, X_train, y_train, X_test, y_test, scoring):

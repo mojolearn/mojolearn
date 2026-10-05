@@ -24,6 +24,7 @@ from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, 
 from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 from x_prep.py2mojo import PY2MOJO_PREP
+from x_prep.proba64 import PROBA64
 from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from x_prep.fastmaxabs import maxabs_fit_direct
 
@@ -282,6 +283,13 @@ def calib_folds_binding() raises -> PythonObject:
     return out
 
 
+def proba64_binding() raises -> PythonObject:
+    """Lane apple-fast-q-clf (x_prep/proba64.mojo): registered only under
+    PROBA64 (FAST, not -D MOJOLEARN_PROBA64_QOLD); Python's probe for staging
+    `q64_softmax` (float64 predict_proba)."""
+    return PythonObject(1)
+
+
 def py2mojo_binding() raises -> PythonObject:
     """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF
     (x_prep/py2mojo.mojo); Python then takes its old loops."""
@@ -373,6 +381,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[calib_folds_binding]("x_prep_calib_folds")
         comptime if PY2MOJO_PREP:
             m.def_function[py2mojo_binding]("x_prep_py2mojo")
+        comptime if PROBA64:
+            m.def_function[proba64_binding]("x_prep_proba64")
         comptime if PTIMPUTE_FLAGS != 0:
             m.def_function[ptimpute_flags_binding]("x_prep_ptimpute_flags")
         return m.finalize()

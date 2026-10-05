@@ -358,6 +358,8 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_NT
+from x_decomp.cells import F32Ptr
+from x_decomp.fast_chol import CHOL_FAST_BLOCKED, CH_NB, launch_chol_blocked
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from checks.numerics import (
@@ -445,6 +447,11 @@ def chol_default_nb_hint() -> Int:
 
 
 comptime CHOL_FAST_CB = 2048
+# HOLD-speed, 2026-10-04, NB512 source19bb1c7a1:
+# w2-cholnb512-quality PASS; w2-cholnb512-synthetic260.4->265.7ms.
+# One run/arm showed no benefit; NB512 stays opt-in, default width unchanged.
+# NB64/NB128 have no admission implied by that NB512 result.
+# See docs/apple-fast/EXPERIMENTS.md (MOJOLEARN_CHOL_FAST_NB512).
 comptime CHOL_FAST_NB = 64 if is_defined["MOJOLEARN_CHOL_FAST_NB64"]() else (
     128 if is_defined["MOJOLEARN_CHOL_FAST_NB128"]() else (
         512 if is_defined["MOJOLEARN_CHOL_FAST_NB512"]() else 256
@@ -1872,6 +1879,31 @@ def _potrf_lower_strips(
     return CholRun(info, CS_NB, n_panels)
 
 
+def _potrf_lower_fast_blocked(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    n: Int,
+) raises -> CholRun:
+    """`potrf_lower` through x_decomp/fast_chol.mojo `launch_chol_blocked`
+    (CHOL_FAST_BLOCKED, default off, FAST + Apple; recovered from
+    lane/apple-fast-decomp-linalg@74d52352b): the launches enqueued, `info`
+    read once after them. The panel width that ran is CH_NB."""
+    var dinfo = ctx.enqueue_create_buffer[DType.float32](1)
+    var hinfo = ctx.enqueue_create_host_buffer[DType.float32](1)
+    launch_chol_blocked(
+        ctx,
+        F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())),
+        F32Ptr(unsafe_from_address=Int(dinfo.unsafe_ptr())),
+        n,
+    )
+    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+    ctx.synchronize()
+    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
+    _ = dinfo^
+    _ = hinfo^
+    return CholRun(info, CH_NB, (n + CH_NB - 1) // CH_NB)
+
+
 def potrf_lower(
     ctx: DeviceContext,
     mut a: DeviceBuffer[DType.float32],
@@ -1969,6 +2001,24 @@ def potrf_lower(
             and String(getenv("MOJOLEARN_CHOL_STRIP_OFF")) != "1"
         ):
             return _potrf_lower_strips(ctx, a, n, elem_tpb, trace)
+    # -D MOJOLEARN_CHOL_FAST_BLOCKED (x_decomp/fast_chol.mojo, default off,
+    # FAST + Apple): the blocked right-looking route instead of the
+    # CHOL_FAST_NB route below. Only without a sabotage, a trace or a
+    # multi-GPU owner set, past one panel, and for a `defer_ok` caller: on a
+    # non-positive pivot the route continues the sweep (x_decomp's rule), and
+    # a `defer_ok` caller (cholesky/estimator.mojo `cholesky_factor_devio`)
+    # redoes a failed factor without `defer_ok`, so LAPACK's partial factor
+    # still comes from the route below (that redo is CHOL_FAST_NOSYNC's, so
+    # the route needs it on).
+    comptime if CHOL_FAST_BLOCKED and CHOL_FAST_NOSYNC:
+        if (
+            defer_ok
+            and sabotage == CHOL_SAB_NONE
+            and not trace.enabled
+            and chol_device_count() == 1
+            and n > CH_NB
+        ):
+            return _potrf_lower_fast_blocked(ctx, a, n)
 
     var nt_max = n - nb
     if nt_max < 0:
