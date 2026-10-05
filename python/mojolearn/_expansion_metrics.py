@@ -175,6 +175,9 @@ class _Prog:
         #: less the inputs and scratch (`_skip`), which never come back
         self._outs = None
         self._skip = []
+        #: (MATCH, W, n) of a weighted `_Sums` program, for a tail that sums
+        #: the rows itself (`_wsum_sf64`); None otherwise
+        self.rows = None
 
     def alloc(self, n):
         off = self.size
@@ -528,6 +531,7 @@ class _Sums:
                        fmode, bo)
             eos.append(eo)
         self.tail = None
+        prog.rows = None if w is None else (match, W, n)
         keep = tail(prog, groups) if tail is not None else None
         _execute(prog, numeric_mode)
         self.prog, self.groups = prog, groups
@@ -616,11 +620,32 @@ def _label_order(labels, present):
 # ---------------------------------------------------------------------------
 
 #: cm_epi kinds (x_metrics/cm_epi.mojo, op 59; lane cpu2-l7-metrics)
-_CM_MLCM, _CM_MCC, _CM_COUNT, _CM_NORM, _CM_KAPPA, _CM_CLR, _CM_TOTAL = range(7)
+_CM_MLCM, _CM_MCC, _CM_COUNT, _CM_NORM, _CM_KAPPA, _CM_CLR, _CM_TOTAL, _CM_WSUM_LEAF, _CM_WSUM_FOLD = range(9)
+#: rows per `_wsum_leaf` unit (x_metrics/cm_epi.mojo WSUM_BLOCK)
+_WSUM_BLOCK = 256
 #: the NORM modes: the 'all' total, then 'all', 'true', 'pred', none
 _NORM_MODES = {"all": 1, "true": 2, "pred": 3, None: 4}
 #: the kappa weight modes
 _KAPPA_W = {None: 0, "linear": 1, "quadratic": 2}
+
+
+def _wsum_sf64(prog, k):
+    """Lane box-run-2-fix (2026-10-05): stage the weighted COUNT's hit and
+    weight total as soft binary64 sums on the device (x_metrics/cm_epi.mojo
+    `_wsum_leaf`: one unit per WSUM_BLOCK rows, then `_wsum_fold`: one stage
+    per tree level, stride 1, 2, 4, ...), the same stages on every column.
+    Returns the slot whose first 4 words are [hit, total]. Before, both were
+    Float32 PairSums widened to binary64 (precision loss in score with
+    sample_weight)."""
+    match, W, n = prog.rows
+    nb = max(1, -(-n // _WSUM_BLOCK))
+    s = prog.scratch(4 * nb)
+    prog.stage("cm_epi", nb, _CM_WSUM_LEAF, match, W, n, s, k)
+    stride = 1
+    while stride < nb:  # glue: one stage per fold level (log2 of the block count)
+        prog.stage("cm_epi", -(-(nb - stride) // (2 * stride)), _CM_WSUM_FOLD, s, stride, nb)
+        stride *= 2
+    return s
 
 
 def _cm_stage(prog, groups, w, n, k, kind, size):
@@ -632,6 +657,10 @@ def _cm_stage(prog, groups, w, n, k, kind, size):
     out = prog.alloc(max(size, 1))
     tp, tr, pr = groups[0][col], groups[1][col], groups[2][col]
     tot = n if w is None else groups[3][1]
+    if kind == _CM_COUNT and w is not None:
+        # lane box-run-2-fix: the weighted COUNT reads soft-f64 [hit, total]
+        # (`_wsum_sf64`), not the Float32 PairSums
+        tot = _wsum_sf64(prog, k)
     if kind == _CM_MLCM:
         if k:
             prog.stage("cm_epi", k, kind, tp, tr, pr, k, col, tot, out)
@@ -950,7 +979,9 @@ def accuracy_fraction(y_true, y_pred, sample_weight=None, numeric_mode=None):
     """sklearn's ClassifierMixin.score / accuracy_score over labels of any
     kind: the (weighted) match count over the row count or the weight total,
     both from the x_metrics binding's grouped sums (lane pyglue-sweep: the
-    weight total is the program's PairSum, not a host sum). Lane
+    weight total is the program's PairSum, not a host sum; lane
+    box-run-2-fix: the weighted hit and total are soft-f64 sums on the
+    device, `_wsum_sf64`, no longer Float32 PairSums). Lane
     cgr4-py-compute: the estimators' `score` methods called this instead of
     a per-row Python comparison."""
     frac = _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode)[1]

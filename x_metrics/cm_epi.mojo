@@ -38,6 +38,13 @@ comptime KIND_NORM = 3
 comptime KIND_KAPPA = 4
 comptime KIND_CLR = 5
 comptime KIND_TOTAL = 6
+#: lane box-run-2-fix (2026-10-05): the weighted COUNT's soft-f64 sums
+#: (the leaf blocks, then the fixed tree fold); see `_wsum_leaf` below
+comptime KIND_WSUM_LEAF = 7
+comptime KIND_WSUM_FOLD = 8
+#: rows per leaf unit of the weighted COUNT's soft-f64 sums. A constant of
+#: the source, never of a launch, a core count or a vendor.
+comptime WSUM_BLOCK = 256
 
 #: NORM modes: the 'all' total (one unit), then 'all' / 'true' / 'pred' /
 #: none (one unit per row, row, column, row)
@@ -147,7 +154,13 @@ def _mcc(f: FP, q: IP):
 @always_inline
 def _count(f: FP, q: IP):
     """q = [KIND, TP, k, WEIGHTED, TOT, OUT]; one unit. hit = the matches'
-    sum over the k labels (ascending, from 0.0). OUT: [0] 1 when the total
+    sum over the k labels (ascending, from 0.0) (unweighted). Weighted
+    (lane box-run-2-fix, 2026-10-05): TOT is the `_wsum_leaf` slot after its
+    fold, [hit, total] as binary64 (soft-f64 sums of every weight widened
+    exactly); TP is not read. It was hit = the k per-label Float32 PairSums
+    widened, and total = the total grouping's Float32 PairSum widened, so
+    `score(sample_weight=...)` lost the weight total to Float32 rounding.
+    OUT: [0] 1 when the total
     is zero, [1] hit and [10] n - hit (Int32, unweighted), [2..4) hit,
     [4..6) total - hit, [6..8) (total - hit) / total, [8..10) hit / total
     (unweighted: hit / max(n, 1)), binary64."""
@@ -158,11 +171,16 @@ def _count(f: FP, q: IP):
     var OUT = p(q, 5)
     var hit = SF64_ZERO
     var ihit = 0
-    for i in range(k):
-        hit = sf64_add(hit, sum_at(f, TP, i, weighted))
-        if not weighted:
+    var total: UInt64
+    if weighted:
+        # the folded soft-f64 slot (`_wsum_leaf`, `_wsum_fold`), not the PairSums
+        hit = ld64(f, tot)
+        total = ld64(f, tot + 2)
+    else:
+        for i in range(k):
+            hit = sf64_add(hit, sum_at(f, TP, i, False))
             ihit += cnt_at(f, TP, i)
-    var total = _total(f, tot, weighted)
+        total = _total(f, tot, False)
     var miss = sf64_sub(total, hit)
     var zero = is0(total)
     sti(f, OUT, 1 if zero else 0)
@@ -332,6 +350,53 @@ def _clr(f: FP, q: IP):
 
 
 @always_inline
+def _wsum_leaf(t: Int, f: FP, q: IP):
+    """q = [KIND, MATCH, W, n, S, k]; unit t sums rows [t * WSUM_BLOCK,
+    min(n, (t + 1) * WSUM_BLOCK)) in ascending order, from 0.0, as soft
+    binary64: every weight W[r] widened exactly (sf64_from_f32 of the
+    flushed load) into the total, and into the hit when MATCH[r] (pair_key
+    mode 1) is a label in [0, k). Writes [hit, total] (4 words) at S + 4t.
+    Lane box-run-2-fix (2026-10-05): the weighted accuracy / hamming /
+    zero-one total and hit were Float32 PairSums widened to binary64."""
+    var MATCH = p(q, 1)
+    var W = p(q, 2)
+    var n = p(q, 3)
+    var S = p(q, 4)
+    var k = p(q, 5)
+    var lo = t * WSUM_BLOCK
+    var hi = min(n, lo + WSUM_BLOCK)
+    var hit = SF64_ZERO
+    var tot = SF64_ZERO
+    for r in range(lo, hi):
+        var w = sf64_from_f32(ld(f, W + r))
+        tot = sf64_add(tot, w)
+        var m = ldi(f, MATCH + r)
+        if m >= 0 and m < k:
+            hit = sf64_add(hit, w)
+    st64(f, S + 4 * t, hit)
+    st64(f, S + 4 * t + 2, tot)
+
+
+@always_inline
+def _wsum_fold(t: Int, f: FP, q: IP):
+    """q = [KIND, S, stride, nb]; one level of the fixed tree fold over the
+    nb leaf slots of `_wsum_leaf`: unit t adds slot a + stride into slot a,
+    a = 2 * stride * t (both channels), when a + stride < nb. The caller
+    stages stride = 1, 2, 4, ... while stride < nb, so slot 0 ends with the
+    sum; the pairs depend on n only, and no unit reads a slot another unit
+    of the same level writes."""
+    var S = p(q, 1)
+    var stride = p(q, 2)
+    var nb = p(q, 3)
+    var a = 2 * stride * t
+    var b = a + stride
+    if b >= nb:
+        return
+    st64(f, S + 4 * a, sf64_add(ld64(f, S + 4 * a), ld64(f, S + 4 * b)))
+    st64(f, S + 4 * a + 2, sf64_add(ld64(f, S + 4 * a + 2), ld64(f, S + 4 * b + 2)))
+
+
+@always_inline
 def _total_of(f: FP, q: IP):
     """q = [KIND, SRC, k, WEIGHTED, OUT]; one unit: the sum of k values
     from 0 in ascending order: Int32 words into an Int64 (unweighted), or
@@ -360,6 +425,10 @@ def cm_epi_unit(t: Int, f: FP, q: IP):
         _norm(t, f, q)
     elif kind == KIND_KAPPA:
         _kappa(t, f, q)
+    elif kind == KIND_WSUM_LEAF:
+        _wsum_leaf(t, f, q)
+    elif kind == KIND_WSUM_FOLD:
+        _wsum_fold(t, f, q)
     elif t != 0:
         return
     elif kind == KIND_MCC:
