@@ -112,6 +112,39 @@ def _prep_rows_check(
     return out
 
 
+def _prep_rows_check_emit(
+    ctx: DeviceContext, mut res: DeviceBuffer[DType.float32], n_fin: Int,
+    pos_lo: Int, pos_n: Int, nonneg_lo: Int, nonneg_n: Int,
+    count: Int, output: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> SIMD[DType.int32, 4]:
+    """`_prep_rows_check` and `_prep_rows_emit` behind ONE wait (lane
+    idn-regress, 2026-10-05): the flags and the first `count` fitted values
+    come home together. The caller raises on a flag, so the rows it got are
+    then dropped with its fresh output buffer (the fits' only callers pass
+    one). The check took its own synchronize before the emit's; the same
+    kernel, the same words."""
+    var flag = ctx.enqueue_create_buffer[DType.int32](4)
+    ctx.enqueue_memset(flag, Int32(0))
+    ctx.enqueue_function[prep_rows_check_kernel](
+        res.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n_fin),
+        Int32(pos_lo), Int32(pos_n), Int32(nonneg_lo), Int32(nonneg_n),
+        Int32(0), Int32(0), flag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        grid_dim=(n_fin + 255) // 256, block_dim=256,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.int32](4)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=flag)
+    var head = res.create_sub_buffer[DType.float32](0, count)
+    ctx.enqueue_copy(dst_ptr=output, src_buf=head)
+    ctx.synchronize()
+    var out = SIMD[DType.int32, 4](
+        h.unsafe_ptr().unsafe_load(0), h.unsafe_ptr().unsafe_load(1), h.unsafe_ptr().unsafe_load(2), 0,
+    )
+    _ = head^
+    _ = h^
+    _ = flag^
+    return out
+
+
 def _prep_rows_emit(
     ctx: DeviceContext, mut res: DeviceBuffer[DType.float32], count: Int,
     output: MutPointer[Float32, MutUntrackedOrigin],
@@ -142,14 +175,13 @@ def minmax_fit_direct(
     # the five rows stay on the device, are checked there, and go to the
     # caller in one copy (lane cpu3-core)
     var res = minmax_fit_fast_dev(ctx,dx,n,d,lower,upper)
-    var f = _prep_rows_check(ctx,res,5*d,3*d,d,0,0,0,0)
+    var f = _prep_rows_check_emit(ctx,res,5*d,3*d,d,0,0,5*d,output)
     _ = dx^
+    _ = res^
     if f[0] != 0:
         raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
     if f[1] != 0:
         raise Error("MinMaxScaler: Float32 scale underflow")
-    _prep_rows_emit(ctx,res,5*d,output)
-    _ = res^
     _ = ctx^
     return 1
 
@@ -219,14 +251,13 @@ def standard_fit_direct(
     # the three rows stay on the device, are checked there, and go to the
     # caller in one copy (lane cpu3-core)
     var res = standard_fit_dev(ctx,dx,n,d,with_mean,with_std)
-    var f = _prep_rows_check(ctx,res,3*d,2*d,d,d,d,0,0)
+    var f = _prep_rows_check_emit(ctx,res,3*d,2*d,d,d,d,3*d,output)
     _ = dx^
+    _ = res^
     if f[0] != 0:
         raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
     if f[1] != 0:
         raise Error("StandardScaler: invalid variance or scale")
-    _prep_rows_emit(ctx,res,3*d,output)
-    _ = res^
     _ = ctx^
     return 1
 
