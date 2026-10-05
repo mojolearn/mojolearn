@@ -1,0 +1,5 @@
+box-run-2 deletion proof (2026-10-05T08:10:06Z)
+NVIDIA RunPod pod aqxujpku19f133 (RTX 4090): VERIFIED: aqxujpku19f133 is gone (GET pod HTTP 404; not in the pod listing)
+AMD DigitalOcean droplet 606153646 (MI325X): DELETE HTTP 204, GET /v2/droplets/606153646 HTTP 404; account droplet list empty.
+RunPod account pod list empty after deletion. Mac dead-men and the harvester stopped.
+Final verified R2 snapshots: R2-OK 8de6b4904802249cec66d2c13c8f58bd593e9704565a3f69ced1f0877017efe6 881814130 aa9c56353 (nv), R2-OK 5906e1d7540f9123e495baea82c055da68bc3591639af768c2fbcdab5c52dedd 1728169179 mojolear (amd)
