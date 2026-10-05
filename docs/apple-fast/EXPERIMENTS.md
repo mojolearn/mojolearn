@@ -27,13 +27,21 @@ FAST never needs identical results: not bits, digests or arm-A equality, and not
 
 | verdict | meaning | rows |
 |---|---|---|
-| KEPT `<main sha>` | FAST + Apple default since that main commit | 84 |
-| DROPPED-slower | B slower than A | 19 |
-| DROPPED-noise | the difference is inside run-to-run spread (arms overlap, or under 5% at n=1), or the signs are mixed across datasets | 48 |
-| DROPPED-quality | faster, but the quality metric got worse | 3 |
-| DROPPED-semantics | no longer matches main's code path: stale base, duplicate of a main change, a no-op, or a host step in the GPU path | 4 |
-| MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | merged to main default OFF without an A/B (Andrew Oct 3: "just merge in the neurals provided they compile; not publicly exposed; don't lose the work") | 84 |
-| OPEN | not measured yet, measured but not judged, or the run did not finish | 189 |
+| KEPT `<main sha>` / DEFAULT | FAST + Apple default since that main commit (includes ACCEPT/DEFAULT, QUALITY-FIX KEPT, and defines on through an umbrella) | 269 |
+| DROPPED-slower | B slower than A (includes REVERTED with no quality gain) | 81 |
+| DROPPED-noise | the difference is inside run-to-run spread (arms overlap, or under 5% at n=1), or the signs are mixed across datasets | 91 |
+| DROPPED-quality | faster, but the quality metric got worse | 25 |
+| DROPPED-semantics | no longer matches main's code path: stale base, duplicate of a main change, a no-op, or a host step in the GPU path | 9 |
+| NEUTRAL | measured on current main, inside noise, quality unchanged; stays off (the batch 4 "RECORD NEUTRAL" rows) | 44 |
+| HOLD-quality | faster, but a quality question is open | 14 |
+| HOLD (other) | held for speed, measurement isolation, an old base, semantics or a missing quality metric | 19 |
+| SUPERSEDED | replaced by another define or path, split into per-define rows, or a no-op on main | 16 |
+| PARKED | parked by decision (rule conflict, pending Andrew, target dropped) | 6 |
+| BASELINE | a no-switch baseline line; no verdict applies | 7 |
+| MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | merged to main default OFF without an A/B (Andrew Oct 3: "just merge in the neurals provided they compile; not publicly exposed; don't lose the work") | 80 |
+| OPEN | no result found (25 rows, listed under Untried candidates) or measured with the verdict owed (2 rows) | 27 |
+
+Counts (2026-10-05) are over every table row in this file, family tables and later sections alike, after the reconciliation below; free-text verdicts are bucketed by their leading word. The Oct 3 counts (84 / 19 / 48 / 3 / 4 / 84 / 189 OPEN) covered the family tables only.
 
 Each row is one define, or one combination of defines, on one branch. Combination rows (`A + B`) are B arms that turn on several defines together. `(_OFF)` in a define name means the switch on main is the opt-out. Shas are `git rev-parse --short origin/<branch>` as of this record; the ledger's measured head is given where it differs.
 
