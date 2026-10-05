@@ -2394,12 +2394,12 @@ def _dsum_sq(k, M):
     return float(k.b.x_decomp_dsum_sq(M.addr, n))  # cpu-route: host binding only (CPU-only installs); a GPU binding sums on the device above
 
 
-def _dsum(values):
-    """Sequential float64 sum (IEEE adds, ascending): the same on every box."""
-    t = 0.0
-    for v in values:
-        t += v
-    return t
+def _dsum(k, M):
+    """Sequential float64 sum (IEEE adds, ascending, from 0.0) of M's float32
+    words: the same on every box (lane py-runtime-b: x_decomp/fa_em.mojo
+    `dsum`, it was a Python loop)."""
+    n = M.r * M.c
+    return float(k.b.x_decomp_dsum_f32(M.addr, n)) if n else 0.0
 
 
 def _inv(k, A):
@@ -2549,53 +2549,22 @@ class FactorAnalysis(_Base):
         # values and right vectors of the d x d R D / sqrt(n) (Q orthogonal)
         # (n >= d never reads Xc again, so the QR may consume it: one copy of X on the device)
         Rx = k.qr_r(Xc, consume=True) if n >= d else None
-        old_ll = -math.inf
-        loglike = []
-        it = 0
-        W = None
-        for it in range(1, self.max_iter + 1):
-            sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
-            if n >= d:
-                sv, Vt = k.svd(k.ew("scale", k.ew("div", Rx, sqrt_psi), s=1.0 / nsqrt))
-                s2 = k.ew("sq", sv)
-            else:
-                Z = k.ew("scale", k.ew("div", Xc, sqrt_psi), s=1.0 / nsqrt)
-                ev, V = k.eigh(k.mm(Z, Z, ta=True))
-                order = list(range(d - 1, -1, -1))
-                s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
-                Vt = V.take_cols(order).T
-            Vfull = Vt
-            Vt = Vt.rows(0, nc)
-            sk = s2.cols(0, nc)
-            # the log-likelihood is accumulated in Python float64 (IEEE adds,
-            # sequential): at float32 its step falls under tol=1e-2 early
-            unexp = _dsum(s2.cols(nc, d).s) if nc < d else 0.0
-            W = k.ew("mul", Vt, k.ew("sqrt", k.ew("maxs", k.ew("adds", sk, s=-1.0), s=0.0)).T)
-            W = k.ew("mul", W, sqrt_psi)
-            slog = _dsum(k.ew("logs", sk, s=1.1754943508222875e-38).s)
-            plog = _dsum(k.ew("logs", psi, s=1.1754943508222875e-38).s)
-            ll = (llconst + slog + unexp + plog) * (-n / 2.0)
-            loglike.append(ll)
-            if (ll - old_ll) < self.tol:
-                break
-            old_ll = ll
-            # lane/apple-fast-quality-glmfa (2026-10-03): psi without the
-            # cancellation. Theirs is var - sum_k W_kj^2; both terms are near
-            # var for a column the factors explain, and in float32 their
-            # difference has a floor near var * 1e-7 (theirs, float64, keeps
-            # falling toward the 1e-12 floor: Istella's held-out
-            # log-likelihood 89.0 against 98.1). With q = (sqrt psi + SMALL)^2
-            # the scaled data's column norms are var_j / q_j = sum_i V_ij^2 s2_i
-            # (every singular vector), so var_j - sum_k W_kj^2 = q_j (sum_i
-            # V_ij^2 w_i), w_i = min(s2_i, 1) for the nc kept components and
-            # s2_i past them: a sum of nonnegative terms, relative accuracy at
-            # any psi. The same value in exact arithmetic; d x d device ops.
-            dfull = Vfull.r
-            keep = _M.of([1.0] * nc + [0.0] * (dfull - nc), 1, dfull)
-            drop = _M.of([0.0] * nc + [1.0] * (dfull - nc), 1, dfull)
-            wts = k.ew("add", k.ew("mul", k.ew("mins", s2, s=1.0), keep), k.ew("mul", s2, drop))
-            share = k.mm(wts, k.ew("sq", Vfull))
-            psi = k.ew("maxs", k.ew("mul", k.ew("sq", sqrt_psi), share), s=SMALL)
+        # the EM loop in ONE binding call (lane py-runtime-b:
+        # x_decomp/fa_em.mojo on the host column, x_decomp/fa_em_dev.mojo on
+        # resident device matrices): the same cells per iteration (the SVD
+        # of the scaled R when n >= d, else the eigh of the scaled Gram), the
+        # same cancellation-free psi update (lane/apple-fast-quality-glmfa)
+        # and the float64 log-likelihood (`_dsum`'s sequential adds) and
+        # stopping test in the same order
+        A = Rx if n >= d else Xc
+        W = _M.zeros(nc, d)
+        psi = psi.copy()
+        la = array.array("d", [0.0]) * max(int(self.max_iter), 1)
+        it = int(k.b.x_decomp_fa_em_main(A.addr, psi.addr, W.addr, la.buffer_info()[0],
+                                         [n, d, nc, int(self.max_iter), A.r], [float(self.tol), float(llconst)]))
+        loglike = la.tolist()[:it]
+        if it == 0:
+            W = None
         return self._fit_store(k, W, psi, mean, loglike, it, d, nc)
 
     def _psi_init(self, k, d):
@@ -2643,11 +2612,11 @@ class FactorAnalysis(_Base):
             Vfull = V.take_cols(order).T
             Vt = _svd_flip_v(Vfull.rows(0, nc))
             sk = s2.cols(0, nc)
-            unexp = _dsum(s2.cols(nc, d).s) if nc < d else 0.0
+            unexp = _dsum(k, s2.cols(nc, d)) if nc < d else 0.0
             W = k.ew("mul", Vt, k.ew("sqrt", k.ew("maxs", k.ew("adds", sk, s=-1.0), s=0.0)).T)
             W = k.ew("mul", W, sqrt_psi)
-            slog = _dsum(k.ew("logs", sk, s=1.1754943508222875e-38).s)
-            plog = _dsum(k.ew("logs", psi, s=1.1754943508222875e-38).s)
+            slog = _dsum(k, k.ew("logs", sk, s=1.1754943508222875e-38))
+            plog = _dsum(k, k.ew("logs", psi, s=1.1754943508222875e-38))
             ll = (llconst + slog + unexp + plog) * (-n / 2.0)
             loglike.append(ll)
             if (ll - old_ll) < self.tol:

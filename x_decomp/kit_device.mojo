@@ -67,6 +67,7 @@ from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det,
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
 from x_decomp.moves import MOVE_TRANSPOSE
+from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.moves_device import launch_move
 from x_decomp.select_dev import enqueue_sel_reduce, order_small_kernel
 from x_decomp.select_ops import SEL_ORDER_MAX
@@ -479,6 +480,22 @@ struct DKit(Movable):
         """`_M.rows(a, b)` as an exact device copy."""
         var view = DMat(rows_of=D, row0=a, rows=b - a)
         return self.copy(view)
+
+    def svd_host(mut self, A: DMat, mut s: Mat, mut v: Mat) raises:
+        """`_Kit.svd`'s solve of a resident tall A (m >= n): DevExec's
+        launches (`_svd_on`, the resident entry's sequence) on a device copy,
+        s (1 x n) and v (n x n, vectors in columns) home, unordered."""
+        var m = A.r
+        var n = A.c
+        if n <= 0 or m < n:
+            raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
+        s = Mat(1, n)
+        v = Mat(n, n)
+        var da = self.ctx.enqueue_create_buffer[DType.float32](m * n)
+        self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+        DevExec._svd_on(self.ctx, da, m, n, s.p(), v.p(), QRB_CELLS)
+        _ = da^
+        self.sync()
 
     def word(mut self, A: DMat) raises -> Float64:
         """`A.s[0]` as Python reads it: one word home (a sync)."""
