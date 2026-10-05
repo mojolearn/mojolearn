@@ -396,6 +396,26 @@ def scaled_copy_kernel(
     dst.unsafe_store(Int(dst_offset_in) + i, v)
 
 
+def scale_in_place_kernel(
+    values: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    scale: Float32,
+):
+    """`values[i] = values[i] * scale`, the model's `leaf * learning_rate`
+    rescale (`identical_mul`: the correctly rounded float product), one
+    thread per value."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    values.unsafe_store(
+        i,
+        sf64_to_f32(
+            sf64_mul(sf64_from_f32(values.unsafe_load(i)), sf64_from_f32(scale))
+        ),
+    )
+
+
 # ===========================================================================
 # THE WALK'S BUFFERS (owned by the fit's estimation workspace)
 # ===========================================================================
@@ -730,5 +750,21 @@ def enqueue_copy_values(
         dst.unsafe_ptr(),
         Int32(dst_offset),
         grid_dim=(_leaf_grid(n), 1, 1),
+        block_dim=(WALK_BLOCK, 1, 1),
+    )
+
+
+def enqueue_scale_in_place(
+    ctx: DeviceContext,
+    mut values: DeviceBuffer[DType.float32],
+    count: Int,
+    scale: Float32,
+) raises:
+    """The model's leaf rescale on the device, in place, over `[0, count)`."""
+    ctx.enqueue_function[scale_in_place_kernel](
+        values.unsafe_ptr(),
+        Int32(count),
+        scale,
+        grid_dim=(_leaf_grid(count), 1, 1),
         block_dim=(WALK_BLOCK, 1, 1),
     )
