@@ -2363,11 +2363,14 @@ struct DeviceDataset(Movable):
             return
         if self.has_rm:
             return
-        # ET_RM_NARROW (trial arm): a row whose floats fit one 64-byte line
-        # also takes the row-major copy, whatever k is.
+        # ET_RM_NARROW: a row whose floats fit one cache line (ET_RM_LINE_BYTES)
+        # also takes the row-major copy when a quarter of it is sampled.
         var narrow = False
         comptime if ET_RM_NARROW:
-            narrow = Int(self.n_cols) * 4 <= 64 and 4 * k >= Int(self.n_cols)
+            narrow = (
+                Int(self.n_cols) * 4 <= ET_RM_LINE_BYTES
+                and 4 * k >= Int(self.n_cols)
+            )
         if 2 * k < Int(self.n_cols) and not narrow:
             return
         var nr = Int(self.n_rows)
@@ -3321,6 +3324,25 @@ The range kernel's cells are the same min/max/NaN counts either way.
 M4 IDENTICAL (steward 1790610860810, always-on arm): ExtraTreesClassifier
 taxi 3904 -> 3745 ms, same hash; RandomTreesEmbedding (k = 1) 469 -> 1086
 ms, hence the quarter gate. `-D MOJOLEARN_ET_RM_NARROW_OFF` turns it off."""
+
+comptime ET_RM_LINE_BYTES = (
+    64
+    if (
+        is_defined["MOJOLEARN_ET_RM_LINE_HW_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+    else 128
+)
+"""lane/no-dim-idn (2026-10-04): the line `ET_RM_NARROW` compares a row
+against. It was a literal 64 bytes, i.e. `n_cols <= 16`, exactly the board's
+taxi width. It is now the cache line of the targets this arm runs on: 128
+bytes on Apple GPUs, the NVIDIA L1 line and the CDNA3 L2 line alike, so
+a row of up to 32 float32 columns is one line fetch however many of its
+features are sampled, and the quarter gate (`4k >= n_cols`, from the
+RandomTreesEmbedding k = 1 slowdown) still bounds the wasted bytes per line
+at three quarters at any width. Bit-inert: the range cells are the same
+either way. `-D MOJOLEARN_ET_RM_LINE_HW_OFF` (and `MOJOLEARN_IDN_ALL_OFF`)
+restore 64 (A/B arm B)."""
 
 
 @always_inline
