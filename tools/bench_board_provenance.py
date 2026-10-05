@@ -60,6 +60,16 @@ def identity(path):
         out.update(installation='source', source_root=d['source_root'])
     elif d.get('installation') not in (None, 'wheel'):
         raise ValueError('Unknown installation layout')
+    runtime = d.get('runtime_files')
+    if runtime is not None:
+        if not isinstance(runtime, dict) or not runtime:
+            raise ValueError('Empty common runtime inventory')
+        for name, digest in runtime.items():
+            if not Path(name).is_absolute() or '..' in Path(name).parts or len(digest) != 64:
+                raise ValueError('Runtime inventory requires absolute paths and hashes')
+        out['runtime_files'] = runtime
+    if d['code_path'] == 'ptx-baseline' and not runtime:
+        raise ValueError('Paired PTX board requires pinned common runtime_files')
     return out
 
 
@@ -84,6 +94,9 @@ def installed_check(manifest, package):
         path = (package / rel).resolve()
         if not path.is_relative_to(package) or sha(path) != digest:
             raise ValueError('Installed artifact bytes differ: ' + rel)
+    for filename, digest in manifest.get('runtime_files', {}).items():
+        if sha(filename) != digest:
+            raise ValueError('Common runtime bytes differ: ' + filename)
 
 
 def loaded_bindings():
@@ -104,6 +117,37 @@ def loaded_bindings():
             continue
         rows.append(dict(module=name, file=str(path), sha256=sha(path),
                          role='host' if path.stem.endswith('_host') else 'gpu'))
+    return rows
+
+
+RUNTIME_PREFIXES = ('libAsync', 'libKGEN', 'libMSupport', 'libMojo', 'libstdc++', 'libgcc_s')
+
+
+def loaded_runtime(manifest, maps_path='/proc/self/maps'):
+    """Check actual worker mappings after timing; LD_LIBRARY_PATH is no proof."""
+    expected = manifest.get('runtime_files')
+    if not expected:
+        return []                 # legacy native evidence remains readable
+    pinned = {str(Path(p).resolve()): digest for p, digest in expected.items()}
+    observed = set()
+    for line in Path(maps_path).read_text().splitlines():
+        fields = line.split(None, 5)
+        if len(fields) != 6 or not fields[5].startswith('/'):
+            continue
+        raw = fields[5]
+        for escaped, actual in ((r'\040', ' '), (r'\011', '\t'), (r'\012', '\n'), (r'\134', '\\')):
+            raw = raw.replace(escaped, actual)
+        filename = str(Path(raw).resolve())
+        if filename in pinned or Path(raw).name.startswith(RUNTIME_PREFIXES):
+            observed.add(filename)
+    if not observed:
+        raise ValueError('No actual common runtime mappings witnessed')
+    rows = []
+    for filename in sorted(observed):
+        digest = sha(filename)
+        if pinned.get(filename) != digest:
+            raise ValueError('Loaded runtime outside pinned common environment: ' + filename)
+        rows.append(dict(file=filename, sha256=digest))
     return rows
 
 
@@ -149,7 +193,7 @@ def collect(manifest):
     if len(smi) != 1:
         raise ValueError('Guarded paired board requires one unambiguous physical GPU')
     return dict(status='verified', artifact_identity=manifest, loaded_files=loaded,
-                runtime_selection=runtime, hardware=smi[0], numeric_mode=ml.numeric_mode(),
+                runtime_selection=runtime, loaded_runtime_files=loaded_runtime(manifest), hardware=smi[0], numeric_mode=ml.numeric_mode(),
                 source_commit=manifest['source_commit'], identical_qualified=False)
 
 
@@ -206,6 +250,8 @@ def compare_boards(native, ptx):
     identities = [c.get('artifact_identity') for c in configs]
     if not all(identities) or [i.get('code_path') for i in identities] != ['native', 'ptx-baseline']:
         raise ValueError('Require guarded native then guarded PTX board')
+    if not identities[0].get('runtime_files') or identities[0].get('runtime_files') != identities[1].get('runtime_files'):
+        raise ValueError('Paired boards require the same pinned common runtime environment')
     for field in ('source_commit', 'numeric_mode'):
         if identities[0].get(field) != identities[1].get(field):
             raise ValueError('Different numerical ' + field)
@@ -232,6 +278,9 @@ def compare_boards(native, ptx):
             receipts = record.get('worker_provenance') or []
             if not receipts or any(r.get('status') != 'verified' or r.get('artifact_identity') != ident or r.get('hardware') != hardware for r in receipts):
                 raise ValueError('Missing/mismatched actual worker evidence: ' + rid)
+            pinned = {str(Path(p).resolve()): h for p, h in ident['runtime_files'].items()}
+            if any(not r.get('loaded_runtime_files') or any(pinned.get(x['file']) != x['sha256'] for x in r['loaded_runtime_files']) for r in receipts):
+                raise ValueError('Missing/mismatched actual runtime mappings: ' + rid)
         for phase in ('cells', 'infer_cells'):
             cells = [{c['arm']: c for c in r.get(phase, []) if c.get('library') == 'mojolearn' or c.get('arm', '').startswith('ours')} for r in records]
             if cells[0].keys() != cells[1].keys():

@@ -148,7 +148,10 @@ class Provenance(unittest.TestCase):
             cell=dict(arm='ours',library='mojolearn',status='ok',median_ms=2,hash='abc',settings={'rounds':1})
             return dict(plan=['r'],config=dict(artifact_identity=identity,rounds=1,data_sha256={'r':'data'}),
                         box=dict(artifact_hardware='GPU-1'),races={'r':dict(status='done',params_check='MATCHED',cells=[cell],worker_provenance=[dict(status='verified',artifact_identity=identity,hardware='GPU-1')])})
-        native,ptx=board(self.native),board(self.ptx)
+        runtime={'/common/libKGEN.so':'f'*64}
+        native,ptx=board(dict(self.native,runtime_files=runtime)),board(dict(self.ptx,runtime_files=runtime))
+        for doc in (native,ptx):
+            doc['races']['r']['worker_provenance'][0]['loaded_runtime_files']=[dict(file='/common/libKGEN.so',sha256='f'*64)]
         self.assertEqual(P.compare_boards(native,ptx)['races'],1)
         for category,key,value in [('config','rounds',2),('config','data_sha256',{'r':'changed'}),('box','artifact_hardware','GPU-2')]:
             changed=copy.deepcopy(ptx);changed[category][key]=value
@@ -157,6 +160,28 @@ class Provenance(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'source_commit'):P.compare_boards(native,changed)
         changed=copy.deepcopy(ptx);changed['races']['r']['cells'][0]['hash']='different'
         with self.assertRaisesRegex(ValueError,'digest mismatch'):P.compare_boards(native,changed)
+
+    def test_ptx_requires_common_runtime_inventory(self):
+        f=self.root/'ptx.json';f.write_text(json.dumps(self.ptx))
+        with patch.dict(os.environ,{'MOJOLEARN_CUDA_PATH':'ptx-baseline','MOJOLEARN_EXPERIMENTAL_PTX':'1'}):
+            with self.assertRaisesRegex(ValueError,'runtime_files'):P.identity(f)
+            f.write_text(json.dumps(dict(self.ptx,runtime_files={'relative.so':'f'*64})))
+            with self.assertRaisesRegex(ValueError,'absolute'):P.identity(f)
+            f.write_text(json.dumps(dict(self.ptx,runtime_files={'/common/libKGEN.so':'f'*64})))
+            self.assertEqual(P.identity(f)['runtime_files'],{'/common/libKGEN.so':'f'*64})
+
+    def test_actual_runtime_mapping_rejects_bundled_override_and_tamper(self):
+        common=self.root/'common';common.mkdir();lib=common/'libKGEN.so';lib.write_bytes(b'common')
+        bundled=self.root/'bundled';bundled.mkdir();other=bundled/'libKGEN.so';other.write_bytes(b'common')
+        maps=self.root/'maps';manifest=dict(self.native,runtime_files={str(lib):P.sha(lib)})
+        maps.write_text('0-1 r-xp 0 00:00 1 '+str(lib)+'\n')
+        rows=P.loaded_runtime(manifest,maps);self.assertEqual(rows,[dict(file=str(lib.resolve()),sha256=P.sha(lib))])
+        maps.write_text('0-1 r-xp 0 00:00 1 '+str(other)+'\n')
+        with self.assertRaisesRegex(ValueError,'outside pinned'):P.loaded_runtime(manifest,maps)
+        maps.write_text('0-1 r-xp 0 00:00 1 '+str(lib)+'\n');lib.write_bytes(b'changed')
+        with self.assertRaisesRegex(ValueError,'outside pinned'):P.loaded_runtime(manifest,maps)
+        maps.write_text('')
+        with self.assertRaisesRegex(ValueError,'No actual'):P.loaded_runtime(manifest,maps)
 
     def test_registration_performed_before_clock_collection_only_at_exit(self):
         P._registered=False
