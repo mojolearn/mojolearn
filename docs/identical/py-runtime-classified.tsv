@@ -174,7 +174,7 @@ python/mojolearn/_expansion_decomp.py	2830	glue	converts the noise_variance_init
 python/mojolearn/_expansion_decomp.py	3253	glue	drives the fixed randomized-SVD power iterations on the device
 python/mojolearn/_expansion_decomp.py	3487	runtime	PLS power driver with the Python convergence test; owed to a Mojo solver driver
 python/mojolearn/_expansion_decomp.py	3532	runtime	PLS per-component driver with Python tests on read-back counts; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	3763	runtime	dictionary update per zero column with Python scalar arithmetic; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	3763	runtime-fixed	zero-column fill folded into the atom loop of kit launches (one FILL0 move per resampled atom); no Python pass
 python/mojolearn/_expansion_decomp.py	3792	runtime	dictionary learning driver with the Python error test; owed to a Mojo solver driver
 python/mojolearn/_expansion_decomp.py	3943	runtime	MiniBatchDictionaryLearning batch driver with Python cost arithmetic; owed to a Mojo solver driver
 python/mojolearn/_expansion_decomp.py	3951	runtime	MiniBatchDictionaryLearning step driver with Python cost and diff arithmetic; owed to a Mojo solver driver
