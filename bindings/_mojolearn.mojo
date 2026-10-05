@@ -102,8 +102,8 @@ from core.hotpath_device import (
 from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_last_f32
 from bindings.array_helpers import (
     nsum_f64_binding,
-    shard_topk_merge_f32_binding,
 )
+from core.shard_merge_device import device_shard_topk_merge_f32
 from bindings.hotpath_helpers import (
     next_combination_i64_binding,
     ic_running_min_f64_binding,
@@ -1623,6 +1623,33 @@ def argmax_rows_f64_binding(
     return _argmax_rows_device("argmax_rows_f64", True, scores_addr, n_rows, n_cols, dst_addr)
 
 
+def shard_topk_merge_f32_binding(
+    table_addr: PythonObject, n_shards: PythonObject, n_queries: PythonObject, k: PythonObject,
+    out_dist_addr: PythonObject, out_idx_addr: PythonObject,
+) raises -> PythonObject:
+    """`shard_topk_merge_f32` (bindings/array_helpers.mojo's contract: 0, 1
+    a local id outside its shard, 2 fewer than k candidates) on the device
+    (lane cpu4-python, core/shard_merge_device.mojo); the host loop is the
+    host binding's column."""
+    var s_count = Int(py=n_shards)
+    var nq = Int(py=n_queries)
+    var kk = Int(py=k)
+    if s_count < 1 or nq < 0 or kk < 1:
+        raise Error("shard_topk_merge_f32: bad dimensions")
+    if nq == 0:
+        return PythonObject(0)
+    if Int(py=table_addr) == 0 or Int(py=out_dist_addr) == 0 or Int(py=out_idx_addr) == 0:
+        raise Error("shard_topk_merge_f32: null buffer address")
+    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=table_addr))
+    var od = Int(py=out_dist_addr)
+    var oi = Int(py=out_idx_addr)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var rc = 0
+    with GILReleased(Python()):
+        rc = device_shard_topk_merge_f32(ctx, tp, s_count, nq, kk, od, oi)
+    return PythonObject(rc)
+
+
 def argmax_last_rows_f32_binding(
     logits_addr: PythonObject, dims: PythonObject, dst_addr: PythonObject,
 ) raises -> PythonObject:
@@ -1643,9 +1670,11 @@ def argmax_last_rows_f32_binding(
         raise Error("argmax_last_rows_f32: null buffer address")
     if b > LRD_MAX_N // l or v > LRD_MAX_N:
         raise Error("argmax_last_rows_f32: more rows or columns than the device argmax holds")
+    var la = Int(py=logits_addr)
+    var da = Int(py=dst_addr)
     var ctx = process_ctx[_DEVCTX_SLOT]()
     with GILReleased(Python()):
-        device_argmax_last_f32(ctx, Int(py=logits_addr), b, l, v, Int(py=dst_addr))
+        device_argmax_last_f32(ctx, la, b, l, v, da)
     return PythonObject(0)
 
 
