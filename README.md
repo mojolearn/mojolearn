@@ -235,6 +235,10 @@ another framework reproduce under mojolearn's arithmetic, not that
 framework's. [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md) lists the verified
 devices and configurations.
 
+## Runtime rule
+
+No Python compute in the runtime, ever. The Python package is only the API surface (argument checks, routing, calls into compiled Mojo); every computed value comes from Mojo, on the GPU for GPU paths.
+
 ## Benchmark boards
 
 These are the canonical pages. Update them in place; don't start new ones.
