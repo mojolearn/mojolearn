@@ -8,6 +8,7 @@ struct keeps the clock fields so both functions share one latch), so only the
 forest files that call it import this file, and an edit to the clock no
 longer changes the source closure of every binding that logs a launch."""
 
+from std.os import getenv
 from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceContext
@@ -23,6 +24,12 @@ def log_launch_ctx(ctx: DeviceContext, name: StringSlice) raises:
     if not st[].clock:
         with open(st[].path, "a") as fh:
             fh.write(String(name) + "\n")
+        # Debug only (needs RF_LAUNCH_LOG): `RF_LAUNCH_SYNC_BEFORE=,a,b,` drains
+        # the queue before the named sites alone, to bisect an async hazard
+        # that the full clock hides (box-run-2, 2026-10-05).
+        var sel = String(getenv("RF_LAUNCH_SYNC_BEFORE"))
+        if sel != "" and sel.find("," + String(name) + ",") >= 0:
+            ctx.synchronize()
         return
     ctx.synchronize()
     var now = Int(perf_counter_ns())
