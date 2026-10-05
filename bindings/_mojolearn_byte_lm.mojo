@@ -715,11 +715,11 @@ def _read_flags(address: Int, n_tensors: Int) raises -> List[Bool]:
 
 
 def _read_ids(address: Int, count: Int) -> List[Int32]:
+    # lane cpu4-python: one memcpy of the caller's ids (the per-token append
+    # loop is gone); the List goes up as is (`afn_upload_ids`) and the range
+    # refusal is the device's (`byte_require_tokens_device`)
     var ids_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
-    var ids = List[Int32]()
-    for i in range(count):
-        ids.append(ids_ptr.unsafe_load(i))
-    return ids^
+    return list_i32(ids_ptr, count)
 
 
 def _write_flags(address: Int, flags: List[Bool]):
@@ -1505,7 +1505,7 @@ def byte_lm_parallel_apply_gradient_binding(session: PythonObject, addresses: Py
     var addr = _read_addresses(addresses, 1)
     var cells: List[Int] = [n]
     _validate_slot_table(addr, cells, 1)
-    owner[].apply_gradient(_read_f32(addr[0], n))
+    owner[].apply_gradient(f32_ptr(addr[0]))  # lane cpu4-python: straight to the device
     return PythonObject(owner[].trainers[0].completed_steps)
 
 
@@ -1616,12 +1616,12 @@ def byte_lm_parallel_fold_reset_binding(session: PythonObject, addresses: Python
     owner[].require_open()
     var n = owner[].trainers[0].config.n_total()
     if Int(py=addresses.__len__()) == 0:
-        owner[].fold_reset(List[Float32]())
+        owner[].fold_clear()
         return PythonObject(0)
     var addr = _read_addresses(addresses, 1)
     var cells: List[Int] = [n]
     _validate_slot_table(addr, cells, 1)
-    owner[].fold_reset(_read_f32(addr[0], n))
+    owner[].fold_reset(f32_ptr(addr[0]))  # lane cpu4-python: straight to the device
     return PythonObject(1)
 
 
@@ -1651,7 +1651,7 @@ def byte_lm_parallel_fold_add_binding(session: PythonObject, addresses: PythonOb
     var addr = _read_addresses(addresses, 1)
     var cells: List[Int] = [n]
     _validate_slot_table(addr, cells, 1)
-    owner[].fold_add(_read_f32(addr[0], n))
+    owner[].fold_add(f32_ptr(addr[0]))  # lane cpu4-python: straight to the device
     return PythonObject(0)
 
 
