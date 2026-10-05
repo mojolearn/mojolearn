@@ -1,13 +1,13 @@
 path	line	class	reason
-python/mojolearn/_array.py	588	runtime	Python cast loop for dtypes without a Mojo helper code (f2, u2, i1); owed: give cast_elements those codes, then delete
-python/mojolearn/_array.py	605	runtime	Python cast loop for dtypes without a Mojo helper code (see line 588)
-python/mojolearn/_array.py	773	runtime	Python equality loop for mixed dtypes without a Mojo helper code; owed to equal_elements codes
-python/mojolearn/_array.py	775	runtime	Python equality loop for dtypes without a Mojo helper code; owed to equal_elements codes
-python/mojolearn/_array.py	854	runtime	Python min fallback for dtypes without a reduce_stat code (f2, u2, i1); owed with those codes
-python/mojolearn/_array.py	860	runtime	Python max fallback for dtypes without a reduce_stat code; owed with those codes
-python/mojolearn/_array.py	878	runtime	Python sum fallback for dtypes without a reduce_stat code; owed with those codes
-python/mojolearn/_array.py	880	runtime	Python sum fallback for dtypes without a reduce_stat code; owed with those codes
-python/mojolearn/_array.py	893	runtime	Python argmax fallback for dtypes without a helper code; owed with those codes
+python/mojolearn/_array.py	588	runtime-fixed	float16/bf16-bit/int8 cast codes in the core helpers; Python route only on the refusal path and the test reference arm
+python/mojolearn/_array.py	605	runtime-fixed	Python route only raises a refused element's words (and the test reference arm)
+python/mojolearn/_array.py	773	runtime	mixed dtypes now widen exactly and compare natively; int64 against a float has no exact native widening and still compares in Python
+python/mojolearn/_array.py	775	runtime-fixed	equal_elements covers every dtype; Python only in the test reference arm
+python/mojolearn/_array.py	854	runtime-fixed	reduce_stat covers every dtype; Python only in the test reference arm
+python/mojolearn/_array.py	860	runtime-fixed	see line 854
+python/mojolearn/_array.py	878	runtime-fixed	see line 854
+python/mojolearn/_array.py	880	runtime-fixed	see line 854
+python/mojolearn/_array.py	893	runtime-fixed	see line 854
 python/mojolearn/_array.py	1002	cpu-input	flattens a ragged user Python list, the explicit input step
 python/mojolearn/_bpe_trainer.py	145	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
 python/mojolearn/_bpe_trainer.py	159	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
@@ -149,15 +149,15 @@ python/mojolearn/_expansion_cnn.py	2228	glue	walks the block layer list
 python/mojolearn/_expansion_cnn.py	2326	glue	address key of the graph input arrays
 python/mojolearn/_expansion_cnn.py	2330	glue	compares the graph key references
 python/mojolearn/_expansion_cnn.py	2384	glue	scalar glorot bound of two sizes
-python/mojolearn/_expansion_cnn.py	2412	runtime	numpy self-loop edge list, reached only under -D MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF / IDN_ALL_OFF (the default is x_cnn_gcn_loops in Mojo); delete with that A/B arm when its A/B closes
-python/mojolearn/_expansion_cnn.py	2413	runtime	numpy self-loop edge list fallback (see line 2412)
-python/mojolearn/_expansion_cnn.py	2414	runtime	numpy self-loop edge list fallback (see line 2412)
+python/mojolearn/_expansion_cnn.py	2412	runtime-fixed	GCN self loops always through x_cnn_gcn_loops (Mojo); the NumPy arm is deleted
+python/mojolearn/_expansion_cnn.py	2413	runtime-fixed	see line 2412
+python/mojolearn/_expansion_cnn.py	2414	runtime-fixed	see line 2412
 python/mojolearn/_expansion_decomp.py	319	glue	one C-level slice copy per selected column on the host matrix
-python/mojolearn/_expansion_decomp.py	363	runtime	builds the sign multiplier vector from flags in Python; owed to a device sign-flip stage (x_decomp sign moves)
-python/mojolearn/_expansion_decomp.py	369	runtime	builds the sign multiplier vector from flags in Python; owed to a device sign-flip stage
+python/mojolearn/_expansion_decomp.py	363	runtime-fixed	flag-list neg_rows deleted; callers multiply by the kit's device signs (absmax_signs / neg_signs)
+python/mojolearn/_expansion_decomp.py	369	runtime-fixed	flag-list neg_cols deleted; see line 363
 python/mojolearn/_expansion_decomp.py	605	glue	walks the matrix arguments of one call
-python/mojolearn/_expansion_decomp.py	1523	runtime	reads device signs into Python flags that steer the result; owed to a device sign-flip stage
-python/mojolearn/_expansion_decomp.py	1527	runtime	reads host signs into Python flags that steer the result; owed to a device sign-flip stage
+python/mojolearn/_expansion_decomp.py	1523	runtime-fixed	absmax_flags deleted; callers use absmax_signs on the kit
+python/mojolearn/_expansion_decomp.py	1527	runtime-fixed	absmax_flags deleted; see line 1523
 python/mojolearn/_expansion_decomp.py	1638	glue	drives one device partial fit per batch
 python/mojolearn/_expansion_decomp.py	1866	glue	shape check of the input argument
 python/mojolearn/_expansion_decomp.py	2147	runtime	NNDSVD init per component with Python scalar arithmetic on device results; owed to a Mojo NMF init driver
@@ -196,7 +196,7 @@ python/mojolearn/_expansion_linear.py	227	glue	per-class coefficient row views
 python/mojolearn/_expansion_linear.py	749	glue	reads the active feature indices
 python/mojolearn/_expansion_linear.py	1085	glue	converts the alphas argument
 python/mojolearn/_expansion_linear.py	1086	glue	validates the alphas argument
-python/mojolearn/_expansion_linear.py	1120	runtime	argmax over the device CV scores of each alpha in Python; owed to x_linear/ridgecv.mojo returning the best index
+python/mojolearn/_expansion_linear.py	1120	runtime-fixed	best alpha chosen in Mojo (x_linear_best_alpha, x_linear/ridgecv.mojo)
 python/mojolearn/_expansion_linear.py	1160	glue	validates the l1_ratio argument
 python/mojolearn/_expansion_linear.py	1174	glue	sorts the user alphas argument
 python/mojolearn/_expansion_linear.py	1180	glue	builds the float parameter list
@@ -413,10 +413,10 @@ python/mojolearn/_expansion_prep.py	4255	glue	class list from the device categor
 python/mojolearn/_expansion_prep.py	4262	cpu-input	Python list labels to a buffer, the explicit label input step
 python/mojolearn/_expansion_prep.py	4286	cpu-input	Python list-of-lists y, the explicit label input step
 python/mojolearn/_expansion_prep.py	4287	cpu-input	Python list-of-lists y, the explicit label input step
-python/mojolearn/_expansion_prep.py	4292	runtime	walks every row of y (ndarray too, via tolist) to check widths; owed to a device multilabel check
-python/mojolearn/_expansion_prep.py	4295	runtime	walks every value of y (ndarray too, via tolist); owed to a device multilabel check
-python/mojolearn/_expansion_prep.py	4296	runtime	walks every value of y (ndarray too, via tolist); owed to a device multilabel check
-python/mojolearn/_expansion_prep.py	4302	runtime	rebuilds y through Python floats; owed to a device multilabel check
+python/mojolearn/_expansion_prep.py	4292	runtime-fixed	buffer y checked natively (_multilabel_buffer); this line is the Python list-of-lists input route (cpu-route)
+python/mojolearn/_expansion_prep.py	4295	runtime-fixed	see line 4292
+python/mojolearn/_expansion_prep.py	4296	runtime-fixed	see line 4292
+python/mojolearn/_expansion_prep.py	4302	runtime-fixed	see line 4292
 python/mojolearn/_expansion_prep.py	4344	glue	shape check of the label argument
 python/mojolearn/_expansion_prep.py	4398	glue	class list from the device categories
 python/mojolearn/_expansion_prep.py	4542	cpu-input	str or object labels, the explicit label input step
@@ -436,7 +436,7 @@ python/mojolearn/_expansion_prep.py	4867	cpu-input	Python iterables of labels, t
 python/mojolearn/_expansion_prep.py	4868	cpu-input	Python iterables of labels, the explicit label input step
 python/mojolearn/_expansion_prep.py	4875	cpu-input	Python iterables of labels, the explicit label input step
 python/mojolearn/_expansion_prep.py	4876	cpu-input	Python iterables of labels, the explicit label input step
-python/mojolearn/_expansion_prep.py	4888	runtime	walks the n x K indicator in Python; owed to a device nonzero stage (building the Python tuples stays)
+python/mojolearn/_expansion_prep.py	4888	cpu-input	builds the user's list of Python label tuples (object output); marked cpu-route
 python/mojolearn/_expansion_prep.py	4972	glue	converts the min_value / max_value arguments
 python/mojolearn/_expansion_prep.py	4974	glue	interleaves the bound arguments
 python/mojolearn/_expansion_prep.py	5036	glue	per-kept-column bound arguments
@@ -450,11 +450,11 @@ python/mojolearn/_expansion_prep.py	5127	glue	fitted imputation sequence views
 python/mojolearn/_expansion_prep.py	5164	cpu-input	drives the user estimator per feature
 python/mojolearn/_expansion_prep.py	5167	cpu-input	drives the user estimator per feature
 python/mojolearn/_expansion_prep.py	5229	runtime-fixed	built m empty Python lists; now an empty (m, 0) Array
-python/mojolearn/_expansion_prep.py	5247	runtime	truncated-normal posterior sample per row in Python; owed to a Mojo truncnorm stage
+python/mojolearn/_expansion_prep.py	5247	runtime	truncated-normal posterior draw per row: needs Mojo twins of the pinned _pm.normal_cdf / normal_inv_cdf and the splitmix64 stream
 python/mojolearn/_expansion_prep.py	5325	glue	drives one device regression per step
 python/mojolearn/_expansion_prep.py	5332	glue	drives one device regression per step
 python/mojolearn/_expansion_prep.py	5336	glue	neighbor-feature mask of one step
-python/mojolearn/_expansion_prep.py	5354	runtime	copies user estimator outputs through Python floats for the per-row sampler; owed with the truncnorm stage
+python/mojolearn/_expansion_prep.py	5354	runtime	feeds the per-row truncnorm draw (see line 5247)
 python/mojolearn/_expansion_prep.py	5403	glue	support index list
 python/mojolearn/_expansion_prep.py	5410	glue	kept column index list
 python/mojolearn/_expansion_prep.py	5478	glue	raises on a negative per-column minimum
@@ -625,12 +625,12 @@ python/mojolearn/_linalg_impl.py	1132	runtime-fixed	R sign normalization now x_d
 python/mojolearn/_linalg_impl.py	1133	runtime-fixed	R sign normalization now x_decomp_r_signs (x_decomp/api.mojo r_signs_py, both x_decomp bindings)
 python/mojolearn/_linalg_impl.py	1135	runtime-fixed	R sign normalization now x_decomp_r_signs (x_decomp/api.mojo r_signs_py, both x_decomp bindings)
 python/mojolearn/_linalg_impl.py	1137	runtime-fixed	R sign normalization now x_decomp_r_signs (x_decomp/api.mojo r_signs_py, both x_decomp bindings)
-python/mojolearn/_linalg_impl.py	1461	runtime	counts the numerical rank over singular values in Python; owed to a device count
-python/mojolearn/_linalg_impl.py	1481	runtime	tests the orth diagonal for zeros in Python to pick the route; owed to a device test
-python/mojolearn/_linalg_impl.py	1482	runtime	reads orth diagonal signs into Python flags; owed to a device sign flip
-python/mojolearn/_linalg_impl.py	1501	runtime	reads R diagonal signs into Python flags; owed to a device sign flip
-python/mojolearn/_linalg_impl.py	1548	runtime	sorts eigenvalues by magnitude in Python; owed to a device argsort
-python/mojolearn/_linalg_impl.py	1551	runtime	reads eigenvalue signs into Python flags; owed to a device sign flip
+python/mojolearn/_linalg_impl.py	1461	runtime-fixed	numerical rank counted in Mojo (x_decomp_rank_above)
+python/mojolearn/_linalg_impl.py	1481	runtime-fixed	dependent-column test as one kit count (le of |d| against 0)
+python/mojolearn/_linalg_impl.py	1482	runtime-fixed	column signs on the kit (neg_signs of the orth diagonal)
+python/mojolearn/_linalg_impl.py	1501	runtime-fixed	R diagonal signs on the kit (strided diagonal, neg_signs)
+python/mojolearn/_linalg_impl.py	1548	runtime-fixed	hermitian eigen order on the kit (order_small of -|w| reversed)
+python/mojolearn/_linalg_impl.py	1551	runtime-fixed	eigenvalue signs on the kit (neg_signs of the ordered w)
 python/mojolearn/_metrics_impl.py	1100	cpu-input	str labels, the explicit label input step
 python/mojolearn/_metrics_impl.py	1102	cpu-input	Python int labels, the explicit label input step
 python/mojolearn/_metrics_impl.py	1181	glue	reads the native class table
@@ -662,7 +662,7 @@ python/mojolearn/_parallel_pool.py	384	glue	multi-device worker setup over devic
 python/mojolearn/_parallel_pool.py	389	glue	multi-device worker setup over device ids and request tuples
 python/mojolearn/_parallel_pool.py	396	glue	multi-device worker setup over device ids and request tuples
 python/mojolearn/_parallel_pool.py	410	glue	multi-device worker setup over device ids and request tuples
-python/mojolearn/_portable_math.py	243	runtime	exact Python sum fallback of fsum over data-derived values; owed to the native nsum_f64 fold
+python/mojolearn/_portable_math.py	243	runtime	fsum's exact fallback; its callers (_expansion_metrics _trapezoid/_binary_ap) do n-sized curve arithmetic through map/operator in Python and need the x_metrics curve finish on the device as a whole
 python/mojolearn/_scale_gamma.py	78	cpu-input	exact gamma reference used only by tests; belongs in tests or _PY_CPU_SIDE
 python/mojolearn/_svm_impl.py	200	glue	type check over the k class labels [py-data-loop]
 python/mojolearn/_svm_impl.py	262	runtime-fixed	balanced class weights by the new base-binding class_ratio_f64 (same binary64 words) [py-data-loop]
