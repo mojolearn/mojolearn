@@ -56,7 +56,11 @@ comptime LFS_TPD = 32
 comptime LFS_DPB = 4
 comptime LFS_TPB = LFS_TPD * LFS_DPB
 #: Largest n_components (one lane per topic of the document's SIMD group).
-comptime LFS_K_CAP = 32
+#: Basis (lane apple-fast-no-narrow-2, 2026-10-04, reviewed as a possible
+#: fit to the board's k = 16 and kept): the kernel maps topic t to lane t of
+#: the document's LFS_TPD-wide SIMD group, so k is bounded by the SIMD width,
+#: not by the board.
+comptime LFS_K_CAP = LFS_TPD
 #: lane/no-bench-tuning-2 (2026-10-04): the vocabulary cap was 320, set just
 #: above the taxi-zones vocabulary (~265). It is now derived from the
 #: threadgroup page: `lfs_page_bytes(v)` is the kernel's shared allocations
