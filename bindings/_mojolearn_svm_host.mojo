@@ -70,11 +70,11 @@ from isolation_forest.estimator import (
     IF_WANT_DECISION_FUNCTION,
     IF_WANT_PREDICT,
     IF_WANT_SCORE_SAMPLES,
-    percentile_linear,
+    percentile_linear_host,
 )
 from isolation_forest.impl.isolation_forest import (
     IF_params,
-    check_finite_by_name,
+    check_finite_by_name_host,
 )
 from isolation_forest.impl.rng.xorwow import (
     XORWOW_HOST_SABOTAGE,
@@ -640,7 +640,7 @@ def _iforest_host_scores(
             + " features, the model was fitted with "
             + String(forest.n_features)
         )
-    check_finite_by_name("X_query", x, n_rows, n_cols)
+    check_finite_by_name_host("X_query", x, n_rows, n_cols)
     var pl = oracle_path_lengths(forest, x, n_rows, n_cols)
     return oracle_scores(forest, pl)
 
@@ -668,11 +668,11 @@ def iforest_run_binding(
     is `IsolationForestEstimator.fit`'s (`isolation_forest/estimator.mojo`,
     max_features, contamination, max_samples, the seed range) in its order
     and words, the guards `iforest_run_host`'s and `IsolationForest.
-    error_checking`'s, the finite scan `check_finite_by_name`'s. The
+    error_checking`'s, the finite scan `check_finite_by_name_host`'s. The
     epilogues are the estimator's: `score_samples = -paper`,
     `decision_function = score_samples - Float32(offset_)`, `predict =
     -(paper > Float32(-offset_) ? 1 : -1)`, `offset_` the contamination
-    quantile through `percentile_linear` over the training scores or -0.5.
+    quantile through `percentile_linear_host` over the training scores or -0.5.
     """
     if len(params) != 16:
         raise Error(
@@ -789,7 +789,7 @@ def iforest_run_binding(
             raise Error(
                 "n_estimators must be > 0, got " + String(if_params.n_estimators)
             )
-        check_finite_by_name("X", train, n_train, n_features)
+        check_finite_by_name_host("X", train, n_train, n_features)
         var tables = build_xorwow_tables()
         var forest = oracle_fit(train, n_train, n_features, if_params, tables)
         if use_quantile:
@@ -797,7 +797,7 @@ def iforest_run_binding(
             var training_scores = List[Float32](capacity=n_train)
             for i in range(n_train):
                 training_scores.append(-paper_train[i])
-            offset_ = percentile_linear(training_scores, 100.0 * contamination)
+            offset_ = percentile_linear_host(training_scores, 100.0 * contamination)
         else:
             offset_ = -0.5
         var paper = _iforest_host_scores(forest, query, n_query, n_features)
