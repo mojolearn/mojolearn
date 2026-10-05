@@ -3911,6 +3911,26 @@ def _enqueue_classification_score[MAX_ACC: Int](
     )
 
 
+def split_tie_tally_kernel(
+    out_tally: MutPointer[Int32, MutAnyOrigin],
+    r_c: MutPointer[Int32, MutAnyOrigin],
+    ties: MutPointer[Int32, MutAnyOrigin],
+    n_nodes: Int32,
+):
+    """`MOJOLEARN_ET_TIE_STATS` only (a measurement define): one thread per
+    node adds to `out_tally[0]` when the node's reduce decided a column and
+    to `out_tally[1]` when two or more candidates tied exactly. Integer
+    atomics, so the two counts are exact in any order. Replaces the host
+    walk over the per-node readback (cpu4-forest)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_nodes):
+        return
+    if r_c[unsafe_offset=i] >= 0:
+        _ = Atomic.fetch_add(out_tally, Int32(1))
+        if ties[unsafe_offset=i] >= Int32(2):
+            _ = Atomic.fetch_add(out_tally.unsafe_offset(1), Int32(1))
+
+
 def pack_splits_kernel(
     out_splits: MutPointer[Split, MutAnyOrigin],
     r_q: MutPointer[Float32, MutAnyOrigin],
@@ -3937,69 +3957,37 @@ def pack_splits_kernel(
     )
 
 
-def search_batch(
+def search_batch_enqueue(
     ctx: DeviceContext,
     mut ws: LevelWorkspace,
     mut dataset: DeviceDataset,
     mut d_row_ids: DeviceBuffer[DType.int32],
-    work_items: List[NodeWorkItem],
+    n_nodes: Int,
+    n_blocks: Int,
     k: Int,
     params: DecisionTreeParams,
     n_classes: Int32,
     n_rows: Int32,
     n_cols: Int32,
-    item_trees: List[Int32],
     seed: UInt64,
     use_sampler: Bool,
-    host_colids: List[Int32],
     range_only: Bool,
     mut clock: PhaseClock,
-) raises -> Tuple[
-    List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
-]:
-    """One batch through the split search: steps 2 to 8 of `doSplit`.
-
-    DEVIATION 211: `item_trees` carries one tree id PER WORK ITEM, because
-    the forest trainer merges every in-flight tree's frontier into one batch.
-    Every draw was already keyed by `(seed, tree, node, col)`; the only thing
-    that changed is where the tree component comes from.
-
-    Extracted from the level loop so DEVIATION 205's rescue can run the SAME
-    passes on a sub-batch instead of a second copy of the launch code. A copy
-    drifts from its constant; this is the one copy.
-
-    `use_sampler` selects deviation 201's device sampler (the normal path) or
-    an upload of `host_colids` (the rescue, whose column the host chose).
-    `range_only` returns after the range pass with the cells, which is the
-    survey the rescue needs and nothing more.
-
-    Returns `(splits, any_nonconstant_per_node, min, max, n_missing)`. The
-    ranges are empty unless `range_only`.
+) raises:
+    """`search_batch`'s launch sequence on a batch that is ALREADY STAGED on
+    the device (cpu4-forest): steps 2 to 8 of `doSplit` with no host list,
+    no host staging and no readback. `n_nodes` items sit in `ws.d_items`
+    (and `d_tree`, `d_tsalt`, `d_nb`, `d_nc`), `n_blocks` workload entries
+    in `ws.d_wl`. The host-list wrapper stages with `stage_batch` and reads
+    the splits back; the device level loop (`EtDeviceLoop`) stages with its
+    own kernels, launches at proven bounds (dummy items own no block, map
+    entries past the live total carry `nodeid == -1`) and reads nothing.
+    Outputs stay on the device: `ws.d_splits` (packed), `ws.d_nonconst`,
+    and the range cells (`d_min`, `d_max`, `d_missing`) for the survey.
     """
     comptime TPB = DEVICE_TPB
-    var n_nodes = len(work_items)
     if n_nodes == 0:
-        # DEVIATION 466: a best-first cycle can have NOTHING to search --
-        # every node popped last cycle had two unexpandable children -- and
-        # still have nodes left to pop. An empty batch is a well-formed
-        # request for no work, not an error. The depth-wise loop breaks
-        # before it can ever ask, so this arm belongs to best-first alone.
-        return (
-            List[Split](),
-            List[Int32](),
-            List[Float32](),
-            List[Float32](),
-            List[Int32](),
-        )
-    # --- 2. the ragged-batch flattening ------------------------------
-    # Search tiles may cover multiple rows per thread. Coverage remains
-    # complete and disjoint through the kernels' existing grid-stride loops;
-    # score accumulation is integer, range merging is integer min/max, and
-    # the local range fold uses total-order keys. Partitioning retains its
-    # own TPB tile and therefore must restage its workload plan when R > 1.
-    var plan = build_workload_info(
-        work_items, TPB * SEARCH_ROWS_PER_THREAD
-    )
+        return
     var n_cells = n_nodes * Int(k)
 
     # --- per-batch device buffers ------------------------------------
@@ -4042,21 +4030,6 @@ def search_batch(
     ref d_samp_report = ws.d_samp_report
     ref d_items = ws.d_items
     ref d_wl = ws.d_wl
-
-    # One host staging buffer per copy: they are asynchronous, and a
-    # shared one would be rewritten under an in-flight copy. The items and
-    # workload staging moved into `stage_batch`; only `h_colids` is still
-    # written here (the rescue's host-chosen columns).
-    #
-    # DEVIATION 450: no entry synchronize. Every path that enqueued a copy
-    # READING an `h_*` staging buffer drained before returning to the
-    # caller (the reduce readback's sync, or the survey's), so no such
-    # copy can be in flight when this call rewrites the staging; the
-    # workspace constructor's own drain covers the first write ever.
-    ref h_colids = ws.h_colids
-
-    stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
-    clock.tick(ctx, PHASE_STAGE_BATCH)
 
     # =================================================================
     # DEVIATION 470 -- TWO fused seeder launches replace this cycle's
@@ -4150,11 +4123,6 @@ def search_batch(
     # survey walk and its host column table are gone): the survey's identity
     # columns are written by `ident_colids_kernel`, the rescue's by
     # `rescue_pick_kernel` (already queued by the caller).
-    if len(host_colids) != 0:
-        raise Error(
-            "host_colids: caller-chosen columns were the host rescue walk,"
-            " removed (cpu3-trees); pass an empty list"
-        )
     var dev_colids = not use_sampler
     if range_only and not dev_colids:
         raise Error("the survey (range_only) runs on the device columns only")
@@ -4174,19 +4142,18 @@ def search_batch(
             )
     if use_sampler:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
-        # `d_report` is the DEVICE's own statement of which kernel ran;
-        # DEVIATION 470's half-A seeder staged `SAMPLER_UNVISITED` into it
-        # above, a value no kernel can produce.
-        _ = sample_features_for_device(
+        # cpu4-forest: the device sampler only. The batch's items are
+        # staged on the device (by `stage_batch` or the device level loop),
+        # so no host list exists to sample from; a target without float64
+        # refuses the algo-L arm by name inside `sample_features_device`.
+        _ = sample_features_device(
             ctx,
-            d_colids,
+            d_colids.unsafe_ptr(),
             d_samp_scratch.unsafe_ptr(),
             d_samp_report.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
             ws.d_tree.unsafe_ptr(),
-            h_colids,
-            work_items,
-            item_trees,
+            n_nodes,
             seed,
             Int(n_cols),
             Int(k),
@@ -4213,7 +4180,7 @@ def search_batch(
             n_cols,
             Int32(k),
             dataset.d_quant.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            grid_dim=(n_blocks, ceildiv(Int(k), ET_FEATURE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     else:
@@ -4231,7 +4198,7 @@ def search_batch(
             n_cols,
             Int32(k),
             Int32(0),
-            grid_dim=search_grid(plan.n_blocks_dimx, Int(k)),
+            grid_dim=search_grid(n_blocks, Int(k)),
             block_dim=(TPB, 1, 1),
         )
     # DEVIATION 204: the merge produced order-preserving KEYS; this
@@ -4263,7 +4230,6 @@ def search_batch(
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
     )
-    ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
     # DEVIATION 450: the range pass drains only when the caller wants the
     # survey NOW. On the full path `h_nonconst` is not READ until after
     # the reduce readback's sync below, so its copy rides the queue and
@@ -4273,12 +4239,7 @@ def search_batch(
     clock.tick(ctx, PHASE_RANGE)
 
     if range_only:
-        # The device rescue: the cells stay on the device for
-        # `rescue_pick_kernel`; nothing drains and nothing is read here.
-        return (
-            List[Split](), List[Int32](), List[Float32](), List[Float32](),
-            List[Int32](),
-        )
+        return
 
     # --- 4. the draw and score pass ----------------------------------
     # DEVIATION 470: the score cells and class accumulators were seeded
@@ -4294,28 +4255,28 @@ def search_batch(
     comptime if FIXED_ACC:
         _enqueue_classification_score[DEVICE_MAX_ACC](
             ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
-            params, n_cells, plan.n_blocks_dimx,
+            params, n_cells, n_blocks,
         )
     else:
         if n_classes <= 4:
             _enqueue_classification_score[4](
                 ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
-                params, n_cells, plan.n_blocks_dimx,
+                params, n_cells, n_blocks,
             )
         elif n_classes <= 8:
             _enqueue_classification_score[8](
                 ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
-                params, n_cells, plan.n_blocks_dimx,
+                params, n_cells, n_blocks,
             )
         elif n_classes <= 16:
             _enqueue_classification_score[16](
                 ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
-                params, n_cells, plan.n_blocks_dimx,
+                params, n_cells, n_blocks,
             )
         else:
             _enqueue_classification_score[32](
                 ctx, ws, dataset, d_row_ids, n_rows, k, n_classes, seed,
-                params, n_cells, plan.n_blocks_dimx,
+                params, n_cells, n_blocks,
             )
 
     # --- 5. scored cells into candidates (DEVIATION 182) -------------
@@ -4394,7 +4355,29 @@ def search_batch(
             grid_dim=ceildiv(n_nodes, 64),
             block_dim=64,
         )
-        ctx.enqueue_copy(dst_buf=ws.o_ties, src_buf=ws.d_ties)
+        # cpu4-forest: the tally runs ON THE DEVICE (two integer counters),
+        # so no per-node host walk reads the readback; one line per batch.
+        var d_tally = ctx.enqueue_create_buffer[DType.int32](2)
+        ctx.enqueue_memset(d_tally, Int32(0))
+        ctx.enqueue_function[split_tie_tally_kernel](
+            d_tally.unsafe_ptr(),
+            r_c.unsafe_ptr(),
+            ws.d_ties.unsafe_ptr(),
+            Int32(n_nodes),
+            grid_dim=ceildiv(n_nodes, 64),
+            block_dim=64,
+        )
+        var h_tally = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_copy(dst_buf=h_tally, src_buf=d_tally)
+        ctx.synchronize()
+        print(
+            "ET_TIE_STATS batch decided=",
+            h_tally.unsafe_ptr()[unsafe_offset=0],
+            " tied=",
+            h_tally.unsafe_ptr()[unsafe_offset=1],
+        )
+        _ = d_tally^
+        _ = h_tally^
 
     # --- 7. the splits come back to the host, as `:492-494` does ------
     # ONLY THE SPLITS CROSS, which is exactly what
@@ -4416,13 +4399,96 @@ def search_batch(
         grid_dim=ceildiv(n_nodes, 64),
         block_dim=64,
     )
+
+
+def search_batch(
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    work_items: List[NodeWorkItem],
+    k: Int,
+    params: DecisionTreeParams,
+    n_classes: Int32,
+    n_rows: Int32,
+    n_cols: Int32,
+    item_trees: List[Int32],
+    seed: UInt64,
+    use_sampler: Bool,
+    host_colids: List[Int32],
+    range_only: Bool,
+    mut clock: PhaseClock,
+) raises -> Tuple[
+    List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
+]:
+    """One batch through the split search: steps 2 to 8 of `doSplit`.
+
+    DEVIATION 211: `item_trees` carries one tree id PER WORK ITEM, because
+    the forest trainer merges every in-flight tree's frontier into one batch.
+    Every draw was already keyed by `(seed, tree, node, col)`; the only thing
+    that changed is where the tree component comes from.
+
+    Extracted from the level loop so DEVIATION 205's rescue can run the SAME
+    passes on a sub-batch instead of a second copy of the launch code. A copy
+    drifts from its constant; this is the one copy.
+
+    `use_sampler` selects deviation 201's device sampler (the normal path) or
+    an upload of `host_colids` (the rescue, whose column the host chose).
+    `range_only` returns after the range pass with the cells, which is the
+    survey the rescue needs and nothing more.
+
+    Returns `(splits, any_nonconstant_per_node, min, max, n_missing)`. The
+    ranges are empty unless `range_only`.
+    """
+    comptime TPB = DEVICE_TPB
+    var n_nodes = len(work_items)
+    if n_nodes == 0:
+        # DEVIATION 466: a best-first cycle can have NOTHING to search --
+        # every node popped last cycle had two unexpandable children -- and
+        # still have nodes left to pop. An empty batch is a well-formed
+        # request for no work, not an error. The depth-wise loop breaks
+        # before it can ever ask, so this arm belongs to best-first alone.
+        return (
+            List[Split](),
+            List[Int32](),
+            List[Float32](),
+            List[Float32](),
+            List[Int32](),
+        )
+    if len(host_colids) != 0:
+        raise Error(
+            "host_colids: caller-chosen columns were the host rescue walk,"
+            " removed (cpu3-trees); pass an empty list"
+        )
+    # --- 2. the ragged-batch flattening ------------------------------
+    # Search tiles may cover multiple rows per thread. Coverage remains
+    # complete and disjoint through the kernels' existing grid-stride loops;
+    # score accumulation is integer, range merging is integer min/max, and
+    # the local range fold uses total-order keys. Partitioning retains its
+    # own TPB tile and therefore must restage its workload plan when R > 1.
+    var plan = build_workload_info(
+        work_items, TPB * SEARCH_ROWS_PER_THREAD
+    )
+    stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
+    clock.tick(ctx, PHASE_STAGE_BATCH)
+    search_batch_enqueue(
+        ctx, ws, dataset, d_row_ids, n_nodes, plan.n_blocks_dimx, Int(k),
+        params, n_classes, n_rows, n_cols, seed, use_sampler, range_only,
+        clock,
+    )
+    ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
+    if range_only:
+        return (
+            List[Split](), List[Int32](), List[Float32](), List[Float32](),
+            List[Int32](),
+        )
     ctx.enqueue_copy(dst_buf=ws.h_splits, src_buf=ws.d_splits)
     ref o_c = ws.o_c
     ref o_nu = ws.o_nu
     ref o_de = ws.o_de
-    ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
-    ctx.enqueue_copy(dst_buf=o_nu, src_buf=r_nu)
-    ctx.enqueue_copy(dst_buf=o_de, src_buf=r_de)
+    ctx.enqueue_copy(dst_buf=o_c, src_buf=ws.r_c)
+    ctx.enqueue_copy(dst_buf=o_nu, src_buf=ws.r_nu)
+    ctx.enqueue_copy(dst_buf=o_de, src_buf=ws.r_de)
     ctx.synchronize()
     clock.tick(ctx, PHASE_REDUCE)
 
@@ -4444,19 +4510,6 @@ def search_batch(
         src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
         count=n_nodes,
     )
-
-    # DEVIATION 463: report the batch's exact-tie tally. The counter cells
-    # rode the queue with the reduce readback, so the sync above completed
-    # them; one line per batch, summed by whoever asked for the define.
-    comptime if is_defined["MOJOLEARN_ET_TIE_STATS"]():
-        var tie_decided = 0
-        var tie_tied = 0
-        for i in range(n_nodes):
-            if o_c.unsafe_ptr()[unsafe_offset=i] >= 0:
-                tie_decided += 1
-                if ws.o_ties.unsafe_ptr()[unsafe_offset=i] >= Int32(2):
-                    tie_tied += 1
-        print("ET_TIE_STATS batch decided=", tie_decided, " tied=", tie_tied)
 
     clock.tick(ctx, PHASE_HOST_SPLITS)
     return (
@@ -5283,63 +5336,37 @@ def dataset_len_ok(
     return len(x_col_major) == Int(n_rows) * Int(n_cols)
 
 
-def search_batch_regression(
+def search_batch_regression_enqueue(
     ctx: DeviceContext,
     mut ws: LevelWorkspace,
     mut dataset: DeviceDataset,
     mut d_row_ids: DeviceBuffer[DType.int32],
-    work_items: List[NodeWorkItem],
+    n_nodes: Int,
+    n_blocks: Int,
     k: Int,
     params: DecisionTreeParams,
     n_rows: Int32,
     n_cols: Int32,
-    item_trees: List[Int32],
     seed: UInt64,
     use_sampler: Bool,
-    host_colids: List[Int32],
     range_only: Bool,
     mut clock: PhaseClock,
-) raises -> Tuple[
-    List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
-]:
-    """One batch through the REGRESSION split search.
-
-    DEVIATION 211: `item_trees` is one tree id per work item -- see
-    `search_batch`'s docstring; the two twins changed together.
-
-    `search_batch`'s twin, and it exists for the same reason: DEVIATION 205's
-    rescue has to run the SAME passes on a sub-batch, and a second copy of the
-    launch code would drift. The two are not merged because the score pass is
-    genuinely different -- fixed-point sums (DEVIATION 135) against class
-    counts, and cuML's MSE gain against Gini (DEVIATION 189) -- and merging
-    them would mean a runtime branch inside every launch rather than one
-    function per objective, which is how cuML templates it
-    (`builder.cuh:142`).
+) raises:
+    """`search_batch_regression`'s launch sequence on a batch that is ALREADY STAGED on
+    the device (cpu4-forest): steps 2 to 8 of `doSplit` with no host list,
+    no host staging and no readback. `n_nodes` items sit in `ws.d_items`
+    (and `d_tree`, `d_tsalt`, `d_nb`, `d_nc`), `n_blocks` workload entries
+    in `ws.d_wl`. The host-list wrapper stages with `stage_batch` and reads
+    the splits back; the device level loop (`EtDeviceLoop`) stages with its
+    own kernels, launches at proven bounds (dummy items own no block, map
+    entries past the live total carry `nodeid == -1`) and reads nothing.
+    Outputs stay on the device: `ws.d_splits` (packed), `ws.d_nonconst`,
+    and the range cells (`d_min`, `d_max`, `d_missing`) for the survey.
     """
     comptime TPB = DEVICE_TPB
     comptime MAX_ACC = DEVICE_MAX_ACC
-    var n_nodes = len(work_items)
     if n_nodes == 0:
-        # DEVIATION 466: a best-first cycle can have NOTHING to search --
-        # every node popped last cycle had two unexpandable children -- and
-        # still have nodes left to pop. An empty batch is a well-formed
-        # request for no work, not an error. The depth-wise loop breaks
-        # before it can ever ask, so this arm belongs to best-first alone.
-        return (
-            List[Split](),
-            List[Int32](),
-            List[Float32](),
-            List[Float32](),
-            List[Int32](),
-        )
-    # DEVIATION 2020: the search tile is `TPB * SEARCH_ROWS_PER_THREAD`
-    # (default 1 = the exact pre-2020 program). The full block, with the
-    # bit argument and the required-RED arm, is at the classification
-    # twin's call site; the two twins must widen together or the two
-    # objectives would launch different grids for the same frontier.
-    var plan = build_workload_info(
-        work_items, TPB * SEARCH_ROWS_PER_THREAD
-    )
+        return
     var n_cells = n_nodes * Int(k)
 
     ref d_min = ws.d_min
@@ -5381,9 +5408,6 @@ def search_batch_regression(
     ref d_samp_report = ws.d_samp_report
     ref d_items = ws.d_items
     ref d_wl = ws.d_wl
-    # DEVIATION 450: no entry synchronize -- see the classification twin.
-    ref h_colids = ws.h_colids
-    stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
 
     # DEVIATION 470: TWO fused seeder launches (halves A and B) replace
     # this cycle's six setup enqueues -- the full argument (bit-inert hoist
@@ -5451,11 +5475,6 @@ def search_batch_regression(
     # survey walk and its host column table are gone): the survey's identity
     # columns are written by `ident_colids_kernel`, the rescue's by
     # `rescue_pick_kernel` (already queued by the caller).
-    if len(host_colids) != 0:
-        raise Error(
-            "host_colids: caller-chosen columns were the host rescue walk,"
-            " removed (cpu3-trees); pass an empty list"
-        )
     var dev_colids = not use_sampler
     if range_only and not dev_colids:
         raise Error("the survey (range_only) runs on the device columns only")
@@ -5475,19 +5494,18 @@ def search_batch_regression(
             )
     else:
         # --- feature sampling, WHERE cuML DOES IT (deviation 201) --------
-        # `d_report` is the DEVICE's own statement of which kernel ran;
-        # DEVIATION 470's half-A seeder staged `SAMPLER_UNVISITED` into it
-        # above, a value no kernel can produce.
-        _ = sample_features_for_device(
+        # cpu4-forest: the device sampler only. The batch's items are
+        # staged on the device (by `stage_batch` or the device level loop),
+        # so no host list exists to sample from; a target without float64
+        # refuses the algo-L arm by name inside `sample_features_device`.
+        _ = sample_features_device(
             ctx,
-            d_colids,
+            d_colids.unsafe_ptr(),
             d_samp_scratch.unsafe_ptr(),
             d_samp_report.unsafe_ptr(),
             d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
             ws.d_tree.unsafe_ptr(),
-            h_colids,
-            work_items,
-            item_trees,
+            n_nodes,
             seed,
             Int(n_cols),
             Int(k),
@@ -5514,7 +5532,7 @@ def search_batch_regression(
             n_cols,
             Int32(k),
             dataset.d_quant.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_CODE_TILE), 1),
+            grid_dim=(n_blocks, ceildiv(Int(k), ET_CODE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     elif tiled_range:
@@ -5533,7 +5551,7 @@ def search_batch_regression(
             n_cols,
             Int32(k),
             dataset.d_quant.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            grid_dim=(n_blocks, ceildiv(Int(k), ET_FEATURE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     else:
@@ -5551,7 +5569,7 @@ def search_batch_regression(
             n_cols,
             Int32(k),
             Int32(0),
-            grid_dim=search_grid(plan.n_blocks_dimx, Int(k)),
+            grid_dim=search_grid(n_blocks, Int(k)),
             block_dim=(TPB, 1, 1),
         )
     # DEVIATION 204: the merge produced order-preserving KEYS; this
@@ -5582,18 +5600,12 @@ def search_batch_regression(
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
     )
-    ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
     # DEVIATION 450: drain only for the survey -- see the classification
     # twin's range pass.
     clock.tick(ctx, PHASE_RANGE)
 
     if range_only:
-        # The device rescue: the cells stay on the device for
-        # `rescue_pick_kernel`; nothing drains and nothing is read here.
-        return (
-            List[Split](), List[Int32](), List[Float32](), List[Float32](),
-            List[Int32](),
-        )
+        return
     # DEVIATION 470: the score cells and the one-output accumulators were
     # seeded by fused half B above (the survey skips half B and returned
     # already).
@@ -5624,7 +5636,7 @@ def search_batch_regression(
             seed,
             dataset.d_quant.unsafe_ptr(),
             dataset.d_nbins.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_CODE_TILE), 1),
+            grid_dim=(n_blocks, ceildiv(Int(k), ET_CODE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     elif tiled_score:
@@ -5651,7 +5663,7 @@ def search_batch_regression(
             seed,
             dataset.d_quant.unsafe_ptr(),
             dataset.d_nbins.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            grid_dim=(n_blocks, ceildiv(Int(k), ET_FEATURE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     else:
@@ -5679,7 +5691,7 @@ def search_batch_regression(
             seed,
             Int32(0),
             dataset.n_cols,
-            grid_dim=search_grid(plan.n_blocks_dimx, Int(k)),
+            grid_dim=search_grid(n_blocks, Int(k)),
             block_dim=(TPB, 1, 1),
         )
     ctx.enqueue_function[
@@ -5786,7 +5798,29 @@ def search_batch_regression(
             grid_dim=ceildiv(n_nodes, 64),
             block_dim=64,
         )
-        ctx.enqueue_copy(dst_buf=ws.o_ties, src_buf=ws.d_ties)
+        # cpu4-forest: the tally runs ON THE DEVICE (two integer counters),
+        # so no per-node host walk reads the readback; one line per batch.
+        var d_tally = ctx.enqueue_create_buffer[DType.int32](2)
+        ctx.enqueue_memset(d_tally, Int32(0))
+        ctx.enqueue_function[split_tie_tally_kernel](
+            d_tally.unsafe_ptr(),
+            r_c.unsafe_ptr(),
+            ws.d_ties.unsafe_ptr(),
+            Int32(n_nodes),
+            grid_dim=ceildiv(n_nodes, 64),
+            block_dim=64,
+        )
+        var h_tally = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_copy(dst_buf=h_tally, src_buf=d_tally)
+        ctx.synchronize()
+        print(
+            "ET_TIE_STATS batch decided=",
+            h_tally.unsafe_ptr()[unsafe_offset=0],
+            " tied=",
+            h_tally.unsafe_ptr()[unsafe_offset=1],
+        )
+        _ = d_tally^
+        _ = h_tally^
 
     if dataset.bins_active():
         ctx.enqueue_function[et_code_threshold_kernel](
@@ -5808,11 +5842,86 @@ def search_batch_regression(
         grid_dim=ceildiv(n_nodes, 64),
         block_dim=64,
     )
+
+
+def search_batch_regression(
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    work_items: List[NodeWorkItem],
+    k: Int,
+    params: DecisionTreeParams,
+    n_rows: Int32,
+    n_cols: Int32,
+    item_trees: List[Int32],
+    seed: UInt64,
+    use_sampler: Bool,
+    host_colids: List[Int32],
+    range_only: Bool,
+    mut clock: PhaseClock,
+) raises -> Tuple[
+    List[Split], List[Int32], List[Float32], List[Float32], List[Int32]
+]:
+    """One batch through the REGRESSION split search.
+
+    DEVIATION 211: `item_trees` is one tree id per work item -- see
+    `search_batch`'s docstring; the two twins changed together.
+
+    `search_batch`'s twin, and it exists for the same reason: DEVIATION 205's
+    rescue has to run the SAME passes on a sub-batch, and a second copy of the
+    launch code would drift. The two are not merged because the score pass is
+    genuinely different -- fixed-point sums (DEVIATION 135) against class
+    counts, and cuML's MSE gain against Gini (DEVIATION 189) -- and merging
+    them would mean a runtime branch inside every launch rather than one
+    function per objective, which is how cuML templates it
+    (`builder.cuh:142`).
+    """
+    comptime TPB = DEVICE_TPB
+    comptime MAX_ACC = DEVICE_MAX_ACC
+    var n_nodes = len(work_items)
+    if n_nodes == 0:
+        # DEVIATION 466: a best-first cycle can have NOTHING to search --
+        # every node popped last cycle had two unexpandable children -- and
+        # still have nodes left to pop. An empty batch is a well-formed
+        # request for no work, not an error. The depth-wise loop breaks
+        # before it can ever ask, so this arm belongs to best-first alone.
+        return (
+            List[Split](),
+            List[Int32](),
+            List[Float32](),
+            List[Float32](),
+            List[Int32](),
+        )
+    if len(host_colids) != 0:
+        raise Error(
+            "host_colids: caller-chosen columns were the host rescue walk,"
+            " removed (cpu3-trees); pass an empty list"
+        )
+    # DEVIATION 2020: the search tile is `TPB * SEARCH_ROWS_PER_THREAD`
+    # (default 1 = the exact pre-2020 program). The full block, with the
+    # bit argument and the required-RED arm, is at the classification
+    # twin's call site; the two twins must widen together or the two
+    # objectives would launch different grids for the same frontier.
+    var plan = build_workload_info(
+        work_items, TPB * SEARCH_ROWS_PER_THREAD
+    )
+    stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
+    search_batch_regression_enqueue(
+        ctx, ws, dataset, d_row_ids, n_nodes, plan.n_blocks_dimx, Int(k),
+        params, n_rows, n_cols, seed, use_sampler, range_only, clock,
+    )
+    ctx.enqueue_copy(dst_buf=ws.h_nonconst, src_buf=ws.d_nonconst)
+    if range_only:
+        return (
+            List[Split](), List[Int32](), List[Float32](), List[Float32](),
+            List[Int32](),
+        )
     ctx.enqueue_copy(dst_buf=ws.h_splits, src_buf=ws.d_splits)
     ref o_c = ws.o_c
     ref o_m = ws.o_m
-    ctx.enqueue_copy(dst_buf=o_c, src_buf=r_c)
-    ctx.enqueue_copy(dst_buf=o_m, src_buf=r_m)
+    ctx.enqueue_copy(dst_buf=o_c, src_buf=ws.r_c)
+    ctx.enqueue_copy(dst_buf=o_m, src_buf=ws.r_m)
     ctx.synchronize()
     clock.tick(ctx, PHASE_REDUCE)
 
@@ -5830,19 +5939,6 @@ def search_batch_regression(
         src=ws.h_splits.unsafe_ptr().unsafe_bitcast[Split](),
         count=n_nodes,
     )
-
-    # DEVIATION 463: report the batch's exact-tie tally. The counter cells
-    # rode the queue with the reduce readback, so the sync above completed
-    # them; one line per batch, summed by whoever asked for the define.
-    comptime if is_defined["MOJOLEARN_ET_TIE_STATS"]():
-        var tie_decided = 0
-        var tie_tied = 0
-        for i in range(n_nodes):
-            if o_c.unsafe_ptr()[unsafe_offset=i] >= 0:
-                tie_decided += 1
-                if ws.o_ties.unsafe_ptr()[unsafe_offset=i] >= Int32(2):
-                    tie_tied += 1
-        print("ET_TIE_STATS batch decided=", tie_decided, " tied=", tie_tied)
 
     clock.tick(ctx, PHASE_HOST_SPLITS)
     return (
