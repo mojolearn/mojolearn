@@ -99,7 +99,7 @@ from core.hotpath_device import (
     device_encode_labels,
     device_gather_u64,
 )
-from core.label_rows_device import LRD_MAX_N, device_argmax_rows
+from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_last_f32
 from bindings.array_helpers import (
     nsum_f64_binding,
     shard_topk_merge_f32_binding,
@@ -1621,6 +1621,32 @@ def argmax_rows_f64_binding(
     return _argmax_rows_device("argmax_rows_f64", True, scores_addr, n_rows, n_cols, dst_addr)
 
 
+def argmax_last_rows_f32_binding(
+    logits_addr: PythonObject, dims: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """dims = [b, l, v]: the first-max argmax (DEVIATION 2500's rule) of the
+    LAST position of each row of float32 logits `[b, l, v]` into int64
+    `dst[b]`, on the device (lane cpu4-python: the callers' host row gather
+    `gather_rows_bytes` before `argmax_rows_f32` is gone)."""
+    if len(dims) != 3:
+        raise Error("argmax_last_rows_f32: dims [b, l, v]")
+    var b = Int(py=dims[0])
+    var l = Int(py=dims[1])
+    var v = Int(py=dims[2])
+    if b < 0 or l < 1 or v < 1:
+        raise Error("argmax_last_rows_f32: b must be non-negative, l and v positive")
+    if b == 0:
+        return PythonObject(0)
+    if Int(py=logits_addr) == 0 or Int(py=dst_addr) == 0:
+        raise Error("argmax_last_rows_f32: null buffer address")
+    if b > LRD_MAX_N // l or v > LRD_MAX_N:
+        raise Error("argmax_last_rows_f32: more rows or columns than the device argmax holds")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    with GILReleased(Python()):
+        device_argmax_last_f32(ctx, Int(py=logits_addr), b, l, v, Int(py=dst_addr))
+    return PythonObject(0)
+
+
 def kmeans_parallel_available_binding() raises -> PythonObject:
     """Version of the whole-row-tile multi-GPU assignment contract."""
     return PythonObject(1)
@@ -1845,6 +1871,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
+        m.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
         m.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         m.def_function[kmeans_parallel_available_binding]("kmeans_parallel_available")
         return m.finalize()
