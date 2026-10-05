@@ -33,6 +33,7 @@ import pytest
 
 from mojolearn import _array, _buffer, _labels, _metrics_impl as M
 from mojolearn import model_selection as MS
+from mojolearn.tests import _fold_reference as _REF
 from mojolearn._array import Array
 
 _HELPERS = (
@@ -590,9 +591,9 @@ def test_default_folds_match(name, classifier):
         # the two helpers, so only `fold_ids` is pinned for every case
         expect = () if python_only else ("fold_ids",)
         _same(lambda: _fold_lists(MS._default_fold_arrays(y, splits, classifier)), expect,
-              group="folds", ref_fn=lambda: _fold_lists(MS._default_folds(y, splits, classifier)))
+              group="folds", ref_fn=lambda: _fold_lists(_REF.default_folds(y, splits, classifier)))
         if not _EXPECT_SABOTAGE and not python_only:
-            clean = _outcome(lambda: _fold_lists(MS._default_folds(y, splits, classifier)))
+            clean = _outcome(lambda: _fold_lists(_REF.default_folds(y, splits, classifier)))
             fast = _outcome(lambda: _fold_lists(MS._default_fold_arrays(y, splits, classifier)))
             assert clean == fast
 
@@ -601,7 +602,7 @@ def test_one_row_per_fold():
     y = _arr(_RNG.integers(0, 2, 300))
     for classifier in (True, False):
         _same(lambda: _fold_lists(MS._default_fold_arrays(y, 300, classifier)), ("fold_ids",),
-              group="folds", ref_fn=lambda: _fold_lists(MS._default_folds(y, 300, classifier)))
+              group="folds", ref_fn=lambda: _fold_lists(_REF.default_folds(y, 300, classifier)))
 
 
 def test_the_fold_sabotage_control_still_moves_the_folds():
@@ -611,10 +612,11 @@ def test_the_fold_sabotage_control_still_moves_the_folds():
     os.environ["MOJOLEARN_HOST_ALLOW_SABOTAGE_SAVED"] = os.environ.get("MOJOLEARN_HOST_ALLOW_SABOTAGE", "")
     os.environ["MOJOLEARN_HOST_ALLOW_SABOTAGE"] = "1"
     try:
+        # the control runs in the core helpers too (lane py-runtime-b)
         with _Spy() as spy:
             rotated = _fold_lists(MS._default_fold_arrays(y, 4, True))
-        assert "fold_ids" not in spy.calls
-        assert rotated == _fold_lists(MS._default_folds(y, 4, True))
+        assert "fold_ids" in spy.calls
+        assert rotated == _fold_lists(_REF.default_folds(y, 4, True))
         if not _EXPECT_SABOTAGE:
             assert rotated != clean
     finally:

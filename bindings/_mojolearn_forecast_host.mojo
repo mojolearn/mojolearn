@@ -57,7 +57,7 @@ from bindings.holtwinters_host_predict import (
     holtwinters_forecast_binding,
     holtwinters_predict_binding,
 )
-from bindings.kpss_host_test import KPSS_DECISION_SABOTAGE, KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding
+from bindings.kpss_host_test import KPSS_DECISION_SABOTAGE, KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding, select_d_host_binding
 
 
 def forecast_host_numeric_mode_binding() raises -> PythonObject:
@@ -130,6 +130,7 @@ def PyInit__mojolearn_forecast_host() abi("C") -> PythonObject:
         # the `_mojolearn_tsa` route reaches it here when the reference
         # binding, which holds holtwinters_fit, is not built.
         module.def_function[kpss_test_binding]("kpss_test")
+        module.def_function[select_d_host_binding]("select_d")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_forecast_host: ", error))

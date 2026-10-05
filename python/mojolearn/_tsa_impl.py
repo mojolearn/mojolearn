@@ -282,9 +282,12 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
     if d_max is None:
         d_max = 2 - int(D)
     flat, n_obs, batch_size = _series_major(y, "select_d")
-    # The device selector itself is a host-controlled first-stationary
-    # loop (tsa/impl/auto_arima.mojo). Reuse the same public KPSS route on
-    # CPU: only the flags determine the choice, with no new arithmetic.
+    # One native entry on every install (lane py-runtime-b): the GPU
+    # binding's selector (tsa/impl/auto_arima.mojo) or, on a CPU-only
+    # install, the host binding's `select_d` (bindings/kpss_host_test.mojo:
+    # the first stationary order of the same host KPSS test, which also
+    # refuses a d_max outside 0 <= d_max <= 2 - D by name; the check below
+    # keeps the CPU route's Python ValueError).
     from . import _backend
     if _backend.vendor() == "cpu":
         limit, seasonal = int(d_max), int(D)
@@ -292,17 +295,6 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
             raise ValueError(
                 f"select_d: d_max must satisfy 0 <= d_max <= 2 - D (d_max={limit}, "
                 f"D={seasonal}), refused by name")
-        chosen = [limit] * batch_size
-        decided = [False] * batch_size
-        for order in range(limit):  # glue: the at most two differencing orders
-            if all(decided):
-                break
-            flags = kpss_test(y, d=order, D=seasonal, s=int(s),
-                              pval_threshold=float(pval_threshold)).tolist()
-            for index, stationary in enumerate(flags):
-                if not decided[index] and stationary:
-                    chosen[index], decided[index] = order, True
-        return Array.from_list(chosen, "<i4")
     out = empty((batch_size,), "<i4")
     _mojolearn_tsa.select_d(
         addr_ro(flat, name="y"),

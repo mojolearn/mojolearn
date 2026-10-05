@@ -62,7 +62,10 @@ _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wperc
             curve_out=63, auc_xy=67,
             # lane cpu4-python: the contingency statistics, MI and expected MI
             # on the device (x_metrics/contingency.mojo)
-            cont_stats=70)
+            cont_stats=70,
+            # lane py-runtime-b: StratifiedShuffleSplit's per-class draw counts
+            # (x_metrics/split.mojo approx_mode_unit)
+            approx_mode=81)
 _PARAMS = 14
 _NONE = -1
 
@@ -3046,6 +3049,32 @@ class CounterRng:
         prog.stage("permute", 1, n, out, lo - (1 << 32) if lo >= 1 << 31 else lo,
                    hi - (1 << 32) if hi >= 1 << 31 else hi)
         return out
+
+    def approximate_modes(self, counts, n_train, n_test, numeric_mode=None):
+        """StratifiedShuffleSplit's per-class train and test draw counts
+        (lane py-runtime-b; it was Python's `model_selection._approximate_mode`
+        twice): scikit-learn's `_approximate_mode` in exact integers, the
+        train counts n_i over `counts`, then the test counts over counts -
+        n_i, each in one `approx_mode` stage (x_metrics/split.mojo) of one
+        device program. A tie group the remainders cut is broken by the
+        next counter draw, so each call consumes the draws the stages report
+        (0 or 1 each), the same draws in the same order as before. Returns
+        (n_i, t_i) as lists of ints."""
+        k = len(counts)
+        prog = _Prog()
+        C = prog.put_i32(counts)
+        out = prog.want(prog.alloc(2 * k), 2 * k)
+        used = prog.want(prog.alloc(2), 2)
+        words = []
+        for v in (self.seed & 0xFFFFFFFF, self.seed >> 32, self.draws & 0xFFFFFFFF, (self.draws >> 32) & 0xFFFFFFFF):  # glue: four parameter words
+            words.append(v - (1 << 32) if v >= 1 << 31 else v)
+        prog.stage("approx_mode", k, k, C, _NONE, n_train, out, _NONE, used, *words)
+        prog.stage("approx_mode", k, k, C, out, n_test, out + k, used, used + 1, *words)
+        _execute(prog, numeric_mode)
+        drew = prog.ints(used, 2)
+        self.draws += drew[0] + drew[1]
+        both = prog.ints(out, 2 * k)
+        return both[:k], both[k:]
 
     def permutations(self, sizes, numeric_mode=None):
         """One permutation per size, drawn in order, in one device program."""

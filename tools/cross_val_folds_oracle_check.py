@@ -37,7 +37,7 @@ THE TWO ORACLES HERE, AND WHY BOTH
       wrong assignment. It rebuilds both branches from their definition by a
       different route from ours:
 
-      ours (`python/mojolearn/model_selection.py::_default_folds`)
+      ours (`python/mojolearn/tests/_fold_reference.py::default_folds`)
         the stratified branch never constructs the sorted encoded label
         vector. It counts each residue modulo `n_splits` in closed form,
         `first = (fold - offset) % n_splits` and
@@ -325,7 +325,7 @@ def arm_partition(rep, ms, work):
     for name, labels, classifier, _X in work:
         n = len(labels)
         for k in SPLITS:
-            folds = list(ms._default_folds(labels, k, classifier))
+            folds = list(fold_ref.default_folds(labels, k, classifier))
             train = [list(a) for a, _ in folds]
             test = [list(b) for _, b in folds]
             rep.same("PARTITION", f"{name}/{k}: exactly {k} folds", len(folds), k)
@@ -347,7 +347,7 @@ def arm_partition(rep, ms, work):
                     worst = max(worst, max(per) - min(per))
                 rep.same("PARTITION", f"{name}/{k}: every class is spread within one fold "
                                       f"(worst spread {worst})", worst <= 1, True)
-            again = [list(b) for _, b in ms._default_folds(labels, k, classifier)]
+            again = [list(b) for _, b in fold_ref.default_folds(labels, k, classifier)]
             rep.same("PARTITION", f"{name}/{k}: the same arguments give the same assignment",
                      test, again, _show_folds)
 
@@ -356,7 +356,7 @@ def arm_reference(rep, ms, work, encoding):
     """The assignment against an independent recomputation."""
     for name, labels, classifier, _X in work:
         for k in SPLITS:
-            ours = [list(b) for _, b in ms._default_folds(labels, k, classifier)]
+            ours = [list(b) for _, b in fold_ref.default_folds(labels, k, classifier)]
             theirs = [list(b) for _, b in ref_folds(labels, k, classifier, encoding)]
             rep.same("REFERENCE", f"{name}/{k}: the fold assignment agrees with the "
                                   f"recomputation ({encoding} encoding)", ours, theirs, _show_folds)
@@ -366,11 +366,11 @@ def arm_switch(rep, ms, work):
     """Switches that MUST flip. A check whose two sides are always equal is
     the same non-check as a grep that always returns zero."""
     labels = work[0][1]
-    a = [list(b) for _, b in ms._default_folds(labels, 5, True)]
+    a = [list(b) for _, b in fold_ref.default_folds(labels, 5, True)]
     rep.differ("SWITCH", "a different n_splits gives a different assignment",
-               a, [list(b) for _, b in ms._default_folds(labels, 3, True)])
+               a, [list(b) for _, b in fold_ref.default_folds(labels, 3, True)])
     rep.differ("SWITCH", "the stratified branch differs from the KFold branch on the same labels",
-               a, [list(b) for _, b in ms._default_folds(labels, 5, False)])
+               a, [list(b) for _, b in fold_ref.default_folds(labels, 5, False)])
     moved = list(labels)
     # Move ONE row across the class boundary, so the label SEQUENCE changes.
     for i, v in enumerate(moved):
@@ -378,15 +378,15 @@ def arm_switch(rep, ms, work):
             moved[i] = moved[0]
             break
     rep.differ("SWITCH", "changing one label moves the stratified assignment",
-               a, [list(b) for _, b in ms._default_folds(moved, 5, True)])
+               a, [list(b) for _, b in fold_ref.default_folds(moved, 5, True)])
     # THE HOLE, HELD OPEN ON PURPOSE. The KFold branch is a function of
     # len(y) alone, so changing a label must leave it ALONE. If this ever
     # starts to move, the branch began reading something it never read and
     # the lane's docstring is stale.
     rep.same("SWITCH", "the KFold branch is unmoved by a changed label (a function of "
                        "len(y) alone, the lane's documented hole)",
-             [list(b) for _, b in ms._default_folds(labels, 5, False)],
-             [list(b) for _, b in ms._default_folds(moved, 5, False)], _show_folds)
+             [list(b) for _, b in fold_ref.default_folds(labels, 5, False)],
+             [list(b) for _, b in fold_ref.default_folds(moved, 5, False)], _show_folds)
 
 
 def arm_order(rep, ms, work, rng):
@@ -407,8 +407,8 @@ def arm_order(rep, ms, work, rng):
     rep.same("ORDER", f"{name}: the rotation preserves the label sequence",
              moved_labels, labels)
 
-    before = [list(b) for _, b in ms._default_folds(labels, 5, True)]
-    after = [list(b) for _, b in ms._default_folds(moved_labels, 5, True)]
+    before = [list(b) for _, b in fold_ref.default_folds(labels, 5, True)]
+    after = [list(b) for _, b in fold_ref.default_folds(moved_labels, 5, True)]
     rep.same("ORDER", f"{name}: the fold INDICES do not move under it "
                       "(the lane's finding, held open on purpose)", before, after, _show_folds)
 
@@ -442,7 +442,7 @@ def arm_encoding(rep, ms, work):
         if not classifier:
             continue
         for k in SPLITS:
-            ours = [list(b) for _, b in ms._default_folds(labels, k, True)]
+            ours = [list(b) for _, b in fold_ref.default_folds(labels, k, True)]
             first_seen = [list(b) for _, b in ref_folds(labels, k, True, "first-seen")]
             in_sorted = [list(b) for _, b in ref_folds(labels, k, True, "sorted")]
             which = []
@@ -468,7 +468,7 @@ def arm_encoding(rep, ms, work):
         if not classifier:
             continue
         for k in (3, 5):
-            ours = [list(b) for _, b in ms._default_folds(labels, k, True)]
+            ours = [list(b) for _, b in fold_ref.default_folds(labels, k, True)]
             sk = [sorted(int(i) for i in b) for _, b in
                   StratifiedKFold(n_splits=k, shuffle=False).split(np.zeros((len(labels), 1)),
                                                                    np.asarray(labels))]
@@ -489,7 +489,10 @@ def main(argv=None, out=sys.stdout):
     parser.add_argument("--only", default="", help="comma separated arm names")
     args = parser.parse_args(argv)
 
+    global fold_ref
     from mojolearn import model_selection as ms
+    # the Python fold reference (moved out of the runtime module, lane py-runtime-b)
+    from mojolearn.tests import _fold_reference as fold_ref
 
     identity_break = _load_identity_break()
     work = cases(identity_break)

@@ -23,8 +23,9 @@ the SAME address contract and packed layouts (level, trend, season each
 `components_len = (n - frequency) * batch_size` and TIME-MAJOR; sse, alpha,
 beta, gamma; niter, criterion; mirrored word for word in `_tsa_impl.py`
 and `bindings/_mojolearn_tsa.mojo`), and `tsa_vendor` answering "cpu".
-`select_d` (ARIMA's) is deliberately absent and refuses BY NAME through
-`_HostBinding`.
+`select_d` (ARIMA's; lane py-runtime-b) is the first stationary order of
+the same KPSS host test (`bindings/kpss_host_test.mojo`), so the CPU-only
+route no longer loops over the flags in Python.
 
 `kpss_test` (lane/cpu-training-batch3, 2026-09-14, the kpss lane) is
 `tsa/checks/kpss_oracle.mojo::kpss_host_f32`, "the serial Float32 REPLAY of
@@ -64,7 +65,7 @@ from holtwinters.impl.runner import (
     holtwinters_validate_params,
 )
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
-from bindings.kpss_host_test import KPSS_DECISION_SABOTAGE, kpss_test_binding
+from bindings.kpss_host_test import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 
 
@@ -257,6 +258,7 @@ def PyInit__mojolearn_tsa_host() abi("C") -> PythonObject:
         module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
         module.def_function[holtwinters_predict_binding]("holtwinters_predict")
         module.def_function[kpss_test_binding]("kpss_test")
+        module.def_function[select_d_host_binding]("select_d")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tsa_host: ", error))

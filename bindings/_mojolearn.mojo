@@ -103,6 +103,7 @@ from core.hotpath_device import (
 from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_last_f32
 from bindings.array_helpers import (
     nsum_f64_binding,
+    row_means_f64_binding,
 )
 from core.shard_merge_device import device_shard_topk_merge_f32
 from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
@@ -2006,6 +2007,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[check_lengths_i64_binding]("check_lengths_i64")
         m.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
         m.def_function[nsum_f64_binding]("nsum_f64")
+        m.def_function[row_means_f64_binding]("row_means_f64")
         m.def_function[class_ratio_f64_binding]("class_ratio_f64")
         m.def_function[shard_topk_merge_f32_binding]("shard_topk_merge_f32")
         m.def_function[gather_i64_binding]("gather_i64")

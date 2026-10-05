@@ -16,6 +16,8 @@ from std.builtin.sort import sort
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from std.math import inf, isinf, isnan
+from glm.impl.lm_finish import _exact_sum
 
 
 @always_inline
@@ -180,6 +182,59 @@ def nsum_f64_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject
     if c != 0.0 and c - c == 0.0:
         total += c
     return PythonObject(total)
+
+
+def row_means_f64_binding(
+    src_addr: PythonObject, rows: PythonObject, cols: PythonObject, out_addr: PythonObject,
+) raises -> PythonObject:
+    """The mean of each row of a C-order float64 (rows, cols) table:
+    `_portable_math.fsum(row) / cols` (lane py-runtime-b: the search
+    results' mean test and train scores, one row per candidate and one
+    column per split; they were Python `fsum` over lists). The sum is
+    CPython's math.fsum (Shewchuk's exact partials, rounded once; a zero sum
+    is +0.0; glm/impl/lm_finish.mojo `_exact_sum`) with `fsum`'s special
+    values: a row holding +inf and -inf writes nothing and is counted, a
+    NaN gives the row's last NaN, one kind of infinity gives it. Returns the
+    number of +inf/-inf rows (the caller raises fsum's ValueError)."""
+    var nr = Int(py=rows)
+    var nc = Int(py=cols)
+    if nr <= 0 or nc <= 0:
+        return PythonObject(0)
+    var sp = _addr_ptr[DType.float64](Int(py=src_addr))
+    var op = _addr_ptr[DType.float64](Int(py=out_addr))
+    var bad = 0
+    for r in range(nr):  # small-loop(nr: search candidates): one mean per candidate row
+        var terms = List[Float64](capacity=nc)
+        var nan_v = Float64(0.0)
+        var any_nan = False
+        var pinf = False
+        var ninf = False
+        for c in range(nc):  # small-loop(nc: cross-validation splits): one score per split
+            var v = sp.unsafe_load(r * nc + c)
+            if isnan(v):
+                any_nan = True
+                nan_v = v
+            elif isinf(v):
+                if v > 0:
+                    pinf = True
+                else:
+                    ninf = True
+            else:
+                terms.append(v)
+        if pinf and ninf:
+            bad += 1
+            continue
+        var total: Float64
+        if any_nan:
+            total = nan_v
+        elif pinf:
+            total = inf[DType.float64]()
+        elif ninf:
+            total = -inf[DType.float64]()
+        else:
+            total = _exact_sum(terms)
+        op.unsafe_store(r, total / Float64(nc))
+    return PythonObject(bad)
 
 
 def class_ratio_f64_host_binding(

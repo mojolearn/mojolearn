@@ -56,20 +56,6 @@ __all__ = ['cross_val_score', 'split_descriptor']
 _FOLD_ORDER_SABOTAGE = 'MOJOLEARN_FOLD_ORDER_SABOTAGE'
 
 
-def _sabotage_fold_order(tests):
-    """`tests` unchanged, or with the row-to-fold assignment rotated by one."""
-    if (os.environ.get(_FOLD_ORDER_SABOTAGE) != '1'
-            or os.environ.get('MOJOLEARN_HOST_ALLOW_SABOTAGE') != '1'):
-        return tests
-    rows = [row for test in tests for row in test]
-    rows = rows[1:] + rows[:1]
-    rotated, at = [], 0
-    for test in tests:
-        rotated.append(rows[at:at + len(test)])
-        at += len(test)
-    return rotated
-
-
 def _sabotage_requested():
     return (os.environ.get(_FOLD_ORDER_SABOTAGE) == '1'
             and os.environ.get('MOJOLEARN_HOST_ALLOW_SABOTAGE') == '1')
@@ -232,107 +218,12 @@ def _classifier(estimator):
     return False
 
 
-def _default_folds(y, n_splits, classifier):
-    """Unshuffled KFold/StratifiedKFold index metadata, in original row order.
-
-    Reference: sklearn 1.9.1 model_selection/_split.py KFold._iter_test_indices
-    and StratifiedKFold._make_test_folds: first-seen class encoding, round-robin
-    allocation over class-sorted labels, then contiguous fold blocks per class.
-
-    LINK 3, THE ROW ORDER (lane/data-ordering-determinism, 2026-09-16). There
-    is no seed here: the folds are unshuffled and this function is a pure
-    function of its arguments. What it never reads is X. The stratified branch
-    reads the LABEL SEQUENCE; the KFold branch reads `len(y)` and nothing else,
-    because its folds are contiguous blocks of positions. So the fold INDICES
-    this yields are not a pin on the split:
-
-      * a permutation of the rows that preserves the label sequence (swapping
-        two rows of the same class) leaves every index this yields BYTE
-        IDENTICAL while changing which rows the estimator is fitted on;
-      * ANY permutation leaves the KFold indices byte identical, because a
-        block of positions does not know which row sits at a position.
-
-    Measured on 2048 rows of the identity_break `base` fixture, both classes
-    1024 rows and 1010 label runs: a within-class rotation of all 2048 rows
-    moved none of the four fold-index hashes and all four fold-CONTENT hashes.
-    The row order is the caller's and mojolearn cannot pin it from inside; what
-    it can do is record it, which is `split_descriptor` below.
-    """
-    n = len(y)
-    if is_bool(n_splits) or not isinstance(n_splits, numbers.Integral) or n_splits < 2:
-        raise ValueError('cv must specify at least two folds')
-    if n_splits > n:
-        raise ValueError('cv cannot exceed the number of samples')
-    labels = flatten_labels(y)
-    discrete = (all(isinstance(v, str) for v in labels) or
-                all((isinstance(v, numbers.Integral) or
-                     (isinstance(v, numbers.Real) and math.isfinite(v) and float(v).is_integer()))
-                    for v in labels))
-    stratified = classifier and discrete
-    if not stratified and not _sabotage_requested():
-        # A plain KFold test set is one contiguous interval.  Construct its
-        # complement from the two surrounding ranges in C instead of doing
-        # ``n`` Python set lookups for every fold.  Keep the general path when
-        # the dormant order control is armed because its rotated tests are no
-        # longer necessarily contiguous.
-        offset = 0
-        for fold in range(n_splits):
-            size = n // n_splits + (fold < n % n_splits)
-            stop = offset + size
-            yield list(range(offset)) + list(range(stop, n)), list(range(offset, stop))
-            offset = stop
-        return
-    tests = [[] for _ in range(n_splits)]
-    if stratified:
-        classes = {}
-        for index, label in enumerate(labels):
-            classes.setdefault(label, []).append(index)
-        counts = [len(rows) for rows in classes.values()]
-        if max(counts) < n_splits:
-            raise ValueError('cv cannot exceed the number of members in every class')
-        if min(counts) < n_splits:
-            warnings.warn('The least populated class has fewer members than cv folds',
-                          UserWarning, stacklevel=3)
-        offset = 0
-        for rows in classes.values():
-            # Class k occupies [offset, offset+count) in sorted encoded y.
-            # Count each residue modulo n_splits without constructing sorted y.
-            used = 0
-            for fold in range(n_splits):
-                first = (fold - offset) % n_splits
-                count = 0 if first >= len(rows) else 1 + (len(rows) - 1 - first) // n_splits
-                tests[fold].extend(rows[used:used + count])
-                used += count
-            offset += len(rows)
-    else:
-        offset = 0
-        for fold in range(n_splits):
-            size = n // n_splits + (fold < n % n_splits)
-            tests[fold] = list(range(offset, offset + size))
-            offset += size
-    # THE DORMANT CONTROL, actually called. It was defined and never invoked
-    # in the crash-preserved draft, which made the lane's negative control
-    # INERT: `MOJOLEARN_FOLD_ORDER_SABOTAGE=1` moved nothing, and a check that
-    # cannot fail is not a check.
-    tests = _sabotage_fold_order(tests)
-    for test in tests:
-        test.sort()
-        # the complement of the test rows, ascending, selected in C
-        mask = bytearray(n)
-        collections.deque(map(mask.__setitem__, test, itertools.repeat(1)), maxlen=0)
-        yield list(itertools.compress(range(n), mask.translate(_FLIP))), test
-
-
 def _default_fold_arrays(y, n_splits, classifier):
-    """`_default_folds` as int64 index Arrays (DEVIATION 3104), computed by
-    the core helpers `fold_ids` and `select_fold_i64` for every label kind
-    and size (lane cgr4-py-compute deleted the Python route it handed back
-    to). `_default_folds` above stays the DEFINITION the fold tests and
-    `tools/identity_break.py` call, and the route under the fold-order
-    sabotage control (a verification switch, never set in production)."""
-    if _sabotage_requested():
-        yield from _default_folds(y, n_splits, classifier)
-        return
+    """The unshuffled default folds as int64 index Arrays (DEVIATION 3104),
+    computed by the core helpers `fold_ids` and `select_fold_i64` for every
+    label kind and size, the fold-order sabotage control included (lane
+    py-runtime-b). The Python DEFINITION the fold tests and tools hold this
+    to is `mojolearn/tests/_fold_reference.py::default_folds`."""
     yield from _native_default_folds(y, n_splits, classifier)
 
 
@@ -381,6 +272,25 @@ def _native_default_folds(y, n_splits, classifier):
         if min(counts) < n_splits:  # glue: k class counts read back for the fold count checks
             warnings.warn('The least populated class has fewer members than cv folds',
                           UserWarning, stacklevel=4)
+    out = _select_folds(fold_store, fold_counts, n, n_splits)
+    if _sabotage_requested():
+        # THE DORMANT NEGATIVE CONTROL (a verification switch, never set in
+        # production): the row-to-fold assignment rotated by one over the
+        # fold-ordered ascending test rows, so each nonempty fold's smallest
+        # test row moves to the previous nonempty fold (the last fold takes
+        # fold 0's). n_splits row ids are moved in the fold table and the
+        # folds selected again; every fold keeps its size.
+        nonempty = [f for f in range(n_splits) if out[f][1].size]  # glue: nonempty folds (n_splits sized)
+        firsts = [int(out[f][1][0]) for f in nonempty]  # glue: each nonempty fold's smallest test row (n_splits sized)
+        for at, fold in enumerate(nonempty):  # glue: moves one row id per nonempty fold (n_splits sized)
+            fold_store[firsts[(at + 1) % len(nonempty)]] = fold
+        out = _select_folds(fold_store, fold_counts, n, n_splits)
+    return out
+
+
+def _select_folds(fold_store, fold_counts, n, n_splits):
+    """Each fold's (train, test) int64 rows from the int32 fold table, by the
+    core helper `select_fold_i64`."""
     select = _native('select_fold_i64')
     out = []
     for fold in range(n_splits):  # glue: one native fold selection per fold (n_splits sized)
@@ -977,6 +887,21 @@ _LITTLE_ENDIAN = __import__('sys').byteorder == 'little'
 _FLIP = bytes([1, 0]) + bytes(254)
 
 
+def _row_means(rows):
+    """`fsum(row) / len(row)` of each equal-length row of float scores, by
+    the core helper `row_means_f64` (lane py-runtime-b: the search results'
+    mean test and train scores and the permutation test's mean score; the
+    same exact sum, rounded once, then one division)."""
+    m = len(rows)
+    k = len(rows[0]) if m else 0
+    flat = array.array('d', itertools.chain.from_iterable(rows))  # glue: score rows packed as one float64 table
+    out = array.array('d', bytes(8 * max(m, 1)))
+    if m and k:
+        if int(_native('row_means_f64')(flat.buffer_info()[0], m, k, out.buffer_info()[0])):
+            raise ValueError('-inf + inf in fsum')
+    return out.tolist()[:m]
+
+
 def _rng(random_state):
     rng = CounterRng(random_state)
     assert rng.binding == _SPLIT_BINDING
@@ -1470,32 +1395,11 @@ class GroupShuffleSplit(ShuffleSplit):
             yield gc.only(words, 0, sums[0]), gc.only(words, 1, sums[1])
 
 
-def _approximate_mode(class_counts, n_draws, rng):
-    """scikit-learn's `_approximate_mode` in exact integers: floor of the
-    proportional share, the remainder handed out by descending fractional
-    part, ties among equal fractions chosen by the counter RNG."""
-    total = sum(class_counts)
-    floored = [c * n_draws // total for c in class_counts]
-    rem = [c * n_draws % total for c in class_counts]
-    need = n_draws - sum(floored)
-    for value in sorted(set(rem), reverse=True):
-        if need <= 0:
-            break
-        inds = [i for i, r in enumerate(rem) if r == value]
-        take = min(len(inds), need)
-        if take < len(inds):
-            perm = rng.permutation(len(inds))
-            inds = [inds[j] for j in perm[:take]]
-        for i in inds:
-            floored[i] += 1
-        need -= take
-    return floored
-
-
 class StratifiedShuffleSplit(ShuffleSplit):
     """scikit-learn 1.9 `StratifiedShuffleSplit`: per class, a counter-RNG
     permutation of its rows (in row order) gives n_i train and t_i test
-    rows, n_i and t_i from the exact-integer approximate mode; train and
+    rows, n_i and t_i from the exact-integer approximate mode
+    (`CounterRng.approximate_modes`, x_metrics/split.mojo); train and
     test are then permuted."""
 
     def split(self, X, y, groups=None):
@@ -1528,8 +1432,9 @@ class StratifiedShuffleSplit(ShuffleSplit):
 
         def gen():
             for _ in range(self.n_splits):  # glue: one split per iteration (n_splits sized)
-                n_i = _approximate_mode(counts, n_train, rng)
-                t_i = _approximate_mode([c - a for c, a in zip(counts, n_i)], n_test, rng)
+                # scikit-learn's _approximate_mode for train then test, in
+                # one device program (x_metrics approx_mode; lane py-runtime-b)
+                n_i, t_i = rng.approximate_modes(counts, n_train, n_test)
                 tr_len, te_len = sum(n_i), sum(t_i)  # glue: train and test sizes summed over k classes
                 train = empty((tr_len,), '<i8')
                 test = empty((te_len,), '<i8')
@@ -1657,7 +1562,7 @@ def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None
             stratify = (all(isinstance(v, str) for v in labels) or  # cpu-route: stratify test over label objects (str/mixed) after the native route declines [py-data-loop]
                         all(isinstance(v, numbers.Integral) or
                             (isinstance(v, numbers.Real) and math.isfinite(v) and float(v).is_integer())
-                            for v in labels))
+                            for v in labels))  # cpu-route: stratify test over label objects (str/mixed) after the native route declines [py-data-loop]
         kind = StratifiedKFold if stratify else KFold
         return kind(cv, shuffle=shuffle, random_state=random_state if shuffle else None)
     if callable(getattr(cv, 'split', None)):
@@ -2345,14 +2250,14 @@ class _BaseSearch:
             for i in range(n_splits):  # glue: one score column per split index
                 results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')  # glue: one score column per split index
             # glue: explicit scalar tail over the candidates x folds scores (Python floats, not data)
-            means = [math.fsum(s) / len(s) for s in per[nm]]  # glue: one mean per candidate
+            means = _row_means(per[nm])
             stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s))  # glue: one std per candidate
                     for s, m in zip(per[nm], means)]  # glue: one std per candidate
             results[f'mean_test_score{suffix}'] = Array.from_list(means, '<f8')
             results[f'std_test_score{suffix}'] = Array.from_list(stds, '<f8')
             results[f'rank_test_score{suffix}'] = Array.from_list(_rank(means), '<i4')
             if self.return_train_score:
-                tm = [math.fsum(s) / len(s) for s in trains[nm]]
+                tm = _row_means(trains[nm])
                 results[f'mean_train_score{suffix}'] = Array.from_list(tm, '<f8')
         self.cv_results_ = results
         self.n_splits_ = n_splits
@@ -2557,7 +2462,7 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
     def mean_score(yv):
         yarr = _materialize(Array.from_list(yv, '<f4' if isinstance(yv[0], float) else '<i4'), 'y')[0]
         r = cross_validate(estimator, Xa, yarr, groups=groups, cv=cv, scoring=sc)
-        return math.fsum(r['test_score'].tolist()) / len(r['test_score'].tolist())
+        return _row_means([r['test_score'].tolist()])[0]
     score = mean_score(yl)
     rng = _rng(random_state)
     perm_scores = []
@@ -2574,7 +2479,7 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
                 for i, j in zip(rows, perm):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
                     yp[i] = yl[rows[j]]
         perm_scores.append(mean_score(yp))
-    pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)
+    pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)  # cpu-route: definition route for label objects (str/mixed), one score per permutation [py-data-loop,py-reduce]
     return score, Array.from_list(perm_scores, '<f8'), pvalue
 
 
@@ -2682,7 +2587,7 @@ class _NativePermutation:
             folds = folds0 if reuse or yarr is base else self._folds(estimator, yarr, groups, cv)
             r = _cross_validate_folds(estimator, self.X, yarr, folds, sc,
                                       rows=rows0 if folds is folds0 else None)
-            return math.fsum(r['test_score'].tolist()) / len(r['test_score'].tolist())
+            return _row_means([r['test_score'].tolist()])[0]
         score = mean_score(base)
         rng = _rng(random_state)
         order = None if groups is None else self._group_order(groups)
