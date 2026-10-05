@@ -275,12 +275,20 @@ struct DKit(Movable):
     var one: DMat
     var hold_f: List[List[Float32]]
     var hold_i: List[List[Int32]]
+    # `smallest_dev`'s NaN refusal word, resident for the kit's life and
+    # read at the next `sync` (lane idn-regress: was a sync a selection)
+    var nan_word: DMat
+    var nan_host: List[Int32]
+    var nan_pending: Bool
 
     def __init__(out self) raises:
         self.ctx = xd_ctx()
         self.one = DMat(1, 1)
         self.hold_f = List[List[Float32]]()
         self.hold_i = List[List[Int32]]()
+        self.nan_word = DMat(1, 1)
+        self.nan_host = List[Int32](length=1, fill=Int32(0))
+        self.nan_pending = False
         # the unused broadcast operand: Kit's `one`, a 0
         var z = List[Float32](length=1, fill=Float32(0))
         var pool = X_DECOMP_POOL.get_or_create_ptr()
@@ -289,6 +297,9 @@ struct DKit(Movable):
             src_ptr=F32Ptr(unsafe_from_address=Int(z.unsafe_ptr())),
         )
         self.hold_f.append(z^)
+        var nv = pool[].bufs[self.nan_word.id].create_sub_buffer[DType.float32](0, 1)
+        enqueue_fill(self.ctx, nv, Float32(0))
+        _ = nv^
 
     # ---- movement
     def _sub(self, D: DMat) raises -> DeviceBuffer[DType.float32]:
@@ -319,9 +330,22 @@ struct DKit(Movable):
         return out^
 
     def sync(mut self) raises:
+        var check = self.nan_pending
+        if check:
+            var pool = X_DECOMP_POOL.get_or_create_ptr()
+            self.ctx.enqueue_copy(
+                dst_ptr=F32Ptr(unsafe_from_address=Int(self.nan_host.unsafe_ptr())),
+                src_buf=pool[].bufs[self.nan_word.id].create_sub_buffer[DType.float32](0, 1),
+            )
         self.ctx.synchronize()
         self.hold_f.clear()
         self.hold_i.clear()
+        if check:
+            self.nan_pending = False
+            if self.nan_host[0] != Int32(0):
+                # `_key`'s refusal, as the host sort raised it; every fit
+                # ends in a sync (`_write_dev`), so none goes unread
+                raise Error("x_decomp MinCovDet: a NaN distance or draw has no order (refused)")
 
     def copy(self, A: DMat) raises -> DMat:
         var out = DMat(A.r, A.c)
@@ -337,7 +361,7 @@ struct DKit(Movable):
             self.ctx.enqueue_copy(dst_buf=self._sub(dst), src_buf=self._sub(src))
 
     # ---- selections on the device (lane cpu3-core)
-    def _sorted_order(mut self, v: DMat, bad: DMat) raises -> DeviceBuffer[DType.uint32]:
+    def _sorted_order(self, v: DMat, bad: DMat) raises -> DeviceBuffer[DType.uint32]:
         """v's indices in (value, index) order, resident (a stable radix
         sort of the monotone images); a NaN sets bad's word."""
         var n = v.n()
@@ -400,8 +424,7 @@ struct DKit(Movable):
         if h <= 0:
             return DMat(0, 1)
         var take = min(h, n)
-        var bad = self._bad_flag()
-        var order = self._sorted_order(v, bad)
+        var order = self._sorted_order(v, self.nan_word)
         var flag = self.ctx.enqueue_create_buffer[DType.int32](max(n, 1))
         var scan = self.ctx.enqueue_create_buffer[DType.int32](n + 1)
         enqueue_fill(self.ctx, flag, Int32(0))
@@ -415,7 +438,10 @@ struct DKit(Movable):
                 flag.unsafe_ptr(), scan.unsafe_ptr(), Int32(n), out.p().bitcast[Int32](),
                 grid_dim=_blocks(n), block_dim=TPB,
             )
-        self._refuse_nan(bad)
+        # the NaN word is read at the next sync (the C-step's log
+        # determinant): the order is a permutation either way, so every
+        # gather before it stays in range
+        self.nan_pending = True
         _ = order^
         _ = flag^
         _ = scan^
