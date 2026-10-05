@@ -19,6 +19,18 @@ from x_decomp.lle_iter import LleArgs, _lle_args, take_want
 from x_decomp.select_ops import SEL_MAX, sel_fold
 
 
+def lle_mm_dev(k: DKit, A: DMat, B: DMat, ta: Bool = False, tb: Bool = False) raises -> DMat:
+    # Shift-invert amplifies error in the null-space projection, and Ritz
+    # residuals/subspace comparisons approach float32's null floor. Splitting
+    # these products into unordered MMA atomics makes unchanged operands
+    # alternate convergence/refusal. Use existing ordered cells throughout
+    # this iteration at every shape; solver, subspace size and limits stay.
+    comptime if AFN_GEMM_APPLE:
+        return k.mm_ordered(A, B, ta, tb)
+    else:
+        return k.mm(A, B, ta, tb)
+
+
 def lle_orth_dev(mut k: DKit, Z: DMat) raises -> DMat:
     var rc = k.ew1(OP_RECIP, k.colsum(k.ew1(OP_ABS, Z, 0.0)), 0.0)
     var one = k.upload(mat_const(1.0, 1, 1))
@@ -46,26 +58,17 @@ def lle_iterate_dev(
     var e_prev = inf[DType.float64]()
     for it in range(max(1, a.max_iter)):
         var T = k.trisolve(lu, im, k.pad_zero_row(X), 1)
-        T = lle_orth_dev(k, k.ew2(OP_SUB, T, k.mm(z, k.mm(z, T, True, False), False, False)))
+        T = lle_orth_dev(k, k.ew2(OP_SUB, T, lle_mm_dev(k, z, lle_mm_dev(k, z, T, True, False), False, False)))
         var U = k.trisolve(lu, pm, T, 0)
         X = lle_orth_dev(k, k.rows(U, 0, a.n1))
-        var B = DMat(0, 0)
-        comptime if AFN_GEMM_APPLE:
-            # Ritz residuals approach float32's null floor. Unordered split-K
-            # MMA adds cancellation noise to F^ X, making identical operands
-            # alternate convergence/refusal. Use the existing ordered cells
-            # for this residual-sensitive product at every shape. The solver,
-            # subspace size, stopping tolerances and limits are unchanged.
-            B = k.mm_ordered(F0, k.pad_zero_row(X), False, False)
-        else:
-            B = k.mm(F0, k.pad_zero_row(X), False, False)
+        var B = lle_mm_dev(k, F0, k.pad_zero_row(X), False, False)
         var s = Mat(0, 0)
         var v = Mat(0, 0)
         k.svd_host(B, s, v)
         var Vt = Mat(0, 0)
         S = Mat(0, 0)
         svd_desc(s, v, S, Vt)
-        X = k.mm(X, k.upload(Vt), False, True)
+        X = lle_mm_dev(k, X, k.upload(Vt), False, True)
         var hx = k.get(X)
         k.sync()
         Y = k.upload(take_want(hx, p, a.nc))
@@ -73,7 +76,7 @@ def lle_iterate_dev(
         if it >= 2 and Float64(sel_fold(SEL_MAX, sw.p(), 0, sw.n())) <= a.floor:
             return 1
         if have_prev:
-            var Em = k.ew2(OP_SUB, Y, k.mm(prev, k.mm(prev, Y, True, False), False, False))
+            var Em = k.ew2(OP_SUB, Y, lle_mm_dev(k, prev, lle_mm_dev(k, prev, Y, True, False), False, False))
             var t = k.word(k.total(k.ew1(OP_SQ, Em, 0.0)))
             var e = sqrt(t if not (0.0 > t) else 0.0)
             if e <= a.sub_tol or (e <= a.stall_tol and e >= e_prev):
