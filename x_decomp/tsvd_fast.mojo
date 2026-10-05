@@ -37,9 +37,10 @@ from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
+from core.device_pool import pool_give, pool_take
 from x_decomp.cells import F32Ptr
 from x_decomp.device import (
-    TPB, XD_FAST_APPLE, _blocks, _down, _p, _up, chol_step_kernel, gemm_scratch, launch_gemm,
+    TPB, XD_FAST_APPLE, _blocks, _down, _p, _up_into, chol_step_kernel, gemm_scratch, launch_gemm,
     lu_info_init_kernel, xd_ctx,
 )
 
@@ -183,8 +184,10 @@ def tsvd_cholqr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -
     var ok = 0
     with GILReleased(Python()):
         var ctx = xd_ctx()
-        var dy = _up(ctx, pa, m * n)
-        var dq = ctx.enqueue_create_buffer[DType.float32](m * n)
+        # the two m x n matrices from a named pool (no fresh 880 MB pages per fit)
+        var dy = pool_take["MojoXDecompTsvdCQ3"](ctx, m * n)
+        _up_into(ctx, dy, pa, m * n)
+        var dq = pool_take["MojoXDecompTsvdCQ3"](ctx, m * n)
         var dg = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dri = ctx.enqueue_create_buffer[DType.float32](n * n)
         var drp = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -233,8 +236,8 @@ def tsvd_cholqr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -
         ctx.synchronize()
         ok = 1 if hflag.unsafe_ptr().unsafe_load(0) != Float32(0) else 0
         _ = hflag^
-        _ = dy^
-        _ = dq^
+        pool_give["MojoXDecompTsvdCQ3"](dy^)
+        pool_give["MojoXDecompTsvdCQ3"](dq^)
         _ = dg^
         _ = dri^
         _ = drp^
