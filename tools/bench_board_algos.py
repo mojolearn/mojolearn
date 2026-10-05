@@ -4869,13 +4869,16 @@ def race(args):
             if msg is not None and msg.get("event") == "saved":
                 with np.load(path) as z:
                     outs[arm] = {k: z[k] for k in z.files}
-                os.remove(path)
+                result.setdefault("saved_outputs", {})[arm] = path
             else:
                 result["arms"][arm].update(status="save_failed", error=msg)
         if w.alive:
             w.close()
     try:
         result["quality"] = quality(lane, D, outs)
+        result["host_quality_receipt"] = _tool("bench_board_host_quality").enrich(
+            lane, D, outs, result["quality"], args.ours_python,
+            os.path.join(args.work, tag + "-host-quality"), args.round_seconds)
     except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
