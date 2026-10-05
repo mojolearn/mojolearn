@@ -160,6 +160,7 @@ _RULE_CLASS.update({"host-call": "host-import", "serial-launch": "serial-gpu", "
                     "block-per-n": "serial-gpu",
                     "py-data-loop": "py-compute", "py-np-compute": "py-compute",
                     "py-reduce": "py-compute", "py-array-method": "py-compute",
+                    "py-fsum": "py-compute", "py-map-arith": "py-compute",
                     "py-native-host": "native-host", "mojo-host-loop": "host-loop"})
 _RULE_WHY = {r[0]: r[4] for r in _LINE_RULES}
 _RULE_WHY.update({
@@ -175,6 +176,8 @@ _RULE_WHY.update({
     "py-np-compute": "numpy compute at runtime in GPU-path Python (move it into Mojo)",
     "py-reduce": "sorted()/sum()/min()/max() over a sequence at runtime in GPU-path Python",
     "py-array-method": "an array reduction or sort method at runtime in GPU-path Python",
+    "py-fsum": "an fsum (math.fsum or a portable twin) over values at runtime in GPU-path Python",
+    "py-map-arith": "arithmetic on data through map(operator.*), itertools.accumulate/starmap or reduce at runtime",
     "py-native-host": "GPU-path Python calls a native host helper (a binding export that loops on the CPU)",
     "mojo-host-loop": "a host loop over a data size in GPU Mojo code (move it into a kernel)",
 })
@@ -949,6 +952,11 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
             return
         if rule == "host-import" and dm_def.match(t):
             return
+        # lane py-runtime round 3: sklearn's own interface (the tags it asks
+        # an estimator for) imports sklearn only when sklearn calls in; a
+        # reviewed `# glue:` note on that import line says so
+        if rule == "py-sklearn" and _GLUE.search(t):
+            return
         if rule not in flagged[no]:
             out.append((rule, no, t))
             flagged[no].add(rule)
@@ -1105,6 +1113,13 @@ set_printoptions printoptions shares_memory may_share_memory isfortran copyto
 """.split())
 _NP_CALL = re.compile(r"(?<![\w.])(?:np|numpy)\.([A-Za-z_][\w.]*)\s*\(")
 _PY_REDUCE = re.compile(r"(?<![\w.])(sorted|sum|min|max)\s*\(")
+# lane py-runtime round 3: the two spellings that walked data in C while the
+# rules above only saw comprehensions: an exact fsum (math.fsum, _pm.fsum,
+# a module's `_fsum` alias) and operator arithmetic mapped over sequences
+_PY_FSUM = re.compile(r"(?<![\w.])(?:\w+\.)?_?fsum\s*\(")
+_PY_MAP_ARITH = re.compile(
+    r"\bmap\(\s*operator\.(add|sub|mul|truediv|floordiv|mod|pow|neg|abs|ne|eq|lt|le|gt|ge|or_|and_|xor)\b"
+    r"|\bitertools\.(accumulate|starmap)\s*\(|\b(functools\.)?reduce\(\s*operator\.")
 _ARR_METHOD = re.compile(r"\.(sum|mean|std|var|argmin|argmax|argsort|cumsum|cumprod|dot|prod|nonzero"
                          r"|searchsorted|argpartition|partition|nansum|nanmean)\s*\(")
 
@@ -1157,6 +1172,10 @@ def _py_compute(lines):
                 break
         if _ARR_METHOD.search(code):
             out.append(("py-array-method", no, t))
+        if _PY_FSUM.search(code):
+            out.append(("py-fsum", no, t))
+        if _PY_MAP_ARITH.search(code):
+            out.append(("py-map-arith", no, t))
     return out
 
 
@@ -1325,7 +1344,7 @@ _DEBT_STATES = ("debt", "owed", "owed2", "owed-py")
 # rules added after the baseline was first written; a baseline with no row of
 # one predates it (see check_tree)
 _LATE_RULES = ("d2h-host-work", "one-block-n", "block-per-n", "py-data-loop", "py-np-compute", "py-reduce",
-               "py-array-method")
+               "py-array-method", "py-fsum", "py-map-arith")
 
 
 def load_baseline(text):
@@ -1361,7 +1380,8 @@ def dump_baseline(rows):
             "# It only shrinks. A fix deletes its rows (no_host_routes.py --prune-baseline).\n"
             "# state debt = on main; inflight = pre-authorized lines of an open PR; owed = debt of a rule\n"
             "# newer than the installed hooks (they skip it); owed-py = the same for the Python\n"
-            "# glue-only rules (py-data-loop, py-np-compute, py-reduce, py-array-method).\n"
+            "# glue-only rules (py-data-loop, py-np-compute, py-reduce, py-array-method, py-fsum,\n"
+            "# py-map-arith).\n"
             "# A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).\n")
     return head + _HDR + "\n" + "".join(
         (f"# why: {r['why']}\n" if r.get("why") else "")

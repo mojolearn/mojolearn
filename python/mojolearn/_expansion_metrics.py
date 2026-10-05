@@ -70,11 +70,6 @@ _PARAMS = 14
 _NONE = -1
 
 
-#: `_portable_math.fsum` carries the `math.fsum` fast path this module
-#: made first (lane py-shared moved it there, so every caller gains it; the
-#: same bits as lane py-bugs' local `_fsum`: `math.fsum` when finite, +0.0
-#: for a zero sum, the exact portable sum otherwise).
-_fsum = pmath.fsum
 
 
 def _sq(v):
@@ -1663,22 +1658,20 @@ def _f32_weights_addr(w):
 
 
 def _auc_of(cur, max_fpr):
-    """`_binary_auc` of a curve
+    """The ROC AUC of a curve
     when both classes are present, else (or on any doubt) the Python.
     A `_FoldCurve` (the device fold, lane cgr2-metrics-shap) scores itself."""
     if isinstance(cur, _FoldCurve):
         return cur.auc(max_fpr)
-    L = cur.lists()
-    return _binary_auc(L[0], L[1], max_fpr, L.keep)
+    raise TypeError("mojolearn metrics: an AUC is scored from the device fold (`_curves(..., fold='auc')`)")
 
 
 def _ap_of(cur):
-    """`_binary_ap` of a curve: a `_FoldCurve` (the device fold, lane
+    """The average precision of a curve: a `_FoldCurve` (the device fold, lane
     cgr2-metrics-shap) scores itself."""
     if isinstance(cur, _FoldCurve):
         return cur.ap()
-    L = cur.lists()
-    return _binary_ap(L[0], L[1])
+    raise TypeError("mojolearn metrics: an average precision is scored from the device fold (`_curves(..., fold='ap')`)")
 
 
 def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds=True, keep_flags=True,
@@ -1848,15 +1841,17 @@ class _FoldCurve:
     def auc(self, max_fpr):
         s, F, T, k, a, b, u, v, c = self._words()
         if c <= 0 or not (F > 0 and T > 0):
-            # `_binary_auc`'s empty-class answer, without bringing the curve back
+            # the empty-class answer, without bringing the curve back
             _undefined_warning("Only one class is present in y_true. ROC AUC score is not defined in that case.")
             return float("nan")
         if max_fpr is None:
             return float(s / (2.0 * F * T))
         if k >= c:
-            # max_fpr at or past the last point: the Python rule
-            L = self.lists()
-            return _binary_auc(L[0], L[1], max_fpr, L.keep)
+            # max_fpr at or past the last point (max_fpr = 1: the last fpr is
+            # F / F): the whole area, the device fold's word (lane py-runtime
+            # round 3; the Python fsum rule over the curve is gone, new bits
+            # for max_fpr = 1 only, the same on every column)
+            return float(s / (2.0 * F * T))
         x0, x1, y0, y1 = a / F, b / F, u / T, v / T
         yi = y0 if x1 == x0 else y0 + (max_fpr - x0) * (y1 - y0) / (x1 - x0)
         part = s / (2.0 * F * T) + (max_fpr - x0) * (yi + y0) / 2.0
@@ -1868,26 +1863,11 @@ class _FoldCurve:
         if c <= 0 or T == 0:
             return 0.0
         if k > 0:
-            L = self.lists()
-            return _binary_ap(L[0], L[1])
+            # a point with tps + fps == 0: the Python rule's t / (t + f) is a
+            # float division by zero (lane py-runtime round 3: raised from the
+            # fold's count word, no curve walk)
+            raise ZeroDivisionError("float division by zero")
         return float(max(0.0, s / T))
-
-
-def _drop_collinear(fps, tps, thr, keep=None):
-    """Keep the first and last points and every point where either step
-    changes: (f[i+1] - f[i]) != (f[i] - f[i-1]), the same binary64
-    subtractions and compares, iterated in C (lane metrics-apple). `keep`,
-    when given, is the device's flags for exactly these lists (an unweighted
-    curve, `_Curve.keep`)."""
-    if keep is not None and len(keep) == len(fps):
-        return (list(itertools.compress(fps, keep)), list(itertools.compress(tps, keep)),
-                list(itertools.compress(thr, keep)))
-    df = list(map(operator.sub, fps[1:], fps[:-1]))
-    dt = list(map(operator.sub, tps[1:], tps[:-1]))
-    inner = map(operator.or_, map(operator.ne, df[1:], df[:-1]), map(operator.ne, dt[1:], dt[:-1]))
-    keep = list(itertools.chain((True,), inner, (True,)))
-    return (list(itertools.compress(fps, keep)), list(itertools.compress(tps, keep)),
-            list(itertools.compress(thr, keep)))
 
 
 #: x_metrics/curve_out.mojo kinds and statuses
@@ -1994,29 +1974,6 @@ def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
     return arrays
 
 
-def _trapezoid(x, y):
-    """fsum of (x[i] - x[i-1]) * (y[i] + y[i-1]) / 2, the same binary64
-    operations per term, iterated in C (lane metrics-apple)."""
-    terms = map(operator.truediv,
-                map(operator.mul, map(operator.sub, x[1:], x[:-1]), map(operator.add, y[1:], y[:-1])),
-                itertools.repeat(2))
-    return _fsum(list(terms))
-
-
-#: terms per chunk of the device trapezoid sum (x_metrics/curve_out.mojo
-#: ax_chunk); the fold order is a function of n and this constant only
-_AX_CHUNK = 1024
-_AX_NEG, _AX_POS = 1, 2
-
-
-def _f64_words(a):
-    """A C-order Float64 Array's values as their Int32 word pairs (low
-    first), an Int32 Array over a copy of the bytes (no per-value Python)."""
-    store = array.array("i")
-    store.frombytes(a.tobytes())
-    return Array._owned(store, (len(store),), "<i4", "C")
-
-
 def auc(x, y):
     """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x, on
     the device (lane cpu4-python: x_metrics/curve_out.mojo auc_xy; the host
@@ -2062,35 +2019,6 @@ def _auc_f64(v):
         return as_f64_c(v, ndim=1, name="x")[0] if ok else None
     except Exception:
         return None
-
-
-def _binary_auc(fps, tps, max_fpr, keep=None):
-    if not fps or fps[-1] <= 0 or tps[-1] <= 0:
-        _undefined_warning("Only one class is present in y_true. ROC AUC score is not defined in that case.")
-        return float("nan")
-    fps, tps, _ = _drop_collinear(fps, tps, fps, keep) if len(fps) > 2 else (fps, tps, fps)
-    fpr = [0.0] + list(map(operator.truediv, fps, itertools.repeat(fps[-1])))
-    tpr = [0.0] + list(map(operator.truediv, tps, itertools.repeat(tps[-1])))
-    if max_fpr is None or max_fpr == 1:
-        return float(_trapezoid(fpr, tpr))
-    import bisect
-    stop = bisect.bisect_right(fpr, max_fpr)
-    x0, x1, y0, y1 = fpr[stop - 1], fpr[stop], tpr[stop - 1], tpr[stop]
-    yi = y0 if x1 == x0 else y0 + (max_fpr - x0) * (y1 - y0) / (x1 - x0)
-    part = _trapezoid(fpr[:stop] + [max_fpr], tpr[:stop] + [yi])
-    min_area = 0.5 * max_fpr * max_fpr
-    return float(0.5 * (1 + (part - min_area) / (max_fpr - min_area)))
-
-
-def _binary_ap(fps, tps):
-    if not tps or tps[-1] == 0:
-        # sklearn: recall is set to one; the sum over diff(recall) is 0
-        return 0.0
-    # (r - r_prev) * (t / (t + f)) per point, r = t / T, in C (lane metrics-apple)
-    rs = list(map(operator.truediv, tps, itertools.repeat(tps[-1])))
-    terms = map(operator.mul, map(operator.sub, rs, itertools.chain((0.0,), rs[:-1])),
-                map(operator.truediv, tps, map(operator.add, tps, fps)))
-    return float(max(0.0, _fsum(list(terms))))
 
 
 #: rank_epi kinds of the ranking averages (x_metrics/rank_epi.mojo, lane cpu2-l7-metrics S3b)
