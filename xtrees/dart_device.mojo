@@ -219,15 +219,15 @@ def dart_add_kernel(
 
 def dart_predict_kernel(
     units: Int64, n: Int64, d: Int32, k: Int32, nt: Int32, toff: I32P, colid: I32P, quesval: F32P, left: I32P,
-    values: F32P, coef: U64P, inits: U64P, x: F32P, out: U64P, bad: I32P,
+    values: F32P, coef: U64P, inits: U64P, x: F32P, dst: U64P, bad: I32P,
 ):
-    """out[c * n + i] = DART's float64 raw score of row i for class c
+    """dst[c * n + i] = DART's float64 raw score of row i for class c
     (`dart_predict_unit`): one unit per (class, row), its trees ascending."""
     var e = _tid()
     var stride = _tstride()
     while e < Int(units):
         dart_predict_unit(
-            e, Int(n), Int(d), Int(k), Int(nt), toff, colid, quesval, left, values, coef, inits, x, out, bad,
+            e, Int(n), Int(d), Int(k), Int(nt), toff, colid, quesval, left, values, coef, inits, x, dst, bad,
         )
         e += stride
 

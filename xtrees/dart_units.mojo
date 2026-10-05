@@ -308,11 +308,11 @@ def dart_add_unit(
 @always_inline
 def dart_predict_unit(
     e: Int, nn: Int, dd: Int, kk: Int, nt: Int, toff: I32P, colid: I32P, quesval: F32P, left: I32P, values: F32P,
-    coef: U64P, inits: U64P, x: F32P, out: U64P, bad: I32P,
+    coef: U64P, inits: U64P, x: F32P, dst: U64P, bad: I32P,
 ):
     """DART's raw score of row i for class c (lane cpu2-l5-trees,
     `x_trees_dart_predict`; e = c * nn + i, the class-major layout of
-    `_DARTBase._raw`): out[e] = inits[c] + sum over the trees j = c, c + kk,
+    `_DARTBase._raw`): dst[e] = inits[c] + sum over the trees j = c, c + kk,
     c + 2 kk, ... (ascending) of coef[j] x values[leaf of row i in tree j].
 
     The forest is concatenated: tree j's nodes are toff[j] .. toff[j + 1] of
@@ -357,4 +357,4 @@ def dart_predict_unit(
         else:
             bad[0] = Int32(1)
         j += kk
-    out[e] = acc
+    dst[e] = acc

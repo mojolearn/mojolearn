@@ -394,12 +394,12 @@ def group_totals_partials_kernel(
 def group_totals_final_kernel(
     partials: MutPointer[UInt64, MutAnyOrigin],
     part_count_in: Int32,
-    out: MutPointer[UInt64, MutAnyOrigin],
+    dst: MutPointer[UInt64, MutAnyOrigin],
 ):
     """Level 2, ONE block over the `ceil(groups / 256)` level-1 partials:
-    `out[0]` the largest pair count (double bits; the counts are
-    non-negative, so the larger bit pattern is the larger value), `out[1]`
-    the pair count, `out[2]` the total weight (thread `t` adds partials
+    `dst[0]` the largest pair count (double bits; the counts are
+    non-negative, so the larger bit pattern is the larger value), `dst[1]`
+    the pair count, `dst[2]` the total weight (thread `t` adds partials
     `t, t + 256, ...` ascending from +0.0, then the halving tree)."""
     var tid = Int(thread_idx.x)
     var parts = Int(part_count_in)
@@ -438,9 +438,9 @@ def group_totals_final_kernel(
         barrier()
         step //= 2
     if tid == 0:
-        out.unsafe_store(0, r_mx[0])
-        out.unsafe_store(1, r_sp[0])
-        out.unsafe_store(2, r_sw[0])
+        dst.unsafe_store(0, r_mx[0])
+        dst.unsafe_store(1, r_sp[0])
+        dst.unsafe_store(2, r_sw[0])
 
 
 def _launch_pair_logit_group_layout[estimation: Bool, second_order: Bool](
