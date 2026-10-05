@@ -633,9 +633,8 @@ for _slug, _cls, _blk, _cu in (("gaussian-nb", "GaussianNB", "cls", True),
                                ("categorical-nb", "CategoricalNB", "cat", True)):
     _add(_slug, xlane="prep", ours=_cls, task="clf", block=_blk, sk="sklearn.naive_bayes:" + _cls,
          cuml=("cuml.naive_bayes:" + _cls) if _cu else None,
-         ours_drop=("min_categories",) if _cls == "CategoricalNB" else (),
-         mism=(["min_categories = every code seen in X or Xq on scikit-learn; ours refuses the "
-                "option (option parity) and cuML has none"] if _cls == "CategoricalNB" else []))
+         mism=(["min_categories = every code seen in X or Xq on ours and scikit-learn; "
+                "cuML has no min_categories option"] if _cls == "CategoricalNB" else []))
 for _slug, _cls in (("multinomial-nb", "MultinomialNB"), ("complement-nb", "ComplementNB")):
     _add(_slug, xlane="prep", ours=_cls, task="clf", block="countclf",
          datasets=("text", "taxi", "istella"), sk="sklearn.naive_bayes:" + _cls,
