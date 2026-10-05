@@ -702,7 +702,14 @@ def loop_retry_compact_kernel[
         var orig = Int32(i)
         if first == Int32(0):
             orig = a2o[unsafe_offset=i]
-        items_s[unsafe_offset=rank] = work_items[unsafe_offset=i]
+        # Field by field, not `dst[k] = src[k]`: a whole NodeWorkItem copy
+        # between device pointers (an aggregate load + store of the padded
+        # {Int, Int32, {Int, Int}}) crashes Apple's Metal compiler ("failed to
+        # compile metallib"); same words either way.
+        ref w = work_items[unsafe_offset=i]
+        items_s[unsafe_offset=rank] = NodeWorkItem(
+            w.idx, w.depth, InstanceRange(w.instances.begin, w.instances.count)
+        )
         a2o_s[unsafe_offset=rank] = orig
     if i == Int(n_bound) - 1:
         hdr[unsafe_offset=LOOP_H_NEXT] = Int32(rank + flag)
@@ -744,7 +751,11 @@ def loop_retry_stage_kernel(
     if i == blk_last:
         block_totals[unsafe_offset = Int(block_idx.x)] = Int32(lp + own)
     if i < cur:
-        work_items[unsafe_offset=i] = items_s[unsafe_offset=i]
+        # Field by field: see `loop_retry_compact_kernel` (Metal compiler).
+        ref w = items_s[unsafe_offset=i]
+        work_items[unsafe_offset=i] = NodeWorkItem(
+            w.idx, w.depth, InstanceRange(w.instances.begin, w.instances.count)
+        )
         a2o[unsafe_offset=i] = a2o_s[unsafe_offset=i]
     else:
         work_items[unsafe_offset=i] = NodeWorkItem(
