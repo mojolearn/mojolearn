@@ -230,7 +230,8 @@ def dense_graph_laplacian(
     var cols = ctx.enqueue_create_buffer[DType.int32](m)
     var vals = ctx.enqueue_create_buffer[DType.float32](m)
     ctx.enqueue_function[dense_graph_fill_kernel](
-        dense.unsafe_ptr(), Int32(n), Int32(1 if drop_diag else 0), indptr.unsafe_ptr(),
+        # dense is a read-only argument; the kernel's slot is declared mutable (box-run-2 compile fix)
+        dense.unsafe_ptr().unsafe_mut_cast[True](), Int32(n), Int32(1 if drop_diag else 0), indptr.unsafe_ptr(),
         rows.unsafe_ptr(), cols.unsafe_ptr(), vals.unsafe_ptr(),
         grid_dim=(n, 1, 1), block_dim=(DG_TPB, 1, 1),
     )

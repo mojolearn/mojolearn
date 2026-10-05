@@ -17,6 +17,7 @@ from x_decomp.api import (
 )
 from x_decomp.device import DevExec
 from x_decomp.fa_fast import FA_FAST_APPLE, fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
+from std.sys.info import has_apple_gpu_accelerator
 from x_decomp.mcd_bmma import MCD_G1_GRAM, MCD_G1_AUDIT, mcd_g1_count, mcd_g1_last
 
 def mcd_g1_gram_on_py() raises -> PythonObject:
@@ -151,7 +152,10 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_ew_py]("x_decomp_dev_ew")
         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
         m.def_function[mcd_cov_reach_py]("x_decomp_mcd_cov_reach")
-        m.def_function[mcd_cov_probe_py]("x_decomp_mcd_cov_probe")
+        # Apple simdgroup MMA probe (tools/mcd_ordered_quality.py): NVIDIA/AMD
+        # cannot link air.simdgroup_* (box-run-2 compile fix)
+        comptime if has_apple_gpu_accelerator():
+            m.def_function[mcd_cov_probe_py]("x_decomp_mcd_cov_probe")
         comptime if MCD_ORDERED_COV:
             m.def_function[dev_mcd_cov_py]("x_decomp_dev_mcd_cov")
         m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
