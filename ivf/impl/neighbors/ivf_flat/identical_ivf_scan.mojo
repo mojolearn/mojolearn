@@ -68,10 +68,13 @@ def identical_ivf_scan_kernel[KM: Int](
     var dim = Int(dim_in)
     var s_q = stack_allocation[IIVF_QPB * IIVF_MAX_DIM, Float32, address_space=AddressSpace.SHARED]()
     var qv = s_q + warp * IIVF_MAX_DIM
+    # lane/no-dim-idn: the query is staged in shared memory when it fits
+    # IIVF_MAX_DIM, else read from global memory in the same order.
+    var staged_dim = dim if dim <= IIVF_MAX_DIM else 0
     var active = q < Int(n_queries)
     if active:
         var j = lane
-        while j < dim:
+        while j < staged_dim:
             qv[j] = ftz(queries[q * dim + j])
             j += WARP_SIZE
     barrier()
@@ -91,7 +94,7 @@ def identical_ivf_scan_kernel[KM: Int](
             var row = list_data + pos * dim
             var acc = Float32(0.0)
             for f in range(dim):
-                acc = ftz(identical_mul_add(qv[f], ftz(row[f]), acc))
+                acc = ftz(identical_mul_add((qv[f] if staged_dim > 0 else ftz(queries[q * dim + f])), ftz(row[f]), acc))
             var d = ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(list_norm[pos]))))
             if d <= Float32(0.0):
                 d = Float32(0.0)
@@ -183,12 +186,15 @@ def identical_ivf_scan_staged_kernel[KM: Int](
     var s_tile = stack_allocation[IIVF_QPB * WARP_SIZE * IIVF_CHP, Float32, address_space=AddressSpace.SHARED]()
     var s_steps = stack_allocation[IIVF_QPB, Int32, address_space=AddressSpace.SHARED]()
     var qv = s_q + warp * IIVF_MAX_DIM
+    # lane/no-dim-idn: the query is staged in shared memory when it fits
+    # IIVF_MAX_DIM, else read from global memory in the same order.
+    var staged_dim = dim if dim <= IIVF_MAX_DIM else 0
     var tile = s_tile + warp * WARP_SIZE * IIVF_CHP
     var active = q < Int(n_queries)
     var my_steps = 0
     if active:
         var j = lane
-        while j < dim:
+        while j < staged_dim:
             qv[j] = ftz(queries[q * dim + j])
             j += WARP_SIZE
         # this query's steps: ceil(list size / WARP_SIZE) summed over its probes
@@ -254,7 +260,7 @@ def identical_ivf_scan_staged_kernel[KM: Int](
             if mine:
                 var trow = tile + lane * IIVF_CHP
                 for f in range(cnt):
-                    acc = ftz(identical_mul_add(qv[c0 + f], ftz(trow[f]), acc))
+                    acc = ftz(identical_mul_add((qv[c0 + f] if staged_dim > 0 else ftz(queries[q * dim + c0 + f])), ftz(trow[f]), acc))
             barrier()
         if mine:
             var d = ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(list_norm[pos]))))
@@ -371,9 +377,12 @@ def identical_ivf_scan_grouped_kernel[KM: Int](
     var s_q = stack_allocation[GQPB * IIVF_MAX_DIM, Float32, address_space=AddressSpace.SHARED]()
     var tile = stack_allocation[WARP_SIZE * IIVF_CHP, Float32, address_space=AddressSpace.SHARED]()
     var qv = s_q + warp * IIVF_MAX_DIM
+    # lane/no-dim-idn: the query is staged in shared memory when it fits
+    # IIVF_MAX_DIM, else read from global memory in the same order.
+    var staged_dim = dim if dim <= IIVF_MAX_DIM else 0
     if active:
         var f = lane
-        while f < dim:
+        while f < staged_dim:
             qv[f] = ftz(queries[q * dim + f])
             f += WARP_SIZE
     barrier()
@@ -408,7 +417,7 @@ def identical_ivf_scan_grouped_kernel[KM: Int](
             if mine:
                 var trow = tile + lane * IIVF_CHP
                 for f in range(cnt):
-                    acc = ftz(identical_mul_add(qv[c0 + f], ftz(trow[f]), acc))
+                    acc = ftz(identical_mul_add((qv[c0 + f] if staged_dim > 0 else ftz(queries[q * dim + c0 + f])), ftz(trow[f]), acc))
             barrier()
         if mine:
             var d = ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(list_norm[pos]))))
