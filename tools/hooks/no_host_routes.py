@@ -517,6 +517,35 @@ class Tree:
                             r"|\bdevice_\w+\s*\(|\w+_device\w*\s*\(|thread_idx|block_idx")
     _LOOP = re.compile(r"^\s*for\s+\w+\s+in\s+range\(([^)]*)\)|^\s*while\b")
     _CALLEE = re.compile(r"\b([A-Za-z_]\w*)\s*[\[(]")
+    # a session object whose struct holds its own device contexts or buffers
+    # (`var contexts: List[DeviceContext]`): an export that downcasts a
+    # PythonObject to it drives that device through its methods, which the
+    # call closure (top-level functions only) cannot follow (lane cpu4-python)
+    _STRUCT = re.compile(r"^struct\s+(\w+)")
+    _DEV_FIELD = re.compile(r"^\s+var\s+\w+\s*:\s*[^=#]*\b(DeviceContext|DeviceBuffer)\b")
+    _DOWNCAST = re.compile(r"\bdowncast_value_ptr\[\s*(\w+)\s*\]")
+
+    def device_structs(self):
+        """Names of GPU-module structs with a DeviceContext/DeviceBuffer field."""
+        if hasattr(self, "_dev_structs"):
+            return self._dev_structs
+        out = set()
+        for p in self.gpu_mojo:
+            cur = None
+            for _, t in self.lines.get(p, []):
+                m = self._STRUCT.match(t)
+                if m:
+                    cur = m.group(1)
+                    continue
+                if cur is None:
+                    continue
+                if t[:1].strip() and not t.startswith((")", "]", "#", "@")):
+                    cur = None
+                    continue
+                if self._DEV_FIELD.match(t):
+                    out.add(cur)
+        self._dev_structs = out
+        return out
     _QCALLEE = re.compile(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*[\[(]")
 
     def _top_bodies(self, p):
@@ -582,6 +611,10 @@ class Tree:
                 fns = self._closure(q, g)
                 bodies = [self._top_bodies(a).get(b, [])[1:] for a, b in fns]
                 if any(self._ON_DEVICE.search(t) for body in bodies for _, t in body):
+                    continue
+                dev_structs = self.device_structs()
+                if any(m2.group(1) in dev_structs for body in bodies for _, t in body
+                       for m2 in self._DOWNCAST.finditer(t)):
                     continue
                 loops = False
                 for body in bodies:

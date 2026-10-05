@@ -1991,7 +1991,7 @@ def _dump_f32(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, 
     # span over the host buffer), no byte-by-byte copy into a List.
     var raw = host.unsafe_ptr().bitcast[UInt8]()
     with open(path, "w") as fh:
-        fh.write_bytes(Span[UInt8, MutAnyOrigin](ptr=raw, length=n * 4))
+        fh.write_bytes(Span(unsafe_ptr=raw, length=n * 4))
     _ = host^
 
 

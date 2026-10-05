@@ -43,7 +43,7 @@ exists), `np.argmin`'s rule. Only the chosen index and its criterion cross
 back. BITS: the criterion was float64 on the host from the float32
 log-likelihood; it is now that value rounded once to float32, on every
 vendor, and the host column takes the same formula
-(`bindings/hotpath_helpers.mojo::ic_running_min_f32_binding`).
+(`bindings/hotpath_helpers.mojo::ic_running_min_f32_host_binding`).
 """
 from std.math import inf, isfinite
 from std.gpu import block_dim, block_idx, thread_idx

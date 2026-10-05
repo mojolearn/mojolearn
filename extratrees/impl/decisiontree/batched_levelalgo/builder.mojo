@@ -4812,8 +4812,9 @@ def train_forest_classification_device_timed(
                     clock.tick(ctx, PHASE_HOST_QUEUE)
                     break
             if sabotage == FOREST_SAB_SCALAR_TREE and len(item_trees) > 0:
+                var first_tree = item_trees[0]  # fill may not alias the result (box-run-2)
                 item_trees = List[Int32](
-                    length=len(item_trees), fill=item_trees[0]
+                    length=len(item_trees), fill=first_tree
                 )
             var n_nodes = len(work_items)
             st_nodes += n_nodes
@@ -6167,8 +6168,9 @@ def train_forest_regression_device_timed(
                     clock.tick(ctx, PHASE_HOST_QUEUE)
                     break
             if sabotage == FOREST_SAB_SCALAR_TREE and len(item_trees) > 0:
+                var first_tree = item_trees[0]  # fill may not alias the result (box-run-2)
                 item_trees = List[Int32](
-                    length=len(item_trees), fill=item_trees[0]
+                    length=len(item_trees), fill=first_tree
                 )
             var n_nodes = len(work_items)
 

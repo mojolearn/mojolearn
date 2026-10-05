@@ -353,7 +353,7 @@ def ivf_write_resident_result(
 # ===========================================================================
 
 
-def ivf_merge_shards_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+def ivf_merge_shards_host_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     var shards = Int(py=params[0])
     var m = Int(py=params[1])
     var k = Int(py=params[2])
@@ -447,7 +447,7 @@ def ivf_merge_shards_binding(addrs: PythonObject, params: PythonObject) raises -
 # ===========================================================================
 
 
-def ivf_shard_plan_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+def ivf_shard_plan_host_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     var n = Int(py=params[0])
     var n_lists = Int(py=params[1])
     var shards = Int(py=params[2])

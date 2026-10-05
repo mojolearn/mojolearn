@@ -187,6 +187,12 @@ comptime OP_MLP_L2FOLD = 91
 comptime OP_MLP_ROWPART = 92
 comptime OP_MLP_PERM = 93
 comptime OP_MLP_EPOCH_LOSS = 94
+#: lane cpu4-python: p0[t] = t (float32, exact below 2^24): the unshuffled
+#: epoch order of the RNN fit, built on the executor.
+comptime OP_SEQ_IOTA = 95
+#: lane cpu4-python: ProphetForecaster's scaled time and seasonal phases on the
+#: executor (soft binary64, `sequence/prophet.mojo` op_prophet_prep).
+comptime OP_PROPHET_PREP = 96
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
@@ -889,6 +895,11 @@ def op_opt(t: Int, a: Args):
 
 def op_fill(t: Int, a: Args):
     a.p0.unsafe_store(t, a.f0)
+
+
+def op_seq_iota(t: Int, a: Args):
+    """p0[t] = t as float32 (t < 2^24: exact)."""
+    a.p0.unsafe_store(t, Float32(t))
 
 
 def op_copy(t: Int, a: Args):

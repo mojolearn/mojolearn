@@ -1468,7 +1468,7 @@ def compute_hist2_binary[
                 ctx, feature_offset, feature_first_fold_index, b_count,
                 cindex, target, weight, indices, partition,
                 slots.unsafe_ptr(), total_feature_count, full_pass,
-                multiplier, nx, ny, nz,
+                multiplier, nx, ny, nz, fixed_scale,
             )
             launch_pw_fold_doc_slots(
                 ctx, slots, bin_sums, full_pass, stride, multiplier
@@ -1739,7 +1739,7 @@ def compute_hist2_half_byte[
                 ctx, feature_offset, feature_first_fold_index, feature_folds,
                 half_byte_features_count, cindex, target, weight, indices,
                 partition, slots.unsafe_ptr(), hist_line_size, full_pass,
-                multiplier, nx, ny, nz,
+                multiplier, nx, ny, nz, fixed_scale,
             )
             launch_pw_fold_doc_slots(
                 ctx, slots, bin_sums, full_pass, stride, multiplier

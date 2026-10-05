@@ -307,7 +307,7 @@ struct IdentityTrace(Movable):
             )
             # the recorded bytes go to the file as they are (no copy loop)
             with open(dump_path, "w") as fh:
-                fh.write_bytes(Span(ptr=raw, length=n_bytes))
+                fh.write_bytes(Span(unsafe_ptr=raw, length=n_bytes))
         self.seq += 1
 
     def record_device[

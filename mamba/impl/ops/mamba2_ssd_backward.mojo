@@ -628,7 +628,7 @@ def mamba2_conv_backward_prefill_into(
             grid_dim=(_grid(tiles * cd), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
         ctx.enqueue_function[m2_fold_tiles_kernel](
-            out.d_w.unsafe_ptr(), out.d_b.unsafe_ptr(), out.d_w.unsafe_ptr(),
+            out.d_w.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), out.d_b.unsafe_ptr(), out.d_w.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             w.unsafe_ptr(), out.fold_part.unsafe_ptr(),
             Int32(tiles), Int32(cd * 5), Int32(cd * 4), Int32(0),
             grid_dim=(_grid(cd * 5), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
@@ -1258,7 +1258,7 @@ def _m2_da_product_into(
             grid_dim=(_grid(tiles * nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
         ctx.enqueue_function[m2_fold_tiles_kernel](
-            out.d_a.unsafe_ptr(), out.d_a.unsafe_ptr(), out.d_a_log.unsafe_ptr(),
+            out.d_a.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), out.d_a.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), out.d_a_log.unsafe_ptr(),
             a.unsafe_ptr(), out.fold_part.unsafe_ptr(),
             Int32(tiles), Int32(nh), Int32(nh), Int32(1),
             grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
@@ -1375,14 +1375,14 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         var per = m2_fold_rows_per_tile(bt)
         var tiles = m2_fold_tiles(bt)
         ctx.enqueue_function[m2_fold_rows_partial_kernel](
-            out.fold_part.unsafe_ptr(), out.d_dtraw.unsafe_ptr(),
-            out.d_dtraw.unsafe_ptr(),
+            out.fold_part.unsafe_ptr(), out.d_dtraw.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            out.d_dtraw.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             Int32(bt), Int32(nh), Int32(per), Int32(tiles), Int32(0),
             grid_dim=(_grid(tiles * nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
         ctx.enqueue_function[m2_fold_tiles_kernel](
-            out.d_dt_bias.unsafe_ptr(), out.d_dt_bias.unsafe_ptr(),
-            out.d_dt_bias.unsafe_ptr(), dt_bias.unsafe_ptr(),
+            out.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), out.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            out.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), dt_bias.unsafe_ptr(),
             out.fold_part.unsafe_ptr(),
             Int32(tiles), Int32(nh), Int32(nh), Int32(0),
             grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),

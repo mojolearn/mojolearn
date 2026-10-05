@@ -622,8 +622,8 @@ def device_distance_weights(
 def index_range_kernel(
     idx: MutPointer[UInt32, MutAnyOrigin],
     flag: MutPointer[Int32, MutAnyOrigin],
-    count: Int,
-    n_index: Int,
+    count: Int64,
+    n_index: Int64,
 ):
     """cpu3-neighbors: the precomputed-neighbours bounds check as a kernel,
     one thread per slot. A slot naming a row outside the reference data sets
@@ -631,7 +631,7 @@ def index_range_kernel(
     the caller zeroes it and raises on a nonzero value. Integer compares
     only, no float work, so no column can differ."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= count:
+    if Int64(i) >= count:  # Int64 args: Int is not DevicePassable (box-run-2)
         return
     if UInt64(idx.unsafe_load(i)) >= UInt64(n_index):
         flag.unsafe_store(0, Int32(1))
@@ -651,7 +651,7 @@ def device_check_index_range(
     var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.enqueue_memset(d_flag, Int32(0))
     ctx.enqueue_function[index_range_kernel](
-        d_idx.unsafe_ptr(), d_flag.unsafe_ptr(), count, n_index,
+        d_idx.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(count), Int64(n_index),
         grid_dim=(count + KNN_TPB_X - 1) // KNN_TPB_X, block_dim=KNN_TPB_X,
     )
     var h_flag = List[Int32](length=1, fill=Int32(0))
