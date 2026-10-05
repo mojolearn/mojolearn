@@ -15,13 +15,14 @@ and refuses `affinity` outside `{'nearest_neighbors', 'precomputed'}` and
 README's HAND-OFF.
 """
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from spectral.impl.spectral_predict_common import SpectralPredictionState
 from spectral.impl.cluster.detail.spectral import (
     SpectralClusteringParams,
     fit_predict_dataset_keep,
+    fit_predict_dense_keep,
     fit_predict_graph_keep,
 )
 from spectral.impl.sparse.coo import CooGraph
@@ -114,3 +115,23 @@ def fit_predict_connectivity_keep(
 ) raises:
     """`fit_predict_connectivity`, keeping the prediction data when `keep`."""
     fit_predict_graph_keep(ctx, to_cuvs(config), connectivity_graph, labels, embedding_out, state, keep, trace)
+
+
+def fit_predict_dense_connectivity_keep(
+    ctx: DeviceContext,
+    config: MLSpectralClusteringParams,
+    dense: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    m: Int,
+    var indptr: DeviceBuffer[DType.int32],
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+) raises:
+    """`fit_predict_connectivity_keep` on a DENSE device affinity whose row
+    offsets `dense_graph_scan` computed (lane cpu2-l9-neighbors)."""
+    fit_predict_dense_keep(
+        ctx, to_cuvs(config), dense, n_samples, m, indptr^, labels, embedding_out, state, keep, trace
+    )

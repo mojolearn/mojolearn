@@ -122,10 +122,13 @@ from gbdt.gpu_data.kernel.binarize import (
 from gbdt.methods.doc_parallel_boosting import model_approx_dim, predict
 from gbdt.models.ctr_value_table import expand_raw_columns
 from gbdt.models.kernel.add_bin_values import (
+    IDN_APPLY_WIDE,
     PRED_ALL_CHUNK_LEVELS,
     compute_bins_and_add_all_kernel,
     compute_bins_and_add_four_kernel,
     compute_bins_and_add_kernel,
+    launch_oblivious_apply_wide,
+    uniform_positive_depth,
 )
 from gbdt.gpu_data.sym_feat_switches import GBDT_PREDICT_PACKED
 from gbdt.models.model_text import load_model_text
@@ -373,7 +376,7 @@ struct ResidentGbdtModel(Movable):
             n_columns * BORDER_SLAB
         )
         var hb = h_borders.unsafe_ptr()
-        for f in range(n_columns):
+        for f in range(n_columns):  # small-loop(n_columns: model columns): checks each column's border count against the slab, model parameters
             if len(tm.borders[f]) >= BORDER_SLAB:
                 raise Error(
                     "feature " + String(f) + " has "
@@ -394,7 +397,7 @@ struct ResidentGbdtModel(Movable):
         var total_levels = 0
         var total_leaves = 0
         if oblivious:
-            for t in range(tm.model.size()):
+            for t in range(tm.model.size()):  # small-loop(tm.model.size: trees): sums the per-tree depths for slab sizes, model metadata
                 total_levels += tm.model.weak_models[t].structure.get_depth()
                 total_leaves += (
                     (1 << tm.model.weak_models[t].structure.get_depth())
@@ -422,10 +425,10 @@ struct ResidentGbdtModel(Movable):
         if oblivious:
             var lvl = 0
             var leaf = 0
-            for t in range(tm.model.size()):
+            for t in range(tm.model.size()):  # small-loop(tm.model.size: trees): stages each tree's split descriptors once at prepare, model parameters
                 ref weak = tm.model.weak_models[t]
                 var depth = weak.structure.get_depth()
-                for level in range(depth):
+                for level in range(depth):  # small-loop(depth: levels of one tree): one split descriptor per level, model parameters
                     ref cf = layout.features[
                         Int(weak.structure.splits[level].feature_id)
                     ]
@@ -458,7 +461,7 @@ struct ResidentGbdtModel(Movable):
                     )
                     lvl += 1
                 var n_values = (1 << depth) * approx_dim
-                for i in range(n_values):
+                for i in range(n_values):  # small-loop(n_values: leaves of one tree): stages one tree's leaf values once at prepare, model parameters
                     var v = Float32(0.0)
                     if i < len(weak.leaf_values):
                         v = weak.leaf_values[i]
@@ -596,7 +599,7 @@ struct ResidentGbdtModel(Movable):
                 )
                 self.ctx.synchronize()
                 var htp = ht.unsafe_ptr()
-                for f in range(self.n_columns):
+                for f in range(self.n_columns):  # small-loop(self.n_columns: model columns): one NaN-treatment code per column, launch arguments
                     var t = Int32(STAGE_SKIP)
                     if len(self.tm.borders[f]) != 0:
                         t = Int32(NAN_TREATMENT_AS_IS)
@@ -676,6 +679,23 @@ struct ResidentGbdtModel(Movable):
                 lvl += depth
                 leaf += (1 << depth) * self.approx_dim
             return
+        comptime if IDN_APPLY_WIDE:
+            # lane/fam2-gbdt F4 (candidate arm): one depth across the
+            # ensemble -> `APPLY_WIDE_TREES` trees per launch, same adds
+            var tree_depths = List[Int](capacity=self.tm.model.size())
+            for tw in range(self.tm.model.size()):  # small-loop(self.tm.model.size: trees): collects the per-tree depths, model metadata
+                tree_depths.append(
+                    self.tm.model.weak_models[tw].structure.get_depth()
+                )
+            var uniform = uniform_positive_depth(tree_depths)
+            if uniform > 0:
+                launch_oblivious_apply_wide(
+                    ctx, self.d_cindex.value(), self.d_off, self.d_shift,
+                    self.d_mask, self.d_bin, self.d_eq, self.d_vals,
+                    uniform, self.tm.model.size(), n_rows,
+                    self.d_cursor.value(), self.approx_dim,
+                )
+                return
         var t = 0
         while t < self.tm.model.size():
             var count = min(4, self.tm.model.size() - t)
@@ -683,7 +703,11 @@ struct ResidentGbdtModel(Movable):
             var d1 = self.tm.model.weak_models[t + 1].structure.get_depth() if count > 1 else 0
             var d2 = self.tm.model.weak_models[t + 2].structure.get_depth() if count > 2 else 0
             var d3 = self.tm.model.weak_models[t + 3].structure.get_depth() if count > 3 else 0
-            var split_offset = lvl if d0 > 0 else 0
+            # lane/fam2-gbdt fix: the group's records start at `lvl` whenever
+            # ANY of its trees has a level. This read `lvl if d0 > 0 else 0`,
+            # which handed a group led by a constant tree the ensemble's
+            # first records instead of its own.
+            var split_offset = lvl if d0 + d1 + d2 + d3 > 0 else 0
             ctx.enqueue_function[compute_bins_and_add_four_kernel](
                 self.d_cindex.value().unsafe_ptr(),
                 self.d_off.unsafe_ptr() + split_offset,

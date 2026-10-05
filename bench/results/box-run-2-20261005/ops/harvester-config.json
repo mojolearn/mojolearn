@@ -1,0 +1,21 @@
+{
+ "interval_seconds": 30,
+ "boxes": {
+  "nv": {
+   "target": "root@69.145.85.83", "ssh_args": ["-p", "10201"],
+   "renew_every_seconds": 1800,
+   "renew_argv": ["bash", "/Users/andrewhendel/mojolearn-wt/box-run-2/tools/dev_pod.sh", "extend", "brnv", "240"],
+   "renew_env": {"MOJOLEARN_DEVPOD_VIA_CENTRAL": "1"},
+   "runpod_key_file": "~/.mojolearn_runpod_key",
+   "r2_script": "/Users/andrewhendel/mojolearn-wt/box-run-2/tools/box_evidence_r2.sh",
+   "r2_prefix": "measurements/2026-10-05/box-run-2", "r2_every_seconds": 1800
+  },
+  "amd": {
+   "target": "root@107.170.70.88", "ssh_args": [],
+   "renew_every_seconds": 1800, "hold_seconds": 14400, "amd_deadman_hold": true,
+   "local_deadline_file": "/Users/andrewhendel/mojolearn-evidence/box-run-2/amd/amd_mac_deadline",
+   "r2_script": "/Users/andrewhendel/mojolearn-wt/box-run-2/tools/box_evidence_r2.sh",
+   "r2_prefix": "measurements/2026-10-05/box-run-2", "r2_every_seconds": 1800
+  }
+ }
+}

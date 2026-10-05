@@ -283,7 +283,8 @@ from std.gpu import block_dim, block_idx, thread_idx
 from core.launch_log import log_launch
 from core.launch_clock import log_launch_ctx
 from core.segmented_sort import segmented_sort_keys_f32
-from checks.numerics import ftz
+from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 
 
 # ===========================================================================
@@ -526,6 +527,43 @@ def custom_next_uniform_int_u64(
 #: `int n_threads = 256` (`quantiles.cuh:200`).
 comptime SAMPLE_BLOCK = 256
 
+# fam2-forests (2026-10-04), IDENTICAL, every vendor: the quantile bin-index
+# table is computed IN the quantile kernel, in exact integers
+# (`IDN_RF_QBIN_DEVICE`). DEVIATION 110 built it on the host in Float64
+# (Metal has no double) and uploaded it: host numeric work on a GPU fit.
+# `round((bin + 1) * sample_count / max_n_bins)` with round-half-away is
+# `floor((2 * (bin + 1) * sample_count + max_n_bins) / (2 * max_n_bins))` for
+# positive operands, exactly, on every device. BITS: equal to the Float64
+# form except where the Float64 product lands a rounding error across an
+# exact half (the integer form is the mathematically exact one); the host
+# column (`ensemble/host/rf_oracle.mojo: host_quantile_bin_index`) and
+# `quantile_bin_index` below change with it, so all four columns agree.
+# `-D MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF` restores the host table everywhere.
+comptime IDN_RF_QBIN_EXACT = not (
+    is_defined["MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime IDN_RF_QBIN_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and IDN_RF_QBIN_EXACT
+)
+
+
+@always_inline
+def quantile_bin_index_exact(
+    bin: Int, sample_count: Int, max_n_bins: Int
+) -> Int:
+    """`quantiles.cuh:90, 94-95` in exact integers (see
+    `IDN_RF_QBIN_DEVICE`). Every operand is positive and the numerator is
+    at most `2 * max_n_bins * sample_count + max_n_bins`, far inside 32
+    bits for any budget `compute_quantiles` accepts."""
+    var r = (2 * (bin + 1) * sample_count + max_n_bins) // (2 * max_n_bins)
+    var idx = r - 1
+    if idx < 0:
+        idx = 0
+    if idx > sample_count - 1:
+        idx = sample_count - 1
+    return idx
+
 #: `std::min(1024, max_n_bins)` (`quantiles.cuh:271`) -- the cap only.
 comptime QUANTILE_BLOCK_CAP = 1024
 
@@ -620,7 +658,14 @@ def compute_quantiles_batched_kernel(
     # launch shape requires.
     var bin = Int(thread_idx.x)
     while bin < Int(max_n_bins):
-        var idx = Int(bin_idx.unsafe_load(bin))
+        var idx: Int
+        comptime if IDN_RF_QBIN_DEVICE:
+            # `bin_idx` is not read on this arm (and not uploaded).
+            idx = quantile_bin_index_exact(
+                bin, Int(sample_count), Int(max_n_bins)
+            )
+        else:
+            idx = Int(bin_idx.unsafe_load(bin))
         quantiles.unsafe_store(
             col_q + bin, sorted_data.unsafe_load(col_d + idx)
         )
@@ -713,17 +758,20 @@ def quantile_bin_index(bin: Int, sample_count: Int, max_n_bins: Int) -> Int:
     toward zero, and `round` has already produced an integral value, so
     the truncation is exact and not a second rounding.
     """
-    var bin_width = Float64(sample_count) / Float64(max_n_bins)
-    var x = Float64(bin + 1) * bin_width
-    var r = floor(x)
-    if x - r >= Float64(0.5):
-        r = r + Float64(1.0)
-    var idx = Int(r) - 1
-    if idx < 0:
-        idx = 0
-    if idx > sample_count - 1:
-        idx = sample_count - 1
-    return idx
+    comptime if IDN_RF_QBIN_DEVICE:
+        return quantile_bin_index_exact(bin, sample_count, max_n_bins)
+    else:
+        var bin_width = Float64(sample_count) / Float64(max_n_bins)
+        var x = Float64(bin + 1) * bin_width
+        var r = floor(x)
+        if x - r >= Float64(0.5):
+            r = r + Float64(1.0)
+        var idx = Int(r) - 1
+        if idx < 0:
+            idx = 0
+        if idx > sample_count - 1:
+            idx = sample_count - 1
+        return idx
 
 
 def compute_quantiles(
@@ -783,7 +831,7 @@ def compute_quantiles(
     h_offsets.unsafe_ptr().unsafe_store(0, UInt64(0))
     h_offsets.unsafe_ptr().unsafe_store(1, UInt64(n_rows))
     var acc = UInt64(0)
-    for i in range(n_offsets):
+    for i in range(n_offsets):  # small-loop(n_offsets: rank offsets): comm_size + 1 words, one rank here
         acc += h_offsets.unsafe_ptr().unsafe_load(i)
         h_offsets.unsafe_ptr().unsafe_store(i, acc)
     # `:187-190`
@@ -871,14 +919,18 @@ def compute_quantiles(
     )
 
     # DEVIATION 110: their `:90` and `:94-95`, on the host.
+    # `IDN_RF_QBIN_DEVICE`: the kernel computes the index itself, so the
+    # host fill and the upload are compiled out; the buffers stay only as
+    # the kernel's (unread) argument and the keep-alive list below.
     var h_bin_idx = ctx.enqueue_create_host_buffer[DType.int32](max_n_bins)
-    for bin in range(max_n_bins):
-        h_bin_idx.unsafe_ptr().unsafe_store(
-            bin, Int32(quantile_bin_index(bin, sample_count, max_n_bins))
-        )
     var d_bin_idx = ctx.enqueue_create_buffer[DType.int32](max_n_bins)
-    log_launch_ctx(ctx, "xfer_quantiles_bin_idx")
-    ctx.enqueue_copy(dst_buf=d_bin_idx, src_ptr=h_bin_idx.unsafe_ptr())
+    comptime if not IDN_RF_QBIN_DEVICE:
+        for bin in range(max_n_bins):
+            h_bin_idx.unsafe_ptr().unsafe_store(
+                bin, Int32(quantile_bin_index(bin, sample_count, max_n_bins))
+            )
+        log_launch_ctx(ctx, "xfer_quantiles_bin_idx")
+        ctx.enqueue_copy(dst_buf=d_bin_idx, src_ptr=h_bin_idx.unsafe_ptr())
 
     # `:271-272` -- grid `n_cols`, block `min(1024, max_n_bins)`.
     var quantile_block = max_n_bins

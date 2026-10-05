@@ -319,7 +319,7 @@ comptime PW_FUSED_SEARCH = PW_FUSED_LEVEL and not is_defined[
 
 
 @always_inline
-def _fold_helper(
+def _fold_winner_kern(
     result_ids: MutPointer[UInt32, MutAnyOrigin],
     result_scores: MutPointer[Float32, MutAnyOrigin],
     block_count: Int,
@@ -509,9 +509,9 @@ def pw_resolve_pack_bins_kernel(
             g_fid, g_bin, g_score, g_gain,
         )
     else:
-        _fold_helper(r0_ids, r0_scores, Int(n0_in), g_fid, g_bin, g_score, g_gain)
-        _fold_helper(r1_ids, r1_scores, Int(n1_in), g_fid, g_bin, g_score, g_gain)
-        _fold_helper(r2_ids, r2_scores, Int(n2_in), g_fid, g_bin, g_score, g_gain)
+        _fold_winner_kern(r0_ids, r0_scores, Int(n0_in), g_fid, g_bin, g_score, g_gain)
+        _fold_winner_kern(r1_ids, r1_scores, Int(n1_in), g_fid, g_bin, g_score, g_gain)
+        _fold_winner_kern(r2_ids, r2_scores, Int(n2_in), g_fid, g_bin, g_score, g_gain)
 
     # `pw_pack_winner_kernel`'s descriptor, in registers
     var fid_c = Int(g_fid)

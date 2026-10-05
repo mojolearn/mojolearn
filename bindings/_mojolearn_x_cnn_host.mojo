@@ -31,6 +31,9 @@ from x_cnn.host.ops_host import pad2d_backward_host as pad2d_backward_impl
 from x_cnn.host.ops_host import spmm_host as spmm_impl
 from x_cnn.host.ops_host import gcn_norm_host as gcn_norm_impl
 from x_cnn.host.ops_host import csr_build_host_binding
+from x_cnn.host.ops_host import gcn_loops_host_binding
+# lane fam2-neural (2026-10-04): the device epoch's element functions, looped
+from x_cnn.ops import idn2_flags, epoch_key, epoch_rows_prm, epoch_rows_at, adam_hyper_base, adam_hyper_at, AH_ROW
 
 
 def fp(addr: PythonObject) raises -> FP:
@@ -989,6 +992,109 @@ def fit_epoch_r_binding(
     return PythonObject(steps)
 
 
+# ------------------------------------------------ lane fam2-neural: the device epoch
+# The GPU binding's `x_cnn_idn2_flags`, `x_cnn_epoch_rows`,
+# `x_cnn_adam_hyper_d` and `x_cnn_fit_epoch_d` contracts on the host: the
+# same element functions (`epoch_rows_at`, `adam_hyper_at`, and through
+# `softmax_xent_into` `blk_fold_at`) in a loop, so the order, the step
+# scalars and the losses are the device's words.
+
+
+def idn2_flags_binding() raises -> PythonObject:
+    return PythonObject(idn2_flags())
+
+
+def _seed64(lo: PythonObject, hi: PythonObject) raises -> UInt64:
+    return (UInt64(Int(py=hi)) << UInt64(32)) | UInt64(Int(py=lo))
+
+
+def _epoch_rows_fill(dst: IP, n: Int, shuffle: Bool, key: UInt64):
+    var prm = epoch_rows_prm(n, 0, shuffle, key)
+    var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var none = FP(unsafe_from_address=Int(dst))
+    for i in range(n):
+        epoch_rows_at(i, none, none, none, none, dst, pp)
+    _ = prm^
+
+
+def epoch_rows_binding(dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    var n = Int(py=params[0])
+    if n < 1 or n >= 2147483647:
+        raise Error("x_cnn epoch rows: 1 <= n < 2^31 - 1")
+    var key = epoch_key(_seed64(params[3], params[4]), Int(py=params[1]))
+    _epoch_rows_fill(ip(dst_addr), n, Int(py=params[2]) != 0, key)
+    return PythonObject(n)
+
+
+def _adam_rows(fparams: PythonObject, step0: Int, nsteps: Int) raises -> List[Float32]:
+    """`adam_hyper_at`'s rows of steps step0 .. step0 + nsteps - 1."""
+    if Int(py=len(fparams)) != 6:
+        raise Error("x_cnn adam hyper: fparams is [lr, beta1, beta2, eps, weight_decay, decoupled]")
+    var base = adam_hyper_base(
+        Float64(py=fparams[0]), Float64(py=fparams[1]), Float64(py=fparams[2]), Float64(py=fparams[3]),
+        Float64(py=fparams[4]), Float64(py=fparams[5]),
+    )
+    var out = List[Float32](length=nsteps * AH_ROW + 1, fill=Float32(0))
+    var prm: List[Int32] = [Int32(step0)]
+    var pb = base.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var po = out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    for t in range(nsteps):
+        adam_hyper_at(t, pb, po, po, po, pp, pp)
+    _ = base^
+    _ = prm^
+    return out^
+
+
+def adam_hyper_d_binding(dst_addr: PythonObject, params: PythonObject, fparams: PythonObject) raises -> PythonObject:
+    var step0 = Int(py=params[0])
+    var nsteps = Int(py=params[1])
+    if step0 < 1 or nsteps < 0:
+        raise Error("x_cnn adam hyper: step0 >= 1, nsteps >= 0")
+    var rows = _adam_rows(fparams, step0, nsteps)
+    var dst = f64_ptr(Int(py=dst_addr))
+    for e in range(nsteps * AH_ROW):
+        dst[e] = Float64(rows[e])
+    return PythonObject(nsteps)
+
+
+def fit_epoch_d_binding(
+    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
+) raises -> PythonObject:
+    """The GPU binding's `x_cnn_fit_epoch_d` contract: the epoch's order and
+    hyper rows from the device's element functions, then the `_r` entry's
+    loop on them (its losses are `softmax_xent_into`'s blocked fold)."""
+    var n = Int(py=params[0])
+    var batch = Int(py=params[1])
+    var adam = Int(py=params[2]) != 0
+    var done = Int(py=params[3])
+    if n <= 0 or batch <= 0 or n >= 2147483647 or done < 0:
+        raise Error("x_cnn fit epoch: positive rows and batch required")
+    var key = epoch_key(_seed64(params[6], params[7]), Int(py=params[4]))
+    var steps = (n + batch - 1) // batch
+    var rows = List[Int32](length=n, fill=Int32(0))
+    _epoch_rows_fill(rows.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, Int(py=params[5]) != 0, key)
+    var nh = 9 if adam else 6
+    var hyp = List[Float64](length=steps * nh, fill=Float64(0))
+    if adam:
+        var r32 = _adam_rows(fparams, done + 1, steps)
+        for e in range(steps * nh):
+            hyp[e] = Float64(r32[e])
+    else:
+        if Int(py=len(fparams)) != 6:
+            raise Error("x_cnn fit epoch: SGD's fparams is [lr, momentum, weight_decay, dampening, nesterov, 0]")
+        for st in range(steps):
+            for e in range(5):
+                hyp[st * 6 + e] = Float64(Float32(Float64(py=fparams[e])))
+            hyp[st * 6 + 5] = Float64(1) if done + st == 0 else Float64(0)
+    var out = fit_epoch_r_binding(
+        spec, PythonObject(Int(rows.unsafe_ptr())), PythonObject(Int(hyp.unsafe_ptr())), losses_addr, params,
+    )
+    _ = rows^
+    _ = hyp^
+    return out
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -1005,6 +1111,7 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[x_cnn_host_vendor_binding]("x_cnn_host_vendor")
         m.def_function[x_cnn_host_column_binding]("x_cnn_host_column")
         m.def_function[csr_build_host_binding]("x_cnn_csr_build")
+        m.def_function[gcn_loops_host_binding]("x_cnn_gcn_loops")
         m.def_function[x_cnn_host_sabotage_binding]("x_cnn_host_sabotage")
         m.def_function[gemm_binding]("x_cnn_gemm")
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")
@@ -1051,6 +1158,10 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[sgd_binding]("x_cnn_sgd_r")
         m.def_function[adam_binding]("x_cnn_adam_r")
         m.def_function[fit_epoch_r_binding]("x_cnn_fit_epoch_r")
+        m.def_function[idn2_flags_binding]("x_cnn_idn2_flags")
+        m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
+        m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
+        m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn_host: ", e))

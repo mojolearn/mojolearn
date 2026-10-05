@@ -12,9 +12,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.curve import fit_umap_curve
 from umap.graph import fuzzy_simplicial_graph
 from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
-from umap.optimizer import optimize_layout_identical
-from umap.sparse_optimizer import optimize_sparse_layout_identical, sparse_weight_at
-from umap.transform import transform_memberships, initialize_transform, refine_transform
+from umap.optimizer import optimize_layout_identical_reference
+from umap.sparse_optimizer import optimize_sparse_layout_identical_reference, sparse_weight_at
+from umap.host.umap_oracle import host_transform_memberships, host_initialize_transform, host_refine_transform
 
 
 def emit(name: String, values: List[Float32]) raises:
@@ -52,7 +52,7 @@ def main() raises:
 
     var initial: List[Float32] = [-1, 0, 1, 0, 0, -1, 0, 1]
     var weights: List[Float32] = [0, 1, 0.25, 1, 1, 0, 1, 0.25, 0.25, 1, 0, 1, 1, 0.25, 1, 0]
-    var result = optimize_layout_identical(initial, weights, 4, 2, 5, seed=UInt64(23))
+    var result = optimize_layout_identical_reference(initial, weights, 4, 2, 5, seed=UInt64(23))
     # Independent scalar NumPy transcription, tools/umap_optimizer_oracle.py.
     var expected: List[Float32] = [1.2685416, -0.6511254, 2.4828997, 0.14019474, 3.115171, -2.3527641, 0.102951676, -0.2911698]
     for i in range(len(expected)):
@@ -82,18 +82,18 @@ def main() raises:
         var start = List[Float32]()
         for i in range(3 * components):
             start.append(Float32(i % 5 - 2) * Float32(0.25))
-        var dense_result = optimize_layout_identical(start, graph.weights, 3, components, 7, a=custom.a, b=custom.b, seed=UInt64(29))
-        var sparse_result = optimize_sparse_layout_identical(start, sparse, 3, components, 7, a=custom.a, b=custom.b, seed=UInt64(29))
+        var dense_result = optimize_layout_identical_reference(start, graph.weights, 3, components, 7, a=custom.a, b=custom.b, seed=UInt64(29))
+        var sparse_result = optimize_sparse_layout_identical_reference(start, sparse, 3, components, 7, a=custom.a, b=custom.b, seed=UInt64(29))
         equal(dense_result, sparse_result, "dense/CSR optimizer")
         emit("graph_layout_" + String(components), dense_result)
 
         var query_distances: List[Float32] = [0, 1, 2, 0.5, 1.5, 3]
         var query_ids: List[UInt32] = [0, 1, 2, 1, 0, 2]
-        var strengths = transform_memberships(query_distances, 2, 3)
+        var strengths = host_transform_memberships(query_distances, 2, 3)
         var before = start.copy()
-        var query_init = initialize_transform(query_ids, strengths, start, 2, 3, 3, components)
-        var transformed = refine_transform(query_init, start, query_ids, strengths, 2, 3, 3, components, 4, curve.a, curve.b, UInt64(19))
-        var again = refine_transform(query_init, start, query_ids, strengths, 2, 3, 3, components, 4, curve.a, curve.b, UInt64(19))
+        var query_init = host_initialize_transform(query_ids, strengths, start, 2, 3, 3, components)
+        var transformed = host_refine_transform(query_init, start, query_ids, strengths, 2, 3, 3, components, 4, curve.a, curve.b, UInt64(19))
+        var again = host_refine_transform(query_init, start, query_ids, strengths, 2, 3, 3, components, 4, curve.a, curve.b, UInt64(19))
         equal(transformed, again, "repeated transform")
         equal(start, before, "frozen transform training coordinates")
         emit("transform_memberships_" + String(components), strengths)

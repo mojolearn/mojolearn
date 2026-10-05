@@ -1,8 +1,10 @@
---- a/x_cnn/ops.mojo	2026-09-27 12:16:05
-+++ b/x_cnn/ops.mojo	2026-09-27 12:16:05
-@@ -670,7 +670,8 @@
-     var lo = _g(q, r)
-     var hi = _g(q, r + 1)
+diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
+index 64c9b4267..29eddb298 100644
+--- a/x_cnn/ops.mojo
++++ b/x_cnn/ops.mojo
+@@ -1133,7 +1133,8 @@ def spmm_at(i: Int, vals: FP, h: FP, dst: FP, f3: FP, q: IP, p: IP):
+         dst.unsafe_store(i, d)
+         return
      var acc = Float32(0)
 -    for e in range(lo, hi):
 +    for t in range(hi - lo):

@@ -45,6 +45,20 @@ def _ordered_add_kernel(
         total[i] = ftz(identical_mul_add(Float32(1), ftz(total[i]), ftz(shard[i])))
 
 
+def _upload_from(
+    ctx: DeviceContext, src: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """Lane cpu4-python: `n` floats from caller memory into a new device
+    buffer in one copy (`_upload` walked a List into a host buffer first)."""
+    var d = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    if n > 0:
+        var head = d.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_buf=head, src_ptr=src)
+        ctx.synchronize()
+        _ = head^
+    return d^
+
+
 struct ByteParallelTrainer(Movable, Writable):
     var contexts: List[DeviceContext]
     var trainers: List[ByteTrainer]
@@ -111,10 +125,10 @@ struct ByteParallelTrainer(Movable, Writable):
         comptime if STEP_PHASE_TIMERS:
             if len(devices) > 1:
                 raise Error("byte LM parallel: process-global phase counters cannot profile concurrent devices")
-        for i in range(len(devices)):
+        for i in range(len(devices)):  # small-loop(devices: device ids, at most the visible GPUs): negative and duplicate device-id refusal
             if devices[i] < 0:
                 raise Error("byte LM parallel: negative device index")
-            for j in range(i):
+            for j in range(i):  # small-loop(i: earlier device ids, at most the visible GPUs): duplicate-id refusal on the device list
                 if devices[i] == devices[j]:
                     raise Error("byte LM parallel: duplicate device index")
         if pool_optimizer and len(devices) > shape.n_total():
@@ -126,7 +140,7 @@ struct ByteParallelTrainer(Movable, Writable):
         self.logical_shards = shards
         # Each physical replica begins from exactly the same host bytes.
         try:
-            for i in range(len(devices)):
+            for i in range(len(devices)):  # small-loop(devices: device ids, at most the visible GPUs): one context and replica trainer per device
                 self.contexts.append(DeviceContext(device_id=devices[i]))
                 self.trainers.append(ByteTrainer(self.contexts[i], p, m, v,
                     flags, completed, opt, shape,
@@ -168,11 +182,11 @@ struct ByteParallelTrainer(Movable, Writable):
     def broadcast_parameters(mut self) raises:
         # Every source range is authoritative on exactly one device. Copies
         # never overwrite another device's owned range.
-        for source in range(len(self.trainers)):
+        for source in range(len(self.trainers)):  # small-loop(trainers: replicas, one per device): device-to-device parameter broadcast per owner range
             var first = self.trainers[source].buffers.optimizer_first
             var n = self.trainers[source].buffers.optimizer_count
             var part = self.trainers[source].buffers.param.create_sub_buffer[DType.float32](first,n)
-            for target in range(len(self.trainers)):
+            for target in range(len(self.trainers)):  # small-loop(trainers: replicas, one per device): device-to-device copy of one owner range to each replica
                 if target == source:
                     continue
                 var dest = self.trainers[target].buffers.param.create_sub_buffer[DType.float32](first,n)
@@ -236,15 +250,15 @@ struct ByteParallelTrainer(Movable, Writable):
         self.busy = False
         return loss
 
-    def apply_gradient(mut self, total: List[Float32]) raises:
+    def apply_gradient(mut self, total: MutPointer[Float32, MutUntrackedOrigin]) raises:
         """Commit one step with a summed gradient folded elsewhere (the same
         ordered left fold `step` runs, done by the caller). From here on this
         is `step`'s replicated tail verbatim: the total lands in
-        `buffers.grad`, is scanned, and `byte_update_device` updates."""
+        `buffers.grad`, is scanned, and `byte_update_device` updates.
+        Lane cpu4-python: `total` is the caller's `n_total` floats, copied
+        straight to the device (no host List, no host staging loop)."""
         self._require_single_replicated()
         var n = self.trainers[0].config.n_total()
-        if len(total) != n:
-            raise Error("byte LM parallel: summed gradient has the wrong length")
         if self.trainers[0].completed_steps >= 999999:
             raise Error("byte LM parallel: step bound reached")
         self.busy = True
@@ -252,7 +266,7 @@ struct ByteParallelTrainer(Movable, Writable):
         self.trainers[0].grad_step = -1
         self.trainers[0].healthy = False
         try:
-            var staged = _upload(self.contexts[0], total)
+            var staged = _upload_from(self.contexts[0], total, n)
             _copy_into(self.contexts[0], self.trainers[0].buffers.grad, staged, 0, 0, n)
             self.contexts[0].synchronize()
             _ = staged^
@@ -276,15 +290,17 @@ struct ByteParallelTrainer(Movable, Writable):
     # folds it in; `fold_add` folds in a gradient held on the host (a shard
     # computed before the prefix arrived); `fold_export` downloads the total.
 
-    def fold_reset(mut self, prefix: List[Float32]) raises:
+    def fold_clear(mut self) raises:
+        """Start this worker's fold empty."""
+        self._require_single_replicated()
+        self.fold_started = False
+
+    def fold_reset(mut self, prefix: MutPointer[Float32, MutUntrackedOrigin]) raises:
+        """Start the fold from a received prefix: the caller's `n_total`
+        floats, copied straight to the device (lane cpu4-python)."""
         self._require_single_replicated()
         var n = self.trainers[0].config.n_total()
-        if len(prefix) == 0:
-            self.fold_started = False
-            return
-        if len(prefix) != n:
-            raise Error("byte LM parallel: the fold prefix has the wrong length")
-        var staged = _upload(self.contexts[0], prefix)
+        var staged = _upload_from(self.contexts[0], prefix, n)
         _copy_into(self.contexts[0], self.total.value(), staged, 0, 0, n)
         self.contexts[0].synchronize()
         _ = staged^
@@ -304,12 +320,12 @@ struct ByteParallelTrainer(Movable, Writable):
         self.contexts[0].synchronize()
         return loss
 
-    def fold_add(mut self, gradient: List[Float32]) raises:
+    def fold_add(mut self, gradient: MutPointer[Float32, MutUntrackedOrigin]) raises:
+        """Fold in a gradient held on the host: the caller's `n_total`
+        floats, copied straight to the device (lane cpu4-python)."""
         self._require_single_replicated()
         var n = self.trainers[0].config.n_total()
-        if len(gradient) != n:
-            raise Error("byte LM parallel: the folded gradient has the wrong length")
-        var staged = _upload(self.contexts[0], gradient)
+        var staged = _upload_from(self.contexts[0], gradient, n)
         if not self.fold_started:
             _copy_into(self.contexts[0], self.total.value(), staged, 0, 0, n)
             self.fold_started = True
@@ -345,7 +361,7 @@ struct ByteParallelTrainer(Movable, Writable):
             raise Error("byte LM parallel: step bound reached")
         for i in range(len(shards)):
             byte_validate_tokens(shards[i], self.trainers[0].config)
-        for i in range(len(self.trainers)):
+        for i in range(len(self.trainers)):  # small-loop(trainers: replicas, one per device): replica health and step-count admission
             if not self.trainers[i].healthy or self.trainers[i].completed_steps != completed:
                 raise Error("byte LM parallel: replica state mismatch")
         self.busy = True
@@ -387,7 +403,7 @@ struct ByteParallelTrainer(Movable, Writable):
                     _gradient_task(0)
                 else:
                     host_parallelize(_gradient_task, active)
-                for rank in range(active):
+                for rank in range(active):  # small-loop(active: replicas in this wave, one per device): failed-shard flags of the wave
                     if failed[rank] != 0:
                         raise Error("byte LM parallel: gradient shard " + String(start + rank) + " failed")
                 # Every parameter keeps the same logical left fold. Owners
@@ -450,7 +466,7 @@ struct ByteParallelTrainer(Movable, Writable):
             # owner ranges. Complete ALL copies/scans before any update.
             for i in range(len(self.trainers)):
                 if self.pool_optimizer:
-                    for owner in range(width):
+                    for owner in range(width):  # small-loop(width: optimizer owners, one per device): device-to-device gradient range transfers
                         var first = self.trainers[owner].buffers.optimizer_first
                         var owned = self.trainers[owner].buffers.optimizer_count
                         var target = self.trainers[i].buffers.grad.create_sub_buffer[DType.float32](first,owned)

@@ -36,22 +36,35 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_exp, identical_sqrt
 from sequence.fit_team import PT_DONE, TEAM_REC, SeqTeam, _ldi, _spend, _sti
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from sequence.prophet import MEM
+from sequence.prophet import COOP_NT, COOP_PW, MEM, PROPHET_COOP_IDN
 
 #: the switch: FAST on Apple by default since the M3 A/B (lane
 #: apple-fast-prophetspeed 805207038, n=1: prophet synthetic 431 -> 45 ms,
 #: taxi-hourly 360 -> 43 ms; forecast_rmse 1.015 -> 1.015, 32.03 -> 32.04).
 #: -D MOJOLEARN_PROPHET_COOP_OFF turns it off; the old -D MOJOLEARN_PROPHET_COOP
 #: is harmless. IDENTICAL and every other vendor keep prophet_fit_team.
+#: lane/fam2-timeseries (2026-10-04): IDENTICAL ON EVERY VENDOR too
+#: (PROPHET_COOP_IDN, sequence/prophet.mojo). The fold orders here are a
+#: function of the block size and the 32-lane group alone (a thread's
+#: strided chain, the shuffle_xor butterfly inside each group of 32, the
+#: groups' partials ascending), so NVIDIA, AMD (a 64-lane wavefront holds two
+#: groups; offsets of at most 16 stay inside one) and Apple fold the same
+#: way, and the host column replays that order (`_coop_fg`, `_dot_coop`).
+#: -D MOJOLEARN_IDN_PROPHET_COOP_OFF=1 restores prophet_fit_team's chain.
 comptime PROPHET_COOP = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_PROPHET_COOP_OFF"]()
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_PROPHET_COOP_OFF"]()
+    )
+    or PROPHET_COOP_IDN
 )
-#: threads of a series' block on the cooperative path
-comptime PROPHET_COOP_TPB = 256
-#: simdgroup width (Apple)
-comptime PW = 32
+#: threads of a series' block on the cooperative path: prophet.mojo's
+#: COOP_NT, the host replay's constant, imported so the two never drift
+#: (lane/review-fixes)
+comptime PROPHET_COOP_TPB = COOP_NT
+#: simdgroup width: prophet.mojo's COOP_PW, imported likewise
+comptime PW = COOP_PW
 
 
 def prophet_coop_vrow(P: Int) -> Int:

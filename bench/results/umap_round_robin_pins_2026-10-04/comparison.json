@@ -1,0 +1,426 @@
+{
+  "schema": "mojolearn.umap-pin-refresh-evidence.v1",
+  "status": "MATCHED_64_WORDS",
+  "qualification": false,
+  "reason": "Shared spectral initialization changed from cyclic Jacobi to round-robin projected eigensolve (844929695, a97730465). September10 pins predate this transition.",
+  "compared_fields": [
+    "input_bits",
+    "config",
+    "actual_bits",
+    "golden_bits"
+  ],
+  "compared_words": 64,
+  "old_and_current_cases": [
+    {
+      "case": "public",
+      "input_bits": [
+        [
+          0
+        ],
+        [
+          1065353216
+        ],
+        [
+          1074580685
+        ],
+        [
+          1082130432
+        ],
+        [
+          1087373312
+        ],
+        [
+          1092616192
+        ],
+        [
+          1097334784
+        ],
+        [
+          1101004800
+        ]
+      ],
+      "config": {
+        "n_neighbors": 3,
+        "n_epochs": 4,
+        "random_state": 19
+      },
+      "actual_bits": [
+        [
+          3245070127,
+          1074041940
+        ],
+        [
+          3228888229,
+          3239233542
+        ],
+        [
+          3237928437,
+          3203993864
+        ],
+        [
+          3215931676,
+          1091897537
+        ],
+        [
+          1068472046,
+          1091895757
+        ],
+        [
+          1090606104,
+          3207501342
+        ],
+        [
+          1092535949,
+          3235377203
+        ],
+        [
+          1091864368,
+          3227045136
+        ]
+      ],
+      "golden_bits": [
+        [
+          3245070127,
+          1074041914
+        ],
+        [
+          3228888277,
+          3239233534
+        ],
+        [
+          3237928445,
+          3203993852
+        ],
+        [
+          3215931711,
+          1091897538
+        ],
+        [
+          1068472055,
+          1091895758
+        ],
+        [
+          1090606105,
+          3207501407
+        ],
+        [
+          1092535954,
+          3235377206
+        ],
+        [
+          1091864361,
+          3227045131
+        ]
+      ],
+      "golden_matches": false,
+      "repeat_matches": true
+    },
+    {
+      "case": "broader",
+      "input_bits": [
+        [
+          0,
+          0,
+          1052770304
+        ],
+        [
+          1040187392,
+          1063256064,
+          1056964608
+        ],
+        [
+          1048576000,
+          1071644672,
+          1063256064
+        ],
+        [
+          1052770304,
+          1056964608,
+          1069547520
+        ],
+        [
+          1056964608,
+          1068498944,
+          0
+        ],
+        [
+          1059061760,
+          1040187392,
+          1066401792
+        ],
+        [
+          1061158912,
+          1065353216,
+          1040187392
+        ],
+        [
+          1063256064,
+          1072693248,
+          1071644672
+        ],
+        [
+          1065353216,
+          1059061760,
+          1067450368
+        ],
+        [
+          1066401792,
+          1069547520,
+          1065353216
+        ],
+        [
+          1067450368,
+          1048576000,
+          1065353216
+        ],
+        [
+          1068498944,
+          1066401792,
+          1067450368
+        ],
+        [
+          1069547520,
+          1073741824,
+          1071644672
+        ],
+        [
+          1070596096,
+          1061158912,
+          1040187392
+        ],
+        [
+          1071644672,
+          1070596096,
+          1066401792
+        ],
+        [
+          1072693248,
+          1052770304,
+          0
+        ]
+      ],
+      "config": {
+        "n_epochs": 12,
+        "n_components": 3,
+        "random_state": 7,
+        "n_neighbors": 5,
+        "min_dist": 0.25,
+        "spread": 1.5,
+        "set_op_mix_ratio": 0.5
+      },
+      "actual_bits": [
+        [
+          3226496988,
+          1086260803,
+          3227178532
+        ],
+        [
+          1036433636,
+          1089708082,
+          3216624980
+        ],
+        [
+          1082121428,
+          1082849707,
+          3221162148
+        ],
+        [
+          3238030950,
+          3230010804,
+          3201814643
+        ],
+        [
+          1069619607,
+          1091856918,
+          3196773142
+        ],
+        [
+          3238703784,
+          3227505642,
+          3205230108
+        ],
+        [
+          1062341049,
+          1091962552,
+          3206498967
+        ],
+        [
+          1085703270,
+          3229833403,
+          1071494349
+        ],
+        [
+          3236548492,
+          3229965442,
+          1050598591
+        ],
+        [
+          1086962241,
+          3219069718,
+          3204772983
+        ],
+        [
+          3235819352,
+          3232328960,
+          3168034018
+        ],
+        [
+          1082114460,
+          3219719116,
+          1059509386
+        ],
+        [
+          1089551542,
+          3231064595,
+          1052606214
+        ],
+        [
+          3225822996,
+          1074975848,
+          1093105330
+        ],
+        [
+          1088974171,
+          3224322694,
+          3203894955
+        ],
+        [
+          3223456843,
+          1081193603,
+          1092231418
+        ]
+      ],
+      "golden_bits": [
+        [
+          3226496972,
+          1086260800,
+          3227178549
+        ],
+        [
+          1036433136,
+          1089708092,
+          3216624968
+        ],
+        [
+          1082121398,
+          1082849706,
+          3221162147
+        ],
+        [
+          3238030930,
+          3230010873,
+          3201815036
+        ],
+        [
+          1069619787,
+          1091856905,
+          3196773278
+        ],
+        [
+          3238703747,
+          3227505849,
+          3205230566
+        ],
+        [
+          1062341170,
+          1091962548,
+          3206499130
+        ],
+        [
+          1085703253,
+          3229833415,
+          1071494797
+        ],
+        [
+          3236548430,
+          3229965542,
+          1050598045
+        ],
+        [
+          1086962188,
+          3219069802,
+          3204772706
+        ],
+        [
+          3235819470,
+          3232329010,
+          3168047036
+        ],
+        [
+          1082114657,
+          3219719233,
+          1059509093
+        ],
+        [
+          1089551538,
+          3231064606,
+          1052606481
+        ],
+        [
+          3225822969,
+          1074975842,
+          1093105332
+        ],
+        [
+          1088974099,
+          3224322659,
+          3203894671
+        ],
+        [
+          3223456741,
+          1081193691,
+          1092231400
+        ]
+      ],
+      "golden_matches": false,
+      "repeat_matches": true
+    }
+  ],
+  "pending": "H100 further corroboration; no broad PTX or release admission",
+  "inputs": {
+    "apple": {
+      "file": "/Users/andrewhendel/mojolearn-evidence/wheel-split-20261004/umap-golden-investigation/mojolearn-umap-8ae-control.json",
+      "sha256": "2e1aff89bba6cef57d6785345f6cc6141fd9be6489fdda5b8a78986c08d0912a",
+      "source_commit": "8ae4346b1fba67dce59f5a61da0b73c5febd0644"
+    },
+    "amd": {
+      "file": "/Users/andrewhendel/mojolearn-evidence/wheel-split-20261004/5c156c5f225e/amd-oob-comparison/lease/results/extra-capture.json",
+      "sha256": "45d0e57c50861e1e102200af22965513f11f10551d85cc5b94d027060ec09084",
+      "source_commit": "8ae4346b1fba67dce59f5a61da0b73c5febd0644"
+    },
+    "ada-native": {
+      "file": "/Users/andrewhendel/mojolearn-evidence/wheel-split-20261004/5c156c5f225e/nvidia-validation-ada/live-umap/extra-native-reference.json",
+      "sha256": "dca6a125d8e43521c0b2f515c0b1bbf01a3757ddd23c1ef01462187f6c959738",
+      "source_commit": "5c156c5f225efc809f76f46c24b20b52e885ae5d"
+    },
+    "ada-ptx": {
+      "file": "/Users/andrewhendel/mojolearn-evidence/wheel-split-20261004/5c156c5f225e/nvidia-validation-ada/live-umap/extra-baseline.json",
+      "sha256": "031a380a4e4fca6312d18c5d7fdcdc8e5bade1c38a4f3b646ee67391501a8e7b",
+      "source_commit": "5c156c5f225efc809f76f46c24b20b52e885ae5d"
+    }
+  },
+  "historical_stage_evidence": {
+    "current-stage-diff.json": "f006768fbc04448a76169a59fae7261708fa2298019bd4d30b61a0d53e267ae4",
+    "current-broader-stage-diff.json": "5d20b7ed3b257ff66774c219ce67c549cd0fd883cca3655871859fc0ab027a5e",
+    "844929695-projected-eigensolve.patch": "39d6fa9b86c576e79822f61db1d33ca72c735b000320c0c8263fa4d5a47f9cdf",
+    "a97730465-projected-eigensolve.patch": "9f500af710e570380a1c634fa56e601c9a5d62fffd951b0707338422b014c668"
+  },
+  "validation": {
+    "tests": 10,
+    "failures": 0,
+    "errors": 0,
+    "source_commit": "5c156c5f225efc809f76f46c24b20b52e885ae5d",
+    "evidence_file": "/Users/andrewhendel/mojolearn-evidence/wheel-split-20261004/umap-golden-investigation/updated-pin-metal-test.json",
+    "evidence_sha256": "13e83408063a38fa9da3875e934eb20bdcdc8b64493137ce39c6ce8dac2508ab",
+    "test_sha256": "6fd3a8e6d5cdf93d9ba0567cc97f8bf962db9483501773fd28a10d8359710774",
+    "guard": "tools/mac_slot.py metal;300second process timeout",
+    "installed_wheel_check": {
+      "schema": "mojolearn.umap-installed-wheel-binding-check.v1",
+      "wheel": "/Users/andrewhendel/mojolearn-evidence/wheel-split-20261004/5c156c5f225e/macos/mojolearn-0.8.37-py3-none-macosx_11_0_arm64.whl",
+      "wheel_sha256": "9764da8aa16180e7c80ab66bfda94027f83a22d9be45b43e36e6e8d12b74b6ca",
+      "checked_loaded_bindings": 33,
+      "all_equal": true,
+      "source_commit": "5c156c5f225efc809f76f46c24b20b52e885ae5d"
+    }
+  }
+}

@@ -84,7 +84,7 @@ from checks.numerics import (
 from core.host_simd_identical import expf_v, ftz_v
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk, host_predict_task_count
 from svm.impl.grid_fold import FOLD_TPB, fold_blocks
-from svm.impl.smosolver import fold_order_for, hash_f32_list
+from svm.impl.smosolver import fold_order_for_host, hash_f32_list
 from svm.impl.svm_parameter import (
     EPSILON_SVR,
     KERNEL_LINEAR,
@@ -224,7 +224,7 @@ def _vec_index(p: Int, n_rows: Int, is_svr: Bool) -> Int:
     alpha* of that row), so the kernel column is `p % n_rows`, spelled as
     theirs spell it.
 
-    This is the function whose collisions make `fold_order_for`'s docstring
+    This is the function whose collisions make `fold_order_for_host`'s docstring
     false under SVR; see `svc_check.mojo::check_svr_fold_order_collisions`."""
     if is_svr and p >= n_rows:
         return p - n_rows
@@ -1131,7 +1131,7 @@ def smo_oracle_fit[
                 nz_da.append(delta_alpha[t])
         var nnz = len(nz_idx)
         if nnz > 0:
-            var order = fold_order_for(nz_idx)
+            var order = fold_order_for_host(nz_idx)
             # UpdateF's batch domain is n_rows for BOTH problems (the tile is
             # `[nnz x n_rows]`). C_SVC writes it once; EPSILON_SVR writes the
             # SAME accumulator into `f` and into `f + n_rows`, which is

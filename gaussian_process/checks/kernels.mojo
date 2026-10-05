@@ -95,7 +95,18 @@ number of roundings and the order they happen in. sklearn's `Sum` and
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from gaussian_process.gp_var_seg import (
+    GP_IDN_VAR_SEG,
+    GP_VAR_PTS,
+    GP_VAR_SEGS,
+    GP_VAR_SMEM_FLOATS,
+    GP_VAR_SMEM_LIMIT_BYTES,
+    gp_var_seg_len,
+    gp_var_tree8,
+)
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.multi_gpu import peer_clone
 from std.os import getenv
@@ -733,6 +744,43 @@ def gp_kernel_diag(spec: GPKernelSpec) raises -> Float32:
 # ===========================================================================
 
 
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_GP_PRESCALE_OFF` restores the divide inside the cell):
+#: each RBF / Matern leaf first writes `X / length_scale` and
+#: `Y / length_scale` once ((m + n) d portable divisions, one thread a
+#: coordinate), and the cell kernels fold the stored quotients
+#: (`gp_scaled_sqdist` at `ls_len == 0`). Before, every cell divided both
+#: coordinates of every feature itself: 2 m n d portable divisions a leaf.
+#: Each quotient is rounded to float32 before the subtraction either way
+#: (DEVIATION 1753 says so and `check_kernels_vs_oracle`'s oracle
+#: materializes the scaled copy), so no bit moves on any column.
+comptime GP_IDN_PRESCALE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GP_PRESCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def gp_prescale_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    ls: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    d_in: Int32,
+    ls_len_in: Int32,
+):
+    """`dst[r, f] = ftz(identical_div(ftz(src[r, f]), ftz(l_f)))`, one thread
+    a coordinate: `gp_scaled_sqdist`'s two quotient lines, once per
+    coordinate instead of once per cell. `ls_len` is 1 (isotropic) or `d`."""
+    var d = Int(d_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(rows_in) * d:
+        return
+    var li = t % d
+    if Int(ls_len_in) == 1:
+        li = 0
+    var lv = ftz(ls.unsafe_load(li))
+    dst.unsafe_store(t, ftz(identical_div(ftz(src.unsafe_load(t)), lv)))
+
+
 def gp_scaled_sqdist(
     x: MutPointer[Float32, MutAnyOrigin],
     y: MutPointer[Float32, MutAnyOrigin],
@@ -773,6 +821,12 @@ def gp_scaled_sqdist(
     named in `gaussian_process/README.md` rather than done here.
     """
     var acc = Float32(0.0)
+    if ls_len == 0:
+        # GP_IDN_PRESCALE: `x` and `y` already hold the rounded quotients
+        # (`gp_prescale_kernel`), so the fold reads them as they are.
+        for f in range(d):
+            acc = l2_unexp_core(acc, ftz(x.unsafe_load(i * d + f)), ftz(y.unsafe_load(j * d + f)))
+        return ftz(acc)
     for f in range(d):
         var li = f
         if ls_len == 1:
@@ -1033,6 +1087,58 @@ def gp_variance_kernel(
     std_out.unsafe_store(t, ftz(identical_sqrt(outv)))
 
 
+def gp_variance_seg_kernel(
+    var_out: MutPointer[Float32, MutAnyOrigin],
+    std_out: MutPointer[Float32, MutAnyOrigin],
+    clamped: MutPointer[Int32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_train_in: Int32,
+    n_star_in: Int32,
+    kss: Float32,
+):
+    """GP_IDN_VAR_SEG (`gaussian_process/gp_var_seg.mojo`): `gp_variance_kernel`
+    with the training-axis fold cut into GP_VAR_SEGS segments, one per
+    thread_idx.y, combined in the fixed tree; block (GP_VAR_PTS,
+    GP_VAR_SEGS). The clamp, its flag and the root are the lines of
+    `gp_variance_kernel`. Every thread reaches the barrier: no early return
+    before it."""
+    comptime assert GP_VAR_SMEM_FLOATS * 4 <= GP_VAR_SMEM_LIMIT_BYTES, "gp var smem fits"
+    var n_train = Int(n_train_in)
+    var n_star = Int(n_star_in)
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var t = Int(block_idx.x) * GP_VAR_PTS + tx
+    var part = stack_allocation[
+        GP_VAR_SMEM_FLOATS, Float32, address_space=AddressSpace.SHARED
+    ]()
+    var seg_len = gp_var_seg_len(n_train)
+    var lo = ty * seg_len
+    var hi = min(lo + seg_len, n_train)
+    var acc = Float32(0.0)
+    if t < n_star:
+        for i in range(lo, hi):
+            var vv = ftz(v.unsafe_load(i * n_star + t))
+            acc = ftz(identical_mul_add(vv, vv, acc))
+    part[unsafe_offset=ty * GP_VAR_PTS + tx] = acc
+    barrier()
+    if ty != 0 or t >= n_star:
+        return
+    var total = gp_var_tree8(
+        part[unsafe_offset=0 * GP_VAR_PTS + tx], part[unsafe_offset=1 * GP_VAR_PTS + tx],
+        part[unsafe_offset=2 * GP_VAR_PTS + tx], part[unsafe_offset=3 * GP_VAR_PTS + tx],
+        part[unsafe_offset=4 * GP_VAR_PTS + tx], part[unsafe_offset=5 * GP_VAR_PTS + tx],
+        part[unsafe_offset=6 * GP_VAR_PTS + tx], part[unsafe_offset=7 * GP_VAR_PTS + tx],
+    )
+    var raw = ftz(ftz(kss) - total)
+    var outv = raw
+    if not (raw > Float32(0.0)):
+        outv = Float32(0.0)
+    var moved = bitcast[DType.uint32](outv) != bitcast[DType.uint32](raw)
+    var_out.unsafe_store(t, outv)
+    clamped.unsafe_store(t, Int32(1) if moved else Int32(0))
+    std_out.unsafe_store(t, ftz(identical_sqrt(outv)))
+
+
 # ===========================================================================
 # THE DRIVER
 # ===========================================================================
@@ -1166,6 +1272,15 @@ def gp_kernel_matrix(
     var sqrt5 = gp_sqrt5()
     var self_flag = Int32(1) if is_self else Int32(0)
 
+    # GP_IDN_PRESCALE: one scaled copy of each operand, rewritten per leaf
+    # (the launches of one leaf are queued before the next leaf's rewrite,
+    # on one stream). Sabotage arms keep the divide inside the cell.
+    var pre = False
+    comptime if GP_IDN_PRESCALE:
+        pre = not sab_kernels
+    var xs = ctx.enqueue_create_buffer[DType.float32](m * d if pre else 1)
+    var ys = ctx.enqueue_create_buffer[DType.float32](n * d if pre else 1)
+
     var sp = 0
     for t in range(len(spec.kinds)):
         var kind = Int(spec.kinds[t])
@@ -1225,7 +1340,35 @@ def gp_kernel_matrix(
             var lsview = dls.create_sub_buffer[DType.float32](
                 Int(spec.ls_off[t]), Int(spec.ls_len[t])
             )
-            if kind == GP_K_RBF:
+            if pre:
+                ctx.enqueue_function[gp_prescale_kernel](
+                    xs.unsafe_ptr(), x.unsafe_ptr(), lsview.unsafe_ptr(),
+                    Int32(m), Int32(d), spec.ls_len[t],
+                    grid_dim=((m * d + elem_tpb - 1) // elem_tpb, 1, 1),
+                    block_dim=(elem_tpb, 1, 1),
+                )
+                ctx.enqueue_function[gp_prescale_kernel](
+                    ys.unsafe_ptr(), y.unsafe_ptr(), lsview.unsafe_ptr(),
+                    Int32(n), Int32(d), spec.ls_len[t],
+                    grid_dim=((n * d + elem_tpb - 1) // elem_tpb, 1, 1),
+                    block_dim=(elem_tpb, 1, 1),
+                )
+                if kind == GP_K_RBF:
+                    ctx.enqueue_function[gp_rbf_kernel](
+                        slot.unsafe_ptr(), xs.unsafe_ptr(), ys.unsafe_ptr(), lsview.unsafe_ptr(),
+                        Int32(m), Int32(n), Int32(d), Int32(0),
+                        grid_dim=(grid, 1, 1),
+                        block_dim=(elem_tpb, 1, 1),
+                    )
+                else:
+                    var nu_pre = gp_matern_nu_selector(spec.params[t])
+                    ctx.enqueue_function[gp_matern_kernel](
+                        slot.unsafe_ptr(), xs.unsafe_ptr(), ys.unsafe_ptr(), lsview.unsafe_ptr(),
+                        Int32(m), Int32(n), Int32(d), Int32(0), Int32(nu_pre), sqrt3, sqrt5,
+                        grid_dim=(grid, 1, 1),
+                        block_dim=(elem_tpb, 1, 1),
+                    )
+            elif kind == GP_K_RBF:
                 if sab_kernels:
                     ctx.enqueue_function[sabotage_rbf_kernel](
                         slot.unsafe_ptr(),
@@ -1301,6 +1444,11 @@ def gp_kernel_matrix(
         block_dim=(elem_tpb, 1, 1),
     )
     _ = root^
+    if pre:
+        # the scaled copies are this call's own: drain before they go
+        ctx.synchronize()
+    _ = xs^
+    _ = ys^
     trace.record_device(ctx, tag, out, cells)
 
 
@@ -1361,17 +1509,30 @@ def gp_predictive_variance(
             block_dim=(elem_tpb, 1, 1),
         )
     else:
-        ctx.enqueue_function[gp_variance_kernel](
-            var_out.unsafe_ptr(),
-            std_out.unsafe_ptr(),
-            clamped.unsafe_ptr(),
-            v.unsafe_ptr(),
-            Int32(n_train),
-            Int32(n_star),
-            kss,
-            grid_dim=(grid, 1, 1),
-            block_dim=(elem_tpb, 1, 1),
-        )
+        comptime if GP_IDN_VAR_SEG:
+            ctx.enqueue_function[gp_variance_seg_kernel](
+                var_out.unsafe_ptr(),
+                std_out.unsafe_ptr(),
+                clamped.unsafe_ptr(),
+                v.unsafe_ptr(),
+                Int32(n_train),
+                Int32(n_star),
+                kss,
+                grid_dim=((n_star + GP_VAR_PTS - 1) // GP_VAR_PTS, 1, 1),
+                block_dim=(GP_VAR_PTS, GP_VAR_SEGS, 1),
+            )
+        else:
+            ctx.enqueue_function[gp_variance_kernel](
+                var_out.unsafe_ptr(),
+                std_out.unsafe_ptr(),
+                clamped.unsafe_ptr(),
+                v.unsafe_ptr(),
+                Int32(n_train),
+                Int32(n_star),
+                kss,
+                grid_dim=(grid, 1, 1),
+                block_dim=(elem_tpb, 1, 1),
+            )
     trace.record_device(ctx, "gp.var", var_out, n_star)
     trace.record_device(ctx, "gp.clamped", clamped, n_star)
     trace.record_device(ctx, "gp.std", std_out, n_star)

@@ -65,8 +65,17 @@ comptime OPT_RAW_UP = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_RAW_UP_O
 #: MOJOLEARN_OPT_PIPE_DOWN_OFF / MOJOLEARN_OPT_ZERO_OPEN_OFF; the old
 #: -D names are harmless. RAW_UP alone measured noise (310 -> 307); it is
 #: the default since 2026-10-04 as the pair with OPT_FAST_STREAM (below).
-comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()
-comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()
+#: lane idn-opt-resident (2026-10-04): IDENTICAL takes PIPE_DOWN and
+#: ZERO_OPEN on every vendor (copies only, and zeros not uploaded over
+#: zeros: no bit moves). -D MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF /
+#: -D MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF restore IDENTICAL's old transport.
+comptime _OPT_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime OPT_PIPE_DOWN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()) or (
+    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime OPT_ZERO_OPEN = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()) or (
+    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
 #: the pipelined download's chunk, floats (8 MB; lane apple-fast-gap-optim:
 #: -D MOJOLEARN_OPT_FAST_PIPE_CH=<floats> for the A/B)
 comptime OPT_PIPE_CH = get_defined_int["MOJOLEARN_OPT_FAST_PIPE_CH", 1 << 21]()
@@ -91,7 +100,14 @@ comptime OPT_RAW_DOWN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_FAST_RAW_D
 #: 2026-10-05, rab10-afresident): adafactor 392.8 -> 205.2 ms, digest
 #: identical A == B. KEEP: the FAST + Apple default since then; rollback
 #: -D MOJOLEARN_AF_FAST_RESIDENT_OFF (the old -D name is harmless).
-comptime AF_RESIDENT = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_RESIDENT_OFF"]()
+#: lane idn-opt-resident (2026-10-04): the IDENTICAL default on every
+#: vendor (the per-call entry moved P, G and the moment up and two of them
+#: down each step); -D MOJOLEARN_IDN_AF_RESIDENT_OFF restores the per-call
+#: entry (the Python side falls back when the entry points are absent).
+#: The same `adafactor_core` launches on the same values: no bit moves.
+comptime AF_RESIDENT = (_OPT_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_RESIDENT_OFF"]()) or (
+    _OPT_IDN and not (is_defined["MOJOLEARN_IDN_AF_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
 
 #: MOJOLEARN_OPT_FAST_STREAM (lane apple-fast-rec-optim, 2026-10-04), default OFF,
 #: FAST + Apple only: the element-wise resident step (rmsprop, adagrad, adamax,
@@ -185,7 +201,7 @@ def _open_sized(kind: Int, n: Int, n0: Int, n1: Int, n2: Int, used: Int, nt: Int
     if len(tab) > 0:
         nb = Int(bitcast[DType.int32](tab[len(tab) - 1]))
     var h = -1
-    for j in range(len(pool[].n)):
+    for j in range(len(pool[].n)):  # small-loop(pool: resident optimizer handles): free handle slot search, no data
         if pool[].n[j] == 0 and h < 0:
             h = j
     if h < 0:
@@ -369,7 +385,7 @@ def _upload_all(mut ex: DeviceExec, P: FP, G: FP, ps: List[Int], gs: List[Int], 
             o += sizes[j]
         return
     var off = 0
-    for j in range(len(sizes)):
+    for j in range(len(sizes)):  # small-loop(sizes: parameter tensors of the model): one upload per tensor, no host arithmetic
         ex.upload(P + off, FP(unsafe_from_address=ps[j]), sizes[j])
         ex.upload(G + off, FP(unsafe_from_address=gs[j]), sizes[j])
         off += sizes[j]
@@ -424,7 +440,7 @@ def _map_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) ra
     """OPT_MAP_DOWN: every tensor through `map_to_host` (the mapping waits
     for the queue) and one memcpy into the caller's array."""
     var off = 0
-    for j in range(len(sizes)):
+    for j in range(len(sizes)):  # small-loop(sizes: parameter tensors of the model): one mapped download per tensor into caller memory
         var f = ex._find(P + off, sizes[j])
         var v = ex._sub(f[0], f[1], sizes[j])
         with v.map_to_host() as h:
@@ -463,7 +479,7 @@ def _download_all(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) ra
         _pipe_download(ex, P, ps, sizes)
         return
     var off = 0
-    for j in range(len(sizes)):
+    for j in range(len(sizes)):  # small-loop(sizes: parameter tensors of the model): one async download per tensor
         ex.download_async(FP(unsafe_from_address=ps[j]), P + off, sizes[j])
         off += sizes[j]
     ex.sync()
@@ -651,7 +667,7 @@ def lamb_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: PythonO
     if J != nt or len(addrs) != 2 * J + 1 or t < 1:
         raise Error("lamb_resident_step: the handle's " + String(nt) + " tensors, 2 J + 1 addresses and t >= 1")
     var sizes = List[Int]()
-    for k in range(nt):
+    for k in range(nt):  # small-loop(nt: parameter tensors of the handle): per-tensor sizes from the offset table
         sizes.append(pool[].offs[h][k + 1] - pool[].offs[h][k])
     var pg = _tensors(addrs, J, sizes, n)
     var t0 = 0
@@ -688,7 +704,7 @@ def adafactor_resident_open_py(ip: PythonObject) raises -> PythonObject:
     col_var (C, matrices only), zero filled. Returns [handle, used mask]
     (and 1 under OPT_ZERO_OPEN)."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_open: not built (FAST + Apple only; off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
+        raise Error("adafactor_resident_open: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default, off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
     if len(ip) != 2:
         raise Error("adafactor_resident_open: requires [R, C]")
     var R = ival(ip, 0)
@@ -710,7 +726,7 @@ def adafactor_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: Py
     fp = `adafactor_step`'s six. The parameter is updated in place.
     Returns n."""
     comptime if not AF_RESIDENT:
-        raise Error("adafactor_resident_step: not built (FAST + Apple only; off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
+        raise Error("adafactor_resident_step: not built (IDENTICAL default, off under -D MOJOLEARN_IDN_AF_RESIDENT_OFF; FAST + Apple default, off under -D MOJOLEARN_AF_FAST_RESIDENT_OFF)")
     var h = _handle(handle, RES_ADAFACTOR)
     if len(addrs) != 2 or len(ip) != 3 or len(fp) != 6:
         raise Error("adafactor_resident_step: requires 2 addresses, 3 integer and 6 float parameters")

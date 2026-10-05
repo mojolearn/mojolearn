@@ -89,6 +89,27 @@ from std.gpu import block_dim, block_idx, thread_idx
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
+from checks.numerics import NUMERIC_IDENTICAL as _IVF_NUMERIC_IDENTICAL
+from cluster.estimator import plan_sum_scale
+from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
+    IVF_IDN_DEVICE_FINITE,
+    ivf_validate_device,
+)
+
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
+#: the quantizer's fixed-point sum scale comes from the rows already on the
+#: device (`cluster/estimator.mojo::plan_sum_scale`: chunked column sums of
+#: |x|, two launches, one n_features read). Before, `plan_quantizer_scale`
+#: walked n_rows x dim on one host thread in float64 before the upload. The
+#: host column already takes `host_plan_sum_scale`, the device fold's
+#: restatement (ivf/host/ivf_host.mojo), so this makes the device build's
+#: scale the host column's by construction; the scale is snapped to a power
+#: of two, so it moves only when the two sums straddle a snap boundary.
+#: -D MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores
+#: the host walk.
+comptime IVF_IDN_DEVICE_SCALE = GLOBAL_NUMERIC_MODE == _IVF_NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 from std.sys.info import has_apple_gpu_accelerator
 from std.memory import memcpy
 from x_ann.stage_timer import AnnStages
@@ -466,7 +487,12 @@ def ivf_flat_build(
         if len(x) != n_rows * dim:
             ivf_validate_data(x, n_rows, dim, "dataset")
     else:
-        ivf_validate_data(x, n_rows, dim, "dataset")
+        # lane fix-k1-neighbors: under IVF_IDN_DEVICE_FINITE the values are
+        # scanned on the device after the upload below (ivf_finite_device.mojo)
+        # (the host walk stays when the host scale walk runs: it reads the rows
+        # before the upload and must not meet a non-finite value first)
+        comptime if not (IVF_IDN_DEVICE_FINITE and IVF_IDN_DEVICE_SCALE):
+            ivf_validate_data(x, n_rows, dim, "dataset")
     st.host("validate")
 
     var n_lists = params.n_lists
@@ -509,11 +535,12 @@ def ivf_flat_build(
                 for c in range(dim):
                     xt.append(x[b + c])
 
-    var sum_scale: Float64
-    if n_train < n_rows:
-        sum_scale = plan_quantizer_scale(xt, n_train, dim)
-    else:
-        sum_scale = plan_quantizer_scale(x, n_rows, dim)
+    var sum_scale = Float64(0.0)
+    comptime if not IVF_IDN_DEVICE_SCALE:
+        if n_train < n_rows:
+            sum_scale = plan_quantizer_scale(xt, n_train, dim)
+        else:
+            sum_scale = plan_quantizer_scale(x, n_rows, dim)
     # Unit weights, so the weight bound is exactly `n_train`
     # (`cluster/estimator.mojo`'s note on why the supplied case is summed
     # instead). IVF has no per-row weight: their `build` passes none.
@@ -521,6 +548,9 @@ def ivf_flat_build(
     st.host("trainset_scale")
 
     var dx = upload_f32(ctx, x)
+    comptime if IVF_IDN_DEVICE_FINITE and IVF_IDN_DEVICE_SCALE:
+        # every training row is one of these rows, so this covers `dxt`
+        ivf_validate_device(ctx, dx, x, n_rows, dim, "dataset")
     comptime if IVF_FAST_DEVICE_VALIDATE:
         var dflag = ctx.enqueue_create_buffer[DType.int32](1)
         dflag.enqueue_fill(Int32(0))
@@ -554,6 +584,13 @@ def ivf_flat_build(
     # it -- `cluster/estimator.mojo` records that passing it uninitialized
     # MERGES CLUSTERS, measured on the first run of
     # `check_kmeans_fit_recovers_planted`.
+    comptime if IVF_IDN_DEVICE_SCALE:
+        if n_train < n_rows:
+            sum_scale = plan_sum_scale(ctx, dxt, n_train, dim)
+        else:
+            sum_scale = plan_sum_scale(ctx, dx, n_rows, dim)
+        st.host("device_scale")
+
     compute_row_norms(ctx, dx, x_norm, n_rows, dim)
     ctx.synchronize()
     st.host("row_norms")
@@ -781,7 +818,8 @@ def ivf_flat_extend(
     sequential id keeps the index a function of the rows alone. The centres
     and their norms do not move.
     """
-    ivf_validate_data(new_x, n_new, index.dim, "extension rows")
+    comptime if not IVF_IDN_DEVICE_FINITE:
+        ivf_validate_data(new_x, n_new, index.dim, "extension rows")
     var dim = index.dim
     var n_lists = index.n_lists
     var kp = KMeansParams.default()
@@ -791,6 +829,8 @@ def ivf_flat_extend(
     kp.n_init = 1
 
     var dx = upload_f32(ctx, new_x)
+    comptime if IVF_IDN_DEVICE_FINITE:
+        ivf_validate_device(ctx, dx, new_x, n_new, dim, "extension rows")
     var x_norm = ctx.enqueue_create_buffer[DType.float32](n_new)
     var centroids = upload_f32(ctx, index.centers)
     var labels = ctx.enqueue_create_buffer[DType.uint32](n_new)

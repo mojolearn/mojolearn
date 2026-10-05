@@ -15,6 +15,7 @@ from . import _portable_math as math
 import numbers
 import os
 import warnings
+from . import _arena_io
 from ._array import Array
 from ._buffer import _materialize, _native, _native_optional, empty
 from ._arrays import _addr, _addr_ro
@@ -111,16 +112,86 @@ def _indices(value, n, name):
     return as_i64
 
 
+#: The dtype codes of core/msel_convert.mojo (bindings/hotpath_helpers.mojo's HP_*).
+_MSEL_CODE = {'<f4': 0, '<f8': 1, '<i4': 2, '<i8': 3, '<u4': 4, '<u1': 5}
+
+
+class _Resident:
+    """Device-resident copies of the buffers a cross-validation reuses (lane
+    cpu2-l4-modelsel, re-audit L4): X, y and every fold's index Array are put
+    ONCE into the base binding's model-selection store (`msel_put`,
+    core/msel_device.mojo), and each fold's rows for each candidate are one
+    device gather out of them (`msel_take_rows`), downloaded straight into
+    the Array the estimator is handed. There is no host gather: the host
+    column is the core host binding's `msel_*` on a CPU-only install.
+
+    Keyed by object identity (the entry holds the object, so its id cannot
+    be reused while the entry lives). Freed deterministically by `close`
+    (or the end of a `with` block), never left to the garbage collector;
+    `release` frees one entry. The caller must not write into a buffer it
+    has handed here while the entry lives."""
+
+    def __init__(self):
+        self._put = _native('msel_put')
+        self._free = _native('msel_free')
+        self._take = _native('msel_take_rows')
+        self._entries = {}
+
+    def _entry(self, values, dtype=None):
+        hit = self._entries.get(id(values))
+        if hit is not None and hit[0] is values:
+            return hit
+        arr = _materialize(values, 'fold data')[0]
+        if dtype is not None and arr.dtype != dtype:
+            arr = arr.astype(dtype)
+        arr = arr._as_c()
+        sid = int(self._put(_addr_ro(arr), arr.nbytes)) if arr.nbytes else -1
+        entry = (values, arr, sid)
+        self._entries[id(values)] = entry
+        return entry
+
+    def take(self, values, indices):
+        """Rows `indices` (an int64 index Array) of `values`, gathered on
+        the device."""
+        _, arr, sid = self._entry(values)
+        _, idx, iid = self._entry(indices, '<i8')
+        n_idx = idx.size
+        out = empty((n_idx, *arr.shape[1:]), arr.dtype)
+        n = len(arr)
+        row_bytes = arr.nbytes // n if n else 0
+        if n_idx and row_bytes:
+            self._take(sid, n, row_bytes, iid, n_idx, _addr(out))
+        return out
+
+    def release(self, values):
+        hit = self._entries.get(id(values))
+        if hit is not None and hit[0] is values:
+            del self._entries[id(values)]
+            if hit[2] >= 0:
+                self._free(hit[2])
+
+    def close(self):
+        entries, self._entries = self._entries, {}
+        for _, _, sid in entries.values():  # glue: frees each resident id
+            if sid >= 0:
+                self._free(sid)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
+
 def _take_rows(values, indices):
-    """Copy dense fold rows with the shared compiled host byte gather."""
+    """Dense fold rows by one device gather (`_Resident`, used once); a
+    Python list of labels (str or object labels, the G5 input-prep case)
+    keeps its list comprehension."""
     if isinstance(values, list):
         return [values[i] for i in indices]
-    values = _materialize(values, "fold data")[0]._as_c()
-    output = empty((len(indices), *values.shape[1:]), values.dtype)
-    gather = _native("gather_rows_bytes")
-    gather(_addr_ro(values), _addr(output), _addr_ro(indices), len(values),
-           len(indices), values.nbytes // len(values))
-    return output
+    with _Resident() as res:
+        return res.take(values, indices)
 
 
 def _clone(value, *, parameter=False):
@@ -510,21 +581,23 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
         ranges = _kfold_ranges(X, y, folds)
     range_at = iter(ranges or ())
     scores = []
-    for train, test in folds:
-        fitted = _clone(estimator)
-        try:
-            if ranges is not None:
-                a, b = next(range_at)
-                fold_rows = (_rows_outside(X, a, b), _rows_outside(y, a, b),
-                             _row_range_view(X, a, b), _row_range_view(y, a, b))
-            else:
-                fold_rows = (_take_rows(X, train), _take_rows(y, train),
-                             _take_rows(X, test), _take_rows(y, test))
-            scores.append(_fit_score_fold(fitted, *fold_rows, scoring))
-        finally:
-            # Release each fold before constructing the next estimator. Native
-            # contexts retain their own cleanup contract; no forced GPU reset.
-            del fitted
+    # X, y and the fold indices resident on the device for every fold; the
+    # CV_FAST_SLICE contiguous-range views above (FAST + Apple) when they apply
+    with _FoldRows(X, y, folds, device_rows=_device_rows_ok(estimator, scoring)) as rows:
+        for i in range(len(folds)):  # glue: one fit per fold
+            fitted = _clone(estimator)
+            try:
+                if ranges is not None:
+                    a, b = next(range_at)
+                    fold_rows = (_rows_outside(X, a, b), _rows_outside(y, a, b),
+                                 _row_range_view(X, a, b), _row_range_view(y, a, b))
+                else:
+                    fold_rows = rows.take(i)
+                scores.append(_fit_score_fold(fitted, *fold_rows, scoring))
+            finally:
+                # Release each fold before constructing the next estimator. Native
+                # contexts retain their own cleanup contract; no forced GPU reset.
+                del fitted
     return Array.from_list(scores, "<f8")
 
 
@@ -728,7 +801,7 @@ def _first_seen_native(y):
     if gc is None or gc.m < 1:
         return None
     first = array.array('q', bytes(8 * gc.m))
-    _expansion_metrics_binding().x_metrics_first_rows(_addr_ro(gc.codes), n, gc.m, first.buffer_info()[0])
+    _expansion_metrics_binding().x_metrics_first_rows(_addr_ro(gc.codes), n, gc.m, first.buffer_info()[0])  # cpu-route: first-seen class order for label encoding at splitter entry
     order = sorted(range(gc.m), key=first.__getitem__)
     table = [0] * gc.m
     for rank, c in enumerate(order):
@@ -1064,7 +1137,7 @@ class StratifiedKFold(_KFoldBase):
         K = self.n_splits
         alloc = empty((K, k), '<i8')
         cnt = array.array('q', counts)
-        _native('strat_alloc_i64')(cnt.buffer_info()[0], k, K, _addr(alloc))
+        _native('strat_alloc_i64')(cnt.buffer_info()[0], k, K, _addr(alloc))  # cpu-route: fold allocation plan over folds x classes, not rows
         return enc, k, counts, alloc
 
     def _fold_of_rows(self, enc, k, counts, alloc, rng):
@@ -1107,9 +1180,17 @@ class GroupKFold(_KFoldBase):
         to_fold = array.array('i', bytes(4 * m))
         sizes = array.array('q', bytes(8 * self.n_splits))
         counts = array.array('q', gc.counts)
-        _native('group_fold_assign_i32')(counts.buffer_info()[0], m, self.n_splits,
-                                         perm.buffer_info()[0] if perm is not None and m else 0,
-                                         to_fold.buffer_info()[0], sizes.buffer_info()[0])
+        if perm is not None:
+            # shuffled: the permuted groups' runs on the device (lane
+            # cpu2-l4-modelsel); the unshuffled greedy below is sequential
+            # by definition (each group goes to the fold lightest after
+            # every larger group) and stays the binding's group-level loop
+            _native('msel_group_fold_perm_i32')(counts.buffer_info()[0], m, self.n_splits,
+                                                perm.buffer_info()[0], to_fold.buffer_info()[0],
+                                                sizes.buffer_info()[0])
+        else:
+            _native('group_fold_assign_i32')(counts.buffer_info()[0], m, self.n_splits, 0,  # cpu-route: sequential greedy fold plan over groups, not rows
+                                             to_fold.buffer_info()[0], sizes.buffer_info()[0])
         yield from gc.split_by_fold(to_fold, self.n_splits, sizes)
 
     def _test_folds(self, X, y, groups):
@@ -1171,9 +1252,15 @@ class StratifiedGroupKFold(_KFoldBase):
         perm = _rng(self.random_state).permutation_rows([m])[0] if self.shuffle else None
         to_fold = array.array('i', bytes(4 * m))
         sizes = array.array('q', bytes(8 * self.n_splits))
-        bad = int(_native('strat_group_assign_i32')(
-            [_addr_ro(yenc), _addr_ro(gc.codes), perm.buffer_info()[0] if perm is not None else 0,
-             to_fold.buffer_info()[0], sizes.buffer_info()[0]], [n, k, m, self.n_splits]))
+        # lane cpu4-python: the group x class table over the rows is the
+        # device's 2-D bincount (`bincount2_i32`); only the group-level
+        # greedy plan (`strat_group_plan_i32`, sequential by definition like
+        # GroupKFold's) reads it
+        dist = array.array('q', bytes(8 * m * k))
+        _native('bincount2_i32')(_addr_ro(yenc), _addr_ro(gc.codes), [n, k, m], dist.buffer_info()[0])
+        bad = int(_native('strat_group_plan_i32')(  # cpu-route: sequential greedy fold plan over groups, not rows
+            [dist.buffer_info()[0], perm.buffer_info()[0] if perm is not None else 0,
+             to_fold.buffer_info()[0], sizes.buffer_info()[0]], [k, m, self.n_splits]))
         if bad:
             raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
                              'each class.')
@@ -1297,7 +1384,7 @@ class LeavePOut(_Splitter):
             return
         # the combinations in lexicographic order, advanced in Mojo
         combo = _arange_rows(0, p)
-        step = _native('next_combination_i64')
+        step = _native('next_combination_i64')  # cpu-route: LeavePOut combinatorics, one p-sized step per split
         while True:
             yield _split_indices(combo, n)
             if not int(step(_addr(combo), p, n)):
@@ -1492,7 +1579,8 @@ class GroupShuffleSplit(ShuffleSplit):
             # each group's side (0 train, 1 test, 2 neither) as a table
             # gathered per row, the same draws (lane/py-misc-msel)
             # each draw's per-group side table and side sizes in Mojo
-            # (`split_table_i32`; lane cgr4-py-compute), gathered per row
+            # (`split_table_i32`; lane cgr4-py-compute; on the device since
+            # lane cpu2-l4-modelsel, `msel_split_table_i32`), gathered per row
             m = gc.m
             n_train, n_test = self._sizes(m)
             rng = _rng(self.random_state)
@@ -1500,8 +1588,9 @@ class GroupShuffleSplit(ShuffleSplit):
             table = array.array('i', bytes(4 * m))
             sums = array.array('q', [0, 0])
             for perm in rng.permutation_rows([m] * self.n_splits):
-                _native('split_table_i32')(perm.buffer_info()[0], m, n_test, n_train, counts.buffer_info()[0],
-                                           table.buffer_info()[0], sums.buffer_info()[0])
+                _native('msel_split_table_i32')(perm.buffer_info()[0], m, n_test, n_train,
+                                                counts.buffer_info()[0], table.buffer_info()[0],
+                                                sums.buffer_info()[0])
                 words = gc.mapped(table)
                 yield gc.only(words, 0, sums[0]), gc.only(words, 1, sums[1])
             return
@@ -1783,24 +1872,99 @@ def _take_any(values, indices):
 
 
 class _FoldRows:
-    """Each fold's rows of X (and of y), gathered per call by `_take_rows`
-    (a byte copy of the same rows) for the fits that share the folds: the
-    candidates of a search, the values of a validation curve, the
-    permutations of a permutation test."""
+    """Each fold's rows of X (and of y) for the fits that share the folds:
+    the candidates of a search, the values of a validation curve, the
+    permutations of a permutation test, the folds of cross_validate and
+    cross_val_predict. X, y and the fold indices stay resident on the device
+    (`_Resident`) across every fold and every candidate; each `take` is one
+    device gather per piece. A y handed to `take` (a permuted y) is put once
+    and replaces the previous such y on the device. Close it (or use it in a
+    `with` block) to free the device copies.
 
-    def __init__(self, X, y, folds, *, keep_y=True):
+    device_rows (lane cpu4-misc; `_device_rows_ok`): X's fold rows are
+    handed over as `_arena_io.DeviceRows` instead of host Arrays, when X is
+    float32 C-contiguous 2-D. The estimator's arena runner puts X once into
+    its own binding's store (the `resident()` scope opened here, which holds
+    only those bases) and gathers each fold on the device: no per-fold
+    download of X. Every other estimator gets host Arrays as before."""
+
+    def __init__(self, X, y, folds, *, keep_y=True, device_rows=False):
         self.X, self.y, self.folds = X, y, folds
+        self._res = _Resident()
+        self._extra = None
+        self._dev = (bool(device_rows) and isinstance(X, Array) and X.dtype == '<f4' and X.ndim == 2
+                     and X.size > 0 and X._has_order('C'))
+        self._scope = None
+        if self._dev:
+            # only DeviceRows bases enter this scope (`rows_slot` ignores the
+            # size floor); no other program input is kept across folds
+            self._scope = _arena_io.resident(min_words=1 << 62)
+            self._scope.__enter__()
+
+    def _xrows(self, idx):
+        if not self._dev:
+            return self._rows(self.X, idx)
+        if idx.dtype != '<i8' or not idx._has_order('C'):
+            idx = idx.astype('<i8')._as_c()
+        return _arena_io.DeviceRows(self.X, idx, self._res.take)
+
+    def _rows(self, values, idx):
+        if isinstance(values, list):
+            return _take_rows(values, idx)
+        return self._res.take(values, idx)
 
     def take(self, i, y=None):
         """(X_train, y_train, X_test, y_test) of fold i; `y` given here (a
         permuted y) stands in for the stored one."""
         train, test = self.folds[i]
-        Xtr, Xte = _take_rows(self.X, train), _take_rows(self.X, test)
+        Xtr, Xte = self._xrows(train), self._xrows(test)
         if y is None:
             y = self.y
+        elif y is not self.y and y is not self._extra:
+            if self._extra is not None:
+                self._res.release(self._extra)
+            self._extra = y
         if y is None:
             return Xtr, None, Xte, None
-        return Xtr, _take_rows(y, train), Xte, _take_rows(y, test)
+        return Xtr, self._rows(y, train), Xte, self._rows(y, test)
+
+    def close(self):
+        self._extra = None
+        scope, self._scope = self._scope, None
+        try:
+            if scope is not None:
+                scope.__exit__(None, None, None)
+        finally:
+            self._res.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
+
+def _device_rows_ok(estimator, scoring=None):
+    """Whether fold X may go to `estimator` as `_arena_io.DeviceRows` (lane
+    cpu4-misc): its class opts in (`_mojolearn_device_rows = True`; a
+    search candidate's `_Pinned` is unwrapped, a Pipeline or any other
+    estimator is not) and every scorer only calls the estimator's own
+    methods on X (None, a scorer name, or mojolearn's `_Scorer`s; a user
+    callable may read X on the host, so it gets host rows)."""
+    est = estimator
+    while isinstance(est, _Pinned):
+        est = est._est
+    if getattr(type(est), '_mojolearn_device_rows', False) is not True:
+        return False
+    if isinstance(scoring, dict):
+        scoring = list(scoring.values())
+    if not isinstance(scoring, (list, tuple, set)):
+        scoring = [scoring]
+    ok = True
+    for sc in scoring:  # glue: the kind of each scorer (a handful)
+        ok = ok and (sc is None or isinstance(sc, (str, _Scorer)))
+    return ok
 
 
 # ---------------------------------------------------------------- scorers
@@ -1855,17 +2019,12 @@ _BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_los
 
 def _proba_column1(pred):
     """Column 1 of an (n, 2) float32 or float64 buffer as a float32 Array,
-    by the core helpers (lane/py-misc-msel): `as_f32_c` (a borrow, or one
-    native round-to-nearest cast from float64, the `(float)` cast the
-    array('f') item setter makes), `transpose_f32` into column-major order,
-    then one byte copy of the second column. The same words the
-    `tolist()` comprehension builds; None hands it back to that route."""
-    import ctypes
-    from ._buffer import _output_store, as_f32_c
-    if not _msel_native() or isinstance(pred, (list, tuple)):
-        return None
-    transpose = _native('transpose_f32')
-    if transpose is None:
+    read on the device (`msel_proba_column`, lane cpu2-l4-modelsel): one
+    kernel takes column 1 straight out of the row-major block and narrows a
+    float64 to nearest even (the `(float)` cast), so the host makes no cast,
+    no transpose and no column copy. None (a Python list from an external
+    estimator, or another shape) hands it to the caller's route."""
+    if isinstance(pred, (list, tuple)):
         return None
     try:
         a = _materialize(pred, 'pred')[0]
@@ -1874,11 +2033,9 @@ def _proba_column1(pred):
     if a.ndim != 2 or a.shape[1] != 2 or a.dtype not in ('<f4', '<f8') or a.shape[0] < 1:
         return None
     n = a.shape[0]
-    c = as_f32_c(a, ndim=2, name='pred')[0]
-    tmp = _output_store('f', 2 * n)
-    transpose(_addr_ro(c), tmp.buffer_info()[0], n, 2)
+    c = a._as_c()
     out = empty((n,), '<f4')
-    ctypes.memmove(_addr(out), tmp.buffer_info()[0] + 4 * n, 4 * n)
+    _native('msel_proba_column')(_addr_ro(c), _MSEL_CODE[c.dtype], n, 2, 1, _addr(out))
     return out
 
 
@@ -2022,7 +2179,6 @@ def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=Fa
     candidate on them, as scikit-learn does (a shuffling splitter with
     random_state=None would otherwise draw new folds per candidate).
     permutation_test_score reuses it on its fixed folds."""
-    import time
     multi = _scorers(scoring)
     single = None if multi is not None else get_scorer(scoring)
     names = list(multi) if multi is not None else ['score']
@@ -2032,14 +2188,24 @@ def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=Fa
         if return_train_score:
             out[f'train_{nm}'] = []
     ests, idx = [], {'train': [], 'test': []}
+    own = rows is None
+    if own:
+        rows = _FoldRows(X, y, folds, device_rows=_device_rows_ok(estimator, scoring))
+    try:
+        return _cross_validate_loop(estimator, y, folds, rows, names, multi, single, out, ests, idx,
+                                    return_train_score, return_estimator, return_indices, error_score)
+    finally:
+        if own:
+            rows.close()
+
+
+def _cross_validate_loop(estimator, y, folds, rows, names, multi, single, out, ests, idx,
+                         return_train_score, return_estimator, return_indices, error_score):
+    import time
     for i, (train, test) in enumerate(folds):
         est = _clone(estimator)
         t0 = time.perf_counter()
-        if rows is not None:
-            Xtr, ytr, Xte, yte = rows.take(i, None if y is rows.y else y)
-        else:
-            Xtr, ytr = _take_rows(X, train), (None if y is None else _take_rows(y, train))
-            Xte, yte = _take_rows(X, test), (None if y is None else _take_rows(y, test))
+        Xtr, ytr, Xte, yte = rows.take(i, None if y is rows.y else y)
         try:
             est.fit(Xtr, ytr) if ytr is not None else est.fit(Xtr)
             ok = True
@@ -2082,11 +2248,15 @@ def _cross_val_predict_native(estimator, X, y, folds, n, method):
     the partition test is `check_indices_i64` over every fold's test rows
     laid end to end (each row held out exactly once: n rows in all, none
     twice; the folds' rows are already in range), and each fold's
-    predictions are put back in row order by the x_metrics binding's
-    `scatter_rows` byte copy into one int64 (integer predictions) or
-    float64 (real predictions, or any prediction with columns) block. A
-    fold whose predictions are not a numeric `Array` (str labels come back
-    as a Python list) sends the placement to the label loop below it."""
+    predictions are put back in row order ON THE DEVICE (lane
+    cpu2-l4-modelsel): `msel_scatter_rows` casts each fold's predictions
+    and scatters them by the fold's resident test indices into one
+    resident int64 (integer predictions) or float64 (real predictions, or
+    any prediction with columns) block, read back once. The folds' rows are
+    device gathers out of the resident X and y (`_FoldRows`). A fold whose
+    predictions are not a numeric `Array` (str labels come back as a Python
+    list) sends the placement to the label loop below it (object labels,
+    the G5 input-prep case)."""
     import ctypes
     from ._buffer import _output_store
     total = sum(int(test.size) for _, test in folds)
@@ -2102,11 +2272,17 @@ def _cross_val_predict_native(estimator, X, y, folds, n, method):
         keep.append(t)
     if int(_native('check_indices_i64')(held.buffer_info()[0], n, n)) != 0:
         raise ValueError('cross_val_predict only works for partitions')
-    preds = []
-    for (train, test), t in zip(folds, keep):
-        est = _clone(estimator)
-        est.fit(_take_rows(X, train), None if y is None else _take_rows(y, train))
-        preds.append((getattr(est, method)(_take_rows(X, test)), t))
+    with _FoldRows(X, y, folds, device_rows=_device_rows_ok(estimator)) as rows:
+        preds = []
+        for i, t in enumerate(keep):  # glue: one fit per fold
+            est = _clone(estimator)
+            Xtr, ytr, Xte, _ = rows.take(i)
+            est.fit(Xtr, ytr)
+            preds.append((getattr(est, method)(Xte), t))
+        return _cross_val_predict_place(preds, n, rows._res)
+
+
+def _cross_val_predict_place(preds, n, res):
     numeric = all(isinstance(p, Array) and p.dtype in ('<f4', '<f8', '<i4', '<i8', '<u4', '<u1')
                   and p.ndim >= 1 and p.shape[0] == t.size for p, t in preds)
     width = tuple(preds[-1][0].shape[1:]) if numeric else ()
@@ -2114,14 +2290,21 @@ def _cross_val_predict_native(estimator, X, y, folds, n, method):
         integral = not width and all(p.dtype[1] in 'iu' for p, _ in preds)
         dtype = '<i8' if integral else '<f8'
         out = empty((n,) + width, dtype)
-        row_bytes = 8
-        for w in width:
-            row_bytes *= int(w)
-        scatter = _expansion_metrics_binding().x_metrics_scatter_rows
-        for p, t in preds:
-            src = p.astype(dtype)._as_c() if p.dtype != dtype else p._as_c()
-            if row_bytes and t.size:
-                scatter(_addr_ro(src), _addr(out), _addr_ro(t), t.size, n, row_bytes)
+        cols = 1
+        for w in width:  # glue: the prediction shape's column count
+            cols *= int(w)
+        if cols and n:
+            block = int(_native('msel_alloc')(n * cols * 8))
+            try:
+                scatter = _native('msel_scatter_rows')
+                for p, t in preds:  # glue: one device scatter per fold
+                    if t.size:
+                        src = p._as_c()
+                        scatter(block, n, _MSEL_CODE[dtype], _addr_ro(src), _MSEL_CODE[src.dtype],
+                                t.size, cols, res._entry(t, '<i8')[2])
+                _native('msel_read')(block, _addr(out), n * cols * 8)
+            finally:
+                _native('msel_free')(block)
         return out
     rows = [None] * n
     width = None
@@ -2227,12 +2410,12 @@ class ParameterSampler:
 def _rank(values):
     """scikit-learn's rank_test_score: 'min' ranking of the scores,
     descending (1 is best)."""
-    order = sorted(set(values), reverse=True)
+    order = sorted(set(values), reverse=True)  # glue: explicit scalar tail, one score per candidate
     pos, start = {}, 1
-    for v in order:
+    for v in order:  # glue: explicit scalar tail, one score per candidate
         pos[v] = start
         start += values.count(v)
-    return [pos[v] for v in values]
+    return [pos[v] for v in values]  # glue: explicit scalar tail, one rank per candidate
 
 
 class _BaseSearch:
@@ -2284,30 +2467,35 @@ class _BaseSearch:
         # the folds are drawn ONCE for every candidate (scikit-learn's
         # evaluate_candidates materializes cv.split once)
         Xf, yf, folds = _cv_folds(_Pinned(self.estimator), X, y, self.cv, groups)
-        rows = _FoldRows(Xf, yf, folds)
-        for params in candidates:
-            est = _clone(self.estimator)
-            if hasattr(est, 'set_params'):
-                est.set_params(**params)
-            else:
-                for k, v in params.items():
-                    setattr(est, k, v)
-            est = _Pinned(est)
-            cvr = _cross_validate_folds(est, Xf, yf, folds, scoring, return_train_score=self.return_train_score,
-                                        error_score=self.error_score, rows=rows)
-            for nm in names:
-                per[nm].append(cvr[f'test_{nm}'].tolist())
-                if self.return_train_score:
-                    trains[nm].append(cvr[f'train_{nm}'].tolist())
-            n_splits = len(cvr['fit_time'])
+        # X, y and the fold indices stay resident on the device for every
+        # candidate (lane cpu2-l4-modelsel)
+        with _FoldRows(Xf, yf, folds, device_rows=_device_rows_ok(self.estimator, scoring)) as rows:
+            for params in candidates:
+                est = _clone(self.estimator)
+                if hasattr(est, 'set_params'):
+                    est.set_params(**params)
+                else:
+                    for k, v in params.items():
+                        setattr(est, k, v)
+                est = _Pinned(est)
+                cvr = _cross_validate_folds(est, Xf, yf, folds, scoring,
+                                            return_train_score=self.return_train_score,
+                                            error_score=self.error_score, rows=rows)
+                for nm in names:
+                    per[nm].append(cvr[f'test_{nm}'].tolist())
+                    if self.return_train_score:
+                        trains[nm].append(cvr[f'train_{nm}'].tolist())
+                n_splits = len(cvr['fit_time'])
         for k in sorted({k for p in candidates for k in p}):
             results[f'param_{k}'] = [p.get(k) for p in candidates]
         for nm in names:
             suffix = '' if multi is None else f'_{nm}'
             for i in range(n_splits):
                 results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')
-            means = [math.fsum(s) / len(s) for s in per[nm]]
-            stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s)) for s, m in zip(per[nm], means)]
+            # glue: explicit scalar tail over the candidates x folds scores (Python floats, not data)
+            means = [math.fsum(s) / len(s) for s in per[nm]]  # glue: one mean per candidate
+            stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s))  # glue: one std per candidate
+                    for s, m in zip(per[nm], means)]  # glue: one std per candidate
             results[f'mean_test_score{suffix}'] = Array.from_list(means, '<f8')
             results[f'std_test_score{suffix}'] = Array.from_list(stds, '<f8')
             results[f'rank_test_score{suffix}'] = Array.from_list(_rank(means), '<i4')
@@ -2419,15 +2607,15 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
     _require_serial(n_jobs, error_score, 'validation_curve')
     # the folds are drawn ONCE for every parameter value, as scikit-learn does
     Xf, yf, folds = _cv_folds(_Pinned(estimator), X, y, cv, groups)
-    rows = _FoldRows(Xf, yf, folds)
     tr, te = [], []
-    for v in param_range:
-        est = _clone(estimator)
-        est.set_params(**{param_name: v})
-        r = _cross_validate_folds(_Pinned(est), Xf, yf, folds, scoring, return_train_score=True,
-                                  error_score=error_score, rows=rows)
-        tr.append(r['train_score'].tolist())
-        te.append(r['test_score'].tolist())
+    with _FoldRows(Xf, yf, folds, device_rows=_device_rows_ok(estimator, scoring)) as rows:
+        for v in param_range:
+            est = _clone(estimator)
+            est.set_params(**{param_name: v})
+            r = _cross_validate_folds(_Pinned(est), Xf, yf, folds, scoring, return_train_score=True,
+                                      error_score=error_score, rows=rows)
+            tr.append(r['train_score'].tolist())
+            te.append(r['test_score'].tolist())
     k = len(tr[0])
     return (Array.from_list([v for row in tr for v in row], '<f8').reshape((len(tr), k)),
             Array.from_list([v for row in te for v in row], '<f8').reshape((len(te), k)))
@@ -2465,23 +2653,34 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
             tr = out
         orders.append(tr)
     tr_s, te_s, ft, st = [], [], [], []
-    for a in sizes:
-        row_tr, row_te, row_ft, row_st = [], [], [], []
-        for (train, test), tr_idx in zip(folds, orders):
-            sub = tr_idx[0:a]
-            est = _clone(estimator)
-            t0 = time.perf_counter()
-            est.fit(_take_rows(X, sub), _take_rows(y, sub))
-            t1 = time.perf_counter()
-            sc = get_scorer(scoring)
-            row_tr.append(_score(est, _take_rows(X, sub), _take_rows(y, sub), sc))
-            row_te.append(_score(est, _take_rows(X, test), _take_rows(y, test), sc))
-            row_ft.append(t1 - t0)
-            row_st.append(time.perf_counter() - t1)
-        tr_s.append(row_tr)
-        te_s.append(row_te)
-        ft.append(row_ft)
-        st.append(row_st)
+    # X, y and the test folds resident on the device for every size; each
+    # size's training prefix is put once and freed after its fit and score
+    res = _Resident()
+
+    def take(values, idx):
+        return _take_rows(values, idx) if isinstance(values, list) else res.take(values, idx)
+    try:
+        for a in sizes:
+            row_tr, row_te, row_ft, row_st = [], [], [], []
+            for (train, test), tr_idx in zip(folds, orders):
+                sub = tr_idx[0:a]
+                est = _clone(estimator)
+                t0 = time.perf_counter()
+                Xs, ys = take(X, sub), take(y, sub)
+                est.fit(Xs, ys)
+                t1 = time.perf_counter()
+                sc = get_scorer(scoring)
+                row_tr.append(_score(est, Xs, ys, sc))
+                row_te.append(_score(est, take(X, test), take(y, test), sc))
+                res.release(sub)
+                row_ft.append(t1 - t0)
+                row_st.append(time.perf_counter() - t1)
+            tr_s.append(row_tr)
+            te_s.append(row_te)
+            ft.append(row_ft)
+            st.append(row_st)
+    finally:
+        res.close()
     k = len(folds)
     shape = (len(sizes), k)
     pack = lambda m: Array.from_list([v for row in m for v in row], '<f8').reshape(shape)
@@ -2536,7 +2735,8 @@ class _NativePermutation:
     once per group per permutation. Here y is converted ONCE into that same
     dtype (the same words: the array('f') / array('i') item setter over the
     same Python scalars, or a buffer of the same values), and each permuted
-    y is `gather_rows_bytes` of it by an Int64 row index: without groups the
+    y is a device gather of it (`_Resident.take`, base y resident for every
+    permutation; lane cpu2-l4-modelsel) by an Int64 row index: without groups the
     permutation itself (`permutation_rows`, the same draw), with groups the
     index the definition builds, from the same per-group draws in the same
     sorted-group order (one program for all of them), each group's rows
@@ -2551,9 +2751,8 @@ class _NativePermutation:
     def get(cls, estimator, X, y, groups, cv):
         if not _msel_native() or _sabotage_requested():
             return None
-        gather = _native('gather_rows_bytes')
         gather64 = _native('gather_i64')
-        if gather is None or gather64 is None:
+        if gather64 is None:
             return None
         base = cls._base(y)
         if base is None or base.size < 2:
@@ -2561,7 +2760,7 @@ class _NativePermutation:
         self = cls()
         self.X = _materialize(X, 'X')[0]
         self.base, self.n = base, base.size
-        self.gather, self.gather64 = gather, gather64
+        self.gather64 = gather64
         return self
 
     @staticmethod
@@ -2589,9 +2788,20 @@ class _NativePermutation:
         if a.dtype in ('<f4', '<f8'):
             from ._buffer import as_f32_c
             return as_f32_c(a, ndim=1, name='y')[0]
-        if a.dtype in ('<i4', '<i8', '<u1', '<u4', '<i2', '<u2', '<i1'):
+        if a.dtype == '<i4':
+            return a._as_c()
+        if a.dtype in ('<i8', '<u1', '<u4'):
+            # the int32 narrowing in the base binding's cast_elements (a
+            # device twin on GPU builds); 1 is the OverflowError of the
+            # array('i') route, which hands back to the definition
+            c = a._as_c()
+            narrow = empty((c.size,), '<i4')
+            if int(_native('cast_elements')(_addr_ro(c), _MSEL_CODE[c.dtype], _addr(narrow), 2, c.size)) != 0:
+                return None
+            return narrow
+        if a.dtype in ('<i2', '<u2', '<i1'):
             try:
-                narrow = array.array('i', a.tolist())
+                narrow = array.array('i', a.tolist())  # glue: dtypes the native casts do not name
             except OverflowError:
                 return None
             return Array._owned(narrow, (len(narrow),), '<i4', 'C')
@@ -2607,7 +2817,14 @@ class _NativePermutation:
         folds0 = self._folds(estimator, base, groups, cv)
         # lane metrics-apple3: X's fold rows are the same for every
         # permutation that runs on folds0 (only y is permuted)
-        rows0 = _FoldRows(self.X, None, folds0, keep_y=False)
+        rows0 = _FoldRows(self.X, None, folds0, keep_y=False, device_rows=_device_rows_ok(estimator, sc))
+        try:
+            return self._run(estimator, groups, cv, n_permutations, random_state, sc, reuse, folds0, rows0)
+        finally:
+            rows0.close()
+
+    def _run(self, estimator, groups, cv, n_permutations, random_state, sc, reuse, folds0, rows0):
+        n, base = self.n, self.base
 
         def mean_score(yarr):
             folds = folds0 if reuse or yarr is base else self._folds(estimator, yarr, groups, cv)
@@ -2623,10 +2840,12 @@ class _NativePermutation:
                 idx = rng.permutation_rows([n])[0]
             else:
                 idx = self._group_index(rng, order)
-            yp = empty((n,), base.dtype)
-            self.gather(_addr_ro(base), _addr(yp), idx.buffer_info()[0], n, n, 4)
+            # the permuted y: one device gather out of the resident base y
+            idx = Array._owned(idx, (n,), '<i8', 'C')
+            yp = rows0._res.take(base, idx)
+            rows0._res.release(idx)
             perm_scores.append(mean_score(yp))
-        pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)
+        pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)  # glue: explicit scalar tail, one score per permutation
         return score, Array.from_list(perm_scores, '<f8'), pvalue
 
     def _group_order(self, groups):

@@ -37,7 +37,9 @@ from sequence.exec_trait import Exec
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
+from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
 from sequence.ops import OP_THETA
+from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW
 from sequence.theta_spec import THETA_SPEC
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR, OP_COLSCALE, OP_VAR_SIGMA, SEQ_FAST_VAR_COOP
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
@@ -50,8 +52,33 @@ from x_linear.ops import IP
 from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
 
-#: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
-comptime SEQ_COOP = has_apple_gpu_accelerator()
+#: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple, and
+#: since nr-small D1/D11 (2026-10-04) NVIDIA and AMD in IDENTICAL. The
+#: cooperative fold is the one-thread op's chain (same fmas, same values,
+#: same order; only the loads are spread over the warp), so no bit moves on
+#: any column; `coop_bcast` keeps a cell inside its 32-lane half of a CDNA
+#: wavefront. -D MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores Apple only.
+comptime SEQ_COOP_NVAMD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_SEQ_COOP_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime SEQ_COOP = has_apple_gpu_accelerator() or SEQ_COOP_NVAMD
+#: nr-small D10: LayerNorm forward / backward-x rows on a simdgroup (the
+#: same chains over broadcast words, coalesced loads; sequence/coop.mojo),
+#: IDENTICAL on every GPU. -D MOJOLEARN_IDN_SEQ_LN_COOP_OFF (or
+#: MOJOLEARN_IDN_ALL_OFF) restores one thread per row.
+#: nr-small D11: Adafactor's row factor (op_af_row) and row-var mean
+#: (op_af_rmean, one thread) on a simdgroup, the same chains; IDENTICAL.
+#: -D MOJOLEARN_IDN_SEQ_AF_COOP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+comptime SEQ_AF_COOP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_SEQ_AF_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime SEQ_LN_COOP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_SEQ_LN_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
 
 comptime TPB = 128
 
@@ -77,8 +104,18 @@ comptime TPB = 128
 #: -D MOJOLEARN_SEQ_FAST_PIPE_UP=1 / _DOWN=1 are harmless. IDENTICAL and
 #: the other vendors compile the main path unchanged.
 comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime SEQ_PIPE_UP = _SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP_OFF"]()
-comptime SEQ_PIPE_DOWN = _SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF"]()
+#: lane idn-opt-resident (2026-10-04): IDENTICAL takes the same pipelined
+#: copies on every vendor (NVIDIA, AMD, Apple). Copies only: the same bytes,
+#: the same launches, no bit moves. -D MOJOLEARN_IDN_SEQ_PIPE_UP_OFF /
+#: -D MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF restore IDENTICAL's serial copies.
+#: FAST on NVIDIA and AMD is unchanged.
+comptime _SEQ_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime SEQ_PIPE_UP = (_SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP_OFF"]()) or (
+    _SEQ_IDN and not (is_defined["MOJOLEARN_IDN_SEQ_PIPE_UP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime SEQ_PIPE_DOWN = (_SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF"]()) or (
+    _SEQ_IDN and not (is_defined["MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
 #: the pipelined chunk, floats (8 MB; lane apple-fast-gap-optim:
 #: -D MOJOLEARN_SEQ_FAST_PIPE_CH=<floats> for the A/B)
 comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
@@ -94,7 +131,7 @@ comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
 #: SEQ_FAST_MAP_DOWN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 50.2 -> 79.8 ms.
 #: DROPPED-slower: stays off.
-comptime SEQ_MAP_DOWN = SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_MAP_DOWN"]()
+comptime SEQ_MAP_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_MAP_DOWN"]()
 #: SEQ_FAST_VAR_COOP (sequence/ops.mojo): VAR's long folds as coop cells, routed in `launch`.
 #: MOJOLEARN_SEQ_FAST_VAR_NODRAIN (FAST + Apple, default off, READY-AB): every
 #: binding call's DeviceExec drains the queue again in __deinit__, a second
@@ -103,7 +140,7 @@ comptime SEQ_MAP_DOWN = SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_MAP_DOW
 #: (`mark_drained`) and __deinit__ skips the empty wait: one Metal wait fewer
 #: per call, two per board fit + forecast.
 comptime SEQ_FAST_VAR_NODRAIN = _SEQ_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_VAR_NODRAIN"]()
-comptime SEQ_RAW_DOWN = SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]() and not SEQ_MAP_DOWN
+comptime SEQ_RAW_DOWN = _SEQ_APPLE_FAST and SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]() and not SEQ_MAP_DOWN
 
 
 struct _SeqContext(Defaultable, Movable):
@@ -330,7 +367,7 @@ def _pool_dev(ctx: DeviceContext, count: Int) raises -> Int:
     """A free device buffer of exactly `count` floats from the pool, or a
     new one added to it; returns its index (held until released)."""
     var pool = X_SEQUENCE_POOL.get_or_create_ptr()
-    for i in range(len(pool[].dev)):
+    for i in range(len(pool[].dev)):  # small-loop(pool: pooled device buffers): free-buffer slot search, no data
         if pool[].dev_free[i] and pool[].dev_n[i] == count:
             pool[].dev_free[i] = False
             return i
@@ -475,7 +512,7 @@ struct DeviceExec(Exec):
 
     def _find(self, p: FP, n: Int) raises -> Tuple[Int, Int]:
         var addr = Int(p)
-        for i in range(len(self.base)):
+        for i in range(len(self.base)):  # small-loop(base: buffers this Exec allocated): address-to-buffer lookup, no data
             var off = (addr - self.base[i]) // 4
             if addr >= self.base[i] and off + n <= self.size[i]:
                 return (i, off)
@@ -766,12 +803,16 @@ struct DeviceExec(Exec):
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
                 return
-        comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
-                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ
-                                  or (THETA_SPEC and OP == OP_THETA)
-                                  or (SEQ_FAST_VAR_COOP and (OP == OP_COLSCALE or OP == OP_VAR_SIGMA))):
+        comptime if (SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
+                                   or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ
+                                   or (THETA_SPEC and OP == OP_THETA)
+                                   or (SEQ_FAST_VAR_COOP and (OP == OP_COLSCALE or OP == OP_VAR_SIGMA)))) or (
+                SEQ_LN_COOP and (OP == OP_LN_FWD or OP == OP_LN_BWD_X)) or (
+                SEQ_AF_COOP and (OP == OP_AF_ROW or OP == OP_AF_RMEAN)):
             var coop = True
-            comptime if OP == OP_GEMM:
+            comptime if OP == OP_LN_FWD or OP == OP_LN_BWD_X or OP == OP_AF_ROW or OP == OP_AF_RMEAN:
+                coop = a.i0 >= COOP_W
+            elif OP == OP_GEMM:
                 coop = a.i0 * a.i1 <= 1024 and a.i2 >= 32768
                 comptime if SEQ_FAST_VAR_COOP:
                     coop = coop or a.i11 == 1
@@ -786,6 +827,19 @@ struct DeviceExec(Exec):
                     Int64(n),
                     grid_dim=((n * COOP_W + TPB - 1) // TPB, 1, 1),
                     block_dim=(TPB, 1, 1),
+                )
+                return
+        # nr-small D1: op_gemm's chain with the A/B slabs staged in
+        # threadgroup memory (sequence/gemm_tiled.mojo), same words
+        comptime if SEQ_GEMM_TILED and OP == OP_GEMM:
+            if seq_gemm_tiled_on(a.i0, a.i1):
+                self.ctx.enqueue_function[seq_gemm_tiled_kernel](
+                    a.p0, a.p1, a.p2,
+                    Int32(a.i0), Int32(a.i1), Int32(a.i2),
+                    Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
+                    Int32(a.i7), Int32(a.i8),
+                    grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
+                    block_dim=(GT_TPB, 1, 1),
                 )
                 return
         comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:
@@ -857,7 +911,7 @@ struct DeviceExec(Exec):
         its half is reused (that half was last read for chunk i - 2, before
         the previous wait). Returns with every byte in place."""
         comptime if SEQ_MAP_DOWN:
-            for j in range(len(self.pipe_n)):
+            for j in range(len(self.pipe_n)):  # small-loop(pipe_n: deferred download chunks): one mapped DMA copy per chunk into caller memory
                 var nj = self.pipe_n[j]
                 var f = self._find(FP(unsafe_from_address=self.pipe_src[j]), nj)
                 var v = self._sub(f[0], f[1], nj)

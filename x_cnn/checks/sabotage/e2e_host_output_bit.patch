@@ -1,11 +1,13 @@
+diff --git a/bindings/_mojolearn_x_cnn_host.mojo b/bindings/_mojolearn_x_cnn_host.mojo
+index 370e845a0..a9c1594fb 100644
 --- a/bindings/_mojolearn_x_cnn_host.mojo
 +++ b/bindings/_mojolearn_x_cnn_host.mojo
 @@ -3,7 +3,17 @@
  """CPU binding for `_mojolearn_x_cnn` (the CNN expansion lane). HOST ONLY;
  the GPU binding's export names and address contract, the work is
  x_cnn/host/ops_host.mojo."""
--from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
-+from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
++from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
 +from bindings.hostptr import copy_f32 as _copy_f32_real
 +from std.memory import bitcast
 +
@@ -19,7 +21,7 @@
  from std.os import abort
  from std.python import Python, PythonObject
  from std.python._cpython import GILReleased
-@@ -64,8 +74,9 @@
+@@ -59,8 +69,9 @@ def out_f32(p: FP, n: Int):
      production it does nothing. The end-to-end sabotage arm
      (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
      bit here, and in `copy_f32` for the entries that still copy a result."""

@@ -1,0 +1,36 @@
+{
+  "source_sha": "58761102d",
+  "kind": "correctness-only",
+  "serialized": true,
+  "units": [
+    {
+      "unit": "identity_gate",
+      "rc": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/callpath-20261004/metal-58761102d/identity_gate-runtime.log",
+      "digest": 138198733663681093,
+      "expected_nv_amd_digest": 138198733663681093,
+      "matches_nv_amd": true,
+      "binary_sha256": "ecb90dc0834e2a2f154ae985fac959e1ad34528b7cd2e48fc6ffac7935e67cbc"
+    },
+    {
+      "unit": "primitive_gate",
+      "rc": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/callpath-20261004/metal-58761102d/primitive_gate-runtime.log",
+      "digest": 12251619760217914789,
+      "expected_nv_amd_digest": 12251619760217914789,
+      "matches_nv_amd": true,
+      "binary_sha256": "7392990f66386f6a06b4109466c4c6826c8b76179ded16d89dfb1aaf0500daeb"
+    },
+    {
+      "unit": "transport_gate",
+      "rc": 0,
+      "log": "/Users/andrewhendel/mojolearn-evidence/callpath-20261004/metal-58761102d/transport_gate-runtime.log",
+      "digest": 16740757882212384037,
+      "expected_nv_amd_digest": 16740757882212384037,
+      "matches_nv_amd": true,
+      "binary_sha256": "082a42a49424315aaecfd36bc16a517bc239485db82f5b10125cfa0a7692eecd"
+    }
+  ],
+  "status": "PASS",
+  "scope": "Frozen shared callpath fixtures only; not every estimator. Scalar/primitive digests also match Linux host."
+}

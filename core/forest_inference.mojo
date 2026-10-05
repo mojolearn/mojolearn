@@ -23,6 +23,8 @@ Host work validates/stages only. All prediction arithmetic/traversal is GPU.
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.sys.compile import is_defined
+from std.atomic import Atomic
+from core.device_fold import device_exclusive_scan_total
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
@@ -578,11 +580,14 @@ def device_ptr_all_finite(ctx: DeviceContext, v: MutPointer[Float32, MutAnyOrigi
     return ok
 
 
-def validate_flat_forest(
+def _forest_shape_checks(
     offsets: List[Int32], columns: List[Int32], thresholds: List[Float32],
     left: List[Int32], leaves: List[Float32], x: List[Float32],
     rows: Int, features: Int, outputs: Int,
 ) raises:
+    """The constant-time shape checks (lengths, ranges, first and last
+    offset); the per-node checks are `forest_validate_device` on a GPU route
+    and `validate_flat_forest_host` on the host."""
     if rows < 0 or features < 1 or outputs < 1 or len(offsets) < 2:
         raise Error("forest inference requires rows>=0, features/outputs/trees>=1")
     if features > 2147483647 or outputs > 2147483647 or len(offsets)-1 > 2147483647:
@@ -596,6 +601,17 @@ def validate_flat_forest(
         raise Error("forest inference flat array shape mismatch")
     if offsets[0] != 0 or Int(offsets[len(offsets)-1]) != nodes:
         raise Error("forest inference offsets must cover all nodes")
+
+
+def validate_flat_forest_host(
+    offsets: List[Int32], columns: List[Int32], thresholds: List[Float32],
+    left: List[Int32], leaves: List[Float32], x: List[Float32],
+    rows: Int, features: Int, outputs: Int,
+) raises:
+    """The host validator (CPU-only callers and the bench harness); the GPU
+    predict validates with `forest_validate_device` instead."""
+    _forest_shape_checks(offsets,columns,thresholds,left,leaves,x,rows,features,outputs)
+    var nodes = len(columns)
     require_finite(thresholds)
     require_finite(leaves)
     # the input rows are scanned on the device where they land
@@ -626,29 +642,390 @@ def validate_flat_forest(
             raise Error("forest inference tree contains unreachable nodes")
 
 
+# ---- model validation on the device (lane cpu3-core) ----------------------
+# The GPU predict used to walk every tree on the host (a stack DFS over all
+# nodes) before each launch. The same predicate, in parallel: every node's
+# child pair is in bounds and in its own tree; every non-root node has
+# exactly one parent and the root none; every node reaches its root by
+# parent pointers (pointer jumping, log2(nodes) + 1 rounds). Flags:
+# 0 offsets, 1 bounds, 2 cycle or shared child, 3 unreachable, 4 non-finite.
+comptime FOREST_VALIDATE_FLAGS = 5
+
+
+@always_inline
+def _forest_tree_of(off: MutPointer[Int32, MutAnyOrigin], trees: Int, i: Int) -> Int:
+    """The tree t with off[t] <= i < off[t + 1] (binary search over sorted
+    offsets; the callers re-check the bounds, so bad offsets stay safe)."""
+    var lo = 0
+    var hi = trees
+    while hi - lo > 1:
+        var mid = (lo + hi) // 2
+        if Int(off.unsafe_load(mid)) <= i:
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
+def forest_offsets_check_kernel(
+    off: MutPointer[Int32, MutAnyOrigin], trees_in: Int32, nodes_in: Int32,
+    flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread a tree: offsets strictly increasing inside [0, nodes]."""
+    var t = Int(block_idx.x) * FOREST_FINITE_TPB + Int(thread_idx.x)
+    if t < Int(trees_in):
+        var base = Int(off.unsafe_load(t))
+        var end = Int(off.unsafe_load(t + 1))
+        if base < 0 or end <= base or end > Int(nodes_in):
+            flag.unsafe_store(0, Int32(1))
+
+
+def forest_edges_kernel(
+    off: MutPointer[Int32, MutAnyOrigin], trees_in: Int32, nodes_in: Int32,
+    col: MutPointer[Int32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    features_in: Int32, indeg: MutPointer[Int32, MutAnyOrigin],
+    parent: MutPointer[Int32, MutAnyOrigin], flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread a node: its child pair in bounds (flag 1), each child's
+    in-degree counted and its parent recorded (exact integer atomics; a
+    parent slot written twice is a shared child, which flag 2 reports)."""
+    var i = Int(block_idx.x) * FOREST_FINITE_TPB + Int(thread_idx.x)
+    if i >= Int(nodes_in):
+        return
+    var t = _forest_tree_of(off, Int(trees_in), i)
+    var base = Int(off.unsafe_load(t))
+    var end = Int(off.unsafe_load(t + 1))
+    if i < base or i >= end:
+        return
+    var child = Int(left.unsafe_load(i))
+    if child == -1:
+        return
+    var c = Int(col.unsafe_load(i))
+    if child < 0 or child + 1 >= end - base or c < 0 or c >= Int(features_in):
+        flag.unsafe_store(1, Int32(1))
+        return
+    _ = Atomic.fetch_add(indeg.unsafe_offset(base + child), Int32(1))
+    _ = Atomic.fetch_add(indeg.unsafe_offset(base + child + 1), Int32(1))
+    parent.unsafe_store(base + child, Int32(i))
+    parent.unsafe_store(base + child + 1, Int32(i))
+
+
+def forest_parent_init_kernel(
+    off: MutPointer[Int32, MutAnyOrigin], trees_in: Int32, nodes_in: Int32,
+    indeg: MutPointer[Int32, MutAnyOrigin], parent: MutPointer[Int32, MutAnyOrigin],
+    flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread a node: the in-degree rule (root 0, others exactly 1:
+    flag 2 for a second parent, flag 3 for none); a root or a rejected node
+    points at itself, so pointer jumping never leaves its tree."""
+    var i = Int(block_idx.x) * FOREST_FINITE_TPB + Int(thread_idx.x)
+    if i >= Int(nodes_in):
+        return
+    var t = _forest_tree_of(off, Int(trees_in), i)
+    var base = Int(off.unsafe_load(t))
+    var d = indeg.unsafe_load(i)
+    if i == base:
+        if d != Int32(0):
+            flag.unsafe_store(2, Int32(1))
+        parent.unsafe_store(i, Int32(i))
+    elif d != Int32(1):
+        if d == Int32(0):
+            flag.unsafe_store(3, Int32(1))
+        else:
+            flag.unsafe_store(2, Int32(1))
+        parent.unsafe_store(i, Int32(i))
+
+
+def forest_parent_jump_kernel(nodes_in: Int32, parent: MutPointer[Int32, MutAnyOrigin]):
+    """One round of pointer jumping, in place: parent[i] = parent[parent[i]].
+    Every value stays an ancestor of i (or i's own cycle), so the in-place
+    races only speed it up; the final predicate does not depend on them."""
+    var i = Int(block_idx.x) * FOREST_FINITE_TPB + Int(thread_idx.x)
+    if i < Int(nodes_in):
+        var p = Int(parent.unsafe_load(i))
+        parent.unsafe_store(i, parent.unsafe_load(p))
+
+
+def forest_reach_check_kernel(
+    off: MutPointer[Int32, MutAnyOrigin], trees_in: Int32, nodes_in: Int32,
+    parent: MutPointer[Int32, MutAnyOrigin], flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread a node: after the jumps every node points at its root, or
+    it sits on a cycle cut off from the root (flag 3, as the host walk's
+    unreachable-node error)."""
+    var i = Int(block_idx.x) * FOREST_FINITE_TPB + Int(thread_idx.x)
+    if i >= Int(nodes_in):
+        return
+    var t = _forest_tree_of(off, Int(trees_in), i)
+    var base = Int(off.unsafe_load(t))
+    if Int(parent.unsafe_load(i)) != base:
+        flag.unsafe_store(3, Int32(1))
+
+
+def forest_validate_device(
+    ctx: DeviceContext, mut doff: DeviceBuffer[DType.int32], mut dcol: DeviceBuffer[DType.int32],
+    mut dthr: DeviceBuffer[DType.float32], mut dleft: DeviceBuffer[DType.int32],
+    mut dleaf: DeviceBuffer[DType.float32], trees: Int, nodes: Int, features: Int, outputs: Int,
+) raises:
+    """`validate_flat_forest_host`'s per-node checks on the uploaded model:
+    every step a parallel kernel, one small flag vector read back."""
+    var flag = ctx.enqueue_create_buffer[DType.int32](FOREST_VALIDATE_FLAGS)
+    ctx.enqueue_memset(flag, Int32(0))
+    var indeg = ctx.enqueue_create_buffer[DType.int32](nodes)
+    ctx.enqueue_memset(indeg, Int32(0))
+    var parent = ctx.enqueue_create_buffer[DType.int32](nodes)
+    var fp = flag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var op = doff.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var ip = indeg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pp = parent.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var node_grid = (nodes + FOREST_FINITE_TPB - 1) // FOREST_FINITE_TPB
+    ctx.enqueue_function[forest_nonfinite_kernel](
+        dthr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(nodes), fp + 4,
+        grid_dim=node_grid, block_dim=FOREST_FINITE_TPB,
+    )
+    ctx.enqueue_function[forest_nonfinite_kernel](
+        dleaf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(nodes * outputs), fp + 4,
+        grid_dim=(nodes * outputs + FOREST_FINITE_TPB - 1) // FOREST_FINITE_TPB, block_dim=FOREST_FINITE_TPB,
+    )
+    ctx.enqueue_function[forest_offsets_check_kernel](
+        op, Int32(trees), Int32(nodes), fp,
+        grid_dim=(trees + FOREST_FINITE_TPB - 1) // FOREST_FINITE_TPB, block_dim=FOREST_FINITE_TPB,
+    )
+    ctx.enqueue_function[forest_edges_kernel](
+        op, Int32(trees), Int32(nodes),
+        dcol.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        dleft.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        Int32(features), ip, pp, fp,
+        grid_dim=node_grid, block_dim=FOREST_FINITE_TPB,
+    )
+    ctx.enqueue_function[forest_parent_init_kernel](
+        op, Int32(trees), Int32(nodes), ip, pp, fp,
+        grid_dim=node_grid, block_dim=FOREST_FINITE_TPB,
+    )
+    # ceil(log2(nodes)) + 1 rounds take every node of a valid tree to its root
+    var span = 1
+    var rounds = 1
+    while span < nodes:
+        span *= 2
+        rounds += 1
+    var r = 0
+    while r < rounds:
+        ctx.enqueue_function[forest_parent_jump_kernel](
+            Int32(nodes), pp, grid_dim=node_grid, block_dim=FOREST_FINITE_TPB,
+        )
+        r += 1
+    ctx.enqueue_function[forest_reach_check_kernel](
+        op, Int32(trees), Int32(nodes), pp, fp,
+        grid_dim=node_grid, block_dim=FOREST_FINITE_TPB,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.int32](FOREST_VALIDATE_FLAGS)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=flag)
+    ctx.synchronize()
+    var f_off = h.unsafe_ptr().unsafe_load(0)
+    var f_bounds = h.unsafe_ptr().unsafe_load(1)
+    var f_cycle = h.unsafe_ptr().unsafe_load(2)
+    var f_reach = h.unsafe_ptr().unsafe_load(3)
+    var f_fin = h.unsafe_ptr().unsafe_load(4)
+    _ = h^
+    _ = flag^
+    _ = indeg^
+    _ = parent^
+    if f_fin != Int32(0):
+        raise Error("forest inference prototype requires finite Float32 values")
+    if f_off != Int32(0):
+        raise Error("forest inference offsets must be strictly increasing")
+    if f_bounds != Int32(0):
+        raise Error("forest inference feature/child index out of bounds")
+    if f_cycle != Int32(0):
+        raise Error("forest inference requires acyclic trees without shared children")
+    if f_reach != Int32(0):
+        raise Error("forest inference tree contains unreachable nodes")
+
+
+def forest_validate_lists_device(
+    ctx: DeviceContext, offsets: List[Int32], columns: List[Int32],
+    thresholds: List[Float32], left: List[Int32], leaves: List[Float32],
+    features: Int, outputs: Int,
+) raises:
+    """Upload a flat forest to `ctx` and run `forest_validate_device` on it
+    (for routes that partition the model before their own uploads)."""
+    var nodes = len(columns)
+    var doff = ctx.enqueue_create_buffer[DType.int32](len(offsets))
+    var dcol = ctx.enqueue_create_buffer[DType.int32](nodes)
+    var dthr = ctx.enqueue_create_buffer[DType.float32](nodes)
+    var dleft = ctx.enqueue_create_buffer[DType.int32](nodes)
+    var dleaf = ctx.enqueue_create_buffer[DType.float32](nodes * outputs)
+    ctx.enqueue_copy(dst_buf=doff, src_ptr=offsets.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dcol, src_ptr=columns.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dthr, src_ptr=thresholds.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dleft, src_ptr=left.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dleaf, src_ptr=leaves.unsafe_ptr())
+    forest_validate_device(ctx, doff, dcol, dthr, dleft, dleaf, len(offsets) - 1, nodes, features, outputs)
+    _ = len(offsets)
+    _ = len(columns)
+    _ = len(thresholds)
+    _ = len(left)
+    _ = len(leaves)
+    _ = doff^
+    _ = dcol^
+    _ = dthr^
+    _ = dleft^
+    _ = dleaf^
+
+
+def forest_leaf_flag_kernel(
+    left: MutPointer[Int32, MutAnyOrigin], nodes_in: Int32, flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread a node: 1 for a leaf (`left == -1`), else 0."""
+    var i = Int(block_idx.x) * FOREST_FINITE_TPB + Int(thread_idx.x)
+    if i < Int(nodes_in):
+        flag.unsafe_store(i, Int32(1) if left.unsafe_load(i) == Int32(-1) else Int32(0))
+
+
+def forest_pack_nodes_kernel(
+    thr: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    col: MutPointer[Int32, MutAnyOrigin], leaves: MutPointer[Float32, MutAnyOrigin],
+    rank: MutPointer[Int32, MutAnyOrigin], nodes_in: Int32, outputs_in: Int32,
+    packed: MutPointer[Int32, MutAnyOrigin], compact: MutPointer[Float32, MutAnyOrigin],
+):
+    """One thread a node: the FOREST-PACKED-1 node word (payload, left,
+    column, 0), where a leaf's payload is its rank among the leaves (the
+    exclusive scan of the leaf flags, the host loop's running leaf count)
+    and its leaf vector moves to that rank's slot. Integer moves only."""
+    var i = Int(block_idx.x) * FOREST_FINITE_TPB + Int(thread_idx.x)
+    if i >= Int(nodes_in):
+        return
+    var outputs = Int(outputs_in)
+    var l = left.unsafe_load(i)
+    var payload = bitcast[DType.int32](thr.unsafe_load(i))
+    if l == Int32(-1):
+        var r = Int(rank.unsafe_load(i))
+        payload = Int32(r)
+        for c in range(outputs):
+            compact.unsafe_store(r * outputs + c, leaves.unsafe_load(i * outputs + c))
+    packed.unsafe_store(4 * i, payload)
+    packed.unsafe_store(4 * i + 1, l)
+    packed.unsafe_store(4 * i + 2, col.unsafe_load(i))
+    packed.unsafe_store(4 * i + 3, Int32(0))
+
+
+def forest_pack_device(
+    ctx: DeviceContext, offsets: List[Int32], columns: List[Int32],
+    thresholds: List[Float32], left: List[Int32], leaves: List[Float32],
+    features: Int, outputs: Int,
+    mut packed_out: Optional[DeviceBuffer[DType.int32]],
+    mut leaves_out: Optional[DeviceBuffer[DType.float32]],
+) raises:
+    """Upload the flat forest once, validate it on the device
+    (`forest_validate_device`) and pack it there (FOREST-PACKED-1 layout):
+    the host packing loop over every node is gone (lane cpu3-core). One
+    word, the leaf count, comes back to size the compact leaves."""
+    var nodes = len(columns)
+    var trees = len(offsets) - 1
+    var doff = ctx.enqueue_create_buffer[DType.int32](len(offsets))
+    var dcol = ctx.enqueue_create_buffer[DType.int32](nodes)
+    var dthr = ctx.enqueue_create_buffer[DType.float32](nodes)
+    var dleft = ctx.enqueue_create_buffer[DType.int32](nodes)
+    var dleaf = ctx.enqueue_create_buffer[DType.float32](nodes * outputs)
+    ctx.enqueue_copy(dst_buf=doff, src_ptr=offsets.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dcol, src_ptr=columns.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dthr, src_ptr=thresholds.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dleft, src_ptr=left.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dleaf, src_ptr=leaves.unsafe_ptr())
+    # validates and drains: the host lists are read by the time it returns
+    forest_pack_resident(
+        ctx, doff, dcol, dthr, dleft, dleaf, trees, nodes, features, outputs,
+        packed_out, leaves_out,
+    )
+    _ = len(offsets)
+    _ = len(columns)
+    _ = len(thresholds)
+    _ = len(left)
+    _ = len(leaves)
+    _ = doff^
+    _ = dcol^
+    _ = dthr^
+    _ = dleft^
+    _ = dleaf^
+
+
+def forest_pack_resident(
+    ctx: DeviceContext, mut doff: DeviceBuffer[DType.int32], mut dcol: DeviceBuffer[DType.int32],
+    mut dthr: DeviceBuffer[DType.float32], mut dleft: DeviceBuffer[DType.int32],
+    mut dleaf: DeviceBuffer[DType.float32], trees: Int, nodes: Int, features: Int, outputs: Int,
+    mut packed_out: Optional[DeviceBuffer[DType.int32]],
+    mut leaves_out: Optional[DeviceBuffer[DType.float32]],
+) raises:
+    """`forest_pack_device` on a flat forest already resident on `ctx`
+    (lane cpu4-misc: the multi-GPU grove owners gather their groves on the
+    device and pack them here). Validates, then packs; the input buffers
+    stay the caller's. One word, the leaf count, comes back."""
+    forest_validate_device(ctx, doff, dcol, dthr, dleft, dleaf, trees, nodes, features, outputs)
+    var rank = ctx.enqueue_create_buffer[DType.int32](nodes + 1)
+    var grid = (nodes + FOREST_FINITE_TPB - 1) // FOREST_FINITE_TPB
+    ctx.enqueue_function[forest_leaf_flag_kernel](
+        dleft.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(nodes),
+        rank.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        grid_dim=grid, block_dim=FOREST_FINITE_TPB,
+    )
+    device_exclusive_scan_total(ctx, rank, nodes)
+    var h = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var tail = rank.create_sub_buffer[DType.int32](nodes, 1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=tail)
+    ctx.synchronize()
+    var n_leaf = Int(h.unsafe_ptr().unsafe_load(0))
+    _ = tail^
+    _ = h^
+    var packed = ctx.enqueue_create_buffer[DType.int32](4 * nodes)
+    var compact = ctx.enqueue_create_buffer[DType.float32](max(n_leaf * outputs, 1))
+    ctx.enqueue_function[forest_pack_nodes_kernel](
+        dthr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        dleft.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        dcol.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        dleaf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        rank.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        Int32(nodes), Int32(outputs),
+        packed.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        compact.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        grid_dim=grid, block_dim=FOREST_FINITE_TPB,
+    )
+    ctx.synchronize()
+    _ = rank^
+    packed_out = packed^
+    leaves_out = compact^
+
+
 def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
     ctx: DeviceContext, offsets: List[Int32], columns: List[Int32],
     thresholds: List[Float32], left: List[Int32], leaves: List[Float32],
     x: List[Float32], n_rows: Int, n_features: Int, n_outputs: Int,
 ) raises -> List[Float32]:
     """Validated synchronous prototype; upload and readback included by caller."""
-    validate_flat_forest(offsets,columns,thresholds,left,leaves,x,n_rows,n_features,n_outputs)
-    if n_rows == 0:
-        return List[Float32]()
+    _forest_shape_checks(offsets,columns,thresholds,left,leaves,x,n_rows,n_features,n_outputs)
     var trees = len(offsets)-1
     var doff = ctx.enqueue_create_buffer[DType.int32](len(offsets))
     var dcol = ctx.enqueue_create_buffer[DType.int32](len(columns))
     var dthr = ctx.enqueue_create_buffer[DType.float32](len(thresholds))
     var dleft = ctx.enqueue_create_buffer[DType.int32](len(left))
     var dleaf = ctx.enqueue_create_buffer[DType.float32](len(leaves))
-    var dx = ctx.enqueue_create_buffer[DType.float32](len(x))
-    var dout = ctx.enqueue_create_buffer[DType.float32](n_rows*n_outputs)
-    var hout = ctx.enqueue_create_host_buffer[DType.float32](n_rows*n_outputs)
     ctx.enqueue_copy(dst_buf=doff,src_ptr=offsets.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dcol,src_ptr=columns.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dthr,src_ptr=thresholds.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dleft,src_ptr=left.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dleaf,src_ptr=leaves.unsafe_ptr())
+    # the model's per-node checks run on the device where it landed
+    forest_validate_device(
+        ctx, doff, dcol, dthr, dleft, dleaf, trees, len(columns), n_features, n_outputs,
+    )
+    if n_rows == 0:
+        _ = len(offsets)
+        _ = len(columns)
+        _ = len(thresholds)
+        _ = len(left)
+        _ = len(leaves)
+        return List[Float32]()
+    var dx = ctx.enqueue_create_buffer[DType.float32](len(x))
+    var dout = ctx.enqueue_create_buffer[DType.float32](n_rows*n_outputs)
     ctx.enqueue_copy(dst_buf=dx,src_ptr=x.unsafe_ptr())
     if not device_all_finite(ctx,dx,len(x)):
         raise Error("forest inference prototype requires finite Float32 values")
@@ -656,7 +1033,9 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
         ctx,doff,dcol,dthr,dleft,dleaf,dx,dout,n_rows,n_features,n_outputs,trees,
     )
     var out_ok = device_all_finite(ctx,dout,n_rows*n_outputs)
-    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(),src_buf=dout)
+    # the answer lands straight in the result list (no host copy loop)
+    var result = List[Float32](length=n_rows*n_outputs, fill=Float32(0.0))
+    ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(),src_buf=dout)
     ctx.synchronize()
     # Keep borrowed host inputs and device operands live through the drain.
     _ = len(offsets)
@@ -672,10 +1051,6 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
     _ = dleaf^
     _ = dx^
     _ = dout^
-    var result = List[Float32]()
-    for i in range(n_rows*n_outputs):
-        result.append(hout[i])
-    _ = hout^
     if not out_ok:
         raise Error("forest inference prototype requires finite Float32 values")
     return result^

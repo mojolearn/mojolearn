@@ -718,7 +718,7 @@ def prep2_scratch_words(host_q: IP, stages: Int, sw: Prep2Switches) -> Int:
     """The scratch words (x_prep/device.mojo `dw`) the lane's stages of a
     program need."""
     var need = 0
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         var hq = host_q + (s * STAGE_INTS + 2)
         if op == OP_QUANTILE and Int(hq[7]) == 1:

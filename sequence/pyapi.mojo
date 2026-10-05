@@ -14,6 +14,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_COOP, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
+from sequence.layernorm import LN_FOLD_BLOCK, ln_fold_rows
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 from sequence.ets import ets_scratch
@@ -91,60 +92,46 @@ def opt_of(ip: PythonObject, at: Int, fp: PythonObject, fat: Int) raises -> OptC
 
 
 def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """addrs = [X, y, order (int32), steps (int32), params (in/out), losses, lrs];
-    ip = [cell, D, H, L, O, task, N, T, n_order, n_steps, opt_kind, opt_flags];
-    fp = [f1, f2, eps, weight_decay, f7, initial_accumulator]."""
-    if len(addrs) != 7 or len(ip) != 12 or len(fp) != 6:
-        raise Error("rnn_fit: requires 7 addresses, 12 integer and 6 float parameters")
+    """addrs = [X, y, params (in/out), losses, lrs];
+    ip = [cell, D, H, L, O, task, N, T, epochs, bs, opt_kind, opt_flags,
+    shuffle, seed_lo, seed_hi]; fp = [f1, f2, eps, weight_decay, f7,
+    initial_accumulator]. Lane cpu4-python: no order or step arrays cross
+    in; `rnn_fit` builds each epoch's order on the executor (losses and lrs
+    hold epochs * ceil(N / bs) words)."""
+    if len(addrs) != 5 or len(ip) != 15 or len(fp) != 6:
+        raise Error("rnn_fit: requires 5 addresses, 15 integer and 6 float parameters")
     var x_addr = addrs[0]
     var y_addr = addrs[1]
-    var order_addr = addrs[2]
-    var steps_addr = addrs[3]
-    var p_addr = addrs[4]
-    var losses_addr = addrs[5]
-    var lrs_addr = addrs[6]
+    var p_addr = addrs[2]
+    var losses_addr = addrs[3]
+    var lrs_addr = addrs[4]
     var net = net_of(ip)
     var task = ival(ip, 5)
     var N = ival(ip, 6)
     var T = ival(ip, 7)
-    var n_order = ival(ip, 8)
-    var n_steps = ival(ip, 9)
+    var epochs = ival(ip, 8)
+    var bs = ival(ip, 9)
+    var shuffle = ival(ip, 12) != 0
+    var seed = (UInt64(ival(ip, 14)) << 32) | UInt64(ival(ip, 13))
     if task != TASK_MSE and task != TASK_CE:
         raise Error("rnn_fit: task must be 0 (mse) or 1 (cross-entropy)")
     if task == TASK_CE and net.O < 2:
         raise Error("rnn_fit: cross-entropy needs at least two classes")
-    # The order arrives as int32 (it was float32, which capped the whole
-    # schedule, epochs x N, below 2^24: 16 epochs at 1M rows). Its length is
-    # bounded only by the int32 step offsets; the sample indices it holds
-    # stay below N < 2^24, so the float32 copy the device gathers with is
-    # exact and the bits are the float32 order's.
-    if N < 1 or T < 1 or n_steps < 1 or n_order < 1 or N >= 16777216 or n_order >= 2147483647:
-        raise Error("rnn_fit: N, T, steps and order must be >= 1, N < 2^24 and order < 2^31 - 1")
+    # The sample indices of the order stay below N < 2^24, so the float32
+    # order the device gathers with is exact.
+    if N < 1 or T < 1 or epochs < 1 or bs < 1 or N >= 16777216 or epochs * N >= 2147483647:
+        raise Error("rnn_fit: N, T, epochs and batch size must be >= 1, N < 2^24 and epochs * N < 2^31 - 1")
+    if ival(ip, 13) < 0 or ival(ip, 14) < 0:
+        raise Error("rnn_fit: the seed words must be non-negative 32-bit values")
     var cfg = opt_of(ip, 10, fp, 0)
-    var steps = iptr(steps_addr, "steps")
-    for k in range(n_steps):
-        var off = Int(steps.unsafe_load(2 * k))
-        var cnt = Int(steps.unsafe_load(2 * k + 1))
-        if cnt < 1 or off < 0 or off + cnt > n_order:
-            raise Error("rnn_fit: step " + String(k) + " reads outside the order")
-    var order_i = iptr(order_addr, "order")
-    var order_f = List[Float32](capacity=n_order)
-    for i in range(n_order):
-        var v = Int(order_i.unsafe_load(i))
-        if v < 0 or v >= N:
-            raise Error("rnn_fit: order holds a value that is not a sample index")
-        order_f.append(Float32(v))
-    var order = FP(unsafe_from_address=Int(order_f.unsafe_ptr()))
     if task == TASK_CE:
         var y = fptr(y_addr, "y")
         for i in range(N):
             var v = Int(y.unsafe_load(i))
             if v < 0 or v >= net.O or Float32(v) != y.unsafe_load(i):
                 raise Error("rnn_fit: a label is not a class index below the class count")
-    rnn_fit(ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, order, n_order,
-            steps, n_steps, fptr(p_addr, "params"), fptr(losses_addr, "losses"),
-            fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
-    _ = order_f^
+    rnn_fit(ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
+            fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
     return PythonObject(net.n_params())
 
 
@@ -720,8 +707,17 @@ def mlp_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
     if N < 1 or D < 1 or O < 1 or N >= 16777216:
         raise Error("mlp_fit: N, D, O >= 1 and N < 2^24")
     var net = _mlp_net(ip, 14, D, O, ival(ip, 3), ival(ip, 4))
-    if len(ip) != 15 + len(net.sizes) - 2:
+    var n_ip = 15 + len(net.sizes) - 2
+    # cpu2-l11-neural: an optional trailing flag: 1 = Y holds N int32 class
+    # codes and the one-hot target is built on the executor, 2 = the codes
+    # are the (N, 1) float target.
+    if len(ip) != n_ip and len(ip) != n_ip + 1:
         raise Error("mlp_fit: the hidden layer count does not match the sizes given")
+    var y_codes = 0
+    if len(ip) == n_ip + 1:
+        y_codes = ival(ip, n_ip)
+        if y_codes < 0 or y_codes > 2 or (y_codes == 2 and O != 1):
+            raise Error("mlp_fit: the target-codes flag must be 0, 1 or 2 (2 with one output)")
     var batch = ival(ip, 9)
     var max_iter = ival(ip, 10)
     if batch < 1 or max_iter < 1:
@@ -730,7 +726,7 @@ def mlp_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
                          fptr(addrs[3], "loss_curve"), ival(ip, 5), ival(ip, 6), ival(ip, 7), ival(ip, 8) != 0,
                          batch, max_iter, ival(ip, 11) != 0, UInt64(ival(ip, 12)), ival(ip, 13),
                          fval(fp, 0), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4),
-                         Float64(py=fp[5]), fval(fp, 6), Float64(py=fp[7]))
+                         Float64(py=fp[5]), fval(fp, 6), Float64(py=fp[7]), y_codes)
     return PythonObject(n_iter)
 
 
@@ -746,7 +742,13 @@ def mlp_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     if N < 1 or D < 1 or O < 1 or chunk < 1:
         raise Error("mlp_predict: N, D, O, chunk >= 1")
     var net = _mlp_net(ip, 6, D, O, ival(ip, 3), ival(ip, 4))
-    mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk)
+    # cpu2-l11-neural: an optional trailing flag, 1 = a one-output net writes
+    # the (N, 2) probability [1 - p, p] into `out`.
+    var n_ip = 7 + len(net.sizes) - 2
+    var proba2 = len(ip) == n_ip + 1 and ival(ip, n_ip) == 1 and O == 1
+    mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk, proba2)
+    if proba2:
+        return PythonObject(N * 2)
     return PythonObject(N * O)
 
 
@@ -1210,9 +1212,13 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
         # FAST: the column folds split over row blocks (about 8192 threads,
         # at least 1024 rows each), then one ordered sum of the S partials
         var S = min(max(8192 // D, 1), M // 1024) if _fast_norms() else 0
+        var RS = (M + S - 1) // S if S > 1 else M
+        # IDENTICAL (lane idn-loss-norm-folds, sequence/layernorm.mojo
+        # LN_FOLD_BLOCK): fixed blocks of ln_fold_rows(M) rows
+        comptime if LN_FOLD_BLOCK:
+            RS = ln_fold_rows(M)
+        S = (M + RS - 1) // RS
         if S > 1:
-            var RS = (M + S - 1) // S
-            S = (M + RS - 1) // RS
             var PW = ex.alloc(S * D)
             var PB = ex.alloc(S * D)
             c.p6 = PW

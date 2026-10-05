@@ -44,12 +44,14 @@ from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
 from checks.fixed_point import choose_scale
 from spectral.checks.device_io import download_f32, download_u32, upload_f32
+from spectral.impl.labels_device import IDN_SPECTRAL_LABELS_DEVICE, download_labels_i32
 from spectral.impl.spectral_predict_common import SpectralPredictionState
 from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     _use_fast_graph,
     create_connectivity_graph,
     transform_dataset_keep,
+    transform_dense_keep,
     transform_graph_keep,
 )
 from spectral.impl.sparse.coo import CooGraph
@@ -111,6 +113,34 @@ def fit_predict_graph_keep(
         seed=config.seed,
     )
     var n_out = transform_graph_keep(ctx, emb_params, connectivity_graph, embedding_out, state, keep, trace)
+    _cluster_embedding(ctx, config, n_samples, n_out, labels, embedding_out, state, keep, trace)
+
+
+def fit_predict_dense_keep(
+    ctx: DeviceContext,
+    config: SpectralClusteringParams,
+    dense: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    m: Int,
+    var indptr: DeviceBuffer[DType.int32],
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+) raises:
+    """`fit_predict_graph_keep` on a DENSE device affinity (lane
+    cpu2-l9-neighbors): the graph is compacted on the device
+    (`transform_dense_keep`), diagonal kept as the COO route keeps it."""
+    if config.n_clusters < 1 or config.n_clusters > n_samples:
+        raise Error(
+            "spectral clustering: n_clusters=" + String(config.n_clusters)
+            + " must satisfy 1 <= n_clusters <= n_samples"
+        )
+    var emb_params = _embedding_params(config)
+    var n_out = transform_dense_keep(
+        ctx, emb_params, dense, n_samples, m, False, indptr^, embedding_out, state, keep, trace
+    )
     _cluster_embedding(ctx, config, n_samples, n_out, labels, embedding_out, state, keep, trace)
 
 
@@ -191,10 +221,13 @@ def _cluster_embedding(
         Float32(sum_scale),
         Float32(weight_scale),
     )
-    var got = download_u32(ctx, d_labels, n_samples)
-    labels.clear()
-    for i in range(n_samples):
-        labels.append(Int32(got[i]))
+    comptime if IDN_SPECTRAL_LABELS_DEVICE:
+        labels = download_labels_i32(ctx, d_labels, n_samples)
+    else:
+        var got = download_u32(ctx, d_labels, n_samples)
+        labels.clear()
+        for i in range(n_samples):
+            labels.append(Int32(got[i]))
     trace.record_list_i32("spectral.labels", labels)
     if keep:
         # lane/spectral-predict: a COPY of the final centroids the labels

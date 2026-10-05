@@ -37,6 +37,7 @@ discipline; the gradient buffer holds `n_free` matrices in theta order.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (
@@ -48,6 +49,7 @@ from checks.numerics import (
 )
 from gaussian_process.checks.kernels import (
     GP_ELEM_TPB,
+    GP_IDN_PRESCALE,
     GP_K_CONST,
     GP_K_MATERN,
     GP_K_PROD,
@@ -61,6 +63,7 @@ from gaussian_process.checks.kernels import (
     gp_kernel_stack_floats,
     gp_matern_kernel,
     gp_matern_nu_selector,
+    gp_prescale_kernel,
     gp_rbf_kernel,
     gp_scaled_sqdist,
     gp_sqrt3,
@@ -71,6 +74,18 @@ from gaussian_process.checks.kernels import (
 from gaussian_process.host.gp_theta import gp_free_count
 
 #: The length-scale gradient forms.
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_GP_GRAD_PRESCALE_OFF` restores the in-cell divisions;
+#: also off with `GP_IDN_PRESCALE`): `gp_kernel_matrix_grad`, the single
+#: evaluation behind `log_marginal_likelihood(theta, eval_gradient=True)`,
+#: takes the optimizer walk's prescaled form (gp_optim.mojo). Each quotient
+#: is rounded before the subtraction either way (DEVIATION 1753): no bit
+#: moves, and the host column is untouched. The function now waits once at
+#: its end (the scaled copy is its own).
+comptime GP_IDN_GRAD_PRESCALE = GP_IDN_PRESCALE and not (
+    is_defined["MOJOLEARN_IDN_GP_GRAD_PRESCALE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
 comptime GP_GRAD_RBF = 0
 comptime GP_GRAD_MATERN05 = 1
 comptime GP_GRAD_MATERN15 = 2
@@ -138,6 +153,44 @@ def gp_ls_grad_kernel(
         g.unsafe_store(f * cells + t, gp_ls_gradient_value(form, dd, d2, k, sqrt3, sqrt5))
 
 
+def gp_ls_grad_pre_kernel(
+    g: MutPointer[Float32, MutAnyOrigin],
+    kval: MutPointer[Float32, MutAnyOrigin],
+    xs: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    ls_len_in: Int32,
+    form_in: Int32,
+    sqrt3: Float32,
+    sqrt5: Float32,
+):
+    """`gp_ls_grad_kernel` over the scaled copy `xs = X / length_scale`
+    (`kernels.mojo::gp_prescale_kernel`, GP_IDN_PRESCALE): the same cells
+    from the stored quotients, no division in the cell. `ls_len` is the
+    leaf's own (1 or d) and only selects the output layout."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var ls_len = Int(ls_len_in)
+    var form = Int(form_in)
+    var cells = n * n
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= cells:
+        return
+    var i = t // n
+    var j = t - i * n
+    var k = ftz(kval.unsafe_load(t))
+    var d2 = gp_scaled_sqdist(xs, xs, xs, i, j, d, 0)
+    if ls_len == 1:
+        g.unsafe_store(t, gp_ls_gradient_value(form, d2, d2, k, sqrt3, sqrt5))
+        return
+    for f in range(d):
+        var xv = ftz(xs.unsafe_load(i * d + f))
+        var yv = ftz(xs.unsafe_load(j * d + f))
+        var diff = ftz(xv - yv)
+        var dd = ftz(identical_mul(diff, diff))
+        g.unsafe_store(f * cells + t, gp_ls_gradient_value(form, dd, d2, k, sqrt3, sqrt5))
+
+
 def gp_kernel_matrix_grad(
     ctx: DeviceContext,
     mut out: DeviceBuffer[DType.float32],
@@ -160,6 +213,14 @@ def gp_kernel_matrix_grad(
     var x2 = x_input.create_sub_buffer[DType.float32](0, len(x_input))
     if n <= 0 or d <= 0:
         raise Error("gp_kernel_matrix_grad: n and d must be positive")
+    # GP_IDN_GRAD_PRESCALE: the n x d scaled copy of X, rewritten per RBF /
+    # Matern leaf (one float when the define is off, never read)
+    var xs_floats = 1
+    comptime if GP_IDN_GRAD_PRESCALE:
+        xs_floats = n * d
+    var xs_own = ctx.enqueue_create_buffer[DType.float32](xs_floats)
+    var xs = xs_own.create_sub_buffer[DType.float32](0, xs_floats)
+    var xs2 = xs_own.create_sub_buffer[DType.float32](0, xs_floats)
     if elem_tpb <= 0:
         raise Error("gp_kernel_matrix_grad: elem_tpb must be positive")
     gp_validate_kernel(spec, d)
@@ -252,27 +313,48 @@ def gp_kernel_matrix_grad(
             var ln = Int(spec.ls_len[t])
             var lsview = dls.create_sub_buffer[DType.float32](Int(spec.ls_off[t]), ln)
             var form = GP_GRAD_RBF
+            var ls_arg = spec.ls_len[t]
+            var xa = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var xb = x2.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            comptime if GP_IDN_GRAD_PRESCALE:
+                # gp_optim.mojo's form: X / length_scale written once for
+                # this leaf, the cells fold the stored quotients
+                ctx.enqueue_function[gp_prescale_kernel](
+                    xs.unsafe_ptr(), x.unsafe_ptr(), lsview.unsafe_ptr(),
+                    Int32(n), Int32(d), spec.ls_len[t],
+                    grid_dim=((n * d + elem_tpb - 1) // elem_tpb, 1, 1), block_dim=(elem_tpb, 1, 1),
+                )
+                ls_arg = Int32(0)
+                xa = xs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                xb = xs2.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             if kind == GP_K_RBF:
                 ctx.enqueue_function[gp_rbf_kernel](
-                    slot.unsafe_ptr(), x.unsafe_ptr(), x2.unsafe_ptr(), lsview.unsafe_ptr(),
-                    Int32(n), Int32(n), Int32(d), spec.ls_len[t],
+                    slot.unsafe_ptr(), xa, xb, lsview.unsafe_ptr(),
+                    Int32(n), Int32(n), Int32(d), ls_arg,
                     grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
                 )
             else:
                 var nu_sel = gp_matern_nu_selector(spec.params[t])
                 form = GP_GRAD_MATERN05 + nu_sel
                 ctx.enqueue_function[gp_matern_kernel](
-                    slot.unsafe_ptr(), x.unsafe_ptr(), x2.unsafe_ptr(), lsview.unsafe_ptr(),
-                    Int32(n), Int32(n), Int32(d), spec.ls_len[t], Int32(nu_sel), sqrt3, sqrt5,
+                    slot.unsafe_ptr(), xa, xb, lsview.unsafe_ptr(),
+                    Int32(n), Int32(n), Int32(d), ls_arg, Int32(nu_sel), sqrt3, sqrt5,
                     grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
                 )
             if is_free:
                 var gsub = dgrad.create_sub_buffer[DType.float32](gi * cells, ln * cells)
-                ctx.enqueue_function[gp_ls_grad_kernel](
-                    gsub.unsafe_ptr(), slot.unsafe_ptr(), x.unsafe_ptr(), lsview.unsafe_ptr(),
-                    Int32(n), Int32(d), Int32(ln), Int32(form), sqrt3, sqrt5,
-                    grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
-                )
+                comptime if GP_IDN_GRAD_PRESCALE:
+                    ctx.enqueue_function[gp_ls_grad_pre_kernel](
+                        gsub.unsafe_ptr(), slot.unsafe_ptr(), xs.unsafe_ptr(),
+                        Int32(n), Int32(d), Int32(ln), Int32(form), sqrt3, sqrt5,
+                        grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[gp_ls_grad_kernel](
+                        gsub.unsafe_ptr(), slot.unsafe_ptr(), x.unsafe_ptr(), lsview.unsafe_ptr(),
+                        Int32(n), Int32(d), Int32(ln), Int32(form), sqrt3, sqrt5,
+                        grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
+                    )
                 _ = gsub^
                 gi += ln
                 count.append(ln)
@@ -288,4 +370,10 @@ def gp_kernel_matrix_grad(
         grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
     )
     _ = root^
+    comptime if GP_IDN_GRAD_PRESCALE:
+        # the scaled copy is this function's own: wait before it is freed
+        ctx.synchronize()
+    _ = xs^
+    _ = xs2^
+    _ = xs_own^
     return n_free

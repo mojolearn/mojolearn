@@ -90,7 +90,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -118,6 +118,26 @@ comptime SEG_SUMS_TPB = 256
 #: `8 * sizeof(T)` for `T = float`, i.e. their `end_bit`
 #: (`quantiles.cuh:253`). Their `begin_bit` is `0`.
 comptime FLOAT32_KEY_BITS = 32
+
+#: K11 (IDENTICAL, lane ml-cluster-nbrs 2026-10-04): `segmented_sort_keys_f32`
+#: sorts by 8-bit digits, 4 passes of 3 launches, instead of 32 one-bit passes
+#: of 4 launches. A sort of keys has one answer, so the output words are the
+#: same bit for bit on every vendor (and the host column, which does not run
+#: this, is unchanged). Each pass is a stable counting sort: per (segment,
+#: block) digit counts with no atomics, one exclusive Int32 scan per segment in
+#: (digit, block) order, then a stable scatter whose in-block rank is counted
+#: from a shared copy of the block's digits. The counts live in the caller's
+#: `offsets` buffer, so the form runs only when R8_BINS * blocks_wide <=
+#: seg_size (seg_size >= R8_BINS); smaller segments keep the one-bit passes.
+#: Shared pages: SORT_BLOCK Int32 = 2 KB (under every column's 16 KB floor).
+#: `-D MOJOLEARN_IDN_SEG_RADIX8_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
+#: one-bit passes. The one-bit kernels stay for ensemble/randomforest.mojo.
+comptime IDN_SEG_RADIX8 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_SEG_RADIX8_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime R8_BITS = 8
+comptime R8_BINS = 256
+comptime R8_PASSES = FLOAT32_KEY_BITS // R8_BITS
 
 
 @always_inline
@@ -350,6 +370,161 @@ def seg_reorder_one_bit_kernel(
     keys.unsafe_store(base + Int(dst), key)
 
 
+def seg_r8_count_kernel(
+    keys: MutPointer[UInt32, MutAnyOrigin],
+    shift_in: Int32,
+    seg_size_in: Int32,
+    blocks_wide_in: Int32,
+    cnt: MutPointer[Int32, MutAnyOrigin],
+):
+    """K11: cnt[seg*seg_size + digit*blocks_wide + block] = how many keys of
+    this block (block_idx.x) of segment block_idx.y have that digit. Integer
+    counts by a fixed scan of a shared copy of the digits: no atomics."""
+    comptime assert SORT_BLOCK >= R8_BINS, "one thread per digit"
+    var seg = Int(block_idx.y)
+    var seg_size = Int(seg_size_in)
+    var base = seg * seg_size
+    var tid = Int(thread_idx.x)
+    var blk = Int(block_idx.x)
+    var start = blk * SORT_BLOCK
+    var dg = stack_allocation[
+        SORT_BLOCK, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var d = Int32(-1)
+    if start + tid < seg_size:
+        d = Int32((Int(keys.unsafe_load(base + start + tid)) >> Int(shift_in)) & 0xFF)
+    dg[tid] = d
+    barrier()
+    if tid < R8_BINS:
+        var c = Int32(0)
+        var want = Int32(tid)
+        for j in range(SORT_BLOCK):
+            if dg[j] == want:
+                c += 1
+        cnt.unsafe_store(base + tid * Int(blocks_wide_in) + blk, c)
+
+
+def seg_r8_scan_kernel(
+    cnt: MutPointer[Int32, MutAnyOrigin],
+    seg_size_in: Int32,
+    blocks_wide_in: Int32,
+):
+    """K11: the exclusive scan, in place, of one segment's R8_BINS *
+    blocks_wide counts in (digit, block) order: each entry becomes the
+    position of that block's first key of that digit. One SORT_BLOCK-thread
+    block per segment, chunks scanned by the block prefix sum and carried
+    (Int32 adds: one answer)."""
+    var seg = Int(block_idx.x)
+    var base = seg * Int(seg_size_in)
+    var used = R8_BINS * Int(blocks_wide_in)
+    var tid = Int(thread_idx.x)
+    var total = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var carry = Int32(0)
+    var c0 = 0
+    while c0 < used:
+        var b = c0 + tid
+        var v = Int32(0)
+        if b < used:
+            v = cnt.unsafe_load(base + b)
+        var ex = prefix_sum[block_size=SORT_BLOCK, exclusive=True](v)
+        if b < used:
+            cnt.unsafe_store(base + b, carry + ex)
+        if tid == SORT_BLOCK - 1:
+            total[0] = ex + v
+        barrier()
+        carry += total[0]
+        barrier()
+        c0 += SORT_BLOCK
+
+
+def seg_r8_scatter_kernel(
+    src_keys: MutPointer[UInt32, MutAnyOrigin],
+    shift_in: Int32,
+    seg_size_in: Int32,
+    blocks_wide_in: Int32,
+    cnt: MutPointer[Int32, MutAnyOrigin],
+    dst_keys: MutPointer[UInt32, MutAnyOrigin],
+):
+    """K11: the stable scatter of one pass. A key goes to its (digit, block)
+    start plus the keys of the same digit before it in its block, so equal
+    digits keep their order (what makes the LSD loop a sort)."""
+    var seg = Int(block_idx.y)
+    var seg_size = Int(seg_size_in)
+    var base = seg * seg_size
+    var tid = Int(thread_idx.x)
+    var blk = Int(block_idx.x)
+    var i = blk * SORT_BLOCK + tid
+    var dg = stack_allocation[
+        SORT_BLOCK, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var key = UInt32(0)
+    var d = Int32(-1)
+    if i < seg_size:
+        key = src_keys.unsafe_load(base + i)
+        d = Int32((Int(key) >> Int(shift_in)) & 0xFF)
+    dg[tid] = d
+    barrier()
+    if i >= seg_size:
+        return
+    var rank = 0
+    for j in range(tid):
+        if dg[j] == d:
+            rank += 1
+    var at = Int(cnt.unsafe_load(base + Int(d) * Int(blocks_wide_in) + blk))
+    dst_keys.unsafe_store(base + at + rank, key)
+
+
+def _seg_radix8_sort(
+    ctx: DeviceContext,
+    blocks_wide: Int,
+    n_segments: Int,
+    seg_size: Int,
+    mut work_a: DeviceBuffer[DType.uint32],
+    mut work_b: DeviceBuffer[DType.uint32],
+    mut offsets: DeviceBuffer[DType.int32],
+) raises:
+    """K11: R8_PASSES (even) 8-bit passes, ping-pong a -> b -> a: the sorted
+    keys end in work_a, as the one-bit loop leaves them."""
+    comptime assert (R8_PASSES % 2) == 0, "an odd pass count would leave the answer in work_b"
+    for p in range(R8_PASSES):
+        var shift = p * R8_BITS
+        # untracked: the ping-pong select merges both origins, which the
+        # aliasing check reads as src == dst (box-run-2 compile fix).
+        var src = (work_a.unsafe_ptr() if p % 2 == 0 else work_b.unsafe_ptr()).unsafe_origin_cast[MutUntrackedOrigin]()
+        var dst = (work_b.unsafe_ptr() if p % 2 == 0 else work_a.unsafe_ptr()).unsafe_origin_cast[MutUntrackedOrigin]()
+        log_launch("seg_sort_r8_count")
+        ctx.enqueue_function[seg_r8_count_kernel](
+            src,
+            Int32(shift),
+            Int32(seg_size),
+            Int32(blocks_wide),
+            offsets.unsafe_ptr(),
+            grid_dim=(blocks_wide, n_segments, 1),
+            block_dim=(SORT_BLOCK, 1, 1),
+        )
+        log_launch("seg_sort_r8_scan")
+        ctx.enqueue_function[seg_r8_scan_kernel](
+            offsets.unsafe_ptr(),
+            Int32(seg_size),
+            Int32(blocks_wide),
+            grid_dim=(n_segments, 1, 1),
+            block_dim=(SORT_BLOCK, 1, 1),
+        )
+        log_launch("seg_sort_r8_scatter")
+        ctx.enqueue_function[seg_r8_scatter_kernel](
+            src,
+            Int32(shift),
+            Int32(seg_size),
+            Int32(blocks_wide),
+            offsets.unsafe_ptr(),
+            dst,
+            grid_dim=(blocks_wide, n_segments, 1),
+            block_dim=(SORT_BLOCK, 1, 1),
+        )
+
+
 def segmented_sort_keys_f32(
     ctx: DeviceContext,
     n_segments: Int,
@@ -405,9 +580,17 @@ def segmented_sort_keys_f32(
         FLOAT32_KEY_BITS % 2
     ) == 0, "an odd pass count would leave the answer in work_b"
 
+    var by_r8 = False
+    comptime if IDN_SEG_RADIX8:
+        if R8_BINS * blocks_wide <= seg_size:
+            _seg_radix8_sort(
+                ctx, blocks_wide, n_segments, seg_size, work_a, work_b, offsets
+            )
+            by_r8 = True
+
     var bit = 0
     var parity = 0
-    while bit < FLOAT32_KEY_BITS:
+    while bit < FLOAT32_KEY_BITS and not by_r8:
         if parity == 0:
             _seg_radix_pass(
                 ctx,

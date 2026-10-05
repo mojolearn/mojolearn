@@ -404,7 +404,7 @@ def mf_cov_kernel(
 
 
 @always_inline
-def _logdet(a: F32Ptr, o: Int, dd: Int) -> Float32:
+def _logdet_kern(a: F32Ptr, o: Int, dd: Int) -> Float32:
     """`fast_logdet` on the d x d block at a[o:]: partial-pivot LU in place
     (x_decomp/host.mojo `lu`: the first largest |a_ik| by `>`), -inf for a
     zero pivot or an odd sign, else the ascending sum of log(max(|u_ii|,
@@ -462,7 +462,7 @@ def mf_det_kernel(
         var o = c * dd * dd
         for q in range(dd * dd):
             work.unsafe_store(o + q, cov.unsafe_load(o + q))
-        var cur = _logdet(work, o, dd)
+        var cur = _logdet_kern(work, o, dd)
         det.unsafe_store(c, cur)
         var s = Int(step)
         var iters = Int(n_iter) - s
@@ -488,10 +488,10 @@ def mf_det_wide_kernel(
     active: I32Ptr, needp: I32Ptr, fin: I32Ptr, err: I32Ptr,
 ):
     """MCD_WIDE: mf_det_kernel with one BLOCK per candidate. The
-    LU is _logdet's (MCD_BATCH_COMPAT cells): the pivot is the first largest
+    LU is _logdet_kern's (MCD_BATCH_COMPAT cells): the pivot is the first largest
     |a_ik| by `>` (a block reduction, ties to the lower row), the row swap,
     the factors and the trailing update are parallel over rows / cells (row
-    k is not written during step k, so each cell sees _logdet's operands),
+    k is not written during step k, so each cell sees _logdet_kern's operands),
     the log sum is one thread's ascending sum. Then the same C-step control."""
     var c = Int(block_idx.x)
     if active.unsafe_load(c) == 0:
@@ -534,7 +534,7 @@ def mf_det_wide_kernel(
             w //= 2
         var p = Int(si[0])
         if p >= dd:
-            p = k  # every |a_ik| unordered (NaN): _logdet keeps p = k
+            p = k  # every |a_ik| unordered (NaN): _logdet_kern keeps p = k
         if p != k:
             if tid == 0:
                 neg += 1
@@ -1293,6 +1293,21 @@ def _finish(
     _ = herr^
 
 
+def mf_pair_table_kernel(pj: I32Ptr, pk: I32Ptr, d_in: Int32):
+    """One thread a (j, k) cell of d x d: for k >= j, pair index
+    j * d - j * (j - 1) / 2 + (k - j) gets (j, k), the row-major upper
+    triangle order the host loop built. Integer only."""
+    var d = Int(d_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < d * d:
+        var j = t // d
+        var k = t % d
+        if k >= j:
+            var p = j * d - j * (j - 1) // 2 + (k - j)
+            pj.unsafe_store(p, Int32(j))
+            pk.unsafe_store(p, Int32(k))
+
+
 def fast_mcd_fast(
     X: Mat, p: List[Int], loc_out: F32Ptr, cov_out: F32Ptr, sup_out: I32Ptr, dist_out: F32Ptr,
 ) raises -> Bool:
@@ -1318,16 +1333,12 @@ def fast_mcd_fast(
         ft0 = _pms(ctx)
         ftp = ft0
     var npair = d * (d + 1) // 2
-    var hpj = List[Int32](capacity=npair)
-    var hpk = List[Int32](capacity=npair)
-    for j in range(d):
-        for k in range(j, d):
-            hpj.append(Int32(j))
-            hpk.append(Int32(k))
+    # the (j, k <= j..d) pair table is written on the device (lane cpu3-core)
     var pj = ctx.enqueue_create_buffer[DType.int32](npair)
     var pk = ctx.enqueue_create_buffer[DType.int32](npair)
-    ctx.enqueue_copy(dst_buf=pj, src_ptr=hpj.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=pk, src_ptr=hpk.unsafe_ptr())
+    ctx.enqueue_function[mf_pair_table_kernel](
+        _i(pj), _i(pk), Int32(d), grid_dim=_blocks(d * d), block_dim=MF_TPB,
+    )
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
     ctx.enqueue_copy(dst_buf=dx, src_ptr=X.p())
     var err = ctx.enqueue_create_buffer[DType.int32](MF_ERR)
@@ -1432,8 +1443,6 @@ def fast_mcd_fast(
     comptime if MCD_PROFILE:
         print("MCDPROF fit n=", n, " d=", d, " h=", h, " total_ms=", _pms(ctx) - ft0, " alloc_a_ms=", fprof[0],
               " alloc_b_ms=", fprof[1], " alloc_c_ms=", fprof[2], " finish_ms=", fprof[3], sep="")
-    _ = hpj^
-    _ = hpk^
     _ = hany^
     _ = pj^
     _ = pk^

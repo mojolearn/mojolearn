@@ -1,0 +1,103 @@
+{
+  "schema": 1,
+  "branch": "integration/identical-all-20261004",
+  "policy": {
+    "owner": "This session owns all IDENTICAL and PTX work; subagents work on this branch.",
+    "toggle_retention": "Keep per-candidate ON/OFF controls for measurement and rollback, including after promotion. Latest user direction supersedes the old handoff instruction to remove OFF controls after measurement.",
+    "master_control": "MOJOLEARN_IDN_ALL_OFF; route readback gates verify actual ON/OFF builds. Not every individual flag is a default-on switch.",
+    "comments": "Explain the change, arithmetic/synchronization/ownership implications, enabling/disabling flags, and scope next to the implementation.",
+    "correctness_repairs": "Keep correctness fixes in both comparison arms. OFF disables the optimization, not required correctness or Python module initialization.",
+    "identity": "Compare raw outputs across vendors within each arm; bits may change between ON/OFF or previous versions.",
+    "promotion": "Require cross-vendor identity, predictive quality within a frozen defensible noise margin, and a speed improvement before main promotion.",
+    "evidence": "Retain exact source, compiler, flags, architecture, artifact/input hashes, complete logs, return codes, quality/identity/timing receipts, and keep/drop verdict.",
+    "publishing": "Out of scope.",
+    "apple_checks": "Deferred by latest user instruction: no Apple GPU/CPU verification or compile checks; M2 move cancelled. Retain prior evidence without claiming current Apple qualification.",
+    "verification_schedule": "Focused NVIDIA/AMD checks during iteration and winner selection; exhaustive combined-source verification on main before any future PyPI release. Publishing remains out of scope."
+  },
+  "records": [
+    {
+      "candidate": "RF fused partition / DART",
+      "toggle": "MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF",
+      "implementation": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+      "correctness_fix_commit": "366a56a0a",
+      "change": "Use separate persistent pinned upload sources for histogram and partition phases, preserving arithmetic and existing completion wait.",
+      "status": "PENDING_QUALITY_AND_SPEED",
+      "evidence": "~/mojolearn-evidence/identical-all/dart-fixed-all-column-bits.json",
+      "validation": "2009 full-fixture outputs match NVIDIA/AMD/CPU; AMD two-fit repeatability passes. AMD artifact is explicitly patch-equivalent; final uniform-source wave pending.",
+      "main_promoted": false
+    },
+    {
+      "candidate": "Block Jacobi eigensolver",
+      "enable": "MOJOLEARN_IDN_EIGH_BLOCK_ON",
+      "disable": "MOJOLEARN_IDN_EIGH_BLOCK_OFF",
+      "implementation": "x_decomp/rr_block.mojo",
+      "decision_commit": "0dd0b4de3",
+      "status": "DISABLED_BY_DEFAULT",
+      "reason": "Strict convergence refusal on captured pivot; preserve strict tolerance and scalar fallback.",
+      "evidence": "~/mojolearn-evidence/identical-all/eigh-block-drop.json",
+      "main_promoted": false
+    },
+    {
+      "candidate": "Shared IDENTICAL callpath",
+      "enable": "MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH",
+      "implementation": "experiments/identical_callpath",
+      "status": "EXPERIMENT_NOT_FULL_ESTIMATOR_INTEGRATION",
+      "validation": "Three scalar/primitive/transport fixture digests match NVIDIA4090, Blackwell, AMD and Apple GPU; arithmetic fixtures also match Linux host.",
+      "evidence": "~/mojolearn-evidence/callpath-20261004/metal-58761102d/runtime-results.json",
+      "main_promoted": false
+    },
+    {
+      "candidate": "Combined-source NVIDIA PTX qualification",
+      "implementation": [
+        "tools/nvidia_baseline_gpu_batch.py",
+        "tools/nvidia_baseline_qualification.py",
+        "python/mojolearn/ptx_admission.py"
+      ],
+      "status": "REQUIRES_NEW_COMBINED_SOURCE_QUALIFICATION",
+      "source_branch": "integration/identical-all-20261004",
+      "historical_evidence": "Earlier5c156c5f rehearsal is historical only and does not admit current source.",
+      "current_work": "Pinned combined-source tooling tests and source-built sm80 PTX/native checks on held NVIDIA hardware. No Apple checks.",
+      "final_matrix": [
+        "RTX4090 native sm89 versus forced sm80 PTX",
+        "H100 native sm90a versus forced sm80 PTX",
+        "A100 forced sm80 PTX, automatic fallback and local qualify-gpu"
+      ],
+      "release_policy": "Final full receipts/admission bind the final frozen combined source; incomplete preliminary probes cannot create release qualification. No CPU fallback.",
+      "main_promoted": false,
+      "publishing": "Out of scope.",
+      "preliminary_evidence": "bench/results/identical-integration-20261004/current-ptx-probe.json",
+      "preliminary_result": "Pinned e82c12650:211tests+24subtests pass;sm89 native and forced-JITsm80 primitive digest match. Final architecture/admission matrix remains pending."
+    },
+    {
+      "candidate": "CNN/SGD correctness and launch bounds",
+      "status": "TARGETED_BITS_PASS_SPEED_PENDING",
+      "evidence": "bench/results/identical-integration-20261004/cnn-sgd-bits.json",
+      "validation": "Small/medium25cases perarm/column match NVIDIA/AMD/Linuxhost; no Apple claim.",
+      "fixes": [
+        "be3348860 linear module initialization export",
+        "a4d01a130 SGD launch-bound metadata"
+      ],
+      "main_promoted": false
+    }
+  ],
+  "correctness_repairs": [
+    {
+      "commit": "301156228",
+      "change": "Canonical computed LU NaN result words for within-version identity; retained across optimization arms.",
+      "evidence": "~/mojolearn-evidence/identical-all/lu-nan-fix-report.json"
+    },
+    {
+      "commit": "be3348860",
+      "change": "Export x_linear Python module initializer instead of helper; native import failed without it.",
+      "evidence": "Native build/import receipts under ~/mojolearn-evidence/identical-all/amd/lq and ~/mojolearn-evidence/identical-blackwell/nv/lq."
+    }
+  ],
+  "evidence_storage": {
+    "working_evidence": "~/mojolearn-evidence/identical-all/",
+    "blackwell_evidence": "~/mojolearn-evidence/identical-blackwell/",
+    "remote_logs": "/root/lq/ on each rental, continuously harvested",
+    "r2": "Verified evidence backups and dataset archives; keys/checksums recorded in bench/results/r2-index.tsv",
+    "committed_findings": "bench/results/identical-integration-20261004/manifest.json"
+  },
+  "coverage_note": "Initial decision ledger for current findings. Source toggle inventory covers the integrated flags; this ledger does not claim every candidate has completed validation."
+}

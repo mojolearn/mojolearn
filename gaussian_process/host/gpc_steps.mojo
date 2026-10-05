@@ -98,6 +98,7 @@ from core.host_predict_threads import (
     host_predict_task_count,
 )
 from gaussian_process.gpc_proba64 import gpc_ovr_combine_row
+from gaussian_process.gp_var_seg import GP_IDN_VAR_SEG, gp_var_seg_sumsq_host
 from gaussian_process.gpc_items import (
     gpc_weight_item, gpc_rhs_item, gpc_scale_item, gpc_a_item, gpc_residual_item, gpc_lml_part_item, gpc_lml_fin,
     gpc_fold_blocks,
@@ -248,9 +249,13 @@ def gpc_latent_var(
     var out = List[Float32](capacity=n_star)
     for t in range(n_star):
         var acc = Float32(0.0)
-        for i in range(n_train):
-            var vv = ftz(v[i * n_star + t])
-            acc = ftz(identical_mul_add(vv, vv, acc))
+        comptime if GP_IDN_VAR_SEG:
+            # fix-kg1-kernel B13: `gpc_latent_var_seg_kernel`'s fold
+            acc = gp_var_seg_sumsq_host(v, n_train, n_star, t)
+        else:
+            for i in range(n_train):
+                var vv = ftz(v[i * n_star + t])
+                acc = ftz(identical_mul_add(vv, vv, acc))
         out.append(ftz(ftz(kss) - acc))
     return out^
 

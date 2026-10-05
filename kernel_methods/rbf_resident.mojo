@@ -44,6 +44,7 @@ from core.device_scan import (
     _scan_blocks,
     device_classify_nonfinite,
     nonfinite_partial_kernel,
+    min_partials_kernel,
 )
 from gemm.afn_apple_fast import AFN_GEMM_FP32_MMA, afn_gemm_fp32_into
 from gemm.checks.gemm_identical import _fast_vendor_gemm, identical_gemm_into, identical_gemm_workspace_max_floats
@@ -219,9 +220,14 @@ def _rbf_unpiped(
         st[].part.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(nx),
         grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
     )
+    # the partials fold on the device into slot SCAN_BLOCKS: one word home
+    ctx.enqueue_function[min_partials_kernel](
+        st[].part.value().unsafe_ptr() + SCAN_BLOCKS, st[].part.value().unsafe_ptr(),
+        Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
     _rbf_gemm(ctx, dz, dx, dw, m, q, d)
     km_feature_map_epilogue(ctx, dz, db, m, q, scale, KM_RF_TPB, KMSAB_NONE)
-    var psub = st[].part.value().create_sub_buffer[DType.int32](0, blocks)
+    var psub = st[].part.value().create_sub_buffer[DType.int32](SCAN_BLOCKS, 1)
     ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=psub)
     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
@@ -280,8 +286,9 @@ def rbf_sampler_fit_transform_resident(
     var ctx = _family_ctx()
     var st = _RBF_STAGE.get_or_create_ptr()
     if not st[].part:
-        st[].part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS)
-        st[].host = ctx.enqueue_create_host_buffer[DType.int32](SCAN_BLOCKS)
+        # SCAN_BLOCKS partials plus one slot for their device-folded minimum
+        st[].part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS + 1)
+        st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
     var dw = pool_take["MojoKmRbfResW"](ctx, d * q)
     var db = pool_take["MojoKmRbfResB"](ctx, q)
     var dx = pool_take["MojoKmRbfResX"](ctx, nx)
@@ -311,7 +318,12 @@ def rbf_sampler_fit_transform_resident(
                             st[].part.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(nx),
                             grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
                         )
-                        var tsub = st[].part.value().create_sub_buffer[DType.int32](0, blocks)
+                        # the partials fold on the device into slot SCAN_BLOCKS: one word home
+                        ctx.enqueue_function[min_partials_kernel](
+                            st[].part.value().unsafe_ptr() + SCAN_BLOCKS, st[].part.value().unsafe_ptr(),
+                            Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+                        )
+                        var tsub = st[].part.value().create_sub_buffer[DType.int32](SCAN_BLOCKS, 1)
                         ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=tsub)
                         ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
                         ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
@@ -321,12 +333,7 @@ def rbf_sampler_fit_transform_resident(
             _stage_give[_RBF_STAGE_POOL](stages.pop())
     if not piped:
         _rbf_unpiped(ctx, dx, dw, db, dz, xaddr, w_addr, b_addr, z_addr, m, d, q, nx, nz, blocks, scale)
-    var best = NONFINITE_NONE
-    var hp = st[].host.value().unsafe_ptr()
-    for i in range(blocks):
-        var v = hp[i]
-        if v < best:
-            best = v
+    var best = st[].host.value().unsafe_ptr()[0]
     var bad = -1 if best == NONFINITE_NONE else Int(best)
     var is_nan = False
     if bad >= 0:

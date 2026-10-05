@@ -140,8 +140,14 @@ def af_alpha_tail(a: Args, ss: Float32):
 
 def op_af_row(t: Int, a: Args):
     """Row t of grad p0 [R, C]: p1[t] = lerp(p1[t], ||g_t||^2 / C, f0); i0 C."""
+    af_row_tail(a, t, _sumsq(a.p0, t * a.i0, a.i0, 1))
+
+
+@always_inline
+def af_row_tail(a: Args, t: Int, ss: Float32):
+    """op_af_row from the row's ||g_t||^2 = ss (sequence/coop.mojo folds it too)."""
     var C = a.i0
-    var nrm = ftz(identical_sqrt(_sumsq(a.p0, t * C, C, 1)))
+    var nrm = ftz(identical_sqrt(ss))
     st(a.p1, t, lerp(ld(a.p1, t), div(mul(nrm, nrm), Float32(C)), a.f0))
 
 
@@ -157,6 +163,12 @@ def op_af_rmean(t: Int, a: Args):
     var s = Float32(0.0)
     for k in range(a.i0):
         s = add(s, ld(a.p0, k))
+    af_rmean_tail(a, s)
+
+
+@always_inline
+def af_rmean_tail(a: Args, s: Float32):
+    """op_af_rmean from sum(p0[0:R]) = s (sequence/coop.mojo folds it too)."""
     var m = div(s, Float32(a.i0))
     # max(mean, eps1) spelled `max` for the Metal compiler fault on a float
     # compare-and-select over a reduction's value (see op_af_alpha); exact,

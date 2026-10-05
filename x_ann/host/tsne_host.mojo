@@ -21,6 +21,7 @@ from x_ann.tsne_core import (
     F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_step_cell,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
 )
+from x_ann.tsne_core import TS_LANE_FOLD, TS_LANES
 from x_ann.host.ann_host_cells import ann_span, ann_task_count, ann_tasks, ftz_v, mul_add_v, mul_v
 from x_ann.host.cagra_host import knn_rows_host
 from x_ann.host.ivf_pq_host import fp, ip
@@ -70,6 +71,38 @@ def _repulse_span[masked: Bool](
             r1 = n1
 
 
+@always_inline
+def _repulse_lane(
+    yf0: F32P, yf1: F32P, s: Int, n: Int, ids: SIMD[DType.int32, REP_W], yi0: SIMD[DType.float32, REP_W],
+    yi1: SIMD[DType.float32, REP_W], mut z: SIMD[DType.float32, REP_W], mut r0: SIMD[DType.float32, REP_W],
+    mut r1: SIMD[DType.float32, REP_W],
+):
+    """TS_LANE_FOLD (x_ann/tsne_core.mojo): lane s of the repulsion for REP_W
+    rows at once, j = s, s + TS_LANES, ... below n, ascending, `_repulse_span`'s
+    statements per j, the j == i step leaving that row's folds as they were."""
+    comptime W = REP_W
+    var one = SIMD[DType.float32, W](1.0)
+    var zero = SIMD[DType.float32, W](0.0)
+    var j = s
+    while j < n:
+        var bj0 = SIMD[DType.float32, W](yf0.unsafe_load(j))
+        var bj1 = SIMD[DType.float32, W](yf1.unsafe_load(j))
+        var d0 = ftz_v[W](yi0 - bj0)
+        var d1 = ftz_v[W](yi1 - bj1)
+        var acc = ftz_v[W](mul_add_v[W](d0, d0, zero))
+        acc = ftz_v[W](mul_add_v[W](d1, d1, acc))
+        var q = ftz_v[W](one / (one + acc))
+        var qq = ftz_v[W](mul_v[W](q, q))
+        var nz = z + q
+        var n0 = ftz_v[W](r0 + ftz_v[W](mul_v[W](qq, d0)))
+        var n1 = ftz_v[W](r1 + ftz_v[W](mul_v[W](qq, d1)))
+        var keep = ids.ne(SIMD[DType.int32, W](Int32(j)))
+        z = keep.select(nz, z)
+        r0 = keep.select(n0, r0)
+        r1 = keep.select(n1, r1)
+        j += TS_LANES
+
+
 def _repulse_host(y: F32P, n: Int, row_z: F32P, rep: F32P, yf0: F32P, yf1: F32P):
     """`ts_repulse_cell` for every row (module docstring). `yf0` / `yf1`
     hold `ftz(y[2 j])` / `ftz(y[2 j + 1])` for j < n, padded to a multiple of
@@ -98,10 +131,22 @@ def _repulse_host(y: F32P, n: Int, row_z: F32P, rep: F32P, yf0: F32P, yf1: F32P)
             var z = SIMD[DType.float32, W](0.0)
             var r0 = SIMD[DType.float32, W](0.0)
             var r1 = SIMD[DType.float32, W](0.0)
-            var mid = min(i0 + W, n)
-            _repulse_span[False](yf0, yf1, 0, i0, ids, yi0, yi1, z, r0, r1)
-            _repulse_span[True](yf0, yf1, i0, mid, ids, yi0, yi1, z, r0, r1)
-            _repulse_span[False](yf0, yf1, mid, n, ids, yi0, yi1, z, r0, r1)
+            comptime if TS_LANE_FOLD:
+                # the device's lane fold: each lane from +0, then the lane
+                # partials added in ascending s, each add flushed
+                for s in range(TS_LANES):
+                    var lz = SIMD[DType.float32, W](0.0)
+                    var l0 = SIMD[DType.float32, W](0.0)
+                    var l1 = SIMD[DType.float32, W](0.0)
+                    _repulse_lane(yf0, yf1, s, n, ids, yi0, yi1, lz, l0, l1)
+                    z = ftz_v[W](z + lz)
+                    r0 = ftz_v[W](r0 + l0)
+                    r1 = ftz_v[W](r1 + l1)
+            else:
+                var mid = min(i0 + W, n)
+                _repulse_span[False](yf0, yf1, 0, i0, ids, yi0, yi1, z, r0, r1)
+                _repulse_span[True](yf0, yf1, i0, mid, ids, yi0, yi1, z, r0, r1)
+                _repulse_span[False](yf0, yf1, mid, n, ids, yi0, yi1, z, r0, r1)
             var rows = min(W, n - i0)
             for r in range(rows):
                 row_z.unsafe_store(i0 + r, z[r])

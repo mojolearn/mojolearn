@@ -33,6 +33,11 @@ _CHILD = textwrap.dedent('''
         out = []
         m = ml.MiniBatchKMeans(n_clusters=3, batch_size=64, max_iter=3, random_state=1).fit(X)   # _E_MINIBATCH
         out += [m.cluster_centers_, m.labels_, m.predict(Q), m.transform(Q)]                      # _E_NEAREST, _E_DISTANCES
+        # lane/no-bench-tuning-2: weighted draws and the tol stop take the device steps too
+        sw = np.linspace(0.5, 2.0, X.shape[0]).astype(np.float32)
+        mw = ml.MiniBatchKMeans(n_clusters=3, batch_size=64, max_iter=3, random_state=1).fit(X, sample_weight=sw)
+        mt = ml.MiniBatchKMeans(n_clusters=3, batch_size=64, max_iter=20, tol=1e-3, random_state=1).fit(X)
+        out += [mw.cluster_centers_, mw.labels_, mt.cluster_centers_, mt.n_steps_]
         p = ml.MiniBatchKMeans(n_clusters=3, batch_size=64, random_state=1)
         p.partial_fit(X[:90]); p.partial_fit(X[90:])                                              # _E_MINIBATCH_PARTIAL
         out += [p.cluster_centers_]

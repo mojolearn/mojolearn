@@ -53,6 +53,7 @@ from core.neural_context import neural_ctx
 from std.time import perf_counter_ns
 from std.os import getenv
 from std.sys.compile import is_defined
+from std.memory import bitcast
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
 # queue and a pipeline load per call. Same kernels, same launches, same order
@@ -112,6 +113,8 @@ from kernel_methods.checks.kernel_matrix import (
 from kernel_methods.checks.random_features import (
     KM_RF_TPB,
     km_basis_indices,
+    km_basis_indices_device,
+    km_gather_rows_kernel,
     km_feature_map_epilogue,
     km_feature_scale,
     km_random_offsets,
@@ -125,12 +128,21 @@ from kernel_methods.impl.kernel_ridge.kernel_ridge import (
     kernel_ridge_workspace_floats,
 )
 from checks.numerics import ftz, identical_div, identical_sqrt
+from checks.soft_f64 import sf64_sqrt, sf64_to_f32
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.svm_parameter import KernelParams
 from x_decomp.cells import F32Ptr
-from x_decomp.rr import RR_OFF_TPB
+from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
+from x_decomp.rr import rr_block, rr_cs, rr_vrow
+from kernel_methods.rbf_fused import (
+    RBF_FUSED_MAX_D,
+    RBF_FUSED_TPB,
+    rbf_fused_project_kernel,
+    rbf_fused_transform_kernel,
+)
+from core.device_zero import enqueue_fill
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -155,6 +167,56 @@ comptime RBF_FUSED = (
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_RBF_FUSED"]()
 )
+
+
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_RBF_FUSED_OFF` restores the GEMM on the device AND in
+#: the host column, `km_host_oracle.mojo::KMH_RBF_FUSED` reads the same
+#: define): RBFSampler.transform at n_features <= RBF_FUSED_MAX_D computes
+#: the projection as ONE chain per cell over the features ascending
+#: (`identical_mul_add`, rounded each step) and, when no trace and no
+#: sabotage arm needs the projection as its own stage, the offset, cosine
+#: and scale in the same kernel: one launch and one write of the
+#: n x n_components matrix where the GEMM route made a workspace, the GEMM's
+#: launches, and a second pass for the epilogue. BITS CHANGE at
+#: n_features <= 64 (the projection's fold is the ascending chain, not the
+#: GEMM profile's): NVIDIA, AMD and Apple run the same kernel and the host
+#: column runs the same chain. A chain of at most 64 fused multiply-adds is
+#: as accurate as the GEMM's fold at that length.
+comptime RBF_IDN_FUSED = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def _rbf_idn_fused_launch(
+    ctx: DeviceContext,
+    mut dp: DeviceBuffer[DType.float32],
+    mut dx: DeviceBuffer[DType.float32],
+    mut dw: DeviceBuffer[DType.float32],
+    mut db: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    d: Int,
+    dd: Int,
+    scale: Float32,
+    whole: Bool,
+) raises:
+    """RBF_IDN_FUSED's launch: the whole transform (`whole`) or the
+    projection alone, one thread per cell. ASYNCHRONOUS."""
+    var grid = (n_rows * dd + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB
+    if whole:
+        ctx.enqueue_function[rbf_fused_transform_kernel](
+            dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
+            Int32(n_rows), Int32(d), Int32(dd), scale,
+            grid_dim=(grid, 1, 1),
+            block_dim=(RBF_FUSED_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[rbf_fused_project_kernel](
+            dp.unsafe_ptr(), dx.unsafe_ptr(), dw.unsafe_ptr(),
+            Int32(n_rows), Int32(d), Int32(dd),
+            grid_dim=(grid, 1, 1),
+            block_dim=(RBF_FUSED_TPB, 1, 1),
+        )
 
 
 # ===========================================================================
@@ -187,10 +249,27 @@ def _upload(
 #: (`read_f32`, fresh pages), a serial host finiteness walk and a second
 #: copy into a fresh pinned stage (`_upload`). The same X words reach the
 #: same kernels: bit-inert; the same refusal text.
-comptime KM_FAST_PTR_IN = (
+#:
+#: fam-kernel-gp (2026-10-04): IDENTICAL takes the same route on every
+#: vendor, ON by default (`KM_IDN_PTR_IN`; `-D MOJOLEARN_IDN_KM_PTR_IN_OFF`
+#: restores the owned host copy, the host walk and the staged upload). The
+#: transforms' X is the one large operand (n_rows x n_features), and it
+#: crossed host memory three times on one thread before the first launch.
+comptime KM_IDN_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KM_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime KM_FAST_PTR_IN = KM_IDN_PTR_IN or (
     _CTX_MODE == _NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_KM_FAST_PTR_IN_OFF"]()
+)
+
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF` restores the appends):
+#: `_download` fills a list of the final length 8 floats a step instead of n
+#: appends into a growing one. The same words: no bit moves.
+comptime KM_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 
@@ -236,6 +315,20 @@ def _download(
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
+    comptime if KM_IDN_BULK_DOWNLOAD:
+        var packed = List[Float32](unsafe_uninit_length=n)
+        var pdst = packed.unsafe_ptr()
+        var psrc = h.unsafe_ptr()
+        var pi = 0
+        var pbody = n - n % 8
+        while pi < pbody:
+            pdst.unsafe_store[width=8](pi, psrc.unsafe_load[width=8](pi))
+            pi += 8
+        while pi < n:
+            pdst.unsafe_store(pi, psrc.unsafe_load(pi))
+            pi += 1
+        _ = h^
+        return packed^
     var out = List[Float32]()
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
@@ -329,6 +422,181 @@ def krr_scale_rows(v: List[Float32], sw: List[Float32], n: Int, t: Int) -> List[
     return out^
 
 
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_KRR_DEV_SCALE_OFF` restores the host loops): the
+#: weighted fit's `y * sw[:, None]` and `dual_coef *= sw[:, None]` run as one
+#: launch each on the resident buffers (`krr_scale_rows_kernel`, one thread
+#: per cell, `krr_scale_rows`'s line) instead of two host loops over n x t
+#: cells around the device solve. One multiplication per cell rounded once
+#: either way: no bit moves, and `kmh_scale_rows` stays the host column.
+#: cpu2-l6-bindings: ON on EVERY tier (FAST included); the host loops were
+#: CPU work on a GPU route. `MOJOLEARN_IDN_ALL_OFF` still turns it off on
+#: IDENTICAL builds only.
+comptime KRR_IDN_DEV_SCALE = not (
+    is_defined["MOJOLEARN_IDN_KRR_DEV_SCALE_OFF"]()
+    or (_CTX_MODE == _CTX_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_KRR_PTR_IN_OFF` unregisters the pointer bindings, so
+#: `kernel_methods.py` takes the list route again): KernelRidge fit and
+#: predict read X, y, X_fit and the dual from the caller's memory straight
+#: to the device, X and y are scanned for NaN / infinity there
+#: (`_upload_checked`) and the result is copied into the caller's output,
+#: instead of an owned host copy of every operand (`read_f32`), a serial
+#: host finiteness walk, a staged second copy (`_upload`), a host list of
+#: the result and a model copy of X. The same words reach the same
+#: kernels: no bit moves; the same refusal texts.
+#:
+#: cpu2-l6-bindings (2026-10-04): the pointer route is the default on EVERY
+#: tier and vendor (FAST included), so no fast build stages X, y or the
+#: sample-weight factors through host lists. Same kernels at the same
+#: default scheduling as the list route: FAST bits do not move either.
+comptime KRR_IDN_PTR_IN = not (
+    is_defined["MOJOLEARN_IDN_KRR_PTR_IN_OFF"]()
+    or (_CTX_MODE == _CTX_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
+#: SCHEDULING: one thread per target cell.
+comptime KRR_SCALE_TPB = 256
+
+
+def krr_scale_rows_kernel(
+    v_io: MutPointer[Float32, MutAnyOrigin],
+    s: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    t_in: Int32,
+):
+    """`krr_scale_rows` in place, one thread per cell (i, c):
+    `ftz(ftz(v) * ftz(s_i))`."""
+    var t = Int(t_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= Int(n_in) * t:
+        return
+    var i = idx // t
+    v_io.unsafe_store(idx, ftz(ftz(v_io.unsafe_load(idx)) * ftz(s.unsafe_load(i))))
+
+
+#: SCHEDULING: one thread per row.
+comptime KRR_SQRT_W_TPB = 256
+
+
+def krr_sqrt_weights_kernel(
+    w: MutPointer[UInt64, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """cpu2-l6-bindings: the per-row factor `sqrt(sample_weight)`, the
+    binary64 square root of each weight rounded once to float32, on the
+    device (`checks/soft_f64.mojo`: `sf64_sqrt` is correctly rounded and
+    `sf64_to_f32` is round-to-nearest-even, the host loop's
+    `Float32(sqrt(w))` word for word; the Apple GPU has no float64). A
+    negative weight gives NaN and the caller's device scan refuses it."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    dst.unsafe_store(i, sf64_to_f32(sf64_sqrt(w.unsafe_load(i))))
+
+
+def _krr_sqrt_weights_dev(
+    ctx: DeviceContext, waddr: Int, n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """The factors from the caller's float64 weights at `waddr`: one
+    upload, one launch, and `krr_validate_weights`' refusal (finite and
+    >= 0) as a device scan; one Int32 per block is read back, never the
+    data."""
+    if n <= 0 or n > 2147483647:
+        raise Error("kernel_ridge_fit_host: sample weight count out of range")
+    var dw = ctx.enqueue_create_buffer[DType.uint64](n)
+    ctx.enqueue_copy(
+        dst_buf=dw, src_ptr=MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=waddr)
+    )
+    var dsw = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_function[krr_sqrt_weights_kernel](
+        dw.unsafe_ptr(), dsw.unsafe_ptr(), Int32(n),
+        grid_dim=((n + KRR_SQRT_W_TPB - 1) // KRR_SQRT_W_TPB, 1, 1),
+        block_dim=(KRR_SQRT_W_TPB, 1, 1),
+    )
+    var bad = device_first_nonfinite(ctx, dsw, n)
+    _ = dw^
+    if bad >= 0:
+        raise Error(
+            "kernel_ridge_fit_host: sample weight factor " + String(bad)
+            + " is negative or not finite; refused by name"
+        )
+    return dsw^
+
+
+def _krr_scale_rows_dev(
+    ctx: DeviceContext,
+    mut v: DeviceBuffer[DType.float32],
+    mut s: DeviceBuffer[DType.float32],
+    n: Int,
+    t: Int,
+) raises:
+    """Launch `krr_scale_rows_kernel` over the n x t cells of `v`. ASYNCHRONOUS."""
+    if n <= 0 or t <= 0:
+        return
+    ctx.enqueue_function[krr_scale_rows_kernel](
+        v.unsafe_ptr(), s.unsafe_ptr(), Int32(n), Int32(t),
+        grid_dim=((n * t + KRR_SCALE_TPB - 1) // KRR_SCALE_TPB, 1, 1),
+        block_dim=(KRR_SCALE_TPB, 1, 1),
+    )
+
+
+def _krr_not_pd_message(info: Int, kernel: Int, n_samples: Int) -> String:
+    """DEVIATION 1662's refusal text (one copy for the list and pointer fits)."""
+    return (
+        "kernel_ridge_fit_host: the ridged kernel matrix K + alpha I is"
+        " NOT positive definite (info="
+        + String(info)
+        + ", the leading minor of order "
+        + String(info)
+        + " failed). kernel="
+        + km_kernel_name(kernel)
+        + ", n_samples="
+        + String(n_samples)
+        + ". cuML catches this and silently returns a LEAST-SQUARES"
+        " solution instead (kernel_ridge.py:26-44, behind a"
+        " warnings.warn); this lane refuses, because a fit that returns"
+        " a different estimator than the one it was asked for is a"
+        " wrong answer with no error. THE CLOSURE IS alpha: raise it."
+        " A float32 kernel matrix needs a larger ridge than cuML's"
+        " float64 one at the same data (DEVIATION 1661). To close it"
+        " properly, implementation an SVD-based least-squares arm -- there is one"
+        " at solver/checks/lstsq.mojo -- and gate BOTH sides of the"
+        " branch; kernel_methods/NOT_IMPLEMENTED.tsv carries the row"
+    )
+
+
+def _krr_validate_alpha(alpha: Float32) raises:
+    """`kernel_ridge_fit_host`'s alpha refusals (NaN, negative)."""
+    if alpha != alpha:
+        raise Error("kernel_ridge_fit_host: alpha is NaN; refused by name")
+    if alpha < Float32(0.0):
+        raise Error(
+            "kernel_ridge_fit_host: alpha must be non-negative, got a"
+            " negative value. scikit-learn's own parameter constraint is"
+            " Interval(Real, 0, None, closed='left') and a negative ridge"
+            " SUBTRACTS from the diagonal, which can turn a positive"
+            " definite kernel matrix indefinite and make the Cholesky fail"
+            " on data that is perfectly well conditioned. DEVIATION 1686"
+        )
+
+
+def _upload_ptr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """`n` floats at a caller's host address onto the device, unchecked (a
+    fitted array the list route did not validate either). The copy is
+    waited on here: the caller's memory is read before this returns."""
+    var buf = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    if n > 0:
+        var sub = buf.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_buf=sub, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=addr))
+        ctx.synchronize()
+        _ = sub^
+    return buf^
+
+
 def krr_validate_weights(sw: List[Float32], n: Int) raises:
     """The per-row sqrt(sample_weight) factors: n of them, finite, >= 0."""
     if len(sw) != n:
@@ -418,7 +686,12 @@ def kernel_ridge_fit_host(
 
     # DEVIATION 2487: self-kernel operands share one uploaded allocation.
     var xa = _upload(ctx, x)
-    var dy = _upload(ctx, krr_scale_rows(y, sw, n_samples, n_targets)) if weighted else _upload(ctx, y)
+    # KRR_IDN_DEV_SCALE: the weighted targets are scaled where they lie.
+    var dev_scale = weighted and KRR_IDN_DEV_SCALE
+    var dy = _upload(ctx, krr_scale_rows(y, sw, n_samples, n_targets)) if (weighted and not dev_scale) else _upload(ctx, y)
+    var dsw = _upload(ctx, sw) if dev_scale else ctx.enqueue_create_buffer[DType.float32](1)
+    if dev_scale:
+        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
     trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
 
     var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
@@ -434,7 +707,7 @@ def kernel_ridge_fit_host(
     else:
         km_kernel_matrix(
             ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
-            na, nb, kws, elem_tpb, sabotage,
+            na, nb, kws, elem_tpb, sabotage, True,
         )
     ctx.synchronize()
     trace.record_device(ctx, "krr.kernel", dk, n_samples * n_samples)
@@ -485,9 +758,12 @@ def kernel_ridge_fit_host(
             " branch; kernel_methods/NOT_IMPLEMENTED.tsv carries the row"
         )
 
+    if dev_scale:
+        _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
     var dual = _download(ctx, dy, n_samples * n_targets)
-    if weighted:
+    if weighted and not dev_scale:
         dual = krr_scale_rows(dual, sw, n_samples, n_targets)
+    _ = dsw^
     _ = xa^
     _ = dy^
     _ = dk^
@@ -573,6 +849,201 @@ def kernel_ridge_predict_host(
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return out^
+
+
+def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
+    xaddr: Int,
+    yaddr: Int,
+    n_samples: Int,
+    n_features: Int,
+    n_targets: Int,
+    kp: KernelParams,
+    alpha: Float32,
+    sw: List[Float32],
+    dual_out: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+    waddr: Int = 0,
+) raises -> Int:
+    """KRR_IDN_PTR_IN: `kernel_ridge_fit_host` with X and y read from the
+    caller's addresses on the device (`_upload_checked`: shape refused on
+    the host, NaN / infinity on the device, X before y as the list route
+    walks them) and `dual_coef_` copied into `dual_out` (n_samples x
+    n_targets). The same launches in the same order as the list route at
+    its default scheduling and no sabotage; the weighted arm scales on the
+    device (`krr_scale_rows_kernel`, the host loop's line). Returns `info`
+    (0; a failed factorization raises DEVIATION 1662's refusal).
+
+    `waddr` (cpu2-l6-bindings): nonzero is the caller's n float64 sample
+    weights; the sqrt factors are formed and refused on the device
+    (`_krr_sqrt_weights_dev`) and `sw` must then be empty."""
+    if xaddr == 0 or yaddr == 0:
+        raise Error("kernel_ridge_fit: null X or y address")
+    var ctx = _family_ctx()
+    var xa = _upload_checked(ctx, xaddr, n_samples, n_features, "kernel_ridge X")
+    var dy = _upload_checked(ctx, yaddr, n_samples, n_targets, "kernel_ridge y")
+    var precomputed = kp.kernel == KM_KERNEL_PRECOMPUTED
+    if precomputed:
+        if n_features != n_samples:
+            raise Error(
+                "kernel_ridge_fit_host: kernel='precomputed' needs a square"
+                " kernel matrix, got " + String(n_samples) + " x "
+                + String(n_features)
+            )
+    else:
+        km_validate_kernel_params(kp, "kernel_ridge")
+    if waddr != 0 and len(sw) > 0:
+        raise Error("kernel_ridge_fit: weights given twice")
+    var weighted = len(sw) > 0 or waddr != 0
+    if len(sw) > 0:
+        krr_validate_weights(sw, n_samples)
+    var dsw: DeviceBuffer[DType.float32]
+    if waddr != 0:
+        dsw = _krr_sqrt_weights_dev(ctx, waddr, n_samples)
+    elif weighted:
+        dsw = _upload(ctx, sw)
+    else:
+        dsw = ctx.enqueue_create_buffer[DType.float32](1)
+    _krr_validate_alpha(alpha)
+
+    # lane/review-fixes: the pointer route honors KRR_IDN_DEV_SCALE's _OFF
+    # arm too (the host loop on the downloaded y, the list route's old form).
+    # cpu2-l6-bindings: that arm needs the factors on the host; with
+    # `waddr` they were formed on the device, so it downloads them.
+    var sw_h = List[Float32]()
+    comptime if not KRR_IDN_DEV_SCALE:
+        if waddr != 0:
+            sw_h = _download(ctx, dsw, n_samples)
+        else:
+            sw_h = sw.copy()
+    comptime if KRR_IDN_DEV_SCALE:
+        if weighted:
+            _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+    else:
+        if weighted:
+            dy = _upload(ctx, krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw_h, n_samples, n_targets))
+    trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
+
+    var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
+    var na = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var nb = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var kws = ctx.enqueue_create_buffer[DType.float32](
+        km_kernel_workspace_floats(n_samples, n_samples, n_features)
+    )
+    var cws = ctx.enqueue_create_buffer[DType.float32](
+        kernel_ridge_workspace_floats(n_samples)
+    )
+    ctx.synchronize()
+
+    if precomputed:
+        ctx.enqueue_copy(dst_buf=dk, src_buf=xa)
+    else:
+        km_kernel_matrix(
+            ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
+            na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE, True,
+        )
+    trace.record_device(ctx, "krr.kernel", dk, n_samples * n_samples)
+    if weighted:
+        var cells = n_samples * n_samples
+        ctx.enqueue_function[krr_weight_kernel](
+            dk.unsafe_ptr(), dsw.unsafe_ptr(), Int32(n_samples),
+            grid_dim=((cells + KRR_WEIGHT_TPB - 1) // KRR_WEIGHT_TPB, 1, 1),
+            block_dim=(KRR_WEIGHT_TPB, 1, 1),
+        )
+        trace.record_device(ctx, "krr.weighted", dk, cells)
+
+    var info = kernel_ridge_solve(
+        ctx, dk, dy, cws, n_samples, n_targets, alpha, trace,
+        CHOL_PANEL_TPB, CHOL_ELEM_TPB, CHOL_SOLVE_TPB, KRR_RIDGE_TPB, KMSAB_NONE,
+    )
+    if info != 0:
+        ctx.synchronize()
+        raise Error(_krr_not_pd_message(info, kp.kernel, n_samples))
+    comptime if KRR_IDN_DEV_SCALE:
+        if weighted:
+            _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
+        _download_into(ctx, dy, dual_out, n_samples * n_targets)
+    else:
+        if weighted:
+            var dual = krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw_h, n_samples, n_targets)
+            for i in range(n_samples * n_targets):
+                dual_out.unsafe_store(i, dual[i])
+        else:
+            _download_into(ctx, dy, dual_out, n_samples * n_targets)
+    _ = dsw^
+    _ = xa^
+    _ = dy^
+    _ = dk^
+    _ = na^
+    _ = nb^
+    _ = kws^
+    _ = cws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return 0
+
+
+def kernel_ridge_predict_ptr_into[out_origin: MutOrigin, //](
+    xfit_addr: Int,
+    dual_addr: Int,
+    xnew_addr: Int,
+    n: Int,
+    d: Int,
+    t: Int,
+    kp: KernelParams,
+    n_query: Int,
+    output: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+) raises:
+    """KRR_IDN_PTR_IN: `kernel_ridge_predict_host` with the fit's X and dual
+    and the query X read from the caller's addresses on the device (the
+    query scanned there, `_upload_checked`; the fitted arrays unchecked as
+    on the list route) and the n_query x t predictions copied into
+    `output`. The same launches as the list route."""
+    if xfit_addr == 0 or dual_addr == 0 or xnew_addr == 0:
+        raise Error("kernel_ridge_predict: null X_fit, dual or X address")
+    if n <= 0 or d <= 0 or t <= 0:
+        raise Error(
+            "kernel_ridge_predict: the model needs positive n, d and n_targets, got "
+            + String(n) + ", " + String(d) + ", " + String(t)
+        )
+    var ctx = _family_ctx()
+    var dq = _upload_checked(ctx, xnew_addr, n_query, d, "predict X")
+    var dfit = _upload_ptr(ctx, xfit_addr, n * d)
+    var ddual = _upload_ptr(ctx, dual_addr, n * t)
+    var dk = ctx.enqueue_create_buffer[DType.float32](n_query * n)
+    var na = ctx.enqueue_create_buffer[DType.float32](n_query)
+    var nb = ctx.enqueue_create_buffer[DType.float32](n)
+    var kws = ctx.enqueue_create_buffer[DType.float32](
+        km_kernel_workspace_floats(n_query, n, d)
+    )
+    var dpred = ctx.enqueue_create_buffer[DType.float32](n_query * t)
+    var gws = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(n_query, t, n)
+    )
+    ctx.synchronize()
+
+    if kp.kernel == KM_KERNEL_PRECOMPUTED:
+        # X IS the n_query x n_samples cross-kernel matrix.
+        ctx.enqueue_copy(dst_buf=dk, src_buf=dq)
+    else:
+        km_kernel_matrix(
+            ctx, kp, dk, dq, dfit, n_query, n, d, na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE
+        )
+    trace.record_device(ctx, "krr.cross_kernel", dk, n_query * n)
+    identical_gemm_into(ctx, dpred, dk, ddual, gws, n_query, t, n, OP_NN)
+    trace.record_device(ctx, "krr.predictions", dpred, n_query * t)
+    _download_into(ctx, dpred, output, n_query * t)
+    _ = dq^
+    _ = dfit^
+    _ = ddual^
+    _ = dk^
+    _ = na^
+    _ = nb^
+    _ = kws^
+    _ = dpred^
+    _ = gws^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
 
 
 def kernel_ridge_primal_weights(
@@ -840,6 +1311,367 @@ def _nystroem_rr_eigh(
     return sweeps
 
 
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_NYS_RR_EIGH_OFF` restores the cyclic one-block solver
+#: on the device AND in the host column, `km_host_oracle.mojo::KMH_NYS_RR`
+#: reads the same define): Nystroem's q x q eigendecomposition is the
+#: two-sided Jacobi in the round-robin ordering (x_decomp's `eigh` order:
+#: `eigh_par_cs_kernel` + `eigh_par_update_kernel` per round, the q / 2
+#: disjoint rotations of a round across the grid, the convergence test
+#: folded on the device before every sweep, three words read) in place of
+#: `jacobi_eigh_kernel`, ONE block of 256 threads running the q (q - 1) / 2
+#: rotations of a sweep one after the other (32,640 serial rotations a sweep
+#: at q = 256). BITS CHANGE (another rotation order): NVIDIA, AMD and Apple
+#: run these same kernels and the host column runs `x_decomp/rr.mojo::
+#: host_eigh_rr`, the same rounds, test and sweep budget (RR_EIGH_SWEEPS).
+#: Not converged in the budget raises on every column, as the cyclic one does.
+comptime NYS_IDN_RR_EIGH = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: Rounds between waits on Apple (x_decomp/device.mojo `PJ_SYNC_ROUNDS`).
+comptime NYS_IDN_RR_SYNC_ROUNDS = 512
+
+
+def _nystroem_rr_eigh_idn(
+    ctx: DeviceContext,
+    mut dk: DeviceBuffer[DType.float32],
+    mut dvec: DeviceBuffer[DType.float32],
+    q: Int,
+    sabotage: Int,
+    mut eig_diag: List[Float32],
+    mut vecs: List[Float32],
+    want_host: Bool = True,
+) raises -> Int:
+    """NYS_IDN_RR_EIGH: the round-robin eigh of the q x q matrix in `dk`,
+    consumed in place (x_decomp/device.mojo `_eigh_par_on`'s rounds, test and
+    budget; `host_eigh_rr` is the host column's). `dvec` gets the sign
+    flipped eigenvectors (vector c in COLUMN c); eigenvalue c is appended to
+    `eig_diag` and the q x q vectors to `vecs`. Returns the sweeps run;
+    raises when the budget does not converge."""
+    var n = q
+    var even_q = n + (n % 2)
+    var h = even_q // 2
+    var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
+    var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
+    var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
+    var nb_off = max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
+    var dpart = ctx.enqueue_create_buffer[DType.float32](3 * nb_off)
+    var dres = ctx.enqueue_create_buffer[DType.float32](3)
+    var hres = ctx.enqueue_create_host_buffer[DType.float32](3)
+    ctx.enqueue_function[pj_identity_kernel](
+        dvec.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+    )
+    var tol = Float32(JACOBI_TOL)
+    var converged = False
+    var executed = 0
+    var fro_in = Float32(-1.0)
+    var fro_now = Float32(0.0)
+    var off_last = Float32(0.0)
+    for sweep in range(RR_EIGH_SWEEPS + 1):
+        # a sum of squares is never negative: a -1 mark left in the fold is
+        # a dispatch that did not run
+        enqueue_fill(ctx, dpart, Float32(-1.0))
+        enqueue_fill(ctx, dres, Float32(-1.0))
+        ctx.enqueue_function[eigh_par_off_part_kernel](
+            dk.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n), grid_dim=nb_off, block_dim=RR_OFF_TPB
+        )
+        ctx.enqueue_function[eigh_par_off_fold_kernel](
+            dpart.unsafe_ptr(), dres.unsafe_ptr(), Int32(nb_off), grid_dim=1, block_dim=RR_OFF_TPB
+        )
+        ctx.enqueue_copy(dst_ptr=hres.unsafe_ptr(), src_buf=dres)
+        ctx.synchronize()
+        var off = hres.unsafe_ptr().unsafe_load(0)
+        var dg = hres.unsafe_ptr().unsafe_load(1)
+        if not (hres.unsafe_ptr().unsafe_load(2) >= Float32(0.0)):
+            raise Error(
+                "nystroem_fit_host: a block of the round-robin Jacobi's convergence test did not"
+                " run (its mark is still -1): a launch failure, not a convergence failure"
+            )
+        off_last = off
+        fro_now = ftz(off + dg)
+        if fro_in < Float32(0.0):
+            fro_in = fro_now
+        if rr_converged(off, dg, tol):
+            converged = True
+            break
+        if sweep == RR_EIGH_SWEEPS:
+            break
+        executed += 1
+        for rd in range(even_q - 1):
+            ctx.enqueue_function[eigh_par_cs_kernel](
+                dk.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(even_q), Int32(rd),
+                grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
+            )
+            ctx.enqueue_function[eigh_par_update_kernel](
+                dk.unsafe_ptr(), dvec.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(even_q), Int32(rd),
+                grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+            )
+            comptime if has_apple_gpu_accelerator():
+                if rd % NYS_IDN_RR_SYNC_ROUNDS == NYS_IDN_RR_SYNC_ROUNDS - 1:
+                    ctx.synchronize()
+    # J^T A J keeps ||A||_F: a solve that moved it is not an answer
+    if converged and not rr_fro_kept(fro_in, fro_now):
+        converged = False
+    if not converged:
+        raise Error(
+            "nystroem_fit_host: the device Jacobi did not converge in "
+            + String(RR_EIGH_SWEEPS)
+            + " sweeps at n_components = "
+            + String(q)
+            + "; the off-diagonal mass is still "
+            + String(off_last)
+            + " of "
+            + String(fro_now)
+            + " against a tolerance of "
+            + String(JACOBI_TOL)
+            + ". An unconverged eigendecomposition returned as if it were"
+            " one is a wrong answer with no error"
+        )
+    if sabotage != KMSAB_NO_SIGN_FLIP:
+        ctx.enqueue_function[sign_flip_kernel](
+            dvec.unsafe_ptr(),
+            Int32(n),
+            grid_dim=(n, 1, 1),
+            block_dim=(SIGNFLIP_TPB, 1, 1),
+        )
+    # the last test's kernel left the diagonal of the converged A in
+    # doff[2 n, 3 n)
+    if want_host:
+        ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
+        ctx.synchronize()
+        var got = _download(ctx, dvec, n * n)
+        for c in range(n):
+            eig_diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + c))
+        for i in range(n * n):
+            vecs.append(got[i])
+    else:
+        # NYS_IDN_DEV_ORDER: the caller orders the pairs where they lie
+        # (`dk`'s diagonal, `dvec`); nothing is read back here.
+        ctx.synchronize()
+    _ = dcs^
+    _ = doff^
+    _ = hoff^
+    _ = dpart^
+    _ = dres^
+    _ = hres^
+    return executed
+
+
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, CANDIDATE ARM, OFF by default
+#: (`-D MOJOLEARN_IDN_NYS_RR_DEV_STOP` turns it on; `MOJOLEARN_IDN_ALL_OFF`
+#: turns it off): the round-robin eigh's convergence test is DECIDED on the
+#: device. A one-thread gate kernel reads the folded sums after every test
+#: and keeps the solve's state in five device words (done, the entry and
+#: current Frobenius sums, the last off-diagonal sum, the sweeps run); the
+#: rotation and update kernels of every later round return at once when the
+#: state says done. The host reads the state once every NYS_RR_STOP_BATCH
+#: sweeps instead of three words and a wait before every sweep. The
+#: rotations that run are the default arm's, in its order: no bit moves and
+#: the host column is unchanged. The cost is the empty launches of up to
+#: NYS_RR_STOP_BATCH - 1 sweeps after convergence, which is why this is an
+#: arm to time (`-D MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4`: batches of 4, not 2).
+comptime NYS_IDN_RR_DEV_STOP = (
+    NYS_IDN_RR_EIGH
+    and is_defined["MOJOLEARN_IDN_NYS_RR_DEV_STOP"]()
+)
+comptime NYS_RR_STOP_BATCH = 4 if is_defined["MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4"]() else 2
+#: `nys_rr_gate_kernel`'s state words.
+comptime NYS_RR_ST_DONE = 0
+comptime NYS_RR_ST_FRO_IN = 1
+comptime NYS_RR_ST_FRO_NOW = 2
+comptime NYS_RR_ST_OFF = 3
+comptime NYS_RR_ST_SWEEPS = 4
+comptime NYS_RR_ST_WORDS = 5
+
+
+def nys_rr_gate_kernel(res: F32Ptr, st: F32Ptr, tol: Float32, last_in: Int32):
+    """One thread: `_nystroem_rr_eigh_idn`'s host statements after a test.
+    st[DONE]: 0 running, 1 converged, 2 the budget ran out, 3 a block of the
+    test did not run. Does nothing once the solve is done."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    if st.unsafe_load(NYS_RR_ST_DONE) != Float32(0.0):
+        return
+    var off = res.unsafe_load(0)
+    var dg = res.unsafe_load(1)
+    if not (res.unsafe_load(2) >= Float32(0.0)):
+        st.unsafe_store(NYS_RR_ST_DONE, Float32(3.0))
+        return
+    st.unsafe_store(NYS_RR_ST_OFF, off)
+    var fro = ftz(off + dg)
+    st.unsafe_store(NYS_RR_ST_FRO_NOW, fro)
+    if st.unsafe_load(NYS_RR_ST_FRO_IN) < Float32(0.0):
+        st.unsafe_store(NYS_RR_ST_FRO_IN, fro)
+    if rr_converged(off, dg, tol):
+        st.unsafe_store(NYS_RR_ST_DONE, Float32(1.0))
+        return
+    if last_in != Int32(0):
+        st.unsafe_store(NYS_RR_ST_DONE, Float32(2.0))
+        return
+    st.unsafe_store(NYS_RR_ST_SWEEPS, st.unsafe_load(NYS_RR_ST_SWEEPS) + Float32(1.0))
+
+
+def nys_rr_cs_gated_kernel(a: F32Ptr, cs: F32Ptr, st: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32):
+    """`eigh_par_cs_kernel` while the solve is running (st[DONE] == 0)."""
+    if st.unsafe_load(NYS_RR_ST_DONE) != Float32(0.0):
+        return
+    var m = Int(m_in)
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if b < m // 2:
+        var got = rr_cs(a, Int(n_in), m, Int(round_in), b)
+        cs.unsafe_store(2 * b, got[0])
+        cs.unsafe_store(2 * b + 1, got[1])
+
+
+def nys_rr_update_gated_kernel(
+    a: F32Ptr, v: F32Ptr, cs: F32Ptr, st: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32
+):
+    """`eigh_par_update_kernel` while the solve is running (st[DONE] == 0)."""
+    if st.unsafe_load(NYS_RR_ST_DONE) != Float32(0.0):
+        return
+    var n = Int(n_in)
+    var m = Int(m_in)
+    var h = m // 2
+    var r = Int(round_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < h * h:
+        var i = t // h
+        var j = t - i * h
+        if i <= j:
+            rr_block(a, cs, n, m, r, i, j)
+    elif t < h * h + n * h:
+        var u = t - h * h
+        var k = u // h
+        rr_vrow(v, cs, n, m, r, k, u - k * h)
+
+
+def _nystroem_rr_eigh_idn_devstop(
+    ctx: DeviceContext,
+    mut dk: DeviceBuffer[DType.float32],
+    mut dvec: DeviceBuffer[DType.float32],
+    q: Int,
+    sabotage: Int,
+    mut eig_diag: List[Float32],
+    mut vecs: List[Float32],
+    want_host: Bool = True,
+) raises -> Int:
+    """NYS_IDN_RR_DEV_STOP: `_nystroem_rr_eigh_idn` with the stop decided on
+    the device (see the define's comment). The same outputs."""
+    var n = q
+    var even_q = n + (n % 2)
+    var h = even_q // 2
+    var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
+    var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
+    var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
+    var nb_off = max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
+    var dpart = ctx.enqueue_create_buffer[DType.float32](3 * nb_off)
+    var dres = ctx.enqueue_create_buffer[DType.float32](3)
+    var dst = ctx.enqueue_create_buffer[DType.float32](NYS_RR_ST_WORDS)
+    var hst = ctx.enqueue_create_host_buffer[DType.float32](NYS_RR_ST_WORDS)
+    # done = 0, fro_in = -1 (unset), fro_now, off, sweeps = 0
+    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_DONE, Float32(0.0))
+    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_FRO_IN, Float32(-1.0))
+    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_FRO_NOW, Float32(0.0))
+    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_OFF, Float32(0.0))
+    hst.unsafe_ptr().unsafe_store(NYS_RR_ST_SWEEPS, Float32(0.0))
+    ctx.enqueue_copy(dst_buf=dst, src_ptr=hst.unsafe_ptr())
+    ctx.enqueue_function[pj_identity_kernel](
+        dvec.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+    )
+    ctx.synchronize()
+    var tol = Float32(JACOBI_TOL)
+    var done = Float32(0.0)
+    for sweep in range(RR_EIGH_SWEEPS + 1):
+        enqueue_fill(ctx, dpart, Float32(-1.0))
+        enqueue_fill(ctx, dres, Float32(-1.0))
+        ctx.enqueue_function[eigh_par_off_part_kernel](
+            dk.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n), grid_dim=nb_off, block_dim=RR_OFF_TPB
+        )
+        ctx.enqueue_function[eigh_par_off_fold_kernel](
+            dpart.unsafe_ptr(), dres.unsafe_ptr(), Int32(nb_off), grid_dim=1, block_dim=RR_OFF_TPB
+        )
+        ctx.enqueue_function[nys_rr_gate_kernel](
+            dres.unsafe_ptr(), dst.unsafe_ptr(), tol, Int32(1) if sweep == RR_EIGH_SWEEPS else Int32(0),
+            grid_dim=1, block_dim=1,
+        )
+        if sweep % NYS_RR_STOP_BATCH == NYS_RR_STOP_BATCH - 1 or sweep == RR_EIGH_SWEEPS:
+            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dst)
+            ctx.synchronize()
+            done = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_DONE)
+            if done != Float32(0.0):
+                break
+        if sweep == RR_EIGH_SWEEPS:
+            break
+        for rd in range(even_q - 1):
+            ctx.enqueue_function[nys_rr_cs_gated_kernel](
+                dk.unsafe_ptr(), dcs.unsafe_ptr(), dst.unsafe_ptr(), Int32(n), Int32(even_q), Int32(rd),
+                grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
+            )
+            ctx.enqueue_function[nys_rr_update_gated_kernel](
+                dk.unsafe_ptr(), dvec.unsafe_ptr(), dcs.unsafe_ptr(), dst.unsafe_ptr(),
+                Int32(n), Int32(even_q), Int32(rd),
+                grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+            )
+            comptime if has_apple_gpu_accelerator():
+                if rd % NYS_IDN_RR_SYNC_ROUNDS == NYS_IDN_RR_SYNC_ROUNDS - 1:
+                    ctx.synchronize()
+    var fro_in = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_FRO_IN)
+    var fro_now = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_FRO_NOW)
+    var off_last = hst.unsafe_ptr().unsafe_load(NYS_RR_ST_OFF)
+    var executed = Int(hst.unsafe_ptr().unsafe_load(NYS_RR_ST_SWEEPS))
+    if done == Float32(3.0):
+        raise Error(
+            "nystroem_fit_host: a block of the round-robin Jacobi's convergence test did not"
+            " run (its mark is still -1): a launch failure, not a convergence failure"
+        )
+    var converged = done == Float32(1.0)
+    # J^T A J keeps ||A||_F: a solve that moved it is not an answer
+    if converged and not rr_fro_kept(fro_in, fro_now):
+        converged = False
+    if not converged:
+        raise Error(
+            "nystroem_fit_host: the device Jacobi did not converge in "
+            + String(RR_EIGH_SWEEPS)
+            + " sweeps at n_components = "
+            + String(q)
+            + "; the off-diagonal mass is still "
+            + String(off_last)
+            + " of "
+            + String(fro_now)
+            + " against a tolerance of "
+            + String(JACOBI_TOL)
+            + ". An unconverged eigendecomposition returned as if it were"
+            " one is a wrong answer with no error"
+        )
+    if sabotage != KMSAB_NO_SIGN_FLIP:
+        ctx.enqueue_function[sign_flip_kernel](
+            dvec.unsafe_ptr(),
+            Int32(n),
+            grid_dim=(n, 1, 1),
+            block_dim=(SIGNFLIP_TPB, 1, 1),
+        )
+    if want_host:
+        # the last test's kernel left the diagonal of the converged A in
+        # doff[2 n, 3 n)
+        ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
+        ctx.synchronize()
+        var got = _download(ctx, dvec, n * n)
+        for c in range(n):
+            eig_diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + c))
+        for i in range(n * n):
+            vecs.append(got[i])
+    else:
+        ctx.synchronize()
+    _ = dcs^
+    _ = doff^
+    _ = hoff^
+    _ = dpart^
+    _ = dres^
+    _ = dst^
+    _ = hst^
+    return executed
+
+
 def _nystroem_device_eigh(
     ctx: DeviceContext,
     mut dk: DeviceBuffer[DType.float32],
@@ -850,6 +1682,7 @@ def _nystroem_device_eigh(
     mut trace: IdentityTrace,
     mut eig_diag: List[Float32],
     mut vecs: List[Float32],
+    want_host: Bool = True,
 ) raises -> Int:
     """The eigendecomposition on the device, through decomposition/: `dk` is
     consumed (its diagonal becomes the eigenvalues), `dvec` gets the sign
@@ -861,6 +1694,14 @@ def _nystroem_device_eigh(
             if got >= 0:
                 trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
                 return got
+    comptime if NYS_IDN_RR_DEV_STOP:
+        var ran_ds = _nystroem_rr_eigh_idn_devstop(ctx, dk, dvec, q, sabotage, eig_diag, vecs, want_host)
+        trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
+        return ran_ds
+    comptime if NYS_IDN_RR_EIGH:
+        var ran = _nystroem_rr_eigh_idn(ctx, dk, dvec, q, sabotage, eig_diag, vecs, want_host)
+        trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)
+        return ran
     ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
         dk.unsafe_ptr(),
         dvec.unsafe_ptr(),
@@ -902,13 +1743,99 @@ def _nystroem_device_eigh(
             " sweep budget, which is decomposition/'s parameter and not"
             " this lane's to change"
         )
-    var raw = _download(ctx, dk, q * q)
-    var got = _download(ctx, dvec, q * q)
-    for c in range(q):
-        eig_diag.append(raw[c * q + c])
-    for i in range(q * q):
-        vecs.append(got[i])
+    if want_host:
+        var raw = _download(ctx, dk, q * q)
+        var got = _download(ctx, dvec, q * q)
+        for c in range(q):
+            eig_diag.append(raw[c * q + c])
+        for i in range(q * q):
+            vecs.append(got[i])
     return Int(info_h[2])
+
+
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_NYS_DEV_ORDER_OFF` restores the host epilogue): after
+#: the eigendecomposition the fit ordered the q eigenpairs with a host
+#: selection sort (q^2 compares on one thread), clipped and square-rooted
+#: them on the host, permuted the q x q eigenvectors on the host and
+#: uploaded them again (plus a signed copy when an eigenvalue is negative).
+#: Now `nys_order_kernel` ranks every eigenvalue by counting (one thread per
+#: eigenvalue; the selection sort's total order: |lambda| descending, index
+#: ascending on a tie) and writes the clipped value, its `identical_sqrt`
+#: and its sign at its rank, and `nys_permute_kernel` writes the ordered and
+#: the column-signed eigenvectors, all from the resident `dk` / `dvec`. The
+#: eigenvectors are read back once, ordered, for the model. The same compare,
+#: clip, square root and negation per value: no bit moves, and the host
+#: column (`km_host_oracle.mojo`) is unchanged. A sabotage arm keeps the
+#: host epilogue (its arms live there).
+comptime NYS_IDN_DEV_ORDER = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_NYS_DEV_ORDER_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime NYS_ORDER_TPB = 256
+
+
+@always_inline
+def _nys_abs_bits(lam: Float32) -> Float32:
+    """`_singular_value_f32`'s line, inlined for the kernels."""
+    return bitcast[DType.float32](bitcast[DType.uint32](lam) & UInt32(0x7FFFFFFF))
+
+
+def nys_order_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    rank: MutPointer[Int32, MutAnyOrigin],
+    values: MutPointer[Float32, MutAnyOrigin],
+    sqrt_s: MutPointer[Float32, MutAnyOrigin],
+    signs: MutPointer[Float32, MutAnyOrigin],
+    q_in: Int32,
+    clip: Float32,
+):
+    """One thread per eigenvalue c (the diagonal of the q x q `a`): its rank
+    r under `_eigen_order_f32`'s order (the count of eigenvalues whose
+    magnitude is larger, or equal at a lower index), then values[r] = the
+    clipped magnitude, sqrt_s[r] = ftz(identical_sqrt(values[r])) and
+    signs[r] = -1 where the eigenvalue is negative, else 1. The ranks are a
+    bijection (the order includes the index), so every slot has one writer."""
+    var q = Int(q_in)
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if c >= q:
+        return
+    var lam = a.unsafe_load(c * q + c)
+    var mc = _nys_abs_bits(lam)
+    var r = 0
+    for j in range(q):
+        var mj = _nys_abs_bits(a.unsafe_load(j * q + j))
+        if mj > mc or (mj == mc and j < c):
+            r += 1
+    rank.unsafe_store(c, Int32(r))
+    var sv = mc
+    if sv < clip:
+        sv = clip
+    values.unsafe_store(r, sv)
+    sqrt_s.unsafe_store(r, ftz(identical_sqrt(sv)))
+    signs.unsafe_store(r, Float32(-1.0) if lam < Float32(0.0) else Float32(1.0))
+
+
+def nys_permute_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    vec: MutPointer[Float32, MutAnyOrigin],
+    rank: MutPointer[Int32, MutAnyOrigin],
+    q_out: MutPointer[Float32, MutAnyOrigin],
+    vt_out: MutPointer[Float32, MutAnyOrigin],
+    q_in: Int32,
+):
+    """One thread per cell (f, src) of the eigenvectors (vector src in
+    COLUMN src): q_out[f, rank[src]] = the cell, vt_out[f, rank[src]] = the
+    cell negated where eigenvalue src is negative (the host loop's lines)."""
+    var q = Int(q_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= q * q:
+        return
+    var f = t // q
+    var src = t - f * q
+    var r = Int(rank.unsafe_load(src))
+    var e = vec.unsafe_load(t)
+    q_out.unsafe_store(f * q + r, e)
+    vt_out.unsafe_store(f * q + r, -e if a.unsafe_load(src * q + src) < Float32(0.0) else e)
 
 
 def nystroem_fit_host(
@@ -972,6 +1899,107 @@ def nystroem_fit_host(
 
     var ctx = _family_ctx()
     var ca = _upload(ctx, comp)
+    var model = _nystroem_fit_core(
+        ctx, ca, comp^, basis^, n_features, kp, q, seed, trace, elem_tpb, scale_tpb, sabotage
+    )
+    _ = ca^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return model^
+
+
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF` unregisters the pointer binding, so
+#: `kernel_methods.py` takes the list route again): Nystroem fit reads X
+#: from the caller's memory straight to the device, scans it for NaN /
+#: infinity there (`_upload_checked`) and gathers the basis rows there
+#: (`km_gather_rows_kernel`), instead of an owned host copy of X
+#: (`read_f32`), a serial host finiteness walk over n x d and a host gather.
+#: The same component words reach the same kernels: no bit moves.
+comptime NYS_IDN_FIT_PTR_IN = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_NYS_DEV_BASIS_OFF` restores the host draw and radix
+#: sort): the pointer fit draws the basis rows on the device
+#: (`km_basis_indices_device`: every row's key drawn there, the rows under a
+#: threshold compacted and ranked there) instead of n_samples host draws and
+#: a host radix sort inside the device fit. Integer only, the same total
+#: order: the same rows in the same order, no bit moves. Applies on the
+#: pointer route (NYS_IDN_FIT_PTR_IN), where X is resident.
+comptime NYS_IDN_DEV_BASIS = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_NYS_DEV_BASIS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def nystroem_fit_ptr(
+    xaddr: Int,
+    n_samples: Int,
+    n_features: Int,
+    kp: KernelParams,
+    n_components: Int,
+    seed: UInt64,
+    mut trace: IdentityTrace,
+) raises -> NystroemModel:
+    """NYS_IDN_FIT_PTR_IN: `nystroem_fit_host` with X read from the caller's
+    address on the device (`_upload_checked`), the basis rows gathered
+    there, and (NYS_IDN_DEV_BASIS) drawn and ranked there. The fit proper is
+    `_nystroem_fit_core`, the list route's."""
+    if xaddr == 0:
+        raise Error("nystroem_fit: null X address")
+    var ctx = _family_ctx()
+    var dx = _upload_checked(ctx, xaddr, n_samples, n_features, "nystroem X")
+    km_validate_kernel_params(kp, "nystroem")
+    var q = n_components
+    var dbasis = ctx.enqueue_create_buffer[DType.int32](max(q, 1))
+    var basis = List[Int32]()
+    if NYS_IDN_DEV_BASIS:
+        basis = km_basis_indices_device(ctx, seed, n_samples, q, dbasis)
+    else:
+        basis = km_basis_indices(seed, n_samples, q)
+        var hb = ctx.enqueue_create_host_buffer[DType.int32](q)
+        for c in range(q):
+            hb.unsafe_ptr().unsafe_store(c, basis[c])
+        ctx.enqueue_copy(dst_buf=dbasis, src_ptr=hb.unsafe_ptr())
+        ctx.synchronize()
+        _ = hb^
+    trace.record_list_i32("nys.basis_indices", basis)
+    var ca = ctx.enqueue_create_buffer[DType.float32](q * n_features)
+    ctx.enqueue_function[km_gather_rows_kernel](
+        ca.unsafe_ptr(), dx.unsafe_ptr(), dbasis.unsafe_ptr(), Int32(q), Int32(n_features),
+        grid_dim=((q * n_features + KM_RF_TPB - 1) // KM_RF_TPB, 1, 1),
+        block_dim=(KM_RF_TPB, 1, 1),
+    )
+    var comp = _download(ctx, ca, q * n_features)
+    _ = dx^
+    _ = dbasis^
+    var model = _nystroem_fit_core(
+        ctx, ca, comp^, basis^, n_features, kp, q, seed, trace, KM_EPILOGUE_TPB, KM_TPB, KMSAB_NONE
+    )
+    _ = ca^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return model^
+
+
+def _nystroem_fit_core(
+    ctx: DeviceContext,
+    mut ca: DeviceBuffer[DType.float32],
+    var comp: List[Float32],
+    var basis: List[Int32],
+    n_features: Int,
+    kp: KernelParams,
+    q: Int,
+    seed: UInt64,
+    mut trace: IdentityTrace,
+    elem_tpb: Int,
+    scale_tpb: Int,
+    sabotage: Int,
+) raises -> NystroemModel:
+    """`nystroem_fit_host` from the uploaded components `ca` (q x n_features)
+    on: the basis kernel, its eigendecomposition, the order and the
+    normalization. `comp` and `basis` are the model's host copies."""
     var dk = ctx.enqueue_create_buffer[DType.float32](q * q)
     var na = ctx.enqueue_create_buffer[DType.float32](q)
     var nb = ctx.enqueue_create_buffer[DType.float32](q)
@@ -980,7 +2008,7 @@ def nystroem_fit_host(
     )
     ctx.synchronize()
     km_kernel_matrix(
-        ctx, kp, dk, ca, ca, q, q, n_features, na, nb, kws, elem_tpb, sabotage
+        ctx, kp, dk, ca, ca, q, q, n_features, na, nb, kws, elem_tpb, sabotage, True
     )
     ctx.synchronize()
     trace.record_device(ctx, "nys.basis_kernel", dk, q * q)
@@ -1002,20 +2030,16 @@ def nystroem_fit_host(
     var sweeps = 0
     var eig_diag = List[Float32]()
     var vecs = List[Float32]()
-    sweeps = _nystroem_device_eigh(ctx, dk, dvec, dinfo, q, sabotage, trace, eig_diag, vecs)
+    # NYS_IDN_DEV_ORDER: the order, clip, square root and permutation run on
+    # the device; a sabotage arm keeps the host epilogue.
+    var dev_order = NYS_IDN_DEV_ORDER and sabotage == KMSAB_NONE
+    sweeps = _nystroem_device_eigh(ctx, dk, dvec, dinfo, q, sabotage, trace, eig_diag, vecs, not dev_order)
 
     # --- the order and the clip, on the host (DEVIATIONS 1669, 1670, 1688) ---
     # THE SVD'S S, NOT THE EIGENVALUE. See `_singular_value_f32`: sklearn's
     # `S` is `|lambda|` with the sign carried by `V`, so the order, the clip
     # and the square root all read the MAGNITUDE, and a numerically negative
     # eigenvalue negates its column of the right operand below.
-    var values_raw = List[Float32]()
-    var mags = List[Float32]()
-    for c in range(q):
-        values_raw.append(eig_diag[c])
-        mags.append(_singular_value_f32(eig_diag[c]))
-    var order = _eigen_order_f32(mags, q, sabotage)
-
     var clip = _eigen_clip_f32()
     var values = List[Float32]()
     var sqrt_s = List[Float32]()
@@ -1023,34 +2047,71 @@ def nystroem_fit_host(
     var any_negative = False
     var vecs_ord = List[Float32]()
     var vt_ord = List[Float32]()
-    for _ in range(q * q):
-        vecs_ord.append(Float32(0.0))
-        vt_ord.append(Float32(0.0))
-    for c in range(q):
-        var src = order[c]
-        var s = mags[src]
-        if sabotage != KMSAB_NO_EIGEN_CLIP and s < clip:
-            s = clip
-        values.append(s)
-        sqrt_s.append(ftz(identical_sqrt(s)))
-        var negative = values_raw[src] < Float32(0.0)
-        if negative:
-            any_negative = True
-            v_signs.append(Int32(-1))
-        else:
-            v_signs.append(Int32(1))
-        for f in range(q):
-            var e = vecs[f * q + src]
-            vecs_ord[f * q + c] = e
-            vt_ord[f * q + c] = -e if negative else e
+    if not dev_order:
+        var values_raw = List[Float32]()
+        var mags = List[Float32]()
+        for c in range(q):
+            values_raw.append(eig_diag[c])
+            mags.append(_singular_value_f32(eig_diag[c]))
+        var order = _eigen_order_f32(mags, q, sabotage)
+        for _ in range(q * q):
+            vecs_ord.append(Float32(0.0))
+            vt_ord.append(Float32(0.0))
+        for c in range(q):
+            var src = order[c]
+            var s = mags[src]
+            if sabotage != KMSAB_NO_EIGEN_CLIP and s < clip:
+                s = clip
+            values.append(s)
+            sqrt_s.append(ftz(identical_sqrt(s)))
+            var negative = values_raw[src] < Float32(0.0)
+            if negative:
+                any_negative = True
+                v_signs.append(Int32(-1))
+            else:
+                v_signs.append(Int32(1))
+            for f in range(q):
+                var e = vecs[f * q + src]
+                vecs_ord[f * q + c] = e
+                vt_ord[f * q + c] = -e if negative else e
+    # the ordered eigenvectors and the clipped square roots, on the device:
+    # uploaded from the host epilogue, or written there (NYS_IDN_DEV_ORDER)
+    var dq0 = ctx.enqueue_create_buffer[DType.float32](q * q) if dev_order else _upload(ctx, vecs_ord)
+    var dsq = ctx.enqueue_create_buffer[DType.float32](q) if dev_order else _upload(ctx, sqrt_s)
+    var dvt_dev = ctx.enqueue_create_buffer[DType.float32](q * q if dev_order else 1)
+    if dev_order:
+        var drank = ctx.enqueue_create_buffer[DType.int32](q)
+        var dvals = ctx.enqueue_create_buffer[DType.float32](q)
+        var dsg = ctx.enqueue_create_buffer[DType.float32](q)
+        ctx.enqueue_function[nys_order_kernel](
+            dk.unsafe_ptr(), drank.unsafe_ptr(), dvals.unsafe_ptr(), dsq.unsafe_ptr(), dsg.unsafe_ptr(),
+            Int32(q), clip,
+            grid_dim=((q + NYS_ORDER_TPB - 1) // NYS_ORDER_TPB, 1, 1),
+            block_dim=(NYS_ORDER_TPB, 1, 1),
+        )
+        ctx.enqueue_function[nys_permute_kernel](
+            dk.unsafe_ptr(), dvec.unsafe_ptr(), drank.unsafe_ptr(), dq0.unsafe_ptr(), dvt_dev.unsafe_ptr(),
+            Int32(q),
+            grid_dim=((q * q + NYS_ORDER_TPB - 1) // NYS_ORDER_TPB, 1, 1),
+            block_dim=(NYS_ORDER_TPB, 1, 1),
+        )
+        # the model's copies (and the card's): copies, no arithmetic
+        values = _download(ctx, dvals, q)
+        vecs_ord = _download(ctx, dq0, q * q)
+        if trace.enabled:
+            sqrt_s = _download(ctx, dsq, q)
+            var sg = _download(ctx, dsg, q)
+            for c in range(q):
+                v_signs.append(Int32(-1) if sg[c] < Float32(0.0) else Int32(1))
+        _ = drank^
+        _ = dvals^
+        _ = dsg^
     trace.record_list_f32("nys.eigenvalues", values)
     trace.record_list_f32("nys.sqrt_eigenvalues", sqrt_s)
     trace.record_list_i32("nys.v_signs", v_signs)
     trace.record_list_f32("nys.eigenvectors", vecs_ord)
 
     # --- `U / sqrt(S) @ V`, on the device ---
-    var dq0 = _upload(ctx, vecs_ord)
-    var dsq = _upload(ctx, sqrt_s)
     var dz = ctx.enqueue_create_buffer[DType.float32](q * q)
     var dnorm = ctx.enqueue_create_buffer[DType.float32](q * q)
     var gws = ctx.enqueue_create_buffer[DType.float32](
@@ -1077,7 +2138,12 @@ def nystroem_fit_host(
     # stages the signed copy. Negation is exact, so each product term is
     # the unsigned term with its sign flipped and the fold order is the
     # same.
-    if any_negative:
+    if dev_order:
+        # the column-signed Q written on the device; where no eigenvalue is
+        # negative it is Q's own words, so the product is the one below
+        identical_gemm_into(ctx, dnorm, dz, dvt_dev, gws, q, q, q, OP_NT)
+        ctx.synchronize()
+    elif any_negative:
         var dvt = _upload(ctx, vt_ord)
         identical_gemm_into(ctx, dnorm, dz, dvt, gws, q, q, q, OP_NT)
         ctx.synchronize()
@@ -1088,7 +2154,6 @@ def nystroem_fit_host(
     trace.record_device(ctx, "nys.normalization", dnorm, q * q)
 
     var norm = _download(ctx, dnorm, q * q)
-    _ = ca^
     _ = dk^
     _ = na^
     _ = nb^
@@ -1097,11 +2162,10 @@ def nystroem_fit_host(
     _ = dinfo^
     _ = dq0^
     _ = dsq^
+    _ = dvt_dev^
     _ = dz^
     _ = dnorm^
     _ = gws^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
 
     return NystroemModel(
         comp^, basis^, norm^, values^, vecs_ord^,
@@ -1532,13 +2596,24 @@ def rbf_sampler_transform_host(
     )
     ctx.synchronize()
 
-    identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
+    # RBF_IDN_FUSED: the projection as the per-cell chain (and the whole
+    # transform in that launch when no stage needs the projection alone)
+    var chain = False
+    var whole = False
+    comptime if RBF_IDN_FUSED:
+        chain = d <= RBF_FUSED_MAX_D and n_rows * dd > 0
+        whole = chain and sabotage == KMSAB_NONE and not trace.enabled
+        if chain:
+            _rbf_idn_fused_launch(ctx, dp, dx, dw, db, n_rows, d, dd, model.scale, whole)
+    if not chain:
+        identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
     ctx.synchronize()
     trace.record_device(ctx, "rf.projection", dp, n_rows * dd)
 
-    km_feature_map_epilogue(
-        ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
-    )
+    if not whole:
+        km_feature_map_epilogue(
+            ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
+        )
     ctx.synchronize()
     trace.record_device(ctx, "rf.feature_map", dp, n_rows * dd)
 
@@ -1614,8 +2689,6 @@ def _rbf_transform_dev[out_origin: MutOrigin, //](
     var t1 = Int(perf_counter_ns())
     var fused = False
     comptime if RBF_FUSED:
-        from kernel_methods.rbf_fused import RBF_FUSED_MAX_D, RBF_FUSED_TPB, rbf_fused_transform_kernel
-
         fused = d <= RBF_FUSED_MAX_D and sabotage == KMSAB_NONE and n_rows * dd > 0
         if fused:
             ctx.enqueue_function[rbf_fused_transform_kernel](
@@ -1624,7 +2697,15 @@ def _rbf_transform_dev[out_origin: MutOrigin, //](
                 grid_dim=((n_rows * dd + RBF_FUSED_TPB - 1) // RBF_FUSED_TPB, 1, 1),
                 block_dim=(RBF_FUSED_TPB, 1, 1),
             )
-    if not fused:
+    # RBF_IDN_FUSED: the projection as the per-cell chain (and the whole
+    # transform in that launch when no stage needs the projection alone)
+    var chain = False
+    comptime if RBF_IDN_FUSED:
+        chain = d <= RBF_FUSED_MAX_D and n_rows * dd > 0
+        fused = chain and sabotage == KMSAB_NONE and not trace.enabled
+        if chain:
+            _rbf_idn_fused_launch(ctx, dp, dx, dw, db, n_rows, d, dd, model.scale, fused)
+    if not fused and not chain:
         identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
     ctx.synchronize()
     var t2 = Int(perf_counter_ns())

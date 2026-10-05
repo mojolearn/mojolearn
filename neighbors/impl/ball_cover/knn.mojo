@@ -388,7 +388,7 @@ def rbc_knn_before(
 
 
 @always_inline
-def rbc_knn_merge(
+def rbc_knn_merge_kern(
     s_ak: UnsafePointer[
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
@@ -590,7 +590,7 @@ def rbc_knn_kernel(
                 x, x_base, r, l * n_cols, n_cols, metric, metric_arg
             )
             val = UInt32(l)
-        rbc_knn_merge(s_ak, s_av, s_ck, s_cv, s_flag, k, tid, key, val)
+        rbc_knn_merge_kern(s_ak, s_av, s_ck, s_cv, s_flag, k, tid, key, val)
 
     # `D` in TRUE distance space: bounds 1, 2 and 3 are all statements
     # about true distances, which is the whole of DEVIATION 564.
@@ -687,7 +687,7 @@ def rbc_knn_kernel(
                             )
                             val = UInt32(r_1nn_cols.unsafe_load(i))
                             my_dists += 1
-                rbc_knn_merge(
+                rbc_knn_merge_kern(
                     s_ak, s_av, s_ck, s_cv, s_flag, k, tid, key, val
                 )
                 i0 += RBC_KNN_TPB

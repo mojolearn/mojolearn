@@ -8,11 +8,19 @@ from sequence.mlp import (
     EPI_ACT_BWD,
     EPI_BIAS_ACT,
     EPI_L2GRAD,
+    MLP_BLOCKED_FOLDS,
+    MLP_EPOCH_DEV,
+    MLP_L2_BLOCK,
+    MLP_ROW_BLOCK,
     SplitMix,
     fisher_yates,
+    mlp_epoch_key,
+    mlp_perm_args,
 )
 from sequence.ops import (
     FP,
+    OP_ONE_HOT,
+    OP_PROBA2,
     OP_ACT,
     OP_ACT_BWD,
     OP_COLSUM_DIV,
@@ -21,8 +29,14 @@ from sequence.ops import (
     OP_GATHER_ROWS,
     OP_GEMM_EPI,
     OP_L2GRAD,
+    OP_AF_BLK_SUMSQ,
     OP_MLP_BLOSS,
+    OP_MLP_EPOCH_LOSS,
+    OP_MLP_L2FOLD,
+    OP_MLP_L2PART,
+    OP_MLP_PERM,
     OP_MLP_ROWLOSS,
+    OP_MLP_ROWPART,
     OP_OPT,
     OP_SOFTMAX,
     OP_SUMSQ,
@@ -120,15 +134,72 @@ def mlp_forward[E: Exec](mut ex: E, net: MLPNet, P: FP, acts: List[FP], B: Int) 
             _act_launch(ex, acts[i + 1], B, fo, act)
 
 
+def _l2_blocked[E: Exec](mut ex: E, net: MLPNet, P: FP, l2: FP, parts: FP) raises:
+    """MLP_BLOCKED_FOLDS (sequence/mlp.mojo): l2[i] = ||W_i||^2 in the blocked
+    order. Up to four layers: one launch of every block, one of the folds;
+    more layers: one block launch and one fold per layer."""
+    var L = net.n_layers()
+    if L <= 4:
+        var q = Args()
+        q.p0 = P
+        q.p1 = parts
+        q.i1 = MLP_L2_BLOCK
+        q.i2 = L
+        var nb = 0
+        for i in range(L):
+            var o_ = net.w_off(i)
+            var c_ = net.sizes[i] * net.sizes[i + 1]
+            nb += (c_ + MLP_L2_BLOCK - 1) // MLP_L2_BLOCK
+            if i == 0:
+                q.i4 = o_
+                q.i5 = c_
+            elif i == 1:
+                q.i6 = o_
+                q.i7 = c_
+            elif i == 2:
+                q.i8 = o_
+                q.i9 = c_
+            else:
+                q.i10 = o_
+                q.i11 = c_
+        ex.launch[OP_MLP_L2PART](q, nb)
+        var f = q
+        f.p0 = parts
+        f.p1 = l2
+        ex.launch[OP_MLP_L2FOLD](f, L)
+        return
+    var poff = 0
+    for i in range(L):
+        var c_ = net.sizes[i] * net.sizes[i + 1]
+        var nb = (c_ + MLP_L2_BLOCK - 1) // MLP_L2_BLOCK
+        var b = Args()
+        b.p0 = P + net.w_off(i)
+        b.p1 = parts + poff
+        b.i0 = c_
+        b.i1 = MLP_L2_BLOCK
+        ex.launch[OP_AF_BLK_SUMSQ](b, nb)
+        var f = Args()
+        f.p0 = parts + poff
+        f.p1 = l2
+        f.i0 = i
+        f.i1 = nb
+        ex.launch[OP_MLP_L2FOLD](f, 1)
+        poff += nb
+
+
 def mlp_fit[E: Exec](
     mut ex: E, net: MLPNet, X: FP, Y: FP, N: Int, Pio: FP, curve: FP,
     loss_kind: Int, solver: Int, lr_sched: Int, nesterov: Bool, batch: Int, max_iter: Int,
     shuffle: Bool, seed: UInt64, n_iter_no_change: Int,
     lr_init: Float32, b1: Float32, b2: Float32, eps: Float32, momentum: Float32,
-    power_t: Float64, alpha: Float32, tol: Float64,
+    power_t: Float64, alpha: Float32, tol: Float64, y_codes: Int = 0,
 ) raises -> Int:
     """Returns n_iter; curve[0:n_iter] is the epoch loss (float32 of the
-    float64 accumulation)."""
+    float64 accumulation; under MLP_EPOCH_DEV the float32 fold of
+    `op_mlp_epoch_loss`). `y_codes` (cpu2-l11-neural): 0, `Y` is the
+    dense (N, O) target; 1, `Y` holds N int32 class codes and the (N, O)
+    one-hot target is built on the executor (`OP_ONE_HOT`); 2 (O = 1), the
+    codes themselves as the float target. Not in host NumPy either way."""
     var L = net.n_layers()
     var D = net.sizes[0]
     var O = net.sizes[L]
@@ -137,7 +208,17 @@ def mlp_fit[E: Exec](
     var dX = ex.alloc(N * D)
     ex.upload(dX, X, N * D)
     var dY = ex.alloc(N * O)
-    ex.upload(dY, Y, N * O)
+    if y_codes == 1 or (y_codes == 2 and O == 1):
+        var dC = ex.alloc(N)
+        ex.upload(dC, Y, N)
+        var oh = Args()
+        oh.p0 = dC
+        oh.p1 = dY
+        oh.i0 = O
+        oh.i1 = 1 if y_codes == 2 else 0
+        ex.launch[OP_ONE_HOT](oh, N * O)
+    else:
+        ex.upload(dY, Y, N * O)
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
@@ -155,6 +236,16 @@ def mlp_fit[E: Exec](
     var n_batches = (N + bs - 1) // bs
     var dloss = ex.alloc(n_batches)
     var didx = ex.alloc(N)
+    # MLP_BLOCKED_FOLDS: every layer's ||W||^2 block partials (layers
+    # concatenated) and the batch's row-loss block sums
+    var l2_nb = 0
+    for i in range(L):
+        l2_nb += (net.sizes[i] * net.sizes[i + 1] + MLP_L2_BLOCK - 1) // MLP_L2_BLOCK
+    var l2parts = ex.alloc(l2_nb if MLP_BLOCKED_FOLDS else 1)
+    var rowparts = ex.alloc((bs + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK if MLP_BLOCKED_FOLDS else 1)
+    # MLP_EPOCH_DEV: the epoch losses stay on the executor, one word read back
+    var dcurve = ex.alloc(max_iter if MLP_EPOCH_DEV else 1)
+    var loss_word = List[Float32](length=1, fill=Float32(0.0))
     var perm = List[Float32]()
     for i in range(N):
         perm.append(Float32(i))
@@ -169,9 +260,15 @@ def mlp_fit[E: Exec](
     var t_samples = 0
     var n_iter = 0
     for it in range(max_iter):
-        if shuffle:
-            fisher_yates(rng, perm)
-        ex.upload(didx, FP(unsafe_from_address=Int(perm.unsafe_ptr())), N)
+        comptime if MLP_EPOCH_DEV:
+            if shuffle:
+                ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, it), didx), N)
+            elif it == 0:
+                ex.upload(didx, FP(unsafe_from_address=Int(perm.unsafe_ptr())), N)
+        else:
+            if shuffle:
+                fisher_yates(rng, perm)
+            ex.upload(didx, FP(unsafe_from_address=Int(perm.unsafe_ptr())), N)
         for bi in range(n_batches):
             var off = bi * bs
             var B = bs if off + bs <= N else N - off
@@ -196,36 +293,39 @@ def mlp_fit[E: Exec](
             a.i0 = loss_kind
             a.i1 = O
             ex.launch[OP_MLP_ROWLOSS](a, B)
-            if L <= 4:
-                # every layer's ||W||^2 in one launch, a thread each (apple2)
-                var q = Args()
-                q.p0 = P
-                q.p1 = l2
-                q.i2 = L
-                for i in range(L):
-                    var o_ = net.w_off(i)
-                    var c_ = net.sizes[i] * net.sizes[i + 1]
-                    if i == 0:
-                        q.i4 = o_
-                        q.i5 = c_
-                    elif i == 1:
-                        q.i6 = o_
-                        q.i7 = c_
-                    elif i == 2:
-                        q.i8 = o_
-                        q.i9 = c_
-                    else:
-                        q.i10 = o_
-                        q.i11 = c_
-                ex.launch[OP_SUMSQ](q, L)
-            else:
-                for i in range(L):
+            comptime if MLP_BLOCKED_FOLDS:
+                _l2_blocked(ex, net, P, l2, l2parts)
+            else:  # runtime L: a plain if inside the comptime else (box-run-2 compile fix)
+                if L <= 4:
+                    # every layer's ||W||^2 in one launch, a thread each (apple2)
                     var q = Args()
-                    q.p0 = P + net.w_off(i)
+                    q.p0 = P
                     q.p1 = l2
-                    q.i0 = i
-                    q.i1 = net.sizes[i] * net.sizes[i + 1]
-                    ex.launch[OP_SUMSQ](q, 1)
+                    q.i2 = L
+                    for i in range(L):
+                        var o_ = net.w_off(i)
+                        var c_ = net.sizes[i] * net.sizes[i + 1]
+                        if i == 0:
+                            q.i4 = o_
+                            q.i5 = c_
+                        elif i == 1:
+                            q.i6 = o_
+                            q.i7 = c_
+                        elif i == 2:
+                            q.i8 = o_
+                            q.i9 = c_
+                        else:
+                            q.i10 = o_
+                            q.i11 = c_
+                    ex.launch[OP_SUMSQ](q, L)
+                else:
+                    for i in range(L):
+                        var q = Args()
+                        q.p0 = P + net.w_off(i)
+                        q.p1 = l2
+                        q.i0 = i
+                        q.i1 = net.sizes[i] * net.sizes[i + 1]
+                        ex.launch[OP_SUMSQ](q, 1)
             var bl = Args()
             bl.p0 = rowloss
             bl.p1 = l2
@@ -236,6 +336,16 @@ def mlp_fit[E: Exec](
             bl.i3 = L
             bl.i4 = loss_kind
             bl.f0 = ftz(identical_mul(Float32(0.5), alpha))
+            comptime if MLP_BLOCKED_FOLDS:
+                var nrb = (B + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK
+                var rp = Args()
+                rp.p0 = rowloss
+                rp.p1 = rowparts
+                rp.i0 = B
+                rp.i1 = MLP_ROW_BLOCK
+                ex.launch[OP_MLP_ROWPART](rp, nrb)
+                bl.p3 = rowparts
+                bl.i5 = nrb
             ex.launch[OP_MLP_BLOSS](bl, 1)
             var i = L - 1
             while i >= 0:
@@ -277,15 +387,30 @@ def mlp_fit[E: Exec](
                 o.f0 = lr
                 o.f1 = momentum
             ex.launch[OP_OPT](o, np_)
-        ex.sync()
-        ex.download(FP(unsafe_from_address=Int(host_loss.unsafe_ptr())), dloss, n_batches)
-        var acc = Float64(0.0)
-        for bi in range(n_batches):
-            var off = bi * bs
-            var B = bs if off + bs <= N else N - off
-            acc += Float64(host_loss[bi]) * Float64(B)
-        var loss = acc / Float64(N)
-        curve.unsafe_store(it, Float32(loss))
+        var loss: Float64
+        comptime if MLP_EPOCH_DEV:
+            var el = Args()
+            el.p0 = dloss
+            el.p1 = dcurve
+            el.i0 = n_batches
+            el.i1 = bs
+            el.i2 = N
+            el.i3 = it
+            ex.launch[OP_MLP_EPOCH_LOSS](el, 1)
+            ex.sync()
+            ex.download(FP(unsafe_from_address=Int(loss_word.unsafe_ptr())), dcurve + it, 1)
+            curve.unsafe_store(it, loss_word[0])
+            loss = Float64(loss_word[0])
+        else:
+            ex.sync()
+            ex.download(FP(unsafe_from_address=Int(host_loss.unsafe_ptr())), dloss, n_batches)
+            var acc = Float64(0.0)
+            for bi in range(n_batches):
+                var off = bi * bs
+                var B = bs if off + bs <= N else N - off
+                acc += Float64(host_loss[bi]) * Float64(B)
+            loss = acc / Float64(N)
+            curve.unsafe_store(it, Float32(loss))
         n_iter = it + 1
         t_samples += N
         if loss > best - tol:
@@ -306,10 +431,14 @@ def mlp_fit[E: Exec](
     ex.download(Pio, P, np_)
     _ = perm^
     _ = host_loss^
+    _ = loss_word^
     return n_iter
 
 
-def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int) raises:
+def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
+                         proba2: Bool = False) raises:
+    """`proba2` (cpu2-l11-neural): a one-output logistic net writes the
+    (N, 2) probability `[1 - p, p]` (`OP_PROBA2` on the executor)."""
     var L = net.n_layers()
     var D = net.sizes[0]
     var O = net.sizes[L]
@@ -335,5 +464,14 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
         d.p1 = dout + b0 * O
         ex.launch[OP_COPY](d, B * O)
         b0 += B
+    if proba2 and O == 1:
+        var two = ex.alloc(N * 2)
+        var q = Args()
+        q.p0 = dout
+        q.p1 = two
+        ex.launch[OP_PROBA2](q, N * 2)
+        ex.sync()
+        ex.download(dst, two, N * 2)
+        return
     ex.sync()
     ex.download(dst, dout, N * O)

@@ -75,7 +75,7 @@ from hierarchy.checks.edge_order import (
     weight_order_key,
 )
 from hierarchy.impl.cluster.detail.connectivities import FLOAT32_MAX
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 
 
@@ -361,7 +361,7 @@ def host_kruskal(
             )
             idx.append(k)
             k += 1
-    merge_sort_u64_with_index(keys, idx)
+    merge_sort_u64_with_index_host(keys, idx)
     var uf = NaiveUnionFind(m)
     var lo = List[Int32](capacity=m - 1)
     var hi = List[Int32](capacity=m - 1)
@@ -527,7 +527,7 @@ def host_extract_flattened_clusters(
     for j in range(child_size):
         keys.append(UInt64(0x7FFFFFFF - Int(children[start + j])))
         idx.append(j)
-    merge_sort_u64_with_index(keys, idx)
+    merge_sort_u64_with_index_host(keys, idx)
     var tmp = List[Int32](capacity=n_vertices)
     for _ in range(n_vertices):
         tmp.append(Int32(-1))

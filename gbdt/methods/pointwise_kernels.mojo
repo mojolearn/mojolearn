@@ -425,7 +425,7 @@ struct FoldsHistogram(Copyable, Movable):
                 + String(to_bit_inclusive)
             )
         var count = 0
-        for bit in range(from_bit, to_bit_inclusive + 1):
+        for bit in range(from_bit, to_bit_inclusive + 1):  # small-loop(to_bit_inclusive: bit widths, at most 8): sums a per-width feature count
             count += Int(self.counts[bit])
         return count
 
@@ -446,7 +446,7 @@ def folds_histogram_from_folds(folds: List[UInt32]) -> FoldsHistogram:
     `lowerBound = ... : 15` exists to prevent. Gate F6 pins it.
     """
     var h = FoldsHistogram()
-    for i in range(len(folds)):
+    for i in range(len(folds)):  # small-loop(folds: one fold count per feature, layout metadata): bins features by width once per pool
         var n = Int(folds[i])
         var bits = 0
         while (1 << bits) < n:
@@ -830,7 +830,7 @@ def run_compute_hist2_non_binary_kernel[
     bin_sums: MutPointer[Float32, o9],
     bin_feature_count: Int,
     full_pass: Bool,
-    fixed_scale: Float32,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
     nx: Int,
     ny: Int,
     nz: Int,
@@ -895,7 +895,7 @@ def run_compute_hist2_non_binary_kernel[
         )
 
 
-def compute_hist2_non_binary[
+def compute_hist2_non_binary_dev[
     o1: MutOrigin,
     o2: MutOrigin,
     o3: MutOrigin,
@@ -925,7 +925,7 @@ def compute_hist2_non_binary[
     bin_sums: MutPointer[Float32, o9],
     feature_count_for_bits: Int,
     sm_count: Int,
-    fixed_scale: Float32,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """`ComputeHist2NonBinary<Bits>` (`:221-270`), copied line for line.
 
@@ -1038,6 +1038,54 @@ def compute_hist2_non_binary[
     )
 
 
+def compute_hist2_non_binary[
+    o1: MutOrigin,
+    o2: MutOrigin,
+    o3: MutOrigin,
+    o4: MutOrigin,
+    o5: MutOrigin,
+    o6: MutOrigin,
+    o7: MutOrigin,
+    o8: MutOrigin,
+    o9: MutOrigin, //,
+    bits: Int,
+](
+    ctx: DeviceContext,
+    feature_offset: MutPointer[UInt32, o1],
+    feature_first_fold_index: MutPointer[UInt32, o2],
+    feature_folds: MutPointer[UInt32, o3],
+    nb_count: Int,
+    cindex: MutPointer[UInt32, o4],
+    target: MutPointer[Float32, o5],
+    weight: MutPointer[Float32, o6],
+    indices: MutPointer[UInt32, o7],
+    size: Int,
+    partition: MutPointer[UInt32, o8],
+    part_count: Int,
+    fold_count: Int,
+    full_pass: Bool,
+    hist_line_size: Int,
+    bin_sums: MutPointer[Float32, o9],
+    feature_count_for_bits: Int,
+    sm_count: Int,
+    fixed_scale: Float32,
+) raises:
+    """The host-scalar form of `compute_hist2_non_binary_dev` (the checks
+    call one width directly): the scale staged on a held one-float device
+    word by an enqueued fill, as `compute_hist2` does."""
+    var scale_word = ctx.enqueue_create_buffer[DType.float32](1)
+    enqueue_fill(ctx, scale_word, fixed_scale)
+    compute_hist2_non_binary_dev[bits](
+        ctx, feature_offset, feature_first_fold_index, feature_folds,
+        nb_count, cindex, target, weight, indices, size, partition,
+        part_count, fold_count, full_pass, hist_line_size, bin_sums,
+        feature_count_for_bits, sm_count, rebind[MutPointer[Float32, MutAnyOrigin]](
+            scale_word.unsafe_ptr()
+        ),
+    )
+    _ = scale_word^
+
+
 def pw_fold_doc_slots_kernel(
     slots: MutPointer[Float32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
@@ -1114,8 +1162,10 @@ def pw_fold_int_slots_kernel(
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     stride_in: Int32,
     multiplier_in: Int32,
-    fixed_scale: Float32,
+    fixed_scale_p: MutPointer[Float32, MutAnyOrigin],
 ):
+    # T5 drain (cpu3-gbdt-a): the scale is a device word, read here
+    var fixed_scale = fixed_scale_p.unsafe_load(0)
     var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(stride_in)
     if c < stride:
@@ -1136,7 +1186,7 @@ def launch_pw_fold_int_slots[
     full_pass: Bool,
     stride: Int,
     multiplier: Int,
-    fixed_scale: Float32,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """`launch_pw_fold_doc_slots`'s window, the integer fold."""
     var lo = 0 if full_pass else stride
@@ -1177,7 +1227,7 @@ def non_binary_multiplier_ladder[
     bin_sums: MutPointer[Float32, o9],
     hist_line_size: Int,
     full_pass: Bool,
-    fixed_scale: Float32,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
     multiplier: Int,
     nx: Int,
     ny: Int,
@@ -1269,7 +1319,7 @@ def run_compute_hist2_binary_kernel[
     nx: Int,
     ny: Int,
     nz: Int,
-    fixed_scale: Float32 = Float32(1.0),
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """`RunComputeHist2BinaryKernel` (`:98-124`), copied."""
     if full_pass:
@@ -1338,7 +1388,7 @@ def compute_hist2_binary[
     total_feature_count: Int,
     bin_sums: MutPointer[Float32, o9],
     sm_count: Int,
-    fixed_scale: Float32 = Float32(1.0),
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """`ComputeHist2Binary` (`:128-179`), copied line for line.
 
@@ -1418,7 +1468,7 @@ def compute_hist2_binary[
                 ctx, feature_offset, feature_first_fold_index, b_count,
                 cindex, target, weight, indices, partition,
                 slots.unsafe_ptr(), total_feature_count, full_pass,
-                multiplier, nx, ny, nz,
+                multiplier, nx, ny, nz, fixed_scale,
             )
             launch_pw_fold_doc_slots(
                 ctx, slots, bin_sums, full_pass, stride, multiplier
@@ -1458,7 +1508,7 @@ def binary_multiplier_ladder[
     nx: Int,
     ny: Int,
     nz: Int,
-    fixed_scale: Float32 = Float32(1.0),
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """`ComputeHist2Binary`'s multiplier ladder, lifted out unchanged for
     DEVIATION 2670."""
@@ -1546,7 +1596,7 @@ def run_compute_hist2_half_byte_kernel[
     nx: Int,
     ny: Int,
     nz: Int,
-    fixed_scale: Float32 = Float32(1.0),
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """`RunComputeHist2HalfByteKernel` (`:99-127`), copied."""
     if full_pass:
@@ -1623,7 +1673,7 @@ def compute_hist2_half_byte[
     hist_line_size: Int,
     bin_sums: MutPointer[Float32, o9],
     sm_count: Int,
-    fixed_scale: Float32 = Float32(1.0),
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """`ComputeHist2HalfByte` (`:130-180`), copied line for line.
 
@@ -1689,7 +1739,7 @@ def compute_hist2_half_byte[
                 ctx, feature_offset, feature_first_fold_index, feature_folds,
                 half_byte_features_count, cindex, target, weight, indices,
                 partition, slots.unsafe_ptr(), hist_line_size, full_pass,
-                multiplier, nx, ny, nz,
+                multiplier, nx, ny, nz, fixed_scale,
             )
             launch_pw_fold_doc_slots(
                 ctx, slots, bin_sums, full_pass, stride, multiplier
@@ -1732,7 +1782,7 @@ def half_byte_multiplier_ladder[
     nx: Int,
     ny: Int,
     nz: Int,
-    fixed_scale: Float32 = Float32(1.0),
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """`ComputeHist2HalfByte`'s multiplier ladder, lifted out unchanged for
     DEVIATION 2670."""
@@ -1792,7 +1842,7 @@ def half_byte_multiplier_ladder[
 # ---------------------------------------------------------------------------
 
 
-def compute_hist2[
+def compute_hist2_dev[
     o1: MutOrigin,
     o2: MutOrigin,
     o3: MutOrigin,
@@ -1826,7 +1876,7 @@ def compute_hist2[
     full_pass: Bool,
     folds_hist: FoldsHistogram,
     sm_count: Int,
-    fixed_scale: Float32,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
 ) raises:
     """`TComputeHist2Kernel::Run` (`pointwise_kernels.cpp:17-93`), copied.
 
@@ -1910,7 +1960,7 @@ def compute_hist2[
         comptime if pointwise_one_byte_fixed_for[
             TARGET_COLUMN, HIST_BUILD_MODE == NUMERIC_IDENTICAL
         ]():
-            compute_hist2_non_binary[8](
+            compute_hist2_non_binary_dev[8](
                 ctx, feature_offset, feature_first_fold_index,
                 feature_folds,
                 feature_count, cindex, target, weight, indices, size,
@@ -1921,7 +1971,7 @@ def compute_hist2[
                 fixed_scale,
             )
         else:
-            compute_hist2_non_binary[5](
+            compute_hist2_non_binary_dev[5](
                 ctx, feature_offset, feature_first_fold_index,
                 feature_folds,
                 feature_count, cindex, target, weight, indices, size,
@@ -1931,7 +1981,7 @@ def compute_hist2[
                 folds_hist.feature_count_for_bits(4, 5), sm_count,
                 fixed_scale,
             )
-            compute_hist2_non_binary[6](
+            compute_hist2_non_binary_dev[6](
                 ctx, feature_offset, feature_first_fold_index,
                 feature_folds,
                 feature_count, cindex, target, weight, indices, size,
@@ -1941,7 +1991,7 @@ def compute_hist2[
                 folds_hist.feature_count_for_bits(6, 6), sm_count,
                 fixed_scale,
             )
-            compute_hist2_non_binary[7](
+            compute_hist2_non_binary_dev[7](
                 ctx, feature_offset, feature_first_fold_index,
                 feature_folds,
                 feature_count, cindex, target, weight, indices, size,
@@ -1951,7 +2001,7 @@ def compute_hist2[
                 folds_hist.feature_count_for_bits(7, 7), sm_count,
                 fixed_scale,
             )
-            compute_hist2_non_binary[8](
+            compute_hist2_non_binary_dev[8](
                 ctx, feature_offset, feature_first_fold_index,
                 feature_folds,
                 feature_count, cindex, target, weight, indices, size,
@@ -2024,3 +2074,59 @@ def compute_hist2[
             hist_line_size,
             partition,
         )
+
+
+def compute_hist2[
+    o1: MutOrigin,
+    o2: MutOrigin,
+    o3: MutOrigin,
+    oh: MutOrigin,
+    o4: MutOrigin,
+    o5: MutOrigin,
+    o6: MutOrigin,
+    o7: MutOrigin,
+    o8: MutOrigin,
+    o9: MutOrigin, //,
+](
+    ctx: DeviceContext,
+    policy: Int,
+    feature_offset: MutPointer[UInt32, o1],
+    feature_first_fold_index: MutPointer[UInt32, o2],
+    feature_folds: MutPointer[UInt32, o3],
+    feature_one_hot: MutPointer[UInt8, oh],
+    feature_count: Int,
+    bin_features_slice_left: Int,
+    bin_features_slice_size: Int,
+    cindex: MutPointer[UInt32, o4],
+    target: MutPointer[Float32, o5],
+    weight: MutPointer[Float32, o6],
+    indices: MutPointer[UInt32, o7],
+    size: Int,
+    partition: MutPointer[UInt32, o8],
+    part_count: Int,
+    fold_count: Int,
+    bin_sums: MutPointer[Float32, o9],
+    hist_line_size: Int,
+    full_pass: Bool,
+    folds_hist: FoldsHistogram,
+    sm_count: Int,
+    fixed_scale: Float32,
+) raises:
+    """The host-scalar form of `compute_hist2_dev`, for callers that hold
+    the scale on the host (the checks, the multi-GPU shards). T5 drain
+    (lane cpu3-gbdt-a): the kernels read the scale from a device word, so
+    this form stages it with an enqueued fill (no drain) on a one-float
+    buffer held past the launches (a Mojo local dies at its last named
+    use). Same value, same arithmetic."""
+    var scale_word = ctx.enqueue_create_buffer[DType.float32](1)
+    enqueue_fill(ctx, scale_word, fixed_scale)
+    compute_hist2_dev(
+        ctx, policy, feature_offset, feature_first_fold_index, feature_folds,
+        feature_one_hot, feature_count, bin_features_slice_left,
+        bin_features_slice_size, cindex, target, weight, indices, size,
+        partition, part_count, fold_count, bin_sums, hist_line_size,
+        full_pass, folds_hist, sm_count, rebind[MutPointer[Float32, MutAnyOrigin]](
+            scale_word.unsafe_ptr()
+        ),
+    )
+    _ = scale_word^

@@ -9,6 +9,7 @@ import http.server
 import json
 import os
 import pathlib
+import re
 import signal
 import subprocess
 import tempfile
@@ -159,8 +160,21 @@ class SmokeTests(unittest.TestCase):
                  MOJOLEARN_HOTAISLE_CREATE_LOCK=str(self.dir / 'ha-create.lock'))
         e.pop('RUNPOD_API_KEY', None)
         e.update(env or {})
-        return subprocess.run(['bash', str(SMOKE), *args], capture_output=True, text=True,
-                              timeout=timeout, env=e)
+        result = subprocess.run(['bash', str(SMOKE), *args], capture_output=True, text=True,
+                                timeout=timeout, env=e)
+        # Ambiguous-create tests deliberately retain the guard. These guards
+        # target this fixture's localhost API; stop only its reported process.
+        if self.cloud:
+            for pid in re.findall(r'dead-man ARMED before the create: pid (\d+)', result.stdout):
+                command = subprocess.run(['ps', '-p', pid, '-o', 'command='], capture_output=True, text=True).stdout
+                if 'mojolearn-smoke-deadman-' not in command:
+                    continue
+                subprocess.run(['pkill', '-P', pid], capture_output=True)
+                try:
+                    os.kill(int(pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+        return result
 
     def selection(self, backend='hip'):
         path = self.dir / f'selection-{backend}.json'
@@ -522,7 +536,13 @@ runpy.run_path(str(pathlib.Path(__file__).with_name('timeout.real')), run_name='
 
 # ---------------------------------------------------------------- --from-index
 IV = '0.9.0'
-PROJECTS = {'mojolearn': 'mojolearn', 'mojolearn-nvidia': 'mojolearn_nvidia', 'mojolearn-amd': 'mojolearn_amd'}
+PROJECTS = {name: name.replace('-', '_') for name in (
+    'mojolearn', 'mojolearn-nvidia', 'mojolearn-amd')}
+PROJECT_REQUIRES = {
+    'mojolearn': ('mojolearn-nvidia', 'mojolearn-amd'),
+    'mojolearn-nvidia': ('mojolearn',),
+    'mojolearn-amd': ('mojolearn',),
+}
 
 
 class FakeIndex(http.server.BaseHTTPRequestHandler):
@@ -541,8 +561,7 @@ class FakeIndex(http.server.BaseHTTPRequestHandler):
                 body = json.dumps({'info': {'requires_dist': None}, 'urls': [
                     {'filename': name, 'packagetype': 'bdist_wheel', 'url': f'{base}/files/{name}', 'yanked': False}]})
             elif self.path == f'/files/{name}.metadata':
-                pins = ([f'mojolearn-nvidia=={IV}', f'mojolearn-amd=={IV}'] if project == 'mojolearn'
-                        else [f'mojolearn=={IV}'])
+                pins = [f'{name}=={IV}' for name in PROJECT_REQUIRES[project]]
                 body = 'Metadata-Version: 2.1\nName: %s\n%s\n' % (project, '\n'.join('Requires-Dist: ' + p for p in pins))
             else:
                 continue
@@ -569,18 +588,19 @@ FAKE_BOX = r'''import json, os, pathlib
 d = pathlib.Path(os.environ['FAKE_BOX_DIR']); v = os.environ['FAKE_VERSION']
 vendor = os.environ.get('FAKE_VENDOR', 'cuda'); index = os.environ.get('FAKE_INDEX', 'testpypi')
 (d / 'install.exit').write_text('0\n'); (d / 'box.txt').write_text('fake box\n')
-(d / 'install.log').write_text('Successfully installed mojolearn mojolearn-amd mojolearn-nvidia numpy\n')
+projects = ('mojolearn', 'mojolearn-nvidia', 'mojolearn-amd')
+(d / 'install.log').write_text('Successfully installed ' + ' '.join(projects) + ' numpy\n')
 (d / 'pip_report.json').write_text(json.dumps({'install': []}))
-(d / 'dists.txt').write_text('mojolearn==%s\nmojolearn-amd==%s\nmojolearn-nvidia==%s\n' % (v, v, v))
+(d / 'dists.txt').write_text(''.join(n + '==' + v + '\n' for n in projects))
 verdict = os.environ.get('FAKE_INDEX_VERDICT', 'PASSED')
 (d / 'index_check.json').write_text(json.dumps(dict(index=index, version=v, vendor=vendor, verdict=verdict,
     problems=[] if verdict == 'PASSED' else ['mojolearn came from files.pythonhosted.org, not test-files.pythonhosted.org'])))
 (d / 'index_check.log').write_text('verdict=%s\n' % verdict)
 (d / 'out').mkdir(exist_ok=True)
-three = {n: v for n in ('mojolearn', 'mojolearn-nvidia', 'mojolearn-amd')}
+installed_projects = {n: v for n in projects}
 (d / 'out' / 'results.json').write_text(json.dumps(dict(wheel=None, wheel_sha256=None, status='PASSED', scope='expanded',
-    source_commit='c' * 40, jobs=[{'name': 'x'}], installed=dict(vendor=vendor, version=v),
-    installed_from=dict(python='/x/iv/bin/python', expected_version=v, distributions=three))))
+    source_commit='c' * 40, jobs=[{'name': 'x'}], installed=dict(vendor=vendor, version=v, gpu_arch='sm_89' if vendor == 'cuda' else 'gfx942'),
+    installed_from=dict(python='/x/iv/bin/python', expected_version=v, distributions=installed_projects))))
 if vendor == 'hip':  # the column the AMD leg ran from the same install
     (d / 'column.json').write_text('{"lanes": {}}\n'); (d / 'column.exit').write_text('0\n')
     (d / 'column.txt').write_text('install_exit=0\n')
@@ -590,6 +610,7 @@ if vendor == 'hip':  # the column the AMD leg ran from the same install
 
 class FromIndexTests(unittest.TestCase):
     def setUp(self):
+        self.cloud = None
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = pathlib.Path(self.tmp.name)
         self.index = None
@@ -622,7 +643,7 @@ class FromIndexTests(unittest.TestCase):
                 self.assertIn('DRY RUN', r.stdout)
                 self.assertIn(args, r.stdout)
                 self.assertIn(f"'mojolearn=={IV}'", r.stdout)
-                self.assertIn(f'index precheck PASSED: all three projects serve {IV} on {index}', r.stdout)
+                self.assertRegex(r.stdout, rf'index precheck PASSED: .*projects serve {IV} on {index}')
                 self.assertIn('no wheel', r.stdout)
                 self.assertIn('provider runpod', r.stdout)
                 self.assertFalse((self.dir / 'o').exists())
@@ -632,6 +653,15 @@ class FromIndexTests(unittest.TestCase):
         r = self.run_smoke('--from-index', 'testpypi', '--version', IV, '--rent', '--out', str(self.dir / 'o'), env=env)
         self.assertEqual(r.returncode, 1)
         self.assertIn(f'mojolearn-amd=={IV} is not on testpypi (HTTP 404)', r.stderr)
+        self.assertIn('nothing was rented', r.stderr)
+        self.assertFalse((self.dir / 'o').exists())
+
+    def test_missing_native_payload_is_refused_before_renting(self):
+        env = self.serve(missing=('mojolearn-nvidia',))
+        r = self.run_smoke('--from-index', 'testpypi', '--version', IV, '--rent',
+                           '--out', str(self.dir / 'o'), env=env)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn(f'mojolearn-nvidia=={IV} is not on testpypi (HTTP 404)', r.stderr)
         self.assertIn('nothing was rented', r.stderr)
         self.assertFalse((self.dir / 'o').exists())
 

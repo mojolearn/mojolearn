@@ -168,5 +168,22 @@ trait Exec:
         ...
 
     @staticmethod
+    def ols_tsqr_factor(
+        a: F32Ptr, b: F32Ptr, r: F32Ptr, mu: F32Ptr, ymean: MutPointer[UInt64, MutAnyOrigin], m: Int, d: Int
+    ) raises:
+        """R ((d + 1) x (d + 1)) of the blocked TSQR of [a - mu | b - ymean]
+        (a m x d, b m): mu (float32 [d]) the column means of a, each the exact
+        column sum over m rounded once to binary64 then to float32; ymean
+        (binary64 bits [1]) b's mean, subtracted as its float32 rounding;
+        every difference `center_cell` (glm/impl/center_items.mojo)."""
+        ...
+
+    @staticmethod
+    def lu_gesv(a: F32Ptr, b: F32Ptr, info: F32Ptr, n: Int, nrhs: Int) raises:
+        """b (n x nrhs) = `lu_solve(lu(a), b)` with trans 0; a is only read,
+        info (1) as `lu` writes it."""
+        ...
+
+    @staticmethod
     def vendor() -> String:
         ...

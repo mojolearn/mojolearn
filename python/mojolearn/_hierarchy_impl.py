@@ -415,8 +415,17 @@ class AgglomerativeClustering:
         if metric == 5 and n != d:
             raise ValueError(f"Distance matrix should be square, got matrix of shape {(n, d)}")
         if metric == 4:
-            flat = x.tolist()
-            if any(not any(row) for row in flat):
+            # lane cpu2-l9-neighbors: the zero-row test on the device (the
+            # x_neighbors binding's `xn_row_all_zero`, one flag per row from
+            # the bit patterns, +-0.0 a zero and NaN not), then the device
+            # `reduce_stat` max of the flags; was `x.tolist()` and a Python
+            # walk of every value
+            if d == 0:
+                raise ValueError("Cosine affinity cannot be used when X contains zero vectors")
+            zrow = empty((n,), "<i4")
+            self._bind("_mojolearn_x_neighbors").xn_row_all_zero(
+                [addr_ro(x, name="X"), addr(zrow, name="zero rows")], [n, d], [])
+            if int(zrow.max()) > 0:
                 raise ValueError("Cosine affinity cannot be used when X contains zero vectors")
         if self.n_clusters is not None:
             k = int(self.n_clusters)

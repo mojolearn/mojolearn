@@ -94,6 +94,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.memory import memcpy
+from std.gpu import block_dim, block_idx, thread_idx
+from training.maximize import maximize_negate
 from std.os import getenv
 from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
@@ -403,6 +405,31 @@ def identical_optimizer_step_host(
 
 
 
+#: lane idn-opt-resident (2026-10-04): IDENTICAL's resident step and the two
+#: clip entries take their small per-call scratch (sumsq, norms, the cells,
+#: the workspace, the partials) as views of the process-wide pool
+#: (`training/afn_optim.mojo`, created once per shape) on every vendor,
+#: instead of six to eight device allocations a call. Every launch writes a
+#: scratch cell before it reads it, as with a fresh (uninitialized) buffer:
+#: no bit moves. -D MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF restores the fresh
+#: buffers. FAST keeps its own switch (AFN_OPT_RESIDENT_STATE).
+comptime IDN_OPT_SCRATCH_POOL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and not (is_defined["MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime OPT_SCRATCH_POOL = AFN_OPT_RESIDENT_STATE or IDN_OPT_SCRATCH_POOL
+
+
+def _scratch(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """A scratch buffer of n floats: a view of pool slot `slot` under
+    IDN_OPT_SCRATCH_POOL, a fresh buffer otherwise."""
+    comptime if IDN_OPT_SCRATCH_POOL:
+        return afn_scratch_view(ctx, slot, n)
+    else:
+        return ctx.enqueue_create_buffer[DType.float32](n)
+
+
 def opt_pool_buffers() -> Bool:
     """Whether the resident step keeps per-handle parameter/gradient device
     buffers (lane neural-pass34): the Apple column by default, a fresh pair
@@ -632,6 +659,64 @@ def opt_pipe_download(
         _parallel_copy_out(_FP(unsafe_from_address=prev_dst), _stage_half(ctx, ch, prev_half), prev_cnt)
 
 
+#: lane fam2-neural (2026-10-04): PARAMETERS AND GRADIENTS RESIDENT ACROSS
+#: STEPS. The resident step moved three registry-sized buffers a step
+#: (parameters up, gradient up, parameters down; 64 MB each at the board's
+#: 16.8M parameters). `identical_optimizer_step_resident_io` takes a mask of
+#: the transfers to make, so a caller whose parameters (and gradient) already
+#: live in its handle's device buffers moves only what changed on the host,
+#: or nothing. The step itself is the same call on the same buffers: no bit
+#: moves. The bits of `io`:
+comptime OPT_IO_UP_P = 1
+comptime OPT_IO_UP_G = 2
+comptime OPT_IO_DOWN_P = 4
+comptime OPT_IO_DOWN_G = 8
+comptime OPT_IO_ALL = 15
+#: Whether the binding offers the device-handle entries
+#: (`optimizer_resident_step_io` and the put/get pair). IDENTICAL, GPU
+#: columns. `-D MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF` (or the master) hides
+#: them, and the Python optimizers then refuse `params_to_device`.
+#: lane fam2-neural: `maximize=True` ON THE DEVICE. The bindings negated the
+#: gradient on the host before the upload (a one-thread loop over N floats,
+#: `maximize_negated_copy`) and negated the clipped gradient again after the
+#: download. `identical_optimizer_step_resident_io(negate=True)` flips the
+#: sign bit in the device gradient buffer instead (`maximize_negate`, the
+#: same exact XOR, one thread per element) before the step and again after
+#: it, so the buffer and any download hold the caller's sign: the same bits.
+#: `-D MOJOLEARN_IDN_MAXIMIZE_DEV_OFF` keeps `Optimizer.step` on the host loop.
+comptime IDN_MAXIMIZE_DEV = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and not (is_defined["MOJOLEARN_IDN_MAXIMIZE_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime MAXIMIZE_TPB = 256
+
+
+def maximize_negate_kernel(g: MutPointer[Float32, MutAnyOrigin], n: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        g.unsafe_store(i, maximize_negate(g.unsafe_load(i)))
+
+
+def maximize_negate_device(ctx: DeviceContext, mut g: DeviceBuffer[DType.float32], n: Int) raises:
+    """g[0:n] negated in place by the sign bit. Enqueues only."""
+    if n <= 0:
+        return
+    ctx.enqueue_function[maximize_negate_kernel](
+        g.unsafe_ptr(),
+        Int32(n),
+        grid_dim=((n + MAXIMIZE_TPB - 1) // MAXIMIZE_TPB, 1, 1),
+        block_dim=(MAXIMIZE_TPB, 1, 1),
+    )
+
+
+comptime IDN_OPT_PARAMS_RESIDENT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and not (is_defined["MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
+
 #: MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN (lane apple-fast-rec-optim, 2026-10-04),
 #: default OFF, FAST + Apple only (AFN_APPLE_FAST): the training optimizers'
 #: resident step (mojolearn.SGD / Adam / AdamW; board lanes sgd, adam, adamw)
@@ -657,7 +742,7 @@ def opt_pipe_download(
 comptime TRAIN_OPT_PIPE_DOWN = AFN_APPLE_FAST and not is_defined["MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF"]()
 
 
-def identical_optimizer_step_resident_host(
+def identical_optimizer_step_resident_io(
     ctx: DeviceContext,
     param_ptr: MutPointer[Float32, MutUntrackedOrigin],
     grad_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -682,8 +767,16 @@ def identical_optimizer_step_resident_host(
     momentum: Float32,
     dampening: Float32,
     max_norm: Float32,
+    io: Int,
+    negate: Bool = False,
 ) raises -> Int:
-    """`identical_optimizer_step_host` with the moments ALREADY ON THE
+    """lane fam2-neural: `io` names the transfers this call makes (OPT_IO_*:
+    parameters up, gradient up, parameters down, clipped gradient down); a
+    transfer left out means that buffer is RESIDENT in `p_buf` / `g_buf`
+    (the caller's handle) and its host pointer is not touched. io =
+    OPT_IO_ALL is the entry below, word for word.
+
+    `identical_optimizer_step_host` with the moments ALREADY ON THE
     DEVICE (lane/neural-pass4, 2026-09-30): `m_state` and `v_state` are the
     caller's buffers of `offsets[J]` floats, read and written in place and
     left there. Everything else is that wrapper's, in its order: the
@@ -741,19 +834,37 @@ def identical_optimizer_step_resident_host(
     # 64 MB array uploads in 1.6-2.4 ms this way (only the process's first
     # upload pays ~9-20 ms), and the memcpy-plus-DMA stage took 4.3 ms
     var piped = opt_pipe_on()
+    var up_p = (io & OPT_IO_UP_P) != 0
+    var up_g = (io & OPT_IO_UP_G) != 0
+    var down_p = (io & OPT_IO_DOWN_P) != 0
+    var down_g = (io & OPT_IO_DOWN_G) != 0 and max_norm > Float32(0.0)
+    if io != OPT_IO_ALL and (len(p_buf) < n_total or len(g_buf) < n_total):
+        raise Error(
+            String("mojolearn training: the parameter and gradient device buffers hold ")
+            + String(len(p_buf)) + String(" and ") + String(len(g_buf))
+            + String(" floats, the registry is ") + String(n_total)
+        )
     if piped:
         # lane gap-train-utils: the two uploads through the pipelined
         # pinned stage (the PIPELINED TRANSPORT section above); a transport choice,
         # no bit moves. The in-order queue orders them before the step.
-        var up = PipeSegs()
-        up.add(0, 0, Int(param_ptr), n_total)
-        up.add(1, 0, Int(grad_ptr), n_total)
-        opt_pipe_upload(ctx, p_buf, g_buf, up)
+        if up_p or up_g:
+            var up = PipeSegs()
+            if up_p:
+                up.add(0, 0, Int(param_ptr), n_total)
+            if up_g:
+                up.add(1, 0, Int(grad_ptr), n_total)
+            opt_pipe_upload(ctx, p_buf, g_buf, up)
     else:
-        ctx.enqueue_copy(dst_buf=p_buf, src_ptr=param_ptr)
-        ctx.enqueue_copy(dst_buf=g_buf, src_ptr=grad_ptr)
+        if up_p:
+            ctx.enqueue_copy(dst_buf=p_buf, src_ptr=param_ptr)
+        if up_g:
+            ctx.enqueue_copy(dst_buf=g_buf, src_ptr=grad_ptr)
         comptime if not TRAIN_OPT_PIPE_DOWN:
             ctx.synchronize()
+    if negate:
+        # maximize: the step reads -g (the sign bit, on the device)
+        maximize_negate_device(ctx, g_buf, n_total)
     _step_timing_tick(ctx, rton, rtk, "resident.upload")
 
     # `denom_out` and `q_out` are written only under `MOJOLEARN_OPT_RECORD`.
@@ -773,7 +884,7 @@ def identical_optimizer_step_resident_host(
     var out2: DeviceBuffer[DType.float32]
     var ws: DeviceBuffer[DType.float32]
     var sab_partials: DeviceBuffer[DType.float32]
-    comptime if AFN_OPT_RESIDENT_STATE:
+    comptime if OPT_SCRATCH_POOL:
         # lane afn-optim: views of pooled buffers, created once per shape;
         # the step allocates nothing here.
         denom_out = afn_scratch_view(ctx, AFN_SF_DENOM, record_n)
@@ -828,29 +939,41 @@ def identical_optimizer_step_resident_host(
     # the downloads through the pinned stages too (a device-to-host-pointer
     # copy ran at about 3 GB/s here; the DMA into pinned memory and the
     # memcpy out together take a fifth of that)
+    if negate:
+        # back to the caller's sign (the clip scaled -g; -(-g c) = g c exactly)
+        maximize_negate_device(ctx, g_buf, n_total)
     _step_timing_tick(ctx, rton, rtk, "resident.device_step")
-    if piped or TRAIN_OPT_PIPE_DOWN:
+    if not down_p and not down_g:
+        # everything stays on the device: the wait ends the entry (the
+        # flags below are host words; the step's kernels are in order)
+        ctx.synchronize()
+        _step_timing_tick(ctx, rton, rtk, "resident.download")
+    elif piped or TRAIN_OPT_PIPE_DOWN:
         var down = PipeSegs()
-        down.add(0, 0, Int(param_ptr), n_total)
-        if max_norm > Float32(0.0):
+        if down_p:
+            down.add(0, 0, Int(param_ptr), n_total)
+        if down_g:
             down.add(1, 0, Int(grad_ptr), n_total)
         opt_pipe_download(ctx, p_buf, g_buf, down)
         _step_timing_tick(ctx, rton, rtk, "resident.download")
     elif opt_download_staged():
-        ctx.enqueue_copy(dst_buf=p_stage, src_buf=p_buf)
-        if max_norm > Float32(0.0):
+        if down_p:
+            ctx.enqueue_copy(dst_buf=p_stage, src_buf=p_buf)
+        if down_g:
             ctx.enqueue_copy(dst_buf=g_stage, src_buf=g_buf)
         ctx.synchronize()
         _step_timing_tick(ctx, rton, rtk, "resident.dma_down")
         # one copy out of the pinned stage on the calling thread (no host task
         # pool on a GPU install); a copy, no bit moves
-        _parallel_copy_out(param_ptr, p_stage.unsafe_ptr(), n_total)
-        if max_norm > Float32(0.0):
+        if down_p:
+            _parallel_copy_out(param_ptr, p_stage.unsafe_ptr(), n_total)
+        if down_g:
             _parallel_copy_out(grad_ptr, g_stage.unsafe_ptr(), n_total)
         _step_timing_tick(ctx, rton, rtk, "resident.memcpy_out")
     else:
-        ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=p_buf)
-        if max_norm > Float32(0.0):
+        if down_p:
+            ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=p_buf)
+        if down_g:
             ctx.enqueue_copy(dst_ptr=grad_ptr, src_buf=g_buf)
         ctx.synchronize()
         _step_timing_tick(ctx, rton, rtk, "resident.download")
@@ -882,6 +1005,40 @@ def identical_optimizer_step_resident_host(
     _ = ws
     _ = sab_partials
     return n_total
+
+
+def identical_optimizer_step_resident_host(
+    ctx: DeviceContext,
+    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    grad_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut m_state: DeviceBuffer[DType.float32],
+    mut v_state: DeviceBuffer[DType.float32],
+    mut p_buf: DeviceBuffer[DType.float32],
+    mut g_buf: DeviceBuffer[DType.float32],
+    mut p_stage: HostBuffer[DType.float32],
+    mut g_stage: HostBuffer[DType.float32],
+    offsets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    init_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    info_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_tensors: Int,
+    kind: Int,
+    t: Int,
+    nesterov: Int,
+    lr: Float32,
+    beta1: Float32,
+    beta2: Float32,
+    eps: Float32,
+    weight_decay: Float32,
+    momentum: Float32,
+    dampening: Float32,
+    max_norm: Float32,
+) raises -> Int:
+    """The resident step with all four transfers (parameters and gradient
+    up, parameters and the clipped gradient down): the entry every caller
+    before lane fam2-neural used, unchanged in what it does."""
+    return identical_optimizer_step_resident_io(
+        ctx, param_ptr, grad_ptr, m_state, v_state, p_buf, g_buf, p_stage, g_stage, offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening, max_norm, OPT_IO_ALL,
+    )
 
 
 # ===========================================================================
@@ -953,14 +1110,12 @@ def identical_clip_grad_norm_host(
     ctx.enqueue_copy(dst_buf=grad, src_ptr=grad_ptr)
     ctx.synchronize()
 
-    var sumsq = ctx.enqueue_create_buffer[DType.float32](n_tensors)
-    var norms = ctx.enqueue_create_buffer[DType.float32](n_tensors)
-    var total_cell = ctx.enqueue_create_buffer[DType.float32](1)
-    var out2 = ctx.enqueue_create_buffer[DType.float32](2)
-    var ws = ctx.enqueue_create_buffer[DType.float32](
-        identical_optimizer_workspace_floats(offsets)
-    )
-    var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
+    var sumsq = _scratch(ctx, AFN_SF_SUMSQ, n_tensors)
+    var norms = _scratch(ctx, AFN_SF_NORMS, n_tensors)
+    var total_cell = _scratch(ctx, AFN_SF_TOTAL, 1)
+    var out2 = _scratch(ctx, AFN_SF_OUT2, 2)
+    var ws = _scratch(ctx, AFN_SF_WS, identical_optimizer_workspace_floats(offsets))
+    var sab_partials = _scratch(ctx, AFN_SF_SAB, SAB_CHUNKS)
     ctx.synchronize()
 
     # THE ONE CALL THAT COMPUTES ANYTHING.
@@ -1051,14 +1206,12 @@ def identical_clip_grad_norm_addrs_host(
             _ = view^
         ctx.synchronize()
 
-    var sumsq = ctx.enqueue_create_buffer[DType.float32](n_tensors)
-    var norms = ctx.enqueue_create_buffer[DType.float32](n_tensors)
-    var total_cell = ctx.enqueue_create_buffer[DType.float32](1)
-    var out2 = ctx.enqueue_create_buffer[DType.float32](2)
-    var ws = ctx.enqueue_create_buffer[DType.float32](
-        identical_optimizer_workspace_floats(offsets)
-    )
-    var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
+    var sumsq = _scratch(ctx, AFN_SF_SUMSQ, n_tensors)
+    var norms = _scratch(ctx, AFN_SF_NORMS, n_tensors)
+    var total_cell = _scratch(ctx, AFN_SF_TOTAL, 1)
+    var out2 = _scratch(ctx, AFN_SF_OUT2, 2)
+    var ws = _scratch(ctx, AFN_SF_WS, identical_optimizer_workspace_floats(offsets))
+    var sab_partials = _scratch(ctx, AFN_SF_SAB, SAB_CHUNKS)
 
     # THE ONE CALL THAT COMPUTES ANYTHING.
     if piped:
@@ -1163,6 +1316,22 @@ comptime _CE_STAGE_POOL = "MojoDownloadStagesTrainingIdentical" if GLOBAL_NUMERI
 comptime _CE_DEV_POOL = "MojoDevPoolCeIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDevPoolCeFast"
 
 
+#: lane fam-neural (2026-10-04): THE LOGITS GO UP THROUGH THE PIPELINED
+#: PINNED STAGE. The host entry copied N * V logits (256 MB at the board's
+#: 8,192 x 8,192 cell) from the caller's pageable memory in one raw copy;
+#: the gradient already comes down through pooled pinned stages. IDENTICAL
+#: now sends the logits through the optimizer's two-half pinned stage
+#: (`opt_pipe_upload`: the copy into one half overlaps the DMA out of the
+#: other) wherever that pipeline is on (`opt_pipe_on`: NVIDIA and AMD by
+#: default, MOJOLEARN_OPT_PIPE forces either) and the tensor is at least one
+#: chunk. The same bytes into the same device buffer: no bit moves.
+#: `-D MOJOLEARN_IDN_CE_PIPE_UP_OFF` is the before arm (the raw copy).
+comptime IDN_CE_PIPE_UP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_CE_PIPE_UP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
+
 def identical_ce_loss_host(
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -1260,7 +1429,17 @@ def identical_ce_loss_host(
     # ---- Transport in.
     var logits = pool_take[_CE_DEV_POOL](ctx, cells)
     var targets = ctx.enqueue_create_buffer[DType.int32](n_rows)
-    ctx.enqueue_copy(dst_buf=logits, src_ptr=logits_ptr)
+    var ce_piped = False
+    comptime if IDN_CE_PIPE_UP:
+        ce_piped = opt_pipe_on() and cells >= opt_pipe_floats()
+    if ce_piped:
+        var ce_segs = PipeSegs()
+        var ce_spare = ctx.enqueue_create_buffer[DType.float32](1)
+        ce_segs.add(0, 0, Int(logits_ptr), cells)
+        opt_pipe_upload(ctx, logits, ce_spare, ce_segs)
+        _ = ce_spare^
+    else:
+        ctx.enqueue_copy(dst_buf=logits, src_ptr=logits_ptr)
     ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_ptr)
     ctx.synchronize()
 
@@ -1278,6 +1457,50 @@ def identical_ce_loss_host(
     # final) synchronize
     pool_give[_CE_DEV_POOL](logits^)
     pool_give[_CE_DEV_POOL](dlogits^)
+    _ = targets^
+    return count
+
+
+def identical_ce_loss_dev(
+    ctx: DeviceContext,
+    loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    row_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut dlogits: DeviceBuffer[DType.float32],
+    mut logits: DeviceBuffer[DType.float32],
+    targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    n_rows: Int,
+    vocab: Int,
+    ignore_index: Int,
+    reduction: Int,
+    num_items: Int,
+    want_grad: Int,
+    label_smoothing: Float32,
+) raises -> Int:
+    """lane fam2-neural: `identical_ce_loss_host` with the logits ALREADY ON
+    THE DEVICE and the gradient LEFT THERE (`logits` N * V floats; `dlogits`
+    N * V floats when `want_grad != 0`, else any buffer of at least one):
+    that entry's refusals, `ce_count` and resident call, in its order, minus
+    the N * V upload and the N * V download (256 MB each way at the board's
+    8,192 x 8,192). The targets (N int32), the row losses and the loss
+    scalar cross as before. The same device calls on the same values: no
+    bit moves. Returns `count`."""
+    identical_ce_admit_call(reduction, want_grad, n_rows)
+    var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
+    var h_targets = List[Int32](length=n_rows, fill=Int32(0))
+    memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
+    ce_refuse_shape(n_rows, n_rows * vocab, cfg)
+    var count = ce_count(h_targets, ignore_index)
+    _ = h_targets^
+    var cells = n_rows * vocab
+    if len(logits) < cells or (want_grad != 0 and len(dlogits) < cells):
+        raise Error("mojolearn training: the device logits or gradient buffer is smaller than N * V")
+    var targets = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_ptr)
+    ctx.synchronize()
+    identical_ce_loss_resident[_CE_DEV_POOL](
+        ctx, loss_ptr, row_ptr, dlogits, logits, targets, n_rows, count,
+        reduction, want_grad, cfg,
+    )
     _ = targets^
     return count
 

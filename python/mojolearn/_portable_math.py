@@ -290,7 +290,7 @@ def nsum(values):
     if not vals:
         return 0.0
     from ._buffer import _native
-    return float(_native("nsum_f64")(vals.buffer_info()[0], len(vals)))
+    return float(_native("nsum_f64")(vals.buffer_info()[0], len(vals)))  # cpu-route: builtin sum twin over host scalars already read back
 
 
 def _cut(value, shift, bits, up):

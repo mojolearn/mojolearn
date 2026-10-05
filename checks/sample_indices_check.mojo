@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The border-sample draw against their `SampleIndices`.
 
-WHAT THIS GATES. `gbdt/train.mojo`'s `sample_indices_for_borders`, which
+WHAT THIS GATES. `gbdt/train.mojo`'s `sample_indices_for_borders_reference`, which
 is the sampling half of CatBoost's `GetSubsetForBuildBorders`
 (`libs/data/quantization.cpp:118-141`) over `SampleIndices<ui32>`
 (`libs/helpers/sample.h:20-43`). It IMPORTS that function rather than
@@ -20,7 +20,7 @@ than from the quantizer. DEVIATION 135.
 """
 
 from std.math import log2
-from gbdt.train import sample_indices_for_borders
+from gbdt.train import sample_indices_for_borders_reference
 
 
 def _distinct_and_repeats(
@@ -47,7 +47,7 @@ def _distinct_and_repeats(
 
 
 def _cell(name: String, nrr: Int, sn: Int, sd0: UInt64) raises -> Int:
-    var idx = sample_indices_for_borders(nrr, sn, sd0)
+    var idx = sample_indices_for_borders_reference(nrr, sn, sd0)
     var fails = 0
     var t = _distinct_and_repeats(idx, nrr)
     var distinct = t[0]
@@ -101,8 +101,8 @@ def check_sample_indices() raises:
     # S4 DETERMINISM, PER POSITION. Comparing multisets would pass on a
     # permutation, which is the failure mode this repository has hit
     # before, so this compares placement.
-    var a = sample_indices_for_borders(464809, 200000, UInt64(7))
-    var b = sample_indices_for_borders(464809, 200000, UInt64(7))
+    var a = sample_indices_for_borders_reference(464809, 200000, UInt64(7))
+    var b = sample_indices_for_borders_reference(464809, 200000, UInt64(7))
     var moved = 0
     for i in range(len(a)):
         if a[i] != b[i]:
@@ -115,7 +115,7 @@ def check_sample_indices() raises:
 
     # S5 THE SEED REACHES THE DRAW. Without this, S4 would also pass on a
     # function that ignored its seed entirely.
-    var c = sample_indices_for_borders(464809, 200000, UInt64(8))
+    var c = sample_indices_for_borders_reference(464809, 200000, UInt64(8))
     var moved2 = 0
     for i in range(len(a)):
         if a[i] != c[i]:
@@ -136,7 +136,7 @@ def check_sample_indices() raises:
     # 90,030 distinct rows; theirs reaches exactly 200,000. This gate
     # asserts only the part that is ours to hold: the new draw's distinct
     # count IS its k, with no shortfall at all.
-    var d = sample_indices_for_borders(464809, 200000, UInt64(0))
+    var d = sample_indices_for_borders_reference(464809, 200000, UInt64(0))
     var t2 = _distinct_and_repeats(d, 464809)
     if t2[0] != 200000:
         print(

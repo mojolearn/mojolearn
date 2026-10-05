@@ -10,6 +10,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.memory import bitcast
 from x_metrics.common import PY2MOJO_CORE_ON
+from x_metrics.cls_epi import IDN_CLS_EPI
 from x_metrics.epilogue import roc_arrays, expected_mi, row_sum_range
 from x_metrics.epilogue import scatter_rows, first_rows_i32, ovo_pair
 from x_metrics.epilogue import (
@@ -90,6 +91,22 @@ def dev_free_binding(id: PythonObject) raises -> PythonObject:
     with GILReleased(Python()):
         X_METRICS_STORE.get_or_create_ptr()[].free(metrics_ctx(), i)
     return PythonObject(None)
+
+
+def dev_take_rows_binding(
+    src_id: PythonObject, row_words: PythonObject, idx_addr: PythonObject, n_idx: PythonObject
+) raises -> PythonObject:
+    """A new resident slot: rows `idx` (n_idx host int64 words) of slot
+    src_id, gathered on the device (core/device_store.mojo `take_rows`,
+    lane cpu4-misc device-rows input); its id."""
+    var s = Int(py=src_id)
+    var w = Int(py=row_words)
+    var a = Int(py=idx_addr)
+    var n = Int(py=n_idx)
+    var id: Int
+    with GILReleased(Python()):
+        id = X_METRICS_STORE.get_or_create_ptr()[].take_rows(metrics_ctx(), s, w, a, n)
+    return PythonObject(id)
 
 
 def dev_live_binding() raises -> PythonObject:
@@ -228,6 +245,14 @@ def py2mojo_core_binding() raises -> PythonObject:
         return PythonObject(0)
 
 
+def idn_fam2_binding() raises -> PythonObject:
+    """Lane fam2-prep-metrics: the bits of the IDENTICAL metric switches this
+    binding was built with (1 IDN_CLS_EPI: op 55, the set-wise classification
+    epilogue, x_metrics/cls_epi.mojo), read by
+    python/mojolearn/_expansion_metrics.py `_idn_fam2`."""
+    return PythonObject(1 if IDN_CLS_EPI else 0)
+
+
 @export
 def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
     try:
@@ -238,6 +263,7 @@ def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
         m.def_function[dev_put_binding]("x_metrics_dev_put")
         m.def_function[dev_free_binding]("x_metrics_dev_free")
         m.def_function[dev_live_binding]("x_metrics_dev_live")
+        m.def_function[dev_take_rows_binding]("x_metrics_dev_take_rows")
         m.def_function[curve_roc_binding]("x_metrics_curve_roc")
         m.def_function[expected_mi_binding]("x_metrics_expected_mi")
         m.def_function[row_sum_range_binding]("x_metrics_row_sum_range")
@@ -257,6 +283,7 @@ def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
         m.def_function[numeric_mode_binding]("x_metrics_numeric_mode")
         m.def_function[vendor_binding]("x_metrics_vendor")
         m.def_function[py2mojo_core_binding]("x_metrics_py2mojo_core")
+        m.def_function[idn_fam2_binding]("x_metrics_idn_fam2")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_metrics: ", e))

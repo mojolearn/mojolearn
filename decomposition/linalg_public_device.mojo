@@ -92,13 +92,13 @@ def _upload(
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
-    ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
+    # the result lands straight in the list (no host copy loop)
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    if n > 0:
+        var head = buf.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=head)
+        ctx.synchronize()
+        _ = head^
     return out^
 
 

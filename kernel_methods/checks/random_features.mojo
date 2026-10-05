@@ -147,6 +147,7 @@ GENERATOR AND ITS TRANSFORM:
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.atomic import Atomic
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.philox import PhiloxState
@@ -511,6 +512,159 @@ def km_basis_indices(
     """
     _km_basis_validate(n_samples, n_components)
     return km_rank_order_sort(km_basis_keys(seed, n_samples), n_components)
+
+
+# ---------------------------------------------------------------------------
+# fam2-kernel-gp (2026-10-04): the basis sample on the device
+# (`MOJOLEARN_IDN_NYS_DEV_BASIS`, gated in kernel_methods/estimator.mojo).
+# `km_basis_indices` drew n_samples keys and radix-sorted them on one host
+# thread inside a device fit. Here every row draws its key on the device
+# (`draw_permutation_key`, the same counter-based draw), the rows whose key
+# is at or below a threshold are compacted (the slot order is scheduling and
+# is never read into a value), and each candidate's rank among the
+# candidates under `permutation_key_lt` is counted on the device: basis[r] =
+# the row of rank r, r < n_components. Every row below a candidate in the
+# total order has a key at or below the candidate's, so it is a candidate
+# too: the rank among the candidates IS the rank among all rows whenever at
+# least n_components rows pass, which the driver checks (one int32 read)
+# and repairs by doubling the threshold. Integer only: `km_basis_indices`'s
+# list on every vendor, and the host column keeps calling `km_basis_indices`.
+# ---------------------------------------------------------------------------
+
+comptime KM_BASIS_TPB = 256
+#: The threshold admits about this many candidates per component drawn.
+comptime KM_BASIS_OVERSAMPLE = 4
+comptime KM_BASIS_SLACK = 64
+
+
+def km_basis_candidates_kernel(
+    ckey: MutPointer[UInt64, MutAnyOrigin],
+    cidx: MutPointer[Int32, MutAnyOrigin],
+    count: MutPointer[Int32, MutAnyOrigin],
+    lo_bits: Int32,
+    hi_bits: Int32,
+    thr_lo: Int32,
+    thr_hi: Int32,
+    n_in: Int32,
+):
+    """One thread per row j: its key; at or below the threshold it takes the
+    next candidate slot (an atomic counter; the buffers hold n_in slots, so
+    a slot always exists)."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j >= Int(n_in):
+        return
+    var k = draw_permutation_key(key_join(lo_bits, hi_bits), 0, j)
+    if k <= key_join(thr_lo, thr_hi):
+        var slot = Int(Atomic[DType.int32].fetch_add(count, Int32(1)))
+        ckey.unsafe_store(slot, k)
+        cidx.unsafe_store(slot, Int32(j))
+
+
+def km_basis_rank_kernel(
+    ckey: MutPointer[UInt64, MutAnyOrigin],
+    cidx: MutPointer[Int32, MutAnyOrigin],
+    basis: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    q_in: Int32,
+):
+    """One thread per candidate slot: its rank = the candidates below it
+    under `permutation_key_lt`; a rank below q writes its row at basis[rank]
+    (the ranks are a bijection, one writer a slot)."""
+    var m = Int(m_in)
+    var sidx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if sidx >= m:
+        return
+    var ks = ckey.unsafe_load(sidx)
+    var js = Int(cidx.unsafe_load(sidx))
+    var r = 0
+    for t in range(m):
+        if permutation_key_lt(ckey.unsafe_load(t), Int(cidx.unsafe_load(t)), ks, js):
+            r += 1
+    if r < Int(q_in):
+        basis.unsafe_store(r, Int32(js))
+
+
+def km_gather_rows_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    rows: MutPointer[Int32, MutAnyOrigin],
+    q_in: Int32,
+    d_in: Int32,
+):
+    """dst[c, f] = src[rows[c], f], one thread per cell: `components_`."""
+    var d = Int(d_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(q_in) * d:
+        return
+    var c = t // d
+    var f = t - c * d
+    dst.unsafe_store(t, src.unsafe_load(Int(rows.unsafe_load(c)) * d + f))
+
+
+def km_basis_indices_device(
+    ctx: DeviceContext,
+    seed: UInt64,
+    n_samples: Int,
+    n_components: Int,
+    mut dbasis: DeviceBuffer[DType.int32],
+) raises -> List[Int32]:
+    """`km_basis_indices` on the device: `dbasis` (at least n_components
+    int32) receives the basis rows in rank order and the same list is
+    returned for the model. See the block comment above."""
+    _km_basis_validate(n_samples, n_components)
+    var n = n_samples
+    var q = n_components
+    var key = km_key(seed, KM_KIND_BASIS)
+    var all_ones = ~UInt64(0)
+    var want = KM_BASIS_OVERSAMPLE * q + KM_BASIS_SLACK
+    var thr = all_ones
+    if want < n:
+        thr = (all_ones // UInt64(n)) * UInt64(want)
+    var dckey = ctx.enqueue_create_buffer[DType.uint64](n)
+    var dcidx = ctx.enqueue_create_buffer[DType.int32](n)
+    var dcount = ctx.enqueue_create_buffer[DType.int32](1)
+    var hcount = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var m = 0
+    while True:
+        dcount.enqueue_fill(Int32(0))
+        ctx.enqueue_function[km_basis_candidates_kernel](
+            dckey.unsafe_ptr(), dcidx.unsafe_ptr(), dcount.unsafe_ptr(),
+            key_lo(key), key_hi(key), key_lo(thr), key_hi(thr), Int32(n),
+            grid_dim=((n + KM_BASIS_TPB - 1) // KM_BASIS_TPB, 1, 1),
+            block_dim=(KM_BASIS_TPB, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=hcount.unsafe_ptr(), src_buf=dcount)
+        ctx.synchronize()
+        m = Int(hcount.unsafe_ptr().unsafe_load(0))
+        if m >= q or thr == all_ones:
+            break
+        # too few rows passed (probability far below 2^-64 at the default
+        # oversampling): admit twice as many and draw again
+        thr = all_ones if thr > all_ones // UInt64(2) else thr * UInt64(2)
+    if m < q:
+        raise Error(
+            "km_basis_indices_device: " + String(m) + " candidate rows for n_components = "
+            + String(q) + " with every key admitted; a launch did not run"
+        )
+    ctx.enqueue_function[km_basis_rank_kernel](
+        dckey.unsafe_ptr(), dcidx.unsafe_ptr(), dbasis.unsafe_ptr(), Int32(m), Int32(q),
+        grid_dim=((m + KM_BASIS_TPB - 1) // KM_BASIS_TPB, 1, 1),
+        block_dim=(KM_BASIS_TPB, 1, 1),
+    )
+    var hb = ctx.enqueue_create_host_buffer[DType.int32](q)
+    var sub = dbasis.create_sub_buffer[DType.int32](0, q)
+    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=sub)
+    ctx.synchronize()
+    var basis = List[Int32](capacity=q)
+    for c in range(q):
+        basis.append(hb.unsafe_ptr().unsafe_load(c))
+    _ = sub^
+    _ = hb^
+    _ = dckey^
+    _ = dcidx^
+    _ = dcount^
+    _ = hcount^
+    return basis^
 
 
 def km_basis_indices_counting(

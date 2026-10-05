@@ -1,0 +1,156 @@
+{
+  "schema": 1,
+  "scope": "Frozen full-row held-out DART quality; timings deliberately omitted. Opponents are data only. Threshold retains legacy own quality gap to stored LightGBM within one classification row or1e-6R2. Medium data cannot satisfy hashes.",
+  "rows": [
+    {
+      "lane": "dart",
+      "dataset": "taxi",
+      "source_evidence": "/Users/andrewhendel/mojolearn-evidence/gap-train-utils/board/raw/algos/rows-full/dart-taxi.json",
+      "source_sha256": "4fa0318c1f2f052eef4cc8fac01b25fd768dd58df4cd97d0327bc64eff5fc90f",
+      "source_commit": "5c38204f4ea5308ddd8603062168f959afabb201",
+      "input_arrays": {
+        "X": {
+          "dtype": "float32",
+          "sha256": "a504bc86fe9482004c4ba80c690b5622121f75fefdc42c8337ba040739cefebe",
+          "shape": [
+            1000000,
+            11
+          ]
+        },
+        "Xq": {
+          "dtype": "float32",
+          "sha256": "75648a1fad7e086a81fda381e141f33d9b0cba3b892c146ef750bc26a041024c",
+          "shape": [
+            100000,
+            11
+          ]
+        },
+        "y": {
+          "dtype": "float32",
+          "sha256": "458f393bc06c963d22e4aa0ce72f9f307ed3afbe2e7df2a7ed614752f8ed7c44",
+          "shape": [
+            1000000
+          ]
+        },
+        "yq": {
+          "dtype": "float32",
+          "sha256": "902e22033a7ce961769e3931538178234ea0dc8c73e7d7f3dd0d7b2811b233f4",
+          "shape": [
+            100000
+          ]
+        }
+      },
+      "params": {
+        "bagging_seed": 7,
+        "colsample_bytree": 1.0,
+        "drop_rate": 0.1,
+        "drop_seed": 7,
+        "feature_fraction_seed": 7,
+        "learning_rate": 0.1,
+        "max_bin": 255,
+        "max_delta_step": 0.0,
+        "max_depth": 8,
+        "max_drop": 50,
+        "min_child_samples": 20,
+        "n_estimators": 200,
+        "num_leaves": 255,
+        "random_state": 7,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "skip_drop": 0.5,
+        "subsample": 1.0,
+        "subsample_freq": 0,
+        "uniform_drop": false,
+        "xgboost_dart_mode": false
+      },
+      "metric": "accuracy",
+      "minimum": 0.7683300000000001,
+      "tolerance": 1e-05,
+      "legacy_ours_quality": {
+        "accuracy": 0.76834,
+        "logloss": 0.5290595561630321
+      },
+      "stored_opponent": "lightgbm-cpu",
+      "stored_opponent_quality": {
+        "accuracy": 0.76819,
+        "logloss": 0.5291082375284661
+      }
+    },
+    {
+      "lane": "dart-reg",
+      "dataset": "taxi",
+      "source_evidence": "/Users/andrewhendel/mojolearn-evidence/gap-train-utils/board/raw/algos/rows-full/dart-reg-taxi.json",
+      "source_sha256": "9afa3d59f4b52c6cabf0747781d7bca1b957caf6aa6d1b0394db5c78f21e08ff",
+      "source_commit": "5c38204f4ea5308ddd8603062168f959afabb201",
+      "input_arrays": {
+        "X": {
+          "dtype": "float32",
+          "sha256": "d60aff554f2b3c15798291cde2e1105b75cdab97ccb9f6548a89ecc9ea660da3",
+          "shape": [
+            1000000,
+            11
+          ]
+        },
+        "Xq": {
+          "dtype": "float32",
+          "sha256": "3d38829177891df39d8ee10103067bc2e1d9fb94bbfd4dc57e367768739c0c44",
+          "shape": [
+            100000,
+            11
+          ]
+        },
+        "y": {
+          "dtype": "float32",
+          "sha256": "69c03b299f12319107f0c41e33a358dc27b94c80fb2a6096e5ce0eff7f9e6fe2",
+          "shape": [
+            1000000
+          ]
+        },
+        "yq": {
+          "dtype": "float32",
+          "sha256": "5f22ef8351272e9cab4cf4b3c17503f166732c8feaa85912f2f577ed84a9fd74",
+          "shape": [
+            100000
+          ]
+        }
+      },
+      "params": {
+        "bagging_seed": 7,
+        "colsample_bytree": 1.0,
+        "drop_rate": 0.1,
+        "drop_seed": 7,
+        "feature_fraction_seed": 7,
+        "learning_rate": 0.1,
+        "max_bin": 255,
+        "max_delta_step": 0.0,
+        "max_depth": 8,
+        "max_drop": 50,
+        "min_child_samples": 20,
+        "n_estimators": 200,
+        "num_leaves": 255,
+        "random_state": 7,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "skip_drop": 0.5,
+        "subsample": 1.0,
+        "subsample_freq": 0,
+        "uniform_drop": false,
+        "xgboost_dart_mode": false
+      },
+      "metric": "r2",
+      "minimum": 0.9254960149266405,
+      "tolerance": 1e-06,
+      "legacy_ours_quality": {
+        "finite": true,
+        "r2": 0.9254970149266405,
+        "rmse": 4.347340206723702
+      },
+      "stored_opponent": "lightgbm-cpu",
+      "stored_opponent_quality": {
+        "finite": true,
+        "r2": 0.9262485583087469,
+        "rmse": 4.3253578926772835
+      }
+    }
+  ]
+}

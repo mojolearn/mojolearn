@@ -47,6 +47,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import a_int, check_search, in_f32, in_i32, out_f32, out_i32, p_int
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.io import upload_f32, upload_i32
+from core.abs_sum_blocked import device_any_index_out_of_range
 from x_ann.ivf_pq_core import F32P, I32P, pq_len_of
 from x_ann.ivf_rabitq_core import rq_pow2
 from x_ann.ivf_pq_device import ivf_pq_search_on, ivf_sq_search_on, ivf_rabitq_search_on
@@ -106,11 +107,12 @@ struct AnnResident(Movable):
                 raise Error("CAGRA: need at least two rows, d >= 1 and graph_degree >= 1")
             self.a = deg
             var g = in_i32(addrs, 1, self.n * deg)
-            for e in range(self.n * deg):
-                if Int(g[e]) < 0 or Int(g[e]) >= self.n:
-                    raise Error("CAGRA search: the graph names a row outside the dataset")
-            self.f0 = upload_f32(ctx, in_f32(addrs, 0, self.n * self.dim))
+            # cpu3-neighbors: the graph's row-id refusal is one device pass
+            # over the uploaded graph (one word back), not a host walk
             self.i0 = upload_i32(ctx, g)
+            if device_any_index_out_of_range(ctx, self.i0, self.n * deg, self.n):
+                raise Error("CAGRA search: the graph names a row outside the dataset")
+            self.f0 = upload_f32(ctx, in_f32(addrs, 0, self.n * self.dim))
             self.f1 = upload_f32(ctx, empty_f)
             self.f2 = upload_f32(ctx, empty_f)
             self.i1 = upload_i32(ctx, empty_i)

@@ -99,7 +99,7 @@ struct StageTimes(Movable):
             return
         ctx.synchronize()
         var dt = perf_counter_ns() - self.t0
-        for i in range(len(self.tags)):
+        for i in range(len(self.tags)):  # small-loop(tags: stage-timer rows, about a dozen): debug stage table only
             if self.tags[i] == String(tag):
                 self.ns[i] += dt
                 return
@@ -114,7 +114,7 @@ struct StageTimes(Movable):
             return
         var total = perf_counter_ns() - self.fit_t0
         var accounted = 0
-        for i in range(len(self.ns)):
+        for i in range(len(self.ns)):  # small-loop(ns: stage-timer rows, about a dozen): debug stage table only
             accounted += self.ns[i]
         print(
             String("[stage-times] ")

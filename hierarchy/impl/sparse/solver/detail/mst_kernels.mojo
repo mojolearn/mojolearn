@@ -34,7 +34,10 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from hierarchy.checks.edge_order import (
     EDGE_SENTINEL,
     VERTEX_SENTINEL,
@@ -52,6 +55,62 @@ comptime MST_WARP = 32
 287`), which is ALSO the size of its three shared arrays (`mst_kernels.cuh:
 34-36`). A fixed 32, not `WARP_SIZE`: on a 64-wide wavefront their kernel
 still runs one 32-thread block per row, and so does ours."""
+
+
+#: fam2-cluster (2026-10-04), IDENTICAL. Four experiments on the Boruvka
+#: solver; each has its own `_OFF` and all are off under
+#: `-D MOJOLEARN_IDN_ALL_OFF=1`. None moves a bit: the MST under the total
+#: edge order (DEVIATION 620) is unique, and every stage below is integer.
+comptime _IDN_MST_ON = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: `label_prop` without a readback. The round's kept edges are a forest
+#: over the supervertices (one out-edge per color at most; of a mutual pair
+#: the larger color's edge is dropped), so parent pointers + a BOUNDED run
+#: of pointer jumps reach every tree's root, an integer `atomicMin` puts the
+#: component's lowest color at the root, and every vertex takes it. That is
+#: the fixed point the hop loop iterates to (every color becomes its
+#: component's minimum), reached in a launch count the host knows up front,
+#: where the hop loop drained the queue once per hop.
+#: `-D MOJOLEARN_IDN_MST_LABEL_JUMP_OFF=1` restores the hop loop.
+comptime IDN_MST_LABEL_JUMP = (
+    _IDN_MST_ON and not is_defined["MOJOLEARN_IDN_MST_LABEL_JUMP_OFF"]()
+)
+
+#: The round loop decided on the device. A 4-cell state buffer holds
+#: `[finished, prev_edge_count, rounds_run, edge_count]`; a one-thread kernel
+#: closes each round (the host's `curr == prev` and `curr > max` tests), the
+#: m^2 scan returns at once when `finished` is set, and every other kernel
+#: of a finished round is a no-op on its own (no vertex finds an edge). The
+#: host enqueues `ceil(log2 v) + 1` rounds (Boruvka's bound: each productive
+#: round at least halves the supervertices that still have an out-edge) and
+#: reads the state ONCE, where it read the count every round. Needs
+#: IDN_MST_LABEL_JUMP. `-D MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF=1` restores
+#: the per-round read.
+comptime IDN_MST_ROUNDS_DEVICE = (
+    IDN_MST_LABEL_JUMP
+    and not is_defined["MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF"]()
+)
+
+#: `append_src_dst_pair`'s stable compaction as three parallel launches
+#: (per-block counts, a scan of the block counts, per-block scan + scatter)
+#: in place of ONE block walking all `2 v` slots chunk by chunk. Same
+#: stable order. `-D MOJOLEARN_IDN_MST_PAR_COMPACT_OFF=1` restores it.
+comptime IDN_MST_PAR_COMPACT = (
+    _IDN_MST_ON and not is_defined["MOJOLEARN_IDN_MST_PAR_COMPACT_OFF"]()
+)
+
+#: CANDIDATE ARM (default 32 = the reference shape). Threads per row in
+#: `kernel_min_edge_per_vertex`: a power of two, 32..1024. The row minimum
+#: under a total order is the same at any lane count, so this is scheduling
+#: only. Time `-D MOJOLEARN_IDN_MST_SCAN_LANES=64|128|256` against 32.
+comptime IDN_MST_SCAN_LANES = (
+    get_defined_int["MOJOLEARN_IDN_MST_SCAN_LANES", 32]()
+    if _IDN_MST_ON
+    else 32
+)
 
 
 @always_inline
@@ -75,7 +134,9 @@ def get_1D_idx() -> Int:
     return Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
 
 
-def kernel_min_edge_per_vertex[DENSE: Bool = False](
+def kernel_min_edge_per_vertex[
+    DENSE: Bool = False, LANES: Int = MST_WARP, GATED: Bool = False
+](
     offsets: MutPointer[Int32, MutAnyOrigin],
     indices: MutPointer[Int32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -86,27 +147,40 @@ def kernel_min_edge_per_vertex[DENSE: Bool = False](
     min_edge_color: MutPointer[Int32, MutAnyOrigin],
     v_in: Int32,
     sabotage: Int32,
+    rstate: MutPointer[Int32, MutAnyOrigin],
 ):
     """`mst_kernels.cuh:18-97`. One 32-thread block per row; each lane keeps
     the minimum (under `triple_less`) of the edges it scanned, the block
     folds the 32 partials, lane 0 publishes the row's min edge and pushes
     its WEIGHT KEY into the color's slot (their `atomicMin(&min_edge_color
-    [self_color], min_edge_weight[0])`, `:94`, phase one of three)."""
+    [self_color], min_edge_weight[0])`, `:94`, phase one of three).
+
+    fam2-cluster: `LANES` threads per row (their 32 by default; a power of
+    two, the block size the launch must use) and, when `GATED`, the whole
+    block returns before any work if `rstate[0]` (the device's "finished"
+    flag, IDN_MST_ROUNDS_DEVICE) is set. Every thread of a block reads the
+    same cell, so the early return is uniform across the barriers."""
+    comptime assert (
+        LANES >= 32 and LANES <= 1024 and (LANES & (LANES - 1)) == 0
+    ), "kernel_min_edge_per_vertex: LANES must be a power of two in 32..1024"
+    comptime if GATED:
+        if rstate.unsafe_load(0) != 0:
+            return
     var tid = get_1D_idx()
-    var warp_id = tid // MST_WARP
-    var lane_id = tid % MST_WARP
+    var warp_id = tid // LANES
+    var lane_id = tid % LANES
 
     var min_edge_index = stack_allocation[
-        MST_WARP, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        LANES, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
     var min_edge_wk = stack_allocation[
-        MST_WARP, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        LANES, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
     var min_edge_lo = stack_allocation[
-        MST_WARP, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        LANES, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
     var min_edge_hi = stack_allocation[
-        MST_WARP, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        LANES, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
     # `min_color[32]` (`:36`, `:64`) is written and never read after the
     # fold in theirs; kept out rather than carried dead.
@@ -164,11 +238,11 @@ def kernel_min_edge_per_vertex[DENSE: Bool = False](
                     min_edge_lo[unsafe_offset=lane_id] = lh[0]
                     min_edge_hi[unsafe_offset=lane_id] = lh[1]
                     min_edge_index[unsafe_offset=lane_id] = Int32(e)
-            e += MST_WARP
+            e += LANES
     barrier()
 
     # `:76-85` reduce across the 32 lanes, halving.
-    var offset = MST_WARP // 2
+    var offset = LANES // 2
     while offset > 0:
         if lane_id < offset:
             # `:78` `min_edge_weight[lane_id] > min_edge_weight[lane_id + offset]`
@@ -568,3 +642,256 @@ def compact_new_edges_kernel(
             base[unsafe_offset=0] = base[unsafe_offset=0] + flags[unsafe_offset=COMPACT_TPB - 1]
         barrier()
         start += COMPACT_TPB
+
+
+# ======================================================================
+# fam2-cluster (2026-10-04): label propagation by pointer jumping
+# (IDN_MST_LABEL_JUMP), the device round state (IDN_MST_ROUNDS_DEVICE) and
+# the parallel compaction (IDN_MST_PAR_COMPACT). Integers throughout.
+# ======================================================================
+
+comptime LP_NONE = Int32(0x7FFFFFFF)
+
+
+def lp_parent_init(
+    v_in: Int32,
+    parent: MutPointer[Int32, MutAnyOrigin],
+    cmin: MutPointer[Int32, MutAnyOrigin],
+):
+    """Every index its own parent; no component minimum yet."""
+    var i = get_1D_idx()
+    if i < Int(v_in):
+        parent.unsafe_store(i, Int32(i))
+        cmin.unsafe_store(i, LP_NONE)
+
+
+def lp_parent_set[DENSE: Bool = False](
+    v_in: Int32,
+    indices: MutPointer[Int32, MutAnyOrigin],
+    new_mst_edge: MutPointer[Int32, MutAnyOrigin],
+    color_index: MutPointer[Int32, MutAnyOrigin],
+    parent: MutPointer[Int32, MutAnyOrigin],
+):
+    """A supervertex whose kept edge leaves it points at the supervertex
+    the edge reaches. At most one vertex per color keeps an edge after
+    `min_edge_per_supervertex` (the color's min triple names one edge, and
+    one of its ends is inside the color), so each cell has one writer."""
+    var i = get_1D_idx()
+    if i < Int(v_in):
+        var edge_idx = new_mst_edge.unsafe_load(i)
+        if edge_idx != EDGE_SENTINEL:
+            var dst = _edge_dst[DENSE](indices, Int(edge_idx), v_in)
+            parent.unsafe_store(
+                Int(color_index.unsafe_load(i)),
+                color_index.unsafe_load(Int(dst)),
+            )
+
+
+def lp_jump(v_in: Int32, parent: MutPointer[Int32, MutAnyOrigin]):
+    """One pointer jump, in place. Every value a cell ever holds is one of
+    its ancestors, so a racing read only jumps further; after k launches a
+    cell is `min(2^k, depth)` steps up, and the root is the same whatever
+    order the stores land in."""
+    var i = get_1D_idx()
+    if i < Int(v_in):
+        var p = parent.unsafe_load(i)
+        var gp = parent.unsafe_load(Int(p))
+        if gp != p:
+            parent.unsafe_store(i, gp)
+
+
+def lp_min(
+    v_in: Int32,
+    color: MutPointer[Int32, MutAnyOrigin],
+    color_index: MutPointer[Int32, MutAnyOrigin],
+    parent: MutPointer[Int32, MutAnyOrigin],
+    cmin: MutPointer[Int32, MutAnyOrigin],
+):
+    """Each supervertex (an index that is its own `color_index`) pushes its
+    color into its root's cell: an integer `atomicMin`."""
+    var i = get_1D_idx()
+    if i < Int(v_in):
+        if color_index.unsafe_load(i) == Int32(i):
+            _ = Atomic.min(
+                cmin.unsafe_offset(Int(parent.unsafe_load(i))),
+                color.unsafe_load(i),
+            )
+
+
+def lp_color(
+    v_in: Int32,
+    color: MutPointer[Int32, MutAnyOrigin],
+    color_index: MutPointer[Int32, MutAnyOrigin],
+    parent: MutPointer[Int32, MutAnyOrigin],
+    cmin: MutPointer[Int32, MutAnyOrigin],
+):
+    """Every vertex takes the lowest color of its supervertex's component:
+    the hop loop's fixed point."""
+    var i = get_1D_idx()
+    if i < Int(v_in):
+        var root = parent.unsafe_load(Int(color_index.unsafe_load(i)))
+        var c = cmin.unsafe_load(Int(root))
+        if c != LP_NONE:
+            color.unsafe_store(i, c)
+
+
+def round_close_kernel(
+    mst_edge_count: MutPointer[Int32, MutAnyOrigin],
+    rstate: MutPointer[Int32, MutAnyOrigin],
+    max_edges: Int32,
+):
+    """The host's per-round tests, on the device (one thread).
+    `rstate = [finished, prev_count, rounds_run, count]`; `finished` is 1 at
+    the steady state (`curr == prev`) and 2 when the count passed
+    `max_edges` (the host raises on it)."""
+    if get_1D_idx() == 0:
+        if rstate.unsafe_load(0) == 0:
+            rstate.unsafe_store(2, rstate.unsafe_load(2) + 1)
+            var c = mst_edge_count.unsafe_load(0)
+            rstate.unsafe_store(3, c)
+            if c > max_edges:
+                rstate.unsafe_store(0, Int32(2))
+            elif c == rstate.unsafe_load(1):
+                rstate.unsafe_store(0, Int32(1))
+
+
+def round_advance_kernel(
+    mst_edge_count: MutPointer[Int32, MutAnyOrigin],
+    rstate: MutPointer[Int32, MutAnyOrigin],
+):
+    """`prev_mst_edge_count = curr`, after the round's append (one thread)."""
+    if get_1D_idx() == 0:
+        if rstate.unsafe_load(0) == 0:
+            rstate.unsafe_store(1, mst_edge_count.unsafe_load(0))
+
+
+def compact_count_kernel(
+    temp_src: MutPointer[Int32, MutAnyOrigin],
+    bcount: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """Pass 1 of the parallel compaction: `bcount[b]` = how many of block
+    b's `COMPACT_TPB` slots are taken (a halving sum in threadgroup
+    memory)."""
+    var tid = Int(thread_idx.x)
+    var blk = Int(block_idx.x)
+    var flags = stack_allocation[
+        COMPACT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var i = blk * COMPACT_TPB + tid
+    var take = Int32(0)
+    if i < Int(n_in) and temp_src.unsafe_load(i) != VERTEX_SENTINEL:
+        take = Int32(1)
+    flags[unsafe_offset=tid] = take
+    barrier()
+    var offset = COMPACT_TPB // 2
+    while offset > 0:
+        if tid < offset:
+            flags[unsafe_offset=tid] = (
+                flags[unsafe_offset=tid] + flags[unsafe_offset=tid + offset]
+            )
+        barrier()
+        offset //= 2
+    if tid == 0:
+        bcount.unsafe_store(blk, flags[unsafe_offset=0])
+
+
+def compact_offsets_kernel(
+    bcount: MutPointer[Int32, MutAnyOrigin], nb_in: Int32
+):
+    """Pass 2: `bcount` becomes its own exclusive prefix sum. ONE block over
+    the `nb` block counts (`COMPACT_TPB` times fewer cells than the slots),
+    the chunked Hillis-Steele scan of `compact_new_edges_kernel`."""
+    var tid = Int(thread_idx.x)
+    var flags = stack_allocation[
+        COMPACT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var base = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    if tid == 0:
+        base[unsafe_offset=0] = Int32(0)
+    barrier()
+    var nb = Int(nb_in)
+    var start = 0
+    while start < nb:
+        var i = start + tid
+        var own = Int32(0)
+        if i < nb:
+            own = bcount.unsafe_load(i)
+        flags[unsafe_offset=tid] = own
+        barrier()
+        var step = 1
+        while step < COMPACT_TPB:
+            var add = Int32(0)
+            if tid >= step:
+                add = flags[unsafe_offset=tid - step]
+            barrier()
+            flags[unsafe_offset=tid] = flags[unsafe_offset=tid] + add
+            barrier()
+            step *= 2
+        if i < nb:
+            bcount.unsafe_store(
+                i, base[unsafe_offset=0] + flags[unsafe_offset=tid] - own
+            )
+        barrier()
+        if tid == 0:
+            base[unsafe_offset=0] = (
+                base[unsafe_offset=0] + flags[unsafe_offset=COMPACT_TPB - 1]
+            )
+        barrier()
+        start += COMPACT_TPB
+
+
+def compact_scatter_kernel[DEV: Bool = False](
+    temp_src: MutPointer[Int32, MutAnyOrigin],
+    temp_dst: MutPointer[Int32, MutAnyOrigin],
+    temp_weights: MutPointer[Float32, MutAnyOrigin],
+    out_src: MutPointer[Int32, MutAnyOrigin],
+    out_dst: MutPointer[Int32, MutAnyOrigin],
+    out_weights: MutPointer[Float32, MutAnyOrigin],
+    bcount: MutPointer[Int32, MutAnyOrigin],
+    rstate: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    out_offset: Int32,
+    out_cap: Int32,
+):
+    """Pass 3: each block scans its own flags and writes its taken slots at
+    `offset + bcount[block] + local rank`: the stable order of the
+    one-block kernel. `DEV`: the offset is the device's `prev_count`
+    (`rstate[1]`) and a finished round writes nothing. A position at or
+    past `out_cap` is not written (the host raises on that count)."""
+    var tid = Int(thread_idx.x)
+    var blk = Int(block_idx.x)
+    var off = out_offset
+    comptime if DEV:
+        if rstate.unsafe_load(0) != 0:
+            return
+        off = rstate.unsafe_load(1)
+    var flags = stack_allocation[
+        COMPACT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var i = blk * COMPACT_TPB + tid
+    var take = Int32(0)
+    if i < Int(n_in) and temp_src.unsafe_load(i) != VERTEX_SENTINEL:
+        take = Int32(1)
+    flags[unsafe_offset=tid] = take
+    barrier()
+    var step = 1
+    while step < COMPACT_TPB:
+        var add = Int32(0)
+        if tid >= step:
+            add = flags[unsafe_offset=tid - step]
+        barrier()
+        flags[unsafe_offset=tid] = flags[unsafe_offset=tid] + add
+        barrier()
+        step *= 2
+    if take != 0:
+        var pos = (
+            Int(off) + Int(bcount.unsafe_load(blk))
+            + Int(flags[unsafe_offset=tid]) - 1
+        )
+        if pos < Int(out_cap):
+            out_src.unsafe_store(pos, temp_src.unsafe_load(i))
+            out_dst.unsafe_store(pos, temp_dst.unsafe_load(i))
+            out_weights.unsafe_store(pos, temp_weights.unsafe_load(i))

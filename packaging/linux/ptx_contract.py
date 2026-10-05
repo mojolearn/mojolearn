@@ -58,7 +58,7 @@ APPROX = re.compile(rb"\b((?:sqrt|rsqrt|rcp|ex2|lg2|sin|cos|tanh|div)\.(?:approx
 def is_identical_cuda(relative):
     """`mojolearn/cuda/<arch>/identical/<name>.so`: the tier this pass owns."""
     parts = Path(relative).parts
-    return (len(parts) == 5 and parts[0] == "mojolearn" and parts[1] == "cuda"
+    return (len(parts) == 5 and parts[0] == "mojolearn" and parts[1] in ("cuda", "cuda_native")
             and parts[3] == "identical" and parts[4].endswith(".so"))
 
 

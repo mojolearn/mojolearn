@@ -34,7 +34,7 @@ def sample_tree_folds(
 ) raises -> List[Int]:
     check_feature_fraction(fraction)
     var eligible = List[Int]()
-    for f in range(len(folds)):
+    for f in range(len(folds)):  # small-loop(folds: features): lists the features with folds, a per-tree plan, no row data
         if folds[f] > 0:
             eligible.append(f)
     var count = max(1, Int(fma(Float64(len(eligible)), fraction, 0.5)))  # the default build's fused op (lane/pinned-mul-contract-free)
@@ -43,9 +43,9 @@ def sample_tree_folds(
     # Partial Fisher-Yates freezes K bounded uniform requests per sampled tree. Restore
     # original ID order by writing a full-length fold vector, never compact IDs.
     var result = List[Int]()
-    for _ in range(len(folds)):
+    for _ in range(len(folds)):  # small-loop(folds: features): zero fold vector of the per-tree feature plan, no row data
         result.append(0)
-    for i in range(count):
+    for i in range(count):  # small-loop(count: sampled features): partial Fisher-Yates over feature ids, a per-tree plan, no row data
         var j = i+Int(random.uniform(UInt64(len(eligible)-i)))
         var selected = eligible[j]
         eligible[j] = eligible[i]
@@ -103,9 +103,9 @@ struct FeatureProjectionWorkspace(Movable):
         self.starts_device = ctx.enqueue_create_buffer[DType.uint32](self.column_capacity+1)
         # Reserve output only for selected columns actually observed.
         self.output = ctx.enqueue_create_buffer[DType.uint32](1)
-        for i in range(max(1,4*self.feature_capacity)):
+        for i in range(max(1,4*self.feature_capacity)):  # small-loop(feature_capacity: projection descriptors): zeroes the launch descriptor slab, four words a feature
             self.descriptors_host[i] = UInt32(0)
-        for i in range(self.column_capacity+1):
+        for i in range(self.column_capacity+1):  # small-loop(column_capacity: projection column starts): zeroes the launch start slab, one word a column
             self.starts_host[i] = UInt32(0)
 
     def project(
@@ -127,9 +127,9 @@ struct FeatureProjectionWorkspace(Movable):
             )
             self.output_column_capacity = selected.columns
         var by_column = List[List[UInt32]]()
-        for _ in range(selected.columns):
+        for _ in range(selected.columns):  # small-loop(selected.columns: projected columns): one descriptor list per output column, launch arguments
             by_column.append(List[UInt32]())
-        for f in range(len(selected.features)):
+        for f in range(len(selected.features)):  # small-loop(selected.features: features): four descriptor words per selected feature, launch arguments
             ref dst = selected.features[f]
             if Int(dst.folds) == 0:
                 continue
@@ -141,14 +141,14 @@ struct FeatureProjectionWorkspace(Movable):
             by_column[column].append(dst.shift)
         var descriptors = List[UInt32]()
         var starts = List[UInt32]()
-        for column in range(selected.columns):
+        for column in range(selected.columns):  # small-loop(selected.columns: projected columns): flattens the launch descriptors, no row data
             starts.append(UInt32(len(descriptors)//4))
-            for i in range(len(by_column[column])):
+            for i in range(len(by_column[column])):  # small-loop(by_column: descriptor words of one column): four words per feature packed in the column, launch arguments
                 descriptors.append(by_column[column][i])
         starts.append(UInt32(len(descriptors)//4))
-        for i in range(len(descriptors)):
+        for i in range(len(descriptors)):  # small-loop(descriptors: projection descriptors): stages the launch descriptors, four words a feature
             self.descriptors_host[i] = descriptors[i]
-        for i in range(len(starts)):
+        for i in range(len(starts)):  # small-loop(starts: projection column starts): stages the launch column starts, one word a column
             self.starts_host[i] = starts[i]
         ctx.enqueue_copy(dst_buf=self.descriptors_device, src_buf=self.descriptors_host)
         ctx.enqueue_copy(dst_buf=self.starts_device, src_buf=self.starts_host)

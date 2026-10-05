@@ -1,0 +1,63 @@
+Retained-output quality statistics only; run on an authorized Linux server.
+No models, opponents or timing. Existing DART one-row reference and raw-bit/
+residual gates are untouched. The two primary metrics are accuracy and R2;
+logloss is retained as a diagnostic.
+
+The supplied DART protocol deliberately refuses calibration until its sampling
+unit is reviewed. Taxi uses a temporal tail split and deterministic stride
+sampling. IID rows/Wilson intervals are NOT automatically valid for that data.
+Group/block choices must be justified using baseline-only data/provenance and
+must provide enough effective units. Insufficient temporal coverage is an
+INSUFFICIENT result, not permission to assume independence.
+
+Prepare one targets.npz from the RETAINED canonical data, containing
+classification_y and regression_y copied from each block's yq. If choosing
+groups, include integer group arrays and set group_key for each case. For
+moving_block, include an integer permutation giving verified chronological
+row order and set order_key. These arrays must retain the prediction alignment.
+Do not fit a model to prepare targets. Hash and retain the target metadata:
+  targets_sha256, sampling_design, source_evidence:[{path,sha256}],
+  iid_justified (only true with a justified random_iid design), or
+  resampling_unit, dependence_justification and order_verified for blocks.
+
+Each OFF/ON receipt must include:
+  schema:1, arm:'off'/'on', numeric_mode:'identical', source_sha:<40hex>,
+  predictions_sha256, targets_sha256, fixture_id,
+  parameter_sha256:{classification:<hash>,regression:<hash>},
+  native_build_receipts:[{path:<source-build JSON>,sha256:<hash>}],
+  loaded_native_artifacts:{<loaded .so absolute path>:<recorded SHA256>}.
+Native receipts must have PASS status, the same source SHA and appropriate
+arm; their module artifact hashes must account for every loaded native binary.
+Use runtime provenance plus build receipts, never fabricate arm receipts from
+aggregate board scores. Same-source ON/OFF and exact target/parameter agreement
+are required. Old OFF predictions from a different source do not qualify.
+
+Stage 1 has NO candidate argument and creates a new file exclusively:
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python tools/identical_quality_noise.py calibrate \
+    --baseline off.npz --baseline-receipt off-receipt.json \
+    --targets targets.npz --target-metadata target-metadata.json \
+    --protocol reviewed-protocol.json --out frozen-margin.json
+Record the SHA256 of frozen-margin.json in the evidence ledger/R2 BEFORE
+looking at candidate deltas. Do not overwrite or retune a freeze to obtain PASS.
+A calibration error writes INSUFFICIENT; such an artifact is not a valid freeze.
+
+Stage 2 only reads retained predictions:
+  OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python tools/identical_quality_noise.py compare \
+    --frozen frozen-margin.json --frozen-sha256 BASELINE_ONLY_RECORDED_SHA256 \
+    --candidate on.npz --candidate-receipt on-receipt.json --out decision.json
+
+Margin = max(0, OFF quality minus its lower95% confidence bound). For justified
+IID classification the baseline bound is Wilson; all other margins use2000
+baseline-only percentile resamples. Comparison recomputes the actual metric
+on paired indices with PCG64 fixed seeds, retaining the resample-index digest.
+Groups resample whole groups with replacement; moving blocks use circular
+contiguous blocks of the declared length in the supplied verified order.
+All draws must define finite metrics; degenerate R2 samples fail closed.
+Only one resample is materialized at a time. Bootstrap arrays are not N-by-N.
+
+Each metric uses one-sided alpha=.025 (Bonferroni across the two primary rows).
+PASS: lower delta bound >= -margin. FAIL: upper bound < -margin. Otherwise
+INCONCLUSIVE. Both metrics must PASS; a good row cannot average away a bad one.
+The root makes the final decision, including identity, semantics and speed.
+This estimates holdout sampling uncertainty conditional on a fixed fitted
+model and declared sampling design; it does not measure training-seed noise.

@@ -25,12 +25,14 @@ from std.math import isfinite
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from bindings.hostptr import copy_f32
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.column_stats import STATS_TPB
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 from tsa.impl.timeSeries.stationarity import (
     KPSS_ELEM_TPB, series_sum_kernel, center_kernel, s2B_accumulation_kernel, cumsum_by_series_kernel,
     kpss_stationarity_check_kernel, kpss_lags, kpss_s2B_coefficients,
+    KPSS_SCAN_BLOCKED, KPSS_SCAN_TPB, cumsum_blocked_kernel,
 )
 
 #: FAST on Apple only. The FAST + Apple default since the M3 A/B (select-d taxi-hourly
@@ -38,6 +40,29 @@ from tsa.impl.timeSeries.stationarity import (
 #: (-D MOJOLEARN_SELECT_D is now harmless).
 comptime SELECT_D_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_SELECT_D_OFF"]()
+)
+
+#: lane/fam-timeseries (2026-10-04), IDENTICAL on every vendor: `select_d`
+#: takes `select_d_fast` (every KPSS round queued on the device, the first
+#: stationary order chosen by a kernel, ONE download and ONE wait) instead of
+#: one `kpss_test` + scan + download per candidate order. The launches are
+#: the primitive's own kernels, so the chosen orders are the same words; a
+#: refusal falls back to the host-controlled loop, which raises it by its
+#: own name and index (`tsa/impl/auto_arima.mojo`).
+#: `-D MOJOLEARN_IDN_SELECT_D_OFF=1` (or MOJOLEARN_IDN_ALL_OFF) restores the
+#: loop. FAST is unchanged.
+comptime SELECT_D_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_SELECT_D_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: lane/fam-timeseries (2026-10-04), IDENTICAL on every vendor: `kpss_test`
+#: from the binding as ONE wait (`kpss_one_wait` below: the upload, the
+#: non-finite flag kernel, the differencing, `_kpss_test`'s launches and the
+#: download queued back to back) instead of four (upload, non-finite scan,
+#: the test, the download). Same kernels, same bits.
+#: `-D MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF=1` (or MOJOLEARN_IDN_ALL_OFF) restores
+#: the four-wait sequence. FAST is unchanged.
+comptime KPSS_ONE_WAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 
 
@@ -154,10 +179,17 @@ def select_d_fast(
             wp + s2b_at, wp + acc_at, Int32(nd), Float32(1.0),
             grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
         )
-        ctx.enqueue_function[cumsum_by_series_kernel](
-            wp + acc_at, wp + cent_at, Int32(nd), Int32(batch_size),
-            grid_dim=(series_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
-        )
+        comptime if KPSS_SCAN_BLOCKED:
+            # IDENTICAL (lane/fam-timeseries): `_kpss_test`'s blocked scan
+            ctx.enqueue_function[cumsum_blocked_kernel](
+                wp + acc_at, wp + cent_at, Int32(nd),
+                grid_dim=(batch_size, 1, 1), block_dim=(KPSS_SCAN_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[cumsum_by_series_kernel](
+                wp + acc_at, wp + cent_at, Int32(nd), Int32(batch_size),
+                grid_dim=(series_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
+            )
         ctx.enqueue_function[sumsq_kernel](
             wp + eta_at, wp + acc_at, Int32(nd), Float32(1.0),
             grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
@@ -192,3 +224,130 @@ def select_d_fast(
     _ = res^
     _ = w^
     return out^
+
+
+def kpss_one_wait(
+    ctx: DeviceContext,
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    flags_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    stat_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    batch_size: Int,
+    n_obs: Int,
+    d: Int,
+    D: Int,
+    s: Int,
+    pval_threshold: Float32,
+) raises -> Bool:
+    """`kpss_test` of the caller's series at (d, D, s) with ONE wait
+    (KPSS_ONE_WAIT; lane/fam-timeseries). Writes `batch_size` flags and
+    statistics and returns True. Returns False, with nothing written, when
+    the call is one the primitive refuses (a shape or differencing refusal,
+    or a non-finite input): the caller then runs the primitive, which raises
+    the refusal by its own name and index. The launches are `_kpss_test`'s
+    (tsa/impl/timeSeries/stationarity.mojo) on one workspace."""
+    var d_sD = d + s * D
+    if batch_size < 1 or d < 0 or D < 0 or d + D > 2 or (D > 0 and s < 2) or n_obs <= d_sD:
+        return False
+    var total = batch_size * n_obs
+    var nd = n_obs - d_sD
+    var tot = batch_size * nd
+    # one workspace: the differenced series, the centred series, the
+    # accumulator (3 x batch x nd) and y_means, s2A, s2B, eta, stat (5 x batch)
+    var cent_at = tot
+    var acc_at = 2 * tot
+    var means_at = 3 * tot
+    var s2a_at = means_at + batch_size
+    var s2b_at = s2a_at + batch_size
+    var eta_at = s2b_at + batch_size
+    var stat_at = eta_at + batch_size
+    var d_y = ctx.enqueue_create_buffer[DType.float32](total)
+    var h_y = ctx.enqueue_create_host_buffer[DType.float32](total)
+    copy_f32(y_ptr, h_y.unsafe_ptr(), total)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=h_y.unsafe_ptr())
+    var w = ctx.enqueue_create_buffer[DType.float32](3 * tot + 5 * batch_size)
+    var res = ctx.enqueue_create_buffer[DType.uint8](batch_size)
+    var flag = ctx.enqueue_create_buffer[DType.uint32](1)
+    ctx.enqueue_memset(flag, UInt32(0))
+    ctx.enqueue_function[nonfinite_flag_kernel](
+        flag.unsafe_ptr(), d_y.unsafe_ptr(), Int32(total),
+        grid_dim=((total + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
+    )
+    var y_diff = w.create_sub_buffer[DType.float32](0, tot)
+    if d == 0 and D == 0:
+        # the test reads the input itself: a device-to-device copy into the workspace
+        ctx.enqueue_copy(dst_buf=y_diff, src_buf=d_y)
+    else:
+        prepare_data(ctx, y_diff, d_y, batch_size, n_obs, d, D, s)
+    comptime sum_kernel = series_sum_kernel[False]
+    comptime sumsq_kernel = series_sum_kernel[True]
+    var nd_f = Float32(nd)
+    var ratio = Float32(1.0) / nd_f
+    var elem_grid = (tot + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
+    var series_grid = (batch_size + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
+    var wp = w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[sum_kernel](
+        wp + means_at, wp, Int32(nd), ratio,
+        grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+    ctx.enqueue_function[center_kernel](
+        wp + cent_at, wp, wp + means_at, Int32(nd), Int32(tot),
+        grid_dim=(elem_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
+    )
+    ctx.enqueue_function[sumsq_kernel](
+        wp + s2a_at, wp + cent_at, Int32(nd), Float32(1.0),
+        grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+    var lags = kpss_lags(nd)
+    var coeffs = kpss_s2B_coefficients(nd, lags)
+    ctx.enqueue_function[s2B_accumulation_kernel](
+        wp + acc_at, wp + cent_at, Int32(lags), Int32(nd), Int32(tot), coeffs[0], coeffs[1],
+        grid_dim=(elem_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
+    )
+    ctx.enqueue_function[sum_kernel](
+        wp + s2b_at, wp + acc_at, Int32(nd), Float32(1.0),
+        grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+    comptime if KPSS_SCAN_BLOCKED:
+        ctx.enqueue_function[cumsum_blocked_kernel](
+            wp + acc_at, wp + cent_at, Int32(nd),
+            grid_dim=(batch_size, 1, 1), block_dim=(KPSS_SCAN_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[cumsum_by_series_kernel](
+            wp + acc_at, wp + cent_at, Int32(nd), Int32(batch_size),
+            grid_dim=(series_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
+        )
+    ctx.enqueue_function[sumsq_kernel](
+        wp + eta_at, wp + acc_at, Int32(nd), Float32(1.0),
+        grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+    ctx.enqueue_function[kpss_stationarity_check_kernel](
+        res.unsafe_ptr(), wp + stat_at, wp + s2a_at, wp + s2b_at, wp + eta_at,
+        Int32(batch_size), nd_f, pval_threshold,
+        grid_dim=(series_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
+    )
+    # the one download: the flags, the statistics and the non-finite word
+    var hr = ctx.enqueue_create_host_buffer[DType.uint8](batch_size)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](batch_size)
+    var hf = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    var stat_view = w.create_sub_buffer[DType.float32](stat_at, batch_size)
+    ctx.enqueue_copy(dst_ptr=hr.unsafe_ptr(), src_buf=res)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=stat_view)
+    ctx.enqueue_copy(dst_ptr=hf.unsafe_ptr(), src_buf=flag)
+    ctx.synchronize()
+    var ok = hf.unsafe_ptr().unsafe_load(0) == UInt32(0)
+    if ok:
+        for b in range(batch_size):
+            flags_ptr.unsafe_store(b, Int32(1) if hr.unsafe_ptr().unsafe_load(b) != UInt8(0) else Int32(0))
+            stat_ptr.unsafe_store(b, hs.unsafe_ptr().unsafe_load(b))
+    _ = stat_view^
+    _ = y_diff^
+    _ = hr^
+    _ = hs^
+    _ = hf^
+    _ = h_y^
+    _ = flag^
+    _ = res^
+    _ = w^
+    _ = d_y^
+    return ok

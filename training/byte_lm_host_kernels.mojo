@@ -103,6 +103,18 @@ comptime HOST_FW = simd_width_of[DType.float32]()
 comptime F32V = SIMD[DType.float32, HOST_FW]
 #: Lanes of a head_dim-64 head the value sum keeps in flight at once.
 comptime VALUE_SUM_64 = 64 // HOST_FW
+#: lane/no-bench-tuning-2 (2026-10-04): `_value_sum_head` kept the whole
+#: head in registers only at head_dim 64 (the board's), one or two SIMD
+#: widths. It now runs every head size by panels of `VALUE_SUM_64` vectors
+#: in registers, then single vectors, then scalar tail lanes. Each output is
+#: still one chain over the keys ascending from `+0.0` by the same fma and
+#: flush, so every head size keeps its bits (the host column needs no
+#: change). `-D MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF=1` restores the
+#: special cases.
+#: lane/review-fixes: off under MOJOLEARN_IDN_ALL_OFF too (the wave's OFF arm).
+comptime BYTE_LM_VSUM_HD_GENERIC_OFF = is_defined["MOJOLEARN_BYTE_LM_VSUM_HD_GENERIC_OFF"]() or is_defined[
+    "MOJOLEARN_IDN_ALL_OFF"
+]()
 comptime U32V = SIMD[DType.uint32, HOST_FW]
 #: SIMD accumulators `gemm_nt_rows` advances together per p step at one leaf
 #: (spelled out as eight locals there). A schedule knob: every lane still runs
@@ -751,6 +763,33 @@ def _value_sum_head(aweights: List[Float32], vpack: List[Float32], l: Int, s: In
         var count = s
         if q_first >= 0 and q_first + qi + 1 < s:
             count = q_first + qi + 1
+        comptime if not BYTE_LM_VSUM_HD_GENERIC_OFF:
+            var dv0 = 0
+            while dv0 + VALUE_SUM_64 * HOST_FW <= hbody:
+                var pacc = InlineArray[F32V, VALUE_SUM_64](fill=F32V(0.0))
+                for j in range(count):
+                    var wp = F32V(awp.unsafe_load(wrow + j))
+                    var vrowp = j * hd + dv0
+                    comptime for v in range(VALUE_SUM_64):
+                        pacc[v] = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                            wp, vp.unsafe_load[width=HOST_FW](vrowp + v * HOST_FW), pacc[v]))
+                comptime for v in range(VALUE_SUM_64):
+                    ctxp.unsafe_store[width=HOST_FW](cbase + dv0 + v * HOST_FW, pacc[v])
+                dv0 += VALUE_SUM_64 * HOST_FW
+            while dv0 < hbody:
+                var a_v = F32V(0.0)
+                for j in range(count):
+                    a_v = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                        F32V(awp.unsafe_load(wrow + j)), vp.unsafe_load[width=HOST_FW](j * hd + dv0), a_v))
+                ctxp.unsafe_store[width=HOST_FW](cbase + dv0, a_v)
+                dv0 += HOST_FW
+            while dv0 < hd:
+                var a_s = Float32(0.0)
+                for j in range(count):
+                    a_s = ftz(identical_mul_add(awp.unsafe_load(wrow + j), vp.unsafe_load(j * hd + dv0), a_s))
+                ctxp.unsafe_store(cbase + dv0, a_s)
+                dv0 += 1
+            continue
         if hd == 64:
             var accs = InlineArray[F32V, VALUE_SUM_64](fill=F32V(0.0))
             for j in range(count):

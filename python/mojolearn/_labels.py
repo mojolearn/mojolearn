@@ -311,9 +311,16 @@ def _encode_labels_native(y):
         if "NaN label" in str(exc):
             raise ValueError(str(exc)) from None
         raise
-    del arr
     if k < 0:
-        return None
+        # More than `_NATIVE_ENCODE_MAX_CLASSES` classes, or a NaN label (lane
+        # cpu2-l2-labels): the device `unique_inverse` has no class cap and
+        # raises the NaN refusal, so the rows never reach the Python routine.
+        # Same classes and codes: one ORDER RULE, the first spelling kept.
+        wide_classes, codes = unique_inverse(arr)
+        del arr
+        conv = bool if bool_source else py
+        return [conv(v) for v in wide_classes.tolist()], codes  # glue: the k class values
+    del arr
     if bool_source:
         classes = [bool(classes_store[i]) for i in range(k)]
     else:
@@ -474,29 +481,36 @@ def threshold_codes(scores, threshold=0.0, *, strict=True, below=0, above=1):
 
 def finite_integer_codes(arr):
     """Sorted distinct values of a float32 label `Array` as ints, or None
-    when any value is non-finite, negative or not an integer. Every pass
-    over the rows is native (lane apple-fast-py2mojo-core; the `set()` over
-    the storage view is gone): the finiteness scan (`_buffer.all_finite`),
-    the integer test and the minimum (the core helper `reduce_stat`), and
-    the distinct values (`unique_inverse`, the device sort on a GPU install);
-    Python only converts the k class values."""
-    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    from ._buffer import all_finite, _native
+    when any value is non-finite, negative or not an integer.
 
-    if not all_finite(arr):
-        return None
+    Lane cpu2-l2-labels: ONE pass over the rows, the device `unique_inverse`
+    (sort, flag/scan, gather; it refuses a NaN, which answers None here).
+    Every other test reads only the k sorted classes: finiteness and the sign
+    are the two ends (the classes are sorted), integrality is the core helper
+    `reduce_stat` over the k classes. The host `all_finite`, the integral
+    test and the minimum over all n rows that ran before are gone; Python
+    only converts the k class values."""
+    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
+    from ._buffer import _native
+
     if arr.size == 0:
         return None
     flat = arr._as_c()
-    code = _NATIVE_CODE.get(flat.dtype)
-    if code is None or flat.dtype not in ("<f4", "<f8"):
-        flat = flat.astype("<f8")
-        code = _NATIVE_CODE["<f8"]
-    if not int(_native("reduce_stat")(flat._addr, code, flat.size, _REDUCE_INTEGRAL)):
+    try:
+        classes, _ = unique_inverse(flat.reshape((flat.size,)))
+    except ValueError:
+        return None  # a NaN label
+    k = int(classes.size)
+    ends = flat_view(classes)
+    lo, hi = ends[0], ends[k - 1]
+    if lo < 0:
         return None
-    if flat.min() < 0:
-        return None
-    classes, _ = unique_inverse(flat.reshape((flat.size,)))
+    if classes.dtype == "<f8":
+        if not (hi < float("inf")):
+            return None
+        if not int(_native("reduce_stat")(classes._addr, _NATIVE_CODE["<f8"], k, _REDUCE_INTEGRAL)):
+            return None
+    del ends
     return [int(v) for v in classes.tolist()]
 
 

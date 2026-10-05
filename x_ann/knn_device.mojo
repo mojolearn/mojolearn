@@ -29,9 +29,26 @@ from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import ftz, identical_mul_add, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_ann.tsne_core import F32P, I32P, ts_ftz_nonneg, ts_knn_beats, ts_knn_cell, ts_knn_offer
 from x_ann.fast_env import FAST_KNN_BIGD
+
+#: K13 (IDENTICAL, lane ml-cluster-nbrs 2026-10-04): partial-distance pruning
+#: in `knn_tiled_kernel`. Once the list is full, a candidate's fold stops as
+#: soon as its partial sum reaches the list's last distance ld. Tie-aware: the
+#: running sum only grows (non-negative fused terms from +0, flushed), so the
+#: full distance is >= the partial, or NaN; candidates are offered in
+#: ascending j, so every listed index is below j, and (dist >= ld, j > li)
+#: never beats (ld, li) under `ts_knn_beats`; a NaN never beats either. A
+#: pruned candidate is exactly one the full fold would reject: the same list,
+#: the same bits. Tested every KNP_EVERY features. `-D
+#: MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF` (or MOJOLEARN_IDN_ALL_OFF) folds every
+#: feature.
+comptime IDN_ANN_KNN_PRUNE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ANN_KNN_PRUNE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: features between two prune tests (a multiple of 4)
+comptime KNP_EVERY = 16
 
 #: rows per threadgroup (one thread each) and candidate rows per tile
 comptime KTB = 128
@@ -85,11 +102,19 @@ def knn_tiled_kernel[MAXD: Int](n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F3
                 # by `ts_ftz_nonneg` (the same word). A skip of the padded
                 # groups was measured slower (m4pro-b 1790604321939) and is
                 # not taken.
+                var dead = False
                 comptime for c4 in range(MAXD // 4):
-                    var tv = tile.unsafe_load[width=4, alignment=16](r * MAXD + 4 * c4)
-                    comptime for u in range(4):
-                        var diff = ftz(xi[4 * c4 + u] - tv[u])
-                        acc = ts_ftz_nonneg(identical_mul_add(diff, diff, acc))
+                    if not dead:
+                        var tv = tile.unsafe_load[width=4, alignment=16](r * MAXD + 4 * c4)
+                        comptime for u in range(4):
+                            var diff = ftz(xi[4 * c4 + u] - tv[u])
+                            acc = ts_ftz_nonneg(identical_mul_add(diff, diff, acc))
+                        # K13: the tie-aware prune (see IDN_ANN_KNN_PRUNE)
+                        comptime if IDN_ANN_KNN_PRUNE and (4 * c4 + 4) % KNP_EVERY == 0 and 4 * c4 + 4 < MAXD:
+                            if filled == k and acc >= ld:
+                                dead = True
+                if dead:
+                    continue
                 if filled == k and not ts_knn_beats(acc, j, ld, li):
                     continue
                 filled = ts_knn_offer(acc, j, base, k, filled, nn_d, nn_i)

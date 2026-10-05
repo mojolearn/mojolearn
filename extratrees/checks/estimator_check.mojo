@@ -47,7 +47,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
 )
 from extratrees.impl.randomforest.randomforest import (
     Forest,
-    predict_class_forest,
+    predict_class_forest_host,
 )
 
 
@@ -433,7 +433,7 @@ def main() raises:
         var row = List[Float32]()
         for c in range(gap.data.n_cols):
             row.append(gap.data.value(r, c))
-        if predict_class_forest(free_fit.forest, row, 0) != Int(
+        if predict_class_forest_host(free_fit.forest, row, 0) != Int(
             gap.data.label[r]
         ):
             wrong += 1

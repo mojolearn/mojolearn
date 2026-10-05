@@ -92,7 +92,7 @@ def quantized_hist_shape_ok(
         return False
     if len(blocks) == 0:
         return False
-    for b in range(len(blocks)):
+    for b in range(len(blocks)):  # small-loop(blocks: policy blocks, at most 3): route eligibility test only
         if blocks[b].policy != POLICY_ONE_BYTE:
             return False
     return True
@@ -231,7 +231,7 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
     var block_first_feature = 0
     comptime if QH_MODE_SKIP:
         var n_feat_total = 0
-        for b in range(len(blocks)):
+        for b in range(len(blocks)):  # small-loop(blocks: policy blocks, at most 3): skip-table capacity check only
             n_feat_total += blocks[b].n_features
         if n_feat_total > q_skip_cap:
             raise Error(

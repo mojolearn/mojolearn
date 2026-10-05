@@ -109,6 +109,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN, column_max_block_size, lib_smem_page_fits_for
 
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.numerics import (
     identical_mul,
     ftz,
@@ -480,6 +481,257 @@ def m3_angle_kernel(
         run = m3_mod_2pi(run)
     theta_state.unsafe_store(cell, run)
     theta_last.unsafe_store(cell, run)
+
+
+# ---------------------------------------------------------------------------
+# lane/fam2-lm (2026-10-04), CANDIDATE ARM, default OFF:
+# `-D MOJOLEARN_IDN_M3_ANGLE_PARALLEL` (IDENTICAL only; off under
+# `-D MOJOLEARN_IDN_ALL_OFF`, the sabotage arms and the legacy increment).
+#
+# The S10 chain above is one thread walking L tokens per (b, h, angle): a
+# float `mod 2pi` after every add is not associative, so it cannot be split.
+# This arm states the SAME recurrence in exact integers instead: an angle is
+# a count `u` of 2pi / 2**23 steps (23 bits: the largest count whose float
+# image `u * 2**-23 * 2pi` is one-to-one, the step 7.49e-7 being above the
+# float32 spacing 4.77e-7 below 2pi), each rate*dt increment is rounded ONCE
+# to that grid, and the chain is `u_t = (u_{t-1} + q_t) mod 2**23`. Integer
+# addition mod 2**23 is associative, so the chain splits into blocks of
+# M3_ANGLE_Q_BLOCK tokens: block prefixes in parallel (A), one short serial
+# walk over the block totals per chain (B), the block-local finish in
+# parallel (C, D). The longest serial run is max(block, L / block) adds
+# where it was L float mods. No float crosses a thread boundary: the counts
+# are integers below 2**24 held exactly in the float32 cells of theta_out.
+# The result is independent of the block size and of the launch geometry,
+# so NVIDIA, AMD, Apple and the host column (this same source, generated)
+# agree by construction; the oracle (mamba/checks/mamba3_oracle.mojo)
+# states the same integer chain serially under the same define.
+#
+# BITS CHANGE against the serial float chain (the fold is a different
+# function). The carried state stays a float angle in [0, 2pi): it is the
+# image of a count, and `m3_angle_q_from_state` recovers that count exactly
+# (the image is one-to-one), so a sequence fed in two calls reproduces the
+# one-call bits, as the serial chain does. A state that is not an image (a
+# caller-supplied angle) is rounded to the nearest count once.
+# QUALITY: each increment carries one rounding of at most 3.75e-7 rad where
+# the float chain carries one of at most 2.4e-7 rad (half a spacing below
+# 2pi) plus the mod's; both are random walks of about 1e-5 rad at L = 4096.
+# That is why this is a candidate and not the default: check the Mamba-3
+# reference comparison before turning it on.
+# ---------------------------------------------------------------------------
+
+comptime M3_ANGLE_PARALLEL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_M3_ANGLE_PARALLEL"]()
+    and M3_PARALLEL_ANGLE_INCREMENT
+    and not AFN_MAMBA3_SISO_FUSED
+    and not SAB3_ANGLE_MOD_PER_CHUNK
+    and not SAB3_ANGLE_MOD_AT_END
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: Tokens per block. The bits do not depend on it (integer chain), so the
+#: three sizes are timing arms only.
+comptime M3_ANGLE_Q_BLOCK = (
+    32 if is_defined["MOJOLEARN_IDN_M3_ANGLE_BLOCK_32"]() else (
+        128 if is_defined["MOJOLEARN_IDN_M3_ANGLE_BLOCK_128"]() else 64
+    )
+)
+comptime M3_ANGLE_Q_MASK = 8388607  # 2**23 - 1
+comptime M3_ANGLE_Q_SCALE = Float32(8388608.0)  # 2**23
+comptime M3_ANGLE_Q_INV_SCALE = Float32(1.1920928955078125e-07)  # 2**-23
+comptime M3_ANGLE_INV_TWO_PI = Float32(0.15915494309189535)
+
+
+@always_inline
+def m3_angle_q_to_theta(u: Int) -> Float32:
+    """The float angle of count `u` (0 <= u < 2**23): `u * 2**-23` is exact,
+    then ONE pinned product with the pinned 2pi."""
+    return ftz(identical_mul(Float32(u) * M3_ANGLE_Q_INV_SCALE, M3_TWO_PI))
+
+
+@always_inline
+def m3_angle_q_round(x: Float32) -> Int:
+    """`x` in turns to the nearest count mod 2**23. `x - floor(x)` is in
+    [0, 1]; times 2**23 is exact; below 2**23 a float32 has a spacing of at
+    most 0.5, so the `+ 0.5` is exact too (and equal to its fused form) and
+    the floor makes an integer. A non-finite `x` (refused upstream) gives 0
+    on every column instead of an undefined conversion."""
+    from std.math import floor
+
+    var f = x - floor(x)
+    if not (f >= Float32(0.0) and f <= Float32(1.0)):
+        return 0
+    return Int(floor(f * M3_ANGLE_Q_SCALE + Float32(0.5))) & M3_ANGLE_Q_MASK
+
+
+@always_inline
+def m3_angle_q_from_inc(inc: Float32) -> Int:
+    return m3_angle_q_round(identical_mul(ftz(inc), M3_ANGLE_INV_TWO_PI))
+
+
+@always_inline
+def m3_angle_q_from_state(theta: Float32) -> Int:
+    """The count whose image is `theta`: the rounded estimate is within 2
+    of it (three roundings of 6e-8 relative on a count below 2**23), and the
+    image is one-to-one, so the first candidate whose image equals `theta`
+    by value is the count. No candidate matching (a state that is not an
+    image) keeps the rounded estimate."""
+    var th = ftz(theta)
+    var u0 = m3_angle_q_round(identical_mul(th, M3_ANGLE_INV_TWO_PI))
+    if m3_angle_q_to_theta(u0) == th:
+        return u0
+    var c = (u0 + 1) & M3_ANGLE_Q_MASK
+    if m3_angle_q_to_theta(c) == th:
+        return c
+    c = (u0 + M3_ANGLE_Q_MASK) & M3_ANGLE_Q_MASK  # u0 - 1
+    if m3_angle_q_to_theta(c) == th:
+        return c
+    c = (u0 + 2) & M3_ANGLE_Q_MASK
+    if m3_angle_q_to_theta(c) == th:
+        return c
+    c = (u0 + M3_ANGLE_Q_MASK - 1) & M3_ANGLE_Q_MASK  # u0 - 2
+    if m3_angle_q_to_theta(c) == th:
+        return c
+    return u0
+
+
+def m3_angle_q_block_kernel(
+    theta_out: MutPointer[Float32, MutAnyOrigin],  # [M, H, R]: increments in, block prefixes out
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+):
+    # (A) One thread per (chain, block): each increment to its count, the
+    # running sum within the block (mod 2**23) written back as an exact
+    # float. The block's last cell then holds the block total.
+    comptime r_ang = M3_NUM_ROPE_ANGLES
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nblk = (l + M3_ANGLE_Q_BLOCK - 1) // M3_ANGLE_Q_BLOCK
+    if cell >= Int(b_in) * nh * r_ang * nblk:
+        return
+    var chain = cell // nblk
+    var blk = cell - chain * nblk
+    var bb = chain // (nh * r_ang)
+    var rem = chain - bb * nh * r_ang
+    var hh = rem // r_ang
+    var r = rem - hh * r_ang
+    var lo = blk * M3_ANGLE_Q_BLOCK
+    var hi = lo + M3_ANGLE_Q_BLOCK
+    if hi > l:
+        hi = l
+    var acc = 0
+    for li in range(lo, hi):
+        var at = ((bb * l + li) * nh + hh) * r_ang + r
+        acc = (acc + m3_angle_q_from_inc(theta_out.unsafe_load(at))) & M3_ANGLE_Q_MASK
+        theta_out.unsafe_store(at, Float32(acc))
+
+
+def m3_angle_q_chain_kernel(
+    theta_out: MutPointer[Float32, MutAnyOrigin],  # [M, H, R]
+    theta_state: MutPointer[Float32, MutAnyOrigin],  # [B, H, R], read only here
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+):
+    # (B) One thread per chain: the carried count plus the block totals, in
+    # token order, over the blocks' LAST cells only (ceil(L / block) adds).
+    # Each last cell becomes the chain's final count at that token.
+    comptime r_ang = M3_NUM_ROPE_ANGLES
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    if cell >= Int(b_in) * nh * r_ang:
+        return
+    var bb = cell // (nh * r_ang)
+    var rem = cell - bb * nh * r_ang
+    var hh = rem // r_ang
+    var r = rem - hh * r_ang
+    var nblk = (l + M3_ANGLE_Q_BLOCK - 1) // M3_ANGLE_Q_BLOCK
+    var run = m3_angle_q_from_state(theta_state.unsafe_load(cell))
+    for blk in range(nblk):
+        var last = (blk + 1) * M3_ANGLE_Q_BLOCK
+        if last > l:
+            last = l
+        var at = ((bb * l + last - 1) * nh + hh) * r_ang + r
+        run = (run + Int(theta_out.unsafe_load(at))) & M3_ANGLE_Q_MASK
+        theta_out.unsafe_store(at, Float32(run))
+
+
+def m3_angle_q_finish_kernel(
+    theta_out: MutPointer[Float32, MutAnyOrigin],  # [M, H, R]
+    theta_state: MutPointer[Float32, MutAnyOrigin],  # [B, H, R], read only here
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+):
+    # (C) One thread per (chain, block): every cell of the block EXCEPT its
+    # last becomes the angle of (count before the block + block prefix). The
+    # count before the block is the previous block's last cell (final after
+    # B; no thread of this launch writes a last cell) or, for block 0, the
+    # carried state (written only by the launch after this one).
+    comptime r_ang = M3_NUM_ROPE_ANGLES
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nblk = (l + M3_ANGLE_Q_BLOCK - 1) // M3_ANGLE_Q_BLOCK
+    if cell >= Int(b_in) * nh * r_ang * nblk:
+        return
+    var chain = cell // nblk
+    var blk = cell - chain * nblk
+    var bb = chain // (nh * r_ang)
+    var rem = chain - bb * nh * r_ang
+    var hh = rem // r_ang
+    var r = rem - hh * r_ang
+    var lo = blk * M3_ANGLE_Q_BLOCK
+    var hi = lo + M3_ANGLE_Q_BLOCK
+    if hi > l:
+        hi = l
+    var before: Int
+    if blk == 0:
+        before = m3_angle_q_from_state(theta_state.unsafe_load(chain))
+    else:
+        before = Int(theta_out.unsafe_load(((bb * l + lo - 1) * nh + hh) * r_ang + r))
+    for li in range(lo, hi - 1):
+        var at = ((bb * l + li) * nh + hh) * r_ang + r
+        var u = (before + Int(theta_out.unsafe_load(at))) & M3_ANGLE_Q_MASK
+        theta_out.unsafe_store(at, m3_angle_q_to_theta(u))
+
+
+def m3_angle_q_last_kernel(
+    theta_out: MutPointer[Float32, MutAnyOrigin],  # [M, H, R]
+    theta_state: MutPointer[Float32, MutAnyOrigin],  # [B, H, R] out
+    theta_last: MutPointer[Float32, MutAnyOrigin],  # [B, H, R] report
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+):
+    # (D) One thread per (chain, block): the block's last cell from its
+    # final count to its angle; the chain's last block also writes the
+    # carried state and the report.
+    comptime r_ang = M3_NUM_ROPE_ANGLES
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nblk = (l + M3_ANGLE_Q_BLOCK - 1) // M3_ANGLE_Q_BLOCK
+    if cell >= Int(b_in) * nh * r_ang * nblk:
+        return
+    var chain = cell // nblk
+    var blk = cell - chain * nblk
+    var bb = chain // (nh * r_ang)
+    var rem = chain - bb * nh * r_ang
+    var hh = rem // r_ang
+    var r = rem - hh * r_ang
+    var last = (blk + 1) * M3_ANGLE_Q_BLOCK
+    if last > l:
+        last = l
+    var at = ((bb * l + last - 1) * nh + hh) * r_ang + r
+    var th = m3_angle_q_to_theta(Int(theta_out.unsafe_load(at)))
+    theta_out.unsafe_store(at, th)
+    if blk == nblk - 1:
+        theta_state.unsafe_store(chain, th)
+        theta_last.unsafe_store(chain, th)
 
 
 # ===========================================================================
@@ -1801,22 +2053,68 @@ def m3_siso_forward(
                 block_dim=(MAMBA3_TPB, 1, 1),
             )
             m3_phase_tick(ctx, phase_tick, String("m3_angle_increment_kernel"))
-    ctx.enqueue_function[m3_angle_kernel](
-        theta_out.unsafe_ptr(),
-        theta_state.unsafe_ptr(),
-        theta_last.unsafe_ptr(),
-        in_proj.unsafe_ptr(),
-        dt_work.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(q0),
-        Int32(nh),
-        Int32(dip),
-        Int32(c_ang),
-        grid_dim=(_grid(b * nh * r_ang), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
-    m3_phase_tick(ctx, phase_tick, String("m3_angle_kernel"))
+    var angle_serial = True
+    comptime if M3_ANGLE_PARALLEL:
+        # lane/fam2-lm candidate arm: the integer chain in four launches
+        # (see m3_angle_q_block_kernel). l == 0 keeps the serial kernel,
+        # which then only copies the state to its report.
+        if l > 0:
+            angle_serial = False
+            var angle_nblk = (l + M3_ANGLE_Q_BLOCK - 1) // M3_ANGLE_Q_BLOCK
+            ctx.enqueue_function[m3_angle_q_block_kernel](
+                theta_out.unsafe_ptr(),
+                Int32(b),
+                Int32(l),
+                Int32(nh),
+                grid_dim=(_grid(b * nh * r_ang * angle_nblk), 1, 1),
+                block_dim=(MAMBA3_TPB, 1, 1),
+            )
+            ctx.enqueue_function[m3_angle_q_chain_kernel](
+                theta_out.unsafe_ptr(),
+                theta_state.unsafe_ptr(),
+                Int32(b),
+                Int32(l),
+                Int32(nh),
+                grid_dim=(_grid(b * nh * r_ang), 1, 1),
+                block_dim=(MAMBA3_TPB, 1, 1),
+            )
+            ctx.enqueue_function[m3_angle_q_finish_kernel](
+                theta_out.unsafe_ptr(),
+                theta_state.unsafe_ptr(),
+                Int32(b),
+                Int32(l),
+                Int32(nh),
+                grid_dim=(_grid(b * nh * r_ang * angle_nblk), 1, 1),
+                block_dim=(MAMBA3_TPB, 1, 1),
+            )
+            ctx.enqueue_function[m3_angle_q_last_kernel](
+                theta_out.unsafe_ptr(),
+                theta_state.unsafe_ptr(),
+                theta_last.unsafe_ptr(),
+                Int32(b),
+                Int32(l),
+                Int32(nh),
+                grid_dim=(_grid(b * nh * r_ang * angle_nblk), 1, 1),
+                block_dim=(MAMBA3_TPB, 1, 1),
+            )
+            m3_phase_tick(ctx, phase_tick, String("m3_angle_q_kernels"))
+    if angle_serial:
+        ctx.enqueue_function[m3_angle_kernel](
+            theta_out.unsafe_ptr(),
+            theta_state.unsafe_ptr(),
+            theta_last.unsafe_ptr(),
+            in_proj.unsafe_ptr(),
+            dt_work.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(q0),
+            Int32(nh),
+            Int32(dip),
+            Int32(c_ang),
+            grid_dim=(_grid(b * nh * r_ang), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
+        m3_phase_tick(ctx, phase_tick, String("m3_angle_kernel"))
     comptime if AFN_MAMBA3_SISO_FUSED:
         # ONE launch: the rotation of the new rows, the K scaling of every
         # working row (m3_kscale_kernel) and the k_last / v_last reports

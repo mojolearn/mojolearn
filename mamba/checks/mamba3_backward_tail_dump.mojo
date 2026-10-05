@@ -45,6 +45,7 @@ from mamba.impl.modules.mamba3_backward import (
     mamba3_backward_join_rotary_into,
     mamba3_backward_join_current_into,
     mamba3_backward_angle_into,
+    mamba3_angle_suffix_sums_cells,
     mamba3_backward_dt_partial_into,
     mamba3_backward_seg_adt_into,
     mamba3_backward_adt_product_into,
@@ -258,9 +259,10 @@ def main() raises:
     var d_gamma_total=mamba_zeros(ctx,head_cells);var d_dt_total=mamba_zeros(ctx,head_cells);var d_trap_total=mamba_zeros(ctx,head_cells)
     mamba3_backward_join_current_into(ctx,d_b_total,d_c_total,d_gamma_total,d_dt_total,d_trap_total,d_b_qk,d_c_qk,d_kraw_rot,d_qraw_rot,d_gamma_qk,d_gamma_scale,d_dt_qk,d_trap_qk,d_beta_scale,stages.dt_work,stages.sig_work,fixture.b,fixture.l,dims)
     var d_angle_rate=mamba_zeros(ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES)
+    var angle_sums=mamba_zeros(ctx,mamba3_angle_suffix_sums_cells(fixture.b,fixture.l,dims.nheads))
     var d_angle_raw=mamba_zeros(ctx,m*M3_NUM_ROPE_ANGLES)
     var d_dt_angle=mamba_zeros(ctx,head_cells)
-    mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,fixture.b,fixture.l,dims)
+    mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,fixture.b,fixture.l,dims,angle_sums)
     var d_dt_available=mamba_zeros(ctx,head_cells);var d_dt_raw=mamba_zeros(ctx,head_cells);var d_dt_bias_rows=mamba_zeros(ctx,head_cells);var d_dt_bias=mamba_zeros(ctx,dims.nheads)
     mamba3_backward_dt_partial_into(ctx,d_dt_available,d_dt_raw,d_dt_bias_rows,d_dt_total,d_dt_angle,stages.in_proj,device_weights.dt_bias,m,dims)
     mamba3_backward_reduce_into(ctx,d_dt_bias,d_dt_bias_rows,ones,workspace,RED3_DT_BIAS,dims,m)
@@ -292,7 +294,7 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=d_beta_join, src_buf=d_scale_join)
     mamba3_backward_join_current_into(ctx,d_b_join,d_c_join,d_gamma_join,d_dt_join_current,d_trap_join,d_b_qk,d_c_qk,d_kraw_join,d_qraw_join,d_gamma_qk,d_scale_join,d_dt_qk,d_trap_qk,d_beta_join,stages.dt_work,stages.sig_work,fixture.b,fixture.l,dims)
     var d_angle_rate_join=mamba_zeros(ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES);var d_angle_raw_join=mamba_zeros(ctx,m*M3_NUM_ROPE_ANGLES);var d_dt_angle_join=mamba_zeros(ctx,head_cells)
-    mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,fixture.b,fixture.l,dims)
+    mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,fixture.b,fixture.l,dims,angle_sums)
     var d_dt_join_base=mamba_zeros(ctx,head_cells);mamba3_backward_join_two_into(ctx,d_dt_join_base,d_dt_join_current,d_dt_join_adt,head_cells)
     var d_dt_join_available=mamba_zeros(ctx,head_cells);var d_dt_raw_join=mamba_zeros(ctx,head_cells);var d_dt_bias_rows_join=mamba_zeros(ctx,head_cells);var d_dt_bias_join=mamba_zeros(ctx,dims.nheads)
     mamba3_backward_dt_partial_into(ctx,d_dt_join_available,d_dt_raw_join,d_dt_bias_rows_join,d_dt_join_base,d_dt_angle_join,stages.in_proj,device_weights.dt_bias,m,dims)
@@ -512,6 +514,7 @@ def main() raises:
     _ = d_dt_angle^
     _ = d_angle_raw^
     _ = d_angle_rate^
+    _ = angle_sums^
     _ = d_dt_bias^
     _ = d_dt_bias_rows^
     _ = d_dt_raw^

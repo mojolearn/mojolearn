@@ -61,7 +61,7 @@ from hierarchy.checks.edge_order import (
 )
 
 
-def merge_sort_u64_with_index(
+def merge_sort_u64_with_index_host(
     mut keys: List[UInt64], mut idx: List[Int]
 ):
     """Bottom-up merge sort of `keys` carrying `idx` along. Stable, so a

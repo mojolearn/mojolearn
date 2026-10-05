@@ -68,6 +68,8 @@ from kde.impl.neighbors.kernel_density import (
     KDE_KERNEL_GAUSSIAN,
     KDE_KERNEL_LINEAR,
     KDE_KERNEL_TOPHAT,
+    kde_chunk_lse_metric_applies,
+    kde_chunk_rows_for,
     log_kernel_norm,
 )
 from checks.numerics import (
@@ -382,7 +384,12 @@ def oracle_score_samples(
     var norm = log_kernel_norm(kernel, h, d)
 
     for q in range(n_query):
-        var mm = oracle_logsumexp_row(logk, q * n_train, n_train)
+        var mm: Tuple[Float32, Float32]
+        if kde_chunk_lse_metric_applies(metric):
+            # lane/fam-neighbors: the device's chunked fold for the tiled metrics
+            mm = _kde_lse_row_chunked(host_list_ptr(logk) + q * n_train, n_train)
+        else:
+            mm = oracle_logsumexp_row(logk, q * n_train, n_train)
         rowmax.append(mm[0])
         lse.append(mm[1])
         var a = ftz(mm[1] - log_sw)
@@ -551,6 +558,50 @@ def _kde_lse_row(row: HostF32Ptr, n_train: Int) -> Tuple[Float32, Float32]:
     return (max_exp, ftz(identical_log(s) + max_exp))
 
 
+def _kde_lse_row_chunked(row: HostF32Ptr, n_train: Int) -> Tuple[Float32, Float32]:
+    """The device's chunked log-sum-exp (lane/fam-neighbors, 2026-10-04;
+    `kde_chunk_lse_kernel` then `kde_chunk_lse_reduce_kernel` in
+    kde/impl/neighbors/kernel_density.mojo) over one row buffer: per chunk
+    of `kde_chunk_rows_for(n_train)` cells, ascending, the pair (m, s) with
+    the rescale on a new strict max; then the chunk maxima's max and the
+    chunk sums scaled to it, chunks ascending. Returns `(rowmax, lse)`."""
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var chunk_rows = kde_chunk_rows_for(n_train)
+    var n_chunks = (n_train + chunk_rows - 1) // chunk_rows
+    var pm = List[Float32](length=n_chunks, fill=neg_inf)
+    var ps = List[Float32](length=n_chunks, fill=Float32(0.0))
+    for c in range(n_chunks):
+        var j_end = min((c + 1) * chunk_rows, n_train)
+        var m = neg_inf
+        var s = Float32(0.0)
+        for j in range(c * chunk_rows, j_end):
+            var v = row.unsafe_load(j)
+            if v > m:
+                if m == neg_inf:
+                    s = Float32(1.0)
+                else:
+                    s = ftz(identical_mul_add(s, ftz(identical_exp(ftz(m - v))), Float32(1.0)))
+                m = v
+            elif v != neg_inf:
+                s = ftz(s + ftz(identical_exp(ftz(v - m))))
+        pm[c] = m
+        ps[c] = s
+    var mx = pm[0]
+    for c in range(1, n_chunks):
+        if pm[c] > mx:
+            mx = pm[c]
+    if mx == neg_inf:
+        return (mx, mx)
+    var tot = Float32(0.0)
+    comptime if KDE_ORACLE_HOST_SABOTAGE:
+        # THE SABOTAGE ARM: one extra unit; wrong on purpose.
+        tot = Float32(1.0)
+    for c in range(n_chunks):
+        if pm[c] != neg_inf:
+            tot = ftz(identical_mul_add(ps[c], ftz(identical_exp(ftz(pm[c] - mx))), tot))
+    return (mx, ftz(identical_log(tot) + mx))
+
+
 def oracle_score_samples_into(
     train: HostF32Ptr,
     query: HostF32Ptr,
@@ -665,7 +716,11 @@ def oracle_score_samples_into(
                             v = ftz_v[KDE_W](v + lw)
                         rbp.unsafe_store(r * rstride + jb * KDE_W, v)
                 for r in range(nq):
-                    var mm = _kde_lse_row(rbp + r * rstride, n_train)
+                    var mm: Tuple[Float32, Float32]
+                    if kde_chunk_lse_metric_applies(metric):
+                        mm = _kde_lse_row_chunked(rbp + r * rstride, n_train)
+                    else:
+                        mm = _kde_lse_row(rbp + r * rstride, n_train)
                     var a = ftz(mm[1] - log_sw)
                     scores.unsafe_store(q0 + r, ftz(a - norm))
                 q0 += KDE_QB

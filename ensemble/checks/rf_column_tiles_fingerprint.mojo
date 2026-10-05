@@ -61,7 +61,7 @@ def run[O: ObjectiveLike](ctx: DeviceContext, name: String, classes: Int, bins: 
     var prediction = List[Scalar[O.LabelT]]()
     for _ in range(N):
         prediction.append(Scalar[O.LabelT](0))
-    estimator.predict(x, N, P, prediction, forest)
+    estimator.predict_host(x, N, P, prediction, forest)
     for i in range(N):
         _fold(hash, UInt64(prediction[i].to_bits()))
     for t in range(len(forest.trees)):

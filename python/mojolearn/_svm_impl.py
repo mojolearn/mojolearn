@@ -174,16 +174,21 @@ def _as_labels(y):
         raise ValueError(
             f"mojolearn SVC: y must be 1-D, got {len(shape)}-D shape {shape}"
         )
-    # A NaN label gets the DEVIATION 636 refusal BEFORE the order rule sees
-    # it, so the message a caller reads does not depend on which check ran.
-    if any(isinstance(v, float) and v != v for v in labels):
+    # A NaN label gets the DEVIATION 636 refusal: the encoder refuses a NaN
+    # label itself (`_labels.py` rule 4, "NaN label"), and that refusal is
+    # translated here, so the message a caller reads does not depend on
+    # which check ran (lane cpu2-l10-linear: no Python scan over the labels).
+    # lane py-shared: the native encoder (`sorted_classes` is its definition)
+    try:
+        classes, codes_arr = encode_labels(labels)
+    except ValueError as exc:
+        if "NaN label" not in str(exc):
+            raise
         raise ValueError(
             "mojolearn SVC: y contains a non-finite value (DEVIATION 636: a "
             "NaN or inf cannot be fitted; a computed NaN carries a "
             "vendor-specific payload and cannot sit in a hashed stage)"
-        )
-    # lane py-shared: the native encoder (`sorted_classes` is its definition)
-    classes, codes_arr = encode_labels(labels)
+        ) from None
     if len(classes) < 2:
         raise ValueError(
             f"mojolearn SVC: y has {len(classes)} class; at least two are needed"
@@ -341,13 +346,21 @@ def _precomputed_columns(binding, q, support):
     cross-kernel columns at the support vectors, copied exactly (float32
     bytes, no arithmetic). What the solver's decision reads as its kernel
     tile."""
-    n_rows, n_cols = q.shape
-    idx = [int(s) for s in support]
-    for s in idx:
-        if not 0 <= s < n_cols:
+    # `support` is the fitted int32 Array (a fit's own rows, or a load's,
+    # checked against n_features_in_ there: `_check_support_bounds`); q has
+    # n_features_in_ columns (`_query`), so every index is in range and no
+    # per-predict Python pass over it runs (lane cpu2-l10-linear)
+    return _gather(binding, q, None, _i32(support))
+
+
+def _check_support_bounds(support, n_cols, path):
+    """`load` (the explicit CPU-only load route): every precomputed support
+    index of a saved model must name one of its n_cols training columns."""
+    for s in support:                   # glue: load-time validation of a saved file
+        if not 0 <= int(s) < n_cols:
             raise ValueError(
-                f"mojolearn SVC: kernel='precomputed' support index {s} is outside X's {n_cols} columns")
-    return _gather(binding, q, None, idx)
+                f"mojolearn: {path!r} kernel='precomputed' support index {int(s)} is outside the "
+                f"model's {n_cols} columns")
 
 
 def _concat_f32(blocks):
@@ -1414,6 +1427,8 @@ class SVC(NumericModeMixin):
         support = _serialize.exact(arrays, "support", "<i4")
         if support.ndim != 1 or support.size != n_support:
             raise ValueError(f"mojolearn: {path!r} support does not match n_support_")
+        if kernel_setting == "precomputed":
+            _check_support_bounds(support.tolist(), nf, path)
         intercept = _serialize.exact(arrays, "intercept", "<f4")
         if intercept.ndim != 1 or intercept.size != 1:
             raise ValueError(f"mojolearn: {path!r} intercept must hold one float32")
@@ -1447,6 +1462,8 @@ class SVC(NumericModeMixin):
             raise ValueError(f"mojolearn: {path!r} pair_meta does not hold {n_pairs} pairs")
         pb = _serialize.exact(arrays, "pair_b", "<f4").tolist()
         ps = _serialize.exact(arrays, "pair_support", "<i4").tolist()
+        if obj.kernel == "precomputed":
+            _check_support_bounds(ps, nf, path)
         pd = _serialize.exact(arrays, "pair_dual", "<f4").tolist()
         pv = _serialize.exact(arrays, "pair_sv", "<f4").tolist()
         total = sum(pm[4 * q + 2] for q in range(n_pairs))
@@ -1462,7 +1479,7 @@ class SVC(NumericModeMixin):
                     i=i, j=j,
                     dual=Array.from_list([pd[at:at + n_sv]], "<f4").reshape((1, n_sv)),
                     sv=Array.from_list(pv[at * nf:(at + n_sv) * nf], "<f4").reshape((n_sv, nf)),
-                    support=ps[at:at + n_sv], b=pb[q], n_iter=int(n_iter)))
+                    support=Array.from_list(ps[at:at + n_sv], "<i4"), b=pb[q], n_iter=int(n_iter)))
                 at += n_sv
                 q += 1
         shape = _serialize.scalar_str(arrays, "shape")
@@ -1923,7 +1940,7 @@ class SVR(NumericModeMixin):
         n_features = self.n_features_in_
         if self.kernel == "precomputed" and self.n_support_ > 0:
             # the cross-kernel's columns at the support vectors (SVC's rule)
-            q = _precomputed_columns(self._bind(_EXT_NAME), q, self.support_.tolist())
+            q = _precomputed_columns(self._bind(_EXT_NAME), q, self.support_)
             n_features = self.n_support_
             sv = dual
         self._bind(_EXT_NAME).svr_predict(
@@ -2048,6 +2065,8 @@ class SVR(NumericModeMixin):
         support = _serialize.exact(arrays, "support", "<i4")
         if support.ndim != 1 or support.size != n_support:
             raise ValueError(f"mojolearn: {path!r} support does not match n_support_")
+        if kernel_setting == "precomputed":
+            _check_support_bounds(support.tolist(), nf, path)
         intercept = _serialize.exact(arrays, "intercept", "<f4")
         if intercept.ndim != 1 or intercept.size != 1:
             raise ValueError(f"mojolearn: {path!r} intercept must hold one float32")

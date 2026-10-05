@@ -24,6 +24,7 @@ and mirrored in `_ivf_impl.py`.
 
 from std.os import abort
 from std.sys.compile import is_defined
+from std.memory import memcpy
 from bindings.hostptr import f32_ptr, i32_ptr, copy_f32, read_f32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -65,7 +66,8 @@ from ivf.resident import (
     ivf_resident_release,
     ivf_resident_search,
 )
-from bindings.ivf_index_arrays import ivf_merge_shards_binding, ivf_shard_plan_binding, ivf_read_resident_filter, ivf_write_resident_result
+from bindings.ivf_index_arrays import ivf_read_resident_filter, ivf_write_resident_result
+from core.shard_merge_device import device_ivf_merge_shards, device_ivf_shard_plan, device_root_f32
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -123,8 +125,10 @@ def _ivf_run(
     # ORIGINAL row ids, UInt32 on the Mojo side and below 2**31 by
     # construction (n <= 46340 on every lane in this tree), so the int32
     # bytes are the same bytes.
-    for i in range(m * k):
-        ip.unsafe_store(i, Int32(Int(r.indices[i])))
+    # cpu2-l6-bindings: one byte copy instead of a per-element conversion
+    memcpy(
+        dest=ip.bitcast[UInt32](), src=r.indices.unsafe_ptr(), count=m * k
+    )
     comptime if is_defined["MOJOLEARN_IVF_BINDING_SABOTAGE"]():
         # NEVER SHIPPED. Swaps the first two neighbor ids of query 0, the
         # tie-class corruption a wrong (distance, id) order would produce, so
@@ -272,12 +276,9 @@ def _ivf_search_arrays(
     var k = ext[1]
     var n_probes = ext[2]
     var queries = read_f32(Int(py=addrs[5]), m * arrays.dim)
-    # `labels` is build workspace the search never reads; it is restored
-    # from the carried ids so the struct holds the assignment it describes.
-    var labels = List[UInt32](length=arrays.n_rows, fill=UInt32(0))
-    for l in range(arrays.n_lists):
-        for s in range(Int(arrays.offsets[l]), Int(arrays.offsets[l + 1])):
-            labels[Int(arrays.list_indices[s])] = UInt32(l)
+    # `labels` is build workspace the search never reads (cpu2-l6-bindings:
+    # no longer restored by a host scatter over every row; left empty).
+    var labels = List[UInt32]()
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
         arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
@@ -303,16 +304,64 @@ def ivf_flat_partial_search_binding(addrs: PythonObject, params: PythonObject) r
 
 
 def ivf_finalize_distances_binding(address: PythonObject, count: PythonObject, metric: PythonObject) raises -> PythonObject:
-    from ivf.impl.neighbors.ivf_common import postprocess_distances
+    """`postprocess_distances` over the merged distances, on the device
+    (lane cpu4-python: `ftz(identical_sqrt(d))` per word, the host
+    statement; the host walk stays the host bindings')."""
+    from ivf.impl.neighbors.ivf_common import postprocess_distances_is_identity
     var n = Int(py=count)
     if n < 0:
         raise Error("distance count must be nonnegative")
-    var distances = read_f32(Int(py=address), n)
-    postprocess_distances(distances, Int(py=metric))
-    var dst = f32_ptr(Int(py=address))
-    for i in range(n):
-        dst.unsafe_store(i, distances[i])
+    if postprocess_distances_is_identity(Int(py=metric)) or n == 0:
+        return PythonObject(0)
+    if Int(py=address) == 0:
+        raise Error("ivf_finalize_distances: null buffer address")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    device_root_f32(ctx, Int(py=address), n)
     return PythonObject(0)
+
+
+def ivf_merge_shards_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`ivf_merge_shards` (bindings/ivf_index_arrays.mojo's contract) on the
+    device (lane cpu4-python, core/shard_merge_device.mojo): [status, row]."""
+    var shards = Int(py=params[0])
+    var m = Int(py=params[1])
+    var k = Int(py=params[2])
+    if shards < 1 or m < 0 or k < 1:
+        raise Error("ivf_merge_shards: need at least one shard and k >= 1")
+    if len(addrs) != 3 + 4 * shards or len(params) != 3 + shards:
+        raise Error("ivf_merge_shards: address or parameter count differs from the shard count")
+    var d_addrs = List[Int]()
+    var i_addrs = List[Int]()
+    var c_addrs = List[Int]()
+    var m_addrs = List[Int]()
+    var sizes = List[Int]()
+    for s in range(shards):  # small-loop(shards: one shard per device): reads the shard addresses, launch arguments only
+        d_addrs.append(Int(py=addrs[3 + 4 * s]))
+        i_addrs.append(Int(py=addrs[4 + 4 * s]))
+        c_addrs.append(Int(py=addrs[5 + 4 * s]))
+        m_addrs.append(Int(py=addrs[6 + 4 * s]))
+        sizes.append(Int(py=params[3 + s]))
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var r = device_ivf_merge_shards(ctx, m, k, d_addrs, i_addrs, c_addrs, m_addrs, sizes,
+                                    Int(py=addrs[0]), Int(py=addrs[1]), Int(py=addrs[2]))
+    var out = Python.list()
+    out.append(PythonObject(Int(r[0])))
+    out.append(PythonObject(Int(r[1])))
+    return out
+
+
+def ivf_shard_plan_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`ivf_shard_plan` (bindings/ivf_index_arrays.mojo's contract) on the
+    device (lane cpu4-python, core/shard_merge_device.mojo)."""
+    var n = Int(py=params[0])
+    var n_lists = Int(py=params[1])
+    var shards = Int(py=params[2])
+    if n < 0 or n_lists < 1 or shards < 1 or len(addrs) != 5:
+        raise Error("ivf_shard_plan: needs 5 addresses, n >= 0, n_lists >= 1 and shards >= 1")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    return PythonObject(device_ivf_shard_plan(
+        ctx, Int(py=addrs[0]), Int(py=addrs[1]), Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4]),
+        n, n_lists, shards))
 
 
 # ===========================================================================
@@ -330,7 +379,9 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
         addrs, params, String("ivf_flat_search"), 5, 5, partial_storage=partial
     )
     bst.host("read_admit")
-    var labels = _labels_from_arrays(arrays.offsets, arrays.list_indices, arrays.n_lists, arrays.n_rows)
+    # cpu2-l6-bindings: the resident index never reads `labels` (build
+    # workspace), so no host scatter over every row restores it
+    var labels = List[UInt32]()
     # lane ann-apple3, behind `ANN3_PREPARE`: the admitted arrays move into
     # the index (copied otherwise, the n_rows x dim list data among them)
     var centers = List[Float32]()
@@ -390,15 +441,6 @@ def ivf_flat_index_release_binding(handle: PythonObject) raises -> PythonObject:
     return PythonObject(0)
 
 
-def _labels_from_arrays(offsets: List[Int32], list_indices: List[UInt32], n_lists: Int, n_rows: Int) -> List[UInt32]:
-    """The assignment an admitted index describes, from its carried ids."""
-    var labels = List[UInt32](length=n_rows, fill=UInt32(0))
-    for l in range(n_lists):
-        for s in range(Int(offsets[l]), Int(offsets[l + 1])):
-            labels[Int(list_indices[s])] = UInt32(l)
-    return labels^
-
-
 def ivf_flat_extend_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -408,7 +450,10 @@ def ivf_flat_extend_binding(
     var arrays = ivf_read_index_arrays(addrs, params, String("ivf_flat_extend"), 10, 5)
     var n_new = ivf_extend_count(params, arrays.n_rows, arrays.dim)
     var new_x = read_f32(Int(py=addrs[5]), n_new * arrays.dim)
-    var labels = _labels_from_arrays(arrays.offsets, arrays.list_indices, arrays.n_lists, arrays.n_rows)
+    # cpu2-l6-bindings: the extension reads only the NEW rows' labels, so
+    # the old assignment is not restored by a host scatter (left empty);
+    # `ivf_flat_extend_host` appends the new labels after it.
+    var labels = List[UInt32]()
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
         arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
@@ -417,9 +462,11 @@ def ivf_flat_extend_binding(
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var out = ivf_flat_extend_host(ctx, index, new_x, n_new)
     ctx.synchronize()
-    var new_labels = List[UInt32](capacity=n_new)
-    for j in range(n_new):
-        new_labels.append(out.labels[arrays.n_rows + j])
+    # the new rows' labels: one memcpy of the tail (no per-row host loop)
+    var new_labels = List[UInt32](length=max(n_new, 0), fill=UInt32(0))
+    var first_new = len(out.labels) - n_new
+    if n_new > 0:
+        memcpy(dest=new_labels.unsafe_ptr(), src=out.labels.unsafe_ptr() + first_new, count=n_new)
     ivf_write_extended_arrays(
         addrs, out.n_rows, out.dim, out.n_lists, out.list_offsets,
         out.list_indices, out.list_data, new_labels, n_new,

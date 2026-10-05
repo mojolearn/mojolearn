@@ -1,0 +1,13 @@
+diff --git a/sequence/mlp.mojo b/sequence/mlp.mojo
+index d6c472be8..6ba20f92d 100644
+--- a/sequence/mlp.mojo
++++ b/sequence/mlp.mojo
+@@ -391,7 +391,7 @@ def op_mlp_perm(t: Int, a: Args):
+     while True:
+         var l = (x >> h) & mask
+         var r = x & mask
+-        for rd in range(6):
++        for rd in range(5):  # SABOTAGE 5545: a Feistel round dropped
+             var rk = _mlp_perm_mix(k0 + UInt32(rd) * UInt32(0x9E3779B9)) ^ k1
+             var f = _mlp_perm_mix(r + rk) & mask
+             var tmp = l ^ f

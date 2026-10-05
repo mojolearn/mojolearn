@@ -77,12 +77,43 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import ftz
-from neighbors.impl.label.classlabels import make_monotonic
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from neighbors.impl.label.classlabels import make_monotonic, map_label_kernel, LABEL_TPB
 from neighbors.impl.selection.distance_weights import (
     weighted_class_probs_kernel,
     weighted_regress_avg_kernel,
+    distance_weights_kernel,
 )
 
+
+#: lane/fam-neighbors (2026-10-04), IDENTICAL on every vendor: the vote
+#: relabels the training labels with ONE launch over the unique set the
+#: caller already holds on the device, instead of `make_monotonic` (a
+#: second device sort + unique of all n_index labels, two n_index-sized
+#: copies, a host round trip of the set, five drains) and a subtract-one
+#: pass, on every predict. Integer only; the tally reads the same column
+#: indices, so no output bit moves and the host column is untouched.
+#: -D MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores the old sequence.
+comptime KNN_IDN_DIRECT_RELABEL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
+#: weights='distance' computes the weights in a kernel
+#: (`distance_weights_kernel`, `host_distance_weights`' statements, one
+#: thread per query row). Before, the vote copied the n_queries x k
+#: distances into a host list element by element, ran the rule on the host,
+#: copied the result into a pinned buffer element by element and uploaded
+#: it. No bit moves; the host column keeps `host_distance_weights`.
+#: cpu3-neighbors (2026-10-04): the kernel is now the only GPU route, in
+#: every mode and when traced (the trace records the device weights); the
+#: host loop and this define's off arm are gone from the vote. The constant
+#: stays for callers that still read it.
+comptime KNN_IDN_DEVICE_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 comptime KNN_TPB_X = 32
 """`template <int TPB_X = 32>` on all three launchers. A scheduling number;
@@ -337,35 +368,54 @@ def class_probs(
         var y_normalized = ctx.enqueue_create_buffer[DType.int32](
             n_index_rows + n_unique_labels
         )
-        var y_tmp = ctx.enqueue_create_buffer[DType.int32](
-            n_index_rows + n_unique_labels
-        )
-        ctx.synchronize()
-        # `raft::update_device(y_tmp, y[i], n_index_rows)` then
-        # `update_device(y_tmp + n_index_rows, uniq_labels[i], n_unique)`:
-        # device-to-device copies into the two halves.
-        ctx.enqueue_copy(
-            dst_buf=y_tmp.create_sub_buffer[DType.int32](0, n_index_rows),
-            src_buf=y[i],
-        )
-        ctx.enqueue_copy(
-            dst_buf=y_tmp.create_sub_buffer[DType.int32](
-                n_index_rows, n_unique_labels
-            ),
-            src_buf=uniq_labels[i],
-        )
-        ctx.synchronize()
+        comptime if KNN_IDN_DIRECT_RELABEL:
+            # lane/fam-neighbors: `uniq_labels[i]` IS `getUniquelabels(y[i])`
+            # (`_unique_label_sets`), so the set `make_monotonic` would
+            # sort out of [y; uniq] again is the one already on the device.
+            # One `map_label_kernel` launch, zero-based, writes the same
+            # column index the map-then-subtract-one pair wrote.
+            ctx.enqueue_memset(y_normalized, Int32(0))
+            ctx.enqueue_function[map_label_kernel](
+                uniq_labels[i].unsafe_ptr(),
+                Int32(n_unique_labels),
+                y[i].unsafe_ptr(),
+                y_normalized.unsafe_ptr(),
+                Int32(n_index_rows),
+                Int32(1),
+                grid_dim=((n_index_rows + LABEL_TPB - 1) // LABEL_TPB, 1, 1),
+                block_dim=(LABEL_TPB, 1, 1),
+            )
+        else:
+            var y_tmp = ctx.enqueue_create_buffer[DType.int32](
+                n_index_rows + n_unique_labels
+            )
+            ctx.synchronize()
+            # `raft::update_device(y_tmp, y[i], n_index_rows)` then
+            # `update_device(y_tmp + n_index_rows, uniq_labels[i], n_unique)`:
+            # device-to-device copies into the two halves.
+            ctx.enqueue_copy(
+                dst_buf=y_tmp.create_sub_buffer[DType.int32](0, n_index_rows),
+                src_buf=y[i],
+            )
+            ctx.enqueue_copy(
+                dst_buf=y_tmp.create_sub_buffer[DType.int32](
+                    n_index_rows, n_unique_labels
+                ),
+                src_buf=uniq_labels[i],
+            )
+            ctx.synchronize()
 
-        make_monotonic(
-            ctx, y_normalized, y_tmp, n_index_rows + n_unique_labels, False
-        )
-        ctx.enqueue_function[_subtract_one_kernel](
-            y_normalized.unsafe_ptr(),
-            Int32(n_index_rows),
-            grid_dim=((n_index_rows + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
-        ctx.synchronize()
+            make_monotonic(
+                ctx, y_normalized, y_tmp, n_index_rows + n_unique_labels, False
+            )
+            ctx.enqueue_function[_subtract_one_kernel](
+                y_normalized.unsafe_ptr(),
+                Int32(n_index_rows),
+                grid_dim=((n_index_rows + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            ctx.synchronize()
+            _ = y_tmp^
 
         if has_weights:
             ctx.enqueue_function[weighted_class_probs_kernel](
@@ -397,7 +447,6 @@ def class_probs(
                 ctx, _clf_tag("votes", i, len(y)), outs[i], cur_size
             )
         _ = y_normalized^
-        _ = y_tmp^
 
 
 def knn_classify(
@@ -524,3 +573,92 @@ def knn_regress(
         trace.record_device(
             ctx, "knn_reg.pred", out_buf, n_query_rows * len(y)
         )
+
+
+def device_distance_weights(
+    ctx: DeviceContext,
+    dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut d_w: DeviceBuffer[DType.float32],
+    n_queries: Int,
+    k: Int,
+) raises:
+    """KNN_IDN_DEVICE_WEIGHTS: `host_distance_weights` over the n_queries x k
+    sorted distances at `dist_ptr`, written to `d_w` on the device. One
+    upload, one launch, one 4-byte flag read (the rule's two refusals)."""
+    if n_queries <= 0 or k <= 0:
+        raise Error(
+            "knn weights='distance': n_queries and k must be positive, got "
+            + String(n_queries) + ", " + String(k)
+        )
+    var d_dist = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+    ctx.enqueue_copy(dst_buf=d_dist, src_ptr=dist_ptr)
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(d_flag, Int32(0))
+    ctx.enqueue_function[distance_weights_kernel](
+        d_dist.unsafe_ptr(), d_w.unsafe_ptr(), d_flag.unsafe_ptr(),
+        Int32(n_queries), Int32(k),
+        grid_dim=(n_queries + KNN_TPB_X - 1) // KNN_TPB_X, block_dim=KNN_TPB_X,
+    )
+    var h_flag = List[Int32](length=1, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=d_flag)
+    ctx.synchronize()
+    var got = Int(h_flag[0])
+    _ = h_flag^
+    _ = d_flag^
+    _ = d_dist^
+    if got == 1:
+        raise Error(
+            "knn weights='distance': a query row has a NEGATIVE distance, which no"
+            " implemented metric can produce; refusing rather than weighting it"
+        )
+    if got != 0:
+        raise Error(
+            "knn weights='distance': every neighbour of a query row has 1/d that"
+            " underflows float32, so the row's normalizer is zero on an FTZ column"
+            " and not on a denormal-honoring one (DEVIATION 555)"
+        )
+
+
+def index_range_kernel(
+    idx: MutPointer[UInt32, MutAnyOrigin],
+    flag: MutPointer[Int32, MutAnyOrigin],
+    count: Int64,
+    n_index: Int64,
+):
+    """cpu3-neighbors: the precomputed-neighbours bounds check as a kernel,
+    one thread per slot. A slot naming a row outside the reference data sets
+    flag[0] to 1 (every writer stores the same word, so the race is benign);
+    the caller zeroes it and raises on a nonzero value. Integer compares
+    only, no float work, so no column can differ."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if Int64(i) >= count:  # Int64 args: Int is not DevicePassable (box-run-2)
+        return
+    if UInt64(idx.unsafe_load(i)) >= UInt64(n_index):
+        flag.unsafe_store(0, Int32(1))
+
+
+def device_check_index_range(
+    ctx: DeviceContext,
+    mut d_idx: DeviceBuffer[DType.uint32],
+    count: Int,
+    n_index: Int,
+) raises:
+    """Refuses a precomputed neighbour index outside [0, n_index) on the
+    device: one launch over the resident index buffer and one 4-byte flag
+    read, instead of a host walk over the n_queries x k indices."""
+    if count <= 0:
+        return
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(d_flag, Int32(0))
+    ctx.enqueue_function[index_range_kernel](
+        d_idx.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(count), Int64(n_index),
+        grid_dim=(count + KNN_TPB_X - 1) // KNN_TPB_X, block_dim=KNN_TPB_X,
+    )
+    var h_flag = List[Int32](length=1, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=d_flag)
+    ctx.synchronize()
+    var got = Int(h_flag[0])
+    _ = h_flag^
+    _ = d_flag^
+    if got != 0:
+        raise Error("precomputed neighbor index outside reference data")

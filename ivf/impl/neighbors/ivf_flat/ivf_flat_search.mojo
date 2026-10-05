@@ -112,6 +112,8 @@ from ivf.impl.neighbors.ivf_flat.ivf_query_device import (
 )
 from x_ann.io import download_i32
 from std.gpu import WARP_SIZE
+from std.gpu import block_dim as _ivf_block_dim, block_idx as _ivf_block_idx, thread_idx as _ivf_thread_idx
+from checks.numerics import ftz as _ivf_ftz, identical_sqrt as _ivf_identical_sqrt
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_PREPARE
 from ivf.checks.list_layout import (
@@ -141,6 +143,10 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     ivf_metric_name,
     ivf_search_params_validate,
     ivf_validate_data,
+)
+from ivf.impl.neighbors.ivf_flat.ivf_finite_device import (
+    IVF_IDN_DEVICE_FINITE,
+    ivf_validate_device,
 )
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -191,6 +197,31 @@ IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): steps 3-5
 for every query in one launch (`identical_ivf_scan.mojo`), the pinned
 distance arithmetic and the `(distance, original index)` key, instead of a
 host round trip per query. Same neighbours, same order, same bits."""
+
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
+#: the L2SqrtExpanded root over the n_queries x k selected distances runs in
+#: a kernel before the download (`ivf_sqrt_kernel`, `postprocess_distances`'
+#: statement per cell: the same words). Before, the host walked the
+#: downloaded list. -D MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF (or
+#: MOJOLEARN_IDN_ALL_OFF) restores the host walk.
+comptime IVF_IDN_DEVICE_SQRT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def ivf_sqrt_kernel(dist: MutPointer[Float32, MutAnyOrigin], n_: Int32):
+    """dist[i] = ftz(identical_sqrt(dist[i])), one thread per cell."""
+    var i = Int(_ivf_block_idx.x) * Int(_ivf_block_dim.x) + Int(_ivf_thread_idx.x)
+    if i < Int(n_):
+        dist.unsafe_store(i, _ivf_ftz(_ivf_identical_sqrt(dist.unsafe_load(i))))
+
+
+def _ivf_sqrt_device(ctx: DeviceContext, mut d_od: DeviceBuffer[DType.float32], n: Int) raises:
+    if n > 0:
+        ctx.enqueue_function[ivf_sqrt_kernel](
+            d_od.unsafe_ptr(), Int32(n), grid_dim=(n + 255) // 256, block_dim=256,
+        )
+
 
 comptime IVF_FAST_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -527,7 +558,7 @@ struct IvfFlatDevice(Movable):
                 index.list_data.copy(),
             )
         self.list_sizes = List[Int32]()
-        for l in range(n_lists):
+        for l in range(n_lists):  # small-loop(n_lists: one count per IVF list): list-count plan for the probe launches, no row data
             self.list_sizes.append(Int32(index.list_size(l)))
 
     def ensure_layout(mut self, index: IvfFlatIndex):
@@ -613,7 +644,10 @@ def ivf_flat_search_traced(
     """`ivf_flat::search` over an index prepared for this call alone
     (`IvfFlatDevice`, then `ivf_flat_search_prepared`). See the latter."""
     ivf_search_params_validate(sp, index.n_lists, n_queries, k)
-    ivf_validate_data(queries, n_queries, index.dim, "queries")
+    # under IVF_IDN_DEVICE_FINITE `ivf_flat_search_prepared` scans the
+    # uploaded queries on the device; this walk was a second copy of its own
+    comptime if not IVF_IDN_DEVICE_FINITE:
+        ivf_validate_data(queries, n_queries, index.dim, "queries")
     var dev = IvfFlatDevice(ctx, index)
     var r = ivf_flat_search_prepared(
         ctx, trace, index, dev, sp, queries, n_queries, k, tile_tpb, expand_tpb, partial_storage, keep
@@ -675,7 +709,8 @@ def ivf_flat_search_prepared(
     flat arrays at all.
     """
     ivf_search_params_validate(sp, index.n_lists, n_queries, k)
-    ivf_validate_data(queries, n_queries, index.dim, "queries")
+    comptime if not IVF_IDN_DEVICE_FINITE:
+        ivf_validate_data(queries, n_queries, index.dim, "queries")
     var dist_is_identity = postprocess_distances_is_identity(index.metric)
     var filtered = len(keep) > 0
     if filtered and len(keep) != index.n_rows:
@@ -718,6 +753,9 @@ def ivf_flat_search_prepared(
 
     # ---- upload: the queries only (the index side is `dev`) -----------
     var dq = upload_f32(ctx, queries)
+    comptime if IVF_IDN_DEVICE_FINITE:
+        # lane fix-k1-neighbors: the queries' finiteness on the device
+        ivf_validate_device(ctx, dq, queries, n_queries, dim, "queries")
     var dq_norm = ctx.enqueue_create_buffer[DType.float32](n_queries)
     compute_row_norms(ctx, dq, dq_norm, n_queries, dim)
     if trace.enabled:
@@ -890,9 +928,14 @@ def ivf_flat_search_prepared(
                                 Int32(k),
                                 grid_dim=grid, block_dim=FIVF_QPB * WARP_SIZE,
                             )
+                var host_root = not dist_is_identity
+                comptime if IVF_IDN_DEVICE_SQRT:
+                    if host_root:
+                        _ivf_sqrt_device(ctx, d_od, n_queries * k)
+                        host_root = False
                 var fd = download_f32(ctx, d_od, n_queries * k)
                 var fi = download_u32(ctx, d_oi, n_queries * k)
-                if not dist_is_identity:
+                if host_root:
                     postprocess_distances(fd, index.metric)
                 _ = d_od^
                 _ = d_oi^
@@ -939,12 +982,17 @@ def ivf_flat_search_prepared(
         if trace.enabled:
             _trace_batch(ctx, batch, all_cand_idx, all_cand_dist)
         _ = batch^
+    var host_root2 = not dist_is_identity and not partial_storage
+    comptime if IVF_IDN_DEVICE_SQRT:
+        if host_root2:
+            _ivf_sqrt_device(ctx, d_od, n_queries * k)
+            host_root2 = False
     var out_dist = download_f32(ctx, d_od, n_queries * k)
     var out_idx = download_u32(ctx, d_oi, n_queries * k)
     # The root, if the metric wants one, AFTER the order is fixed on the
     # squared keys (their store-time `post_process`); the padding of a
     # partial-storage search is never rooted (it never was).
-    if not dist_is_identity and not partial_storage:
+    if host_root2:
         postprocess_distances(out_dist, index.metric)
 
     if trace.enabled:

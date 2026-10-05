@@ -92,11 +92,37 @@ _OPS = dict(
     # lane apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): only the FAST + Apple binding (default;
     # -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF has none) runs them (it exports x_prep_cls2_cat)
     cat_zero=157, cat_present=158, pres_count=159, pres_write=160, cat_pack=161,
+    # lane idn-int-prep (x_prep/blocked.mojo): the IDENTICAL bindings (device and host column;
+    # -D MOJOLEARN_IDN_NB_ONEPASS_OFF has none) run them (`_idn_int` bit 2); IDENTICAL also
+    # compiles 157-160 (x_prep/label_fast.mojo IDN_LABEL)
+    csb1_part=162, csb1_neg=163,
+    # lane idn-all (x_prep/blocked.mojo `csr_dense_unit`): the IDENTICAL device binding
+    # (`_idn_int` bit 8; -D MOJOLEARN_IDN_NB_CSR_DENSE_OFF has none) densifies a CSR input
+    csr_dense=164,
+    # lane fam-prep-metrics: the IDENTICAL bindings (device and host column) run them
+    # (`_idn_fam` bit 2: csb1_ss, x_prep/blocked.mojo, -D MOJOLEARN_IDN_CLASS_ONEPASS_OFF has
+    # none; bit 4: the blocked univariate scores, x_prep/select_blocked.mojo,
+    # -D MOJOLEARN_IDN_SELECT_BLOCKED_OFF has none)
+    csb1_ss=165, fcb_part=166, fcb_fin=167, frb_part1=168, frb_mean=169, frb_part2=170, frb_fin=171,
+    # bit 8: PowerTransformer's blocked folds, x_prep/pt_blocked.mojo, -D MOJOLEARN_IDN_PT_BLOCKED_OFF has none
+    ptb_part1=172, ptb_mean=173, ptb_part2=174, ptb_fin=175, ptb_step=176,
     # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
     # runs them (lane pyglue-numeric deleted the OFF arm and its Python loops)
     p2m_ccount=200, p2m_cscan=201, p2m_cstart=202, p2m_cwrite=203, p2m_rgather=204, p2m_smrows=205,
     p2m_sel_count=206, p2m_sel_scan=207, p2m_sel_write=208, p2m_transpose=209, p2m_rowflag=210,
     p2m_abscorr_cell=211, p2m_abscorr_norm=212,
+    # lane fam2-prep-metrics (x_prep/fam2.mojo, a range of its own): every binding runs
+    # 230-235 and 241 since lane cpu2-l3-prep (they were IDENTICAL-only)
+    f2_wblk=230, f2_wscan=231, f2_wdraw=232, f2_perm_rows=233, f2_wpick=234, f2_clamp0=235,
+    # the IDENTICAL tiled Gram (x_prep/gram_blocked.mojo): bit 16; gb_part_row is the bit 32 candidate
+    gb_part=236, gb_part_row=237, gb_fold=238, qcb_part=239, qcb_fold=240,
+    f2_code_gather=241,
+    # lane cpu2-l3-prep (x_prep/cpu2_prep.mojo, in fam2's range): every binding, every tier
+    c2_bin_code=242, c2_kfold=243, c2_strat_meta=244, c2_strat_flag=245, c2_strat_fold=246, c2_integral=247,
+    c2_isum=248, c2_inf_m0=249, c2_inf_m1=250, c2_inf_map=251, c2_imp_stats=252, c2_key64=253, c2_topk=254,
+    c2_gt=255, c2_rfe_step=256, c2_rfe_rank=257, c2_ii_miss=258, c2_ii_pos=259, c2_ii_ord=260, c2_ii_rand=261,
+    c2_colmax=262, c2_grid=263, c2_nan_sub=264, c2_nan_rows=265, c2_cnt0=266, c2_mm_keep=267, c2_mm_merge=268,
+    c2_add_i64=269, c2_nonfinite=270,
     # lane apple-fast-q-clf (x_prep/proba64.mojo, in the py2mojo range): staged only when the
     # binding exports x_prep_proba64 (FAST, not -D MOJOLEARN_PROBA64_QOLD)
     q64_softmax=213,
@@ -385,6 +411,9 @@ class _Prog:
         self._out = None
         self._out_at = None
         self._out_code = "f"
+        #: callables run(self) right after the device returns (lane fam2-prep-metrics:
+        #: refusals a program decides on the device, e.g. `_stage_partial_codes`)
+        self._after = []
 
     def alloc(self, n):
         off = self.size
@@ -423,8 +452,14 @@ class _Prog:
         """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset.
         inout (lane prep-apple3): a stage writes these words and Python reads
         them after the run, so they come back from the device (a plain input
-        never does, and a read of one is refused)."""
-        if not (isinstance(arr, Array) and arr.dtype == "<f4" and arr._has_order("C")):
+        never does, and a read of one is refused). A `_arena_io.DeviceRows`
+        (a fold's rows, lane cpu4-misc) is kept as it is: `run` gathers it
+        on the device, or copies its host rows when the binding cannot."""
+        if isinstance(arr, _arena_io.DeviceRows):
+            if inout or arr.dtype != "<f4":
+                arr = arr.materialize()
+        if not (isinstance(arr, (Array, _arena_io.DeviceRows)) and arr.dtype == "<f4"
+                and (isinstance(arr, _arena_io.DeviceRows) or arr._has_order("C"))):
             arr = as_f32_c(arr, ndim=None, name="input")[0]
         off = self.alloc(arr.size)
         self._inputs.append((off, arr, "f"))
@@ -495,9 +530,24 @@ class _Prog:
                       if (dev_scratch or sc == 0) and _arena_io.ranges_enabled() else None)
         spans = []
         direct = None
+        gathered = []
         for off, arr, _ in self._inputs:
             if not arr.size:
                 continue
+            if isinstance(arr, _arena_io.DeviceRows):
+                # device-rows input (lane cpu4-misc): the fold's rows gathered
+                # on the device out of the base X, put once into this binding's
+                # store; a binding without the gather copies the host rows
+                slot = None
+                if run_ranges is not None:
+                    if direct is None and _arena_io.DeviceCache.supports(binding, "x_prep"):
+                        direct = _arena_io.DeviceCache(binding, "x_prep")
+                    slot = _arena_io.rows_slot(binding, "x_prep", arr, direct)
+                if slot is not None:
+                    gathered.append(slot)
+                    spans.append((off, off + arr.size, slot))
+                    continue
+                arr = arr.materialize()
             inout = (off, off + arr.size) in self._inout
             cache = (_arena_io.active_cache(binding, "x_prep", arr.size)
                      if run_ranges is not None and not inout else None)
@@ -534,6 +584,8 @@ class _Prog:
                            (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
                            (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
             finally:
+                for slot in gathered:  # glue: frees each fold-rows slot
+                    binding.x_prep_dev_free(slot)
                 if direct is not None:
                     direct.close()
             self._out = out
@@ -549,6 +601,8 @@ class _Prog:
         else:
             run(base, host_words, prog.buffer_info()[0], nst)
         self.arena = arena
+        for fn in self._after:  # glue: the program's post-run refusal hooks
+            fn(self)
         if prof:
             # one line per program (the device's XPPHASE lines come in the same order)
             inv = {v: k for k, v in _OPS.items()}
@@ -648,7 +702,16 @@ def decode_labels(classes, codes):
 
 
 def _x2d(X, name="X"):
-    arr = as_f32_c(X, ndim=2, name=name)[0]
+    if isinstance(X, _arena_io.DeviceRows):
+        # a fold's rows on the device (lane cpu4-misc): float32 2-D rows of
+        # a C-contiguous base stay a handle for `_Prog.put`; anything else
+        # takes its host rows and the usual conversion
+        if X.dtype == "<f4" and X.ndim == 2:
+            arr = X
+        else:
+            arr = as_f32_c(X.materialize(), ndim=2, name=name)[0]
+    else:
+        arr = as_f32_c(X, ndim=2, name=name)[0]
     if arr.ndim != 2 or arr.shape[0] == 0 or arr.shape[1] == 0:
         raise ValueError(f"mojolearn: {name} must be a nonempty two-dimensional array")
     if arr.size > 2 ** 31 - 1:
@@ -1025,70 +1088,48 @@ def _check_infrequent_params(est):
     return mc is not None or mf is not None
 
 
-def _category_counts(mode, arr, categories):
-    """Per column, how many training rows hold each category (the device's
-    lookup and a per-column count, integers)."""
-    n, d = arr.shape
-    pr = _Prog()
-    codes, _neg = _codes(pr, arr, categories)
-    kmax = max(c.size for c in categories)
-    out = pr.alloc(d * kmax)
-    pr.stage("code_counts", d, codes, n, d, kmax, out)
-    pr.run(mode)
-    flat = pr.get_i32(out, d * kmax).tolist()
-    return [flat[j * kmax:j * kmax + c.size] for j, c in enumerate(categories)]
-
-
-def _identify_infrequent(counts, n, min_frequency, max_categories):
-    """sklearn `_identify_infrequent`: the sorted infrequent indices, or None.
-    Integer counts; the fractional threshold is n * min_frequency in float64."""
+def _infrequent_threshold(n, min_frequency):
+    """The integer count a frequent category reaches (THR of c2_inf_m0): an
+    int min_frequency as is; a fraction f, ceil(n * f) in binary64 (count <
+    n * f exactly when count < ceil(n * f)); none, 0. A scalar."""
     if min_frequency is None:
-        mask = [False] * len(counts)
-    elif isinstance(min_frequency, numbers.Integral):
-        mask = [c < min_frequency for c in counts]
-    else:
-        lim = n * float(min_frequency)
-        mask = [c < lim for c in counts]
-    current = len(counts) - sum(mask) + 1
-    if max_categories is not None and max_categories < current:
-        keep = max_categories - 1
-        if keep == 0:
-            mask = [True] * len(counts)
-        else:
-            order = sorted(range(len(counts)), key=lambda i: counts[i])   # stable, as mergesort
-            for i in order[:-keep]:
-                mask[i] = True
-    idx = [i for i, m in enumerate(mask) if m]
-    return idx or None
+        return 0
+    if isinstance(min_frequency, numbers.Integral):
+        return int(min_frequency)
+    return int(math.ceil(n * float(min_frequency)))
 
 
 def _fit_infrequent(est, mode, arr, ignore_missing):
     """Sets est._infrequent (per column: sorted infrequent indices or None)
     and est._grouping (per column: category index -> grouped code, or None),
-    as the reference's `_fit_infrequent_category_mapping`. With
-    ignore_missing (OrdinalEncoder) a trailing NaN category is left out of
-    the grouping."""
-    counts = _category_counts(mode, arr, est.categories_)
-    n = arr.shape[0]
+    as the reference's `_identify_infrequent` and
+    `_fit_infrequent_category_mapping`. With ignore_missing (OrdinalEncoder)
+    a trailing NaN category is left out of the grouping. Lane cpu2-l3-prep:
+    one program, the counts (code_counts), the min_frequency mask
+    (c2_inf_m0), the max_categories cut by a stable count rank (c2_inf_m1)
+    and the grouped codes (c2_inf_map) on the device; the masks and codes
+    come back as the fitted tables."""
+    n, d = arr.shape
+    cats_all = est.categories_
+    ks = [c.size - 1 if (ignore_missing and c.size and _is_nan_value(c.tolist()[-1])) else c.size
+          for c in cats_all]  # glue: one size per column
+    pr = _Prog()
+    codes, _neg = _codes(pr, arr, cats_all)
+    kmax = max(c.size for c in cats_all)  # glue: the widest column's category count (a shape)
+    cnt, kc = pr.alloc(d * kmax), pr.put_list(ks)
+    m0, m1, mp = pr.work(d * kmax), pr.alloc(d * kmax), pr.alloc(d * kmax)
+    maxc = -1 if est.max_categories is None else int(est.max_categories)
+    pr.stage("code_counts", d, codes, n, d, kmax, cnt)
+    pr.stage("c2_inf_m0", d * kmax, cnt, kc, kmax, _infrequent_threshold(n, est.min_frequency), m0)
+    pr.stage("c2_inf_m1", d * kmax, cnt, kc, kmax, m0, maxc, m1)
+    pr.stage("c2_inf_map", d * kmax, kc, kmax, m1, mp)
+    pr.run(mode)
+    masks, maps = pr.get_i32(m1, d * kmax).tolist(), pr.get_i32(mp, d * kmax).tolist()
     est._infrequent, est._grouping = [], []
-    for cats, cnt in zip(est.categories_, counts):
-        if ignore_missing and cats.size and _is_nan_value(cats.tolist()[-1]):
-            cnt = cnt[:-1]
-        inf = _identify_infrequent(cnt, n, est.min_frequency, est.max_categories)
+    for j, k in enumerate(ks):  # glue: the device's tables as the fitted per-column lists
+        inf = [i for i in range(k) if masks[j * kmax + i]] or None  # glue: the device mask as the fitted index list
         est._infrequent.append(inf)
-        if inf is None:
-            est._grouping.append(None)
-            continue
-        infset = set(inf)
-        nf = len(cnt) - len(inf)
-        mapping, g = [], 0
-        for i in range(len(cnt)):
-            if i in infset:
-                mapping.append(nf)
-            else:
-                mapping.append(g)
-                g += 1
-        est._grouping.append(mapping)
+        est._grouping.append(None if inf is None else maps[j * kmax:j * kmax + k])
     est.infrequent_categories_ = [None if inf is None else Array.from_list([c.tolist()[i] for i in inf], "<f4")
                                   for c, inf in zip(est.categories_, est._infrequent)]
 
@@ -1449,31 +1490,62 @@ def _splitmix64(state):
     return state, z ^ (z >> 31)
 
 
-def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=False):
-    """The fold assignment through the binding's host entry (x_prep/folds.mojo,
-    the same integers; both the GPU and the CPU-only binding export it since
-    lane apple-fast-py2mojo-prep, which deleted the Python copies
-    `_kfold_assignment` / `_stratified_assignment`). `codes` is a list or an
-    int32 Array; as_array returns the folds as an int32 Array."""
-    b = _prep_binding(_mode())
+def _stage_folds(pr, n, n_folds, seed, shuffle, codes=_NONE, n_classes=0):
+    """Stages TargetEncoder's cross-fit fold of every row (lane cpu2-l3-prep:
+    on the device, every tier; the host entries x_prep_kfold_folds /
+    x_prep_strat_folds walked a serial Fisher-Yates). Without `codes` (the
+    float class codes' offset): KFold, c2_kfold. With them: StratifiedKFold,
+    the rows grouped by class (p2m_ccount .. p2m_cwrite), each class's start
+    in first-seen order (c2_strat_meta), its rows' folds (c2_strat_fold).
+    Unshuffled, the reference's folds; shuffled, a seed-keyed permutation of
+    the positions (of each class's fold block), integers only. Returns (the
+    folds' float codes offset, the refusal flag offset or None: 1.0 when
+    every class has fewer rows than n_folds)."""
     s = int(seed) & 0xFFFFFFFFFFFFFFFF
-    halves = (s & 0xFFFFFFFF, s >> 32)
-    out = array.array("i", bytes(4 * max(n, 1)))
-    if codes is None:
-        b.x_prep_kfold_folds(out.buffer_info()[0], (n, n_folds, 1 if shuffle else 0), halves)
-    else:
-        if isinstance(codes, Array) and codes.dtype == "<i4" and codes._has_order("C") and codes.size == n:
-            cod, cod_addr = codes, addr_ro(codes, name="codes")
-        else:
-            cod = array.array("i", codes)
-            cod_addr = cod.buffer_info()[0]
-        if b.x_prep_strat_folds(cod_addr, out.buffer_info()[0],
-                                (n, n_classes, n_folds, 1 if shuffle else 0), halves) != 0:
-            raise ValueError(f"mojolearn: n_splits={n_folds} cannot be greater than the number of members in each class")
-    if as_array:
-        return Array._owned(out, (len(out),), "<i4", "C") if len(out) == n else \
-            Array._owned(array.array("i", out[:n]), (n,), "<i4", "C")
-    return out[:n].tolist()
+    fo = pr.alloc(max(n, 1))
+    if codes == _NONE:
+        pr.stage("c2_kfold", n, _seed_words(pr, s), n, n_folds, 1 if shuffle else 0, fo)
+        return fo, None
+    K = n_classes
+    ch, nch = _p2m_chunks(n, K)
+    cnt, tot = pr.alloc(nch * K), pr.alloc(K)
+    pr.stage("p2m_ccount", nch, codes, n, K, ch, cnt)
+    pr.stage("p2m_cscan", K, cnt, nch, K, tot)
+    start, ro = pr.alloc(K), pr.alloc(n)
+    pr.stage("p2m_cstart", 1, tot, K, start, _NONE)
+    pr.stage("p2m_cwrite", nch, codes, n, K, ch, cnt, start, ro)
+    meta, flag = pr.alloc(2 * K), pr.alloc(1)
+    pr.stage("c2_strat_meta", K, start, tot, ro, K, meta)
+    pr.stage("c2_strat_flag", 1, tot, K, n_folds, flag)
+    pr.stage("c2_strat_fold", n, ro, start, tot, codes, meta, n_folds, _seed_words(pr, s), 1 if shuffle else 0, fo)
+    return fo, flag
+
+
+def _refuse_folds(pr, flag, n_folds):
+    """After the run: the reference's refusal when every class is smaller
+    than n_folds (one word read back)."""
+    if flag is None:
+        return
+
+    def refuse(prog, flag=flag):
+        if prog.values(flag, 1)[0] != 0:
+            raise ValueError(f"mojolearn: n_splits={n_folds} cannot be greater than the number of members in "
+                             "each class")
+    pr._after.append(refuse)
+
+
+def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=False):
+    """The folds `_stage_folds` gives TargetEncoder's fit, as int32 words
+    (one program; `codes` a list or an int32 Array of class codes)."""
+    pr = _Prog()
+    co = pr.put_codes(codes) if codes is not None else _NONE
+    fo, flag = _stage_folds(pr, n, n_folds, seed, shuffle, co, n_classes)
+    _refuse_folds(pr, flag, n_folds)
+    out = pr.alloc(max(n, 1))
+    pr.stage("f2i", n, fo, out)
+    pr.run(_mode())
+    got = pr.get_i32(out, n)
+    return got if as_array else got.tolist()
 
 
 def _target_binary_codes(y, target_type):
@@ -1505,14 +1577,14 @@ def _target_kind(y, target_type):
     """(kind, classes, targets, T): targets are a float32 Array (continuous)
     or the int32 class codes (binary, multiclass; the device makes their
     float and one-hot words). Lane cgr4-py-compute: the kind test (any
-    non-integer value) is the base binding's `reduce_stat` integral check,
-    not a per-label Python test, and no per-row target list is built."""
+    non-integer value) is `_all_integral` (lane cpu2-l3-prep: on the
+    device), not a per-label Python test, and no per-row target list is
+    built."""
     num = _numeric_target(y)
     continuous = target_type == "continuous"
     if not continuous and target_type == "auto" and num is not None and num.size \
             and num.dtype in ("<f4", "<f8"):
-        continuous = not bool(_native_helper("reduce_stat")(num._addr, 0 if num.dtype == "<f4" else 1,
-                                                            num.size, 4))
+        continuous = not _all_integral(num)
     if continuous:
         if num is None:
             raise ValueError("mojolearn: a continuous TargetEncoder target must be numeric")
@@ -1526,9 +1598,21 @@ def _target_kind(y, target_type):
 
 
 def _all_integral(arr):
-    """Whether every value of a float Array is an integer (`reduce_stat`)."""
-    vec = arr if arr._has_order("C") else arr._as_c()
-    return bool(_native_helper("reduce_stat")(vec._addr, 0 if vec.dtype == "<f4" else 1, vec.size, 4))
+    """Whether every value of a float32 / float64 Array is finite and an
+    integer (`reduce_stat`'s integral test), on the device: c2_integral by
+    chunks, c2_isum, one word read back (lane cpu2-l3-prep)."""
+    lb = _label_buffer(arr)
+    if lb is None or lb.kind not in (0, 4):
+        raise TypeError("mojolearn: the integral test takes a float32 or float64 vector")
+    n = lb.n
+    ch = max(4096, -(-n // 4096))
+    nch = -(-n // ch)
+    pr = _Prog()
+    cnt, tot = pr.alloc(nch), pr.alloc(1)
+    pr.stage("c2_integral", nch, pr.put_words(lb.words), lb.kind, n, ch, cnt)
+    pr.stage("c2_isum", 1, cnt, nch, tot)
+    pr.run(_mode())
+    return int(pr.get_i32(tot, 1).tolist()[0]) == 0
 
 
 def _target_arrays(y, target_type):
@@ -1550,9 +1634,8 @@ def _target_arrays(y, target_type):
         return None
     if kind == "f" and (arr.dtype not in ("<f4", "<f8") or not all_finite(arr)):
         return None
-    # the reference's continuous test: some label is not an integer (a C-speed map
-    # over the storage; an integer dtype holds integers)
-    # (the base binding's `reduce_stat` integral test; an integer dtype holds integers)
+    # the reference's continuous test: some label is not an integer (`_all_integral`,
+    # on the device; an integer dtype holds integers)
     cont = target_type == "continuous" or (
         target_type == "auto" and kind == "f" and not _all_integral(arr))
     if cont:
@@ -1653,12 +1736,20 @@ class TargetEncoder(_PrepBase):
             # the one-hot rows: word 1.0f (bits 0x3F800000) where row i's code is c, else 0.0f
             co, yo = pr.put_codes(tgt), pr.alloc(n * T)
             pr.stage("label_binarize", n * T, co, n, T, 0, 0, 0x3F800000, T, yo)
-        if folds is None:
-            folds = full((max(n, 1),), -1, "<i4")
-        elif not isinstance(folds, Array):
-            store = array.array("i", folds)
-            folds = Array._owned(store, (len(store),), "<i4", "C")
-        fo = pr.put_codes(folds)
+        if isinstance(folds, tuple):
+            # cv an int: the folds on the device (`_stage_folds`): KFold for a continuous
+            # target, else StratifiedKFold over the class codes
+            _, seed, shuffle = folds
+            codes_off = _NONE if kind == "continuous" else (yo if T == 1 else co)
+            fo, flag = _stage_folds(pr, n, F, seed, shuffle, codes_off, len(classes) if classes is not None else 0)
+            _refuse_folds(pr, flag, F)
+        else:
+            if folds is None:
+                folds = full((max(n, 1),), -1, "<i4")
+            elif not isinstance(folds, Array):
+                store = array.array("i", folds)
+                folds = Array._owned(store, (len(store),), "<i4", "C")
+            fo = pr.put_codes(folds)
         nco = pr.put_list([c.size for c in cats])
         meta = pr.alloc(2 * (F + 1) * T)
         smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
@@ -1730,7 +1821,7 @@ class TargetEncoder(_PrepBase):
         if len(splits) < 1:
             raise ValueError(cover)
         fold = full((n,), -1, "<i4")
-        assign = _native_helper("assign_fold_i64")
+        assign = _native_helper("assign_fold_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
         trains = []
         for k, (train, test) in enumerate(splits):
             te = as_index_i64(test, name="test")
@@ -1742,7 +1833,7 @@ class TargetEncoder(_PrepBase):
             raise ValueError(cover)
         sizes = _class_counts(fold, len(splits))
         check = _native_helper("check_indices_i64")
-        hits = _native_helper("count_fold_hits_i64")
+        hits = _native_helper("count_fold_hits_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
         for k, tr in enumerate(trains):
             # every row outside fold k exactly once: as many as there are,
             # distinct, in range and none in fold k
@@ -1765,24 +1856,20 @@ class TargetEncoder(_PrepBase):
         if n < cv:
             raise ValueError(f"mojolearn: cv={cv} folds need at least {cv} rows")
         seed = 0 if self.random_state is None else int(self.random_state)
+        # the folds are staged in the fit's own program (`_stage_folds`, lane cpu2-l3-prep)
+        folds = ("cv", seed, bool(self.shuffle))
         binary = _target_binary_codes(y, self.target_type)
         if binary is not None:
             if binary[1].size != n:
                 raise ValueError("mojolearn: X and y have different numbers of rows")
-            folds = _native_folds(n, cv, seed, bool(self.shuffle), binary[1], len(binary[0]), as_array=True)
-            if folds is not None:
-                return self._run(arr, y, folds, cv, True, binary=binary)
-        # the target and the folds as arrays (`_target_arrays`, lane
-        # apple-fast-py2mojo-prep; else `_target_kind`'s arrays, lane
-        # cgr4-py-compute): no per-row Python either way
+            return self._run(arr, y, folds, cv, True, binary=binary)
+        # the target as arrays (`_target_arrays`, lane apple-fast-py2mojo-prep;
+        # else `_target_kind`'s arrays, lane cgr4-py-compute): no per-row Python either way
         target = _target_arrays(y, self.target_type)
         if target is None:
             target = _target_kind(y, self.target_type)
-        kind, classes, tgt, _T = target
-        if tgt.size != n:
+        if target[2].size != n:
             raise ValueError("mojolearn: X and y have different numbers of rows")
-        folds = (_native_folds(n, cv, seed, bool(self.shuffle), as_array=True) if kind == "continuous" else
-                 _native_folds(n, cv, seed, bool(self.shuffle), tgt, len(classes), as_array=True))
         return self._run(arr, y, folds, cv, True, target=target)
 
     def transform(self, X):
@@ -1868,7 +1955,7 @@ class SimpleImputer(_PrepBase):
         half = pr.put_list([0.5])
         if sorts:
             pr.stage("sort_cols", d, xo, n, d, so, 0)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st, var=False)
         if self.strategy == "median" and qsel:
             pr.stage("quantile", d, xo, n, d, half, 1, med, st, 1)
         elif self.strategy == "median":
@@ -1881,33 +1968,26 @@ class SimpleImputer(_PrepBase):
             # comp + j*n (p2m_sel_*), in place of the Python transpose and filter
             comp = pr.alloc(n * d)
             ctot = _p2m_sel(pr, xo, n, d, 0, comp)
+        # lane cpu2-l3-prep: statistics_ and the fill on the device (c2_imp_stats: an
+        # all-missing column's statistic is NaN, or with keep_empty_features 0 / the
+        # constant; its fill 0 / the constant), read back as the fitted vectors
+        konst = self.strategy == "constant"
+        src = so2 = fo2 = None
+        if not callable(self.strategy):
+            fv = pr.put_scalar(0.0 if self.fill_value is None else float(self.fill_value)) if konst else _NONE
+            src = st + d if konst else {"mean": st + d, "median": med, "most_frequent": mf}[self.strategy]
+            so2, fo2 = pr.alloc(d), pr.alloc(d)
+            pr.stage("c2_imp_stats", d, st, src, d, 1 if self.keep_empty_features else 0, 1 if konst else 0, fv,
+                     so2, fo2)
         pr.run(mode)
         counts = [int(v) for v in pr.values(st, d)]
         empty = [c == 0 for c in counts]
         if callable(self.strategy) and comp is not None:
             ncol = pr.get_i32(ctot, d).tolist()
             return self._fit_callable(None, counts, mode, [pr.get(comp + j * n, ncol[j]) for j in range(d)], n, d)
-        if callable(self.strategy):
-            # missing_values NaN: the marked block is the input itself, which never comes back
-            return self._fit_callable(arr if xo == x_in else pr.get(xo, (n, d)), counts, mode)
-        if self.strategy == "constant":
-            fv = 0.0 if self.fill_value is None else float(self.fill_value)
-            stats = [fv] * d
-            fill = list(stats)
-        else:
-            src = {"mean": st + d, "median": med, "most_frequent": mf}[self.strategy]
-            stats = pr.values(src, d)
-            fill = [0.0 if e else s for s, e in zip(stats, empty)]
-        # the reference: an all-missing column's statistic is NaN and the
-        # column is dropped, unless keep_empty_features (then 0, or fill_value)
-        for j in range(d):
-            if empty[j] and not self.keep_empty_features:
-                stats[j] = float("nan")
-            elif empty[j] and self.strategy != "constant":
-                stats[j] = 0.0
-        if self.strategy == "constant" or any(empty):
-            self.statistics_ = Array.from_list(stats, "<f4")
-            self._fill = Array.from_list(fill, "<f4")
+        if konst or any(empty):
+            self.statistics_ = pr.get(so2, d)
+            self._fill = pr.get(fo2, d)
         else:
             self.statistics_ = pr.get(src, d)
             self._fill = self.statistics_
@@ -1916,24 +1996,13 @@ class SimpleImputer(_PrepBase):
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
-    def _fit_callable(self, marked, counts, mode, kept=None, n=0, d=0):
+    def _fit_callable(self, marked, counts, mode, kept, n=0, d=0):
         """strategy=<callable>: the reference's `strategy(masked_X[:, j].compressed())`
         per column over the missing-marked X (NaN = missing). kept (lane
         apple-fast-py2mojo-prep): the columns' non-NaN words already compacted
-        by the program, one float32 Array per column; else each column's
-        non-NaN values compacted by the base binding (`compact_notnan_f32`)."""
-        if kept is None:
-            n, d = marked.shape
-            mk, _ = as_f32_c(marked, ndim=2, name="X")
-            compact = _native_helper("compact_notnan_f32")
-            kept = []
-            for j in range(d):
-                v = Array((0,), "<f4")
-                if counts[j]:
-                    buf = empty((n,), "<f4")
-                    m = int(compact(addr_ro(mk, name="X") + 4 * j, n, d, _addr_rw(buf, name="column")))
-                    v = buf[:m]
-                kept.append(v)
+        by the program (`p2m_sel_*`, on the device), one float32 Array per
+        column. Lane cpu3-python: the host compaction arm (`compact_notnan_f32`)
+        was unreachable (the program always compacts for a callable) and is gone."""
         stats = []
         for j in range(d):
             stats.append(float(self.strategy(kept[j])))
@@ -2036,18 +2105,13 @@ class KBinsDiscretizer(_PrepBase):
             sub = ((0 if self.random_state is None else int(self.random_state)) & 0xFFFFFFFFFFFFFFFF,
                    int(self.subsample))
         elif self.subsample is not None and n > self.subsample:
-            # the reference's weighted resample with replacement (its weights are then
-            # spent): row = the first whose cumulative weight exceeds u * total, u a
-            # 53-bit splitmix64 uniform, binary64 running sums: the base binding's
-            # `weighted_draw_rows_i32` (lane pyglue-numeric: a Python bisect loop),
-            # the rows gathered in the program
+            # the weighted resample with replacement is drawn in the fit's program below
+            # (f2_wblk / f2_wscan / f2_wdraw, x_prep/fam2.mojo: blocked float32 weight sums,
+            # one thread per draw), then gathered there; every tier (lane cpu2-l3-prep
+            # deleted the host `weighted_draw_rows_i32` route)
             seed = (0 if self.random_state is None else int(self.random_state)) & 0xFFFFFFFFFFFFFFFF
-            k = int(self.subsample)
-            rows = Array((k,), "<i4")
-            _native_helper("weighted_draw_rows_i32")(addr_ro(w, name="sample_weight"), n, k, seed & 0xFFFFFFFF,
-                                                     seed >> 32, _addr_rw(rows, name="rows"))
+            sub = ("w", seed, int(self.subsample), w)
             w = None
-            sub = (None, rows)
         nb = [int(self.n_bins)] * d if isinstance(self.n_bins, numbers.Integral) else [int(b) for b in self.n_bins]
         if len(nb) != d or min(nb) < 2:
             raise ValueError("mojolearn: n_bins must be >= 2 per feature")
@@ -2059,10 +2123,15 @@ class KBinsDiscretizer(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
-        if sub is not None and sub[0] is None:
-            m = sub[1].size
-            xs = pr.alloc(m * d)
-            pr.stage("p2m_rgather", m * d, xo, d, pr.put_words(sub[1]), xs)
+        if sub is not None and sub[0] == "w":
+            _, seed, m, wsub = sub
+            nbk = (n + _XB - 1) // _XB
+            wo, bs, bp = pr.put(wsub), pr.work(nbk), pr.work(nbk)
+            ro, xs = pr.alloc(m), pr.alloc(m * d)
+            pr.stage("f2_wblk", nbk, wo, n, bs)
+            pr.stage("f2_wscan", 1, bs, nbk, bp)
+            pr.stage("f2_wdraw", m, wo, n, bs, bp, nbk, _seed_words(pr, seed), ro)
+            pr.stage("p2m_rgather", m * d, xo, d, ro, xs)
             xo, n = xs, m
         elif sub is not None:
             seed, m = sub
@@ -2079,7 +2148,7 @@ class KBinsDiscretizer(_PrepBase):
         ne = pr.alloc(d)
         lab = pr.alloc(n * d) if strat == 3 else 0
         cen = pr.alloc(d * nbmax) if strat == 3 else 0
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st)
         if w is None:
             pr.stage("sort_cols", d, xo, n, d, so, 0)
             pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, strat, st, edges, ne, lab, cen)
@@ -2092,7 +2161,7 @@ class KBinsDiscretizer(_PrepBase):
                 # validated nonnegative: v > 0 is v != 0)
                 m = wl
                 if m < n:
-                    pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, m), m, d, stw)
+                    _cs(pr, mode, _p2m_positive_rows(pr, xo, pr.put(w), n, d, m), m, d, stw)
                 else:
                     stw = st
             if strat == 0:
@@ -2102,8 +2171,8 @@ class KBinsDiscretizer(_PrepBase):
                 if strat == 3:
                     pr.stage("kbins_wkm", d, ug, n, d, ucnt, nbo, nbmax, st, stw, edges, cen, lab)
                 else:
-                    levels = [[i * (100.0 / b) for i in range(b)] + [100.0] for b in nb]
-                    _weighted_levels(pr, ug, ucnt, n, d, levels, strat == 1, edges)
+                    # the percent levels i * (100 / b) on the device (c2_grid KIND 0)
+                    _weighted_levels(pr, ug, ucnt, n, d, nb, 0, strat == 1, edges)
                 pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 11, stw, edges, ne, 0, 0)
         pr.run(mode)
         counts = [int(v) for v in pr.values(ne, d)]
@@ -2190,6 +2259,14 @@ def _proba64_on(mode):
 class _Classifier(_PrepBase):
     """predict / predict_proba / predict_log_proba from a subclass's joint
     log likelihood stages (`_jll_stages`), normalised on the device."""
+    #: lane cpu4-misc: fit and every scoring method take a
+    #: `_arena_io.DeviceRows` (a cross-validation fold's X on the device):
+    #: X reaches the arena only through `_x2d` -> `_Prog.put`, so the fold
+    #: rows are gathered on the device and never come to the host. Every
+    #: subclass (GaussianNB, MultinomialNB, BernoulliNB, ComplementNB,
+    #: CategoricalNB, LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis)
+    #: keeps to that; a user covariance_estimator takes host rows.
+    _mojolearn_device_rows = True
 
     def _encode_y(self, y, n):
         classes, codes = encode_labels(y)
@@ -2198,14 +2275,20 @@ class _Classifier(_PrepBase):
         self.classes_ = classes
         return codes
 
-    def _scores(self, X, want):
+    def _scores(self, X, want, csr=None):
         self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        K = len(self.classes_)
         pr = _Prog()
-        xo = pr.put(arr)
+        # lane idn-all: `csr` (the IDENTICAL CSR scoring's fallback, its
+        # width already checked) is densified by the program on the device
+        xo = _csr_dense_x(pr, csr, self.numeric_mode_) if csr is not None else None
+        if xo is None:
+            arr = _x2d(X.toarray() if csr is not None else X)
+            self._check_width(arr)
+            n, d = arr.shape
+            xo = pr.put(arr)
+        else:
+            n, d = csr[3], csr[4]
+        K = len(self.classes_)
         chk = self._score_checks(pr, xo, n, d)
         # the joint log likelihood stays on the device unless it is the answer
         jll = pr.work(n * K) if want else pr.alloc(n * K)
@@ -2275,19 +2358,204 @@ def _nb_weights(pr, sample_weight, n):
     return pr.put(w)
 
 
-def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums):
+#: binding -> its `x_prep_idn_int` bits (0 when it has none), probed once
+_IDN_INT = {}
+_IDN_NB_ONEPASS, _IDN_NB_CSR, _IDN_NB_CSR_DENSE = 2, 4, 8
+
+
+def _idn_int(mode):
+    """Lane idn-int-prep: the IDENTICAL binding's integer prep switches
+    (bindings/_mojolearn_x_prep.mojo `idn_int_binding`: 1 IDN_LABEL, 2
+    IDN_NB_ONEPASS, 4 IDN_NB_CSR, 8 IDN_NB_CSR_DENSE), 0 on another tier or a
+    build with none."""
+    if mode != "identical":
+        return 0
+    binding = _prep_binding(mode)
+    key = id(binding)
+    v = _IDN_INT.get(key)
+    if v is None:
+        fn = _optional_prep_entry(binding, "x_prep_idn_int")
+        v = int(fn()) if fn is not None else 0
+        _IDN_INT[key] = v
+    return v
+
+
+def _nb_onepass(mode):
+    return _blocked() and bool(_idn_int(mode) & _IDN_NB_ONEPASS)
+
+
+def _nb_counts(pr, wo, xo, n, d, yo, K, cnt, sums, thr=_NONE, neg=_NONE):
+    """The discrete naive Bayes count pass as one unit per (block, column)
+    (x_prep/blocked.mojo `csb1_part`, lane idn-int-prep): csb_part's
+    partials of every class from one walk of X, then csb_fold. thr: the
+    binarize threshold's offset (BernoulliNB; X is binarized in the unit).
+    neg: d words that are -1 for a column holding a negative word, else 0
+    (where the fit read the column minimum)."""
+    nb = (n + _XB - 1) // _XB
+    w = _NONE if wo is None else wo
+    ps, pc, cn = pr.work(nb * K * d), pr.work(nb * K * d), pr.work(K * d)
+    ng = pr.work(nb * d) if neg != _NONE else _NONE
+    pr.stage("csb1_part", nb * d, xo, n, d, yo, K, ps, pc, nb, w, thr, ng)
+    pr.stage("csb_fold", K * d, ps, pc, nb, K, d, cn, cnt, _NONE, sums, w)
+    if neg != _NONE:
+        pr.stage("csb1_neg", d, ng, nb, d, neg)
+
+
+#: binding -> its `x_prep_idn_fam2` bits (0 when it has none), probed once
+_IDN_FAM2 = {}
+_F2_WDRAW, _F2_PERM_DRAW, _F2_WPICK, _F2_PARTIAL_CODES = 1, 2, 4, 8
+_F2_GRAM, _F2_GRAM_ROWTILE, _F2_LABEL_INV = 16, 32, 64
+#: the most partial words (blocks x cells) a blocked Gram keeps; past it the
+#: block grows, then the one-thread-per-cell stage (a function of the shape
+#: only, so the device and the host column agree)
+_GRAM_WORDS = 2 ** 26
+
+
+def _gram_rows(v, n, cells):
+    """Rows per block of a blocked Gram over n rows with `cells` partial
+    words a block (x_prep/gram_blocked.mojo): the binding's block length
+    (`x_prep_idn_fam2` >> 16; 2048 unless a candidate arm is built), doubled
+    until the partial table fits `_GRAM_WORDS`; 0 when it never does."""
+    rows = (v >> 16) or _XB
+    while ((n + rows - 1) // rows) * cells > _GRAM_WORDS and rows < 2 ** 22:  # glue: the block length doubles
+        rows *= 2
+    return rows if ((n + rows - 1) // rows) * cells <= _GRAM_WORDS else 0
+
+
+def _gram(pr, mode, z, n, d, g):
+    """Stages G = Z'Z of the (n, d) block at z into the (d, d) block g. Under
+    IDENTICAL (`_idn_fam2` bit 16): block partials of the upper triangle, one
+    thread per (block, a, b >= a) (bit 32, a candidate arm: one per
+    (block, a)), then each cell folded over the blocks. Else `matmul`: one
+    thread per cell over every row."""
+    v = _idn_fam2(mode)
+    rows = _gram_rows(v, n, d * d) if (_blocked() and v & _F2_GRAM) else 0
+    if not rows:
+        pr.stage("matmul", d * d, z, 1, d, z, d, 1, g, d, n, _NONE, _NONE)
+        return
+    nb = (n + rows - 1) // rows
+    part = pr.work(nb * d * d)
+    if v & _F2_GRAM_ROWTILE:
+        pr.stage("gb_part_row", nb * d, z, n, d, part, nb, rows)
+    else:
+        pr.stage("gb_part", nb * d * d, z, n, d, part, nb, rows)
+    pr.stage("gb_fold", d * d, part, nb, d, g)
+
+
+def _qda_cov(pr, mode, xo, n, d, yo, K, mean, cnt, cov):
+    """Stages the K class covariances (divisor the class count) into cov.
+    Under IDENTICAL (`_idn_fam2` bit 16): block partials of every class from
+    one walk per (block, a, b >= a), then each cell folded over the blocks
+    (x_prep/gram_blocked.mojo). Else `qda_cov`: one thread per (class, a, b)
+    over every row."""
+    v = _idn_fam2(mode)
+    rows = _gram_rows(v, n, K * d * d) if (_blocked() and v & _F2_GRAM) else 0
+    if not rows:
+        pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
+        return
+    nb = (n + rows - 1) // rows
+    part = pr.work(nb * K * d * d)
+    pr.stage("qcb_part", nb * d * d, xo, n, d, yo, K, mean, part, nb, rows)
+    pr.stage("qcb_fold", K * d * d, part, nb, K, d, cnt, cov)
+
+
+def _idn_fam2(mode):
+    """Lane fam2-prep-metrics: the IDENTICAL binding's x_prep/fam2.mojo
+    switches (bindings/_mojolearn_x_prep*.mojo `idn_fam2_binding`: 1
+    IDN_WDRAW, 2 IDN_PERM_DRAW, 4 IDN_WPICK, 8 IDN_PARTIAL_CODES), 0 on
+    another tier or a build with none. The device and the host column export
+    the same bits, so both stage the same program."""
+    if mode != "identical":
+        return 0
+    binding = _prep_binding(mode)
+    key = id(binding)
+    v = _IDN_FAM2.get(key)
+    if v is None:
+        fn = _optional_prep_entry(binding, "x_prep_idn_fam2")
+        v = int(fn()) if fn is not None else 0
+        _IDN_FAM2[key] = v
+    return v
+
+
+def _seed_words(pr, seed):
+    """A uint64 seed as two int32 words (low, high) -> offset."""
+    lo, hi = seed & 0xFFFFFFFF, (seed >> 32) & 0xFFFFFFFF
+    return pr.put_ints([lo - (1 << 32) if lo >= 1 << 31 else lo, hi - (1 << 32) if hi >= 1 << 31 else hi])
+
+
+#: binding -> its `x_prep_idn_fam` bits (0 when it has none), probed once
+_IDN_FAM = {}
+_IDN_STATS_BLOCKED, _IDN_CLASS_ONEPASS, _IDN_SELECT_BLOCKED, _IDN_PT_BLOCKED = 1, 2, 4, 8
+#: `_cls`: the most partial words (blocks x classes x columns) a blocked
+#: class_stats stage keeps; past it the serial stage (a function of the shape
+#: only, so the device and the host column agree)
+_CLS_BLOCK_WORDS = 2 ** 26
+
+
+def _idn_fam(mode):
+    """Lane fam-prep-metrics: the IDENTICAL binding's family switches
+    (bindings/_mojolearn_x_prep*.mojo `idn_fam_binding`: 1 IDN_STATS_BLOCKED,
+    2 IDN_CLASS_ONEPASS, 4 IDN_SELECT_BLOCKED, 8 IDN_PT_BLOCKED, 16
+    IDN_RR_EIGH: informational), 0 on another tier or a build
+    with none. The device and the host column export the same bits, so both
+    stage the same program."""
+    if mode != "identical":
+        return 0
+    binding = _prep_binding(mode)
+    key = id(binding)
+    v = _IDN_FAM.get(key)
+    if v is None:
+        fn = _optional_prep_entry(binding, "x_prep_idn_fam")
+        v = int(fn()) if fn is not None else 0
+        _IDN_FAM[key] = v
+    return v
+
+
+def _cs(pr, mode, xo, n, d, out, var=True):
+    """A col_stats stage: x_prep/blocked.mojo's blocked order under
+    IDN_STATS_BLOCKED (IDENTICAL; `_col_stats`), else one thread per column
+    over every row. var=False: the caller reads no variance (the blocked
+    order then skips that pass)."""
+    if _blocked() and _idn_fam(mode) & _IDN_STATS_BLOCKED:
+        _col_stats(pr, xo, n, d, out, var=var)
+    else:
+        pr.stage("col_stats", d, xo, n, d, out)
+
+
+def _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, sums, *tail):
+    """An unweighted class_stats stage: x_prep/blocked.mojo's blocked order
+    under IDN_STATS_BLOCKED (IDENTICAL; `_class_stats`) while its partial
+    tables stay within _CLS_BLOCK_WORDS, else one thread per (class, column)
+    over every row (`tail`: the serial stage's trailing parameters)."""
+    nb = (n + _XB - 1) // _XB
+    if _blocked() and _idn_fam(mode) & _IDN_STATS_BLOCKED and nb * K * d <= _CLS_BLOCK_WORDS:
+        _class_stats(pr, None, K * d, xo, n, d, yo, K, cnt, mean, var, sums, mode=mode)
+    else:
+        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, sums, *tail)
+
+
+def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None):
     """class_stats, or its weighted form when a sample_weight offset is given;
     in x_prep/blocked.mojo's blocked order when `_blocked()` (offsets
-    _NONE are not written)."""
+    _NONE are not written). mode given and IDN_CLASS_ONEPASS (IDENTICAL):
+    one unit per (block, column) walks X once for every class (csb1_part /
+    csb1_ss; the same words as csb_part / csb_ss)."""
     if _blocked():
         nb = (n + _XB - 1) // _XB
         w = _NONE if wo is None else wo
         ps, pc, cn = pr.work(nb * K * d), pr.work(nb * K * d), pr.work(K * d)
         if var != _NONE and mean == _NONE:
             mean = pr.work(K * d)
-        pr.stage("csb_part", nb * K * d, xo, n, d, yo, K, ps, pc, nb, w)
+        onepass = mode is not None and bool(_idn_fam(mode) & _IDN_CLASS_ONEPASS)
+        if onepass:
+            pr.stage("csb1_part", nb * d, xo, n, d, yo, K, ps, pc, nb, w, _NONE, _NONE)
+        else:
+            pr.stage("csb_part", nb * K * d, xo, n, d, yo, K, ps, pc, nb, w)
         pr.stage("csb_fold", K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, w)
-        if var != _NONE:
+        if var != _NONE and onepass:
+            pr.stage("csb1_ss", nb * d, xo, n, d, yo, K, mean, cn, ps, nb, w)
+            pr.stage("csb_var", K * d, ps, nb, K, d, cn, var)
+        elif var != _NONE:
             pr.stage("csb_ss", nb * K * d, xo, n, d, yo, K, mean, cn, ps, nb, w)
             pr.stage("csb_var", K * d, ps, nb, K, d, cn, var)
         return
@@ -2310,10 +2578,68 @@ def _given_priors(values, K, who, check_sum=False):
     return vals
 
 
-def _partial_codes(est, y, classes, n):
+class _DevCodes:
+    """A partial_fit batch's labels whose class codes the fit program makes
+    on the device (lane fam2-prep-metrics, `_stage_partial_codes`): the
+    numeric label buffer, the classes as sorted float32 categories, and
+    `walk`, the Python route (the codes as an int32 Array; it names the
+    labels of a refused batch)."""
+    __slots__ = ("lb", "cats", "walk")
+
+    def __init__(self, lb, cats, walk):
+        self.lb, self.cats, self.walk = lb, cats, walk
+
+
+def _partial_dev(est, y, n, walk):
+    """`_DevCodes` when y is a numeric label buffer of n labels and every
+    class is an int or float with an exact float32 word, strictly ascending
+    (so `lookup`'s binary search over them is the dict's answer); else None."""
+    cl = list(est.classes_)
+    if not cl or any(type(c) not in (int, float) for c in cl):  # glue: the K class labels' types
+        return None
+    vals = [float(c) for c in cl]  # glue: the K class labels as floats
+    cats = Array._from_flat(vals, (len(vals),), "<f4")
+    ordered = all(vals[i] < vals[i + 1] for i in range(len(vals) - 1))  # glue: the K classes ascend
+    if cats.tolist() != vals or not ordered:
+        return None
+    lb = _label_buffer(y)
+    if lb is None or lb.n != n:
+        return None
+    return _DevCodes(lb, cats, walk)
+
+
+def _stage_partial_codes(pr, codes, mode):
+    """The float class codes offset of a partial_fit batch. An int32 Array:
+    `put_codes`. A `_DevCodes` (every tier, lane cpu2-l3-prep): staged in
+    this program (lab_load, lookup among the classes, count_neg, f2_clamp0:
+    a label outside classes_ counts and is clamped to class 0), and the
+    program refuses the batch right after its run, before the caller reads a
+    result, through the Python walk that names the labels."""
+    if not isinstance(codes, _DevCodes):
+        return pr.put_codes(codes)
+    lb, cats = codes.lb, codes.cats
+    K = cats.size
+    x = _label_load(pr, lb)
+    c, neg, yo = pr.work(lb.n), pr.alloc(1), pr.alloc(lb.n)
+    pr.stage("lookup", lb.n, x, lb.n, 1, pr.put(cats), K, pr.put_scalar(K), c)
+    pr.stage("count_neg", 1, c, lb.n, 1, neg)
+    pr.stage("f2_clamp0", lb.n, c, yo)
+
+    def refuse(prog, neg=neg, walk=codes.walk):
+        if prog.values(neg, 1)[0] > 0:
+            walk()
+            raise ValueError("mojolearn: a target label in y does not exist in the initial classes")
+
+    pr._after.append(refuse)
+    return yo
+
+
+def _partial_codes(est, y, classes, n, defer=False):
     """sklearn `_check_partial_fit_first_call` and the batch's class codes:
     the first call (no classes_ yet) needs `classes`, later ones may repeat
-    them only unchanged; a label outside classes_ is refused."""
+    them only unchanged; a label outside classes_ is refused. defer (lane
+    fam2-prep-metrics): a numeric label buffer comes back as a `_DevCodes`
+    for `_stage_partial_codes` (no Python walk over the labels)."""
     first = getattr(est, "classes_", None) is None
     if first and classes is None:
         raise ValueError("mojolearn: classes must be passed on the first call to partial_fit.")
@@ -2324,6 +2650,17 @@ def _partial_codes(est, y, classes, n):
                              f"{est.classes_}")
         if first:
             est.classes_ = cl
+    if defer:
+        dev = _partial_dev(est, y, n, lambda: _partial_walk(est, y, n, first)[1])
+        if dev is not None:
+            return first, dev
+    return _partial_walk(est, y, n, first)
+
+
+def _partial_walk(est, y, n, first):
+    """`_partial_codes`' Python route: labels of any kind (str, lists, a
+    class list float32 cannot hold), and the refusal that names a batch's
+    unknown labels."""
     labels = flatten_labels(y)
     if len(labels) != n:
         raise ValueError("mojolearn: X and y have different numbers of rows")
@@ -2381,7 +2718,7 @@ class GaussianNB(_Classifier):
         wo = _nb_weights(pr, sample_weight, n)
         _col_stats(pr, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
-        _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE)
+        _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE, mode=mode)
         raw = _copy_block(pr, var, K, d)
         given = _NONE
         if self.priors is not None:
@@ -2404,7 +2741,7 @@ class GaussianNB(_Classifier):
     def partial_fit(self, X, y, classes=None, sample_weight=None):
         arr = _x2d(X)
         n, d = arr.shape
-        first, codes = _partial_codes(self, y, classes, n)
+        first, codes = _partial_codes(self, y, classes, n, defer=True)
         K = len(self.classes_)
         if first:
             mode = _mode()
@@ -2415,7 +2752,7 @@ class GaussianNB(_Classifier):
             zk, zkd = None, None
         pr = _Prog()
         xo = pr.put(arr)
-        yo = pr.put_codes(codes)
+        yo = _stage_partial_codes(pr, codes, mode)
         st = pr.alloc(6 * d)
         vs = pr.put_scalar(self.var_smoothing)
         eps = pr.alloc(1)
@@ -2423,7 +2760,7 @@ class GaussianNB(_Classifier):
         wo = _nb_weights(pr, sample_weight, n)
         _col_stats(pr, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
-        _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, bm, bv, _NONE)
+        _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, bm, bv, _NONE, mode=mode)
         oc = pr.put_list(zk) if first else pr.put(self.class_count_)
         om = pr.put_list(zkd) if first else pr.put(self.theta_)
         ov = pr.put_list(zkd) if first else pr.put(self._raw_var)
@@ -2464,6 +2801,22 @@ def _csr_input(X):
     return ip, ix, dv, n, d
 
 
+def _csr_dense_x(pr, csr, mode):
+    """Lane idn-all: the dense n x d block of a CSR input, built ON THE
+    DEVICE by the program itself (op csr_dense, x_prep/blocked.mojo): the
+    CSR arrays go up, the block is device work words. Returns its offset, or
+    None when the binding has no such stage (`_idn_int` bit 8 clear: the
+    caller densifies on the host, the old form)."""
+    if not _idn_int(mode) & _IDN_NB_CSR_DENSE:
+        return None
+    ip, ix, dv, n, d = csr
+    if n * d > 2 ** 31 - 1:
+        raise ValueError("mojolearn: X exceeds the native Int32 indexing bound")
+    xo = pr.work(n * d)
+    pr.stage("csr_dense", n, pr.put_words(ip), pr.put_words(ix), pr.put(dv), d, xo)
+    return xo
+
+
 def _check_nonnegative(pr_values, who):
     if any(v < 0 for v in pr_values):
         raise ValueError(f"mojolearn: Negative values in data passed to {who}")
@@ -2472,6 +2825,9 @@ def _check_nonnegative(pr_values, who):
 class _DiscreteNB(_Classifier):
     #: MultinomialNB and ComplementNB take a CSR input on the FAST CSR path
     _csr_ok = False
+    #: whether `_params` reads the column minimum row (the negative-input
+    #: refusal of MultinomialNB / ComplementNB)
+    _needs_min = False
 
     @classmethod
     def _nb_csr_ready(cls):
@@ -2479,11 +2835,21 @@ class _DiscreteNB(_Classifier):
         densifying it: FAST mode and the x_prep binding built on Apple with
         NB_TEXT_CSR (lane apple-fast-nb, default since the M3 A/B; it exports
         `x_prep_nb_csr_fit`). The bench hands such a build the text block as
-        CSR. False everywhere else: IDENTICAL, other vendors,
+        CSR. Also IDENTICAL on every vendor's device binding (lane
+        idn-int-prep, IDN_NB_CSR, -D MOJOLEARN_IDN_NB_CSR_OFF). False
+        everywhere else: FAST off Apple, the host column,
         -D MOJOLEARN_NB_TEXT_CSR_OFF."""
-        if not cls._csr_ok or _mode() != "fast":
+        if not cls._csr_ok:
             return False
+        mode = _mode()
         try:
+            if mode == "identical":
+                # lane idn-int-prep: the IDENTICAL device binding on every
+                # vendor (IDN_NB_CSR; the host column has no CSR entry and
+                # takes the dense block: the same words)
+                return bool(_idn_int(mode) & _IDN_NB_CSR)
+            if mode != "fast":
+                return False
             return _optional_prep_entry(_prep_binding("fast"), "x_prep_nb_csr_fit") is not None
         except Exception:
             return False
@@ -2512,7 +2878,15 @@ class _DiscreteNB(_Classifier):
         fit_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
                 addr_ro(codes, name="y"), [n, d, K, dv.size],
                 _addr_rw(fc, name="feature_count"), _addr_rw(cnt, name="class_count"), _addr_rw(flag, name="flag"))
-        if int(flag.tolist()[0]) != 0:
+        level = int(flag.tolist()[0])
+        if mode == "identical":
+            # x_prep/fastnb_csr.mojo: 2 a negative value; 1 the counts are not
+            # exact integers below 2^24 (or the rows are not canonical), so
+            # the caller runs the dense program
+            if level == 1:
+                return None
+            level = 1 if level == 2 else 0
+        if level != 0:
             raise ValueError(f"mojolearn: Negative values in data passed to {type(self).__name__} (input X)")
         pr = _Prog()
         st = pr.alloc(6 * d)
@@ -2540,25 +2914,55 @@ class _DiscreteNB(_Classifier):
         jll_csr = _optional_prep_entry(_prep_binding(self.numeric_mode_), "x_prep_nb_csr_jll")
         jll_h = Array._from_flat([0.0] * (n * K), (n, K), "<f4")
         bias = self._csr_bias()
-        jll_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
+        args = (addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
                 addr_ro(self.feature_log_prob_, name="feature_log_prob_"),
                 0 if bias is None else addr_ro(bias, name="class_log_prior_"),
                 [n, d, K, dv.size], _addr_rw(jll_h, name="jll"))
+        if self.numeric_mode_ == "identical":
+            # lane idn-int-prep: the dense chain without its zero terms; a row
+            # whose columns do not ascend strictly takes the dense program
+            flag = Array.from_list([0], "<i4")
+            jll_csr(*args, _addr_rw(flag, name="flag"))
+            if int(flag.tolist()[0]) != 0:
+                # lane idn-all: the dense program on a block the device
+                # builds from the CSR arrays (no host densify mid-predict)
+                return super()._scores(X, want, csr=csr)
+        else:
+            jll_csr(*args)
         pr = _Prog()
         z = pr.put_list([0.0] * (n * K))
         jll = pr.alloc(n * K)
         pr.stage("add_arrays", n * K, pr.put(jll_h), z, jll)
         return self._score_tail(pr, n, d, K, jll, want, None)
 
-    def _fit_counts(self, X, y, binarize=None, sample_weight=None):
-        arr = _x2d(X)
-        n, d = arr.shape
-        codes = self._encode_y(y, n)
-        K = len(self.classes_)
+    def _fit_counts(self, X, y, binarize=None, sample_weight=None, csr=None):
         mode = _mode()
         pr = _Prog()
-        xo = pr.put(arr)
+        # lane idn-all: `csr` (the IDENTICAL CSR route's fallback) is
+        # densified by the program on the device, not by the host
+        xo = _csr_dense_x(pr, csr, mode) if csr is not None else None
+        if xo is None:
+            arr = _x2d(X.toarray() if csr is not None else X)
+            n, d = arr.shape
+            xo = pr.put(arr)
+        else:
+            n, d = csr[3], csr[4]
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
         wo = _nb_weights(pr, sample_weight, n)
+        if _nb_onepass(mode):
+            # lane idn-int-prep: one unit per (block, column) counts every
+            # class, binarizes (BernoulliNB) and flags a negative word; no
+            # binarized copy and no column-stats pass. The same words.
+            yo = pr.put_codes(codes)
+            st = pr.alloc(6 * d)
+            cnt, fc = pr.alloc(K), pr.alloc(K * d)
+            clp = pr.alloc(K)
+            _nb_counts(pr, wo, xo, n, d, yo, K, cnt, fc,
+                       thr=_NONE if binarize is None else pr.put_scalar(binarize),
+                       neg=st + 3 * d if self._needs_min else _NONE)
+            self._prior_stages(pr, K, cnt, clp)
+            return pr, mode, n, d, K, st, cnt, fc, clp
         if binarize is not None:
             thr = pr.put_scalar(binarize)
             xb = pr.work(n * d)
@@ -2582,7 +2986,12 @@ class _DiscreteNB(_Classifier):
         _check_alpha(self)
         csr = self._csr_fast(X) if sample_weight is None else None
         if csr is not None:
-            return self._params(*self._fit_counts_csr(csr, y))
+            got = self._fit_counts_csr(csr, y)
+            if got is not None:
+                return self._params(*got)
+            # IDENTICAL only (`_fit_counts_csr`'s flag): the dense program,
+            # its block built on the device from the CSR arrays (lane idn-all)
+            return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), None, csr=csr))
         return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), sample_weight))
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
@@ -2592,7 +3001,7 @@ class _DiscreteNB(_Classifier):
         _check_alpha(self)
         arr = _x2d(X)
         n, d = arr.shape
-        first, codes = _partial_codes(self, y, classes, n)
+        first, codes = _partial_codes(self, y, classes, n, defer=True)
         K = len(self.classes_)
         if first:
             mode = _mode()
@@ -2602,19 +3011,31 @@ class _DiscreteNB(_Classifier):
         pr = _Prog()
         xo = pr.put(arr)
         wo = _nb_weights(pr, sample_weight, n)
+        onepass = _nb_onepass(mode)
+        thr = _NONE
         if getattr(self, "binarize", None) is not None:
-            xb = pr.work(n * d)
-            pr.stage("binarize", n * d, xo, n * d, pr.put_scalar(self.binarize), xb)
-            xo = xb
-        yo = pr.put_codes(codes)
+            if onepass:
+                thr = pr.put_scalar(self.binarize)
+            else:
+                xb = pr.work(n * d)
+                pr.stage("binarize", n * d, xo, n * d, pr.put_scalar(self.binarize), xb)
+                xo = xb
+        yo = _stage_partial_codes(pr, codes, mode)
         st = pr.alloc(6 * d)
         cnt, fc, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
-        _col_stats(pr, xo, n, d, st, var=False)
+        if not onepass:
+            _col_stats(pr, xo, n, d, st, var=False)
         if first:
-            _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
+            bc, bf = cnt, fc
         else:
             bc, bf = pr.alloc(K), pr.alloc(K * d)
+        if onepass:
+            # lane idn-int-prep (`_fit_counts`): the same words
+            _nb_counts(pr, wo, xo, n, d, yo, K, bc, bf, thr=thr,
+                       neg=st + 3 * d if self._needs_min else _NONE)
+        else:
             _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, _NONE, _NONE, bf)
+        if not first:
             pr.stage("add_arrays", K, pr.put(self.class_count_), bc, cnt)
             pr.stage("add_arrays", K * d, pr.put(self.feature_count_), bf, fc)
         self._prior_stages(pr, K, cnt, clp)
@@ -2637,6 +3058,7 @@ class MultinomialNB(_DiscreteNB):
     reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
     _csr_ok = True
+    _needs_min = True
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None):
         self.alpha = alpha
@@ -2738,6 +3160,9 @@ def _estimator_covs(est, arr, codes, K, who):
     for each class k (codes None: every row, one block). `est.fit` runs in
     Python on the class's float32 rows (a mojolearn Array); its covariance_
     is read as float32. Returns the (K, d, d) blocks as one flat list."""
+    if isinstance(arr, _arena_io.DeviceRows):
+        # the user's estimator takes host rows (lane cpu4-misc)
+        arr = arr.materialize()
     n, d = arr.shape
     mode = _mode()
     if codes is not None:
@@ -2781,7 +3206,7 @@ def _lda_cov_blocks(pr, xo, n, d, yo, K, mean, var, cnt, shr, given=None):
     if given is not None:
         return pr.put_list(given)
     cov = pr.alloc(K * d * d)
-    pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
+    _qda_cov(pr, _mode(), xo, n, d, yo, K, mean, cnt, cov)
     if shr is not None:
         pr.stage("da_shrink", K, xo, n, d, yo, mean, var, cnt, cov, pr.put_scalar(shr), pr.alloc(K))
     return cov
@@ -2864,17 +3289,17 @@ class LinearDiscriminantAnalysis(_Classifier):
         scal1, g2, ms = pr.alloc(d * d), pr.alloc(d * d), pr.alloc(K * d)
         e2, v2 = pr.alloc(d), pr.alloc(d * d)
         scal, coef, inter, evr, tmp = pr.alloc(d * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(d), pr.alloc(K * d)
-        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
+        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
         gflag, gofs = 0, 0
         if self.priors is not None:
             pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
             gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)
         pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
         pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
-        pr.stage("col_stats", d, z, n, d, stz)
+        _cs(pr, mode, z, n, d, stz)
         pr.stage("lda_w", d, stz + 2 * d, d, n, K, std, w)
         pr.stage("center_rows", n * d, xo, n, d, mean, yo, w, z2)
-        pr.stage("matmul", d * d, z2, 1, d, z2, d, 1, g, d, n, _NONE, _NONE)
+        _gram(pr, mode, z2, n, d, g)
         pr.stage("eigh", 1, g, d, 0, e1, v1)
         pr.stage("lda_stage2", 1, e1, v1, std, mean, xbar, priors, K, d, n, meta, scal1, g2, ms)
         pr.stage("eigh", 1, g2, d, 0, e2, v2)
@@ -2908,7 +3333,7 @@ class LinearDiscriminantAnalysis(_Classifier):
         yo = pr.put_codes(codes)
         cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
         var = pr.alloc(K * d) if shr is not None else _NONE
-        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, _NONE)
+        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE)
         gflag, gofs = 0, 0
         if self.priors is not None:
             pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
@@ -2921,7 +3346,7 @@ class LinearDiscriminantAnalysis(_Classifier):
             y0 = pr.put_list([0.0] * n)
             c1, m1 = pr.alloc(1), pr.alloc(d)
             v1 = pr.alloc(d) if shr is not None else _NONE
-            pr.stage("class_stats", d, xo, n, d, y0, 1, c1, m1, v1, _NONE)
+            _cls(pr, mode, xo, n, d, y0, 1, c1, m1, v1, _NONE)
             gt = None if est is None else _estimator_covs(est, arr, None, 1, "LinearDiscriminantAnalysis")
             tot = _lda_cov_blocks(pr, xo, n, d, y0, 1, m1, v1, c1, shr, gt)
         gk = None if est is None else _estimator_covs(est, arr, codes, K, "LinearDiscriminantAnalysis")
@@ -3077,7 +3502,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         var = pr.alloc(K * d) if shr is not None else _NONE
         # the trailing 1: FAST keeps row-order class sums here (the tree sums did not pass
         # QuadraticDiscriminantAnalysis' paired quality check)
-        pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, _NONE, 1)
+        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE, 1)
         gflag, gofs = 0, 0
         if self.priors is not None:
             gflag, gofs = 1, pr.put_list(_given_priors(self.priors, K, "QuadraticDiscriminantAnalysis"))
@@ -3085,7 +3510,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         if est is not None:
             cov = pr.put_list(_estimator_covs(est, arr, codes, K, "QuadraticDiscriminantAnalysis"))
         else:
-            pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
+            _qda_cov(pr, mode, xo, n, d, yo, K, mean, cnt, cov)
         if shr is not None:
             pr.stage("da_shrink", K, xo, n, d, yo, mean, var, cnt, cov, pr.put_scalar(shr), pr.alloc(K))
         keep = pr.alloc(K * d * d) if (self.store_covariance and eigen) else None
@@ -3162,33 +3587,31 @@ class QuantileTransformer(_PrepBase):
         arr = _x2d(X)
         n, d = arr.shape
         mode = _mode()
-        drawn = None
+        perm = None
         if self.subsample is not None and n > self.subsample:
-            # the base binding's `draw_rows_without_replacement_i32` (a splitmix64
-            # partial Fisher-Yates, ascending; lane pyglue-numeric: the Python draw),
-            # the rows gathered in the program (p2m_rgather)
-            seed = (0 if self.random_state is None else int(self.random_state)) & 0xFFFFFFFFFFFFFFFF
-            k = int(self.subsample)
-            drawn = Array((k,), "<i4")
-            _native_helper("draw_rows_without_replacement_i32")(n, k, seed & 0xFFFFFFFF, seed >> 32,
-                                                                 _addr_rw(drawn, name="rows"))
-        if drawn is not None:
-            n = drawn.size
+            # the rows are drawn without replacement in the program below (f2_perm_rows,
+            # x_prep/fam2.mojo: a keyed permutation of [0, n), one thread per draw), then
+            # gathered there; every tier (lane cpu2-l3-prep deleted the host
+            # `draw_rows_without_replacement_i32` route)
+            perm = ((0 if self.random_state is None else int(self.random_state)) & 0xFFFFFFFFFFFFFFFF,
+                    int(self.subsample))
+        n_all = n
+        if perm is not None:
+            n = perm[1]
         nq = max(1, min(int(self.n_quantiles), n))
-        refs = [i / (nq - 1) if nq > 1 else 0.0 for i in range(nq)]
         pr = _Prog()
         xo = pr.put(arr)
-        if drawn is not None:
-            xs = pr.alloc(n * d)
-            pr.stage("p2m_rgather", n * d, xo, d, pr.put_words(drawn), xs)
+        if perm is not None:
+            ro, xs = pr.alloc(n), pr.alloc(n * d)
+            pr.stage("f2_perm_rows", n, _seed_words(pr, perm[0]), n_all, ro)
+            pr.stage("p2m_rgather", n * d, xo, d, ro, xs)
             xo = xs
-        # the references are an input no stage writes: the fitted attribute is
-        # the array that went up (the same float32 words the arena held)
-        refs_arr = Array._from_flat([float(v) for v in refs], (nq,), "<f4")
-        so, st, qf = pr.work(n * d), pr.alloc(6 * d), pr.put(refs_arr)
+        # the references i / (nq - 1) (0 for one quantile) on the device, in binary64
+        # rounded to float32 as the Python list was (c2_grid KIND 1, lane cpu2-l3-prep)
+        so, st, qf = pr.work(n * d), pr.alloc(6 * d), _grid(pr, [nq - 1], nq, 1)
         qo = pr.alloc(nq * d)
         pr.stage("sort_cols", d, xo, n, d, so, 0)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st, var=False)
         pr.stage("quantile", nq * d, so, n, d, qf, nq, qo, st)
         # quantiles_ (nq, d): the (d, nq) block written column-major on the
         # device (p2m_transpose; lane pyglue-numeric: a Python transpose)
@@ -3197,7 +3620,7 @@ class QuantileTransformer(_PrepBase):
         pr.run(mode)
         self._q = pr.get(qo, nq * d)
         self.quantiles_ = pr.get(qt, (nq, d))
-        self.references_ = refs_arr
+        self.references_ = pr.get(qf, nq)
         self.n_quantiles_, self.numeric_mode_, self.n_features_in_ = nq, mode, d
         return self
 
@@ -3224,10 +3647,13 @@ class QuantileTransformer(_PrepBase):
 def _pt_spec_depth(n, d):
     """The device search's speculation depth (lane prep-apple2): each round
     evaluates the 2^S - 1 candidate points of the next S golden steps side by
-    side. MOJOLEARN_XPREP_PT_SPEC = S (default 3: m4pro-b taxi 4.55 s staged,
-    S=2 3.31, S=3 2.95, S=4 3.09; 0: one evaluation per fold, the staged
-    search); the candidates' transforms (n*d words each) are capped at
-    2^28 words. Every S gives the same lambdas. IDENTICAL only: FAST keeps the
+    side. MOJOLEARN_XPREP_PT_SPEC = S (default 3; 0: one evaluation per
+    fold, the staged search). The rule is a size range, not a shape: S is
+    lowered until the (2^S - 1) candidates' transforms (n*d words each) fit
+    in 2^28 words, so every (n, d) gets the deepest speculation its buffer
+    allows. The default 3 was measured on one row (m4pro-b, 1M x 11: staged
+    4.55 s, S=2 3.31, S=3 2.95, S=4 3.09) and needs neighbor-shape
+    validation (n*d around 2^28 / 7 and 2^28 / 3, d = 8..256). Every S gives the same lambdas. IDENTICAL only: FAST keeps the
     staged search, whose folds FAST runs as threadgroup trees
     (x_prep/fastred.mojo), already short."""
     try:
@@ -3278,8 +3704,13 @@ class PowerTransformer(_PrepBase):
         # PT_SCORE_STABLE (bit 32, FAST+Apple default, rollback MOJOLEARN_PT_SCORE_STABLE_OFF): the device's centered coordinates; never on the host binding
         centered = bool(_ptimpute_flags(mode) & 32) and not host
         anchor, anchor_kind = (pr.alloc(d), pr.alloc(d)) if centered else (_NONE, _NONE)
-        pr.stage("col_stats", d, xo, n, d, st)
-        if host:
+        _cs(pr, mode, xo, n, d, st)
+        # lane fam-prep-metrics, IDN_PT_BLOCKED (IDENTICAL, `_idn_fam` bit 8): every fold of the
+        # search by row blocks (x_prep/pt_blocked.mojo). The host column then stages the SAME
+        # program as the device (its pt_fit folds in row order), so both take the blocked order.
+        fam_pt = _blocked() and bool(_idn_fam(mode) & _IDN_PT_BLOCKED)
+        nb = (n + _XB - 1) // _XB
+        if not fam_pt and host:
             # the host binding: its own pt_fit (x_prep/host/power.mojo), the same words
             pr.stage("pt_fit", d, xo, n, d, method, st, lam)
         else:
@@ -3312,13 +3743,23 @@ class PowerTransformer(_PrepBase):
                 pr.stage("pt_init", d, method, st, d, lam, state, leval, anchor, anchor_kind, int(self.standardize))
                 if not tiled:
                     pr.stage("pt_log", n * d, xo, n, d, method, lg)
+                if fam_pt:
+                    bps, bpc, bss = pr.work(nb * d * mmax), pr.work(nb * d * mmax), pr.work(nb * d * mmax)
+                    bpj, bmean, bcnt = pr.work(nb * d), pr.work(d * mmax), pr.work(d * mmax)
                 k0 = 0
                 while k0 <= _PT_EVALS - 2:
                     steps = 2 if k0 == 0 else min(spec, _PT_EVALS - 1 - k0)
                     m = 2 if k0 == 0 else 2 ** steps - 1
                     pr.stage("pt_spts", d, state, leval, spl, m, k0)
                     pr.stage("pt_smap", m * n * d, xo, n, d, method, spl, m, tv, lg, il)
-                    pr.stage("pt_sfold", d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0, il)
+                    if fam_pt:
+                        first = 1 if k0 == 0 else 0
+                        pr.stage("ptb_part1", nb * d * m, xo, n, d, method, tv, m, state, bps, bpc, bpj, nb, first, il)
+                        pr.stage("ptb_mean", d * m, bps, bpc, bpj, nb, d, m, state, bmean, bcnt, first)
+                        pr.stage("ptb_part2", nb * d * m, tv, n, d, m, state, bmean, bcnt, bss, nb, il)
+                        pr.stage("ptb_fin", d * m, bss, nb, d, m, state, spl, vals, bcnt)
+                    else:
+                        pr.stage("pt_sfold", d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0, il)
                     pr.stage("pt_sres", d, state, leval, m, vals, k0, steps, lam)
                     k0 += steps
             else:
@@ -3327,10 +3768,21 @@ class PowerTransformer(_PrepBase):
                 pr.stage("pt_init", d, method, st, d, lam, state, leval, anchor, anchor_kind, int(self.standardize))
                 if not tiled:
                     pr.stage("pt_log", n * d, xo, n, d, method, lg)
+                if fam_pt:
+                    bps, bpc, bss = pr.work(nb * d), pr.work(nb * d), pr.work(nb * d)
+                    bpj, bmean, bcnt = pr.work(nb * d), pr.work(d), pr.work(d)
                 for k in range(_PT_EVALS):
                     # tiled: the device skips pt_map and fuses it into pt_fold (LG1 = 0 either way)
                     pr.stage("pt_map", n * d, xo, n, d, method, leval, tv, 0 if tiled else lg + 1)
-                    pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
+                    if fam_pt:
+                        # one candidate a column (M = 1, contiguous): the blocked fold, then pt_finish's step
+                        first = 1 if k == 0 else 0
+                        pr.stage("ptb_part1", nb * d, xo, n, d, method, tv, 1, state, bps, bpc, bpj, nb, first, 0)
+                        pr.stage("ptb_mean", d, bps, bpc, bpj, nb, d, 1, state, bmean, bcnt, first)
+                        pr.stage("ptb_part2", nb * d, tv, n, d, 1, state, bmean, bcnt, bss, nb, 0)
+                        pr.stage("ptb_step", d, xo, n, d, method, tv, k, state, leval, lam, bss, nb, bcnt)
+                    else:
+                        pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
         mean, scale = pr.alloc(d), pr.alloc(d)
         if self.standardize:
             # PT_FUSED_TRANSFORM (bit 4, FAST + Apple): the device folds col_stats of the transform
@@ -3339,7 +3791,7 @@ class PowerTransformer(_PrepBase):
             fused = bool(_ptimpute_flags(mode) & 4)
             tx, st2 = pr.alloc(1) if fused else pr.alloc(n * d), pr.alloc(6 * d)
             pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx, anchor, anchor_kind)
-            pr.stage("col_stats", d, tx, n, d, st2)
+            _cs(pr, mode, tx, n, d, st2)
             pr.stage("std_params", d, st2, d, mean, scale)
         pr.run(mode)
         if method == 1 and any(v <= 0 for v in pr.values(st + 3 * d, d)):
@@ -3496,7 +3948,7 @@ def _check_weights(sample_weight, n, who):
     pr = _Prog()
     wo = pr.put(w)
     st = pr.alloc(6)
-    pr.stage("col_stats", 1, wo, n, 1, st)
+    _cs(pr, _mode(), wo, n, 1, st, var=False)
     pos = _p2m_sel(pr, wo, n, 1, 1, pr.alloc(n))
     pr.run(_mode())
     cnt, lo = pr.values(st, 1)[0], pr.values(st + 3, 1)[0]
@@ -3521,16 +3973,24 @@ def _weighted_groups(pr, arr, w, n, d):
     return ug, ucnt
 
 
-def _weighted_levels(pr, ug, ucnt, n, d, levels, average, out):
+def _grid(pr, nb, w, kind):
+    """Stages c2_grid (lane cpu2-l3-prep): one level row of stride w per entry
+    b of nb (KIND 0: i * (100 / b), then 100; 1: i / b; 2: 100 * (i * (1 /
+    b)), then 100; zeros past b), binary64 rounded to float32 as the Python
+    lists were. Returns the (len(nb), w) block's offset."""
+    out = pr.alloc(len(nb) * w)
+    pr.stage("c2_grid", len(nb) * w, pr.put_list(nb), w, kind, out)
+    return out
+
+
+def _weighted_levels(pr, ug, ucnt, n, d, nb, kind, average, out):
     """A stage of the reference's `_weighted_percentile` of every column at
-    the percent `levels` (one list per column, padded to a common stride
-    max + 1) into `out` (column c at c * stride), over `_weighted_groups`."""
-    nb = [len(lv) - 1 for lv in levels]
-    nbmax = max(nb)
-    flat = []
-    for lv in levels:
-        flat += list(lv) + [0.0] * (nbmax + 1 - len(lv))
-    pr.stage("kbins_wq", d, ug, n, d, ucnt, pr.put_list(nb), nbmax, pr.put_list(flat), int(average), out)
+    the percent levels `_grid` writes for nb (one b per column, a common
+    stride max + 1) into `out` (column c at c * stride), over
+    `_weighted_groups`."""
+    nbmax = max(nb)  # glue: the widest level row (a shape)
+    lv = _grid(pr, nb, nbmax + 1, kind)
+    pr.stage("kbins_wq", d, ug, n, d, ucnt, pr.put_list(nb), nbmax, lv, int(average), out)
 
 
 def _spline_fused(mode):
@@ -3648,27 +4108,25 @@ class SplineTransformer(_PrepBase):
         if fused:
             _col_stats(pr, xo, n, d, st, var=False)
         else:
-            pr.stage("col_stats", d, xo, n, d, st)
+            _cs(pr, mode, xo, n, d, st, var=False)
         uniform, kst = 0, st
         if given:
             base = pr.put_list([v for col in cols for v in col])
         elif self.knots == "quantile":
             base = pr.alloc(d * nk)
             if w is None:
-                qf = pr.put_list([i / (nk - 1) for i in range(nk)])
+                qf = _grid(pr, [nk - 1], nk, 1)
                 pr.stage("sort_cols", d, xo, n, d, so, 0)
                 pr.stage("quantile", d * nk, so, n, d, qf, nk, base, st)
             else:
-                step = 1.0 / (nk - 1)
-                lv = [100.0 * (i * step) for i in range(nk - 1)] + [100.0]
                 ug, ucnt = _weighted_groups(pr, arr, w, n, d)
-                _weighted_levels(pr, ug, ucnt, n, d, [lv] * d, False, base)
+                _weighted_levels(pr, ug, ucnt, n, d, [nk - 1] * d, 2, False, base)
         else:
             base, uniform = pr.alloc(d * nk), 1
             if w is not None and wl < n:
                 # the positive-weight rows on the device
                 kst = pr.alloc(6 * d)
-                pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, wl), wl, d, kst)
+                _cs(pr, mode, _p2m_positive_rows(pr, xo, pr.put(w), n, d, wl), wl, d, kst, var=False)
         pr.stage("spline_knots", d, base, nk, d, k, knots, uniform, kst, int(periodic))
         nspl = nk - 1 if periodic else nk + k - 1
         W = d * (nspl if self.include_bias else nspl - 1)
@@ -3705,7 +4163,7 @@ class SplineTransformer(_PrepBase):
             if _spline_fused(self.numeric_mode_):
                 _col_stats(pr, xo, n, d, st, var=False)
             else:
-                pr.stage("col_stats", d, xo, n, d, st)
+                _cs(pr, self.numeric_mode_, xo, n, d, st, var=False)
         pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k, self._EXTRAP[self.extrapolation], W,
                  1 if self.include_bias else 0, out)
         fo = _p2m_f_stage(pr, out, n, W) if self.order == "F" else None
@@ -3945,7 +4403,9 @@ _LABEL_PRESENT = {}
 
 
 def _label_present_enabled(mode):
-    if mode != "fast":
+    # FAST + Apple (LABEL_DIRECT) and, lane idn-int-prep, IDENTICAL on every
+    # vendor and the host column (IDN_LABEL): the binding's export is the switch
+    if mode not in ("fast", "identical"):
         return False
     binding = _prep_binding(mode)
     key = id(binding)
@@ -4094,12 +4554,57 @@ class LabelEncoder(_PrepBase):
             raise ValueError("mojolearn: y contains previously unseen labels")
         return pr.get_i32(out, n)
 
+    def _inverse_device(self, y):
+        """An integer or float code buffer over numeric classes, one program
+        on every tier (lane fam2-prep-metrics; lane cpu2-l3-prep: FAST and
+        float code buffers too): each code checked (an integer in [0, K)) and
+        its class written as the int64 / float64 word returned
+        (f2_code_gather, x_prep/fam2.mojo). None: str classes or a code list
+        (the explicit input-prep route)."""
+        if self._cats is None:
+            return None
+        lb = _label_buffer(y)
+        if lb is None:
+            return None
+        n = lb.n
+        ints = label_kind(self._classes) == "int"
+        pr = _Prog()
+        out, neg = _stage_class_gather(pr, _label_load(pr, lb), n, self._cats, ints)
+        pr.run(self.numeric_mode_)
+        if pr.values(neg, 1)[0] > 0:
+            raise ValueError("mojolearn: y contains previously unseen labels")
+        return _class_words(pr, out, n, ints)
+
     def inverse_transform(self, y):
         self._check_fitted()
+        got = self._inverse_device(y)
+        if got is not None:
+            return got
+        # str classes or a Python code list: the explicit input-prep route (G5)
         codes = [int(c) for c in flatten_labels(y)]
         if any(c < 0 or c >= len(self._classes) for c in codes):
             raise ValueError("mojolearn: y contains previously unseen labels")
         return _classes_array([self._classes[c] for c in codes])
+
+
+def _stage_class_gather(pr, codes, n, cats, ints):
+    """Stages f2_code_gather (x_prep/fam2.mojo): the n float codes at `codes`
+    to their classes among `cats` as 64-bit words (int64 when ints, else
+    binary64), plus the count of codes that are not an integer in
+    [0, cats.size). Returns (words offset, count offset)."""
+    out, bad, neg = pr.alloc(2 * n), pr.work(n), pr.alloc(1)
+    pr.stage("f2_code_gather", n, codes, cats.size, pr.put(cats), 0 if ints else 1, out, bad)
+    pr.stage("count_neg", 1, bad, n, 1, neg)
+    return out, neg
+
+
+def _class_words(pr, out, n, ints):
+    """The n 64-bit class words `_stage_class_gather` wrote, as an int64 or
+    float64 Array (one byte copy, no Python object per label)."""
+    words = pr.get_i32(out, 2 * n)
+    store = array.array("q" if ints else "d")
+    store.frombytes(ctypes.string_at(words._addr, 8 * n))
+    return Array._owned(store, (n,), "<i8" if ints else "<f8", "C")
 
 
 class LabelBinarizer(_PrepBase):
@@ -4218,23 +4723,28 @@ class LabelBinarizer(_PrepBase):
             if W != K:
                 raise ValueError(f"mojolearn: Y has {W} columns, expected {K}")
             codes = _block_argmax(pr, arr, [K], None, False)
-            pr.run(self.numeric_mode_)
-            idx = [int(v) for v in pr.values(codes, n)]
         else:
             if W > 2:
                 raise ValueError("mojolearn: output_type='binary', but y.shape = " + str((n, W)))
             if threshold is None:
                 threshold = (self.pos_label + self.neg_label) / 2.0
-            xo = pr.put(arr)
-            out = pr.alloc(n * W)
-            pr.stage("binarize", n * W, xo, n * W, pr.put_scalar(threshold), out)
+            # the last column against the threshold, one code per row (c2_bin_code)
+            codes = pr.alloc(n)
+            pr.stage("c2_bin_code", n, pr.put(arr), n, W, pr.put_scalar(threshold), codes)
+        if self._cats is None:
+            # str classes: the codes come back for the explicit object-label decode (G5)
             pr.run(self.numeric_mode_)
-            # Read only output words, then select the last binary column.
-            vals = pr.values(out, n * W)[W - 1::W]
+            idx = [int(v) for v in pr.values(codes, n)]
             if K == 1:
-                return _classes_array([self._classes[0]] * n)
-            idx = [1 if v == 1.0 else 0 for v in vals]
-        return _classes_array([self._classes[i] for i in idx])
+                idx = [0] * n
+            return _classes_array([self._classes[i] for i in idx])
+        # numeric classes (lane cpu2-l3-prep): each code's class gathered on the device
+        # (f2_code_gather); one class: both codes name it
+        ints = label_kind(self._classes) == "int"
+        cats = self._cats if K > 1 else Array._from_flat(self._cats.tolist() * 2, (2,), "<f4")
+        out, _neg = _stage_class_gather(pr, codes, n, cats, ints)
+        pr.run(self.numeric_mode_)
+        return _class_words(pr, out, n, ints)
 
 
 #: lane gap-prep2 (2026-10-02): MultiLabelBinarizer's int label sets cross as
@@ -4379,6 +4889,28 @@ class MultiLabelBinarizer(_PrepBase):
 
 
 # ---------------------------------------------------------------- iterative imputer
+class _NeighbourDraws:
+    """IterativeImputer's n_nearest_features draws, one list per (round,
+    feature) step in fit order. Every step is drawn up front in one device
+    program (`_neighbours_device`, every tier: lane cpu2-l3-prep deleted the
+    host route that read the |corr| matrix back and called the base binding's
+    `weighted_pick_i32` per step); `next` then hands them out and moves the
+    instance's splitmix64 state past the words the steps taken so far own
+    (k per step: state + k * golden each)."""
+
+    def __init__(self, imp, Xf, n, dk, mode, orders):
+        self.imp, self.dk, self.at = imp, dk, 0
+        js = [j for order in orders for j in order]  # glue: the (round, feature) step list
+        self.k, self.start = int(imp.n_nearest_features), imp._rng
+        self.lists = imp._neighbours_device(Xf, n, dk, mode, js, self.k) if js else []
+
+    def next(self, j):
+        out = self.lists[self.at]
+        self.at += 1
+        self.imp._rng = (self.start + self.at * self.k * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+        return out
+
+
 class IterativeImputer(_PrepBase):
     """sklearn.impute.IterativeImputer. With its default estimator
     (BayesianRidge, default priors, max_iter 300, tol 1e-3) the whole fit is
@@ -4459,35 +4991,13 @@ class IterativeImputer(_PrepBase):
         self._rng, z = _splitmix64(self._rng)
         return z
 
-    def _orders(self, miss, dk, rounds):
-        """The features each round imputes, in order: the reference's orders
-        (a stable argsort of the missing counts; 'descending' that order
-        reversed; 'random' a Fisher-Yates permutation per round of the
-        candidates, every feature or with skip_complete those with missing
-        entries). A feature with nothing missing is skipped whether or not
-        skip_complete (the reference fits it and changes nothing)."""
-        if self.imputation_order != "random":
-            asc = sorted(range(dk), key=lambda j: miss[j])
-            order = {"ascending": asc, "descending": asc[::-1], "roman": list(range(dk)),
-                     "arabic": list(range(dk))[::-1]}[self.imputation_order]
-            return [[j for j in order if miss[j] > 0]] * rounds
-        cand = [j for j in range(dk) if miss[j] > 0] if self.skip_complete else list(range(dk))
-        out = []
-        for _ in range(rounds):
-            perm = list(cand)
-            for i in range(len(perm) - 1, 0, -1):
-                k = self._draw() % (i + 1)
-                perm[i], perm[k] = perm[k], perm[i]
-            out.append([j for j in perm if miss[j] > 0])
-        return out
-
-    def _abs_corr(self, Xf, n, dk, mode):
-        """The reference's `_get_abs_corr_mat` of the initially filled block:
-        |corrcoef| (the centred Gram, then the dk x dk normalisation, on the
-        device: p2m_abscorr_cell / p2m_abscorr_norm, float32), NaN -> 1e-6,
-        clipped below at 1e-6, a zero diagonal, each column scaled to sum 1.
-        The matrix comes back as a (dk, dk) float32 Array (the neighbour
-        draws read it)."""
+    def _neighbours_device(self, Xf, n, dk, mode, js, k):
+        """Lane fam2-prep-metrics (every tier since lane cpu2-l3-prep): every
+        (round, feature) step's n_nearest_features draw in ONE program: the
+        |corr| matrix (ii_mean, ii_gram, p2m_abscorr_*) stays on the device and one
+        thread per step draws its k features from it (f2_wpick,
+        x_prep/fam2.mojo; step c takes splitmix64 words c*k .. c*k + k - 1 of
+        the instance's stream). Returns each step's ascending picks."""
         pr = _Prog()
         fo, mz = pr.put(Xf), pr.alloc(n * dk)
         means, cnt, g, flag = pr.alloc(dk), pr.alloc(1), pr.alloc(dk * dk), pr.alloc(1)
@@ -4496,21 +5006,18 @@ class IterativeImputer(_PrepBase):
         m = pr.alloc(dk * dk)
         pr.stage("p2m_abscorr_cell", dk * dk, g, dk, m)
         pr.stage("p2m_abscorr_norm", dk, m, dk)
+        calls = len(js)
+        fl, out = pr.work(calls * dk), pr.alloc(calls * (k + 1))
+        pr.stage("f2_wpick", calls, m, dk, pr.put_ints(js), k, _seed_words(pr, self._rng), fl, out)
         pr.run(mode)
-        return pr.get(m, (dk, dk))
-
-    def _neighbours(self, corr, j, dk):
-        """n_nearest_features predictors of feature j, drawn without
-        replacement with probability corr[:, j] (a 53-bit splitmix64 uniform
-        against the cumulative weight of the columns not yet drawn): the base
-        binding's `weighted_pick_i32` on the instance's draw stream."""
-        k = int(self.n_nearest_features)
-        out = Array((max(k, 1),), "<i4")
-        st = array.array("Q", [self._rng])
-        got = int(_native_helper("weighted_pick_i32")(addr_ro(corr, name="corr"), dk, j, k, st.buffer_info()[0],
-                                                       _addr_rw(out, name="neighbours")))
-        self._rng = st[0]
-        return out.tolist()[:got]
+        words = pr.get_i32(out, calls * (k + 1)).tolist()
+        lists = []
+        for c in range(calls):  # glue: one feature list per step
+            got = words[c * (k + 1) + k]
+            if got < k:
+                raise ValueError("mojolearn: IterativeImputer: no feature left to draw")
+            lists.append(words[c * (k + 1):c * (k + 1) + got])
+        return lists
 
     def fit_transform(self, X, y=None):
         self._refuse()
@@ -4529,21 +5036,42 @@ class IterativeImputer(_PrepBase):
         self._bounds_k = [bounds[2 * c + h] for c in self._keep for h in (0, 1)]
         # missing counts per kept column, and the tolerance scale, from the device
         pr = _Prog()
-        fo, mo, bo = self._prepare(pr, arr, Xf)
         xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
-        st, stm = pr.alloc(6 * d), pr.alloc(6 * dk)
-        pr.stage("col_stats", d, xo, n, d, st)
-        pr.stage("col_stats", dk, mo, n, dk, stm)
-        pr.run(mode)
-        miss = [round(v * n) for v in pr.values(stm + dk, dk)]      # mean of the 0/1 mask
-        scale = max([v for v in pr.values(st + 5 * d, d)] or [0.0])
-        self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []
-        self.n_features_with_missing_ = sum(1 for m in miss if m > 0)
-        self.numeric_mode_, self.n_features_in_ = mode, d
+        st = pr.alloc(6 * d)
+        _cs(pr, mode, xo, n, d, st)
         rounds = int(self.max_iter)
-        orders = self._orders(miss, dk, rounds)
+        # lane cpu2-l3-prep: the missing counts (c2_ii_miss), each round's imputation
+        # order (c2_ii_pos + c2_ii_ord, or c2_ii_rand: the reference's Fisher-Yates on the
+        # instance's splitmix64 stream, one round a thread) and the tolerance scale
+        # (c2_colmax) on the device; the orders come back as the fit's control lists
+        R = max(rounds, 1)
+        ordw, lens, sc = pr.alloc(max(R * dk, 1)), pr.alloc(R), pr.alloc(1)
+        pr.stage("c2_colmax", 1, st + 5 * d, d, sc)
+        if dk:
+            missd = pr.work(dk)
+            pr.stage("c2_ii_miss", dk, st, pr.put_ints(self._keep), n, missd)
+            if self.imputation_order == "random":
+                pr.stage("c2_ii_rand", R, missd, dk, 1 if self.skip_complete else 0, _seed_words(pr, self._rng),
+                         ordw, lens)
+            else:
+                pos = pr.work(dk)
+                mcode = {"ascending": 0, "descending": 1, "roman": 2, "arabic": 3}[self.imputation_order]
+                pr.stage("c2_ii_pos", dk, missd, dk, mcode, pos)
+                pr.stage("c2_ii_ord", dk, missd, dk, pos, R, ordw, lens)
+        pr.run(mode)
+        scale = pr.values(sc, 1)[0]
+        self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []
+        ln = pr.get_i32(lens, R).tolist() if dk else [0] * R
+        ow = pr.get_i32(ordw, R * dk).tolist() if dk else []
+        orders = [ow[r * dk:r * dk + ln[r]] for r in range(rounds)]  # glue: the device's orders as control lists
+        self.n_features_with_missing_ = ln[0]
+        if self.imputation_order == "random":
+            # the draws the rounds took: (m - 1) a round over m candidates
+            m = ln[0] if self.skip_complete else dk
+            self._rng = (self._rng + rounds * max(m - 1, 0) * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+        self.numeric_mode_, self.n_features_in_ = mode, d
         nnf = self.n_nearest_features
-        corr = self._abs_corr(Xf, n, dk, mode) if nnf is not None and nnf < dk else None
+        corr = _NeighbourDraws(self, Xf, n, dk, mode, orders) if nnf is not None and nnf < dk else None
         if self.estimator is not None:
             return self._with_indicator(arr, self._fit_user(arr, Xf, orders, corr, float(self.tol) * scale))
         pr = _Prog()
@@ -4564,7 +5092,7 @@ class IterativeImputer(_PrepBase):
                 pr.stage("ii_snapshot", n * dk, fo, prev, flag)
             for j in orders[r]:
                 coef, inter, means = pr.alloc(dk), pr.alloc(1), pr.alloc(dk)
-                nbl = self._neighbours(corr, j, dk) if corr is not None else None
+                nbl = corr.next(j) if corr is not None else None
                 nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0
                 pp = len(nbl) if nbl is not None else dk - 1
                 al = pr.alloc(2) if self.sample_posterior else -1
@@ -4637,7 +5165,7 @@ class IterativeImputer(_PrepBase):
             check = not self.sample_posterior and bool(order)
             prev = Xt.copy() if check else None
             for j in order:
-                nbl = self._neighbours(corr, j, dk) if corr is not None else [a for a in range(dk) if a != j]
+                nbl = corr.next(j) if corr is not None else [a for a in range(dk) if a != j]  # glue: the other feature ids
                 est = _clone(self.estimator)
                 Xo, yo, Xm, rows, m = self._ii_take(Xt, mask, j, nbl, mode, fit=True)
                 est.fit(Xo, yo)
@@ -4839,6 +5367,34 @@ def _pred_f64(v):
     return Array._owned(array.array("d", vals), (len(vals),), "<f8", "C")
 
 
+def _f64_words(pr, value):
+    """A Python float as its binary64 word (two int32 words) -> offset."""
+    w = array.array("i")
+    w.frombytes(array.array("d", [float(value)]).tobytes())
+    return pr.put_words(Array._owned(w, (2,), "<i4", "C"))
+
+
+def _key_words(values, d):
+    """(int32 words, c2_key64 KIND) of d values: a float32 / float64 / int32 /
+    int64 buffer as its own words; anything else (a user score function's
+    list) converted once to float64 (the explicit input-prep step)."""
+    lb = _label_buffer(values)
+    if lb is not None and lb.kind in (0, 1, 3, 4) and lb.n == d:
+        return lb.words, lb.kind
+    vals = values.tolist() if hasattr(values, "tolist") else values
+    flat = array.array("d", [float(v) for v in vals])  # glue: a user callable's scores, converted once
+    if len(flat) != d:
+        raise ValueError(f"mojolearn: expected {d} scores, got {len(flat)}")
+    w = array.array("i")
+    w.frombytes(flat.tobytes())
+    return Array._owned(w, (2 * d,), "<i4", "C"), 4
+
+
+def _mask_list(pr, off, d):
+    """A device 0.0 / 1.0 mask read back as the fitted bool list."""
+    return [v != 0.0 for v in pr.values(off, d)]  # glue: the device's mask as the fitted list
+
+
 # ---------------------------------------------------------------- feature selection
 class _SelectorMixin(_PrepBase):
     def get_support(self, indices=False):
@@ -4879,11 +5435,15 @@ class VarianceThreshold(_SelectorMixin):
         pr = _Prog()
         xo = pr.put(arr)
         st, var = pr.alloc(6 * d), pr.alloc(d)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st)
         pr.stage("var_ptp", d, st, d, var, 1 if self.threshold == 0 else 0)
+        # lane cpu2-l3-prep: variance > threshold on the device, in binary64 (c2_key64, c2_gt)
+        key, mask = pr.work(2 * d), pr.alloc(d)
+        pr.stage("c2_key64", d, var, 0, key)
+        pr.stage("c2_gt", d, key, _f64_words(pr, self.threshold), mask)
         pr.run(mode)
         self.variances_ = pr.get(var, d)
-        self._mask = [v > self.threshold for v in pr.values(var, d)]
+        self._mask = _mask_list(pr, mask, d)
         if not any(self._mask):
             raise ValueError(f"mojolearn: No feature in X meets the variance threshold {self.threshold:.5f}")
         self.numeric_mode_, self.n_features_in_ = mode, d
@@ -4901,13 +5461,20 @@ def _scores_classif(X, y, kind):
     xo, yo = pr.put(arr), pr.put_codes(codes)
     cnt, mean, sums = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
     sc, pv, st = pr.alloc(d), pr.alloc(d), pr.alloc(6 * d)
-    pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, _NONE, sums)
+    mode = _mode()
+    _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, sums)
     if kind == "chi2":
-        pr.stage("col_stats", d, xo, n, d, st)
+        _cs(pr, mode, xo, n, d, st, var=False)
         pr.stage("chi2", d, sums, K, d, cnt, n, sc, pv)
+    elif _blocked() and _idn_fam(mode) & _IDN_SELECT_BLOCKED:
+        # x_prep/select_blocked.mojo: the within-class squares by row blocks, then the score
+        nb = (n + _XB - 1) // _XB
+        ps = pr.work(nb * d)
+        pr.stage("fcb_part", nb * d, xo, n, d, yo, mean, ps, nb)
+        pr.stage("fcb_fin", d, ps, n, d, nb, K, cnt, mean, sc, pv)
     else:
         pr.stage("f_classif", d, xo, n, d, yo, K, cnt, mean, sc, pv)
-    pr.run(_mode())
+    pr.run(mode)
     if kind == "chi2" and any(v < 0 for v in pr.values(st + 3 * d, d)):
         raise ValueError("mojolearn: Input X must be non-negative.")
     return pr.get(sc, d), pr.get(pv, d)
@@ -4938,8 +5505,21 @@ def _pearson(X, y, center, force_finite):
     pr = _Prog()
     xo, yo = pr.put(arr), pr.put(yv)
     sc, pv, co = pr.alloc(d), pr.alloc(d), pr.alloc(d)
-    pr.stage("f_regression", d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
-    pr.run(_mode())
+    mode = _mode()
+    if _blocked() and _idn_fam(mode) & _IDN_SELECT_BLOCKED:
+        # x_prep/select_blocked.mojo: the sums and the centred products by row blocks
+        nb = (n + _XB - 1) // _XB
+        mx = my = _NONE
+        if center:
+            psx, psy, mx, my = pr.work(nb * d), pr.work(nb), pr.work(d), pr.work(1)
+            pr.stage("frb_part1", nb * d, xo, n, d, yo, psx, psy, nb)
+            pr.stage("frb_mean", d, psx, psy, nb, d, n, mx, my)
+        pxy, pxx, pyy = pr.work(nb * d), pr.work(nb * d), pr.work(nb)
+        pr.stage("frb_part2", nb * d, xo, n, d, yo, mx, my, pxy, pxx, pyy, nb)
+        pr.stage("frb_fin", d, pxy, pxx, pyy, nb, d, n, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
+    else:
+        pr.stage("f_regression", d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
+    pr.run(mode)
     return pr.get(sc, d), pr.get(pv, d), pr.get(co, d)
 
 
@@ -4976,17 +5556,21 @@ class SelectKBest(_SelectorMixin):
         out = self.score_func(arr, y)
         scores, pvals = out if isinstance(out, (tuple, list)) else (out, None)
         self.scores_, self.pvalues_ = scores, pvals
-        vals = [float(v) for v in (scores.tolist() if hasattr(scores, "tolist") else scores)]
-        vals = [(-float("inf") if v != v else v) for v in vals]
         if self.k == "all":
             self._mask = [True] * d
         else:
             k = int(self.k)
             if not 0 <= k <= d:
                 raise ValueError(f"mojolearn: k should be 0 <= k <= n_features = {d}; got {k}")
-            order = sorted(range(d), key=lambda j: vals[j])       # stable, ascending
-            chosen = set(order[d - k:]) if k else set()
-            self._mask = [j in chosen for j in range(d)]
+            # lane cpu2-l3-prep: the top k on the device (c2_key64: binary64 ordered keys, a
+            # NaN as -inf; c2_topk: stable ascending rank, the later of tied columns wins)
+            pr = _Prog()
+            key, mask = pr.work(2 * d), pr.alloc(d)
+            words, kind = _key_words(scores, d)
+            pr.stage("c2_key64", d, pr.put_words(words), kind, key)
+            pr.stage("c2_topk", d, key, d, k, mask)
+            pr.run(_mode())
+            self._mask = _mask_list(pr, mask, d)
         self.numeric_mode_, self.n_features_in_ = _mode(), d
         return self
 
@@ -5074,21 +5658,21 @@ def _mutual_info(X, y, discrete_target, discrete_features, n_neighbors, random_s
         dc = len(cont)
         xo = pr.put(arr if not disc else _gather(arr, cont, mode))
         st, sc, ma, z, zs = pr.alloc(6 * dc), pr.alloc(dc), pr.alloc(dc), work(n * dc), work(n * dc)
-        pr.stage("col_stats", dc, xo, n, dc, st)
+        _cs(pr, mode, xo, n, dc, st)
         pr.stage("mi_colscale", dc, xo, n, dc, st, sc, ma)
         pr.stage("mi_noise", n * dc, xo, n, dc, sc, ma, 2 * seed, z, _plus1(zs))
     if not discrete_target:
         yo = pr.put(yv)
         sty, scy, may, zy, zys = pr.alloc(6), pr.alloc(1), pr.alloc(1), work(n), work(n)
-        pr.stage("col_stats", 1, yo, n, 1, sty)
+        _cs(pr, mode, yo, n, 1, sty)
         pr.stage("mi_colscale", 1, yo, n, 1, sty, scy, may)
         pr.stage("mi_noise", n, yo, n, 1, scy, may, 2 * seed + 1, zy, _plus1(zys))
     if cont:
         term, outc = work(n * dc), pr.alloc(dc)
         if discrete_target:
-            used = sum(c for c in counts if c > 1)
             pr.stage("mi_cd", n * dc, z, n, dc, yo, lc, k, term, _plus1(zs))
-            pr.stage("mi_reduce", dc, term, n, dc, 1, k, used, outc)
+            # the rows of the classes with more than one (KIND 3: summed on the device)
+            pr.stage("mi_reduce", dc, term, n, dc, 3, k, 0, outc, lc, len(counts))
         else:
             pr.stage("mi_cc", n * dc, z, n, dc, zy, k, term, _plus1(zs), _plus1(zys))
             pr.stage("mi_reduce", dc, term, n, dc, 0, k, n, outc)
@@ -5156,30 +5740,34 @@ def _gather(arr, cols, mode):
     return pr.get(out, (n, len(cols)))
 
 
-def _importances(est, mode, getter="auto"):
-    """The squared importance of each column of a fitted estimator: coef_
-    squared (summed over rows when 2-D) on the device, else
-    feature_importances_ as given (a monotone stand-in for its square).
-    A str getter (a dotted attribute path, as operator.attrgetter) or a
-    callable picks the importances instead; they are squared (summed over
-    rows when 2-D) on the device, as the reference's transform_func='square'."""
+def _stage_importance_keys(pr, est, m, getter="auto"):
+    """Stages the ordered keys (c2_key64) of a fitted estimator's m column
+    importances: coef_ squared (summed over rows when 2-D, sqsum_cols) on the
+    device, else feature_importances_ as given (a monotone stand-in for its
+    square). A str getter (a dotted attribute path, as operator.attrgetter)
+    or a callable picks the importances instead; they are squared (summed
+    over rows when 2-D) on the device, as the reference's
+    transform_func='square'. Returns the keys' offset."""
     if getter != "auto":
         coef = operator.attrgetter(getter)(est) if isinstance(getter, str) else getter(est)
     else:
         coef = getattr(est, "coef_", None)
+    key = pr.work(2 * m)
     if coef is None and getter == "auto":
         imp = getattr(est, "feature_importances_", None)
         if imp is None:
             raise ValueError("mojolearn: RFE needs an estimator with coef_ or feature_importances_")
-        return [float(v) for v in (imp.tolist() if hasattr(imp, "tolist") else imp)]
+        words, kind = _key_words(imp, m)
+        pr.stage("c2_key64", m, pr.put_words(words), kind, key)
+        return key
     c = as_f32_c(coef, ndim=None, name="coef_")[0]
     rows, d = (1, c.shape[0]) if c.ndim == 1 else c.shape
-    pr = _Prog()
-    co = pr.put(c)
-    out = pr.alloc(d)
-    pr.stage("sqsum_cols", d, co, rows, d, out)
-    pr.run(mode)
-    return pr.values(out, d)
+    if d != m:
+        raise ValueError(f"mojolearn: RFE importances have {d} columns, expected {m}")
+    out = pr.work(d)
+    pr.stage("sqsum_cols", d, pr.put(c), rows, d, out)
+    pr.stage("c2_key64", d, out, 0, key)
+    return key
 
 
 class RFE(_SelectorMixin):
@@ -5219,22 +5807,29 @@ class RFE(_SelectorMixin):
         if step <= 0:
             raise ValueError("mojolearn: step must be > 0")
         support = [True] * d
-        ranking = [1] * d
-        while sum(support) > nsel:
-            features = [j for j in range(d) if support[j]]
+        ranking = full((d,), 1, "<f4")
+        nsup = d
+        while nsup > nsel:
+            features = [j for j in range(d) if support[j]]  # glue: the supported column list (control)
             est = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
-            imp = _importances(est, mode, self.importance_getter)
-            ranks = sorted(range(len(features)), key=lambda r: imp[r])
-            threshold = min(step, sum(support) - nsel)
-            for r in ranks[:threshold]:
-                support[features[r]] = False
-            for j in range(d):
-                if not support[j]:
-                    ranking[j] += 1
+            # lane cpu2-l3-prep: the ranking and elimination on the device (c2_rfe_step: the
+            # `step` weakest by a stable ascending sort of the importance keys leave the
+            # support; c2_rfe_rank: every unsupported column's ranking + 1)
+            pr = _Prog()
+            key = _stage_importance_keys(pr, est, len(features), self.importance_getter)
+            sup = pr.put_list([1.0 if v else 0.0 for v in support], inout=True)  # glue: the support mask up
+            rk = pr.put(ranking, inout=True)
+            pr.stage("c2_rfe_step", len(features), key, pr.put_ints(features), len(features),
+                     min(step, nsup - nsel), sup)
+            pr.stage("c2_rfe_rank", d, sup, rk)
+            pr.run(mode)
+            support = _mask_list(pr, sup, d)
+            ranking = pr.get(rk, d)
+            nsup = len([1 for v in support if v])  # glue: the support size (control)
         features = [j for j in range(d) if support[j]]
         self.estimator_ = self._clone().fit(_gather(arr, features, mode), y, **fit_params)
         self._mask, self.support_ = support, list(support)
-        self.ranking_ = Array.from_list(ranking, "<i8")
+        self.ranking_ = ranking.astype("<i8")
         self.n_features_ = sum(support)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
@@ -5260,6 +5855,7 @@ class ComplementNB(_DiscreteNB):
     reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
     _csr_ok = True
+    _needs_min = True
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False):
         self.alpha = alpha
@@ -5317,7 +5913,7 @@ class CategoricalNB(_DiscreteNB):
     def partial_fit(self, X, y, classes=None, sample_weight=None):
         _check_alpha(self)
         arr = _x2d(X)
-        first, codes = _partial_codes(self, y, classes, arr.shape[0])
+        first, codes = _partial_codes(self, y, classes, arr.shape[0], defer=True)
         if first:
             return self._cat_fit(arr, codes, sample_weight, _mode(), False)
         self._check_width(arr)
@@ -5332,7 +5928,7 @@ class CategoricalNB(_DiscreteNB):
         n, d = arr.shape
         K = len(self.classes_)
         pr = _Prog()
-        xo, yo = pr.put(arr), pr.put_codes(codes)
+        xo, yo = pr.put(arr), _stage_partial_codes(pr, codes, mode)
         st, cnt, clp = pr.alloc(6 * d), pr.alloc(K), pr.alloc(K)
         wo = _nb_weights(pr, sample_weight, n)
         _col_stats(pr, xo, n, d, st, var=False)
@@ -5363,7 +5959,7 @@ class CategoricalNB(_DiscreteNB):
             ncat = [max(a, b) for a, b in zip(ncat, self.n_categories_.tolist())]
         cmax = max(ncat)
         q = _Prog()
-        xo, yo = q.put(arr), q.put_codes(codes)
+        xo, yo = q.put(arr), _stage_partial_codes(q, codes, mode)
         no, co, a = q.put_list(ncat), q.put(pr.get(cnt, K)), q.put_scalar(self.alpha)
         wq = _nb_weights(q, sample_weight, n)
         cc = q.alloc(d * K * cmax)

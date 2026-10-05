@@ -50,6 +50,7 @@ from neighbors.estimator import (
     knn_regressor_predict_resident,
     knn_search_resident,
 )
+from neighbors.impl.knn.knn import KnnVoteCache
 from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     KnnIndexCache,
@@ -68,6 +69,9 @@ struct ResidentKnnIndex(Movable):
     #: DEVIATION 3061: what every search derives from `index` alone, built
     #: by the first search that needs it and kept for the handle's life.
     var cache: KnnIndexCache
+    #: lane/fam2-neighbors (KNN_IDN_VOTE_CACHE): the classifier vote's labels
+    #: and unique sets, built by the first vote and kept for the handle's life.
+    var vote: KnnVoteCache
 
     def __init__(
         out self,
@@ -86,9 +90,11 @@ struct ResidentKnnIndex(Movable):
         self.index = index^
         self.ctx = ctx^
         self.cache = KnnIndexCache()
+        self.vote = KnnVoteCache()
 
     def __deinit__(deinit self):
         # The buffers before the context they were created on (DEVIATION 1946).
+        _ = self.vote^
         _ = self.cache^
         _ = self.index^
         _ = self.ctx^
@@ -223,6 +229,7 @@ def knn_index_classify(
         out_proba_ptr, out_uniq_ptr, want_proba, requested_query_tile,
         metric, metric_arg, weights,
         MutPointer(to=entry.cache).unsafe_origin_cast[MutAnyOrigin](),
+        MutPointer(to=entry.vote).unsafe_origin_cast[MutAnyOrigin](),
     )
 
 

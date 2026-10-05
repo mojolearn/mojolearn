@@ -1,0 +1,1845 @@
+{
+  "schema": 1,
+  "description": "Explicit disabled-candidate compilation recipes from original handoff; not promotion, qualification or automatic run authorization. Read from the same immutable source SHA as the build.",
+  "policy": "Preserve ON/OFF controls. No Apple jobs; targeted NVIDIA/AMD work now, exhaustive matrix deferred to final main.",
+  "recipes": [
+    {
+      "id": "kmeans_convergence_chunk/1",
+      "candidate_group": "kmeans_convergence_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "KMeans labels/centers versus host; confirm grouped stopping does not change final iterate.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "kmeans_convergence_chunk/2",
+      "candidate_group": "kmeans_convergence_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "KMeans labels/centers versus host; confirm grouped stopping does not change final iterate.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "kmeans_convergence_chunk/4",
+      "candidate_group": "kmeans_convergence_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_4=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "KMeans labels/centers versus host; confirm grouped stopping does not change final iterate.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "kmeans_convergence_chunk/16",
+      "candidate_group": "kmeans_convergence_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_16=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "KMeans labels/centers versus host; confirm grouped stopping does not change final iterate.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "kmeans_convergence_chunk/32",
+      "candidate_group": "kmeans_convergence_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_32=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "KMeans labels/centers versus host; confirm grouped stopping does not change final iterate.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "kmeans_accumulator_rows/256",
+      "candidate_group": "kmeans_accumulator_rows",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "KMeans integer totals and final labels/centers; memory bound at skinny and wide shapes.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "kmeans_accumulator_rows/4096",
+      "candidate_group": "kmeans_accumulator_rows",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "KMeans integer totals and final labels/centers; memory bound at skinny and wide shapes.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gmm_estep_stack/1",
+      "candidate_group": "gmm_estep_stack",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GMM_ESTEP_STACK=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "mixture",
+        "mixture_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "GaussianMixture E-step raw likelihood/responsibility/model bytes plus predictive quality; exercise n*K*d below and above 1GiB cap.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "dbscan_cc_chunk/4",
+      "candidate_group": "dbscan_cc_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK4=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "DBSCAN exact labels including long propagation chain and all-noise; convergence must reach same fixed point.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "dbscan_cc_chunk/16",
+      "candidate_group": "dbscan_cc_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK16=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "DBSCAN exact labels including long propagation chain and all-noise; convergence must reach same fixed point.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "dbscan_cc_chunk/32",
+      "candidate_group": "dbscan_cc_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_CHUNK32=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "DBSCAN exact labels including long propagation chain and all-noise; convergence must reach same fixed point.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "dbscan_cc_split/4",
+      "candidate_group": "dbscan_cc_split",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT4=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Dense-neighborhood edge rows with splitting active; exact labels/host identity, not just unordered cluster equivalence.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "dbscan_cc_split/8",
+      "candidate_group": "dbscan_cc_split",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT8=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Dense-neighborhood edge rows with splitting active; exact labels/host identity, not just unordered cluster equivalence.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "dbscan_cc_split/16",
+      "candidate_group": "dbscan_cc_split",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_DBSCAN_CC_SPLIT16=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Dense-neighborhood edge rows with splitting active; exact labels/host identity, not just unordered cluster equivalence.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "mst_scan_lanes/64",
+      "candidate_group": "mst_scan_lanes",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_MST_SCAN_LANES=64"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "solver",
+        "solver_host",
+        "hdbscan",
+        "hdbscan_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Dense MST deterministic total-order edges including equal weights; hierarchy and HDBSCAN raw tree/label identity.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "mst_scan_lanes/128",
+      "candidate_group": "mst_scan_lanes",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_MST_SCAN_LANES=128"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "solver",
+        "solver_host",
+        "hdbscan",
+        "hdbscan_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Dense MST deterministic total-order edges including equal weights; hierarchy and HDBSCAN raw tree/label identity.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "mst_scan_lanes/256",
+      "candidate_group": "mst_scan_lanes",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_MST_SCAN_LANES=256"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "solver",
+        "solver_host",
+        "hdbscan",
+        "hdbscan_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Dense MST deterministic total-order edges including equal weights; hierarchy and HDBSCAN raw tree/label identity.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "dendrogram_hook_chunk/2",
+      "candidate_group": "dendrogram_hook_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [
+        "MOJOLEARN_IDN_DENDRO_UNION_OFF=1"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_DENDRO_UNION_OFF=1",
+        "MOJOLEARN_IDN_DENDRO_HOOK_CHUNK=2"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "solver",
+        "solver_host",
+        "hdbscan",
+        "hdbscan_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Disable default union kernel using MOJOLEARN_IDN_DENDRO_UNION_OFF=1; hook/jump rounds at chunk2/8 must preserve exact dendrogram and convergence.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "dendrogram_hook_chunk/8",
+      "candidate_group": "dendrogram_hook_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [
+        "MOJOLEARN_IDN_DENDRO_UNION_OFF=1"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_DENDRO_UNION_OFF=1",
+        "MOJOLEARN_IDN_DENDRO_HOOK_CHUNK=8"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "solver",
+        "solver_host",
+        "hdbscan",
+        "hdbscan_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Disable default union kernel using MOJOLEARN_IDN_DENDRO_UNION_OFF=1; hook/jump rounds at chunk2/8 must preserve exact dendrogram and convergence.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "hdbscan_sparse_threshold/4096",
+      "candidate_group": "hdbscan_sparse_threshold",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS=4096"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "hdbscan",
+        "hdbscan_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Fixtures straddling both thresholds below46340 so changed route is reached; exact hierarchy/labels, sparse MR checker.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "hdbscan_sparse_threshold/16384",
+      "candidate_group": "hdbscan_sparse_threshold",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS=16384"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "hdbscan",
+        "hdbscan_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Fixtures straddling both thresholds below46340 so changed route is reached; exact hierarchy/labels, sparse MR checker.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "single_linkage_sparse_mst/4096",
+      "candidate_group": "single_linkage_sparse_mst",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_SL_SPARSE_MST=1",
+        "MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS=4096"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "solver",
+        "solver_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Source report only compares unordered child pairs against dense route. Mandatory exact within-version raw child orientation across all columns plus infinity refusal behavior; sparse linkage checks.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "affinity_convergence_chunk/4",
+      "candidate_group": "affinity_convergence_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_AP_CONV_CHUNK4=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_cluster",
+        "x_cluster_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Affinity propagation labels/exemplars and convergence boundary fixtures; unchanged final iterate.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "affinity_convergence_chunk/16",
+      "candidate_group": "affinity_convergence_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_AP_CONV_CHUNK16=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_cluster",
+        "x_cluster_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Affinity propagation labels/exemplars and convergence boundary fixtures; unchanged final iterate.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "affinity_convergence_chunk/32",
+      "candidate_group": "affinity_convergence_chunk",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_AP_CONV_CHUNK32=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_cluster",
+        "x_cluster_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Affinity propagation labels/exemplars and convergence boundary fixtures; unchanged final iterate.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "minibatch_group_size/8",
+      "candidate_group": "minibatch_group_size",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_MINIBATCH_GROUP8=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_cluster",
+        "x_cluster_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "MiniBatchKMeans exact centers/labels across grouping boundaries and remainder steps.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "minibatch_group_size/32",
+      "candidate_group": "minibatch_group_size",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_MINIBATCH_GROUP32=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_cluster",
+        "x_cluster_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "MiniBatchKMeans exact centers/labels across grouping boundaries and remainder steps.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "minibatch_group_size/64",
+      "candidate_group": "minibatch_group_size",
+      "source_ref": "lane/fam2-cluster",
+      "source_sha": "cba1376d442322ba6f83e3a38f881fc6e8dcda5a",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_MINIBATCH_GROUP64=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_cluster",
+        "x_cluster_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "MiniBatchKMeans exact centers/labels across grouping boundaries and remainder steps.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "eigh_block_width/8",
+      "candidate_group": "eigh_block_width",
+      "source_ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "baseline_defines": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON=1"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON=1",
+        "MOJOLEARN_IDN_EIGH_BLOCK_B8=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_decomp",
+        "x_decomp_host"
+      ],
+      "status": "BLOCK_FAMILY_QUARANTINED_DEFAULT_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Default block candidate already failed strict intrinsic pivot convergence. Do not time or promote siblings without their own convergence/residual/orthogonality plus identity proof.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": "~/mojolearn-evidence/identical-all/eigh-block-drop.json",
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "eigh_block_width/32",
+      "candidate_group": "eigh_block_width",
+      "source_ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "baseline_defines": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON=1"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON=1",
+        "MOJOLEARN_IDN_EIGH_BLOCK_B32=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_decomp",
+        "x_decomp_host"
+      ],
+      "status": "BLOCK_FAMILY_QUARANTINED_DEFAULT_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Default block candidate already failed strict intrinsic pivot convergence. Do not time or promote siblings without their own convergence/residual/orthogonality plus identity proof.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": "~/mojolearn-evidence/identical-all/eigh-block-drop.json",
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "eigh_block_threshold/128",
+      "candidate_group": "eigh_block_threshold",
+      "source_ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "baseline_defines": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON=1"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON=1",
+        "MOJOLEARN_IDN_EIGH_BLOCK_MIN128=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_decomp",
+        "x_decomp_host"
+      ],
+      "status": "BLOCK_FAMILY_QUARANTINED_DEFAULT_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Same failed block family; n128..511 and nonmultiple dimensions need full strict quality before any measurement.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": "~/mojolearn-evidence/identical-all/eigh-block-drop.json",
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "eigh_small_limit/64",
+      "candidate_group": "eigh_small_limit",
+      "source_ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_EIGH_SMALL_N64=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_decomp",
+        "x_decomp_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "n48,64,128 exact host/GPU eigensystem; one-block host-route guard and residual/orthogonality; keep default32 unless needed.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "eigh_small_limit/128",
+      "candidate_group": "eigh_small_limit",
+      "source_ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_EIGH_SMALL_N128=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_decomp",
+        "x_decomp_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "n48,64,128 exact host/GPU eigensystem; one-block host-route guard and residual/orthogonality; keep default32 unless needed.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "rf_sorted_bootstrap/1",
+      "candidate_group": "rf_sorted_bootstrap",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_RF_ROWS_SORTED=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "rf",
+        "rf_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Wide RF bootstrap with >=64cols and narrow control; exact forest/predictions, trace row order intentionally different.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "rf_device_level_loop/1",
+      "candidate_group": "rf_device_level_loop",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP=1",
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K1=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "rf",
+        "rf_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "max_leaves=-1 and single sampling round required, unlike DART255-leaf fixture. Exact forest node queue/IDs and tail batches; bound unlimited-depth allocation.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "rf_device_level_loop/2",
+      "candidate_group": "rf_device_level_loop",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP=1",
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K2=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "rf",
+        "rf_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "max_leaves=-1 and single sampling round required, unlike DART255-leaf fixture. Exact forest node queue/IDs and tail batches; bound unlimited-depth allocation.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "rf_device_level_loop/4",
+      "candidate_group": "rf_device_level_loop",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "rf",
+        "rf_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "max_leaves=-1 and single sampling round required, unlike DART255-leaf fixture. Exact forest node queue/IDs and tail batches; bound unlimited-depth allocation.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "rf_device_level_loop/8",
+      "candidate_group": "rf_device_level_loop",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP=1",
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K8=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "rf",
+        "rf_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "max_leaves=-1 and single sampling round required, unlike DART255-leaf fixture. Exact forest node queue/IDs and tail batches; bound unlimited-depth allocation.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "extra_trees_u16_bins/1",
+      "candidate_group": "extra_trees_u16_bins",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_ET_BINNED_U16=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "trees",
+        "trees_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": ">=64cols with2*k>=cols; Istella-reg/year quality within declared margin and raw all-column model/prediction identity. Taxi16cols cannot activate.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gbdt_apply_wide/1",
+      "candidate_group": "gbdt_apply_wide",
+      "source_ref": "lane/fam2-gbdt",
+      "source_sha": "54c99a3b7b4f1a90a19a4a486af5ecbdb2b81690",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GBDT_APPLY_WIDE=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "gbdt",
+        "gbdt_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Wide symmetric predict resident/nonresident fixtures, zero/mixed depth and exact labels/probabilities.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gbdt_ctr_borders_device/1",
+      "candidate_group": "gbdt_ctr_borders_device",
+      "source_ref": "lane/fam2-gbdt",
+      "source_sha": "54c99a3b7b4f1a90a19a4a486af5ecbdb2b81690",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GBDT_CTR_BORDERS_DEVICE=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "gbdt",
+        "gbdt_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Categorical GBDT borders/model/prediction raw identity with flag applied device AND host builds.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gp_gradient_rows4/4",
+      "candidate_group": "gp_gradient_rows4",
+      "source_ref": "lane/fam2-kernel-gp",
+      "source_sha": "a0329a4e9b496604fb4100e6fb82d5658a89fdda",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GP_GRAD_ROWS4=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "gp",
+        "gp_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Optimized GPR theta/lml gradient and prediction quality; same fold on host, default ROWFOLD is1.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "nystroem_device_rr_stop/2",
+      "candidate_group": "nystroem_device_rr_stop",
+      "source_ref": "lane/fam2-kernel-gp",
+      "source_sha": "a0329a4e9b496604fb4100e6fb82d5658a89fdda",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_NYS_RR_DEV_STOP=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "kernel_methods",
+        "kernel_methods_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Nystroem eigen convergence and basis/transform bytes; stopped and extra-empty sweep fixtures.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "nystroem_device_rr_stop/4",
+      "candidate_group": "nystroem_device_rr_stop",
+      "source_ref": "lane/fam2-kernel-gp",
+      "source_sha": "a0329a4e9b496604fb4100e6fb82d5658a89fdda",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_NYS_RR_DEV_STOP=1",
+        "MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "kernel_methods",
+        "kernel_methods_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Nystroem eigen convergence and basis/transform bytes; stopped and extra-empty sweep fixtures.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "rbf_direct_cell/16",
+      "candidate_group": "rbf_direct_cell",
+      "source_ref": "lane/fam2-kernel-gp",
+      "source_sha": "a0329a4e9b496604fb4100e6fb82d5658a89fdda",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_KM_RBF_CELL=1",
+        "MOJOLEARN_IDN_KM_RBF_CELL_D16=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "kernel_methods",
+        "kernel_methods_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "KernelRidge/Nystroem direct squared differences changes arithmetic; exact all-column cells and kernel-relative-error/predictive quality on cancellation-sensitive data.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "rbf_direct_cell/64",
+      "candidate_group": "rbf_direct_cell",
+      "source_ref": "lane/fam2-kernel-gp",
+      "source_sha": "a0329a4e9b496604fb4100e6fb82d5658a89fdda",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_KM_RBF_CELL=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "kernel_methods",
+        "kernel_methods_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "KernelRidge/Nystroem direct squared differences changes arithmetic; exact all-column cells and kernel-relative-error/predictive quality on cancellation-sensitive data.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gram_cd_column_limit/128",
+      "candidate_group": "gram_cd_column_limit",
+      "source_ref": "lane/fam2-linear",
+      "source_sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_CD_IDN_GRAM_COLS_128=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "solver",
+        "solver_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Lasso/ElasticNet width>64 and at both new thresholds; Gram route readback, coefficients/objective/KKT and raw identity.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gram_cd_column_limit/256",
+      "candidate_group": "gram_cd_column_limit",
+      "source_ref": "lane/fam2-linear",
+      "source_sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_CD_IDN_GRAM_COLS_256=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "solver",
+        "solver_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Lasso/ElasticNet width>64 and at both new thresholds; Gram route readback, coefficients/objective/KKT and raw identity.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "qn_tiled_multinomial_all/1",
+      "candidate_group": "qn_tiled_multinomial_all",
+      "source_ref": "lane/fam2-linear",
+      "source_sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_QN_TILED_MULTI_ALL=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "C>1 and D*C<=256 specifically, otherwise default already tiled; fitted logistic model/raw prediction identity and quality.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "qn_device_convergence/2",
+      "candidate_group": "qn_device_convergence",
+      "source_ref": "lane/fam2-linear",
+      "source_sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_QN_IDN_DCONV=1",
+        "MOJOLEARN_QN_IDN_DCONV_POLL_2=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Logistic/SVR Armijo/convergence/line-search fallback fixtures; exact model against all columns at poll boundaries.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "qn_device_convergence/4",
+      "candidate_group": "qn_device_convergence",
+      "source_ref": "lane/fam2-linear",
+      "source_sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_QN_IDN_DCONV=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Logistic/SVR Armijo/convergence/line-search fallback fixtures; exact model against all columns at poll boundaries.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "qn_device_convergence/8",
+      "candidate_group": "qn_device_convergence",
+      "source_ref": "lane/fam2-linear",
+      "source_sha": "d2f2abb011cb6b4439f4621bf6377ecbae6e5001",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_QN_IDN_DCONV=1",
+        "MOJOLEARN_QN_IDN_DCONV_POLL_8=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Logistic/SVR Armijo/convergence/line-search fallback fixtures; exact model against all columns at poll boundaries.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "mamba3_parallel_angle/32",
+      "candidate_group": "mamba3_parallel_angle",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1",
+        "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "mamba",
+        "mamba_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Mamba3 seam-crossing angle, staged forward/backward/decode and source-generated host oracle; all explicit block sizes require identity and quality.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [
+        "mamba3_angle"
+      ],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "mamba3_parallel_angle/64",
+      "candidate_group": "mamba3_parallel_angle",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "mamba",
+        "mamba_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Mamba3 seam-crossing angle, staged forward/backward/decode and source-generated host oracle; all explicit block sizes require identity and quality.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [
+        "mamba3_angle"
+      ],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "mamba3_parallel_angle/128",
+      "candidate_group": "mamba3_parallel_angle",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1",
+        "MOJOLEARN_IDN_M3_ANGLE_BLOCK_128=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "mamba",
+        "mamba_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Mamba3 seam-crossing angle, staged forward/backward/decode and source-generated host oracle; all explicit block sizes require identity and quality.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [
+        "mamba3_angle"
+      ],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gemm_group_slack/2",
+      "candidate_group": "gemm_group_slack",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_2=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Grouped GEMM route-active NVIDIA shapes; exact GEMM/lm/transformer results and selected split plan readback.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gemm_group_slack/8",
+      "candidate_group": "gemm_group_slack",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GEMM_GROUP_SLACK_8=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Grouped GEMM route-active NVIDIA shapes; exact GEMM/lm/transformer results and selected split plan readback.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gemm_group_s/half",
+      "candidate_group": "gemm_group_s",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GEMM_GROUP_S_HALF=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "NVIDIA and AMD shapes with positive grouped-split row; exact outputs and actual chosen launch plan.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gemm_group_s/x2",
+      "candidate_group": "gemm_group_s",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GEMM_GROUP_S_X2=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "NVIDIA and AMD shapes with positive grouped-split row; exact outputs and actual chosen launch plan.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "gemm_group_tiles_body/1",
+      "candidate_group": "gemm_group_tiles_body",
+      "source_ref": "lane/fam2-lm",
+      "source_sha": "dd5cee5517a4337c43b98dbc1f1e164d8a963604",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "NVIDIA body row1 actual128x64 tiles versus128x128 count; record selected split route and exact outputs.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "ocsvm_chunk256/256",
+      "candidate_group": "ocsvm_chunk256",
+      "source_ref": "lane/fam2-neighbors",
+      "source_sha": "c395f3631340e6d508aa3551e685a89295291791",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_OCSVM_CHUNK256=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_neighbors",
+        "x_neighbors_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "OneClassSVM stop boundary/model identity; candidate enqueues256SMO iterations rather than64.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "cross_entropy_fold256/256",
+      "candidate_group": "cross_entropy_fold256",
+      "source_ref": "lane/fam2-neural",
+      "source_sha": "3f04284d843469017ee15d23910015c216578554",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_XENT_FOLD_BLOCK_256=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_cnn",
+        "x_cnn_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Loss fold arithmetic changes; n33,256,257,1024,1025 raw loss/gradient host+GPU and high-precision reference error.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "lda_gram_rowtile/1",
+      "candidate_group": "lda_gram_rowtile",
+      "source_ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GRAM_ROWTILE=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_prep",
+        "x_prep_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "LDA ZtZ exact cell fold and model/transform across all columns, tail blocks.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "lda_qda_gram_rows/512",
+      "candidate_group": "lda_qda_gram_rows",
+      "source_ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GRAM_ROWS_512=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_prep",
+        "x_prep_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "LDA/QDA changed Gram fold: full raw host/GPU plus covariance/eigen/accuracy checks, rows straddling block size.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "lda_qda_gram_rows/8192",
+      "candidate_group": "lda_qda_gram_rows",
+      "source_ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GRAM_ROWS_8192=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_prep",
+        "x_prep_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "LDA/QDA changed Gram fold: full raw host/GPU plus covariance/eigen/accuracy checks, rows straddling block size.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "lda_qda_rr_min/8",
+      "candidate_group": "lda_qda_rr_min",
+      "source_ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_RR_MIN_8=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_prep",
+        "x_prep_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Matrices whose route changes between cyclic and round-robin eigh; raw all-column and strict eigensystem error against high precision.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "lda_qda_rr_min/16",
+      "candidate_group": "lda_qda_rr_min",
+      "source_ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_RR_MIN_16=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_prep",
+        "x_prep_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Matrices whose route changes between cyclic and round-robin eigh; raw all-column and strict eigensystem error against high precision.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "lda_qda_rr_min/48",
+      "candidate_group": "lda_qda_rr_min",
+      "source_ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_RR_MIN_48=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_prep",
+        "x_prep_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Matrices whose route changes between cyclic and round-robin eigh; raw all-column and strict eigensystem error against high precision.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "lda_qda_rr_min/96",
+      "candidate_group": "lda_qda_rr_min",
+      "source_ref": "lane/fam2-prep-metrics",
+      "source_sha": "ce576f3404c2e614c2446c634705f50d234e4758",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_RR_MIN_96=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_prep",
+        "x_prep_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Matrices whose route changes between cyclic and round-robin eigh; raw all-column and strict eigensystem error against high precision.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "xty_tile_rows/64",
+      "candidate_group": "xty_tile_rows",
+      "source_ref": "lane/fam2-shared",
+      "source_sha": "f394108a6b2da1c69fa84a26240bc70465bcdebd",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_XTY_TILE_64=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host",
+        "arima",
+        "arima_host",
+        "x_decomp",
+        "x_decomp_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "OLS/Ridge/ARIMA/svd consumers; altered tile fold at boundary rows, raw host/GPU and fit quality.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "xty_tile_rows/1024",
+      "candidate_group": "xty_tile_rows",
+      "source_ref": "lane/fam2-shared",
+      "source_sha": "f394108a6b2da1c69fa84a26240bc70465bcdebd",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_XTY_TILE_1024=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host",
+        "arima",
+        "arima_host",
+        "x_decomp",
+        "x_decomp_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "OLS/Ridge/ARIMA/svd consumers; altered tile fold at boundary rows, raw host/GPU and fit quality.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "device_f64_narrowing/1",
+      "candidate_group": "device_f64_narrowing",
+      "source_ref": "lane/fam2-shared",
+      "source_sha": "f394108a6b2da1c69fa84a26240bc70465bcdebd",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_HPDEV_CAST_F64=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Float64->Float32 rounding tie/subnormal/infinity/NaN payload cases across GPU+host; never accept host fallback. Cost includes extra bus transfers.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "arima_parallel_start_ls/256",
+      "candidate_group": "arima_parallel_start_ls",
+      "source_ref": "lane/fam2-timeseries",
+      "source_sha": "287909f7a960d440643fe0a3190a2ea6a9de48c1",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_X0_PAR_LS=1",
+        "MOJOLEARN_IDN_X0_PAR_LS_MIN256=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "arima",
+        "arima_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "ARIMA/AutoARIMA long start-parameter least squares at threshold boundaries; raw fit/forecast and quality versus same data.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "arima_parallel_start_ls/2048",
+      "candidate_group": "arima_parallel_start_ls",
+      "source_ref": "lane/fam2-timeseries",
+      "source_sha": "287909f7a960d440643fe0a3190a2ea6a9de48c1",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_X0_PAR_LS=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "arima",
+        "arima_host"
+      ],
+      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "ARIMA/AutoARIMA long start-parameter least squares at threshold boundaries; raw fit/forecast and quality versus same data.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": null,
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    },
+    {
+      "id": "eigh_block_reenable/1",
+      "candidate_group": "eigh_block_reenable",
+      "source_ref": "lane/fam2-decomp",
+      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_EIGH_BLOCK_ON=1"
+      ],
+      "recommended_builders": [
+        "base",
+        "base_host",
+        "x_decomp",
+        "x_decomp_host"
+      ],
+      "status": "DISABLED_AFTER_OBSERVED_CONVERGENCE_FAILURE",
+      "qualification_ready": false,
+      "required_fixture_and_gate": "Captured rank-one pivot refused60sweeps; all4096/nonmultiple quality must pass before reconsidering default. Refusal regression is NOT decomposition success.",
+      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
+      "current_gate_ids": [],
+      "evidence": "~/mojolearn-evidence/identical-all/eigh-block-drop.json",
+      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
+      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
+    }
+  ]
+}

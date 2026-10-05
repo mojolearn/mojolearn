@@ -194,7 +194,7 @@ class Pipelines(Base):
         self.assertEqual(release.RESOURCE["macos-build"], "mac")
         self.assertEqual(release.NEEDS["gpu-column-nvidia"], ["linux-pack", "release-check"])
         self.assertEqual(release.NEEDS["gpu-column-amd"], ["linux-pack", "release-check"])
-        self.assertEqual(release.NEEDS["publish-macos"], ["macos-smoke", "release-check"])
+        self.assertEqual(release.NEEDS["publish-macos"], ["macos-smoke", "macos-self-test", "release-check"])
 
 
 # ---------------------------------------------------------------- legs
@@ -401,16 +401,17 @@ class Columns(Base):
         (out / "diff-ref-cuda.txt").write_text("summary: IDENTICAL=1\n")
         return r, final
 
-    def receipt(self, core):
+    def receipt(self, core, arch="sm_89"):
         """A PASSED smoke of the core with both plugins installed beside it."""
         return dict(status="PASSED", scope="expanded", source_commit=Y, wheel_sha256=release.sha256(core),
+                    installed=dict(gpu_arch=arch),
                     plugins=[dict(wheel=str(p), wheel_sha256=release.sha256(p)) for p in self.plugins])
 
     def earlier_amd(self, wheel_sha, core, lanes=("rf-clf",)):
         d = self.tmp / "state" / X[:12] / "column-amd"
         d.mkdir(parents=True)
         (d / "column-hip.json").write_text(json.dumps(column("hip")))
-        (d / "results.json").write_text(json.dumps(self.receipt(core)))
+        (d / "results.json").write_text(json.dumps(self.receipt(core, "gfx942")))
         sel = dict(backend="hip", column="hip", fixtures="base", lanes=list(lanes), commit=X)
         seld = hashlib.sha256(json.dumps({k: sel[k] for k in ("backend", "column", "fixtures", "lanes")},
                                          sort_keys=True).encode()).hexdigest()
@@ -526,7 +527,13 @@ class SourceAndTooling(Base):
         r.state["commit"] = HEAD
         r.say = lambda m: None
         self.assertIn(f"says {version}", r.step_freeze_version())
-        self.assertIn("frozen source", r.step_freeze_changelog())
+        # A development HEAD may correctly be marked unreleased. Supply a
+        # published frozen-source document without editing the working tree.
+        with mock.patch.object(release, "file_at", return_value=f"## {version} (published 2026-10-04)\n"):
+            self.assertIn("frozen source", r.step_freeze_changelog())
+        with mock.patch.object(release, "file_at", return_value=f"## {version} (unreleased 2026-10-04)\n"):
+            with self.assertRaises(release.StepFailed):
+                r.step_freeze_changelog()
         self.assertIn("part of the frozen source", r.step_freeze_docs_facts())
         r.args.version = r.version = "9.9.9"
         with self.assertRaises(release.StepFailed):
@@ -540,6 +547,39 @@ class SourceAndTooling(Base):
                 r.step_freeze_commit()
         self.assertIn("already published", str(cm.exception))
 
+    def test_refreeze_is_refused_when_only_a_native_payload_published(self):
+        for profile in ("nvidia", "amd"):
+            with self.subTest(profile=profile):
+                r = self.release(commit=X, refreeze=True)
+                r.state["steps"] = {"publish-" + profile: dict(done=True, commit=X, at="t", result="pypi")}
+                with mock.patch.object(release, "git", return_value=Y):
+                    with self.assertRaisesRegex(release.StepFailed, "already published"):
+                        r.step_freeze_commit()
+                self.assertEqual(r.state["commit"], X)
+
+    def test_resume_does_not_dispatch_an_already_published_native_payload(self):
+        for profile in ("nvidia", "amd"):
+            with self.subTest(profile=profile):
+                r = self.release(commit=X)
+                step = "publish-" + profile
+                r.state["steps"] = {step: dict(done=True, commit=X, at="t", result="pypi")}
+                dispatch = mock.Mock(side_effect=AssertionError("must not dispatch twice"))
+                setattr(r, "step_" + step.replace("-", "_"), dispatch)
+                self.assertEqual(r.run_step(step), "done")
+                dispatch.assert_not_called()
+
+    def test_finish_record_is_invalidated_by_a_new_payload_publication(self):
+        r = self.release(commit=X)
+        r.state["steps"] = {"publish-nvidia": dict(done=True, commit=X, at="t", result="pypi")}
+        receipt = dict(platforms=["nvidia"])
+        self.assertTrue(r.skip_recorded("finish-line", receipt))
+        self.assertTrue(r.skip_recorded("record", receipt))
+        r.state["steps"]["publish-amd"] = dict(done=True, commit=X, at="t", result="pypi")
+        self.assertFalse(r.skip_recorded("finish-line", receipt))
+        self.assertFalse(r.skip_recorded("record", receipt))
+        for step in ("publish-nvidia", "publish-amd"):
+            self.assertIn(step, release.AFTER["finish-line"])
+
     def test_publish_ships_the_frozen_source_from_the_tooling_checkout(self):
         r = self.release(commit=Y, publish="pypi")
         calls = []
@@ -549,6 +589,11 @@ class SourceAndTooling(Base):
         with zipfile.ZipFile(whl, "w") as z:
             z.writestr("mojolearn/identity_columns/COMMIT", Y + "\n")
         r.on_pypi = lambda w: False
+        import wheel_self_test
+        receipt = r.self_test_receipt()
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt.write_text(json.dumps(dict(format=wheel_self_test.FORMAT, status="PASSED",
+                                          wheel_sha256=release.sha256(whl))))
         out = r.step_publish_macos()
         (cmd, env), = calls
         self.assertEqual(cmd[:2], ["bash", "tools/release_linux_publish.sh"])

@@ -647,7 +647,7 @@ def arm_e_fit_then_predict(ctx: DeviceContext) raises -> Int:
     var preds = List[Int32]()
     preds.resize(n_rows, Int32(-1))
     var rf = RandomForest[DT, LT](f.rf_params.copy(), CLASSIFICATION)
-    rf.predict(row_major, n_rows, n_cols, preds, f)
+    rf.predict_host(row_major, n_rows, n_cols, preds, f)
 
     var wrong = 0
     for r in range(n_rows):

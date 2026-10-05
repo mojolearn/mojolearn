@@ -2376,7 +2376,7 @@ def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
     if address == 0:
         raise Error("binary prediction: null output")
     var op = MutPointer[Scalar[dtype], MutUntrackedOrigin](unsafe_from_address=address)
-    # `binary_prediction_host`'s own refusal (`gbdt/binary_prediction.mojo:47-50`)
+    # `binary_prediction_device`'s own refusal (`gbdt/binary_prediction.mojo`)
     for i in range(n):
         if not isfinite(rp.unsafe_load(i)):
             raise Error("binary prediction: finite Float32 margins required")

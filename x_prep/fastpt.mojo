@@ -93,9 +93,13 @@ comptime PTIMPUTE_FLAGS = ((1 if PT_COLBATCH else 0) + (2 if PT_SPEC else 0) + (
 
 #: threads per block of the finish kernels (a block a column, a tree)
 comptime TGR = 256
-#: the tile set: rows per chunk, picked by d at run time (`tile_rows`): wide
-#: blocks (Istella's 220 columns) take 256 rows a chunk; narrow ones (taxi's
-#: 11) take 64 so the grid still carries ~170k threads
+#: the tile set: rows per chunk, picked by d at run time (`tile_rows`), a
+#: range rule on occupancy, not a shape table: a block is one thread per
+#: column (`tile_tpb`), so for d >= 64 a 256-row chunk already fills the
+#: device; below 64 columns a block is at most two warps, and 64-row chunks
+#: give 4x the blocks so the grid keeps ~1e5+ threads at 1M rows. The 64-column
+#: cut is a measured value (two board widths, d = 11 and 220): needs
+#: neighbor-shape validation (d = 32, 48, 63, 64, 96, 128)
 comptime ROWS_WIDE = 256
 comptime ROWS_NARROW = 64
 #: the most speculated candidates a thread keeps in registers (S <= 3)
@@ -510,7 +514,7 @@ def cs_tile_stats(mut ctx: DeviceContext, f: FP, pp: FP, X: Int, n: Int, d: Int,
 def ptimpute_part_words(host_q: IP, stages: Int) -> Int:
     """The partials buffer's words over the program (1 when nothing here runs)."""
     var words = 1
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         var hq = host_q + (s * STAGE_INTS + 2)
         comptime if PT_COLBATCH:

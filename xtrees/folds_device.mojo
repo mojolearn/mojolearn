@@ -532,11 +532,19 @@ def leaf_numbering(
         _ = ws^
         return count
     else:
-        var col = 0
-        for g in range(nn):
-            if Int(left[unsafe_offset=g]) == -1:
-                node_col[unsafe_offset=g] = Int32(col)
-                col += 1
-            else:
-                node_col[unsafe_offset=g] = Int32(-1)
-        return col
+        return leaf_numbering_host(left, nn, node_col)
+
+
+def leaf_numbering_host(
+    left: MutPointer[Int32, MutUntrackedOrigin], nn: Int, node_col: MutPointer[Int32, MutUntrackedOrigin],
+) -> Int:
+    """The CPU column of `leaf_numbering` (`-D MOJOLEARN_COLUMN_CPU`, the host
+    binding): the same integers by one loop in node order."""
+    var col = 0
+    for g in range(nn):
+        if Int(left[unsafe_offset=g]) == -1:
+            node_col[unsafe_offset=g] = Int32(col)
+            col += 1
+        else:
+            node_col[unsafe_offset=g] = Int32(-1)
+    return col

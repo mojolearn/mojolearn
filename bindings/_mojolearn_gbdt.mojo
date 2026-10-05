@@ -52,10 +52,12 @@ from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from hostptr import list_f32, list_u32
+from core.pair_split_device import device_split_pairs
 
 from checks.vendor import COMPILED_VENDOR
 from gbdt.gpu_data.sym_feat_switches import GBDT_QUANT_DEVICE
-from gbdt.binary_prediction import binary_prediction_host
+from gbdt.binary_prediction import binary_prediction_device, sigmoid_f64_device
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -81,13 +83,6 @@ from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     identical_exp64,
-)
-from std.memory import bitcast as _hr2_bitcast
-from checks.soft_f64 import (
-    SF64_ONE,
-    sf64_ftz,
-    sf64_sigmoid_f64,
-    sf64_sub,
 )
 from gbdt.resident_model import (
     gbdt_resident_info,
@@ -144,19 +139,17 @@ def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
     var n = Int(py=params[0])
     if n <= 0 or n > 2147483647:
         raise Error("binary prediction: positive n<=Int32.max required")
-    var rp = _f32_ptr(Int(py=raw_addr))
+    var raw_address = Int(py=raw_addr)
     var address = Int(py=out_addr)
+    if raw_address == 0:
+        raise Error("mojolearn: null buffer address")
     if address == 0:
         raise Error("binary prediction: null output")
-    var op = MutPointer[Scalar[dtype], MutUntrackedOrigin](unsafe_from_address=address)
-    var raw = List[Float32]()
-    for i in range(n):
-        raw.append(rp.unsafe_load(i))
     var count = 2*n if probabilities else n
     with GILReleased(Python()):
-        var result = binary_prediction_host[probabilities,dtype](raw,n)
-        for i in range(count):
-            op.unsafe_store(i,result[i])
+        # cpu2-l6-bindings: upload from the caller's pointer, device
+        # finiteness scan, output copied straight into the caller's buffer
+        binary_prediction_device[probabilities,dtype](raw_address,address,n)
     return PythonObject(count)
 
 
@@ -169,13 +162,17 @@ def gbdt_sigmoid_binding(
     used numpy's exp, whose last bit is the host libm's); under FAST this
     is the host stdlib and the wrapper keeps numpy. Both buffers are
     float64, the caller's."""
-    var rp = _f64_ptr(Int(py=raw_addr))
-    var op = _f64_ptr(Int(py=out_addr))
     var count = Int(py=n)
-    for i in range(count):
-        var r = rp.unsafe_load(i)
-        # lane hr2-gbdt-host: soft binary64, every column's words
-        op.unsafe_store(i, _hr2_bitcast[DType.float64](sf64_sigmoid_f64(_hr2_bitcast[DType.uint64](r))))
+    if count < 0:
+        raise Error("gbdt_sigmoid: n must be non-negative")
+    var raw_address = Int(py=raw_addr)
+    var out_address = Int(py=out_addr)
+    if count > 0 and (raw_address == 0 or out_address == 0):
+        raise Error("mojolearn: null buffer address")
+    with GILReleased(Python()):
+        # cpu2-l6-bindings: soft binary64 on the device (`sigmoid_f64_kernel`),
+        # the words the host loop wrote; the host column keeps its loop
+        sigmoid_f64_device(raw_address, out_address, count, False, False)
     return PythonObject(count)
 
 
@@ -197,23 +194,19 @@ def gbdt_sigmoid_pair_binding(
     (DEVIATION 2333, retired where the binary carries this entry point);
     a lone subtraction has no fusion partner and no association, so the
     column's bits are the Python column's on every host."""
-    var rp = _f64_ptr(Int(py=raw_addr))
-    var op = _f64_ptr(Int(py=out_addr))
     var count = Int(py=n)
     if count < 0:
         raise Error("gbdt_sigmoid_pair: n must be non-negative")
-    for i in range(count):
-        var r = rp.unsafe_load(i)
-        # lane hr2-gbdt-host: `resident_link_kernel`'s pair, soft binary64
-        var pb = sf64_ftz(sf64_sigmoid_f64(_hr2_bitcast[DType.uint64](r)))
-        var p = _hr2_bitcast[DType.float64](pb)
-        var q = _hr2_bitcast[DType.float64](sf64_sub(SF64_ONE, pb))
-        comptime if GBDT_PAIR_SABOTAGE:
-            op.unsafe_store(2 * i, p)
-            op.unsafe_store(2 * i + 1, q)
-        else:
-            op.unsafe_store(2 * i, q)
-            op.unsafe_store(2 * i + 1, p)
+    var raw_address = Int(py=raw_addr)
+    var out_address = Int(py=out_addr)
+    if count > 0 and (raw_address == 0 or out_address == 0):
+        raise Error("mojolearn: null buffer address")
+    with GILReleased(Python()):
+        # cpu2-l6-bindings: `resident_link_kernel`'s pair, soft binary64,
+        # on the device (`sigmoid_f64_kernel`); same words as the host loop
+        sigmoid_f64_device(
+            raw_address, out_address, count, True, GBDT_PAIR_SABOTAGE
+        )
     return PythonObject(count)
 
 
@@ -415,7 +408,7 @@ def _gbdt_fit_impl(
     # `params` is a Python list and touching it without the GIL is a data
     # race, not a slow path.
     var class_weights = List[Float32]()
-    for i in range(n_class_weights):
+    for i in range(n_class_weights):  # small-loop(n_class_weights: one weight per class): Python parameter list, not row data
         class_weights.append(Float32(Float64(py=params[35 + i])))
     # their `EGrowPolicy` by ORDINAL (enums.h order: SymmetricTree,
     # Depthwise, Lossguide), resolved to the spelling `train` takes
@@ -466,9 +459,8 @@ def _gbdt_fit_impl(
                 "gbdt_fit: the group tail needs a positive group count, got "
                 + String(n_groups)
             )
-        var gp = _u32_ptr(Int(py=params[fixed_and_weights + 3]))
-        for g in range(n_groups):
-            group_sizes.append(gp.unsafe_load(g))
+        # one memcpy (no per-group host loop)
+        group_sizes = list_u32(_u32_ptr(Int(py=params[fixed_and_weights + 3])), n_groups)
 
     # the PairLogit pairs tail; a count of -1 means generate them
     var pair_winners = List[UInt32]()
@@ -484,10 +476,10 @@ def _gbdt_fit_impl(
         if n_pairs > 0:
             var pp = _u32_ptr(Int(py=params[fixed_and_weights + 5]))
             var pw = _f32_ptr(Int(py=params[fixed_and_weights + 7]))
-            for q in range(n_pairs):
-                pair_winners.append(pp.unsafe_load(2 * q))
-                pair_losers.append(pp.unsafe_load(2 * q + 1))
-                pair_weights.append(pw.unsafe_load(q))
+            # cpu3-bindings: the interleaved pairs split on the device and
+            # the weights in one memcpy (no per-pair host loop)
+            device_split_pairs(process_ctx[_DEVCTX_SLOT](), pp, n_pairs, pair_winners, pair_losers)
+            pair_weights = list_f32(pw, n_pairs)
 
     var fp = GbdtFitParams(
         Int(py=params[4]),
@@ -550,10 +542,10 @@ def _gbdt_fit_impl(
         ctx.synchronize()
 
     var learn = Python.list()
-    for i in range(len(result.learn_losses)):
+    for i in range(len(result.learn_losses)):  # small-loop(learn_losses: one loss per boosting iteration): result glue to Python, no compute
         learn.append(PythonObject(result.learn_losses[i]))
     var test = Python.list()
-    for i in range(len(result.test_losses)):
+    for i in range(len(result.test_losses)):  # small-loop(test_losses: one loss per boosting iteration): result glue to Python, no compute
         test.append(PythonObject(result.test_losses[i]))
 
     var out = Python.list()
@@ -857,7 +849,7 @@ def gbdt_fit_ordered_rmse_binding(
     conversions finish before releasing the GIL; buffers remain borrowed
     from live arrays held by the wrapper for the duration of this call.
     """
-    from gbdt.train import train_ordered_rmse
+    from gbdt.train import train_ordered_rmse_ptr
     from gbdt.models.model_text import model_text
 
     if len(params) != 9:
@@ -875,26 +867,25 @@ def gbdt_fit_ordered_rmse_binding(
         raise Error("ordered RMSE requires >=4 rows, features and a full permutation")
     if n_weights != 0 and n_weights != n_rows:
         raise Error("ordered RMSE sample weight shape mismatch")
-    var xp = _f32_ptr(Int(py=x_addr))
+    _ = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var wp = _f32_ptr(Int(py=weights_addr))
     var pp = _u32_ptr(Int(py=permutation_addr))
     var text: String
+    var x_address = Int(py=x_addr)
     with GILReleased(Python()):
-        var xs = List[Float32]()
-        var ys = List[Float32]()
-        var ws = List[Float32]()
-        var permutation = List[UInt32]()
-        for i in range(n_rows * n_features):
-            xs.append(xp.unsafe_load(i))
-        for i in range(n_rows):
-            ys.append(yp.unsafe_load(i))
-            permutation.append(pp.unsafe_load(i))
-        for i in range(n_weights):
-            ws.append(wp.unsafe_load(i))
+        # cpu2-l6-bindings: X (n_rows x n_features) is NOT copied into a host
+        # List: `train_ordered_rmse_ptr` uploads it from the caller's
+        # address once and refuses non-finite cells on the device. y, the
+        # permutation and the weights (O(n)) still feed
+        # `fit_ordered_rmse`'s host validation and fold plan as lists.
+        # cpu3-bindings: one memcpy each (no per-row host loop)
+        var ys = list_f32(yp, n_rows)
+        var ws = list_f32(wp, n_weights)
+        var permutation = list_u32(pp, n_rows)
         with process_ctx[_DEVCTX_SLOT]() as ctx:
-            var trained = train_ordered_rmse(
-                ctx, xs, ys, n_rows, n_features, permutation,
+            var trained = train_ordered_rmse_ptr(
+                ctx, x_address, ys, n_rows, n_features, permutation,
                 n_estimators, max_depth, border_count, learning_rate,
                 l2_leaf_reg, ws,
             )

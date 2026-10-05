@@ -88,6 +88,8 @@ from arima.impl.linalg.batched.least_squares import (
 from arima.impl.timeSeries.jones_transform import JONES_MAX_PARAMS
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, validate_order
 from arima.impl.fast_arma_ls import FLS_MAX_COLS, FLS_TPB, fast_arma_ls_kernel
+from arima.impl.idn_arma_ls import idn_arma_ls_kernel
+from arima.impl.idn_ls_math import ILS_MAX_COLS, ILS_TPB, X0_IDN_PAR_LS, X0_IDN_PAR_LS_MIN_OBS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -198,7 +200,7 @@ def test_invparams(
     add: ONE rounding. This is NOT `invtransform`'s `sign * (a * x)`."""
     var new_params = InlineArray[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
     var tmp = InlineArray[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
-    for i in range(pq):
+    for i in range(pq):  # small-loop(pq: AR or MA order, at most JONES_MAX_PARAMS = 8): per-thread device helper inside a kernel
         var v = ftz(params.unsafe_load(base + i))
         tmp[i] = v
         new_params[i] = v
@@ -209,16 +211,16 @@ def test_invparams(
         # the operand of the multiply that fuses into the add.
         var coef_a = a if is_ar else ftz(-a)
         var den = ftz(identical_mul_add(-a, a, Float32(1.0)))
-        for k in range(j):
+        for k in range(j):  # small-loop(j: recursion step below pq <= 8): per-thread device helper inside a kernel
             var num = ftz(
                 identical_mul_add(coef_a, new_params[j - k - 1], new_params[k])
             )
             tmp[k] = ftz(num / den)
-        for it in range(j):
+        for it in range(j):  # small-loop(j: recursion step below pq <= 8): per-thread device helper inside a kernel
             new_params[it] = tmp[it]
         j -= 1
     var result = True
-    for i in range(pq):
+    for i in range(pq):  # small-loop(pq: AR or MA order, at most JONES_MAX_PARAMS = 8): per-thread device helper inside a kernel
         var v = new_params[i]
         result = result and not (v <= Float32(-1.0) or v >= Float32(1.0))
     return result
@@ -565,6 +567,34 @@ def arma_least_squares(
             + " columns, above LS_MAX_COLS = " + String(LS_MAX_COLS)
             + "; refused by name (arima/NOT_IMPLEMENTED.tsv)"
         )
+
+    comptime if X0_IDN_PAR_LS:
+        # lane/fam2-timeseries, candidate arm: one block of ILS_TPB threads
+        # per series, pinned Givens folds in a fixed order
+        # (`idn_arma_ls.mojo`); the host column takes the same condition.
+        if (
+            n_obs_d >= X0_IDN_PAR_LS_MIN_OBS
+            and p + q + k <= ILS_MAX_COLS
+            and (q == 0 or p_ar <= ILS_MAX_COLS)
+        ):
+            ctx.enqueue_function[idn_arma_ls_kernel](
+                d_y.unsafe_ptr(), d_ar.unsafe_ptr(), d_ma.unsafe_ptr(),
+                d_sigma2.unsafe_ptr(), d_mu.unsafe_ptr(), info.unsafe_ptr(),
+                Int32(n_obs_d), Int32(p), Int32(q), Int32(s), Int32(k),
+                Int32(p_ar), Int32(r_ls), Int32(1 if estimate_sigma2 else 0),
+                grid_dim=(batch_size, 1, 1), block_dim=(ILS_TPB, 1, 1),
+            )
+            ctx.enqueue_function[fast_ls_finish_kernel](
+                d_ar.unsafe_ptr(), d_ma.unsafe_ptr(), d_sigma2.unsafe_ptr(),
+                d_mu.unsafe_ptr(), info.unsafe_ptr(), verdict.unsafe_ptr(),
+                Int32(batch_size), Int32(p), Int32(q), Int32(k),
+                Int32(1 if estimate_sigma2 else 0),
+                grid_dim=(grid, 1, 1), block_dim=(X0_TPB, 1, 1),
+            )
+            ctx.synchronize()
+            return LeastSquaresResult(
+                info=info^, verdict=verdict^, degenerate=False
+            )
 
     comptime if X0_FAST_LS:
         if (

@@ -56,7 +56,7 @@ def _grid(n: Int) -> Int:
     return g
 
 
-def mamba2_gnorm_backward_kernel(gid_: Int, 
+def mamba2_gnorm_backward_kernel(gid_: Int,
     d_gate: MutPointer[Float32, MutAnyOrigin],
     weight_product: MutPointer[Float32, MutAnyOrigin],
     d_gnorm: MutPointer[Float32, MutAnyOrigin],
@@ -118,7 +118,7 @@ def mamba2_gnorm_backward_kernel(gid_: Int,
         weight_product.unsafe_store(cell, ftz(identical_mul(dj, normalized)))
 
 
-def mamba2_silu_gate_backward_kernel(gid_: Int, 
+def mamba2_silu_gate_backward_kernel(gid_: Int,
     d_skip: MutPointer[Float32, MutAnyOrigin],
     d_z: MutPointer[Float32, MutAnyOrigin],
     d_gate: MutPointer[Float32, MutAnyOrigin],
@@ -149,7 +149,7 @@ def mamba2_silu_gate_backward_kernel(gid_: Int,
     d_z.unsafe_store(cell, ftz(identical_mul(ftz(identical_mul(dg, sk)), prime)))
 
 
-def mamba2_d_skip_backward_kernel(gid_: Int, 
+def mamba2_d_skip_backward_kernel(gid_: Int,
     d_scan: MutPointer[Float32, MutAnyOrigin],
     d_x_from_d: MutPointer[Float32, MutAnyOrigin],
     d_d_product: MutPointer[Float32, MutAnyOrigin],
@@ -417,7 +417,7 @@ def mamba2_backward_d_skip_into(
     )
 
 
-def mamba2_pack_inproj_grad_kernel(gid_: Int, 
+def mamba2_pack_inproj_grad_kernel(gid_: Int,
     dst: MutPointer[Float32, MutAnyOrigin], z: MutPointer[Float32, MutAnyOrigin],
     xbc: MutPointer[Float32, MutAnyOrigin], dt: MutPointer[Float32, MutAnyOrigin],
     m_in: Int32, di_in: Int32, cd_in: Int32, dip_in: Int32, nh_in: Int32,

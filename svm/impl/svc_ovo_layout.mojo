@@ -241,7 +241,7 @@ def ovo_pairs_from_python(sup_addrs: PythonObject, dual_addrs: PythonObject, met
     if len(sup_addrs) != p or len(dual_addrs) != p or len(meta) != 3 + 3 * p:
         raise Error("svc_ovo_layout: one support and one dual address per pair, meta [k, n, P, (i, j, m) * P]")
     var out = OvoPairs(List[Int](), List[Int](), List[Int](), List[Int](), List[Int]())
-    for q in range(p):
+    for q in range(p):  # small-loop(p: OvO class pairs): reads one pair's addresses and sizes, plan entries only
         out.sup.append(Int(py=sup_addrs[q]))
         out.dual.append(Int(py=dual_addrs[q]))
         out.ci.append(Int(py=meta[3 + 3 * q]))
@@ -270,7 +270,7 @@ def ovo_layout_device(
     ctx.enqueue_memset(d_st, Int32(0))
     var offs = List[Int]()
     var e_total = 0
-    for q in range(len(pairs.m)):
+    for q in range(len(pairs.m)):  # small-loop(m: OvO class pairs): per-pair upload offsets, a prefix over pair sizes only
         offs.append(e_total)
         e_total += pairs.m[q]
     var d_sup = ctx.enqueue_create_buffer[DType.int32](max(1, e_total))

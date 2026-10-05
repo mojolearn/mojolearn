@@ -143,7 +143,7 @@ def mb_shift_kernel[MR: Bool](
 
 
 @always_inline
-def _exact_d2(
+def _exact_d2_kern(
     x: MutPointer[Float32, MutAnyOrigin], i: Int, j: Int, dim: Int
 ) -> Float32:
     """`fb_nearest_other_kernel`'s per-pair sum: `d += df * df` in feature
@@ -332,7 +332,7 @@ def fb_mma_nearest_kernel[D: Int, MR: Bool, A: Int, B: Int](
                     msk &= msk - 1
                     var cj = col0 + 8 * (j >> 1) + (j & 1)
                     if cj < hi:
-                        var v = _exact_d2(x, Int(qi[a]), cj, dim)
+                        var v = _exact_d2_kern(x, Int(qi[a]), cj, dim)
                         comptime if MR:
                             var crj = core[cj]
                             v = max(crj, max(cri[a], inv_alpha * sqrt(v)))

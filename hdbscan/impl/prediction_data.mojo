@@ -44,7 +44,7 @@ give the same arrays.
 
 THE ONE ORDER CHOICE. Their `thrust::sort_by_key` of the exemplars by
 original label (`:208-211`) is not specified stable. Ours sorts on the
-packed key `(label << 32) | point index` (the `merge_sort_u64_with_index`
+packed key `(label << 32) | point index` (the `merge_sort_u64_with_index_host`
 DEVIATION 1611 already uses), a total order that equals a stable sort of
 the ascending `copy_if` output. The exemplar ORDER feeds nothing but a
 minimum over each label's exemplars in `membership_vector`, which does not
@@ -79,7 +79,7 @@ from hdbscan.impl.detail.tree_device import (
     td_upload_i32,
 )
 from hierarchy.checks.edge_order import weight_order_key, weight_order_unkey
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 
 
 comptime PD_FLOAT32_LOWEST = Float32(-3.4028234663852886e38)
@@ -126,7 +126,7 @@ struct PredictionData(Copyable, Movable):
         self.index_into_children = index_into_children^
 
 
-def generate_prediction_data(
+def generate_prediction_data_host(
     parents: List[Int32],
     children: List[Int32],
     lambdas: List[Float32],
@@ -224,7 +224,7 @@ def generate_prediction_data(
             var lab = UInt64(Int(exemplar_labels[j])) & UInt64(0xFFFFFFFF)
             keys.append((lab << UInt64(32)) | UInt64(Int(exemplar_idx[j])))
             order.append(j)
-        merge_sort_u64_with_index(keys, order)
+        merge_sort_u64_with_index_host(keys, order)
         var s_idx = List[Int32](capacity=n_exemplars)
         var s_lab = List[Int32](capacity=n_exemplars)
         for j in range(n_exemplars):
@@ -541,13 +541,15 @@ def generate_prediction_data_device(
                 "hdbscan.generate_prediction_data: a child is outside [0,"
                 " n_edges]; refused by name"
             )
-        var h_vals = ctx.enqueue_create_host_buffer[DType.uint32](n_exemplars)
-        ctx.enqueue_copy(dst_ptr=h_vals.unsafe_ptr(), src_buf=vals)
-        ctx.synchronize()
-        exemplar_idx = List[Int32](capacity=n_exemplars)
-        for j in range(n_exemplars):
-            exemplar_idx.append(Int32(Int(h_vals.unsafe_ptr().unsafe_load(j))))
-        _ = h_vals^
+        # cpu3-neighbors: the exemplar row ids (each below n_leaves < 2^31,
+        # so their uint32 words ARE the int32 words) are copied straight
+        # into the output list, with no host conversion walk.
+        exemplar_idx = List[Int32](length=n_exemplars, fill=Int32(0))
+        if n_exemplars > 0:
+            ctx.enqueue_copy(
+                dst_ptr=exemplar_idx.unsafe_ptr().bitcast[UInt32](), src_buf=vals
+            )
+            ctx.synchronize()
         exemplar_label_offsets = td_download_i32(
             ctx, counts, n_selected_clusters + 1
         )
