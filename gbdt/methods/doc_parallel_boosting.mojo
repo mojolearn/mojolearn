@@ -49,6 +49,7 @@ from gbdt.methods.leaves_estimation.pointwise_oracle import (
     OracleHostScratch,
     _oracle_dims,
     make_oracle_device_scratch_in,
+    make_oracle_device_scratch_sharing_rows_in,
     OracleScratchPool,
     make_bin_optimized_oracle,
     merge_stage_times,
@@ -2066,11 +2067,26 @@ def _estimate_prepare(
             ds = i
     var fresh_scratch = ds < 0
     if ds < 0:
-        est_ws[0].arena_scratch.append(
-            make_oracle_device_scratch_in(
-                ctx, arena, n_rows, n_leaves, dims[0], dims[1], fv_blocks, sm
+        # The row-sized half belongs to this task, not to a leaf count.
+        # Retaining it for every distinct tree shape makes arena memory
+        # grow as n_rows * distinct_leaf_counts * permutations.
+        var rows_slot = -1
+        for i in range(len(est_ws[0].arena_scratch)):
+            if est_ws[0].arena_scratch[i].row_matches(n_rows, dims[1], fv_blocks):
+                rows_slot = i
+                break
+        if rows_slot < 0:
+            est_ws[0].arena_scratch.append(
+                make_oracle_device_scratch_in(
+                    ctx, arena, n_rows, n_leaves, dims[0], dims[1], fv_blocks, sm
+                )
             )
-        )
+        else:
+            var shared = make_oracle_device_scratch_sharing_rows_in(
+                ctx, arena, est_ws[0].arena_scratch[rows_slot],
+                n_leaves, dims[0], sm,
+            )
+            est_ws[0].arena_scratch.append(shared^)
         ds = len(est_ws[0].arena_scratch) - 1
     var hsi = -1
     for i in range(len(est_ws[0].arena_host)):  # small-loop(arena_host: pooled host scratch keys, a few shapes): cache lookup by shape only
@@ -3617,6 +3633,12 @@ def fit_with_test(
                     # step behind one drain per round, completed in order
                     var pend = List[PendingEstimation]()
                     for p in range(perm_count):
+                        # Reserve the policy's leaf capacity once. Rebuilding
+                        # a workspace for a larger tree cannot reclaim its
+                        # old bump-arena region, even after its handles die.
+                        estimate_workspace(
+                            ctx, perm_est_ws[p], perm_arena, n_rows, cap
+                        )
                         pend.append(
                             _estimate_prepare(
                                 ctx, n_rows, n_bins,

@@ -2075,6 +2075,48 @@ def make_oracle_device_scratch_sharing_rows(
     )
 
 
+def make_oracle_device_scratch_sharing_rows_in(
+    ctx: DeviceContext,
+    mut arena: BufferArena,
+    rows: OracleDeviceScratch,
+    bin_count: Int,
+    cursor_dim: Int,
+    sm: Int,
+) raises -> OracleDeviceScratch:
+    """The arena twin: separate bin buffers, shared row buffers per task.
+
+    Different leaf counts are used by successive trees, never concurrently
+    within one estimation task. Each permutation owns its own row half;
+    sharing across permutations would race their simultaneously queued work.
+    Only bin-sized storage grows with distinct leaf counts, not n_rows-sized
+    storage. Every oracle rewrites its row scratch before reading it.
+    """
+    var multi_planes = rows.multi_planes
+    var d_leaves = arena.device[DType.uint32](ctx, bin_count)
+    var d_shift = arena.device[DType.float32](ctx,
+        bin_count * cursor_dim
+    )
+    var d_partials = arena.device[DType.float32](ctx,
+        _oracle_partials_len(bin_count, sm)
+    )
+    var d_multi_partials = arena.device[DType.float32](ctx,
+        _oracle_multi_partials_len(bin_count, sm, multi_planes)
+    )
+    var d_part_stats = arena.device[DType.float32](ctx,
+        2 * bin_count
+    )
+    var d_multi_stats = arena.device[DType.float32](ctx,
+        multi_planes * bin_count
+    )
+    return OracleDeviceScratch(
+        rows.n_rows, bin_count, cursor_dim, multi_planes, rows.fv_blocks, sm,
+        rows.d_identity.copy(), rows.d_bins.copy(), d_leaves^, d_shift^,
+        rows.d_eval_stats.copy(), rows.d_fv.copy(), rows.d_mag_dummy.copy(),
+        d_partials^, d_multi_partials^, d_part_stats^,
+        rows.d_multi_der.copy(), d_multi_stats^,
+    )
+
+
 #: the bin-keyed half of the pool holds at most this many keys (a
 #: non-symmetric fit sees a handful of leaf counts; each entry is a few KiB)
 comptime ORACLE_POOL_MAX_BIN_KEYS = 128
