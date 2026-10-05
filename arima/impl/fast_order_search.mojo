@@ -128,7 +128,7 @@ def order_fit_f32_offset(orders: List[ARIMAOrder], i: Int, bs: Int) -> Int:
     """Float32 offset of order `i`'s fit block: per order, params, x, x0
     (bs * N each) then fx (bs), N = complexity()."""
     var off = 0
-    for j in range(i):  # small-loop(orders: the AutoARIMA order grid, a few dozen entries): plan offsets, no series data
+    for j in range(i):  # small-loop(i: a position in the AutoARIMA order grid, a few dozen entries): plan offsets, no series data
         off += bs * (3 * orders[j].complexity() + 1)
     return off
 

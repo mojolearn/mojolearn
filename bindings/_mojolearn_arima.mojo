@@ -240,7 +240,7 @@ def arima_order_search_multi_binding(y_addrs: PythonObject, out_addrs: PythonObj
     var fis = List[Int]()
     var task_orders = List[List[ARIMAOrder]]()
     var bss = List[Int]()
-    for t in range(nt):
+    for t in range(nt):  # small-loop(nt: AutoARIMA d groups, at most three): task plan entries and addresses, no series data
         var d = Int(py=config[2 + 2 * t])
         bss.append(Int(py=config[3 + 2 * t]))
         yps.append(Int(py=y_addrs[t]))

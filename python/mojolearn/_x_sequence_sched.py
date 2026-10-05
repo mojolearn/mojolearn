@@ -200,7 +200,7 @@ def _sched_block_fn():
     with -D MOJOLEARN_SCHED_FAST_TABLE, else None."""
     try:
         from . import _backend
-        return getattr(_backend.binding("_mojolearn_x_sequence"), "sched_exp_block", None)
+        return getattr(_backend.binding("_mojolearn_x_sequence"), "sched_exp_block", None)  # cpu-route: a learning-rate schedule is one host scalar per optimizer step (CPU-ONLY ROUTE, sequence/sched_table.mojo)
     except Exception:  # noqa: BLE001  (no GPU binding: the Python path)
         return None
 
