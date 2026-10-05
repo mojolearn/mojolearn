@@ -4544,9 +4544,9 @@ def _lle_smallest(k, F, nc, max_iter, seed=0, Xd=None):
         # _LLE_CANON_NULL floors). A value in the band up to _LLE_CANON_GAP
         # floors leaves N's edge unclear: the iteration's answer stays.
         sl = [float(v) for v in S.s]  # glue: the p Ritz values
-        if any(_LLE_CANON_NULL * floor < v <= _LLE_CANON_GAP * floor for v in sl):
+        if any(_LLE_CANON_NULL * floor < v <= _LLE_CANON_GAP * floor for v in sl):  # glue: p <= 160 scalars
             break
-        idx = [j for j in range(p) if sl[j] <= _LLE_CANON_NULL * floor]
+        idx = [j for j in range(p) if sl[j] <= _LLE_CANON_NULL * floor]  # glue: p <= 160 column numbers
         if len(idx) == p and p < min(n1, _LLE_CANON_MAX_P):
             p = min(n1, 4 * p, _LLE_CANON_MAX_P)    # every column null: N may be wider, iterate wider
             continue
