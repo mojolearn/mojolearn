@@ -26,6 +26,14 @@ size or dataset rule. The max is exact in any order, so every column (NVIDIA,
 AMD, Apple, host) reads the same e. A NaN or infinite entry (exponent field
 255), a zero or subnormal max (field 0) keeps the matrix as it is.
 
+The same rule serves the one-sided Jacobi SVDs (x_decomp `svd`, PCA's
+full route, `svdvals`, FA's grid SVD): A m x n scaled before the QR (whose
+column norms are folded squares too), the singular values multiplied back,
+U and V unmoved; and the decomposition / glm / x_prep / Nystroem eigh
+routes, whose eigenvalues stay on the matrix diagonal
+(`es_unscale_diag_kernel`). Every device route and its host replay apply it
+at the same point.
+
 Each scale is two multiplications (2^-e1, then 2^-e2, e1 = e // 2): every
 factor is a normal power of two for e in [-125, 128], and each product is
 flushed (`ftz`), the host's and every device's denormal policy."""
@@ -303,3 +311,8 @@ def enqueue_es_unscale_ptr(ctx: DeviceContext, w: F32Ptr, fac: F32Ptr, batch: In
     ctx.enqueue_function[es_unscale_kernel](
         w, fac, Int32(n), Int32(batch * n), grid_dim=_es_blocks(batch * n), block_dim=ES_TPB
     )
+
+
+def enqueue_es_unscale_diag_ptr(ctx: DeviceContext, a: F32Ptr, fac: F32Ptr, n: Int) raises:
+    """`enqueue_es_unscale_diag` with the factors at a device pointer."""
+    ctx.enqueue_function[es_unscale_diag_kernel](a, fac, Int32(n), grid_dim=_es_blocks(n), block_dim=ES_TPB)

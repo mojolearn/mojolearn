@@ -76,6 +76,7 @@ from checks.numerics import identical_mul_add, identical_sqrt
 from x_decomp.cells import X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL, F32Ptr, add, div0, log_floor, mul, sqrt0
 from x_decomp.device import PJ_SYNC_ROUNDS, TPB, _blocks, _pj_blocks, _pj_off_blocks, xd_ctx
 from x_decomp.jacobi2 import dev_barrier
+from x_decomp.eigh_scale import enqueue_es_scale_strided, enqueue_es_unscale_diag_ptr, enqueue_es_unscale_ptr, es_strided_words
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -1060,7 +1061,7 @@ struct _FaMem(Movable):
 
 def _fa_eigh_grid(
     ctx: DeviceContext, mem: _FaMem, s_b: Int, s_v: Int, s_cs: Int, s_off: Int, s_part: Int, s_fold: Int,
-    mut hfold: HostBuffer[DType.float32], d: Int,
+    mut hfold: HostBuffer[DType.float32], d: Int, s_es: Int,
 ) raises -> SIMD[DType.float32, 4]:
     """Main's `DevExec._eigh_par_on` rounds and per-sweep test on the loop's
     pointers (no sign flip, no ordering, no download: `fa_finish_kernel`
@@ -1076,6 +1077,11 @@ def _fa_eigh_grid(
     var ppart = mem.ptr(s_part)
     var pfold = mem.ptr(s_fold)
     ctx.enqueue_function[pj_identity_kernel](pv, Int32(d), grid_dim=_pj_blocks(d * d), block_dim=PJ_TPB)
+    # lane idn-cov-overflow: the eigh's power-of-two range scale
+    # (x_decomp/eigh_scale.mojo; no write inside the band), the diagonal
+    # unscaled below for `fa_finish_kernel`
+    var pes = mem.ptr(s_es)
+    enqueue_es_scale_strided(ctx, pa, d * d, 1, d, pes)
     var converged = False
     var executed = 0
     var fro_in = Float32(-1.0)
@@ -1116,12 +1122,14 @@ def _fa_eigh_grid(
                 ctx.synchronize()
     if converged and not rr_fro_kept(fro_in, fro_now):
         converged = False
+    enqueue_es_unscale_diag_ptr(ctx, pa, pes, d)
+    enqueue_es_unscale_ptr(ctx, poff + 2 * d, pes, 1, d)
     return SIMD[DType.float32, 4](Float32(1.0) if converged else Float32(0.0), Float32(executed), off_last, fro_now)
 
 
 def _fa_svd_grid(
     ctx: DeviceContext, mem: _FaMem, s_rt: Int, s_vt: Int, s_s: Int, s_flags: Int,
-    mut hflags: HostBuffer[DType.float32], d: Int,
+    mut hflags: HostBuffer[DType.float32], d: Int, s_es: Int,
 ) raises -> SIMD[DType.float32, 4]:
     """FA_GRAM_DF without EIG_SMALL: main's `DevExec.svd_cells` rounds on the
     loop's pointers (one `rs_round_kernel` launch a round, a pair a block,
@@ -1134,6 +1142,9 @@ def _fa_svd_grid(
     var ps = mem.ptr(s_s)
     var pfl = mem.ptr(s_flags)
     ctx.enqueue_function[pj_identity_kernel](pvt, Int32(d), grid_dim=_pj_blocks(d * d), block_dim=PJ_TPB)
+    # the power-of-two range scale (x_decomp/eigh_scale.mojo), s unscaled
+    var pes = mem.ptr(s_es)
+    enqueue_es_scale_strided(ctx, prt, d * d, 1, d, pes)
     var converged = d < 2
     var executed = 0
     while not converged and executed < X_DECOMP_SVD_SWEEPS:
@@ -1156,6 +1167,7 @@ def _fa_svd_grid(
         if not rotated:
             converged = True
     ctx.enqueue_function[rs_norm_kernel](prt, ps, Int32(d), grid_dim=d, block_dim=RS_TPB)
+    enqueue_es_unscale_ptr(ctx, ps, pes, 1, d)
     return SIMD[DType.float32, 4](Float32(1.0) if converged else Float32(0.0), Float32(executed), 0.0, 0.0)
 
 
@@ -1224,6 +1236,7 @@ def fa_em_py(
     var s_off = mem.add(ctx, 3 * d)
     var s_part = mem.add(ctx, 3 * nb)
     var s_fold = mem.add(ctx, 3)
+    var s_es = mem.add(ctx, es_strided_words(1, d))
     var s_llst = mem.add(ctx, 4)
     var s_llrec = mem.add(ctx, 2 * max_iter)
     # FA_GRAM_DF: R^T (d x d), the singular values, the grid SVD's pair flags
@@ -1275,7 +1288,7 @@ def fa_em_py(
                     Int32(X_DECOMP_SVD_SWEEPS), X_DECOMP_SVD_TOL, grid_dim=1, block_dim=FA_TPB,
                 )
             else:
-                est = _fa_svd_grid(ctx, mem, s_b, s_v, s_s, s_flags, hflags, d)
+                est = _fa_svd_grid(ctx, mem, s_b, s_v, s_s, s_flags, hflags, d, s_es)
                 _fa_check_eigh(est[0], est[1], est[2], est[3], d)
             ctx.enqueue_function[fa_finish_kernel[FA_LL_DEVICE, True]](
                 mem.ptr(s_s), mem.ptr(s_v), mem.ptr(s_sp), mem.ptr(cur), mem.ptr(s_w), mem.ptr(nxt),
@@ -1292,7 +1305,7 @@ def fa_em_py(
                     Float32(JACOBI_TOL), grid_dim=1, block_dim=FA_TPB,
                 )
             else:
-                est = _fa_eigh_grid(ctx, mem, s_b, s_v, s_cs, s_off, s_part, s_fold, hfold, d)
+                est = _fa_eigh_grid(ctx, mem, s_b, s_v, s_cs, s_off, s_part, s_fold, hfold, d, s_es)
                 _fa_check_eigh(est[0], est[1], est[2], est[3], d)
             ctx.enqueue_function[fa_finish_kernel[FA_LL_DEVICE]](
                 mem.ptr(s_b), mem.ptr(s_v), mem.ptr(s_sp), mem.ptr(cur), mem.ptr(s_w), mem.ptr(nxt),
