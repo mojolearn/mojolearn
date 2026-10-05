@@ -100,3 +100,49 @@ def test_remote_body_parses_and_keeps_experimental_build_separate():
     assert 'git diff --quiet HEAD --' in text
     assert 'release061_remote_build.sh' not in text
     assert 'experimental-build.json' in text
+
+
+@pytest.mark.parametrize('git_present,install_fails', [(False, False), (True, False), (False, True)])
+def test_bootstrap_missing_git_before_unchanged_frozen_body(tmp_path, git_present, install_fails):
+    """Execute the real generated shell with fake package tools; never apt or rent."""
+    import os
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    out = tmp_path / 'out'
+    out.mkdir()
+    (tmp_path / 'tools').mkdir()
+
+    def executable(path, text):
+        path.write_text('#!/bin/bash\n' + text)
+        path.chmod(0o755)
+
+    executable(bin_dir / 'bash', 'exec /bin/bash "$@"\n')
+    executable(bin_dir / 'timeout', '[[ "$1 $2 $3" == "-k 10 180" ]] || exit 90\nshift 3\nexec "$@"\n')
+    executable(bin_dir / 'apt-get', '''printf '%s\\n' "$*" >> "$LEG_OUT/apt-calls"
+if [[ "$*" == *install* ]]; then
+  [[ "${INSTALL_FAIL:-0}" == 0 ]] || exit 7
+  printf '#!/bin/bash\\nprintf "git version fake\\\\n"\\n' > "$FAKE_BIN/git"
+  /bin/chmod +x "$FAKE_BIN/git"
+fi
+''')
+    if git_present:
+        executable(bin_dir / 'git', 'echo "git version preinstalled"\n')
+    executable(tmp_path / build.BODY, 'printf "%s\\n" "$@" > "$LEG_OUT/body-args"\n')
+    spec = dict(source_commit='a' * 40, origin='https://example.test/team/project.git',
+                build_seconds=6000, jobs='auto')
+    env = dict(os.environ, PATH=str(bin_dir), LEG_OUT=str(out), FAKE_BIN=str(bin_dir),
+               INSTALL_FAIL=str(int(install_fails)))
+    result = subprocess.run(['/bin/bash', '-c', build.body_command(spec)], cwd=tmp_path,
+                            env=env, capture_output=True, text=True)
+    if install_fails:
+        assert result.returncode == 7 and not (out / 'body-args').exists()
+        return
+    assert result.returncode == 0, result.stderr
+    assert (out / 'body-args').read_text().splitlines() == [spec['source_commit'], spec['origin'], '6000', 'auto']
+    assert (out / 'ptx-prerequisites-readback.txt').read_text().startswith('git version ')
+    if git_present:
+        assert not (out / 'apt-calls').exists()
+    else:
+        calls = (out / 'apt-calls').read_text().splitlines()
+        assert calls == ['-o Acquire::Retries=2 update',
+                         '-o Acquire::Retries=2 install -y --no-install-recommends --no-upgrade git ca-certificates']
