@@ -2667,7 +2667,7 @@ def render_board(result):
                 clean(repair["hardware_description"]), repair["capture"]["sha256"]))
         L.extend(["", "The Box section describes the original run. Per-row replacement board, audit, "
                   "capture and artifact identities are pinned in overlay-manifest.json and board.json. "
-                  "Original inference cells are retained; this overlay admits fit cells only.", ""])
+                  "Original inference cells are retained; this overlay admits fit cells only. Ratios on repaired races are withdrawn. Missing original shape proof is explicitly recorded; no new comparability claim.", ""])
     if cfg.get("smoke"):
         why = []
         if cfg.get("rows"):

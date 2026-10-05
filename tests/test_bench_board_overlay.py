@@ -8,10 +8,10 @@ spec=importlib.util.spec_from_file_location('overlay',Path(__file__).parents[1]/
 def fixture(tmp_path):
  def ref(name,data):
   p=tmp_path/name;p.write_text(json.dumps(data));return {'path':str(p),'sha256':m.digest(p)}
- cell={'arm':'ours','status':'ok','rounds':1,'times_ms':[2.0],'median_ms':2.0,'warmup_ms':3.0,'quality':{'relative_error':0.0}}
- old={'status':'done','cells':[{'arm':'ours','status':'timeout'},{'arm':'other','median_ms':4}],'infer_cells':[{'arm':'ours','median_ms':1}]}
- original=ref('original.json',{'races':{'x':old},'box':{'gpu':'old'}})
- board=ref('new.json',{'races':{'x':{'status':'done','params_check':'MATCHED','cells':[cell]}},'box':{'gpu':'new'},'config':{'artifact_identity':{'candidate':'abc'}}})
+ cell={'arm':'ours','status':'ok','rounds':1,'times_ms':[2.0],'median_ms':2.0,'warmup_ms':3.0,'quality':{'relative_error':0.0},'params':{'seed':7},'settings':{'rounds':1}}
+ old={'status':'done','cells':[{'arm':'ours','status':'timeout','params':{'seed':7},'settings':{'rounds':1}},{'arm':'other','median_ms':4}],'infer_cells':[{'arm':'ours','median_ms':1}]}
+ original=ref('original.json',{'races':{'x':old},'box':{'gpu':'old'},'config':{'data_sha256':{'taxi':'abc'}}})
+ board=ref('new.json',{'races':{'x':{'status':'done','params_check':'MATCHED','cells':[cell]}},'box':{'gpu':'new'},'config':{'data_sha256':{'taxi':'abc'},'artifact_identity':{'candidate':'abc'}}})
  audit=ref('audit.json',{'status':'PASS','failures':[],'board_sha256':board['sha256']})
  capture=ref('capture.json',{'verified_at':1,'manifest_sha256':'abc','rows':[{'path':'new/board.json','sha256':board['sha256']}]})
  return {'original':original,'repairs':[{'board':board,'audit':audit,'capture':capture,'capture_board_path':'new/board.json','races':['x'],'source_description':'base + candidate','hardware_description':'different UUID'}]}
@@ -34,3 +34,16 @@ def test_duplicate_race_rejected(tmp_path):
 @pytest.mark.parametrize('quality',[{'error':'failed'},{'metric':float('nan')},{'metric':float('inf')},{}])
 def test_invalid_quality(quality):
  with pytest.raises(ValueError):m.validate_cell({'status':'ok','rounds':1,'times_ms':[1],'median_ms':1,'warmup_ms':1,'quality':quality})
+
+def test_stale_ratios_cleared(tmp_path):
+ x=fixture(tmp_path);p=Path(x['original']['path']);d=json.loads(p.read_text());d['races']['x']['cells'][1]['ratio_ours_identical_over']=999;p.write_text(json.dumps(d));x['original']['sha256']=m.digest(p)
+ assert m.apply(x)['races']['x']['cells'][1]['ratio_ours_identical_over'] is None
+
+@pytest.mark.parametrize('field,value',[('data_sha256',{'taxi':'different'}),('vendor','amd')])
+def test_changed_run_identity(tmp_path,field,value):
+ x=fixture(tmp_path);p=Path(x['original']['path']);d=json.loads(p.read_text());d['config'][field]=value;p.write_text(json.dumps(d));x['original']['sha256']=m.digest(p)
+ with pytest.raises(ValueError):m.apply(x)
+
+def test_missing_original_settings_refused(tmp_path):
+ x=fixture(tmp_path);p=Path(x['original']['path']);d=json.loads(p.read_text());del d['races']['x']['cells'][0]['settings'];p.write_text(json.dumps(d));x['original']['sha256']=m.digest(p)
+ with pytest.raises(ValueError,match='settings'):m.apply(x)

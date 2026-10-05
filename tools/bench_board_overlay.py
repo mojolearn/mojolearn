@@ -23,7 +23,7 @@ def finite(value):
     if isinstance(value, float) and not math.isfinite(value):
         raise ValueError('nonfinite evidence')
     if isinstance(value, dict):
-        if value.get('error'):
+        if 'error' in value:
             raise ValueError('explicit quality error')
         for key, item in value.items():
             if (key == 'finite' or key.endswith('_finite') or key.endswith('_passed')) and item is False:
@@ -57,6 +57,13 @@ def apply(manifest):
     provenance = []
     for overlay in manifest['repairs']:
         board = read_ref(overlay['board'])
+        for field in ('vendor', 'seed', 'rounds'):
+            if board.get('config', {}).get(field) != original.get('config', {}).get(field):
+                raise ValueError('changed run setting: ' + field)
+        old_identity = original.get('config', {}).get('artifact_identity') or {}
+        new_identity = board.get('config', {}).get('artifact_identity') or {}
+        if old_identity.get('code_path') != new_identity.get('code_path'):
+            raise ValueError('changed code path')
         receipt = read_ref(overlay['capture'])
         if not receipt.get('verified_at') or not receipt.get('manifest_sha256'):
             raise ValueError('unverified capture')
@@ -83,15 +90,45 @@ def apply(manifest):
             for cell in own:
                 validate_cell(cell)
             old = original['races'][key]
+            for field in ('family', 'lane', 'dataset', 'rows'):
+                if old.get(field) != replacement.get(field):
+                    raise ValueError('changed race setting: ' + field)
+            data_before = original.get('config', {}).get('data_sha256') or {}
+            data_after = board.get('config', {}).get('data_sha256') or {}
+            if not data_after or any(data_before.get(name) != sha for name, sha in data_after.items()):
+                raise ValueError('missing or changed input hashes')
+            missing_shape = []
+            for cell in own:
+                prior = next((c for c in old.get('cells', []) if c.get('arm') == cell['arm']), None)
+                if prior is None:
+                    raise ValueError('missing original own arm')
+                for field in ('params', 'settings'):
+                    if not prior.get(field) or prior.get(field) != cell.get(field):
+                        raise ValueError('missing or changed own ' + field)
+                if prior.get('shape') is not None and prior.get('shape') != cell.get('shape'):
+                    raise ValueError('changed own input shape')
+                if prior.get('shape') is None:
+                    missing_shape.append(cell['arm'])
+            old_modes = {c.get('mode') for c in old.get('cells', []) if str(c.get('arm', '')).startswith('ours')}
+            if old_modes != {c.get('mode') for c in own}:
+                raise ValueError('changed numerical mode')
             # Preserve the original complete race (including failures) and opponents.
             merged = copy.deepcopy(replacement)
             arms = {c['arm'] for c in own}
             merged['cells'] = copy.deepcopy(own) + [copy.deepcopy(c) for c in old.get('cells', []) if c.get('arm') not in arms]
+            for cell in merged['cells']:
+                for field in list(cell):
+                    if field.startswith('ratio_ours_'):
+                        cell[field] = None
             # Inference was not admitted by the fit audit. Retain original inference.
             merged['infer_cells'] = copy.deepcopy(old.get('infer_cells', []))
+            for cell in merged['infer_cells']:
+                for field in list(cell):
+                    if field.startswith('ratio_ours_'):
+                        cell[field] = None
             merged['overlay_original_race'] = copy.deepcopy(old)
             proof = dict(overlay)
-            proof.update(race=key, original=manifest['original'], qualification=False,
+            proof.update(missing_original_shape_arms=missing_shape, comparability_claim=False, race=key, original=manifest['original'], qualification=False,
                          artifact_identity=board.get('config', {}).get('artifact_identity'),
                          replacement_box=board.get('box'), original_box=original.get('box'))
             merged['repair_overlay'] = proof
