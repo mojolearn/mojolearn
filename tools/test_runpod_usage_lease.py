@@ -15,6 +15,26 @@ def config(root='/tmp/usage-unit'):
                 remote_out=root+'/artifacts',local_out=root+'/local',remote_state=root+'/guard',remote_curlrc=root+'/credential')
 
 
+class FailureDiagnostics(unittest.TestCase):
+    def test_subprocess_stderr_retained_without_arguments_or_stdout(self):
+        exc=subprocess.CalledProcessError(24,['rsync','private-argument'],output=b'private-output',stderr=b'vanished source file')
+        result=u.failure_diagnostic(exc)
+        self.assertEqual(result['executable'],'rsync');self.assertEqual(result['returncode'],24)
+        self.assertEqual(result['stderr_tail'],'vanished source file')
+        self.assertNotIn('private',json.dumps(result))
+    def test_diagnostic_tail_is_bounded_and_decodes_invalid_bytes(self):
+        result=u.failure_diagnostic(subprocess.TimeoutExpired(['ssh','private'],120,stderr=b'x'*5000+b'\xff'))
+        self.assertEqual(len(result['stderr_tail']),4096);self.assertTrue(result['stderr_truncated']);self.assertEqual(result['timeout_seconds'],120)
+    def test_manager_persists_private_diagnostic_and_continues_error_policy(self):
+        with tempfile.TemporaryDirectory() as td:
+            c=config(td)
+            exc=subprocess.CalledProcessError(24,['rsync','private'],stderr=b'vanished source file')
+            with patch.object(u,'remote_call',side_effect=exc),patch.object(u,'local_gone',return_value=False),patch.object(u,'notify'):
+                u.manage(c,once=True)
+            status=json.loads((Path(c['local_out'])/'manager-status.json').read_text());self.assertEqual(status['status'],'ERROR');self.assertFalse(status['heartbeat_suspended'])
+            p=Path(status['diagnostic_file']);self.assertEqual(p.stat().st_mode & 0o777,0o600);self.assertEqual(json.loads(p.read_text())['returncode'],24)
+
+
 class Policy(unittest.TestCase):
     def setUp(self):self.c=config();self.s=u.new_state(self.c,0)
     def test_active_many_days_has_no_absolute_cutoff(self):

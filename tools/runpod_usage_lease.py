@@ -334,6 +334,30 @@ def local_gone(c):
     except (OSError,ValueError,subprocess.SubprocessError):return False
 
 
+def failure_diagnostic(exc):
+    """Retain bounded subprocess stderr, never command arguments or stdout.
+
+    Control/capture failures must be diagnosable without restarting a live
+    benchmark. Arguments can contain private control payloads, so only the
+    executable basename is recorded.
+    """
+    result = {'error_type': type(exc).__name__}
+    if isinstance(exc, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+        command = exc.cmd
+        if isinstance(command, (list, tuple)) and command:
+            result['executable'] = Path(str(command[0])).name
+        if isinstance(exc, subprocess.CalledProcessError):
+            result['returncode'] = exc.returncode
+        else:
+            result['timeout_seconds'] = exc.timeout
+        stderr = exc.stderr or b''
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode('utf-8', errors='replace')
+        result['stderr_tail'] = str(stderr)[-4096:]
+        result['stderr_truncated'] = len(str(stderr)) > 4096
+    return result
+
+
 def manage(c, once=False):
     local=Path(c['local_out']);local.mkdir(parents=True,exist_ok=True)
     lock=(local/'manager.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -362,12 +386,18 @@ def manage(c, once=False):
             atomic(local/'manager-status.json',dict(status='MANAGING',lease=state,last_probe=probe,updated_at=time.time(),manager_pid=os.getpid()))
         except Exception as exc:
             failed_polls+=1
+            diagnostic=local/('manager-error-'+str(time.time_ns())+'.json')
+            try:
+                atomic(diagnostic,dict(failure_diagnostic(exc),updated_at=time.time(),manager_pid=os.getpid(),failed_polls=failed_polls))
+                diagnostic.chmod(0o600)
+            except OSError:
+                diagnostic=None  # diagnostics must not suppress lease recovery
             if local_gone(c):
                 atomic(local/'manager-status.json',dict(status='TERMINATED_VERIFIED',verified_at=time.time(),pod_id=c['pod_id']));notify(c,local,'POD_TERMINATED','Provider GET and listing both verify deletion');return
             # After repeated failed polls, preserve the last remote orphan deadline.
             notify(c,local,'MANAGER_ERROR',type(exc).__name__)
             if failed_polls>=c.get('max_failed_polls',3):notify(c,local,'HEARTBEAT_SUSPENDED','Repeated failed capture/control polls; repair before the retained90-minute orphan deadline')
-            atomic(local/'manager-status.json',dict(status='ERROR',failed_polls=failed_polls,heartbeat_suspended=failed_polls>=c.get('max_failed_polls',3),error_type=type(exc).__name__,updated_at=time.time(),manager_pid=os.getpid()))
+            atomic(local/'manager-status.json',dict(status='ERROR',failed_polls=failed_polls,heartbeat_suspended=failed_polls>=c.get('max_failed_polls',3),error_type=type(exc).__name__,diagnostic_file=str(diagnostic) if diagnostic else None,updated_at=time.time(),manager_pid=os.getpid()))
         if once:return
         time.sleep(c.get('poll_seconds',30))
 
