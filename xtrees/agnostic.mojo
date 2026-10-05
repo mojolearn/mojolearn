@@ -32,8 +32,8 @@ from checks.soft_f64 import (
     SF64_ZERO, SF64_ONE, SF64_SIGN, sf64_add, sf64_sub, sf64_mul, sf64_div, sf64_lt, sf64_gt, sf64_from_int,
     sf64_from_f32, sf64_to_int, sf64_log,
 )
-from xtrees.ops import draw, stream_base
 from std.memory import bitcast
+from xtrees.ops import draw, stream_base
 from checks.numerics import ftz, identical_div
 
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
@@ -462,3 +462,112 @@ def agn_model_unit[RF_INPUT: Bool, PERM: Bool](q: Int, nb: Int, d: Int, mc: Int,
     var ft = Float32(trees)
     for c in range(k):
         y[yb + c] = ftz(identical_div(ftz(y[yb + c]), ft))
+
+
+# ------------------------------------- Permutation SHAP delta rows (FAST)
+# MOJOLEARN_PSHAP_DELTA (M3 w2-pdelta-pshap-istella default, _OFF rollback; FAST +
+# Apple only, xtrees/agnostic_device.mojo): coalition o of a permutation
+# differs from coalition o - 1 in ONE feature (pshap_toggled). A background
+# row r whose value of that feature has the same bits as the explained
+# row's gives the same synthetic row as at o - 1, so the model is not run on
+# it again (shap `MaskedModel`'s delta masking with `masker.invariants`,
+# here exact bit equality): only the varying (o, r) rows are built, the
+# model runs on those, and every (o, r) reads the output of its latest
+# varying predecessor. The background means are bg_mean_unit's adds in the
+# same row order over the same outputs, so for a model whose row output
+# does not depend on the batch, phi keeps its words.
+
+@always_inline
+def pshap_toggled(o: Int, d: Int, pm: I32P) -> Int:
+    """The feature coalition o (1 <= o <= 2d) toggles against o - 1: the
+    feature at position o - 1 turns on (forward walk, o <= d), the one at
+    position o - d - 1 turns off (backward walk)."""
+    return Int(pm[o - 1]) if o <= d else Int(pm[o - d - 1])
+
+
+@always_inline
+def pshap_varies(g: Int, r: Int, d: Int, np: Int, x: F32P, bg: F32P, perm: I32P) -> Bool:
+    """Group g = (row * np + p) * (2d + 1) + o: background row r's synthetic
+    row differs from its row at o - 1 (always at o = 0)."""
+    var span = 2 * d + 1
+    var rp = g // span
+    var o = g - rp * span
+    if o == 0:
+        return True
+    var row = rp // np
+    var f = pshap_toggled(o, d, perm + rp * d)
+    return bitcast[DType.uint32](x[row * d + f]) != bitcast[DType.uint32](bg[r * d + f])
+
+
+def pshap_dcount_unit(t: Int, nb: Int, d: Int, np: Int, x: F32P, bg: F32P, perm: I32P, cnt: I64P):
+    """t = group: how many of its nb background rows vary."""
+    var c = 0
+    for r in range(nb):
+        if pshap_varies(t, r, d, np, x, bg, perm):
+            c += 1
+    cnt[t] = Int64(c)
+
+
+def scan_step_unit(t: Int, off: Int, src: I64P, dst: I64P):
+    """One Hillis-Steele step of an inclusive integer prefix sum."""
+    dst[t] = src[t] + src[t - off] if t >= off else src[t]
+
+
+def pshap_dindex_unit(t: Int, nb: Int, d: Int, np: Int, x: F32P, bg: F32P, perm: I32P, incl: I64P, cnt: I64P,
+                      idx: I64P, src: I64P):
+    """t = group * nb + r: a varying row's compact index (its group's
+    exclusive offset plus its rank among the group's varying rows, so the
+    compact rows keep the full order), -1 for a repeat; src[index] = t."""
+    var g = t // nb
+    var r = t - g * nb
+    if not pshap_varies(g, r, d, np, x, bg, perm):
+        idx[t] = -1
+        return
+    var rank = 0
+    for q in range(r):
+        if pshap_varies(g, q, d, np, x, bg, perm):
+            rank += 1
+    var c = incl[g] - cnt[g] + Int64(rank)
+    idx[t] = c
+    src[Int(c)] = Int64(t)
+
+
+def pshap_dsynth_unit(t: Int, nb: Int, d: Int, np: Int, x: F32P, bg: F32P, inv: I32P, src: I64P, syn: F32P):
+    """t = c * d + f: feature f of compact row c, pshap_synth_unit's value
+    for the full row src[c]."""
+    var c = t // d
+    var f = t - c * d
+    var q = Int(src[c])
+    var r = q % nb
+    var s = q // nb
+    var span = 2 * d + 1
+    var rp = s // span
+    var o = s - rp * span
+    var row = rp // np
+    var pos = Int(inv[rp * d + f])
+    var on = pos < o if o <= d else pos >= o - d
+    if on:
+        syn[t] = x[row * d + f]
+    else:
+        syn[t] = bg[r * d + f]
+
+
+def pshap_dmap_unit(t: Int, nb: Int, idx: I64P, mp: I64P):
+    """t = group * nb + r: the compact row whose model output (o, r) reads,
+    its latest varying predecessor in the same permutation (o = 0 always
+    varies, so the walk stops there at the latest)."""
+    var q = t
+    while idx[q] < 0:
+        q -= nb
+    mp[t] = idx[q]
+
+
+def bg_mean_mapped_unit(t: Int, nb: Int, k: Int, y: F32P, mp: I64P, res: U64P):
+    """bg_mean_unit over the mapped compact outputs: the same adds in the
+    same row order."""
+    var q = t // k
+    var j = t - q * k
+    var acc = SF64_ZERO
+    for r in range(nb):
+        acc = sf64_add(acc, sf64_from_f32(y[Int(mp[q * nb + r]) * k + j]))
+    res[t] = sf64_div(acc, sf64_from_int(nb))

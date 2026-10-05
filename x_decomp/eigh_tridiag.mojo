@@ -67,6 +67,27 @@ comptime EIGH_FAST_TRIDIAG = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF"]()
 )
+#: FAST Apple candidate, default OFF: `-D MOJOLEARN_EIGH_FAST_PANEL_DF`
+#: (`_OFF` wins). Source lane/apple-fast-eigh-panel-df@21eeacf90 (ported
+#: 2026-10-04, lane apple-fast-rec-misc). Panel tridiagonalization with the
+#: trailing matrix kept as double-float (hi in A, lo in an n x n buffer):
+#: the rank-2 tile update, the column read (`_td_cell_df`) and the GEMV row
+#: dot (y = A v, thread and block sums) run in double-float.
+#: Known: M3 eigh-panel-df-q-v1 HOLD, "strict no-regression failed" (all
+#: eight cases, finite B <= A per metric, no allowance). Cause: 21eeacf90
+#: compensated only the syr2k update and then rounded each cell back to
+#: float32 at every panel, so ~128 roundings per cell at n 4096 stayed, and
+#: y = A v (the reflector's fp32 GEMV over up to n terms) stayed float32;
+#: B moved no metric beyond noise. Fixed here: low words survive between
+#: panels and the GEMV reads and sums them. T, reflectors, p/w, bisection,
+#: vectors, back-transform and refusals unchanged; orthogonality is set by
+#: the back-transform and may still compare as noise. Board 4096 eigerr
+#: 4.27e-7 (A) vs numpy ~3.49e-8; one float32 rounding of T is ~6e-8.
+comptime EIGH_FAST_PANEL_DF = (
+    EIGH_FAST_TRIDIAG
+    and is_defined["MOJOLEARN_EIGH_FAST_PANEL_DF"]()
+    and not is_defined["MOJOLEARN_EIGH_FAST_PANEL_DF_OFF"]()
+)
 #: Smallest n routed here; below it main's Jacobi is cheap.
 comptime TD_MIN_N = 512
 #: Panel width (reflectors per WY block). TD_TPB == 8 TD_NB is assumed by
@@ -206,8 +227,32 @@ def _td_cell_kern(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n: Int, i: Int, c: Int, jj:
     return x
 
 
+@always_inline
+def _td_cell_df(a: F32Ptr, alo: F32Ptr, vp: F32Ptr, wp: F32Ptr, n: Int, i: Int, c: Int, jj: Int) -> Float32:
+    """EIGH_FAST_PANEL_DF: `_td_cell` from the retained (hi, lo) trailing
+    cell, the panel's pending rank-2 terms subtracted in double-float, one
+    final rounding."""
+    var x = DF(a.unsafe_load(i * n + c), alo.unsafe_load(i * n + c))
+    for p in range(jj):
+        var t = df_add(
+            df_mul(DF(vp.unsafe_load(i * TD_NB + p), Float32(0.0)), DF(wp.unsafe_load(c * TD_NB + p), Float32(0.0))),
+            df_mul(DF(wp.unsafe_load(i * TD_NB + p), Float32(0.0)), DF(vp.unsafe_load(c * TD_NB + p), Float32(0.0))),
+        )
+        x = df_sub(x, t)
+    return x[0] + x[1]
+
+
+@always_inline
+def _td_cell_any(a: F32Ptr, alo: F32Ptr, vp: F32Ptr, wp: F32Ptr, n: Int, i: Int, c: Int, jj: Int) -> Float32:
+    comptime if EIGH_FAST_PANEL_DF:
+        return _td_cell_df(a, alo, vp, wp, n, i, c, jj)
+    else:
+        return _td_cell_kern(a, vp, wp, n, i, c, jj)
+
+
 def td_col_kernel(
-    a: F32Ptr, vp: F32Ptr, wp: F32Ptr, xcol: F32Ptr, part: F32Ptr, dd: F32Ptr, n_in: Int32, j_in: Int32, jj_in: Int32
+    a: F32Ptr, alo: F32Ptr, vp: F32Ptr, wp: F32Ptr, xcol: F32Ptr, part: F32Ptr, dd: F32Ptr, n_in: Int32, j_in: Int32,
+    jj_in: Int32,
 ):
     """Column j updated by the panel's earlier reflectors: xcol[i] = A_cur[i, j]
     (rows > j), part[b] = block b's sum of xcol[i]^2 over rows > j + 1, and
@@ -222,7 +267,7 @@ def td_col_kernel(
     var i = j + 1 + b * TD_TPB + tid
     var s = Float32(0.0)
     if i < n:
-        var x = _td_cell_kern(a, vp, wp, n, i, j, jj)
+        var x = _td_cell_any(a, alo, vp, wp, n, i, j, jj)
         xcol.unsafe_store(i, x)
         if i >= j + 2:
             s = x * x
@@ -237,9 +282,9 @@ def td_col_kernel(
     if tid == 0:
         part.unsafe_store(b, red[0])
     if b == 0 and tid == 1:
-        dd.unsafe_store(j, _td_cell_kern(a, vp, wp, n, j, j, jj))
+        dd.unsafe_store(j, _td_cell_any(a, alo, vp, wp, n, j, j, jj))
         if j == n - 2:
-            dd.unsafe_store(n - 1, _td_cell_kern(a, vp, wp, n, n - 1, n - 1, jj))
+            dd.unsafe_store(n - 1, _td_cell_any(a, alo, vp, wp, n, n - 1, n - 1, jj))
 
 
 @always_inline
@@ -266,7 +311,7 @@ def _td_v(xcol: F32Ptr, j: Int, scale: Float32, c: Int) -> Float32:
 
 
 def td_gemv_kernel(
-    a: F32Ptr, xcol: F32Ptr, part: F32Ptr, vp: F32Ptr, wp: F32Ptr, vv: F32Ptr, tau: F32Ptr, ee: F32Ptr,
+    a: F32Ptr, alo: F32Ptr, xcol: F32Ptr, part: F32Ptr, vp: F32Ptr, wp: F32Ptr, vv: F32Ptr, tau: F32Ptr, ee: F32Ptr,
     y: F32Ptr, tv: F32Ptr, n_in: Int32, j_in: Int32, jj_in: Int32, np_in: Int32,
 ):
     """Every block first forms column j's reflector (`_td_house` of the
@@ -283,6 +328,10 @@ def td_gemv_kernel(
     var b = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var red = stack_allocation[TD_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # EIGH_FAST_PANEL_DF's low words of `red` (one float when off)
+    var redl = stack_allocation[
+        TD_TPB if EIGH_FAST_PANEL_DF else 1, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
     # column j's reflector from the partial sums, folded in the same order
     # in every block (so every block holds the same scalars)
     var np_ = Int(np_in)
@@ -314,6 +363,31 @@ def td_gemv_kernel(
             tau.unsafe_store(j, hh[1])
         return
     var s = Float32(0.0)
+    comptime if EIGH_FAST_PANEL_DF:
+        if b < m:
+            # y row from the retained (hi, lo) cells, products and the
+            # thread's and block's sums in double-float, one final rounding.
+            var row = (j + 1 + b) * n
+            var c = j + 1 + tid
+            var acc = DF(Float32(0.0), Float32(0.0))
+            while c < n:
+                acc = df_add(acc, df_mul(DF(a.unsafe_load(row + c), alo.unsafe_load(row + c)),
+                                         DF(_td_v(xcol, j, scale, c), Float32(0.0))))
+                c += TD_TPB
+            red[tid] = acc[0]
+            redl[tid] = acc[1]
+            barrier()
+            var wd = TD_TPB // 2
+            while wd > 0:
+                if tid < wd:
+                    var u = df_add(DF(red[tid], redl[tid]), DF(red[tid + wd], redl[tid + wd]))
+                    red[tid] = u[0]
+                    redl[tid] = u[1]
+                barrier()
+                wd = wd // 2
+            if tid == 0:
+                y.unsafe_store(j + 1 + b, red[0] + redl[0])
+            return
     if b < m:
         var row = (j + 1 + b) * n
         var c = j + 1 + tid
@@ -415,7 +489,7 @@ def td_w_kernel(
         wp.unsafe_store(i * TD_NB + jj, pb.unsafe_load(i) + alpha2 * vv.unsafe_load(i))
 
 
-def td_syr2k_kernel(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int32, g_in: Int32):
+def td_syr2k_kernel(a: F32Ptr, alo: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int32, g_in: Int32):
     """A[kend :, kend :] -= V W^T + W V^T (the panel's TD_NB columns; unused
     columns are zero). One block of TD_TPB per 32 x 32 tile, 2 x 2 cells a
     thread; g x g tiles."""
@@ -455,19 +529,46 @@ def td_syr2k_kernel(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int
         svc[rr * TD_NBP + q] = a3
         swc[rr * TD_NBP + q] = a4
     barrier()
-    var acc = InlineArray[Float32, 4](fill=Float32(0.0))
-    comptime for q in range(TD_NB):
+    comptime if EIGH_FAST_PANEL_DF:
+        # Keep the two products' rounding residuals and all 32 rank-2
+        # contributions. Include A in the same compensated subtraction:
+        # rounding the accumulated update before A - update loses low
+        # bits when cancellation leaves a small trailing cell.
+        var acc_df = InlineArray[DF, 4](fill=DF(Float32(0.0), Float32(0.0)))
+        comptime for q in range(TD_NB):
+            comptime for ra in range(2):
+                var vr = DF(svr[(ty + 16 * ra) * TD_NBP + q], Float32(0.0))
+                var wr = DF(swr[(ty + 16 * ra) * TD_NBP + q], Float32(0.0))
+                comptime for cb in range(2):
+                    var wc = DF(swc[(tx + 16 * cb) * TD_NBP + q], Float32(0.0))
+                    var vc = DF(svc[(tx + 16 * cb) * TD_NBP + q], Float32(0.0))
+                    var pair = df_add(df_mul(vr, wc), df_mul(wr, vc))
+                    acc_df[ra * 2 + cb] = df_add(acc_df[ra * 2 + cb], pair)
         comptime for ra in range(2):
-            var vr = svr[(ty + 16 * ra) * TD_NBP + q]
-            var wr = swr[(ty + 16 * ra) * TD_NBP + q]
             comptime for cb in range(2):
-                acc[ra * 2 + cb] += vr * swc[(tx + 16 * cb) * TD_NBP + q] + wr * svc[(tx + 16 * cb) * TD_NBP + q]
-    comptime for ra in range(2):
-        comptime for cb in range(2):
-            var ri = r0 + ty + 16 * ra
-            var ci = c0 + tx + 16 * cb
-            if ri < n and ci < n:
-                a.unsafe_store(ri * n + ci, a.unsafe_load(ri * n + ci) - acc[ra * 2 + cb])
+                var ri = r0 + ty + 16 * ra
+                var ci = c0 + tx + 16 * cb
+                if ri < n and ci < n:
+                    # The cell's low word survives to the next panel
+                    # (21eeacf90 rounded it away here: the HOLD's cause).
+                    var prior = DF(a.unsafe_load(ri * n + ci), alo.unsafe_load(ri * n + ci))
+                    var updated = df_sub(prior, acc_df[ra * 2 + cb])
+                    a.unsafe_store(ri * n + ci, updated[0])
+                    alo.unsafe_store(ri * n + ci, updated[1])
+    else:
+        var acc = InlineArray[Float32, 4](fill=Float32(0.0))
+        comptime for q in range(TD_NB):
+            comptime for ra in range(2):
+                var vr = svr[(ty + 16 * ra) * TD_NBP + q]
+                var wr = swr[(ty + 16 * ra) * TD_NBP + q]
+                comptime for cb in range(2):
+                    acc[ra * 2 + cb] += vr * swc[(tx + 16 * cb) * TD_NBP + q] + wr * svc[(tx + 16 * cb) * TD_NBP + q]
+        comptime for ra in range(2):
+            comptime for cb in range(2):
+                var ri = r0 + ty + 16 * ra
+                var ci = c0 + tx + 16 * cb
+                if ri < n and ci < n:
+                    a.unsafe_store(ri * n + ci, a.unsafe_load(ri * n + ci) - acc[ra * 2 + cb])
 
 
 # ===========================================================================
@@ -852,6 +953,11 @@ def eigh_td_on(
     var dpb = ctx.enqueue_create_buffer[DType.float32](n)
     var dpart = ctx.enqueue_create_buffer[DType.float32](_td_grid(n, TD_TPB))
     var dpart2 = ctx.enqueue_create_buffer[DType.float32](_td_grid(n, TD_TPB))
+    # EIGH_FAST_PANEL_DF: the trailing matrix's low words (n x n, zero = the
+    # input is exact in float32); one float otherwise (never read).
+    var dlo = ctx.enqueue_create_buffer[DType.float32](n * n if EIGH_FAST_PANEL_DF else 1)
+    comptime if EIGH_FAST_PANEL_DF:
+        enqueue_fill(ctx, dlo, Float32(0.0))
     # 1. tridiagonalize
     var k = 0
     var panel = 0
@@ -864,12 +970,12 @@ def eigh_td_on(
             var m = n - j - 1
             var nbm = _td_grid(m, TD_TPB)
             ctx.enqueue_function[td_col_kernel](
-                da.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), dx.unsafe_ptr(), dpart.unsafe_ptr(), ddd.unsafe_ptr(),
+                da.unsafe_ptr(), dlo.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), dx.unsafe_ptr(), dpart.unsafe_ptr(), ddd.unsafe_ptr(),
                 Int32(n), Int32(j), Int32(jj),
                 grid_dim=nbm, block_dim=TD_TPB,
             )
             ctx.enqueue_function[td_gemv_kernel](
-                da.unsafe_ptr(), dx.unsafe_ptr(), dpart.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), dvv.unsafe_ptr(),
+                da.unsafe_ptr(), dlo.unsafe_ptr(), dx.unsafe_ptr(), dpart.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), dvv.unsafe_ptr(),
                 dtau.unsafe_ptr(), dee.unsafe_ptr(), dy.unsafe_ptr(), dtv.unsafe_ptr(),
                 Int32(n), Int32(j), Int32(jj), Int32(nbm),
                 grid_dim=m + 2 * jj + nbm, block_dim=TD_TPB,
@@ -889,7 +995,7 @@ def eigh_td_on(
         if mm > 0:
             var g = (mm + 31) // 32
             ctx.enqueue_function[td_syr2k_kernel](
-                da.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), Int32(n), Int32(kend), Int32(g),
+                da.unsafe_ptr(), dlo.unsafe_ptr(), dV.unsafe_ptr(), dW.unsafe_ptr(), Int32(n), Int32(kend), Int32(g),
                 grid_dim=g * g, block_dim=TD_TPB,
             )
         k = kend
@@ -910,6 +1016,8 @@ def eigh_td_on(
         grid_dim=_td_grid(n, TD_EIG_TPB), block_dim=TD_EIG_TPB,
     )
     ctx.synchronize()
+    # the tridiagonalization is complete (synchronized): low words released
+    _ = dlo^
     # 3. eigenvectors of T
     var dph = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dpl = ctx.enqueue_create_buffer[DType.float32](n * n)

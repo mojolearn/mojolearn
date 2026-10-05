@@ -23,7 +23,10 @@ from core.device_zero import enqueue_fill
 
 from core.identity_trace import IdentityTrace
 from ensemble.instruments import StageTimes as HostStageTimes
-from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.compressed_index_builder import (
+    CompressedIndexLayout,
+    build_layout,
+)
 from max.gpu.host.device_attribute import DeviceAttribute
 from gbdt.gpu_data.kernel.binarize import (
     BINARIZE_BLOCK_SIZE,
@@ -59,6 +62,23 @@ from gbdt.ctrs.ctr_calcers import (
     compute_simple_ctrs_device_resident,
     compute_simple_ctrs_gpu_resident,
 )
+from gbdt.ctrs.ctr import CTR_BORDERS, CTR_FEATURE_FREQ
+from gbdt.ctrs.fast_prep import (
+    CTR_FAST_PREP,
+    CTR_INDEX_FUSED,
+    CTR_ONEHOT_DEVICE,
+    CTR_PREP_SHARED,
+    CTR_SORT_ONCE,
+    SYM_CTR_ANY,
+    CtrPrepFast,
+    ctr_borders_from_device,
+    device_dense_codes,
+    device_target_histogram,
+    fast_dependent_ctrs,
+    fast_freq_ctrs,
+    read_codes,
+    upload_codes,
+)
 from gbdt.ctrs.kernel.ctr_order import launch_ctr_estimation_order
 from gbdt.data.permutation import DEFAULT_PERMUTATION_COUNT
 from gbdt.grid_creator.binarization import (
@@ -70,6 +90,7 @@ from gbdt.grid_creator.binarization import (
 from gbdt.models.ctr_value_table import (
     TCtrValueTable,
     build_ctr_tables,
+    build_ctr_tables_from_counts,
     column_plan,
     dense_category_code,
     expand_raw_columns,
@@ -118,7 +139,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
     od_type_from_name,
 )
-from std.memory import memcpy
+from std.memory import bitcast, memcpy
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
@@ -140,6 +161,24 @@ from std.sys.info import has_apple_gpu_accelerator
 #: way. The CTR columns themselves stay ON THE DEVICE through the border
 #: build and the compressed-index build (`train`'s column loop).
 
+#: lane/apple-fast-sym-feat (2026-10-03): the switches live in
+#: `gbdt/gpu_data/sym_feat_switches.mojo` (FAST + Apple only, default OFF).
+from gbdt.gpu_data.sym_feat_switches import (
+    GBDT_EVAL_SKIP_EMPTY,
+    GBDT_INDEX_PACK_DEVICE,
+    GBDT_QUANT_DEVICE,
+)
+from gbdt.gpu_data.kernel.binarize import (
+    PACK_BLOCK,
+    PACK_BORDER_CAP,
+    PACK_DOCS,
+    PACK_MAX_ENTRIES,
+    TR_MAX_GRID_Y,
+    TR_ROWS_PER_PASS,
+    TR_TILE,
+    pack_cindex_words_kernel,
+    transpose_rows_to_columns_kernel,
+)
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -336,6 +375,28 @@ struct TrainedModel(Movable):
     the production structure-search driver rather than focused checks."""
 
 
+def _sym_feat_test_cindex(
+    ctx: DeviceContext,
+    x_colmajor: List[Float32],
+    n_rows: Int,
+    borders: List[List[Float32]],
+    fold_counts: List[Int],
+    nan_treatment: List[Int],
+    eval_rows: Int,
+) raises -> DeviceBuffer[DType.uint32]:
+    """The held-out arm's compressed index: `_build_cindex_from_floats`,
+    except under `GBDT_EVAL_SKIP_EMPTY` (lane/apple-fast-sym-feat, FAST +
+    Apple only) with NO held-out rows, where nothing reads the index and
+    the one-row dummy build (a launch and two uploads per bordered feature,
+    a drain per eight) is replaced by a one-word allocation."""
+    comptime if GBDT_EVAL_SKIP_EMPTY:
+        if eval_rows == 0:
+            return ctx.enqueue_create_buffer[DType.uint32](1)
+    return _build_cindex_from_floats(
+        ctx, x_colmajor, n_rows, borders, fold_counts, nan_treatment,
+    )
+
+
 def _build_cindex_from_floats(
     ctx: DeviceContext,
     x_colmajor: List[Float32],
@@ -491,6 +552,257 @@ def _resolve_column_ptrs(
     return column_ptrs.copy()
 
 
+#: lane/apple-fast-sym-feat: the border slab stride of the device-resident
+#: quantizer (count + up to 287 borders; a 255-border grid with both NaN
+#: sentinels is 257), and the launch shape of its per-feature fallback.
+comptime _QD_SLAB = 288
+comptime _QD_SUB_BLOCK = 256
+comptime _QD_SUB_MAX_BLOCKS = 4096
+
+
+@fieldwise_init
+struct _QdPackTable(Movable):
+    """`pack_cindex_words_kernel`'s host-built tables (lane af-sym-feat):
+    one entry per device-resident bordered feature, grouped by index word."""
+    var word_start: List[UInt32]
+    var col: List[UInt32]
+    var shift: List[UInt32]
+    var mask: List[UInt32]
+    var slab: List[UInt32]
+    var sub: List[Float32]
+    var fits: Bool
+
+
+def _qd_pack_word_table(
+    lay: CompressedIndexLayout,
+    dev_col_of: List[Int],
+    borders: List[List[Float32]],
+    nan_treatment: List[Int],
+) raises -> _QdPackTable:
+    """Group the device-resident bordered features by their compressed-index
+    word, in word order. `fits` is the shared-page gate of
+    `pack_cindex_words_kernel`: at most `PACK_MAX_ENTRIES` features and
+    `PACK_BORDER_CAP` border values per word; a layout that exceeds either
+    takes the per-feature launches instead."""
+    var n_features = len(borders)
+    var n_words = lay.columns
+    var per_word = List[List[Int]]()
+    for _ in range(n_words):
+        per_word.append(List[Int]())
+    for f in range(n_features):
+        if len(borders[f]) == 0 or dev_col_of[f] < 0:
+            continue
+        per_word[Int(lay.features[f].offset)].append(f)
+    var t = _QdPackTable(
+        List[UInt32](), List[UInt32](), List[UInt32](), List[UInt32](),
+        List[UInt32](), List[Float32](), True,
+    )
+    t.word_start.append(UInt32(0))
+    for w in range(n_words):
+        var total = 0
+        if len(per_word[w]) > PACK_MAX_ENTRIES:
+            t.fits = False
+        for k in range(len(per_word[w])):
+            var f = per_word[w][k]
+            ref cf = lay.features[f]
+            total += len(borders[f])
+            var treat = NAN_TREATMENT_AS_IS
+            if len(nan_treatment) == n_features:
+                treat = nan_treatment[f]
+            t.col.append(UInt32(dev_col_of[f]))
+            t.shift.append(cf.shift)
+            t.mask.append(cf.mask)
+            t.slab.append(UInt32(f * _QD_SLAB))
+            # a NaN substitute means "leave NaN alone" (bin 0, as AS_IS)
+            t.sub.append(
+                nan_substitution(treat) if treat != NAN_TREATMENT_AS_IS
+                else bitcast[DType.float32](UInt32(0x7FC00000))
+            )
+        if total > PACK_BORDER_CAP:
+            t.fits = False
+        t.word_start.append(UInt32(len(t.col)))
+    return t^
+
+
+def _cindex_from_device_columns(
+    ctx: DeviceContext,
+    dev: MutPointer[Float32, MutAnyOrigin],
+    dev_col_of: List[Int],
+    n_rows: Int,
+    borders: List[List[Float32]],
+    nan_treatment: List[Int],
+    lay: CompressedIndexLayout,
+    mut cindex: DeviceBuffer[DType.uint32],
+) raises:
+    """lane/apple-fast-sym-feat (`GBDT_QUANT_DEVICE`): binarize every
+    device-resident float column from the device copy. ONE upload carries
+    every feature's border slab (`_QD_SLAB` floats a feature, the count
+    first, the layout `binarize_float_feature_kernel` reads); a column whose
+    NaN treatment substitutes does so in place on the device copy (the
+    border build has already read it); then either ONE
+    `pack_cindex_words_kernel` launch over every word
+    (`GBDT_INDEX_PACK_DEVICE`, when the word table fits its shared page) or
+    one `binarize_float_feature_kernel` launch per feature reading the
+    device column and its slab. No pinned memcpy, no per-feature upload, no
+    ring drain; the caller drains once. Same kernels and arithmetic as the
+    staged path, so the words are the same."""
+    var n_features = len(borders)
+    var h_slab = ctx.enqueue_create_host_buffer[DType.float32](
+        max(1, n_features * _QD_SLAB)
+    )
+    var hs = h_slab.unsafe_ptr()
+    for f in range(n_features):
+        if dev_col_of[f] < 0:
+            continue
+        if len(borders[f]) >= _QD_SLAB:
+            raise Error(
+                "feature " + String(f) + " has " + String(len(borders[f]))
+                + " borders; the device quantizer's slab holds "
+                + String(_QD_SLAB - 1)
+            )
+        hs.unsafe_store(f * _QD_SLAB, Float32(len(borders[f])))
+        for b in range(len(borders[f])):
+            hs.unsafe_store(f * _QD_SLAB + 1 + b, borders[f][b])
+    var d_slab = ctx.enqueue_create_buffer[DType.float32](
+        max(1, n_features * _QD_SLAB)
+    )
+    ctx.enqueue_copy(dst_buf=d_slab, src_ptr=hs)
+    for f in range(n_features):
+        if len(borders[f]) == 0 or dev_col_of[f] < 0:
+            continue
+        var treat = NAN_TREATMENT_AS_IS
+        if len(nan_treatment) == n_features:
+            treat = nan_treatment[f]
+        if treat != NAN_TREATMENT_AS_IS:
+            ctx.enqueue_function[nan_substitute_kernel](
+                dev + dev_col_of[f] * n_rows, Int32(n_rows),
+                nan_substitution(treat),
+                grid_dim=min(
+                    (n_rows + _QD_SUB_BLOCK - 1) // _QD_SUB_BLOCK,
+                    _QD_SUB_MAX_BLOCKS,
+                ),
+                block_dim=_QD_SUB_BLOCK,
+            )
+    var packed = False
+    comptime if GBDT_INDEX_PACK_DEVICE:
+        var tab = _qd_pack_word_table(lay, dev_col_of, borders, nan_treatment)
+        if tab.fits and lay.columns > 0 and len(tab.col) > 0:
+            var ne = len(tab.col)
+            var nw = lay.columns
+            var h_ws = ctx.enqueue_create_host_buffer[DType.uint32](nw + 1)
+            var h_meta = ctx.enqueue_create_host_buffer[DType.uint32](4 * ne)
+            var h_sub = ctx.enqueue_create_host_buffer[DType.float32](ne)
+            for w in range(nw + 1):
+                h_ws.unsafe_ptr().unsafe_store(w, tab.word_start[w])
+            for e in range(ne):
+                h_meta.unsafe_ptr().unsafe_store(e, tab.col[e])
+                h_meta.unsafe_ptr().unsafe_store(ne + e, tab.shift[e])
+                h_meta.unsafe_ptr().unsafe_store(2 * ne + e, tab.mask[e])
+                h_meta.unsafe_ptr().unsafe_store(3 * ne + e, tab.slab[e])
+                h_sub.unsafe_ptr().unsafe_store(e, tab.sub[e])
+            var d_ws = ctx.enqueue_create_buffer[DType.uint32](nw + 1)
+            var d_meta = ctx.enqueue_create_buffer[DType.uint32](4 * ne)
+            var d_sub = ctx.enqueue_create_buffer[DType.float32](ne)
+            ctx.enqueue_copy(dst_buf=d_ws, src_ptr=h_ws.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=d_meta, src_ptr=h_meta.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=d_sub, src_ptr=h_sub.unsafe_ptr())
+            comptime PACK_ROWS = PACK_BLOCK * PACK_DOCS
+            # one table buffer, four views: an untracked origin so the
+            # views are not seen as aliasing mutable arguments
+            var pm = d_meta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            ctx.enqueue_function[pack_cindex_words_kernel](
+                dev, Int32(n_rows),
+                d_ws.unsafe_ptr(),
+                pm,
+                pm + ne,
+                pm + 2 * ne,
+                pm + 3 * ne,
+                d_sub.unsafe_ptr(),
+                d_slab.unsafe_ptr(),
+                cindex.unsafe_ptr(),
+                grid_dim=((n_rows + PACK_ROWS - 1) // PACK_ROWS, nw, 1),
+                block_dim=(PACK_BLOCK, 1, 1),
+            )
+            # the tables and their staging outlive the launch: the caller
+            # drains before anything reads `cindex`
+            ctx.synchronize()
+            _ = h_ws^
+            _ = h_meta^
+            _ = h_sub^
+            _ = d_ws^
+            _ = d_meta^
+            _ = d_sub^
+            packed = True
+    if not packed:
+        comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
+        for f in range(n_features):
+            if len(borders[f]) == 0 or dev_col_of[f] < 0:
+                continue
+            ref cf = lay.features[f]
+            ctx.enqueue_function[binarize_float_feature_kernel](
+                Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                dev + dev_col_of[f] * n_rows, Int32(n_rows),
+                d_slab.unsafe_ptr() + f * _QD_SLAB, cindex.unsafe_ptr(),
+                grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+            )
+        ctx.synchronize()
+    _ = h_slab^
+    _ = d_slab^
+
+
+def _qd_upload_float_columns(
+    ctx: DeviceContext,
+    column_ptrs: List[MutPointer[Float32, MutUntrackedOrigin]],
+    dev_col_of: List[Int],
+    n_float: Int,
+    n_rows: Int,
+    n_features: Int,
+    x_row_major: Bool,
+    x_src: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> DeviceBuffer[DType.float32]:
+    """lane/apple-fast-sym-feat (`GBDT_QUANT_DEVICE`): the float columns
+    resident on the device, column-major in `dev_col_of` order, uploaded
+    ONCE. A column-major caller's columns go up straight from its pointers
+    (no pinned memcpy, as `device_float_borders` already did per chunk); a
+    row-major caller's rows go up as handed over and
+    `transpose_rows_to_columns_kernel` lays them out (every column is then
+    a raw float column, `train` has refused anything else)."""
+    var mat = ctx.enqueue_create_buffer[DType.float32](
+        max(1, n_float * n_rows)
+    )
+    if n_float == 0:
+        return mat^
+    if x_row_major:
+        var raw = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+        ctx.enqueue_copy(
+            dst_buf=raw,
+            src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](x_src),
+        )
+        var gy = min((n_rows + TR_TILE - 1) // TR_TILE, TR_MAX_GRID_Y)
+        ctx.enqueue_function[transpose_rows_to_columns_kernel](
+            mat.unsafe_ptr(), raw.unsafe_ptr(), Int32(n_rows), Int32(n_features),
+            grid_dim=((n_features + TR_TILE - 1) // TR_TILE, gy, 1),
+            block_dim=(TR_TILE, TR_ROWS_PER_PASS, 1),
+        )
+        # the raw rows are read by the transpose only; drain before they go
+        ctx.synchronize()
+        _ = raw^
+        return mat^
+    for c in range(len(column_ptrs)):
+        var k = dev_col_of[c]
+        if k < 0:
+            continue
+        var view = mat.create_sub_buffer[DType.float32](k * n_rows, n_rows)
+        ctx.enqueue_copy(
+            dst_buf=view,
+            src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                column_ptrs[c]
+            ),
+        )
+    return mat^
+
+
 def _build_cindex_from_columns(
     ctx: DeviceContext,
     columns: List[List[Float32]],
@@ -501,7 +813,11 @@ def _build_cindex_from_columns(
     column_ptrs: List[MutPointer[Float32, MutUntrackedOrigin]] = List[
         MutPointer[Float32, MutUntrackedOrigin]
     ](),
-    dev_cols: List[DeviceBuffer[DType.float32]] = List[
+    dev_cols: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+    dev_col_of: List[Int] = List[Int](),
+    # lane cpu4-gbdt: separately held resident columns (`train`'s CTR
+    # columns) and each column's index into them, -1 for none
+    dev_col_bufs: List[DeviceBuffer[DType.float32]] = List[
         DeviceBuffer[DType.float32]
     ](),
     column_dev_slot: List[Int] = List[Int](),
@@ -521,7 +837,7 @@ def _build_cindex_from_columns(
 
     RESIDENT COLUMNS (lane cpu4-gbdt): a column `c` with
     `column_dev_slot[c] >= 0` is already on the device, in
-    `dev_cols[column_dev_slot[c]]` (`n_rows` long; `train`'s CTR columns);
+    `dev_col_bufs[column_dev_slot[c]]` (`n_rows` long; `train`'s CTR columns);
     it is binarized in place, never staged or uploaded. An empty
     `column_dev_slot` means no column is resident.
     """
@@ -529,6 +845,144 @@ def _build_cindex_from_columns(
     if len(fold_counts) != n_features:
         raise Error("fold_counts/borders length mismatch")
     var cps = _resolve_column_ptrs(columns, column_ptrs)
+    var lay = build_layout(fold_counts)
+    var cindex = ctx.enqueue_create_buffer[DType.uint32](
+        n_rows * lay.columns
+    )
+    enqueue_fill(ctx, cindex, UInt32(0))
+
+    # lane/apple-fast-sym-feat: the device-resident float columns are
+    # binarized straight from the device (one slab upload, no pinned
+    # memcpy, no per-feature upload, no ring drain); the staging ring below
+    # then serves only the columns that have no device copy (CTR, one-hot).
+    var dev_done = False
+    comptime if GBDT_QUANT_DEVICE:
+        if dev_cols.__bool__() and len(dev_col_of) == n_features:
+            _cindex_from_device_columns(
+                ctx, dev_cols.value(), dev_col_of, n_rows, borders,
+                nan_treatment, lay, cindex,
+            )
+            dev_done = True
+            var all_dev = True
+            for f in range(n_features):
+                if len(borders[f]) != 0 and dev_col_of[f] < 0:
+                    all_dev = False
+            if all_dev:
+                ctx.synchronize()
+                return cindex^
+
+    comptime _CINDEX_SLOTS = 8
+    var xdevs = List[DeviceBuffer[DType.float32]]()
+    var hxs = List[HostBuffer[DType.float32]]()
+    var hbos = List[HostBuffer[DType.float32]]()
+    var bdevs = List[DeviceBuffer[DType.float32]]()
+    for _ in range(_CINDEX_SLOTS):
+        xdevs.append(ctx.enqueue_create_buffer[DType.float32](n_rows))
+        hxs.append(ctx.enqueue_create_host_buffer[DType.float32](n_rows))
+        hbos.append(ctx.enqueue_create_host_buffer[DType.float32](256))
+        bdevs.append(ctx.enqueue_create_buffer[DType.float32](256))
+    ctx.synchronize()
+    comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
+    var staged = 0
+    for f in range(n_features):
+        if len(borders[f]) == 0:
+            continue
+        comptime if GBDT_QUANT_DEVICE:
+            if dev_done and dev_col_of[f] >= 0:
+                continue
+        ref cf = lay.features[f]
+        var treat = NAN_TREATMENT_AS_IS
+        if len(nan_treatment) == n_features:
+            treat = nan_treatment[f]
+        var sub = nan_substitution(treat)
+        var slot = staged % _CINDEX_SLOTS
+        if staged >= _CINDEX_SLOTS and slot == 0:
+            # one drain per revolution frees every slot in the ring
+            ctx.synchronize()
+        var hx = hxs[slot].unsafe_ptr()
+        var hbo = hbos[slot].unsafe_ptr()
+        var dev_slot = -1
+        if len(column_dev_slot) == n_features:
+            dev_slot = column_dev_slot[f]
+        if dev_slot >= 0:
+            # a RESIDENT column: only its borders are staged; the values
+            # are binarized where they are (a NaN treatment, never set for
+            # a CTR column, substitutes on a device-side copy)
+            hbo.unsafe_store(0, Float32(len(borders[f])))
+            for b in range(len(borders[f])):  # small-loop(borders: one column's borders, at most 255): kernel argument staging, model parameters
+                hbo.unsafe_store(1 + b, borders[f][b])
+            ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
+            if treat != NAN_TREATMENT_AS_IS:
+                ctx.enqueue_copy(
+                    dst_buf=xdevs[slot], src_buf=dev_col_bufs[dev_slot]
+                )
+                _enqueue_nan_substitute(ctx, xdevs[slot], n_rows, sub)
+                ctx.enqueue_function[binarize_float_feature_kernel](
+                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                    xdevs[slot].unsafe_ptr(), Int32(n_rows),
+                    bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
+                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[binarize_float_feature_kernel](
+                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                    dev_col_bufs[dev_slot].unsafe_ptr(), Int32(n_rows),
+                    bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
+                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+                )
+            staged += 1
+            continue
+        var src = cps[f]
+        # the raw column is a byte move into the pinned slot; a treatment
+        # that substitutes NaNs does so on the device after the upload
+        # (cpu-gpu-cleanup t-gbdt). AS_IS means the border build's
+        # full-column NaN scan saw none in THIS SAME buffer, so it needs no
+        # pass at all.
+        memcpy(dest=hx, src=src, count=n_rows)
+        hbo.unsafe_store(0, Float32(len(borders[f])))
+        for b in range(len(borders[f])):
+            hbo.unsafe_store(1 + b, borders[f][b])
+        ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
+        ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
+        if treat != NAN_TREATMENT_AS_IS:
+            _enqueue_nan_substitute(ctx, xdevs[slot], n_rows, sub)
+        ctx.enqueue_function[binarize_float_feature_kernel](
+            Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+            xdevs[slot].unsafe_ptr(), Int32(n_rows),
+            bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
+            grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+            block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+        )
+        staged += 1
+    ctx.synchronize()
+    return cindex^
+
+
+def _build_cindex_fused(
+    ctx: DeviceContext,
+    n_rows: Int,
+    borders: List[List[Float32]],
+    fold_counts: List[Int],
+    nan_treatment: List[Int],
+    column_ptrs: List[MutPointer[Float32, MutUntrackedOrigin]],
+    mut dev_cols: List[DeviceBuffer[DType.float32]],
+    dev_slot: List[Int],
+) raises -> DeviceBuffer[DType.uint32]:
+    """lane/apple-fast-sym-ctr, `-D MOJOLEARN_CTR_INDEX_FUSED` (FAST +
+    Apple only; reached from `train` under that flag alone).
+    `_build_cindex_from_columns` with one change: a column whose
+    `dev_slot` is set is a CTR column that already lives on the device, and
+    the binarize kernel reads that buffer directly -- no host copy, no
+    staging memcpy, no upload. A CTR column is NaN free (`AsIs`), so no
+    substitution applies. Every other column takes the pointer path's ring
+    unchanged. Same kernel, same borders, same values: the same index."""
+    var n_features = len(borders)
+    if len(fold_counts) != n_features:
+        raise Error("fold_counts/borders length mismatch")
+    if len(dev_slot) != n_features or len(column_ptrs) != n_features:
+        raise Error("_build_cindex_fused: column lists disagree")
     var lay = build_layout(fold_counts)
     var cindex = ctx.enqueue_create_buffer[DType.uint32](
         n_rows * lay.columns
@@ -555,60 +1009,36 @@ def _build_cindex_from_columns(
         var treat = NAN_TREATMENT_AS_IS
         if len(nan_treatment) == n_features:
             treat = nan_treatment[f]
-        var sub = nan_substitution(treat)
         var slot = staged % _CINDEX_SLOTS
         if staged >= _CINDEX_SLOTS and slot == 0:
             # one drain per revolution frees every slot in the ring
             ctx.synchronize()
-        var hx = hxs[slot].unsafe_ptr()
         var hbo = hbos[slot].unsafe_ptr()
-        var dev_slot = -1
-        if len(column_dev_slot) == n_features:
-            dev_slot = column_dev_slot[f]
-        if dev_slot >= 0:
-            # a RESIDENT column: only its borders are staged; the values
-            # are binarized where they are (a NaN treatment, never set for
-            # a CTR column, substitutes on a device-side copy)
-            hbo.unsafe_store(0, Float32(len(borders[f])))
-            for b in range(len(borders[f])):  # small-loop(borders: one column's borders, at most 255): kernel argument staging, model parameters
-                hbo.unsafe_store(1 + b, borders[f][b])
-            ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
-            if treat != NAN_TREATMENT_AS_IS:
-                ctx.enqueue_copy(
-                    dst_buf=xdevs[slot], src_buf=dev_cols[dev_slot]
-                )
-                _enqueue_nan_substitute(ctx, xdevs[slot], n_rows, sub)
-                ctx.enqueue_function[binarize_float_feature_kernel](
-                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                    xdevs[slot].unsafe_ptr(), Int32(n_rows),
-                    bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
-                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
-                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
-                )
-            else:
-                ctx.enqueue_function[binarize_float_feature_kernel](
-                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                    dev_cols[dev_slot].unsafe_ptr(), Int32(n_rows),
-                    bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
-                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
-                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
-                )
-            staged += 1
-            continue
-        var src = cps[f]
-        # the raw column is a byte move into the pinned slot; a treatment
-        # that substitutes NaNs does so on the device after the upload
-        # (cpu-gpu-cleanup t-gbdt). AS_IS means the border build's
-        # full-column NaN scan saw none in THIS SAME buffer, so it needs no
-        # pass at all.
-        memcpy(dest=hx, src=src, count=n_rows)
         hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
             hbo.unsafe_store(1 + b, borders[f][b])
-        ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
         ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
+        if dev_slot[f] >= 0:
+            if treat != NAN_TREATMENT_AS_IS:
+                raise Error(
+                    "_build_cindex_fused: a device CTR column must be AsIs"
+                )
+            ctx.enqueue_function[binarize_float_feature_kernel](
+                Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                dev_cols[dev_slot[f]].unsafe_ptr(), Int32(n_rows),
+                bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
+                grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+            )
+            staged += 1
+            continue
+        var hx = hxs[slot].unsafe_ptr()
+        memcpy(dest=hx, src=column_ptrs[f], count=n_rows)
+        ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
         if treat != NAN_TREATMENT_AS_IS:
-            _enqueue_nan_substitute(ctx, xdevs[slot], n_rows, sub)
+            _enqueue_nan_substitute(
+                ctx, xdevs[slot], n_rows, nan_substitution(treat)
+            )
         ctx.enqueue_function[binarize_float_feature_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             xdevs[slot].unsafe_ptr(), Int32(n_rows),
@@ -794,6 +1224,10 @@ def train(
     # `x_colmajor` empty. The binding entry (`gbdt_fit`) passes it; every
     # other caller passes the List.
     x_borrow: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None,
+    # lane/apple-fast-sym-feat: `x_borrow` holds ROW-MAJOR rows
+    # (`x[row * n_features + feature]`). Served only by the FAST Apple
+    # device quantizer (`GBDT_QUANT_DEVICE`), raw float columns only.
+    x_row_major: Bool = False,
     # THE POOL'S GROUPING, their `TQueriesGrouping` sizes in row order: one
     # entry per query, each the number of CONSECUTIVE rows carrying that
     # `group_id` (`libs/data/objects.cpp:60-87` builds the groups from runs
@@ -1406,8 +1840,42 @@ def train(
     # this pre-pass reads cardinalities and nothing else -- their features
     # manager makes the same decision before their options are resolved,
     # in the same order.
+    # lane/apple-fast-sym-ctr, `-D MOJOLEARN_CTR_ONEHOT_DEVICE` (FAST + Apple
+    # only, gbdt/ctrs/fast_prep.mojo): every declared categorical column's
+    # dense-code pass on the device, ONCE, before the two cardinality
+    # pre-passes below and the walk, which all read it. Off, these lists stay
+    # empty and `symctr_host_prepass` is the constant True.
+    var symctr_host_prepass = True
+    var symctr_codes = List[DeviceBuffer[DType.uint32]]()
+    var symctr_unique = List[Int]()
+    var symctr_counts = List[List[Int]]()
+    comptime if CTR_ONEHOT_DEVICE:
+        symctr_host_prepass = False
+        for f in range(n_features):
+            if len(cat_features) == n_features and cat_features[f]:
+                var dc = device_dense_codes(
+                    ctx, x_src + f * n_rows, n_rows, f
+                )
+                symctr_unique.append(dc.unique_values)
+                symctr_counts.append(dc.counts.copy())
+                symctr_codes.append(dc.codes)
+            else:
+                symctr_unique.append(0)
+                symctr_counts.append(List[Int]())
+                symctr_codes.append(
+                    ctx.enqueue_create_buffer[DType.uint32](1)
+                )
+
     var has_permutation_features = False
-    if len(dependent_configs) > 0:
+    comptime if CTR_ONEHOT_DEVICE:
+        if len(dependent_configs) > 0:
+            for f in range(n_features):
+                if symctr_unique[f] > 0 and (
+                    symctr_unique[f] > cat_params.one_hot_max_size
+                ):
+                    has_permutation_features = True
+                    break
+    if len(dependent_configs) > 0 and symctr_host_prepass:
         for f in range(n_features):
             if not (len(cat_features) == n_features and cat_features[f]):
                 continue
@@ -1417,7 +1885,15 @@ def train(
                 break
 
     var ordered_ctr_column = False
-    if ordered and len(cat_features) == n_features:
+    comptime if CTR_ONEHOT_DEVICE:
+        if ordered:
+            for f in range(n_features):
+                if symctr_unique[f] > 0 and (
+                    symctr_unique[f] > cat_params.one_hot_max_size
+                ):
+                    ordered_ctr_column = True
+                    break
+    if ordered and len(cat_features) == n_features and symctr_host_prepass:
         for f in range(n_features):
             if not cat_features[f]:
                 continue
@@ -1570,7 +2046,333 @@ def train(
             + String(len(d_orders))
         )
 
-    for f in range(n_features):
+    # lane/apple-fast-sym-ctr (FAST + Apple only; gbdt/ctrs/fast_prep.mojo,
+    # docs/apple-fast/ab/sym-ctr.md). Under any of `-D MOJOLEARN_CTR_PREP_SHARED`,
+    # `_SORT_ONCE`, `_INDEX_FUSED`, `_ONEHOT_DEVICE` (or SYM_CTR_ALL, default
+    # since 2026-10-04, rollback `-D MOJOLEARN_SYM_CTR_ALL_OFF`) the
+    # categorical walk below runs here instead and main's walk runs zero
+    # times. Off, `symctr_walk_main` is the constant True and every list
+    # stays empty.
+    var symctr_walk_main = True
+    var symctr_dev_cols = List[DeviceBuffer[DType.float32]]()
+    #: [permutation][dependent ordinal] -> index into `symctr_dev_cols`
+    var symctr_dep_dev = List[List[Int]]()
+    #: a column whose device copy every permutation shares (FeatureFreq)
+    var symctr_shared_col = List[Int]()
+    var symctr_shared_dev = List[Int]()
+    #: a column whose grid the walk already built
+    var symctr_pre_col = List[Int]()
+    var symctr_pre_borders = List[List[Float32]]()
+    var symctr_pre_folds = List[Int]()
+    comptime if SYM_CTR_ANY:
+        symctr_walk_main = False
+        for _ in range(perm_count):
+            symctr_dep_dev.append(List[Int]())
+        var fprep = CtrPrepFast(ctx, n_rows, perm_count)
+        var use_fast_dep = False
+        comptime if CTR_FAST_PREP:
+            use_fast_dep = (
+                len(dependent_configs) > 0
+                and len(binarized_target) == n_rows
+                and len(d_orders) == perm_count
+            )
+        var sort_once_ok = False
+        comptime if CTR_SORT_ONCE:
+            sort_once_ok = (
+                use_fast_dep
+                and len(independent_configs) > 0
+                and cat_params.counter_calc_method != COUNTER_CALC_FULL
+            )
+            for c in range(len(independent_configs)):
+                if independent_configs[c].ctr_type != CTR_FEATURE_FREQ:
+                    sort_once_ok = False
+        var device_out = False
+        comptime if CTR_INDEX_FUSED:
+            device_out = use_fast_dep
+        comptime if CTR_PREP_SHARED:
+            if use_fast_dep:
+                # lane cpu4-gbdt: the fit's resident target and device
+                # orders, shared by handle (no host order, no re-upload)
+                fprep.target = d_btarget
+                fprep.has_target = True
+                for p in range(perm_count):
+                    fprep.orders[p] = d_orders[p]
+                    fprep.order_ready[p] = True
+        var wants_histogram = False
+        for c in range(len(configs)):
+            if configs[c].ctr_type == CTR_BORDERS:
+                wants_histogram = True
+
+        for f in range(n_features):
+            var is_cat = len(cat_features) == n_features and cat_features[f]
+            var flagged_one_hot = len(one_hot) == n_features and one_hot[f]
+            if is_cat and flagged_one_hot:
+                raise Error(
+                    "feature "
+                    + String(f)
+                    + " is in both cat_features and one_hot; cat_features"
+                    " makes the one-hot decision itself, from"
+                    " one_hot_max_size"
+                )
+            if not is_cat:
+                columns.append(List[Float32]())
+                column_src_feature.append(f)
+                column_one_hot.append(flagged_one_hot)
+                column_ctr_grid.append(-1)
+                column_dev_slot.append(-1)
+                continue
+
+            var unique_values = 0
+            var codes = List[UInt32]()
+            var host_codes = False
+            var dcodes = ctx.enqueue_create_buffer[DType.uint32](1)
+            var have_dcodes = False
+            var counts = List[Int]()
+            comptime if CTR_ONEHOT_DEVICE:
+                unique_values = symctr_unique[f]
+                dcodes = symctr_codes[f]
+                have_dcodes = True
+                counts = symctr_counts[f].copy()
+                if unique_values <= cat_params.one_hot_max_size:
+                    # the raw column IS the code column (validated on the
+                    # device): read it in place like a float column, and
+                    # hand `_quantize_training_columns` the grid its
+                    # one-hot branch would have computed with a host max
+                    # loop (codes are dense, so the max is
+                    # `unique_values - 1`)
+                    if unique_values - 1 > 254:
+                        raise Error(
+                            "one-hot feature " + String(len(columns))
+                            + " has more than 255 categories"
+                        )
+                    var bs = List[Float32]()
+                    for c in range(unique_values - 1):
+                        bs.append(Float32(c) + Float32(0.5))
+                    symctr_pre_col.append(len(columns))
+                    symctr_pre_folds.append(
+                        len(bs) + 1 if len(bs) > 0 else 0
+                    )
+                    symctr_pre_borders.append(bs^)
+                    columns.append(List[Float32]())
+                    column_src_feature.append(f)
+                    column_one_hot.append(True)
+                    column_ctr_grid.append(-1)
+                    column_dev_slot.append(-1)
+                    continue
+            else:
+                var col = List[Float32]()
+                col.resize(n_rows, Float32(0.0))
+                memcpy(
+                    dest=col.unsafe_ptr(),
+                    src=x_src + f * n_rows,
+                    count=n_rows,
+                )
+                var maxc = 0
+                var seen = List[Bool]()
+                seen.resize(1, False)
+                for r in range(n_rows):
+                    var c = dense_category_code(col[r], f, r)
+                    if c > maxc:
+                        maxc = c
+                        seen.resize(maxc + 1, False)
+                    seen[c] = True
+                    codes.append(UInt32(c))
+                host_codes = True
+                unique_values = maxc + 1
+                if unique_values <= 1:
+                    raise Error(
+                        "Error: useless catFeature found (feature "
+                        + String(f)
+                        + " has one category)"
+                    )
+                for c in range(unique_values):
+                    if not seen[c]:
+                        raise Error(
+                            "cat_features column " + String(f)
+                            + " is not densely coded: category "
+                            + String(c)
+                            + " is absent from 0.." + String(maxc)
+                        )
+                if unique_values <= cat_params.one_hot_max_size:
+                    columns.append(col^)
+                    column_src_feature.append(-1)
+                    column_one_hot.append(True)
+                    column_ctr_grid.append(-1)
+                    column_dev_slot.append(-1)
+                    continue
+
+            # lane cpu4-gbdt: every calcer below reads the codes on the
+            # device; the host codes feed only the host table builder
+            if not have_dcodes:
+                dcodes = upload_codes(ctx, codes)
+                have_dcodes = True
+            _ = host_codes
+
+            var base_col = len(columns)
+            # `slot_dev[c]`: config c's resident column, an index into
+            # `ctr_dev_cols` (lane cpu4-gbdt; was a host column per config)
+            var slot_dev = List[Int](length=len(configs), fill=-1)
+
+            if len(independent_configs) > 0 and not sort_once_ok:
+                # the device FeatureFreq writer, SkipTest and Full alike
+                # (lane cpu4-gbdt; the host calcer is the host column only)
+                var indep = compute_simple_ctrs_device_resident(
+                    ctx, dcodes, n_rows, unique_values, independent_configs
+                )
+                for c in range(len(independent_slots)):  # small-loop(independent_slots: CTR config slots): one device column handle per config, no element copy
+                    slot_dev[independent_slots[c]] = len(ctr_dev_cols)
+                    ctr_dev_cols.append(indep[c])
+
+            if len(dependent_configs) > 0:
+                if use_fast_dep:
+                    for p in range(perm_count):
+                        comptime if not CTR_PREP_SHARED:
+                            # one context per (feature, permutation): the
+                            # scratch main pays per call; the target and
+                            # order are the fit's resident ones
+                            fprep = CtrPrepFast(ctx, n_rows, perm_count)
+                            fprep.target = d_btarget
+                            fprep.has_target = True
+                            fprep.orders[p] = d_orders[p]
+                            fprep.order_ready[p] = True
+                        var got = fast_dependent_ctrs(
+                            ctx, fprep, p, dcodes, unique_values,
+                            dependent_configs, device_out,
+                        )
+                        for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one device column handle per config
+                            var col_dev: DeviceBuffer[DType.float32]
+                            if device_out:
+                                symctr_dep_dev[p].append(
+                                    len(symctr_dev_cols)
+                                )
+                                symctr_dev_cols.append(got.dev[c])
+                                col_dev = got.dev[c]
+                            else:
+                                col_dev = _upload_ctr_column(
+                                    ctx, got.host[c], n_rows
+                                )
+                            if p == est_perm:
+                                slot_dev[dependent_slots[c]] = len(
+                                    ctr_dev_cols
+                                )
+                                ctr_dev_cols.append(col_dev)
+                            dep_dev_by_perm[p].append(col_dev)
+                    if device_out:
+                        # a dependent column's grid is permutation 0's
+                        # (`GetOrComputeBorders`, see
+                        # `_quantize_training_columns`), from its device
+                        # copy
+                        var k0 = len(symctr_dep_dev[0]) - len(
+                            dependent_slots
+                        )
+                        for c in range(len(dependent_slots)):
+                            var bs = ctr_borders_from_device(
+                                ctx,
+                                symctr_dev_cols[symctr_dep_dev[0][k0 + c]],
+                                n_rows,
+                                cat_params.ctr_binarization_for(
+                                    configs[dependent_slots[c]]
+                                ),
+                            )
+                            symctr_pre_col.append(
+                                base_col + dependent_slots[c]
+                            )
+                            symctr_pre_folds.append(len(bs))
+                            symctr_pre_borders.append(bs^)
+                else:
+                    if len(d_orders) != perm_count:
+                        raise Error(
+                            "a Borders ctr is a statistic OF the target and"
+                            " cannot be computed without its grid and the"
+                            " permutations' orders"
+                        )
+                    for p in range(perm_count):
+                        var dep = compute_simple_ctrs_gpu_resident(
+                            ctx,
+                            dcodes,
+                            n_rows,
+                            unique_values,
+                            dependent_configs,
+                            d_btarget,
+                            d_orders[p],
+                        )
+                        for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one device column handle per config
+                            if p == est_perm:
+                                slot_dev[dependent_slots[c]] = len(
+                                    ctr_dev_cols
+                                )
+                                ctr_dev_cols.append(dep[c])
+                            dep_dev_by_perm[p].append(dep[c])
+
+            if sort_once_ok:
+                # FeatureFreq off the LAST permutation's sorted order
+                # (CTR_SORT_ONCE): same segments, same integer counts
+                var gotf = fast_freq_ctrs(
+                    ctx, fprep, unique_values, independent_configs,
+                    device_out,
+                )
+                for c in range(len(independent_slots)):  # small-loop(independent_slots: CTR config slots): one device column handle per config
+                    var fcol: DeviceBuffer[DType.float32]
+                    if device_out:
+                        symctr_shared_col.append(
+                            base_col + independent_slots[c]
+                        )
+                        symctr_shared_dev.append(len(symctr_dev_cols))
+                        symctr_dev_cols.append(gotf.dev[c])
+                        fcol = gotf.dev[c]
+                    else:
+                        fcol = _upload_ctr_column(ctx, gotf.host[c], n_rows)
+                    slot_dev[independent_slots[c]] = len(ctr_dev_cols)
+                    ctr_dev_cols.append(fcol)
+
+            var tables = List[TCtrValueTable]()
+            comptime if CTR_ONEHOT_DEVICE:
+                var hist = List[Int]()
+                if wants_histogram and len(binarized_target) == n_rows and (
+                    target_classes_count >= 1
+                ):
+                    if not fprep.has_target:
+                        fprep.target = d_btarget
+                        fprep.has_target = True
+                    hist = device_target_histogram(
+                        ctx, dcodes, n_rows, unique_values, fprep.target,
+                        target_classes_count,
+                    )
+                tables = build_ctr_tables_from_counts(
+                    counts,
+                    hist,
+                    unique_values,
+                    configs,
+                    target_classes_count,
+                    f,
+                    base_col,
+                    n_rows,
+                )
+            else:
+                tables = build_ctr_tables(
+                    codes,
+                    unique_values,
+                    configs,
+                    binarized_target,
+                    target_classes_count,
+                    f,
+                    base_col,
+                )
+            for c in range(len(tables)):
+                ctr_tables.append(tables[c].copy())
+            for c in range(len(dependent_slots)):
+                dep_col_index.append(base_col + dependent_slots[c])
+            for c in range(len(configs)):  # small-loop(configs: CTR config slots): plan entries per config; the column itself stays on the device
+                columns.append(List[Float32]())
+                column_dev_slot.append(slot_dev[c])
+                column_src_feature.append(-1)
+                column_one_hot.append(False)
+                ctr_grids.append(cat_params.ctr_binarization_for(configs[c]))
+                column_ctr_grid.append(len(ctr_grids) - 1)
+                ctr_column_count += 1
+            _ = dcodes^  # past every launch that read it (drained above)
+
+    for f in range(n_features if symctr_walk_main else 0):
         var is_cat = len(cat_features) == n_features and cat_features[f]
         var flagged_one_hot = len(one_hot) == n_features and one_hot[f]
         if is_cat and flagged_one_hot:
@@ -1739,6 +2541,51 @@ def train(
 
     host_times.stop_host("train_pre_quantize", t_phase)
     t_phase = host_times.start()
+    # lane/apple-fast-sym-feat (`GBDT_QUANT_DEVICE`): the float columns
+    # resident on the device, uploaded once here and read by the border
+    # build and the index build below; freed after the index build.
+    var qd_mat: Optional[DeviceBuffer[DType.float32]] = None
+    var qd_cols: Optional[MutPointer[Float32, MutAnyOrigin]] = None
+    var qd_col_of = List[Int]()
+    comptime if GBDT_QUANT_DEVICE:
+        var qd_n_float = 0
+        for c in range(n_columns):
+            if not column_one_hot[c] and column_ctr_grid[c] < 0:
+                qd_col_of.append(qd_n_float)
+                qd_n_float += 1
+            else:
+                qd_col_of.append(-1)
+        if x_row_major and qd_n_float != n_columns:
+            raise Error(
+                "gbdt_fit_rowmajor: a row-major fit takes raw float columns"
+                " only (no categorical, one-hot or CTR columns)"
+            )
+        var mat = _qd_upload_float_columns(
+            ctx, column_ptrs, qd_col_of, qd_n_float, n_rows, n_features,
+            x_row_major, x_src,
+        )
+        qd_cols = Optional(mat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+        qd_mat = Optional(mat^)
+    else:
+        if x_row_major:
+            raise Error(
+                "gbdt_fit_rowmajor is served only by the FAST Apple device"
+                " quantizer (-D MOJOLEARN_GBDT_QUANT_DEVICE)"
+            )
+    # lane/apple-fast-sym-ctr: the grids the fast walk already built, by
+    # column (empty unless a SYM_CTR define is on)
+    var symctr_pre_has = List[Bool]()
+    var symctr_pre_b = List[List[Float32]]()
+    var symctr_pre_f = List[Int]()
+    comptime if SYM_CTR_ANY:
+        for _ in range(n_columns):
+            symctr_pre_has.append(False)
+            symctr_pre_b.append(List[Float32]())
+            symctr_pre_f.append(0)
+        for k in range(len(symctr_pre_col)):
+            symctr_pre_has[symctr_pre_col[k]] = True
+            symctr_pre_b[symctr_pre_col[k]] = symctr_pre_borders[k].copy()
+            symctr_pre_f[symctr_pre_col[k]] = symctr_pre_folds[k]
     var grid = _quantize_training_columns(
         ctx, columns, column_one_hot, column_ctr_grid,
         dep_ordinal_of_column, dep_dev_by_perm, ctr_grids, n_rows,
@@ -1747,6 +2594,10 @@ def train(
         border_type=border_type_code,
         ctr_dev_cols=ctr_dev_cols,
         column_dev_slot=column_dev_slot,
+        dev_cols=qd_cols,
+        pre_has=symctr_pre_has,
+        pre_borders=symctr_pre_b,
+        pre_folds=symctr_pre_f,
     )
     var borders = grid[0].copy()
     var fold_counts = grid[1].copy()
@@ -1794,16 +2645,21 @@ def train(
                     ctx, columns, n_rows, borders, fold_counts,
                     column_nan_treatment,
                     column_ptrs=column_ptrs,
-                    dev_cols=ctr_dev_cols,
+                    dev_cols=qd_cols,
+                    dev_col_of=qd_col_of,
+                    dev_col_bufs=ctr_dev_cols,
                     column_dev_slot=column_dev_slot,
                 )
             )
             continue
         # the dependent columns are read IN PLACE from this permutation's
         # RESIDENT CTR buffers (lane cpu4-gbdt), the other CTR columns from
-        # `ctr_dev_cols`, every raw and one-hot column from `column_ptrs`,
-        # through the same builder as above (same kernels, same borders,
-        # same writes, so the same bits, with no column crossing the bus)
+        # `ctr_dev_cols`, every raw and one-hot column from `column_ptrs`
+        # (or the resident float matrix under GBDT_QUANT_DEVICE), through
+        # the same builder as above (same kernels, same borders, same
+        # writes, so the same bits, with no column crossing the bus). This
+        # subsumes lane/apple-fast-sym-ctr's CTR_INDEX_FUSED arm: its walk
+        # now hands its device columns to the same resident lists.
         var perm_dev = List[DeviceBuffer[DType.float32]]()
         var perm_slot = List[Int](length=n_columns, fill=-1)
         for c in range(n_columns):  # small-loop(n_columns: column plan entries): one device buffer handle per CTR column, no element read
@@ -1819,7 +2675,9 @@ def train(
                 ctx, columns, n_rows, borders, fold_counts,
                 column_nan_treatment,
                 column_ptrs=column_ptrs,
-                dev_cols=perm_dev,
+                dev_cols=qd_cols,
+                dev_col_of=qd_col_of,
+                dev_col_bufs=perm_dev,
                 column_dev_slot=perm_slot,
             )
         )
@@ -1827,6 +2685,10 @@ def train(
     # DEVIATION 2550: `column_ptrs` points into `columns`; hold both to here
     _ = len(columns)
     _ = len(column_ptrs)
+    # lane/apple-fast-sym-feat: the index builders drained before returning,
+    # so the resident float matrix can go now
+    _ = qd_mat^
+    _ = qd_cols^
     host_times.stop_host("train_cindex_build", t_phase)
     t_phase = host_times.start()
 
@@ -2160,9 +3022,9 @@ def train(
         for _ in range(len(fold_counts)):  # small-loop(fold_counts: features of the one-row placeholder): one zero per feature for an empty eval set
             eval_expanded.append(Float32(0.0))
 
-    var test_cindex = _build_cindex_from_floats(
+    var test_cindex = _sym_feat_test_cindex(
         ctx, eval_expanded, t_rows, borders, fold_counts,
-        column_nan_treatment,
+        column_nan_treatment, eval_rows,
     )
 
     var approx_dim = 1
@@ -2358,6 +3220,27 @@ def train(
     )
 
 
+def _upload_ctr_column(
+    ctx: DeviceContext, col: List[Float32], n_rows: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """A host CTR column onto the device, one bulk copy (lane cpu4-gbdt:
+    the FAST + Apple sym-ctr walk's host-returning drivers feed the same
+    resident column lists as every other route)."""
+    if len(col) != n_rows:
+        raise Error(
+            "CTR column has " + String(len(col)) + " values for "
+            + String(n_rows) + " rows"
+        )
+    var h = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    ctx.synchronize()
+    memcpy(dest=h.unsafe_ptr(), src=col.unsafe_ptr(), count=n_rows)
+    var d = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+    _ = h^  # past the drain (step-33 race class)
+    return d^
+
+
 def _ctr_borders_device(
     ctx: DeviceContext,
     col: DeviceBuffer[DType.float32],
@@ -2370,7 +3253,7 @@ def _ctr_borders_device(
     column's twin is `gbdt/host/gbdt_oracle_ctr.mojo::_ctr_borders_host_grid`.
 
     lane cpu4-gbdt: the column is RESIDENT (`train`'s CTR buffers), read
-    device to device by `device_float_borders`' `dev_cols` input; this is
+    device to device by `device_float_borders`' `dev_col_bufs` input; this is
     the CTR grid's only route in the GPU fit."""
     var one = List[DeviceBuffer[DType.float32]](capacity=1)
     one.append(col)
@@ -2379,7 +3262,7 @@ def _ctr_borders_device(
         description.border_count,
         NAN_MODE_FORBIDDEN, generate_seed_for_borders(UInt64(0)),
         ctr_border_type_code(description),
-        dev_cols=one,
+        dev_col_bufs=one,
     )
     var grids = got[0].copy()
     if len(grids) != 1:
@@ -2421,6 +3304,14 @@ def _quantize_training_columns(
         DeviceBuffer[DType.float32]
     ](),
     column_dev_slot: List[Int] = List[Int](),
+    dev_cols: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+    # lane/apple-fast-sym-ctr: grids `train`'s fast categorical walk already
+    # built (one-hot from the device cardinality, dependent CTR columns
+    # from a device min/max). Read only under the FAST + Apple SYM_CTR
+    # flags; empty for every other build and caller.
+    pre_has: List[Bool] = List[Bool](),
+    pre_borders: List[List[Float32]] = List[List[Float32]](),
+    pre_folds: List[Int] = List[Int](),
 ) raises -> Tuple[List[List[Float32]], List[Int], List[Int]]:
     """Shared grid builder for ordinary training and reusable numeric pools.
 
@@ -2505,6 +3396,7 @@ def _quantize_training_columns(
         var got = device_float_borders(
             ctx, dcols, n_rows, border_sample_n, border_count, nan_mode_opt_early,
             generate_seed_for_borders(random_seed), border_type,
+            dev_cols=dev_cols,
         )
         dev_borders = got[0].copy()
         dev_modes = got[1].copy()
@@ -2518,6 +3410,11 @@ def _quantize_training_columns(
     for _ in range(n_columns):  # small-loop(n_columns: column plan entries): one AsIs code per column, no data
         column_nan_treatment.append(NAN_TREATMENT_AS_IS)
     for f in range(n_columns):
+        comptime if SYM_CTR_ANY:
+            if len(pre_has) == n_columns and pre_has[f]:
+                fold_counts.append(pre_folds[f])
+                borders.append(pre_borders[f].copy())
+                continue
         var flagged = column_one_hot[f]
         if flagged:
             var maxc = onehot_column_max_code(ctx, cps[f], n_rows, f)

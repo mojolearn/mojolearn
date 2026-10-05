@@ -18,6 +18,7 @@ entries from kNN candidates are retained; consumers must apply their
 existing weight policy.
 """
 
+from checks.numerics import ftz
 from checks.soft_f64 import sf64_is_nan, sf64_to_f32
 from core.host_predict_threads import (
     host_list_ptr,
@@ -29,9 +30,16 @@ from umap.graph import _finite
 from umap.sparse_graph import (
     SparseFuzzySimplicialGraph,
     UG_F32P,
+    ug_categorical_constants,
+    ug_categorical_weight,
     ug_constants,
+    ug_intersect_cell,
+    ug_intersect_expo,
+    ug_intersect_floor,
     ug_member,
     ug_merge_weight,
+    ug_reset_scale,
+    ug_reset_weight,
     ug_row_rho_kern,
     ug_row_sigma,
 )
@@ -198,3 +206,163 @@ def sparse_fuzzy_simplicial_graph(
         n_samples, n_neighbors, rhos^, sigmas^, doff^, dcol^, dval^,
         offsets^, indices^, values^
     )
+
+
+# ---------------------------------------------------------------------------
+# Supervised UMAP's set operations, the HOST column (lane cpu4-umap,
+# 2026-10-04). The GPU fit runs them on the device
+# (`umap/sparse_graph.mojo::categorical_intersection`, `general_intersection`,
+# `reset_local_connectivity`); both call the same per-cell statements
+# (`ug_reset_scale`, `ug_reset_weight`, `ug_categorical_weight`,
+# `ug_intersect_cell`) and host scalars (`ug_categorical_constants`,
+# `ug_intersect_floor`, `ug_intersect_expo`), in the same row order.
+# ---------------------------------------------------------------------------
+
+
+def _host_with_csr(
+    graph: SparseFuzzySimplicialGraph, var offsets: List[Int], var indices: List[UInt32], var values: List[Float32]
+) -> SparseFuzzySimplicialGraph:
+    return SparseFuzzySimplicialGraph(
+        graph.n_samples, graph.n_neighbors, graph.rhos.copy(), graph.sigmas.copy(),
+        graph.directed_offsets.copy(), graph.directed_indices.copy(), graph.directed_values.copy(),
+        offsets^, indices^, values^,
+    )
+
+
+def host_reset_local_connectivity(graph: SparseFuzzySimplicialGraph) raises -> SparseFuzzySimplicialGraph:
+    """umap-learn `reset_local_connectivity`: every row scaled by its largest
+    stored value (`ug_reset_scale`), then `ug_reset_weight` per cell of
+    S + S^T in ascending column order, exact zeros eliminated."""
+    var n = graph.n_samples
+    var nv = List[Float32](capacity=len(graph.values))
+    for row in range(n):
+        var mx = Float32(0.0)
+        for e in range(graph.offsets[row], graph.offsets[row + 1]):
+            var v = ftz(graph.values[e])
+            if v > mx:
+                mx = v
+        for e in range(graph.offsets[row], graph.offsets[row + 1]):
+            nv.append(ug_reset_scale(graph.values[e], mx))
+    # the transpose: rows scattered in ascending order, so each row of it is
+    # column sorted
+    var toff = List[Int](length=n + 1, fill=0)
+    for col in graph.indices:
+        toff[Int(col) + 1] += 1
+    for i in range(n):
+        toff[i + 1] += toff[i]
+    var cursor = toff.copy()
+    var tcol = List[UInt32](length=len(graph.indices), fill=UInt32(0))
+    var tval = List[Float32](length=len(graph.indices), fill=Float32(0.0))
+    for i in range(n):
+        for at in range(graph.offsets[i], graph.offsets[i + 1]):
+            var col = Int(graph.indices[at])
+            tcol[cursor[col]] = UInt32(i)
+            tval[cursor[col]] = nv[at]
+            cursor[col] += 1
+    var offsets = List[Int]()
+    var indices = List[UInt32]()
+    var values = List[Float32]()
+    offsets.append(0)
+    for i in range(n):
+        var left = graph.offsets[i]
+        var right = toff[i]
+        while left < graph.offsets[i + 1] or right < toff[i + 1]:
+            var lc = n
+            var rc = n
+            if left < graph.offsets[i + 1]:
+                lc = Int(graph.indices[left])
+            if right < toff[i + 1]:
+                rc = Int(tcol[right])
+            var col = min(lc, rc)
+            var a = Float32(0.0)
+            var b = Float32(0.0)
+            if lc == col:
+                a = nv[left]
+                left += 1
+            if rc == col:
+                b = tval[right]
+                right += 1
+            var w = ug_reset_weight(a, b)
+            if w != Float32(0.0):
+                indices.append(UInt32(col))
+                values.append(w)
+        offsets.append(len(indices))
+    return _host_with_csr(graph, offsets^, indices^, values^)
+
+
+def host_categorical_intersection(
+    graph: SparseFuzzySimplicialGraph, target: List[Float32], far_dist: Float64,
+    unknown_dist: Float64 = Float64(1.0),
+) raises -> SparseFuzzySimplicialGraph:
+    """umap-learn `discrete_metric_simplicial_set_intersection` (no target
+    metric): `ug_categorical_weight` per edge, exact zeros eliminated, then
+    `host_reset_local_connectivity`."""
+    var n = graph.n_samples
+    if len(target) != n:
+        raise Error("UMAP supervised target length differs from n_samples")
+    var consts = ug_categorical_constants(far_dist, unknown_dist)
+    var offsets = List[Int]()
+    var indices = List[UInt32]()
+    var values = List[Float32]()
+    offsets.append(0)
+    for i in range(n):
+        for e in range(graph.offsets[i], graph.offsets[i + 1]):
+            var j = Int(graph.indices[e])
+            var w = ug_categorical_weight(graph.values[e], target[i], target[j], consts[0], consts[1])
+            if w != Float32(0.0):
+                indices.append(UInt32(j))
+                values.append(w)
+        offsets.append(len(indices))
+    return host_reset_local_connectivity(_host_with_csr(graph, offsets^, indices^, values^))
+
+
+def _host_min_stored(values: List[Float32]) -> Float32:
+    """The smallest nonzero stored value, flushed (FLT_MAX when none)."""
+    var m = Float32(3.4028234663852886e38)
+    for value in values:
+        var v = ftz(value)
+        if v != Float32(0.0) and v < m:
+            m = v
+    return m
+
+
+def host_general_intersection(
+    left: SparseFuzzySimplicialGraph, right: SparseFuzzySimplicialGraph, weight: Float32,
+) raises -> SparseFuzzySimplicialGraph:
+    """umap-learn `general_simplicial_set_intersection` +
+    `sparse.general_sset_intersection` (right_complement False): the union
+    pattern of the two graphs, `ug_intersect_cell` per cell, then
+    `host_reset_local_connectivity`."""
+    var n = left.n_samples
+    if right.n_samples != n:
+        raise Error("UMAP supervised target graph size differs")
+    var left_min = ug_intersect_floor(_host_min_stored(left.values))
+    var right_min = ug_intersect_floor(_host_min_stored(right.values))
+    var ex = ug_intersect_expo(weight)
+    var offsets = List[Int]()
+    var indices = List[UInt32]()
+    var values = List[Float32]()
+    offsets.append(0)
+    for i in range(n):
+        var a = left.offsets[i]
+        var b = right.offsets[i]
+        while a < left.offsets[i + 1] or b < right.offsets[i + 1]:
+            var ac = n
+            var bc = n
+            if a < left.offsets[i + 1]:
+                ac = Int(left.indices[a])
+            if b < right.offsets[i + 1]:
+                bc = Int(right.indices[b])
+            var col = min(ac, bc)
+            var lv = Float32(0.0)
+            var rv = Float32(0.0)
+            if ac == col:
+                lv = left.values[a]
+                a += 1
+            if bc == col:
+                rv = right.values[b]
+                b += 1
+            indices.append(UInt32(col))
+            values.append(ug_intersect_cell(lv, rv, left_min, right_min, ex[0], ex[1]))
+        offsets.append(len(indices))
+    return host_reset_local_connectivity(_host_with_csr(left, offsets^, indices^, values^))

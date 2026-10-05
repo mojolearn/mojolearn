@@ -61,6 +61,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
+from experiments.apple_fast.gemm.softmax_narrow import softmax_gemm_nt
 from core.pinned_reduce import pinned_block_max, pinned_block_sum
 from core.strided_walk import (
     APPLE_IDENTICAL_STEP_UNROLL,
@@ -493,7 +494,9 @@ comptime QNT_TPB = 256
 #                    linearsvr taxi 116.7 -> 79.4 ms (-32%), r2 / rmse
 #                    identical; M2 linsvr-lsbatch-taxi-x -38.8%.
 #                    `-D MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF` reverts.
-#   QN_LSVR_ALL      DEFAULT for n_features <= QN_ALL_MAX_D (32) only; on top
+#   QN_LSVR_ALL      DEFAULT at every width since 2026-10-04 (the old
+#                    n_features <= 32 bound is MOJOLEARN_LEGACY_NARROW_QN_ALL;
+#                    dconv keeps the fused register bound QNF_MAX_D); on top
 #                    of the two above: QN_FAST_TILED (the tiled objective,
 #                    FAST arithmetic) and QN_FAST_DCONV (the line search's
 #                    decision and the convergence test on the device,
@@ -523,6 +526,12 @@ comptime QN_FAST_TILED = QN_LSVR_ALL
 #: lane/apple-fast-linsvr: device-side line-search decision + convergence
 #: test, one host read per QN_DCONV_POLL iterations (`qn_dconv.mojo`)
 comptime QN_FAST_DCONV = QN_LSVR_ALL
+#: LEGACY, default OFF: QN_LSVR_ALL's old width bound admitted only
+#: n_features <= 32, chosen between taxi (d ~ 11, -77%) and istella (d ~ 220,
+#: +6.2%). Removed as benchmark-tuned on 2026-10-04: the tiled objective now
+#: serves every d (UNMEASURED). The device line search (dconv) keeps only the
+#: fused pass's register bound QNF_MAX_D.
+comptime QN_ALL_LEGACY_WIDTH = is_defined["MOJOLEARN_LEGACY_NARROW_QN_ALL"]()
 #: the fused pass: threads per block, rows per thread, the register bound on d
 comptime QNF_TPB = 256
 comptime QNF_RPT = 16
@@ -546,7 +555,9 @@ def qn_tiled_applies(d: Int, c: Int) -> Bool:
     comptime if QN_TILED:
         return c == 1
     comptime if QN_FAST_TILED:
-        return c == 1 and d <= QN_ALL_MAX_D
+        comptime if QN_ALL_LEGACY_WIDTH:
+            return c == 1 and d <= QN_ALL_MAX_D
+        return c == 1
     return False
 
 
@@ -1657,7 +1668,7 @@ def linear_fwd(
             grid_dim=((cd + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
             block_dim=(VEC_ELEM_TPB, 1, 1),
         )
-        gemm_nt(ctx, z, x, w_weights, n_rows, dims.C, d)
+        softmax_gemm_nt(ctx, z, x, w_weights, n_rows, dims.C, d)
         if dims.fit_intercept:
             var cn = dims.C * n_rows
             ctx.enqueue_function[add_bias_multi_kernel](
@@ -2309,7 +2320,7 @@ struct GLMWithData(Movable):
         comptime if QN_FAST_DCONV:
             return (
                 qn_fused_applies(self.dims.D, self.dims.C)
-                and self.dims.D <= QN_ALL_MAX_D
+                and (not QN_ALL_LEGACY_WIDTH or self.dims.D <= QN_ALL_MAX_D)
                 and self.dims.n_param <= STATS_TPB
             )
         return False

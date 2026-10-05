@@ -93,6 +93,22 @@ def dev_free_binding(id: PythonObject) raises -> PythonObject:
     return PythonObject(None)
 
 
+def dev_take_rows_binding(
+    src_id: PythonObject, row_words: PythonObject, idx_addr: PythonObject, n_idx: PythonObject
+) raises -> PythonObject:
+    """A new resident slot: rows `idx` (n_idx host int64 words) of slot
+    src_id, gathered on the device (core/device_store.mojo `take_rows`,
+    lane cpu4-misc device-rows input); its id."""
+    var s = Int(py=src_id)
+    var w = Int(py=row_words)
+    var a = Int(py=idx_addr)
+    var n = Int(py=n_idx)
+    var id: Int
+    with GILReleased(Python()):
+        id = X_METRICS_STORE.get_or_create_ptr()[].take_rows(metrics_ctx(), s, w, a, n)
+    return PythonObject(id)
+
+
 def dev_live_binding() raises -> PythonObject:
     return PythonObject(X_METRICS_STORE.get_or_create_ptr()[].live)
 
@@ -247,6 +263,7 @@ def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
         m.def_function[dev_put_binding]("x_metrics_dev_put")
         m.def_function[dev_free_binding]("x_metrics_dev_free")
         m.def_function[dev_live_binding]("x_metrics_dev_live")
+        m.def_function[dev_take_rows_binding]("x_metrics_dev_take_rows")
         m.def_function[curve_roc_binding]("x_metrics_curve_roc")
         m.def_function[expected_mi_binding]("x_metrics_expected_mi")
         m.def_function[row_sum_range_binding]("x_metrics_row_sum_range")

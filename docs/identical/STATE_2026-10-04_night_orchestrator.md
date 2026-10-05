@@ -64,3 +64,8 @@ no benchmark-shape tuning; wait for Mojo/Modular rather than workarounds; Opus f
 - lane/cpu3-gbdt-a a3c34a238 done: T5 drain removed; 170->56 left (host Newton leaf walker pointwise_oracle; per-tree host model copy + leaf*lr rescale; lossguide replay node stats) -> needs device leaf walker + device-resident model programs.
 - lane/cpu3-trees 1123d7b8c done: 163->63 (49 real left: RF/ET per-level node queue+tree on host -> device-resident level loop default; IF percentile sort; DART K targets readback across two extension modules). Toggle rows to retire listed in its report.
 - lane/cpu3-neighbors 5eb8d5449 done: 132->24. REAL CPU route left: umap/transform.mojo whole transform on host in Float64 (needs soft-f64 device port + oracle bit change); umap supervised set ops (portable f64 pow); spectral_init needs a device-output solver entry. Lanczos copy-backs bounded by ncv/k noted small-loop (accepted).
+
+## Update 2026-10-05 ~01:10Z (resume)
+- All three boxes were deleted overnight: the Mac disk filled at ~20:25Z, both harvesters crashed on ENOSPC, leases stopped renewing. Results after 20:25Z (incl. Blackwell candidate timing, identity merges) were not harvested. Disk reclaimed (90 merged lane worktrees removed): 123 GiB free.
+- Consolidated head d795d2ade: all lanes incl. compile-fix and cpu3-* merged. Owed checker findings 198 (gbdt 73, forest 63, python 33, umap 24, misc 5); baseline debt 1181.
+- Running: box-run-2 (rents 1 NVIDIA + 1 MI325X, disk-checking harvester, compiles head, identity + timing, verdicts); cpu4-{gbdt,forest,umap,python,misc} code lanes for the remaining findings and named redesigns.

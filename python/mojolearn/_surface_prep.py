@@ -92,7 +92,7 @@ FAMILIES = (
             "x_prep/units.mojo", "x_prep/target.mojo", "x_prep/kbins.mojo",
             "naive_bayes/nb.mojo", "naive_bayes/da.mojo",
             "x_prep/transform.mojo", "x_prep/spline.mojo", "x_prep/iterative.mojo", "x_prep/stats.mojo", "x_prep/mutual_info.mojo",
-            "x_prep/user_host.mojo", "x_prep/folds.mojo", "x_prep/py2mojo.mojo",
+            "x_prep/user_host.mojo", "x_prep/folds.mojo", "x_prep/py2mojo.mojo", "x_prep/proba64.mojo", "checks/f64_words.mojo",
         ),
         exports=(
             "x_prep_host_numeric_mode", "x_prep_host_vendor", "x_prep_host_column", "x_prep_host_sabotage",

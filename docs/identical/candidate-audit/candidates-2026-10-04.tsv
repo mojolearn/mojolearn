@@ -1,0 +1,562 @@
+name	family	file:line	state	sources	note
+MOJOLEARN_XCNN_DEVICE_IO_OFF	OFF_DEFINES.txt	python/mojolearn/_expansion_cnn.py:213	LOST	OFF_DEFINES.txt	default ON, ALL_OFF-tied, not in any wave builder; not in toggle-inventory
+MOJOLEARN_GBDT_ID_DEFER_COPY	gbdt	gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:162	LOST	fam-gbdt	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GBDT_ID_RIDX	gbdt	checks/kernel_matrix.mojo:945	LOST	fam-gbdt,fam2-gbdt	pre-existing arm a report asks to time; opt-in, NOT ALL_OFF-tied, in wave closure
+MOJOLEARN_CD_IDN_GRAM_WIDE	linear	solver/impl/cd_gram_rule.mojo:28	LOST	fam-linear	opt-in, ALL_OFF-tied, in wave closure; not in toggle-inventory
+MOJOLEARN_GEMM_AMD_K768_PLAN64	lm	gemm/checks/gemm_identical.mojo:6456	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_AMD_NO_K768_TUNED	lm	gemm/checks/gemm_identical.mojo:6454	LOST	fam-lm,fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_KPACK_CPT4	lm	gemm/checks/gemm_identical.mojo:7091	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_KPACK_RPT4	lm	gemm/checks/gemm_identical.mojo:7089	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_LEAF_SPLIT_KPACK_BODY	lm	gemm/checks/gemm_identical.mojo:6440	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_MFMA_GMIN1	lm	gemm/checks/gemm_identical.mojo:5817	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_MFMA_GMIN16	lm	gemm/checks/gemm_identical.mojo:5815	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_MFMA_GMIN2	lm	gemm/checks/gemm_identical.mojo:5816	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_MFMA_NO_GROUPS	lm	gemm/checks/gemm_identical.mojo:3201	LOST	fam-lm,fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_SPLIT_CELLS	lm	gemm/checks/gemm_identical.mojo:3344	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_TILE_MIN_BLOCKS	lm	gemm/checks/gemm_identical.mojo:3472	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_TILE_MIN_K	lm	gemm/checks/gemm_identical.mojo:3413	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_GEMM_TILE_SHORT_K	lm	gemm/checks/gemm_identical.mojo:3454	LOST	fam2-lm	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, in wave closure
+MOJOLEARN_IVF_SCAN_GROUPED	neighbors	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:262	LOST	fam2-neighbors	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, not in any wave builder; unsure-compil
+MOJOLEARN_IVF_SCAN_STAGED	neighbors	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:273	LOST	fam2-neighbors	pre-existing arm a report asks to time; opt-in, ALL_OFF-tied, not in any wave builder; unsure-compil
+MOJOLEARN_XPREP_BLOCKED	prep-metrics	python/mojolearn/_expansion_prep.py:233	LOST	fam-prep-metrics	pre-existing arm a report asks to time; opt-in, NOT ALL_OFF-tied, not in any wave builder
+(not impl) BGMM / GaussianMixture EM convergence read	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:214	report Not implemented section
+(not impl) Ball-cover query: one query per 32-thread block	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:91	report Not implemented section
+(not impl) BisectingKMeans column means, centering and row partition on the host	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:215	report Not implemented section
+(not impl) Bounded hook loop with no read at all	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:158	report Not implemented section
+(not impl) Brute-force arm	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:95	report Not implemented section
+(not impl) Convergence without any host read in the restart loop	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:272	report Not implemented section
+(not impl) Core-distance guard	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:160	report Not implemented section
+(not impl) Count pass readback	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:93	report Not implemented section
+(not impl) Dataset path the device graph declines	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:270	report Not implemented section
+(not impl) Degree fold	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:274	report Not implemented section
+(not impl) Dense-arm first-round shortcut	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:162	report Not implemented section
+(not impl) Embedding round trip into k-means	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:271	report Not implemented section
+(not impl) FAST	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:221	report Not implemented section
+(not impl) First `lanczos_aux_identical_dev` call and the first solve	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:273	report Not implemented section
+(not impl) Fixed-point distance accumulation	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:92	report Not implemented section
+(not impl) Fuse the four `fill_i32` launches + `lp_parent_init` per Boruvka round	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:161	report Not implemented section
+(not impl) Fused Cholesky above d = 256	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:47	report Not implemented section
+(not impl) GMM EM convergence on the device	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:44	report Not implemented section
+(not impl) GMM covariance loop batched across components	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:45	report Not implemented section
+(not impl) GaussianMixture.sample component draws on the device	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:46	report Not implemented section
+(not impl) Hierarchy's own NaN pass	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:157	report Not implemented section
+(not impl) MiniBatchKMeans early stop on the device	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:217	report Not implemented section
+(not impl) MiniBatchKMeans weighted draws	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:216	report Not implemented section
+(not impl) OPTICS ordering	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:218	report Not implemented section
+(not impl) Row canonicalization skip for unweighted fits	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:90	report Not implemented section
+(not impl) Sparse arm (`sparse_mr_mst_device`) round reads	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:159	report Not implemented section
+(not impl) Stage drains	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:94	report Not implemented section
+(not impl) Weighted fits	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:97	report Not implemented section
+(not impl) `IDN_SPMV_LANES` shape arms	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:275	report Not implemented section
+(not impl) `kth_flat`	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:219	report Not implemented section
+(not impl) `ms_suppress`	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:220	report Not implemented section
+(not impl) approximate_predict / membership_vector device k-NN	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:156	report Not implemented section
+(not impl) border_pull_kernel row split	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:96	report Not implemented section
+(not impl) k-means|| selected count readback	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:43	report Not implemented section
+(not impl) k-means|| step-8 scale	cluster	-	NEVER_WRITTEN	fam/fam2-cluster.md:42	report Not implemented section
+(cpu owed) arima_ic	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; Remove ARIMA aic_/bic_ host Float64 compute via shared all-column arithmet
+(cpu owed) bisecting_centering	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; BisectingKMeans host centering.
+(cpu owed) decomp_python_leftovers	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; NMF _cd_side L2ridge adjustment on HHt diagonal whenalpha>0; FastICA _par 
+(cpu owed) garch_identical_team	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; Enable GARCH cooperative kernel with shared host replay, sequence/fit_team
+(cpu owed) gbdt_multiclass_leaf_solve	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; Multiclass one-step per-leaf solve on device and symmetric-fit drain merge
+(cpu owed) gcn_self_loops	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; GCNConv self-loop edge preparation remains host NumPy once per graph.
+(cpu owed) hdbscan_approx_predict	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; HDBSCAN approximate_predict host compute.
+(cpu owed) host_route_baseline_false_positives	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; Review each not-compute list with explicit reason; preserve latest user re
+(cpu owed) ivf_finiteness	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; Device IVF data/query finiteness checks.
+(cpu owed) neighbor_sketch_rng	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; Host MT19937 sketch tables in fam2-neighbors.
+(cpu owed) ocsvm_weighted_gather	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; Weighted OneClassSVM gather_i32 device path.
+(cpu owed) shared_numeric_helpers	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; cast_elements, reduce_stat float/integer sums, normal_init_f32, resident X
+(cpu owed) silhouette_label_counts	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; Silhouette countLabels readback.
+(cpu owed) tokenizer_device_encode_gather	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; Tokenizer encode and tokens_gather_rows; keep BPE text training explicitly
+(cpu owed) trustworthiness_staging	cpu-in-gpu	-	NEVER_WRITTEN	handoff§4,coverage	NOT_CLOSED_BY_THIS_AUDIT; Trustworthiness X_embedded host staging copy.
+(not impl) Block one-sided Jacobi for the SVD of R (Gram pivots through `rr_batch	decomp	-	NEVER_WRITTEN	fam/fam2-decomp.md:46	report Not implemented section
+(not impl) GMM: one batched Cholesky launch for all components (mixture family; p	decomp	-	NEVER_WRITTEN	fam/fam2-decomp.md:50	report Not implemented section
+(not impl) SVD: two sweeps per readback (no bit change; may run one extra no-op s	decomp	-	NEVER_WRITTEN	fam/fam2-decomp.md:48	report Not implemented section
+(not impl) The block eigh's A update in ONE launch with a 4 KB shared T tile per	decomp	-	NEVER_WRITTEN	fam/fam2-decomp.md:45	report Not implemented section
+(not impl) Tridiagonalization + bisection as a preconditioner for the Jacobi (2 t	decomp	-	NEVER_WRITTEN	fam/fam2-decomp.md:44	report Not implemented section
+(not impl) `DevExec.chol` (kit Cholesky, n launches each recomputing the pivot ch	decomp	-	NEVER_WRITTEN	fam/fam2-decomp.md:49	report Not implemented section
+(not impl) eigh at 33 <= n < 512: sweeps enqueued in groups gated on a device fla	decomp	-	NEVER_WRITTEN	fam/fam2-decomp.md:47	report Not implemented section
+(not impl) DART: bagged or column-sampled DART (`subsample < 1` with `subsample_f	forests	-	NEVER_WRITTEN	fam/fam2-forests.md:93	report Not implemented section
+(not impl) ET `quantize_labels` (`extratrees/estimator.mojo:~683`): serial host F	forests	-	NEVER_WRITTEN	fam/fam2-forests.md:88	report Not implemented section
+(not impl) ET level loop on the device: one loop serves merged multi-tree batches	forests	-	NEVER_WRITTEN	fam/fam2-forests.md:87	report Not implemented section
+(not impl) IsolationForest contamination quantile (`percentile_linear`, host shel	forests	-	NEVER_WRITTEN	fam/fam2-forests.md:91	report Not implemented section
+(not impl) RF OOB score epilogue (argmax / accuracy, r2 sums) and model flatten s	forests	-	NEVER_WRITTEN	fam/fam2-forests.md:90	report Not implemented section
+(not impl) RF `FBS_WARP` / `SMALL_NODE_FUSED` in IDENTICAL (first-pass item): sti	forests	-	NEVER_WRITTEN	fam/fam2-forests.md:95	report Not implemented section
+(not impl) RF `prepare_weights` validation walk (NaN / negative refusal, zero-wei	forests	-	NEVER_WRITTEN	fam/fam2-forests.md:89	report Not implemented section
+(not impl) RF device level loop for trees with retry rounds (`max_features` < 1.0	forests	-	NEVER_WRITTEN	fam/fam2-forests.md:86	report Not implemented section
+(not impl) SHAP: DART models on the device (different fold from the forest mean),	forests	-	NEVER_WRITTEN	fam/fam2-forests.md:92	report Not implemented section
+(not impl) User-splitter cv validation (PY 1918-1927): host `check_indices_i64` /	forests	-	NEVER_WRITTEN	fam/fam2-forests.md:94	report Not implemented section
+(not impl, pass1) ET `ET_PART_FLAGS` (direction byte): only applies at one row per threa	forests	-	NEVER_WRITTEN	fam/fam-forests.md:47	pass-1 not-implemented; no keyword match in fam2 report (1/4)
+(not impl) Estimation offsets/sizes taken from the search's device buffers	gbdt	-	NEVER_WRITTEN	fam/fam2-gbdt.md:42	report Not implemented section
+(not impl) First-pass leftovers unchanged	gbdt	-	NEVER_WRITTEN	fam/fam2-gbdt.md:45	report Not implemented section
+(not impl) Host target/weight staging loop in `train`	gbdt	-	NEVER_WRITTEN	fam/fam2-gbdt.md:44	report Not implemented section
+(not impl) Integer vs float histogram flush arm	gbdt	-	NEVER_WRITTEN	fam/fam2-gbdt.md:40	report Not implemented section
+(not impl) MultiClass one-step estimation on the device (the per-leaf host `dposv`)	gbdt	-	NEVER_WRITTEN	fam/fam2-gbdt.md:38	report Not implemented section
+(not impl) OVA / MultiRMSE diagonal one-step on the device	gbdt	-	NEVER_WRITTEN	fam/fam2-gbdt.md:39	report Not implemented section
+(not impl) PairLogit walker (10 Newton iterations) without per-evaluation readbacks	gbdt	-	NEVER_WRITTEN	fam/fam2-gbdt.md:41	report Not implemented section
+(not impl) Two-level FeatureFreq tensor path	gbdt	-	NEVER_WRITTEN	fam/fam2-gbdt.md:43	report Not implemented section
+(not impl, pass1) Depthwise/Lossguide level in one host wait under IDENTICAL	gbdt	-	NEVER_WRITTEN	fam/fam-gbdt.md:34	pass-1 not-implemented; no keyword match in fam2 report (7/18)
+(not impl) Cholesky panels / `cho_solve` for KRR are `cholesky/`'s (multi-target	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.km-part.md:38	report Not implemented section
+(not impl) Cholesky panels / `cho_solve` for KRR are `cholesky/`'s (multi-target	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:93	report Not implemented section
+(not impl) Device-resident GP model handle (fit leaves L on the device, predict r	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:50	report Not implemented section
+(not impl) Fused Nystroem transform (cross kernel + `@ normalization.T` in one la	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.km-part.md:36	report Not implemented section
+(not impl) Fused Nystroem transform (cross kernel + `@ normalization.T` in one la	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:91	report Not implemented section
+(not impl) KRR sample weights: the binding still takes `sqrt` of the n float64 we	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.km-part.md:33	report Not implemented section
+(not impl) KRR sample weights: the binding still takes `sqrt` of the n float64 we	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:88	report Not implemented section
+(not impl) Newton loop / optimizer fully device-gated (no stop word per iteration	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:49	report Not implemented section
+(not impl) Nystroem transform and RBFSampler fit / transform still build the mode	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.km-part.md:34	report Not implemented section
+(not impl) Nystroem transform and RBFSampler fit / transform still build the mode	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:89	report Not implemented section
+(not impl) Optimizer evaluation: K^-1 through `cho_solve` with n right-hand sides	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:48	report Not implemented section
+(not impl) Symmetric self-kernel (one triangle + mirror): n^2 d / 2 cell work aga	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:52	report Not implemented section
+(not impl) The list routes (`kernel_ridge_fit_host`, `nystroem_fit_host`) keep th	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.km-part.md:35	report Not implemented section
+(not impl) The list routes (`kernel_ridge_fit_host`, `nystroem_fit_host`) keep th	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:90	report Not implemented section
+(not impl) `MOJOLEARN_IDN_KM_RBF_CELL` for Laplacian / polynomial / sigmoid at sm	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.km-part.md:37	report Not implemented section
+(not impl) `MOJOLEARN_IDN_KM_RBF_CELL` for Laplacian / polynomial / sigmoid at sm	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:92	report Not implemented section
+(not impl) `gpc_latent_var_kernel` / `gp_variance_kernel` blocked folds: already	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:53	report Not implemented section
+(not impl) `gpr_predict_cov` / `gpr_sample_y` / `gpr_optimize` / `gpr_lml_grad` p	kernel-gp	-	NEVER_WRITTEN	fam/fam2-kernel-gp.md:51	report Not implemented section
+(not impl) Batched line search in IDENTICAL	linear	-	NEVER_WRITTEN	fam/fam2-linear.md:37	report Not implemented section
+(not impl) Device convergence for OWL-QN (l1) and for multinomial	linear	-	NEVER_WRITTEN	fam/fam2-linear.md:38	report Not implemented section
+(not impl) Fused row pass for C > 1	linear	-	NEVER_WRITTEN	fam/fam2-linear.md:39	report Not implemented section
+(not impl) Gram CD for the x_linear CV grids	linear	-	NEVER_WRITTEN	fam/fam2-linear.md:43	report Not implemented section
+(not impl) `_check_weights` (`w.min()`, `w.sum()`) and `_check_stratified_folds` (`Counter(	linear	-	NEVER_WRITTEN	fam/fam2-linear.md:41	report Not implemented section
+(not impl) `_spearman_sign` in Python	linear	-	NEVER_WRITTEN	fam/fam2-linear.md:40	report Not implemented section
+(not impl) `glm/impl/ridge_multi.mojo:125` `column_mean_kernel`	linear	-	NEVER_WRITTEN	fam/fam2-linear.md:42	report Not implemented section
+(not impl) `qn_fit_ovr` without the per-class device copy of X	linear	-	NEVER_WRITTEN	fam/fam2-linear.md:44	report Not implemented section
+(not impl) A GEMM arm that changes the fold order (for example a wider leaf or a	lm	-	NEVER_WRITTEN	fam/fam2-lm.md:35	report Not implemented section
+(not impl) Device-resident token batches (see the tokenizer section).	lm	-	NEVER_WRITTEN	fam/fam2-lm.md:34	report Not implemented section
+(not impl) Fixed15 / int8 / bf16 IDENTICAL GEMM: forbidden without the owner's ap	lm	-	NEVER_WRITTEN	fam/fam2-lm.md:36	report Not implemented section
+(not impl) Mamba-2 prefill session, Mamba-2 backward scratch pooling, fused eleme	lm	-	NEVER_WRITTEN	fam/fam2-lm.md:37	report Not implemented section
+(not impl) Samba device-resident layer handoff. The stack's layers live in three	lm	-	NEVER_WRITTEN	fam/fam2-lm.md:33	report Not implemented section
+(not impl) `tools/mamba_host_gen.py`: teach it the `mamba.impl.modules.afn_define	lm	-	NEVER_WRITTEN	fam/fam2-lm.md:38	report Not implemented section
+(not impl) DBSCAN row canonicalization	neighbors	-	NEVER_WRITTEN	fam/fam2-neighbors.md:62	report Not implemented section
+(not impl) Fixed-point k-NN / DBSCAN distance accumulation	neighbors	-	NEVER_WRITTEN	fam/fam2-neighbors.md:61	report Not implemented section
+(not impl) Fused k-NN through the expanded-distance tile with exact re-scoring	neighbors	-	NEVER_WRITTEN	fam/fam2-neighbors.md:60	report Not implemented section
+(not impl) IVF	neighbors	-	NEVER_WRITTEN	fam/fam2-neighbors.md:64	report Not implemented section
+(not impl) KNNImputer	neighbors	-	NEVER_WRITTEN	fam/fam2-neighbors.md:67	report Not implemented section
+(not impl) OneClassSVM `gather_i32`	neighbors	-	NEVER_WRITTEN	fam/fam2-neighbors.md:66	report Not implemented section
+(not impl) UMAP	neighbors	-	NEVER_WRITTEN	fam/fam2-neighbors.md:63	report Not implemented section
+(not impl) kNN regressor	neighbors	-	NEVER_WRITTEN	fam/fam2-neighbors.md:65	report Not implemented section
+(not impl, pass1) IVF flat search (`ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:625`)	neighbors	-	NEVER_WRITTEN	fam/fam-neighbors.md:35	pass-1 not-implemented; no keyword match in fam2 report (12/25)
+(not impl, pass1) SVGP Cholesky, one launch per column (2 m launches)	neighbors	-	NEVER_WRITTEN	fam/fam-neighbors.md:33	pass-1 not-implemented; no keyword match in fam2 report (5/14)
+(not impl) Device forms of embedding and rms_norm for `TrainDeviceArray`.	neural	-	NEVER_WRITTEN	fam/fam2-neural.md:44	report Not implemented section
+(not impl) Epoch mean of the step losses is still `_pm.nsum` in Python over the d	neural	-	NEVER_WRITTEN	fam/fam2-neural.md:45	report Not implemented section
+(not impl) GCNConv `_graph` self-loop handling (`_expansion_cnn.py` ~:2372-2382:	neural	-	NEVER_WRITTEN	fam/fam2-neural.md:37	report Not implemented section
+(not impl) Global average pooling forward as a blocked fold (bits change on four	neural	-	NEVER_WRITTEN	fam/fam2-neural.md:43	report Not implemented section
+(not impl) LR schedules (`WarmupCosineLR` etc.) decided in Python with `Fraction`	neural	-	NEVER_WRITTEN	fam/fam2-neural.md:38	report Not implemented section
+(not impl) No per-entry wait inside the fit epoch: every `_into[True]` entry stil	neural	-	NEVER_WRITTEN	fam/fam2-neural.md:39	report Not implemented section
+(not impl) Per-call `optimizer_step` (moments on the host, used only with `MOJOLE	neural	-	NEVER_WRITTEN	fam/fam2-neural.md:41	report Not implemented section
+(not impl) Single-launch grouped / depthwise conv (batched pinned GEMM over group	neural	-	NEVER_WRITTEN	fam/fam2-neural.md:40	report Not implemented section
+(not impl) `pin_weights` for GCNConv, SAGEConv, grouped conv and BasicBlock; resi	neural	-	NEVER_WRITTEN	fam/fam2-neural.md:42	report Not implemented section
+(not impl) Blocked `scaler_stats`, `ii_mean` / `ii_gram`, `te_*`, `mode_cols` / `	prep-metrics	-	NEVER_WRITTEN	fam/fam2-prep-metrics.md:114	report Not implemented section
+(not impl) Integer / fixed-point statistics for integer-valued inputs (first pass	prep-metrics	-	NEVER_WRITTEN	fam/fam2-prep-metrics.md:118	report Not implemented section
+(not impl) LDA `lda_stage2` / `lda_stage3` and QDA `qda_prep` / `qda_dec` paralle	prep-metrics	-	NEVER_WRITTEN	fam/fam2-prep-metrics.md:112	report Not implemented section
+(not impl) LabelEncoder / LabelBinarizer / MultiLabelBinarizer on Python list or	prep-metrics	-	NEVER_WRITTEN	fam/fam2-prep-metrics.md:110	report Not implemented section
+(not impl) More `cls_epi` kinds: matthews_corrcoef, cohen_kappa_score, the PRF pa	prep-metrics	-	NEVER_WRITTEN	fam/fam2-prep-metrics.md:98	report Not implemented section
+(not impl) Other host helpers still called from `_expansion_prep.py` under every	prep-metrics	-	NEVER_WRITTEN	fam/fam2-prep-metrics.md:107	report Not implemented section
+(not impl) Trustworthiness with X_embedded uploaded once and searched resident (`	prep-metrics	-	NEVER_WRITTEN	fam/fam2-prep-metrics.md:116	report Not implemented section
+(not impl) model_selection's native host helpers (fold ids, stratified / group as	prep-metrics	-	NEVER_WRITTEN	fam/fam2-prep-metrics.md:102	report Not implemented section
+(not impl) silhouette's `countLabels` readback and kl_divergence's epilogue: same	prep-metrics	-	NEVER_WRITTEN	fam/fam2-prep-metrics.md:119	report Not implemented section
+(not impl) Pooling the tile workspace of `xty_tiled` (allocated and synchronized	shared	-	NEVER_WRITTEN	fam/fam2-shared.md:47	report Not implemented section
+(not impl) `argmax_rows` belongs to fam2-linear (audit case 1).	shared	-	NEVER_WRITTEN	fam/fam2-shared.md:46	report Not implemented section
+(not impl) `cast_elements` (36 dtype pairs): needs CPython's item-setter refusals	shared	-	NEVER_WRITTEN	fam/fam2-shared.md:42	report Not implemented section
+(not impl) `gather_rows_bytes` / `transpose_f32` / `strided_copy_bytes` (base bin	shared	-	NEVER_WRITTEN	fam/fam2-shared.md:45	report Not implemented section
+(not impl) `normal_init_f32`: needs a correctly rounded binary64 sqrt in `checks/	shared	-	NEVER_WRITTEN	fam/fam2-shared.md:44	report Not implemented section
+(not impl) `reduce_stat` float sum: Python's left-to-right binary64 sum is the de	shared	-	NEVER_WRITTEN	fam/fam2-shared.md:43	report Not implemented section
+(not impl) AutoARIMA's grouping of series by d and by chosen order (bincount/sele	timeseries	-	NEVER_WRITTEN	fam/fam2-timeseries.md:45	report Not implemented section
+(not impl) GARCH under IDENTICAL: the device recursion runs on the lead thread al	timeseries	-	NEVER_WRITTEN	fam/fam2-timeseries.md:43	report Not implemented section
+(not impl) KPSS as one fused launch per series under IDENTICAL (first-pass note s	timeseries	-	NEVER_WRITTEN	fam/fam2-timeseries.md:49	report Not implemented section
+(not impl) Kalman loop parallel in time: the scan lowered fitted log-likelihood i	timeseries	-	NEVER_WRITTEN	fam/fam2-timeseries.md:46	report Not implemented section
+(not impl) One stacked launch for `estimate_x0` across all orders of a group (sti	timeseries	-	NEVER_WRITTEN	fam/fam2-timeseries.md:47	report Not implemented section
+(not impl) `ARIMA.aic_/bic_` on the device: needs the fit binding's stats layout	timeseries	-	NEVER_WRITTEN	fam/fam2-timeseries.md:44	report Not implemented section
+(not impl) `batched_fit_x` still downloads x0 (returned to the caller anyway) and	timeseries	-	NEVER_WRITTEN	fam/fam2-timeseries.md:48	report Not implemented section
+MOJOLEARN_PREP3_MAXABS_OFF	HANDOFF_2026-10-04_identical-speed-and-ptx.md	x_prep/prep3.mojo:33	UNPLANNED	HANDOFF_2026-10-04_identical-speed-and-ptx	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried
+MOJOLEARN_AGN_IDN_SYN_POOL_OFF	OFF_DEFINES.txt	xtrees/agnostic_device.mojo:50	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_BN_FOLD_BLOCK_OFF	OFF_DEFINES.txt	x_cnn/ops.mojo:874	UNPLANNED	BIT_CHANGES,OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_DROPOUT2D_CH_MASK_OFF	OFF_DEFINES.txt	x_cnn/ops.mojo:1034	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_EMB_AUTO_SORT_OFF	OFF_DEFINES.txt	embedding/checks/embedding_identical.mojo:189	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_EMB_DEVICE_SCRATCH_OFF	OFF_DEFINES.txt	bindings/_mojolearn_embedding.mojo:148	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_EMB_RESIDENT_OFF	OFF_DEFINES.txt	bindings/_mojolearn_embedding.mojo:147	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_LN_FOLD_BLOCK_OFF	OFF_DEFINES.txt	sequence/layernorm.mojo:22	UNPLANNED	BIT_CHANGES,OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_PCA_RR_EIGH_OFF	OFF_DEFINES.txt	decomposition/pca_rr_switch.mojo:21	UNPLANNED	BIT_CHANGES,OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_PCA_RR_FLAG_TEST_OFF	OFF_DEFINES.txt	decomposition/pca_rr_switch.mojo:45	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_SGD_IDN_CHUNK_WIDE_OFF	OFF_DEFINES.txt	x_linear/device.mojo:742	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_SGD_IDN_DEV_FINITE_APPLE_OFF	OFF_DEFINES.txt	x_linear/device.mojo:831	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_SGD_IDN_DEV_FINITE_OFF	OFF_DEFINES.txt	x_linear/device.mojo:830	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_SGD_IDN_MB_FUSE_OFF	OFF_DEFINES.txt	x_linear/device.mojo:756	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_SGD_IDN_PS_WARP_OFF	OFF_DEFINES.txt	x_linear/device.mojo:2152	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_XCNN_ONES_CACHE_OFF	OFF_DEFINES.txt	x_cnn/device.mojo:583	UNPLANNED	OFF_DEFINES.txt	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_IDN_CHOL_ONE_WAIT_OFF	decomp	cholesky/checks/potrf.mojo:1468	UNPLANNED	fam2-decomp	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_EMB_AUTO_SORT_MIN_CELLS	embedding	embedding/checks/embedding_identical.mojo:191	UNPLANNED	-	opt-in, ALL_OFF-tied, in wave closure; not in toggle-inventory
+MOJOLEARN_IDN_GP_GRAD_PRESCALE_OFF	kernel-gp	gaussian_process/checks/kernel_gradient.mojo:86	UNPLANNED	fam2-kernel-gp	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_IDN_GP_PRESCALE_OFF	kernel-gp	gaussian_process/checks/kernels.mojo:747	UNPLANNED	fam-kernel-gp	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_CD_IDN_GRAM_OFF	linear	solver/impl/cd_gram_rule.mojo:19	UNPLANNED	fam-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_QN_DEV_ARGMAX_OFF	linear	glm/estimator.mojo:907	UNPLANNED	fam2-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_QN_IDN_FUSED_OFF	linear	glm/impl/qn/glm_base.mojo:1196	UNPLANNED	fam2-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_QN_IDN_SLIM_OFF	linear	glm/impl/qn/glm_base.mojo:1014	UNPLANNED	fam2-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_QN_OVR_ONE_UPLOAD_OFF	linear	glm/estimator.mojo:702	UNPLANNED	fam2-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_QN_TILED_MULTI_OFF	linear	glm/impl/qn/qn_tiled_rule.mojo:22	UNPLANNED	fam2-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_SGD_IDN_OVR_PAR_OFF	linear	x_linear/device.mojo:1026	UNPLANNED	fam2-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_SVM_IDN_FUSED_TILE_OFF	linear	svm/impl/distance/kernel_matrices.mojo:394	UNPLANNED	fam-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF	linear	svm/impl/smosolver.mojo:163	UNPLANNED	fam-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF	linear	svm/impl/smosolver.mojo:179	UNPLANNED	fam-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_XLIN_GLM_YDOM_OFF	linear	x_linear/glm_ydom.mojo:32	UNPLANNED	fam2-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_XLIN_IDN_DEV_FINITE_OFF	linear	x_linear/finite_device.mojo:31	UNPLANNED	fam-linear	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_IDN_GEMM_MFMA_REUSE_WS_OFF	lm	gemm/checks/gemm_identical.mojo:3181	UNPLANNED	fam-lm	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried; not in togg
+MOJOLEARN_ARIMA_ORDER_BATCH_OFF	timeseries	arima/impl/fast_order_state.mojo:46	UNPLANNED	fam-timeseries	default ON, ALL_OFF-tied, in wave builder closure (implicit wave arm) but uninventoried
+(unsure) bisect.mojo	cluster	x_cluster/bisect.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:202	- `bisect.mojo`: `FM_PROD if weighted else FM_VAL` as an argument; `comptime if ... else` each decla
+(unsure) bodies.mojo	cluster	x_cluster/bodies.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:199	- `bodies.mojo` now imports `std.sys.compile.is_defined`, `GLOBAL_NUMERIC_MODE` and `mixture.nk_orde
+(unsure) chol_order.mojo	cluster	mixture/chol_order.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:30	- `chol_order.mojo`: `@fieldwise_init struct GmmIdnChol(Movable)` holding two `List[Float32]`, retur
+(unsure) csr.mojo	cluster	dbscan/impl/sparse/detail/csr.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:77	- `csr.mojo:112,129,144`: nested conditional expressions at `comptime` (`4 if is_defined[...]() else
+(unsure) dbscan.mojo	cluster	dbscan/impl/dbscan.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-cluster.md:39	- `dbscan.mojo`: `comptime if IDN_DBSCAN_RBC_ONE_BATCH:` assigning `batch` / `edge_cap` declared out
+(unsure) dendrogram_device.mojo	cluster	hierarchy/impl/cluster/detail/dendrogram_device.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-cluster.md:34	- `dendrogram_device.mojo` `_sort_half_kernel`: `UInt32(Int(keys[p] & UInt64(0xFFFFFFFF)))` (idiom c
+(unsure) dendrogram_union.mojo	cluster	hdbscan/impl/cluster/detail/dendrogram_union.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:140	- `dendrogram_union.mojo` kernels (`Atomic.compare_exchange[..., weak=True]`, `Atomic.load[ordering=
+(unsure) device_ops.mojo	cluster	x_cluster/device_ops.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-cluster.md:38	- `device_ops.mojo` `optics_order`: `comptime if ... else` around the two launch loops, `range(-1, n
+(unsure) edge_order.mojo	cluster	hierarchy/checks/edge_order.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-cluster.md:34	- `dendrogram_device.mojo` `_sort_half_kernel`: `UInt32(Int(keys[p] & UInt64(0xFFFFFFFF)))` (idiom c
+(unsure) entries.mojo	cluster	x_cluster/entries.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:203	- `entries.mojo`: `Float64(a[off + r]) if r == c else Float64(0)` inside `append`.
+(unsure) estimator.mojo	cluster	arima/estimator.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:31	- `estimator.mojo`: `comptime if IDN_GMM_INIT_DEVICE: return ctx.enqueue_create_buffer...` then `ret
+(unsure) fast_graph.mojo	cluster	spectral/impl/preprocessing/detail/fast_graph.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-cluster.md:33	- `fast_graph.mojo`: `comptime fg_groups = FG_SORT_TPB // WARP_SIZE` inside a kernel, and `_warp_pre
+(unsure) gmm_host_oracle.mojo	cluster	mixture/host/gmm_host_oracle.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-cluster.md:37	- `gmm_host_oracle.mojo`: a `comptime if` that builds a `List` inside the `_nk` closure run by `host
+(unsure) host_ops.mojo	cluster	x_cluster/host/host_ops.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:200	- `host_ops.mojo`: `comptime if` inside the `nk_body` closure run by `host_cells`, with `nk_levels_c
+(unsure) kmeans.mojo	cluster	cluster/impl/detail/kmeans.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:28	- `kmeans.mojo`: `comptime if` inside a runtime `while` inside a `comptime if`; `bitcast[DType.float
+(unsure) lanczos.mojo	cluster	spectral/impl/sparse/solver/detail/lanczos.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:252	- `lanczos.mojo` `lanczos_restart_pooled`: 30 parameters, `HostBuffer[DType.float32]` as a `mut` par
+(unsure) laplacian.mojo	cluster	spectral/impl/sparse/linalg/detail/laplacian.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:251	- `laplacian.mojo`: `comptime if IDN_SPECTRAL_LAP_DEVICE: return ... else: ...` as the tail of `comp
+(unsure) merge_labels.mojo	cluster	dbscan/impl/label/merge_labels.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:78	- `csr.mojo:376`, `merge_labels.mojo:196`: `comptime if ... else` assigning `passes` / `converged` /
+(unsure) minibatch.mojo	cluster	x_cluster/minibatch.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:201	- `minibatch.mojo`: `comptime if IDN_MINIBATCH_GROUP:` block declaring locals and then setting `n_st
+(unsure) mst_kernels.mojo	cluster	hierarchy/impl/sparse/solver/detail/mst_kernels.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:139	- `mst_kernels.mojo`: `comptime assert` on the `LANES` parameter inside a kernel; `stack_allocation[
+(unsure) mst_solver.mojo	cluster	hierarchy/impl/sparse/solver/mst_solver.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:138	- `mst_solver.mojo`: method with a comptime parameter called as `self.append_src_dst_pair[True](ctx,
+(unsure) mstep.mojo	cluster	mixture/checks/mstep.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:29	- `mstep.mojo` `idn_precision_cholesky_kernel`: `_gmm_dev_barrier()` and `identical_sqrt` / `identic
+(unsure) predict.mojo	cluster	hdbscan/impl/detail/predict.mojo	UNSURE_COMPILE:no wave builder	fam/fam2-cluster.md:142	- `predict.mojo`: `nq * neighborhood if IDN_HDB_PREDICT_DEVICE_CAST else 1` (runtime ternary on a co
+(unsure) reduce_by_key.mojo	cluster	cluster/checks/reduce_by_key.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-cluster.md:36	- `reduce_by_key.mojo`: `fold_block_table_kernel[store]` bound with a defaulted comptime parameter; 
+(unsure) runner.mojo	cluster	dbscan/impl/mergelabels/runner.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:82	- `runner.mojo:1116`: host buffers sized `1 if needs_device else n_rows`.
+(unsure) simt_kernel.mojo	cluster	cluster/impl/distance/fused_distance_nn/simt_kernel.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-cluster.md:26	- `simt_kernel.mojo`: the fused kernel body moved into `@always_inline _fused_distance_nn_body[...]`
+(unsure) soft_clustering.mojo	cluster	hdbscan/impl/detail/soft_clustering.mojo	UNSURE_COMPILE:no wave builder	fam/fam2-cluster.md:143	- `soft_clustering.mojo`: `var h = List[Float32]()` then reassigned from `_download_f32`.
+(unsure) sparse_mr_mst.mojo	cluster	hdbscan/impl/cluster/detail/sparse_mr_mst.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-cluster.md:35	- `sparse_mr_mst.mojo` `smr_rank_key_kernel`: `bitcast[DType.uint32](src[s]) ^ UInt32(0x80000000)` o
+(unsure) device.mojo	decomp	x_cnn/device.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-decomp.md:55	- `x_decomp/device.mojo _eigh_block_on`: `pv0 if cur == 0 else pv1` on pointers, `_p(doff) + 2 * nn`
+(unsure) potrf.mojo	decomp	cholesky/checks/potrf.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-decomp.md:57	- `cholesky/checks/potrf.mojo`: `comptime if IDN_CHOL_ONE_WAIT: ... else:` with runtime statements i
+(unsure) rr_block.mojo	decomp	x_decomp/rr_block.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-decomp.md:56	- `rr_block.mojo`: `rb_use` (a `comptime if` assigning a runtime var), nested `comptime X = a if is_
+(unsure) rr_solve.mojo	decomp	x_decomp/rr_solve.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-decomp.md:54	- `x_decomp/rr_solve.mojo`: closures (`right_row`, `left_row`, `v_row`) defined inside the block-rou
+(unsure) agnostic.mojo	forests	xtrees/agnostic.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-forests.md:79	- 12: `model_kernel[True, True]` with 15 arguments; variables assigned inside `comptime if / else` a
+(unsure) add_bin_values.mojo	gbdt	gbdt/models/kernel/add_bin_values.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-gbdt.md:33	- F3/F4: `comptime if IDN_PREDICT_FOUR or IDN_APPLY_WIDE:` with nested `comptime if`s assigning a ru
+(unsure) gbdt_oracle_ordered.mojo	gbdt	gbdt/host/gbdt_oracle_ordered.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-gbdt.md:27	- E6: `rebind[MutPointer[Float32, MutUntrackedOrigin]](x_colmajor.unsafe_ptr()) + f * n_rows` on an 
+(unsure) pairs.mojo	gbdt	gbdt/data/pairs.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-gbdt.md:32	- F2: `HostPairs` is `@fieldwise_init` with ten fields now (two construction sites updated); `pair_l
+(unsure) resident_model.mojo	gbdt	gbdt/resident_model.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-gbdt.md:33	- F3/F4: `comptime if IDN_PREDICT_FOUR or IDN_APPLY_WIDE:` with nested `comptime if`s assigning a ru
+(unsure) cd.mojo	linear	solver/impl/cd.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-linear.md:40	- `solver/impl/cd.mojo::cd_idn_gram_sweep_kernel`: `sh[unsafe_offset = i]` compares and stores on a 
+(unsure) device.mojo	linear	x_cnn/device.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-linear.md:53	- `x_linear/device.mojo::sgd_mb_chunk_ovr_kernel`: pointer arithmetic on kernel arguments (`ys + c *
+(unsure) fast_update_f.mojo	linear	svm/impl/fast_update_f.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-linear.md:39	- `svm/impl/idn_update_f.mojo` and `idn_rbf_fused_tile_kernel`: modeled on kernels that have only ev
+(unsure) glm_base.mojo	linear	glm/impl/qn/glm_base.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-linear.md:52	- `glm/impl/qn/glm_base.mojo::_qn_idn_fused_body`: `@always_inline` body with four `stack_allocation
+(unsure) huber_grid.mojo	linear	x_linear/huber_grid.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-linear.md:41	- `x_linear/huber_grid.mojo` / `logcv_grid.mojo`: `xlin_finite_device(c, obj.x, ...)` passes a struc
+(unsure) idn_update_f.mojo	linear	svm/impl/idn_update_f.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-linear.md:39	- `svm/impl/idn_update_f.mojo` and `idn_rbf_fused_tile_kernel`: modeled on kernels that have only ev
+(unsure) logcv_grid.mojo	linear	x_linear/logcv_grid.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-linear.md:41	- `x_linear/huber_grid.mojo` / `logcv_grid.mojo`: `xlin_finite_device(c, obj.x, ...)` passes a struc
+(unsure) qn_dconv.mojo	linear	glm/impl/qn/qn_dconv.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-linear.md:54	- `glm/impl/qn/qn_dconv.mojo`: `comptime QN_IDN_DCONV_POLL` as a nested conditional expression; `UIn
+(unsure) qn_tiled_rule.mojo	linear	glm/impl/qn/qn_tiled_rule.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-linear.md:55	- `glm/impl/qn/qn_tiled_rule.mojo::qn_tiled_multi_shape`: a `comptime if` with a `return` nested ins
+(unsure) histogram.mojo	neighbors	metrics/impl/stats/detail/histogram.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-neighbors.md:26	- `neighbors/impl/selection/knn.mojo`: `ctx.enqueue_memset(y_normalized, Int32(0))` on an int32 buff
+(unsure) items.mojo	neighbors	x_neighbors/items.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-neighbors.md:24	- `x_neighbors/items.mojo` and `x_ann/tsne_core.mojo`: an import placed after the `FP`/`IP` aliases.
+(unsure) iter_device.mojo	neighbors	x_neighbors/iter_device.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-neighbors.md:50	- `x_neighbors/iter_device.mojo`: `LP_IDN_RESIDENT` is defined below its first use (`op_lp_knn_produ
+(unsure) iter_host.mojo	neighbors	x_neighbors/iter_host.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-neighbors.md:23	- `x_neighbors/iter_host.mojo`: module-level imports placed mid-file with `as` aliases of underscore
+(unsure) ivf_flat_build.mojo	neighbors	ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo	UNSURE_COMPILE:no wave builder	fam/fam2-neighbors.md:54	- `ivf_flat_search.mojo`: aliased imports (`block_dim as _ivf_block_dim`); `ivf_flat_build.mojo`: `f
+(unsure) ivf_flat_search.mojo	neighbors	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	UNSURE_COMPILE:no wave builder	fam/fam2-neighbors.md:54	- `ivf_flat_search.mojo`: aliased imports (`block_dim as _ivf_block_dim`); `ivf_flat_build.mojo`: `f
+(unsure) kde_oracle.mojo	neighbors	kde/host/kde_oracle.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-neighbors.md:25	- `kde/host/kde_oracle.mojo`: `var mm: Tuple[Float32, Float32]` declared then assigned in two branch
+(unsure) knn.mojo	neighbors	neighbors/impl/ball_cover/knn.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-neighbors.md:26	- `neighbors/impl/selection/knn.mojo`: `ctx.enqueue_memset(y_normalized, Int32(0))` on an int32 buff
+(unsure) ocsvm_host.mojo	neighbors	x_neighbors/ocsvm_host.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-neighbors.md:51	- `x_neighbors/ocsvm_host.mojo`: `ph + nc` pointer arithmetic on `FP`; a mid-file `from std.python i
+(unsure) ocsvm_init.mojo	neighbors	x_neighbors/ocsvm_init.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-neighbors.md:52	- `x_neighbors/ocsvm_init.mojo`: two import lines from `x_neighbors.items`; Float64 helpers in a mod
+(unsure) optimizer_identical_device.mojo	neighbors	umap/optimizer_identical_device.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-neighbors.md:53	- `umap/optimizer_identical_device.mojo`: `memcpy` from an immutable `List` argument's `unsafe_ptr()
+(unsure) tsne_core.mojo	neighbors	x_ann/tsne_core.mojo	UNSURE_COMPILE:no wave builder	fam/fam-neighbors.md:24	- `x_neighbors/items.mojo` and `x_ann/tsne_core.mojo`: an import placed after the `FP`/`IP` aliases.
+(unsure) tsne_device.mojo	neighbors	x_ann/tsne_device.mojo	UNSURE_COMPILE:no wave builder	fam/fam-neighbors.md:22	- `x_ann/tsne_device.mojo` `repulse_tiled_kernel`: three `SIMD[DType.float32, 64]` lane vectors with
+(unsure) _mojolearn_training.mojo	neural	bindings/_mojolearn_training.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-neural.md:63	- `bindings/_mojolearn_training.mojo`: nested `comptime if` inside the module builder; `optimizer_re
+(unsure) _mojolearn_x_cnn_host.mojo	neural	bindings/_mojolearn_x_cnn_host.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-neural.md:62	- `bindings/_mojolearn_x_cnn_host.mojo::fit_epoch_d_binding`: `PythonObject(Int(rows.unsafe_ptr()))`
+(unsure) dev_tensors.mojo	neural	training/dev_tensors.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-neural.md:61	- `training/dev_tensors.mojo`: `DeviceBuffer[DType.float32](ctx, ptr, n, owning=False)` on the train
+(unsure) device.mojo	neural	x_cnn/device.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-neural.md:35	- `x_cnn/device.mojo` helpers that return a `DeviceBuffer` from branches (`_adapt_idx`, `_graph_in`,
+(unsure) estimator.mojo	neural	arima/estimator.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-neural.md:37	- `training/estimator.mojo:1272-1281`: assignment to `ce_piped` inside `comptime if`; `opt_pipe_uplo
+(unsure) ops.mojo	neural	sequence/ops.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-neural.md:34	- `x_cnn/ops.mojo:1208-1227`: nested conditional expressions for the three ranges inside a `comptime
+(unsure) samba_ops.mojo	neural	training/samba_ops.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-neural.md:64	- `training/samba_ops.mojo::_refuse_host`: a function whose whole body is a `comptime if not ...:` b
+(unsure) hotpath_device.mojo	shared	bindings/hotpath_device.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-shared.md:51	- `bindings/hotpath_device.mojo`: aliased imports of sixteen host bindings; `comptime if dt == DType
+(unsure) py2mojo_rows.mojo	shared	core/py2mojo_rows.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-shared.md:52	- `core/hotpath_device.mojo`: UInt64 / Int64 scalar kernel arguments on Metal (precedent: `core/py2m
+(unsure) xtdz_coalesced.mojo	shared	core/xtdz_coalesced.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-shared.md:53	- `core/xtdz_coalesced.mojo` `xty_tiled`: `MutPointer[Float32, MutAnyOrigin]` parameters fed from `D
+(unsure) arima_oracle.mojo	timeseries	arima/host/arima_oracle.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-timeseries.md:35	- idn_arma_ls.mojo: shared `stack_allocation` pointers indexed `sh[i]`, `comptime for` store, copied
+(unsure) auto_arima.mojo	timeseries	tsa/impl/auto_arima.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-timeseries.md:29	- `try: ... except e:` with `e` unused in tsa/impl/auto_arima.mojo (warning at most, I believe).
+(unsure) batched_fit.mojo	timeseries	arima/impl/batched_fit.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-timeseries.md:34	- `ews = held^` (Optional[FastEvalWS] from a moved local) in batched_fit.mojo.
+(unsure) fast_arma_ls.mojo	timeseries	arima/impl/fast_arma_ls.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-timeseries.md:35	- idn_arma_ls.mojo: shared `stack_allocation` pointers indexed `sh[i]`, `comptime for` store, copied
+(unsure) fast_order_search.mojo	timeseries	arima/impl/fast_order_search.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-timeseries.md:33	- fast_order_search.mojo: `var x_dev: DeviceBuffer[DType.float32]` assigned in `comptime if/else` th
+(unsure) fit_team.mojo	timeseries	sequence/fit_team.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-timeseries.md:29	- `lbfgs_steps[F: ProphetFG, COOP: Bool = False]`: existing caller sequence/fit_team.mojo:755 infers
+(unsure) idn_arma_ls.mojo	timeseries	arima/impl/idn_arma_ls.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-timeseries.md:35	- idn_arma_ls.mojo: shared `stack_allocation` pointers indexed `sh[i]`, `comptime for` store, copied
+(unsure) idn_ls_math.mojo	timeseries	arima/impl/idn_ls_math.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-timeseries.md:35	- idn_arma_ls.mojo: shared `stack_allocation` pointers indexed `sh[i]`, `comptime for` store, copied
+(unsure) kpss_fused.mojo	timeseries	tsa/impl/timeSeries/kpss_fused.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam-timeseries.md:28	- `select_d_fast` / `kpss_one_wait` pass several offsets of ONE buffer (`wp + ...`) to one launch; a
+(unsure) unfused_distance_nn.mojo	timeseries	cluster/impl/distance/unfused_distance_nn.mojo	UNSURE_COMPILE:compiled(default arm)	fam/fam2-timeseries.md:31	- Prophet coop kernel is first compiled for CUDA/HIP and under IDENTICAL: `shuffle_xor` butterfly in
+MOJOLEARN_IDN_EIGH_BLOCK_B32	decomp	x_decomp/rr_block.mojo:70	DROPPED	inv,rec,cov,fam2-decomp	quarantined/disabled: BLOCK_FAMILY_QUARANTINED_DEFAULT_DISABLED; unsure-compile; opt-in arm never co
+MOJOLEARN_IDN_EIGH_BLOCK_B8	decomp	x_decomp/rr_block.mojo:72	DROPPED	inv,rec,cov,fam2-decomp	quarantined/disabled: BLOCK_FAMILY_QUARANTINED_DEFAULT_DISABLED; unsure-compile; opt-in arm never co
+MOJOLEARN_IDN_EIGH_BLOCK_MIN128	decomp	x_decomp/rr_block.mojo:76	DROPPED	inv,rec,cov,fam2-decomp	quarantined/disabled: BLOCK_FAMILY_QUARANTINED_DEFAULT_DISABLED; unsure-compile; opt-in arm never co
+MOJOLEARN_IDN_EIGH_BLOCK_OFF	decomp	x_decomp/rr_block.mojo:68	DROPPED	inv,led,fam2-decomp	ledger DISABLED_BY_DEFAULT; unsure-compile; default arm compiled in wave builders
+MOJOLEARN_IDN_EIGH_BLOCK_ON	decomp	x_decomp/rr_block.mojo:68	DROPPED	inv,rec,cov,led	quarantined/disabled: DISABLED_AFTER_OBSERVED_CONVERGENCE_FAILURE; unsure-compile; opt-in arm never 
+MOJOLEARN_2661_NONSYM_GROUP_WIDTH	gbdt	gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:213	DROPPED	fam-gbdt	pre-existing opt-in, rejected on H100 2026-09-21 (fam-gbdt.md:35)
+MOJOLEARN_EXPERIMENT_IDENTICAL_CALLPATH	api-optin	core/identical_callpath.mojo:127	IN_INVENTORY_ONLY	cov,led,HANDOFF_2026-10-04_identical-speed-and-ptx	opt-in, not in wave closure, not ALL_OFF-tied; API_OPTIN_WORKLOAD_REQUIRED; ledger EXPERIMENT_NOT_FU
+MOJOLEARN_IDN_HPDEV_	bindings	bindings/_mojolearn.mojo:122	IN_INVENTORY_ONLY	inv	opt-in
+MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF	cluster	hdbscan/impl/detail/idn_switches.mojo:33	IN_INVENTORY_ONLY	inv,fam2-cluster	default ON, not in wave closure
+MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF	cluster	hdbscan/impl/detail/idn_switches.mojo:47	IN_INVENTORY_ONLY	inv,fam2-cluster	default ON, not in wave closure
+MOJOLEARN_IDN_HDB_ONE_SYNC_OFF	cluster	hdbscan/impl/detail/idn_switches.mojo:26	IN_INVENTORY_ONLY	inv,fam2-cluster	default ON, not in wave closure
+MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF	cluster	hdbscan/impl/detail/idn_switches.mojo:64	IN_INVENTORY_ONLY	inv,fam2-cluster	default ON, not in wave closure
+MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF	cluster	hdbscan/impl/detail/idn_switches.mojo:40	IN_INVENTORY_ONLY	inv,fam2-cluster	default ON, not in wave closure
+MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF	cluster	hdbscan/impl/detail/idn_switches.mojo:56	IN_INVENTORY_ONLY	inv,fam2-cluster	default ON, not in wave closure
+MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF	neighbors	ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:104	IN_INVENTORY_ONLY	inv,fam2-neighbors	default ON, not in wave closure; unsure-compile; not in wave closure
+MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF	neighbors	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:204	IN_INVENTORY_ONLY	inv,fam2-neighbors	default ON, not in wave closure; unsure-compile; not in wave closure
+MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF	neighbors	x_ann/tsne_core.mojo:62	IN_INVENTORY_ONLY	inv,fam-neighbors	default ON, not in wave closure; unsure-compile; not in wave closure
+MOJOLEARN_IDN_CLS_EPI_OFF	prep-metrics	x_metrics/cls_epi.mojo:35	IN_INVENTORY_ONLY	inv,fam2-prep-metrics	default ON, not in wave closure
+MOJOLEARN_IDN_AP_CONV_CHUNK16	cluster	x_cluster/device_ops.mojo:673	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: affinity_convergence_chunk/16; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_AP_CONV_CHUNK32	cluster	x_cluster/device_ops.mojo:674	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: affinity_convergence_chunk/32; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_AP_CONV_CHUNK4	cluster	x_cluster/device_ops.mojo:671	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: affinity_convergence_chunk/4; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_DBSCAN_CC_CHUNK16	cluster	dbscan/impl/sparse/detail/csr.mojo:115	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: dbscan_cc_chunk/16; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_DBSCAN_CC_CHUNK32	cluster	dbscan/impl/sparse/detail/csr.mojo:116	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: dbscan_cc_chunk/32; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_DBSCAN_CC_CHUNK4	cluster	dbscan/impl/sparse/detail/csr.mojo:113	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: dbscan_cc_chunk/4; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_DBSCAN_CC_SPLIT16	cluster	dbscan/impl/sparse/detail/csr.mojo:133	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: dbscan_cc_split/16; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_DBSCAN_CC_SPLIT4	cluster	dbscan/impl/sparse/detail/csr.mojo:130	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: dbscan_cc_split/4; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_DBSCAN_CC_SPLIT8	cluster	dbscan/impl/sparse/detail/csr.mojo:132	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: dbscan_cc_split/8; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_GMM_ESTEP_STACK	cluster	mixture/checks/estep.mojo:1013	IN_RECIPES_ONLY	rec,cov,pq,fam2-cluster	recipes: gmm_estep_stack/1; not in toggle-inventory; priority queue
+MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS	cluster	hdbscan/impl/detail/idn_switches.mojo:70	IN_RECIPES_ONLY	inv,rec,cov	recipes: hdbscan_sparse_threshold/16384,hdbscan_sparse_threshold/4096
+MOJOLEARN_IDN_KMEANS_ACC_ROWS_256	cluster	cluster/checks/reduce_by_key.mojo:769	IN_RECIPES_ONLY	rec,cov,pq,fam2-cluster	recipes: kmeans_accumulator_rows/256; not in toggle-inventory; priority queue; unsure-compile; opt-i
+MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096	cluster	cluster/checks/reduce_by_key.mojo:775	IN_RECIPES_ONLY	rec,cov,fam2-cluster	recipes: kmeans_accumulator_rows/4096; not in toggle-inventory; priority queue; unsure-compile; opt-
+MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1	cluster	cluster/impl/detail/kmeans.mojo:203	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: kmeans_convergence_chunk/1; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_KMEANS_CONV_CHUNK_16	cluster	cluster/impl/detail/kmeans.mojo:209	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: kmeans_convergence_chunk/16; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2	cluster	cluster/impl/detail/kmeans.mojo:205	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: kmeans_convergence_chunk/2; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_KMEANS_CONV_CHUNK_32	cluster	cluster/impl/detail/kmeans.mojo:211	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: kmeans_convergence_chunk/32; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_KMEANS_CONV_CHUNK_4	cluster	cluster/impl/detail/kmeans.mojo:207	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: kmeans_convergence_chunk/4; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_MINIBATCH_GROUP32	cluster	x_cluster/minibatch.mojo:75	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: minibatch_group_size/32; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_MINIBATCH_GROUP64	cluster	x_cluster/minibatch.mojo:76	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: minibatch_group_size/64; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_MINIBATCH_GROUP8	cluster	x_cluster/minibatch.mojo:73	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: minibatch_group_size/8; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_MST_SCAN_LANES	cluster	hierarchy/impl/sparse/solver/detail/mst_kernels.mojo:110	IN_RECIPES_ONLY	inv,rec,cov	recipes: mst_scan_lanes/128,mst_scan_lanes/256,mst_scan_lanes/64; unsure-compile; opt-in arm never c
+MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS	cluster	hierarchy/impl/cluster/detail/single_linkage.mojo:78	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: single_linkage_sparse_mst/4096
+MOJOLEARN_IDN_SL_SPARSE_MST	cluster	hierarchy/impl/cluster/detail/single_linkage.mojo:81	IN_RECIPES_ONLY	inv,rec,cov,fam2-cluster	recipes: single_linkage_sparse_mst/4096
+MOJOLEARN_IDN_EIGH_SMALL_N128	decomp	x_decomp/device.mojo:196	IN_RECIPES_ONLY	inv,rec,cov,fam2-decomp	recipes: eigh_small_limit/128; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_EIGH_SMALL_N64	decomp	x_decomp/device.mojo:197	IN_RECIPES_ONLY	inv,rec,cov,fam2-decomp	recipes: eigh_small_limit/64; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_ET_BINNED_U16	forests	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:1986	IN_RECIPES_ONLY	inv,rec,cov,fam2-forests	recipes: extra_trees_u16_bins/1
+MOJOLEARN_IDN_RF_DEVICE_LOOP	forests	ensemble/decisiontree/batched_levelalgo/builder.mojo:932	IN_RECIPES_ONLY	inv,rec,cov,fam2-forests	recipes: rf_device_level_loop/1,rf_device_level_loop/2,rf_device_leve
+MOJOLEARN_IDN_RF_DEVICE_LOOP_K1	forests	ensemble/decisiontree/batched_levelalgo/builder.mojo:936	IN_RECIPES_ONLY	inv,rec,cov	recipes: rf_device_level_loop/1
+MOJOLEARN_IDN_RF_DEVICE_LOOP_K2	forests	ensemble/decisiontree/batched_levelalgo/builder.mojo:937	IN_RECIPES_ONLY	inv,rec,cov	recipes: rf_device_level_loop/2
+MOJOLEARN_IDN_RF_DEVICE_LOOP_K8	forests	ensemble/decisiontree/batched_levelalgo/builder.mojo:938	IN_RECIPES_ONLY	inv,rec,cov	recipes: rf_device_level_loop/8
+MOJOLEARN_IDN_RF_ROWS_SORTED	forests	ensemble/randomforest.mojo:135	IN_RECIPES_ONLY	inv,rec,cov,fam2-forests	recipes: rf_sorted_bootstrap/1
+MOJOLEARN_IDN_GBDT_APPLY_WIDE	gbdt	gbdt/models/kernel/add_bin_values.mojo:64	IN_RECIPES_ONLY	inv,rec,cov,fam2-gbdt	recipes: gbdt_apply_wide/1; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_GBDT_CTR_BORDERS_DEVICE	gbdt	gbdt/ctrs/ctr_binarization.mojo:102	IN_RECIPES_ONLY	inv,rec,cov,fam2-gbdt	recipes: gbdt_ctr_borders_device/1
+MOJOLEARN_IDN_GP_GRAD_ROWS4	kernel-gp	gaussian_process/gp_grad_items.mojo:35	IN_RECIPES_ONLY	inv,rec,cov,fam2-kernel-gp	recipes: gp_gradient_rows4/4
+MOJOLEARN_IDN_KM_RBF_CELL	kernel-gp	kernel_methods/checks/kernel_matrix.mojo:472	IN_RECIPES_ONLY	inv,rec,cov,fam2-kernel-gp,fam2-kernel-gp.km-part	recipes: rbf_direct_cell/16,rbf_direct_cell/64
+MOJOLEARN_IDN_KM_RBF_CELL_D16	kernel-gp	kernel_methods/checks/kernel_matrix.mojo:475	IN_RECIPES_ONLY	inv,rec,cov	recipes: rbf_direct_cell/16
+MOJOLEARN_IDN_NYS_RR_DEV_STOP	kernel-gp	kernel_methods/estimator.mojo:1379	IN_RECIPES_ONLY	inv,rec,cov,fam2-kernel-gp,fam2-kernel-gp.km-part	recipes: nystroem_device_rr_stop/2,nystroem_device_rr_stop/4; unsure-compile; opt-in arm never compi
+MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4	kernel-gp	kernel_methods/estimator.mojo:1381	IN_RECIPES_ONLY	inv,rec,cov	recipes: nystroem_device_rr_stop/4; unsure-compile; opt-in arm never compiled
+MOJOLEARN_CD_IDN_GRAM_COLS_128	linear	solver/impl/cd_gram_rule.mojo:29	IN_RECIPES_ONLY	rec,cov,fam2-linear	recipes: gram_cd_column_limit/128; not in toggle-inventory
+MOJOLEARN_CD_IDN_GRAM_COLS_256	linear	solver/impl/cd_gram_rule.mojo:28	IN_RECIPES_ONLY	rec,cov,fam2-linear	recipes: gram_cd_column_limit/256; not in toggle-inventory
+MOJOLEARN_QN_IDN_DCONV	linear	glm/impl/qn/glm_base.mojo:1204	IN_RECIPES_ONLY	rec,cov,fam2-linear	recipes: qn_device_convergence/2,qn_device_convergence/4,qn_device_co; not in toggle-inventory; unsu
+MOJOLEARN_QN_IDN_DCONV_POLL_2	linear	glm/impl/qn/qn_dconv.mojo:520	IN_RECIPES_ONLY	rec,cov,fam2-linear	recipes: qn_device_convergence/2; not in toggle-inventory; unsure-compile; opt-in arm never compiled
+MOJOLEARN_QN_IDN_DCONV_POLL_8	linear	glm/impl/qn/qn_dconv.mojo:521	IN_RECIPES_ONLY	rec,cov,fam2-linear	recipes: qn_device_convergence/8; not in toggle-inventory; unsure-compile; opt-in arm never compiled
+MOJOLEARN_QN_TILED_MULTI_ALL	linear	glm/impl/qn/qn_tiled_rule.mojo:24	IN_RECIPES_ONLY	rec,cov,fam2-linear	recipes: qn_tiled_multinomial_all/1; not in toggle-inventory; unsure-compile; opt-in arm never compi
+MOJOLEARN_IDN_GEMM_GROUP_SLACK_2	lm	gemm/checks/gemm_identical.mojo:5776	IN_RECIPES_ONLY	rec,cov,fam2-lm	recipes: gemm_group_slack/2; not in toggle-inventory
+MOJOLEARN_IDN_GEMM_GROUP_SLACK_8	lm	gemm/checks/gemm_identical.mojo:5777	IN_RECIPES_ONLY	rec,cov,fam2-lm	recipes: gemm_group_slack/8; not in toggle-inventory
+MOJOLEARN_IDN_GEMM_GROUP_S_HALF	lm	gemm/checks/gemm_identical.mojo:5794	IN_RECIPES_ONLY	rec,cov,fam2-lm	recipes: gemm_group_s/half; not in toggle-inventory
+MOJOLEARN_IDN_GEMM_GROUP_S_X2	lm	gemm/checks/gemm_identical.mojo:5796	IN_RECIPES_ONLY	rec,cov,fam2-lm	recipes: gemm_group_s/x2; not in toggle-inventory
+MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY	lm	gemm/checks/gemm_identical.mojo:5780	IN_RECIPES_ONLY	rec,cov,fam2-lm	recipes: gemm_group_tiles_body/1; not in toggle-inventory
+MOJOLEARN_IDN_M3_ANGLE_BLOCK_128	lm	mamba/host/gen/mamba3_siso.mojo:538	IN_RECIPES_ONLY	inv,rec,cov,fam2-lm	recipes: mamba3_parallel_angle/128
+MOJOLEARN_IDN_M3_ANGLE_BLOCK_32	lm	mamba/host/gen/mamba3_siso.mojo:537	IN_RECIPES_ONLY	inv,rec,cov,fam2-lm	recipes: mamba3_parallel_angle/32
+MOJOLEARN_IDN_OCSVM_CHUNK256	neighbors	x_neighbors/ocsvm_dev.mojo:100	IN_RECIPES_ONLY	inv,rec,cov,pq,fam2-neighbors	recipes: ocsvm_chunk256/256; priority queue
+MOJOLEARN_IDN_XENT_FOLD_BLOCK_256	neural	x_cnn/ops.mojo:1496	IN_RECIPES_ONLY	inv,rec,cov,fam2-neural	recipes: cross_entropy_fold256/256; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_GRAM_ROWS_512	prep-metrics	x_prep/gram_blocked.mojo:53	IN_RECIPES_ONLY	inv,rec,cov,fam2-prep-metrics	recipes: lda_qda_gram_rows/512
+MOJOLEARN_IDN_GRAM_ROWS_8192	prep-metrics	x_prep/gram_blocked.mojo:53	IN_RECIPES_ONLY	inv,rec,cov,fam2-prep-metrics	recipes: lda_qda_gram_rows/8192
+MOJOLEARN_IDN_GRAM_ROWTILE	prep-metrics	x_prep/gram_blocked.mojo:51	IN_RECIPES_ONLY	inv,rec,cov,fam2-prep-metrics	recipes: lda_gram_rowtile/1
+MOJOLEARN_IDN_RR_MIN_16	prep-metrics	x_prep/host/rr_eigh_host.mojo:61	IN_RECIPES_ONLY	inv,rec,cov,fam2-prep-metrics	recipes: lda_qda_rr_min/16
+MOJOLEARN_IDN_RR_MIN_48	prep-metrics	x_prep/host/rr_eigh_host.mojo:62	IN_RECIPES_ONLY	inv,rec,cov,fam2-prep-metrics	recipes: lda_qda_rr_min/48
+MOJOLEARN_IDN_RR_MIN_8	prep-metrics	x_prep/host/rr_eigh_host.mojo:60	IN_RECIPES_ONLY	inv,rec,cov,fam2-prep-metrics	recipes: lda_qda_rr_min/8
+MOJOLEARN_IDN_RR_MIN_96	prep-metrics	x_prep/host/rr_eigh_host.mojo:62	IN_RECIPES_ONLY	inv,rec,cov,fam2-prep-metrics	recipes: lda_qda_rr_min/96
+MOJOLEARN_IDN_HPDEV_CAST_F64	shared	bindings/hotpath_device.mojo:114	IN_RECIPES_ONLY	inv,rec,cov,fam2-shared	recipes: device_f64_narrowing/1; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_XTY_TILE_1024	shared	core/host_tile_fold.mojo:50	IN_RECIPES_ONLY	inv,rec,cov,fam2-shared	recipes: xty_tile_rows/1024
+MOJOLEARN_IDN_XTY_TILE_64	shared	core/host_tile_fold.mojo:49	IN_RECIPES_ONLY	inv,rec,cov,fam2-shared	recipes: xty_tile_rows/64
+MOJOLEARN_IDN_X0_PAR_LS	timeseries	arima/impl/idn_ls_math.mojo:38	IN_RECIPES_ONLY	inv,rec,cov,fam2-timeseries	recipes: arima_parallel_start_ls/2048,arima_parallel_start_ls/256; unsure-compile; opt-in arm never 
+MOJOLEARN_IDN_X0_PAR_LS_MIN256	timeseries	arima/impl/idn_ls_math.mojo:41	IN_RECIPES_ONLY	inv,rec,cov,fam2-timeseries	recipes: arima_parallel_start_ls/256; unsure-compile; opt-in arm never compiled
+MOJOLEARN_IDN_AF_RESIDENT_OFF	OFF_DEFINES.txt	sequence/opt_resident.mojo:100	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GATES_OFF	OFF_DEFINES.txt	cholesky/estimator.mojo:233	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_LABEL_OFF	OFF_DEFINES.txt	x_prep/label_fast.mojo:31	IN_WAVE_PLAN	inv,BIT_CHANGES,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_LU_GESV_OFF	OFF_DEFINES.txt	x_decomp/api.mojo:546	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF	OFF_DEFINES.txt	x_prep/fastnb.mojo:34	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_NB_CSR_DENSE_OFF	OFF_DEFINES.txt	x_prep/blocked.mojo:601	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_NB_CSR_OFF	OFF_DEFINES.txt	x_prep/fastnb_csr.mojo:65	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF	OFF_DEFINES.txt	x_decomp/api.mojo:545	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF	OFF_DEFINES.txt	sequence/opt_resident.mojo:69	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF	OFF_DEFINES.txt	training/estimator.mojo:418	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF	OFF_DEFINES.txt	sequence/opt_resident.mojo:72	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF	OFF_DEFINES.txt	sequence/exec_device.mojo:90	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_SEQ_PIPE_UP_OFF	OFF_DEFINES.txt	sequence/exec_device.mojo:87	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_TSQR_GRID_OFF	OFF_DEFINES.txt	x_decomp/tsqr_device.mojo:95	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_TSQR_NORM_OFF	OFF_DEFINES.txt	x_decomp/tsqr_device.mojo:96	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_XD_SWEEP_OFF	OFF_DEFINES.txt	x_decomp/device.mojo:173	IN_WAVE_PLAN	inv,OFF_DEFINES.txt	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF	api-optin	training/estimator.mojo:715	IN_WAVE_PLAN	inv,cov,fam2-neural	default ON, toggled only via ALL_OFF arm of wave; API_OPTIN_WORKLOAD_REQUIRED; unsure-compile; defau
+MOJOLEARN_IDN_PIN_WEIGHTS_OFF	api-optin	x_cnn/device.mojo:1876	IN_WAVE_PLAN	inv,cov,fam2-neural	default ON, toggled only via ALL_OFF arm of wave; API_OPTIN_WORKLOAD_REQUIRED; unsure-compile; defau
+MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF	api-optin	training/dev_tensors.mojo:43	IN_WAVE_PLAN	inv,cov,fam2-neural	default ON, toggled only via ALL_OFF arm of wave; API_OPTIN_WORKLOAD_REQUIRED; unsure-compile; defau
+MOJOLEARN_IDN_ALL_OFF	cluster	arima/impl/batched_kalman.mojo:180	IN_WAVE_PLAN	inv,led,HANDOFF_2026-10-04_identical-speed-and-ptx,OFF_DEFINES.txt,fam-COMMON,fam-cluster,+24	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_AP_DEVICE_CONV_OFF	cluster	x_cluster/device_ops.mojo:666	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_AP_R_TOP2_OFF	cluster	x_cluster/device_ops.mojo:594	IN_WAVE_PLAN	inv,fam-cluster,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF	cluster	x_cluster/device_ops.mojo:1605	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF	cluster	x_cluster/bodies.mojo:485	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF	cluster	x_cluster/bisect.mojo:45	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF	cluster	dbscan/impl/runner.mojo:254	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF	cluster	dbscan/impl/sparse/detail/csr.mojo:105	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF	cluster	dbscan/impl/sparse/detail/csr.mojo:159	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF	cluster	dbscan/estimator.mojo:146	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF	cluster	dbscan/estimator.mojo:159	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF	cluster	dbscan/impl/runner.mojo:214	IN_WAVE_PLAN	inv,fam-cluster,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF	cluster	dbscan/impl/runner.mojo:239	IN_WAVE_PLAN	inv,fam-cluster,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF	cluster	dbscan/impl/dbscan.mojo:85	IN_WAVE_PLAN	inv,fam-cluster,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF	cluster	hierarchy/impl/cluster/detail/dendrogram_device.mojo:106	IN_WAVE_PLAN	inv,rec,cov	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF	cluster	hierarchy/impl/cluster/detail/dendrogram_device.mojo:69	IN_WAVE_PLAN	inv,fam-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_DENDRO_UNION_OFF	cluster	hierarchy/impl/cluster/detail/dendrogram_device.mojo:86	IN_WAVE_PLAN	inv,rec,cov,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF	cluster	mixture/chol_order.mojo:67	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_GMM_INIT_DEVICE_OFF	cluster	mixture/estimator.mojo:688	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_GMM_NK_LEVELS_OFF	cluster	mixture/nk_order.mojo:32	IN_WAVE_PLAN	inv,fam-cluster	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF	cluster	mixture/estimator.mojo:727	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_GMM_PROBA_DEVICE_OFF	cluster	mixture/estimator.mojo:700	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_GMM_SCORE_DEVICE_OFF	cluster	mixture/estimator.mojo:712	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF	cluster	cluster/impl/detail/kmeans.mojo:151	IN_WAVE_PLAN	inv,fam-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF	cluster	cluster/impl/detail/kmeans.mojo:195	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF	cluster	cluster/impl/detail/kmeans.mojo:172	IN_WAVE_PLAN	inv,fam-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF	cluster	cluster/impl/detail/kmeans.mojo:837	IN_WAVE_PLAN	inv,fam-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF	cluster	cluster/impl/detail/kmeans.mojo:864	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_LANCZOS_POOL_OFF	cluster	spectral/impl/sparse/solver/detail/lanczos.mojo:1891	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_MINIBATCH_GROUP_OFF	cluster	x_cluster/minibatch.mojo:68	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_MST_LABEL_JUMP_OFF	cluster	hierarchy/impl/sparse/solver/detail/mst_kernels.mojo:79	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_MST_PAR_COMPACT_OFF	cluster	hierarchy/impl/sparse/solver/detail/mst_kernels.mojo:102	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF	cluster	hierarchy/impl/sparse/solver/detail/mst_kernels.mojo:94	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF	cluster	x_cluster/device_post.mojo:316	IN_WAVE_PLAN	inv,fam-cluster,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_SMR_RADIX_RANK_OFF	cluster	hdbscan/impl/cluster/detail/sparse_mr_mst.mojo:873	IN_WAVE_PLAN	inv,fam-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF	cluster	spectral/impl/preprocessing/detail/fast_graph.mojo:67	IN_WAVE_PLAN	inv,fam-cluster,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_SPECTRAL_LABELS_DEVICE_OFF	cluster	spectral/impl/labels_device.mojo:25	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_SPECTRAL_LAP_DEVICE_OFF	cluster	spectral/impl/sparse/linalg/detail/laplacian.mojo:87	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF	cluster	spectral/impl/sparse/solver/detail/lanczos.mojo:2189	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_SPMV_LANES_OFF	cluster	spectral/spmv_order.mojo:31	IN_WAVE_PLAN	inv,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_SYMMETRIZE_SORTED_OFF	cluster	spectral/impl/sparse/linalg/detail/symmetrize.mojo:65	IN_WAVE_PLAN	inv,fam-cluster,fam2-cluster	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_CD_RESIDENT_OFF	decomp	x_decomp/resident.mojo:520	IN_WAVE_PLAN	inv,fam-decomp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_CODE_RESIDENT_OFF	decomp	x_decomp/resident.mojo:724	IN_WAVE_PLAN	inv,fam-decomp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF	decomp	decomposition/mean_switch.mojo:9	IN_WAVE_PLAN	inv,fam2-decomp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_EIGH_RESIDENT_OFF	decomp	x_decomp/resident.mojo:798	IN_WAVE_PLAN	inv,fam-decomp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_EIGH_SMALL_OFF	decomp	x_decomp/device.mojo:189	IN_WAVE_PLAN	inv,fam-decomp	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_LLE_DEV_F0_OFF	decomp	x_decomp/api.mojo:553	IN_WAVE_PLAN	inv,fam-decomp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_LU_RESIDENT_OFF	decomp	x_decomp/resident.mojo:608	IN_WAVE_PLAN	inv,fam-decomp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_QR_R_DIRECT_OFF	decomp	x_decomp/device.mojo:207	IN_WAVE_PLAN	inv,fam-decomp	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_QR_R_RESIDENT_OFF	decomp	x_decomp/resident.mojo:684	IN_WAVE_PLAN	inv,fam-decomp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RAND_RESIDENT_OFF	decomp	x_decomp/api.mojo:560	IN_WAVE_PLAN	inv,fam-decomp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RES_MOVES_OFF	decomp	x_decomp/api.mojo:568	IN_WAVE_PLAN	inv,fam2-decomp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_SVD_RESIDENT_OFF	decomp	x_decomp/resident.mojo:563	IN_WAVE_PLAN	inv,fam-decomp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ADA_SESSION_OFF	forests	xtrees/api.mojo:890	IN_WAVE_PLAN	inv,fam-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_DART_DEVICE_OFF	forests	xtrees/dart_units.mojo:41	IN_WAVE_PLAN	inv,fam2-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ET_PART_ROWS_OFF	forests	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3137	IN_WAVE_PLAN	inv,fam-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF	forests	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2084	IN_WAVE_PLAN	inv,fam2-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ET_STAGE_LIVE_OFF	forests	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3175	IN_WAVE_PLAN	inv,fam-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ET_TILED_SEARCH_OFF	forests	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3033	IN_WAVE_PLAN	inv,fam-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF	forests	isolation_forest/impl/isolation_forest.mojo:542	IN_WAVE_PLAN	inv,fam2-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF	forests	isolation_forest/impl/isolation_forest.mojo:513	IN_WAVE_PLAN	inv,fam-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_IF_RESIDENT_OFF	forests	isolation_forest/impl/isolation_forest.mojo:527	IN_WAVE_PLAN	inv,fam2-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RF_COLS40_OFF	forests	ensemble/decisiontree/batched_levelalgo/builder.mojo:127	IN_WAVE_PLAN	inv,fam-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF	forests	ensemble/decisiontree/batched_levelalgo/builder.mojo:909	IN_WAVE_PLAN	inv,led,fam2-forests	default ON, toggled only via ALL_OFF arm of wave; ledger PENDING_QUALITY_AND_SPEED
+MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF	forests	ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:2850	IN_WAVE_PLAN	inv,fam-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF	forests	ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:2586	IN_WAVE_PLAN	inv,fam-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RF_HIST_ZERO_OFF	forests	ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:540	IN_WAVE_PLAN	inv,fam-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RF_OOB_DEVICE_OFF	forests	ensemble/oob_device.mojo:30	IN_WAVE_PLAN	inv,fam2-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF	forests	ensemble/decisiontree/batched_levelalgo/quantiles.mojo:543	IN_WAVE_PLAN	inv,fam2-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF	forests	ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:466	IN_WAVE_PLAN	inv,fam-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE_OFF	forests	ensemble/host/rf_oracle.mojo:1311	IN_WAVE_PLAN	inv,fam2-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RF_WEIGHT_ROWS_DEVICE_OFF	forests	ensemble/randomforest.mojo:149	IN_WAVE_PLAN	inv,fam2-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF	forests	xtrees/agnostic_device.mojo:71	IN_WAVE_PLAN	inv,fam2-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF	forests	xtrees/api.mojo:824	IN_WAVE_PLAN	inv,fam2-forests	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GBDT_BOOT_SEEDS_DEVICE_OFF	gbdt	gbdt/gpu_util/kernel/bootstrap.mojo:117	IN_WAVE_PLAN	inv,fam2-gbdt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GBDT_CTR_FREQ_DEVICE_OFF	gbdt	gbdt/train.mojo:150	IN_WAVE_PLAN	inv,fam-gbdt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF	gbdt	gbdt/methods/doc_parallel_boosting.mojo:164	IN_WAVE_PLAN	inv,fam-gbdt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF	gbdt	gbdt/methods/leaves_estimation/leaves_estimation.mojo:103	IN_WAVE_PLAN	inv,fam2-gbdt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF	gbdt	gbdt/methods/leaves_estimation/pointwise_oracle.mojo:1374	IN_WAVE_PLAN	inv,fam-gbdt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF	gbdt	gbdt/models/add_non_symmetric_tree_doc_parallel.mojo:267	IN_WAVE_PLAN	inv,fam-gbdt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF	gbdt	gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:303	IN_WAVE_PLAN	inv,fam-gbdt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GBDT_ORDERED_RMSE_DEVICE_GRID_OFF	gbdt	gbdt/grid_creator/binarization.mojo:75	IN_WAVE_PLAN	inv,fam-gbdt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF	gbdt	gbdt/data/pairs.mojo:46	IN_WAVE_PLAN	inv,fam2-gbdt	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF	gbdt	gbdt/models/kernel/add_bin_values.mojo:49	IN_WAVE_PLAN	inv,fam2-gbdt	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_GBDT_YETI_BLOCK_AMD_OFF	gbdt	gbdt/targets/kernel/yeti_rank.mojo:175	IN_WAVE_PLAN	inv,fam-gbdt	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF	kernel-gp	gaussian_process/gpc_ovr.mojo:121	IN_WAVE_PLAN	inv,fam2-kernel-gp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GPC_OVR_OFF	kernel-gp	gaussian_process/gpc_ovr.mojo:113	IN_WAVE_PLAN	inv,fam2-kernel-gp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GPR_PTR_OFF	kernel-gp	gaussian_process/gpr_resident.mojo:93	IN_WAVE_PLAN	inv,fam2-kernel-gp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF	kernel-gp	gaussian_process/estimator.mojo:559	IN_WAVE_PLAN	inv,fam-kernel-gp	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF	kernel-gp	gaussian_process/gp_grad_items.mojo:33	IN_WAVE_PLAN	inv,fam2-kernel-gp	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF	kernel-gp	gaussian_process/estimator.mojo:568	IN_WAVE_PLAN	inv,fam-kernel-gp	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF	kernel-gp	kernel_methods/estimator.mojo:271	IN_WAVE_PLAN	inv,fam-kernel-gp,fam2-kernel-gp,fam2-kernel-gp.km-part	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KM_PTR_IN_OFF	kernel-gp	kernel_methods/estimator.mojo:258	IN_WAVE_PLAN	inv,fam-kernel-gp,fam2-kernel-gp,fam2-kernel-gp.km-part	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KRR_DEV_SCALE_OFF	kernel-gp	kernel_methods/estimator.mojo:432	IN_WAVE_PLAN	inv,fam2-kernel-gp,fam2-kernel-gp.km-part	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KRR_PTR_IN_OFF	kernel-gp	kernel_methods/estimator.mojo:446	IN_WAVE_PLAN	inv,fam2-kernel-gp,fam2-kernel-gp.km-part	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_NYS_DEV_BASIS_OFF	kernel-gp	kernel_methods/estimator.mojo:1836	IN_WAVE_PLAN	inv,fam2-kernel-gp,fam2-kernel-gp.km-part	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_NYS_DEV_ORDER_OFF	kernel-gp	kernel_methods/estimator.mojo:1676	IN_WAVE_PLAN	inv,fam2-kernel-gp,fam2-kernel-gp.km-part	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF	kernel-gp	kernel_methods/estimator.mojo:1824	IN_WAVE_PLAN	inv,fam2-kernel-gp,fam2-kernel-gp.km-part	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_NYS_RR_EIGH_OFF	kernel-gp	kernel_methods/estimator.mojo:1233	IN_WAVE_PLAN	inv,fam-kernel-gp,fam2-kernel-gp,fam2-kernel-gp.km-part	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_RBF_FUSED_OFF	kernel-gp	kernel_methods/estimator.mojo:186	IN_WAVE_PLAN	inv,fam-kernel-gp,fam2-kernel-gp,fam2-kernel-gp.km-part	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF	lm	transformer/impl/llama/fused_attention.mojo:2253	IN_WAVE_PLAN	inv,fam-lm	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF	lm	transformer/impl/llama/fused_attention.mojo:8895	IN_WAVE_PLAN	inv,fam-lm	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_CACHE_CTX_KEY_OFF	lm	core/ctx_key.mojo:20	IN_WAVE_PLAN	inv,fam2-lm	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF	lm	transformer/impl/llama/modeling_llama.mojo:3683	IN_WAVE_PLAN	inv,fam-lm	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_M3_ANGLE_PARALLEL	lm	mamba/checks/mamba3_oracle.mojo:181	IN_WAVE_PLAN	inv,rec,cov,wave,fam2-lm	
+MOJOLEARN_IDN_M3_SESSION_STAGE_REUSE_OFF	lm	mamba/impl/modules/afn_defines.mojo:102	IN_WAVE_PLAN	inv,fam2-lm	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_MAMBA3_REPORTS_ON_REQUEST_OFF	lm	mamba/impl/modules/afn_defines.mojo:92	IN_WAVE_PLAN	inv,fam2-lm	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_MAMBA_ALLOC_NOWAIT_OFF	lm	mamba/impl/modules/afn_defines.mojo:79	IN_WAVE_PLAN	inv,fam-lm	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_MAMBA_ARENA_OFF	lm	mamba/impl/modules/afn_defines.mojo:110	IN_WAVE_PLAN	inv,fam-lm	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF	lm	mamba/impl/modules/afn_defines.mojo:68	IN_WAVE_PLAN	inv,fam-lm	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF	lm	mamba/impl/modules/idn_gemm_ws.mojo:45	IN_WAVE_PLAN	inv,fam-lm	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF	neighbors	kde/impl/neighbors/kernel_density.mojo:3439	IN_WAVE_PLAN	inv,wave,fam-neighbors	
+MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF	neighbors	neighbors/impl/selection/knn.mojo:113	IN_WAVE_PLAN	inv,fam2-neighbors	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF	neighbors	neighbors/impl/selection/knn.mojo:100	IN_WAVE_PLAN	inv,fam-neighbors	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF	neighbors	neighbors/impl/knn/knn.mojo:50	IN_WAVE_PLAN	inv,fam2-neighbors	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_LP_RESIDENT_OFF	neighbors	x_neighbors/iter_device.mojo:2500	IN_WAVE_PLAN	inv,fam2-neighbors	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_NC_CHUNKED_OFF	neighbors	x_neighbors/items.mojo:58	IN_WAVE_PLAN	inv,fam-neighbors	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_OCSVM_2L_OFF	neighbors	x_neighbors/ocsvm_dev.mojo:97	IN_WAVE_PLAN	inv,fam2-neighbors	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF	neighbors	x_neighbors/ocsvm_init.mojo:42	IN_WAVE_PLAN	inv,fam2-neighbors	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_OCSVM_RES_OFF	neighbors	x_neighbors/ocsvm_dev.mojo:94	IN_WAVE_PLAN	inv,fam2-neighbors	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_SVGP_DOT2_OFF	neighbors	x_neighbors/svgp_ff.mojo:64	IN_WAVE_PLAN	inv,fam-neighbors	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_UMAP_DEVICE_CSR_OFF	neighbors	umap/optimizer_identical_device.mojo:556	IN_WAVE_PLAN	inv,fam2-neighbors	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_XN_KNN_LEAN_OFF	neighbors	x_neighbors/iter_device.mojo:625	IN_WAVE_PLAN	inv,fam2-neighbors	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_XN_KNN_PRUNE_OFF	neighbors	x_neighbors/iter_device.mojo:626	IN_WAVE_PLAN	inv,fam2-neighbors	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_XN_UNIT_DEV_OFF	neighbors	x_neighbors/ocsvm_init.mojo:120	IN_WAVE_PLAN	inv,fam2-neighbors	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF	neural	x_cnn/ops.mojo:50	IN_WAVE_PLAN	inv,fam-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_ADAPT_M_OFF	neural	x_cnn/device.mojo:1863	IN_WAVE_PLAN	inv,fam-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_AVGPOOL_BWD_TILE_OFF	neural	x_cnn/ops.mojo:44	IN_WAVE_PLAN	inv,fam-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_CE_PIPE_UP_OFF	neural	training/estimator.mojo:1303	IN_WAVE_PLAN	inv,fam-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF	neural	x_cnn/ops.mojo:1490	IN_WAVE_PLAN	inv,fam2-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_GRAPH_M_OFF	neural	x_cnn/device.mojo:1865	IN_WAVE_PLAN	inv,fam-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_GROUP_M_OFF	neural	x_cnn/device.mojo:1869	IN_WAVE_PLAN	inv,fam-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_LAYER_DEV_IO_OFF	neural	x_cnn/device.mojo:1872	IN_WAVE_PLAN	inv,fam-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_MAXIMIZE_DEV_OFF	neural	training/estimator.mojo:689	IN_WAVE_PLAN	inv,fam2-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_PAD_BWD_BOUNDED_OFF	neural	x_cnn/ops.mojo:47	IN_WAVE_PLAN	inv,fam-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_PAD_M_OFF	neural	x_cnn/device.mojo:1867	IN_WAVE_PLAN	inv,fam-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF	neural	training/samba_ops.mojo:98	IN_WAVE_PLAN	inv,fam2-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_XENT_DEV_FOLD_OFF	neural	x_cnn/ops.mojo:1489	IN_WAVE_PLAN	inv,fam2-neural	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_CLASS_ONEPASS_OFF	prep-metrics	x_prep/blocked.mojo:75	IN_WAVE_PLAN	inv,fam-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_GRAM_BLOCKED_OFF	prep-metrics	x_prep/gram_blocked.mojo:49	IN_WAVE_PLAN	inv,fam2-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_LABEL_INV_OFF	prep-metrics	x_prep/fam2.mojo:68	IN_WAVE_PLAN	inv,fam2-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_METRIC_EPI_OFF	prep-metrics	metrics/impl/stats/detail/sf_epilogue_core.mojo:52	IN_WAVE_PLAN	inv,fam2-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_NB_ONEPASS_OFF	prep-metrics	x_prep/blocked.mojo:43	IN_WAVE_PLAN	inv,OFF_DEFINES.txt,fam-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_PARTIAL_CODES_OFF	prep-metrics	x_prep/fam2.mojo:67	IN_WAVE_PLAN	inv,fam2-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_PERM_DRAW_OFF	prep-metrics	x_prep/fam2.mojo:65	IN_WAVE_PLAN	inv,fam2-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_PT_BLOCKED_OFF	prep-metrics	x_prep/pt_blocked.mojo:50	IN_WAVE_PLAN	inv,fam-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_RR_EIGH_OFF	prep-metrics	x_prep/host/rr_eigh_host.mojo:49	IN_WAVE_PLAN	inv,fam-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_SELECT_BLOCKED_OFF	prep-metrics	x_prep/select_blocked.mojo:33	IN_WAVE_PLAN	inv,fam-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_STATS_BLOCKED_OFF	prep-metrics	x_prep/blocked.mojo:62	IN_WAVE_PLAN	inv,fam-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_TRUST_DEV_OFF	prep-metrics	metrics/impl/stats/detail/trustworthiness_score.mojo:97	IN_WAVE_PLAN	inv,fam2-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_WDRAW_OFF	prep-metrics	x_prep/fam2.mojo:64	IN_WAVE_PLAN	inv,fam2-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_WPICK_OFF	prep-metrics	x_prep/fam2.mojo:66	IN_WAVE_PLAN	inv,fam2-prep-metrics	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_HPDEV_ELEM_OFF	shared	bindings/hotpath_device.mojo:105	IN_WAVE_PLAN	inv,fam2-shared	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_HPDEV_FOLDS_OFF	shared	bindings/hotpath_device.mojo:107	IN_WAVE_PLAN	inv,fam2-shared	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_HPDEV_INIT_OFF	shared	bindings/hotpath_device.mojo:109	IN_WAVE_PLAN	inv,fam2-shared	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_HPDEV_LABELS_OFF	shared	bindings/hotpath_device.mojo:106	IN_WAVE_PLAN	inv,fam2-shared	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_HPDEV_REDUCE_OFF	shared	bindings/hotpath_device.mojo:108	IN_WAVE_PLAN	inv,fam2-shared	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_XTY_TILED_OFF	shared	core/host_tile_fold.mojo:43	IN_WAVE_PLAN	inv,fam2-shared	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ARIMA_ASYNC_OFF	timeseries	arima/impl/fast_lbfgs_async.mojo:86	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF	timeseries	arima/impl/batched_kalman.mojo:202	IN_WAVE_PLAN	inv,fam2-timeseries	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF	timeseries	arima/impl/batched_kalman.mojo:190	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF	timeseries	arima/impl/fast_eval_ws.mojo:71	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF	timeseries	arima/impl/fast_order_search.mojo:79	IN_WAVE_PLAN	inv,fam2-timeseries	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_ARIMA_LLONLY_OFF	timeseries	arima/impl/batched_kalman.mojo:184	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF	timeseries	arima/impl/fast_order_state.mojo:49	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF	timeseries	arima/impl/fast_order_search.mojo:73	IN_WAVE_PLAN	inv,fam2-timeseries	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF	timeseries	arima/impl/fast_order_search.mojo:74	IN_WAVE_PLAN	inv,fam2-timeseries	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF	timeseries	arima/impl/fast_order_search.mojo:76	IN_WAVE_PLAN	inv,fam2-timeseries	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_HW_FIT_DIRECT_OFF	timeseries	holtwinters/estimator.mojo:70	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_HW_FORECAST_DIRECT_OFF	timeseries	holtwinters/estimator.mojo:82	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave; unsure-compile; default arm compiled in wave build
+MOJOLEARN_IDN_KALMAN_RD_OFF	timeseries	arima/impl/batched_kalman.mojo:180	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF	timeseries	tsa/impl/select_d_fast.mojo:65	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_KPSS_SCAN_OFF	timeseries	tsa/impl/timeSeries/stationarity.mojo:253	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_PROPHET_COOP_OFF	timeseries	sequence/prophet.mojo:44	IN_WAVE_PLAN	inv,fam2-timeseries	default ON, toggled only via ALL_OFF arm of wave
+MOJOLEARN_IDN_SELECT_D_OFF	timeseries	tsa/impl/select_d_fast.mojo:55	IN_WAVE_PLAN	inv,fam-timeseries	default ON, toggled only via ALL_OFF arm of wave

@@ -29,8 +29,8 @@ from max.gpu.host import DeviceBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from sequence.exec_device import DeviceExec, X_SEQUENCE_POOL, _pool_host, _pool_release_host, sequence_ctx
-from sequence.ops import FP
-from sequence.recurrent import OptState, opt_scalars, opt_step
+from sequence.ops import FP, OP_OPT, Args
+from sequence.recurrent import OptConfig, OptState, opt_scalars, opt_step
 from sequence.pyapi import adafactor_core, fptr, fval, ival, lamb_bias, lamb_core, lamb_offsets, lamb_table, opt_of, opt_slots
 
 #: Apple FAST transport switches of the resident step (lane
@@ -53,13 +53,18 @@ from sequence.pyapi import adafactor_core, fptr, fval, ival, lamb_bias, lamb_cor
 #:    still untouched zero host copies on the first step.
 #: IDENTICAL and the other vendors compile the main path unchanged.
 comptime _OPT_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime OPT_RAW_UP = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_RAW_UP"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab2 @ 40027eb8e): RAW_UP measured as a pair with
+#: OPT_FAST_STREAM below (see there): KEEP, the FAST + Apple default since
+#: then; rollback -D MOJOLEARN_OPT_RAW_UP_OFF (the old -D name is harmless).
+comptime OPT_RAW_UP = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_RAW_UP_OFF"]()
 #: PIPE_DOWN and ZERO_OPEN are the FAST+Apple default since the M3 A/B of
 #: lane/apple-fast-optspeed f2b6491a8 (n=1, synthetic, output digest
 #: identical): all three switches adagrad 317 -> 187 ms, lamb 340 -> 206,
 #: adamax 326 -> 195; PIPE_DOWN alone 318 -> 191. Off with
 #: MOJOLEARN_OPT_PIPE_DOWN_OFF / MOJOLEARN_OPT_ZERO_OPEN_OFF; the old
-#: -D names are harmless. RAW_UP measured noise (310 -> 307): opt-in.
+#: -D names are harmless. RAW_UP alone measured noise (310 -> 307); it is
+#: the default since 2026-10-04 as the pair with OPT_FAST_STREAM (below).
 #: lane idn-opt-resident (2026-10-04): IDENTICAL takes PIPE_DOWN and
 #: ZERO_OPEN on every vendor (copies only, and zeros not uploaded over
 #: zeros: no bit moves). -D MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF /
@@ -99,6 +104,35 @@ comptime OPT_RAW_DOWN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_FAST_RAW_D
 comptime AF_RESIDENT = (_OPT_APPLE_FAST and is_defined["MOJOLEARN_AF_FAST_RESIDENT"]()) or (
     _OPT_IDN and not (is_defined["MOJOLEARN_IDN_AF_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
+
+#: MOJOLEARN_OPT_FAST_STREAM (lane apple-fast-rec-optim, 2026-10-04), default OFF,
+#: FAST + Apple only: the element-wise resident step (rmsprop, adagrad, adamax,
+#: nadam, lion, sgd/adam of the sequence lane) STREAMED in OPT_PIPE_CH chunks
+#: instead of three whole-buffer phases. Per chunk: the parameter and gradient
+#: chunk up, ONE `op_opt` launch over that chunk's range (the same Args the
+#: whole-buffer `opt_step` builds; the host scalars computed ONCE per step), the
+#: chunk DMAd into a pinned half; the host reads chunk c - 1 out of the other half
+#: while the GPU does chunk c. Main runs upload-all, launch, then the pipelined
+#: download, so the host idles through both 64 MB DMAs and the launch (~5-6 ms of
+#: a ~20 ms step at the board's 16,777,216 floats, docs/apple-fast/notes/
+#: gap-optim.md); here only the first chunk's GPU work is exposed. `op_opt` is
+#: per element (sequence/ops.mojo), so a chunked launch computes the same bits.
+#: Chunk = OPT_PIPE_CH (8 MB; -D MOJOLEARN_OPT_FAST_PIPE_CH sets it): a transfer
+#: granularity, not a board-size window. Uploads follow OPT_RAW_UP (raw host
+#: pointers) when that is named, else a memcpy into two pinned stage pairs.
+#: Prior: none (new). Source: this branch.
+#: Wins over the reference only on the host-bound transport; the floor stays
+#: the single-thread read of write-combined pinned memory (~13 ms / 64 MB).
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab2 @ 40027eb8e): STREAM together with OPT_RAW_UP (the pair):
+#: rmsprop 185.3 -> 179.1 ms, adagrad 185.6 -> 179.3, adamax 194.8 -> 190.1,
+#: nadam 194.8 -> 185.7; output digests identical A == B. STREAM alone (staged
+#: uploads) was slower: rmsprop 185.6 -> 187.3, adagrad 185.5 -> 195.6, adamax
+#: 192.4 -> 217.3, nadam 192.7 -> 201.9. KEEP the pair: both are the FAST + Apple
+#: default since then; rollback -D MOJOLEARN_OPT_FAST_STREAM_OFF and
+#: -D MOJOLEARN_OPT_RAW_UP_OFF, each on its own (STREAM_OFF alone leaves the
+#: measured-noise RAW_UP; RAW_UP_OFF alone leaves the slower staged STREAM).
+comptime OPT_STREAM = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_FAST_STREAM_OFF"]()
 
 #: the handle kinds
 comptime RES_ELEMENTWISE = 1
@@ -447,6 +481,107 @@ def _download_all(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) ra
     ex.sync()
 
 
+def _opt_args(cfg: OptConfig, mut st: OptState, t: Int, lr: Float32, P: FP, G: FP, s1: FP, s2: FP,
+              s3: FP) -> Args:
+    """OPT_STREAM: the Args `sequence/recurrent.mojo::opt_step` builds for one
+    whole-buffer launch, field for field (the scalars advanced once)."""
+    var a = Args()
+    a.p0 = P
+    a.p1 = G
+    a.p2 = s1
+    a.p3 = s2
+    a.p4 = s3
+    a.i0 = cfg.kind
+    a.i1 = t
+    a.i2 = cfg.flags
+    a.f0 = lr
+    a.f1 = cfg.f1
+    a.f2 = cfg.f2
+    a.f3 = cfg.eps
+    a.f4 = cfg.wd
+    var sc = opt_scalars(cfg, st, t, lr)
+    a.f5 = sc[0]
+    a.f6 = sc[1]
+    a.f7 = sc[2]
+    return a
+
+
+def _stream_step(mut ex: DeviceExec, a0: Args, ps: List[Int], gs: List[Int], sizes: List[Int]) raises:
+    """OPT_STREAM: chunk c's uploads, its `op_opt` launch and its DMA into a
+    pinned half are queued, then the host reads chunk c - 1 out of the other
+    half, then one wait. A stage of parity c & 1 was last used by chunk c - 2,
+    whose DMA ended at that chunk's wait (uploads) and whose host read came
+    before chunk c - 1's wait (download). Returns with every byte in the
+    caller's arrays. a0.p0 .. p4 are the flat P, G, s1, s2, s3."""
+    var hi = List[Int]()
+    for _ in range(6):
+        hi.append(_pool_host(ex.ctx, OPT_PIPE_CH))
+    var pool = X_SEQUENCE_POOL.get_or_create_ptr()
+    # 0, 1: parameter stages; 2, 3: gradient stages; 4, 5: download halves
+    var stg = List[Int]()
+    for k in range(6):
+        stg.append(Int(pool[].host[hi[k]].unsafe_ptr()))
+    var P = a0.p0
+    var G = a0.p1
+    var c = 0
+    var have_prev = False
+    var prev_dst = 0
+    var prev_cnt = 0
+    var prev_half = 0
+    var off = 0
+    for j in range(len(sizes)):
+        var done = 0
+        while done < sizes[j]:
+            var cnt = min(OPT_PIPE_CH, sizes[j] - done)
+            var par = c & 1
+            var o = off + done
+            var hp = FP(unsafe_from_address=ps[j] + done * 4)
+            var hg = FP(unsafe_from_address=gs[j] + done * 4)
+            var fpp = ex._find(P + o, cnt)
+            var vp = ex._sub(fpp[0], fpp[1], cnt)
+            var fgg = ex._find(G + o, cnt)
+            var vg = ex._sub(fgg[0], fgg[1], cnt)
+            comptime if OPT_RAW_UP:
+                ex.ctx.enqueue_copy(dst_buf=vp, src_ptr=hp)
+                ex.ctx.enqueue_copy(dst_buf=vg, src_ptr=hg)
+            else:
+                var sp = FP(unsafe_from_address=stg[par])
+                var sg = FP(unsafe_from_address=stg[2 + par])
+                memcpy(dest=sp, src=hp, count=cnt)
+                memcpy(dest=sg, src=hg, count=cnt)
+                ex.ctx.enqueue_copy(dst_buf=vp, src_ptr=sp)
+                ex.ctx.enqueue_copy(dst_buf=vg, src_ptr=sg)
+            var a = a0
+            a.p0 = a0.p0 + o
+            a.p1 = a0.p1 + o
+            a.p2 = a0.p2 + o
+            a.p3 = a0.p3 + o
+            a.p4 = a0.p4 + o
+            ex.launch[OP_OPT](a, cnt)
+            ex.ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=stg[4 + par]), src_buf=vp)
+            _ = vg^
+            _ = vp^
+            if have_prev:
+                # overlaps chunk c's uploads, launch and DMA
+                memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
+                       count=prev_cnt)
+            ex.ctx.synchronize()
+            have_prev = True
+            prev_dst = ps[j] + done * 4
+            prev_cnt = cnt
+            prev_half = par
+            done += cnt
+            c += 1
+        off += sizes[j]
+    if have_prev:
+        memcpy(dest=FP(unsafe_from_address=prev_dst), src=FP(unsafe_from_address=stg[4 + prev_half]),
+               count=prev_cnt)
+    for k in range(6):
+        _pool_release_host(hi[k])
+    # the executor's own bookkeeping (the queue is empty)
+    ex.sync()
+
+
 def opt_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: PythonObject,
                          fp: PythonObject) raises -> PythonObject:
     """One element-wise step with the state on the device.
@@ -490,12 +625,18 @@ def opt_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: PythonOb
     var ex = DeviceExec()
     var P = ex._alloc(n, False)
     var G = ex._alloc(n, False)
-    _upload_all(ex, P, G, pg[0], pg[1], sizes)
-    var s1 = _slot_ptr(h, 0) if u[0] else P
-    var s2 = _slot_ptr(h, 1) if u[1] else P
-    var s3 = _slot_ptr(h, 2) if u[2] else P
-    opt_step(ex, cfg, st, t, fval(fp, 0), P, G, s1, s2, s3, n)
-    _download_all(ex, P, pg[0], sizes)
+    comptime if OPT_STREAM:
+        # an unused slot names P (never read by op_opt for that kind)
+        var a0 = _opt_args(cfg, st, t, fval(fp, 0), P, G, _slot_ptr(h, 0) if u[0] else P,
+                           _slot_ptr(h, 1) if u[1] else P, _slot_ptr(h, 2) if u[2] else P)
+        _stream_step(ex, a0, pg[0], pg[1], sizes)
+    else:
+        _upload_all(ex, P, G, pg[0], pg[1], sizes)
+        var s1 = _slot_ptr(h, 0) if u[0] else P
+        var s2 = _slot_ptr(h, 1) if u[1] else P
+        var s3 = _slot_ptr(h, 2) if u[2] else P
+        opt_step(ex, cfg, st, t, fval(fp, 0), P, G, s1, s2, s3, n)
+        _download_all(ex, P, pg[0], sizes)
     sc.unsafe_store(0, st.pw1)
     sc.unsafe_store(1, st.pw2)
     sc.unsafe_store(2, st.mu_prod)

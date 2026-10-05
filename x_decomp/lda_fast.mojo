@@ -89,8 +89,28 @@ def lfs_v_cap_rule() -> Int:
     return v
 
 
-#: Largest vocabulary (and so nonzero count) a document keeps in threadgroup memory.
-comptime LFS_V_CAP = 320 if is_defined["MOJOLEARN_LDA_V_CAP_RULE_OFF"]() else lfs_v_cap_rule()
+#: Apple threadgroup memory limit (32 KB; Metal refuses larger pipelines).
+comptime LFS_SMEM_BYTES = 32768
+#: Threadgroup bytes of lfs_kernel that do not scale with v: ds/es/dif
+#: (3 x K_CAP f32), cnt (TPD + 1 i32), misc (2 f32), done (1 i32), per document.
+comptime LFS_SMEM_FIXED = LFS_DPB * (3 * LFS_K_CAP * 4 + (LFS_TPD + 1) * 4 + 2 * 4 + 4)
+#: Largest vocabulary (and so nonzero count) a document keeps in threadgroup
+#: memory: idx (i32) + sw (f32) per word per document, filling what is left
+#: of LFS_SMEM_BYTES, rounded down to a multiple of 32 (928). Kernel limit.
+#: LEGACY, default OFF: the old cap 320 sat just above the taxi-zones
+#: vocabulary (at most 300). Removed as benchmark-tuned on 2026-10-04; the
+#: larger cap is UNMEASURED (more threadgroup memory per block).
+#: Merge 2026-10-05: both sides removed the taxi-tuned 320. main's full-page
+#: cap is the default; the IDENTICAL-side half-page rule above (two blocks
+#: resident per core, 416) is `-D MOJOLEARN_LDA_V_CAP_HALF_PAGE`; either
+#: side's rollback (`MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V` or
+#: `MOJOLEARN_LDA_V_CAP_RULE_OFF`) restores 320.
+comptime LFS_V_CAP = 320 if (
+    is_defined["MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V"]() or is_defined["MOJOLEARN_LDA_V_CAP_RULE_OFF"]()
+) else (
+    lfs_v_cap_rule() if is_defined["MOJOLEARN_LDA_V_CAP_HALF_PAGE"]()
+    else (LFS_SMEM_BYTES - LFS_SMEM_FIXED) // (LFS_DPB * 8) // 32 * 32
+)
 #: Persistent blocks (each owns one k x v partial of the statistics).
 comptime LFS_BLOCKS = 2048
 

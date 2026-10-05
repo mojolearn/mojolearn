@@ -619,6 +619,14 @@ class NearestCentroid(_XNeighbors):
 
     def predict_proba(self, X):
         dec = self.decision_function(X)
+        if hasattr(self._bind(), "xn_softmax64"):
+            # lane apple-fast-q-clf (x_neighbors/proba64_nc.mojo, QUALITY-FIX, FAST
+            # default; -D MOJOLEARN_PROBA64_QOLD has no export): float64 probabilities,
+            # the winner's 1 - c exact (float32 saturated at 1.0: Istella log loss
+            # 4.299 vs scikit-learn 4.118, accuracy equal)
+            out = empty(dec.shape, "<f8")
+            self._op("softmax64", [(dec, 0), (out, 1)], dec.shape)
+            return out
         out = empty(dec.shape, "<f4")
         self._op("softmax", [(dec, 0), (out, 1)], dec.shape)
         return out
@@ -1635,7 +1643,11 @@ class KNNImputer(_XNeighbors):
         colmiss_only=1 (fit): a build with MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY
         may skip the cell list; the counts are the same integers."""
         n, d = X.shape
-        cells = empty((max(n * d, 1),), "<i4")
+        # FAST Apple default MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU (_OFF rollback): a binary
+        # whose fit-time op ignores the cell list gets a one-slot one (no
+        # n * d allocation)
+        lean = colmiss_only and int(getattr(self._bind(), "x_neighbors_nc_fit_lean", lambda: 0)())
+        cells = empty((1 if lean else max(n * d, 1),), "<i4")
         colmiss = empty((max(d, 1),), "<i4")
         info = empty((1,), "<i4")
         self._op("nan_cells", [(X, 0), (cells, 1), (colmiss, 1), (info, 1)], (n, d, colmiss_only))
@@ -1835,6 +1847,20 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         # and labels as the dense matrix's, without building or scanning it
         indptr, indices, n = csr
         lab = _p2m_iota(est, n)
+        if _cc_fast_tier(est):
+            # lane/apple-fast-graph (2026-10-02), FAST on Apple only: two
+            # info words. Under CC_FAST (default; `-D MOJOLEARN_CC_FAST_OFF` rolls back) the device compacts the
+            # labels itself in order of first appearance (`_cc_relabel`'s
+            # integers) and puts n_components + 1 in info[1]; info[1] == 0
+            # means the binding's main path ran and `lab` still needs
+            # `_cc_relabel` (zeros, not empty: the main path never writes
+            # info[1]).
+            info = zeros((2,), "<i4")
+            est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
+            k1 = int(info.tolist()[1])
+            if k1 > 0:
+                return (k1 - 1, lab) if return_labels else k1 - 1
+            return _cc_relabel(lab, return_labels, est)
         info = empty((1,), "<i4")
         est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
         return _cc_relabel(lab, return_labels, est)
@@ -1853,6 +1879,14 @@ def _p2m_iota(est, n):
     if n > 0:
         est._op("p2m_iota", [(lab, 1)], (n,))
     return lab
+
+
+def _cc_fast_tier(est):
+    """True on the FAST tier on Apple (lane/apple-fast-graph): the x_neighbors
+    binding may compact connected_components' labels on the device
+    (CC_FAST, default; rollback `-D MOJOLEARN_CC_FAST_OFF`). IDENTICAL and the other vendors never come
+    through the branch this gates."""
+    return est.numeric_mode_used() == "fast" and est.vendor_used() == "metal"
 
 
 def _cc_relabel(lab, return_labels, est):

@@ -95,6 +95,7 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from gbdt.gpu_data.sym_feat_switches import GBDT_BOOT_DEVICE
 
 from gbdt.gpu_util.kernel.random_gen import (
     next_poisson_f,

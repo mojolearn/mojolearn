@@ -1,0 +1,345 @@
+CLAUDE HANDOFF — APPLE FAST MANAGER
+Snapshot: 2026-10-04. Recheck live state before acting.
+
+1. USER INTENT AND OPERATING CONSTRAINTS
+
+You are the Apple FAST manager. Continue candidate recovery, M2 builds, M3
+serialized quality/timing, inline result comments, main integration and board
+promotion when justified. The user explicitly authorizes subagents and wants
+work completed, committed and pushed as it progresses.
+
+Do not contact the external peer/other conversation. Preserve its existing
+queue entries and avoid duplicate jobs. Our own delegated agents are allowed.
+No laptop development: no local source reads/edits, tests, builds or scans.
+Laptop SSH remote control was accepted. Use M2 for source/builds; M3 for
+serialized numerical work. Do not silently run measurements on M2.
+
+One scored call per arm under the applicable original board protocol. Do not
+replay completed scored arms/opponents. Resample original board protocol has
+one unscored warmup (round0), one scored call (round1), then save/quit.
+Keep quality gates unchanged, with zero regression allowance where specified.
+Do not enable losers globally or add dataset-name-specific dispatch.
+Do not confuse kernel/probe PASS with estimator quality or board wins.
+
+2. ACCESS AND REPOSITORY TOPOLOGY — PUBLICATION IS NOT FINISHED
+
+SSH from the controlling machine:
+  ssh -i /Users/andrewhendel/.ssh/mambik-l8.pem ec2-user@54.237.205.45  # M2
+  ssh -i /Users/andrewhendel/.ssh/mambik-l8.pem ec2-user@54.157.1.251   # M3
+
+Actual GitHub repository: https://github.com/mojolearn/mojolearn.git
+GitHub main last verified: cb88add1c0a78b29a4c7286c01e6be0598646ff6.
+M2 bare main BEFORE THIS HANDOFF COMMIT:
+  41a378a43e781fbb55d4b044ca817baa40cdf877
+This handoff is committed as its direct successor; resolve the live main SHA.
+
+IMPORTANT: M2 ~/mojolearn.git and M3 ~/mojolearn.git are independent bare Git
+repositories ON THOSE MACHINES. They are NOT GitHub. Normal ~/mojolearn clones
+use the same-machine bare repository as origin. The bare repositories have
+no configured GitHub remote. A successful push to them is not publication
+or off-machine backup.
+
+Main integration worktree on M2:
+  ~/m2c/apple-fast-outcomes-integration
+  branch integration/apple-fast-outcomes-20261004
+It shares M2 bare repository storage and has no origin remote. Push explicitly:
+  git -C ~/m2c/apple-fast-outcomes-integration push ~/mojolearn.git HEAD:main
+It was clean at snapshot. Do not use older ~/mojolearn/main as current source.
+
+Other M2 worktrees:
+  ~/apple-fast-manager-remote                   # older manager branch
+  ~/apple-fast-arima-k3-df-gpu-remote            # compiled fe5 source
+  ~/apple-fast-softmax-g2-narrow
+  ~/m2c/mcd-g1-gram-remote
+  ~/m2c/resample-gpu-harness-r1                  # belongs normal clone storage
+  ~/m2c/scoped-pca-remote-harness
+Use git worktree list and branch inspection remotely. Not every worktree
+shares the same .git storage, so check before updating refs.
+
+Neither remote currently has gh installed. No GH_TOKEN/GITHUB_TOKEN was
+present in tested SSH environments. Both HTTPS push --dry-run attempts failed:
+  fatal: could not read Username for 'https://github.com': terminal prompts disabled
+M2 ssh -T git@github.com: Permission denied (publickey).
+M3 SSH GitHub test stopped at host-key verification.
+Earlier session tested forwarded SSH agent to M2; its keys did not authenticate
+GitHub. Public HTTPS reads work. Do not claim M3 SSH credentials were exhaustively
+ruled out: HTTPS was definitively unauthenticated, SSH host verification blocked.
+
+There is NO PyPI release task. Need GitHub repository write authentication only:
+authorized SSH key/deploy key, fine-grained repository Contents write token
+through a credential helper, or an authorized forwarded agent. Do not request
+tokens in chat, read laptop credentials without authorization, or bypass branch
+protection. Inspect GitHub main/rules after authentication; fetch and reconcile
+any new commits before push. User already authorized commit/push/main integration.
+
+Highest operational debt: publish remote-only work to GitHub and VERIFY refs.
+Preserve all existing remote repositories until every relevant commit is reachable
+from GitHub. Do not delete mirrors/worktrees assuming successful local push backed
+them up. Configure clearly named GitHub vs build-mirror remotes after inventory.
+
+3. LIVE M3 QUEUE AND WATCHER
+
+Snapshot: position1863, total1875,12 pending after the claimed current job.
+Current:
+  opp9-algos on lane/apple-fast-opp
+  opponent-only knn-imputer:istella and quantile:istella
+  round/budget7200s, race-deadline14400s
+This existing job may run a long time. Root did not submit or restart this sweep.
+
+Pending after it:
+  vsearch-refine-team-taxi-x
+  py2mojo-cluster-ivf-refine-taxi
+  vsv-filter-taxi
+  vsv-rabitq-istella, vsv-rabitq-taxi
+  vsv-pq-istella, vsv-pq-taxi
+  vsv-sq-istella, vsv-sq-taxi
+  vsv-ivf-istella, vsv-ivf-taxi
+  ident-ivf-refine-taxi
+
+Queue files:
+  ~/mq.sh                         # runner, root PID92814 at snapshot
+  ~/mq/queue.txt                  # includes historical/completed jobs
+  ~/mq/pos                        # 1-based claimed current position
+  ~/mq/results.txt
+  ~/mq/out/
+  ~/mq/queue_insert.py            # JSON array of CMD lines; --immediate
+  ~/mq/apple_fast_pinned_job.py
+  ~/mq/apple_fast_job_policy.py
+  ~/mq/apple_fast_job_preflight.py
+
+Do not assume total1875 means1875 pending jobs. A child bash mq.sh under92814
+is not necessarily a duplicate runner; inspect parentage before killing anything.
+
+Existing watcher:
+  ~/mq/af_m3_watchdog.py
+  ~/mq/watchdog-state.json
+  ~/mq/watchdog.log
+  cron every20minutes with --recover.
+Last snapshot check19:40UTC: no alerts, one root runner, free10.9GiB.
+It checks missing runner, progress, disk and duplicate roots; safe missing-runner
+restart refuses surviving workers and does not replay interrupted jobs.
+It does NOT publish results, promote defaults or automatically admit candidates.
+Do not create another watcher.
+
+Use existing serial transfer windows for artifacts, large hashes, heavy staging:
+  python3 ~/mq/serial_transfer_window.py TAG
+Wait ~/mq/transfer-windows/TAG/ready.json, then stage; always touch release.
+All windows created by root were released, including manager-resample-header-stage-v1.
+
+Insert only validated jobs. Common prepared branch for pinned jobs:
+  lane/apple-fast-eigh-panels @ e79a96e03
+  CMD lane/apple-fast-eigh-panels TAG python3 ~/mq/apple_fast_pinned_job.py H SCRIPT ARGS
+K3 explicitly prefixes env MOJOLEARN_NUMERIC_MODE=fast.
+Avoid advancing M3 lane/apple-fast blindly: legacy ensure_so jobs can rebuild
+all bindings when its source tip moves. New manager jobs use prebuilt hash-verified
+artifacts and pinned source instead.
+
+4. THE LARGE SWEEP IS IDENTICAL, NOT A FRESH FAST BOARD
+
+Verified351 unique ident-* jobs in queue. They use AFC_ARM=ours (IDENTICAL),
+not ours-fast. Last ident-ivf-refine-taxi remains pending after vector jobs.
+They are our implementation-only baseline runs, not all candidate comparisons
+or refreshed opponents. Queue wrapper rc0 alone is not quality certification;
+read underlying race results. No automatic board consolidation was verified.
+
+The user wants these measurements retained, then selective FAST runs only for
+changed candidates. Do not rerun the full FAST board merely to refresh it.
+Existing board:
+  ~/board-0834/board/board.json
+  ~/board-0834/board/BOARD.md
+Race output:
+  ~/mq/out/race-ident-*/A-1/res/
+  ~/mq/out/race-ident-*/race.log
+Driver tools/afc_ab.sh is a wrapper; read actual status/quality receipts.
+
+Last established FAST headline351/377 eligible comparisons faster,
+26slower, geomean ratio0.225. AutoARIMA taxi quality-held exclusion means
+raw slower count may be27. No new promotion from the recovered work below.
+Do not conflate351 ident jobs with351 winning FAST rows.
+
+5. COMPLETED RECOVERED CANDIDATES AND EXACT EVIDENCE
+
+A. GPU RESAMPLE GATHER — QUALITY PASS, MIXED TIMING, DEFAULT OFF
+
+Recovered genuinely missed GPU gather from old branch50b96e795.
+Distinct from rejected host RESAMPLE_FAST_ROW_GATHER.
+Compiled source:
+  7eacaa2b2c1a6fa84fa3aa6e4b7d6c14b2d0d817
+Flag: MOJOLEARN_RESAMPLE_FAST_GATHER, FAST+Apple only.
+M2 and M3 artifact roots respectively:
+  ~/m2-arms/SOURCE/resample/{A.so,B.so,manifest.json}
+  ~/mq/verified-arms/SOURCE/resample/{A.so,B.so,manifest.json}
+Same-source IDENTICAL ibase:
+  SOURCE/ibase/{_mojolearn.so,manifest.json}
+A flags empty; B -D MOJOLEARN_RESAMPLE_FAST_GATHER.
+
+Quality PASS:
+  ~/mq/out/resample-gpu-recovered-q-r2-20261004-quality/PASS.json
+  SHA84812e78275dff3dc61625b4d07dc8ae4ae7327950e5de03e063f7ab285165fe
+Quality H7d66c0a052cd55d97b984caf521af32f5d12e229.
+r1 failed harness exception capture on a deliberate native refusal, not a numeric
+mismatch; fixed capture preserves exact refusal type/message comparison.
+
+Timing H0c7066aae73f995cd3cf4894ec181e10fe74ef7a.
+Original r1 timing attempts failed NumPy private header API before ANY scoring.
+Fixed public header reader; fresh r2 tags completed:
+  taxi: A68.48829198861495ms -> B58.8205840322189ms
+  istella: A390.82008303375915ms -> B805.391583009623ms
+Both receipts PASS output means/digests; matched board warmup then one score.
+DO NOT RERUN THESE SCORED ARMS.
+Paths:
+  ~/mq/out/resample-gpu-recovered-t-taxi-r2-20261004-timing/PASS.json
+  ~/mq/out/resample-gpu-recovered-t-istella-r2-20261004-timing/PASS.json
+SHA taxi a8077db5a76c48ed431a7736597fe241d301aa1f01aa20f255d10c67431aeaea
+SHA istella28e20bec22f34b67c1b8123f1d71ead38a4e402946777554f09fa412eadfd7c7
+
+Latest integrated commit41a378a43 records this beside RESAMPLE_GPU_GATHER,
+plus experiment ledger/intake/ab doc. Global activation rejected due wide-row
+regression. A future metadata/shape-scoped variant must be a separately justified
+candidate, not a dataset-name switch or replay of unchanged code.
+
+B. COMPENSATED ARIMA K3 PRIVATE GPU KERNEL — QUALITY PASS ONLY
+
+Compiled source fe5df7ab075883123c57f561fb35e9cc6838a71a.
+M2 built arima FAST A default-off and B:
+  -D MOJOLEARN_ARIMA_FAST_K3_DF_PROBE
+Artifacts source/arima/{A.so,B.so,manifest.json}, same M2/M3 roots as above.
+A hash ca7abec59ae127cc495dda52e3222ecafaf1452bfad5455129a9b40e38b8737d
+B hash 89ebe3e6515ec3293caf87b781a5db118d44e12f9f1cee86f0e81df3713bad61
+
+Completed M3:
+  ~/mq/out/arima-k3-df-gpu-q-v1.json
+  SHA1b6dad1eec707862ce23ac4f2580e5d3db8082b95171dabc6ca8edcb87b1d537
+13 groups +4controls PASS, zero error degradation, actual GPU retained low-word
+gradient. product_dispatch=false, scored_timings=0.
+Baseline preserved:
+  ~/mq/out/arima-k3-actual-tail-quality-quality/kernel-quality.json
+  SHA0bb5fa599ca808fd5d51c3dcc854c83edcc411f527e64dbf3744a53a7cf0e4ec
+Original production scalarK3 HOLD49worse gradient components is separate.
+Do not replace it with a kernel-only PASS claim.
+Private ABI3, direct hash-verified extension import.
+Next: production layout/initializer/Jones/optimizer integration, full fit/forecast
+quality and numerical controls, then timing. No speedup claim yet.
+Inline outcome comments included from2dd6e92c618a7baa7c75d035631a926d2a31eb33.
+
+C. SCOPED GEMM / PCA
+
+Compiled scoped adapter28f06e1923cfa164fd068c31b0f986ff0126d306.
+Quality H5776a5d1cb161ceb2dee9059b6d862a843ebb292:
+  ~/mq/out/scoped-r2-all-q-v1-quality/report.json
+PASS28metadata fixtures/38output checks; mechanism coverage, not estimator win.
+
+Actual PCA.fit compiled201fe7367461af236f4adf0331f367d8a02cd29d,
+estimators binding; A audit, B audit+G1_GRAM+SPLIT+PCA.
+  ~/mq/out/scoped-pca-fit-istella-q-v1-quality/
+HOLD on saved metrics including singular/noise regression. Eigen residuals
+3.50994e-5 ->3.50092e-5 both exceed5e-6. NumPy bool serialization also caused
+partial invalid JSON; do not use rc or partial file as PASS.
+Saved outputs/oracle exist; no refit needed.
+Recovery helper H4c69e43874f1ee486209fb26124f8b6e798c958a:
+  tools/scoped_pca_recover.py H scoped-pca-fit-istella-recover-v1
+M2 spec ~/mojolearn-evidence/scoped-pca-recovery/preflight.json.
+Recovery remains unexecuted; deploy policy reference and run serially if needed.
+It preserves partial report and reconstructs separate provenance without native
+imports, GPU fits, data reread or timing. Exit0 means reconstruction succeeded,
+NOT quality PASS.
+
+Earlier actual public PCA transform/inverse diagnostics all qualityPASS:
+  G1 transform32.633750 ->29.887000ms
+  G1 inverse34.177417 ->36.050709ms (slower)
+  G5 transform32.698166 ->30.608875ms
+  G5 inverse35.538000 ->36.727542ms (slower)
+Cold+first-output-read, board_evidence=false. Not PCA-fit board evidence.
+Full details and report hashes docs/apple-fast/GEMM_INLINE_OUTCOMES.md.
+
+6. NEW ALGORITHM-SPECIFIC GEMM CANDIDATES — COMMITTED, UNBUILT, UNQUEUED
+
+Softmax narrow:
+  source4bfc1424aceae9900bef38d54833cf67f5b45a17
+  lane/apple-fast-softmax-g2-narrow
+  comments574b63b8a136d55074a959377eff1af6da3f9a1b, integrated.
+Actual glm/impl/qn/glm_base.mojo linear_fwd multiclass X @ weights.T,
+M>=4096, classes2..16, features128..512. Preserves bias/transpose, binary GEMV
+and incumbent fallback. Flag MOJOLEARN_SOFTMAX_FAST_G2_NARROW.
+Binding estimators; A -D MOJOLEARN_SOFTMAX_G2_AUDIT;
+B additionally -D MOJOLEARN_SOFTMAX_FAST_G2_NARROW.
+tools/softmax_g2_quality.py: actual qn_fit/decision captures, eight cases, route
+counters, independent FP64 loss/gradient/score/accuracy, zero-regression gates.
+docs/apple-fast/ab/softmax-g2-narrow.md.
+KMeans plain GEMM adapter rejected as NO_REACH: actual assignment is fused SIMT;
+do not force a materialized GEMM path merely to claim candidate reach.
+
+MCD/EE Gram:
+  source35c712d9cfe74b6a603b19d71cfaaa635ec45abb
+  lane/apple-fast-mcd-g1-gram-remote
+  comments5d5a06c697ead44094e125f17d35f83c0b3be715, integrated.
+Actual batched phaseA/B covariance, TN aliased self-Gram dimensions129..256,
+K128..1023, non-split. Existing phaseC/split/precision/Mahalanobis/taxi preserved.
+Binding x_decomp; A -D MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT;
+B additionally -D MOJOLEARN_MCD_FAST_G1_GRAM.
+Audit exports eligible/selected launch counts.
+docs/apple-fast/ab/mcd-g1-gram.md.
+Needs gated matrix quality, actual fitted-state/support/rank quality, then timing.
+Not the held PCA atomic-Gram or ordered-MCD retry.
+
+Both candidates must be compiled on M2 then staged/admitted on M3. They are NOT
+automatically in the queue merely because source was merged. M2 currently idle.
+
+7. WHAT WAS INTEGRATED
+
+M2main integration892863fc8, then latest resample outcomes41a378a43.
+53 files in initial integration; resolved ledger/policy conflicts additively.
+Included resample, scoped decomp/PCA, compensatedK3, MCDG1, softmaxG2,
+quality/recovery/spec helpers and manager policy.
+Precise inline outcome comments beside surviving flags including:
+  resample, PCA/decomp, softmax, MCD, ARIMA,
+  MBK_LABRG, CHOL_NB512, SVGP_BSPLIT, PREP2_EIGH, optional MoE/LSTM.
+Held/unmeasured candidates remain off. Existing accepted defaults/rollback
+switches preserved. Archived removed losers were NOT recreated just for comments.
+No board cell/default promotion from this integration.
+
+Validation:17Python ASTs, conflict-marker and whitespace checks, no-host-routes
+hook PASS; header reader metadata regression check v1/v2 PASS.
+Combined native compilation remains outstanding, as do new MCD/softmax builds.
+Do not call source integration binary qualification.
+
+Key docs:
+  docs/apple-fast/EXPERIMENTS.md
+  docs/apple-fast/CONSOLIDATED_CANDIDATE_QUEUE_2026-10-04.md
+  docs/apple-fast/REMOTE_MANAGER_STATUS_20261004.txt (chronological snapshots)
+  docs/apple-fast/GEMM_INLINE_OUTCOMES.md
+  docs/apple-fast/ab/*
+Read later outcome entries as superseding earlier chronological pending notes.
+
+8. RECOMMENDED NEXT ACTIONS, IN ORDER
+
+1. Secure off-machine publication. Inventory branches/worktrees and latest refs;
+   fix authenticated GitHub push without using prohibited local development.
+   Fetch latest GitHubmain, preserve ancestry, publish integration + outstanding
+   useful branches, verify GitHub refs. Do not force-push over unrelated work.
+2. Build combined default paths and the two new algorithm-specific GEMM A/B
+   candidates on M2. Freeze source SHA first; separate worktrees; one build at
+   a time. Preserve all artifacts/manifests and original evidence.
+3. Queue actual-caller quality after preflight/staging; only successful quality
+   admits selective FAST timing. No full FAST rerun.
+4. Progress K3 from private kernel into production, with unchanged quality gates.
+5. Recover PCA report from saved outputs without rerunning fits; preserve HOLD.
+6. Reconcile IDENTICAL sweep into board only after actual result/quality audit.
+   Keep IDENTICAL, FAST and opponent evidence separate; don't manufacture fresh
+   comparisons by mixing incompatible source/protocol measurements.
+7. Update inline toggle comments and ledgers on every judged result; promote
+   only proven defaults and update board accordingly; publish those commits.
+
+Resource notes: M2 free6.9GiB at snapshot; M3 last watcher free10.9GiB.
+Do not delete evidence or active worktrees to free space. Verify disposable
+outputs before cleanup. M3 lacks rg; use Python/grep. M2 detached builds need
+Python subprocess.Popen(start_new_session=True, stdin=DEVNULL, log files);
+nohup previously failed on this macOS session. Existing SDK env:
+  ~/m2c/lane_apple-fast-resample-gpu-recovery/.pixi
+Root reused it via a .pixi symlink for K3; do not delete the donor.
+
+COMMUNICATION REQUIREMENT
+Be direct about what is running, queued, merely source-ready, integrated locally,
+or actually published to GitHub. Prior updates blurred these and frustrated the
+user. Do not say "pushed main" without naming GitHub vs same-machine repository.
+Do not claim all candidates are running while M2 is idle and new ones unqueued.

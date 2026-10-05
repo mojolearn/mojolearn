@@ -10,7 +10,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import mat_from
@@ -987,3 +987,21 @@ def numeric_mode_py() raises -> PythonObject:
 
 def vendor_py[E: Exec]() raises -> PythonObject:
     return PythonObject(E.vendor())
+
+
+def fast_defines_py() raises -> PythonObject:
+    """The recovered Apple FAST switches the Python linalg doors read
+    (lane/apple-fast-rec-decomp, 2026-10-04; from
+    lane/apple-fast-decomp-linalg@74d52352b), comma-joined: the build's
+    `-D MOJOLEARN_QR_FAST_DEV` / `-D MOJOLEARN_SVD_FAST_CHOLQR` under FAST, so
+    `linalg.qr` / `linalg.svd` pick the FAST kit route with no env read
+    (`_kit_fast_define` in python/mojolearn/_expansion_decomp.py, which also
+    requires the Metal vendor). Empty for an IDENTICAL build and for a FAST
+    build with neither."""
+    var s = String("")
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        comptime if is_defined["MOJOLEARN_QR_FAST_DEV"]():
+            s += "MOJOLEARN_QR_FAST_DEV,"
+        comptime if is_defined["MOJOLEARN_SVD_FAST_CHOLQR"]():
+            s += "MOJOLEARN_SVD_FAST_CHOLQR,"
+    return PythonObject(s)
