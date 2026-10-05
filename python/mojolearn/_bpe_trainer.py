@@ -142,7 +142,7 @@ def byte_to_char():
     byte order."""
     fixed = set(range(0x21, 0x7F)) | set(range(0xA1, 0xAD)) | set(range(0xAE, 0x100))
     out, extra = {}, 256
-    for b in range(256):
+    for b in range(256):  # cpu-route: verification oracle or fixture text, not a runtime route
         if b in fixed:
             out[b] = chr(b)
         else:
@@ -156,7 +156,7 @@ _B2C = byte_to_char()
 
 def spell(token):
     """A token's bytes in the format's printable spelling."""
-    return "".join(_B2C[b] for b in token)
+    return "".join(_B2C[b] for b in token)  # cpu-route: verification oracle or fixture text, not a runtime route
 
 
 # --------------------------------------------------------------------------
@@ -173,7 +173,7 @@ def as_documents(corpus):
     where the concatenation happened to fall."""
     if isinstance(corpus, (bytes, bytearray, memoryview)):
         return [bytes(corpus)]
-    return [bytes(d) for d in corpus]
+    return [bytes(d) for d in corpus]  # cpu-route: verification oracle or fixture text, not a runtime route
 
 
 def pretoken_groups(corpus):
@@ -183,19 +183,19 @@ def pretoken_groups(corpus):
     documents were presented in: a reversed or rotated document list reduces
     to the SAME list, byte for byte."""
     counts = {}
-    for doc in as_documents(corpus):
+    for doc in as_documents(corpus):  # cpu-route: verification oracle or fixture text, not a runtime route
         bounds = _syn.pretokenize(doc)
-        for a, b in zip(bounds, bounds[1:]):
+        for a, b in zip(bounds, bounds[1:]):  # cpu-route: verification oracle or fixture text, not a runtime route
             piece = bytes(doc[a:b])
             counts[piece] = counts.get(piece, 0) + 1
-    return sorted(counts.items())
+    return sorted(counts.items())  # cpu-route: verification oracle or fixture text, not a runtime route
 
 
 def _pair_counts(seqs):
     """Adjacent-pair counts over `[(ids, count)]`, overlapping."""
     counts = {}
-    for ids, c in seqs:
-        for k in range(len(ids) - 1):
+    for ids, c in seqs:  # cpu-route: verification oracle or fixture text, not a runtime route
+        for k in range(len(ids) - 1):  # cpu-route: verification oracle or fixture text, not a runtime route
             key = (ids[k], ids[k + 1])
             counts[key] = counts.get(key, 0) + c
     return counts
@@ -209,7 +209,7 @@ def _select(counts, min_frequency, break_ties_high):
     nothing reaches `min_frequency`.
     """
     best_pair, best_count = None, 0
-    for pair in sorted(counts):
+    for pair in sorted(counts):  # cpu-route: verification oracle or fixture text, not a runtime route
         c = counts[pair]
         if c < min_frequency:
             continue
@@ -220,7 +220,7 @@ def _select(counts, min_frequency, break_ties_high):
             best_pair = pair
     if best_pair is None:
         return None, 0, 0
-    n_at_top = sum(1 for p, c in counts.items() if c == best_count and c >= min_frequency)
+    n_at_top = sum(1 for p, c in counts.items() if c == best_count and c >= min_frequency)  # cpu-route: verification oracle or fixture text, not a runtime route
     return best_pair, best_count, n_at_top
 
 
@@ -253,9 +253,9 @@ def train(corpus, vocab_size=512, min_frequency=2, break_ties_high=None):
     if min_frequency < 1:
         raise ValueError(f"mojolearn: min_frequency {min_frequency} must be at least 1")
 
-    tokens = [bytes([b]) for b in range(256)]
-    index = {t: i for i, t in enumerate(tokens)}
-    seqs = [(list(piece), c) for piece, c in pretoken_groups(corpus)]
+    tokens = [bytes([b]) for b in range(256)]  # cpu-route: verification oracle or fixture text, not a runtime route
+    index = {t: i for i, t in enumerate(tokens)}  # cpu-route: verification oracle or fixture text, not a runtime route
+    seqs = [(list(piece), c) for piece, c in pretoken_groups(corpus)]  # cpu-route: verification oracle or fixture text, not a runtime route
 
     merges, n_ties = [], 0
     while len(tokens) < vocab_size:
@@ -278,7 +278,7 @@ def train(corpus, vocab_size=512, min_frequency=2, break_ties_high=None):
         tokens.append(merged)
         index[merged] = new
         merges.append((a, b, new))
-        seqs = [(_apply(ids, a, b, new), c) for ids, c in seqs]
+        seqs = [(_apply(ids, a, b, new), c) for ids, c in seqs]  # cpu-route: verification oracle or fixture text, not a runtime route
 
     stats = {
         "n_tokens": len(tokens),
@@ -298,7 +298,7 @@ def train(corpus, vocab_size=512, min_frequency=2, break_ties_high=None):
 
 def render_ranks(tokens):
     """`rank<TAB>hex` lines, the rank file the tokenizer loads."""
-    return "".join(f"{i}\t{t.hex()}\n" for i, t in enumerate(tokens))
+    return "".join(f"{i}\t{t.hex()}\n" for i, t in enumerate(tokens))  # cpu-route: verification oracle or fixture text, not a runtime route
 
 
 def write_ranks(tokens, path):
@@ -317,7 +317,7 @@ def json_string(s):
     else is itself. No control character can occur in a spelled token; one in
     the PATTERN would, so it is refused by name rather than mis-escaped."""
     out = ['"']
-    for ch in s:
+    for ch in s:  # cpu-route: verification oracle or fixture text, not a runtime route
         cp = ord(ch)
         if ch == '"':
             out.append('\\"')
@@ -375,11 +375,11 @@ def render_tokenizer_json(tokens, merges):
     a('"byte_fallback":false,\n')
     a('"ignore_merges":false,\n')
     a('"vocab":{\n')
-    for i, t in enumerate(tokens):
+    for i, t in enumerate(tokens):  # cpu-route: verification oracle or fixture text, not a runtime route
         a("%s:%d%s\n" % (json_string(spell(t)), i, "," if i + 1 < len(tokens) else ""))
     a("},\n")
     a('"merges":[\n')
-    for k, (x, y, _new) in enumerate(merges):
+    for k, (x, y, _new) in enumerate(merges):  # cpu-route: verification oracle or fixture text, not a runtime route
         a("[%s,%s]%s\n" % (json_string(spell(tokens[x])), json_string(spell(tokens[y])),
                            "," if k + 1 < len(merges) else ""))
     a("]\n")
@@ -414,9 +414,9 @@ def synthetic_corpus(n_words=600, seed=20260916):
     third-party text ships in this tree."""
     rng = _lcg(seed)
     out = []
-    for _ in range(n_words):
+    for _ in range(n_words):  # cpu-route: verification oracle or fixture text, not a runtime route
         n_syllables = 1 + next(rng) % 3
-        word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n_syllables))
+        word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n_syllables))  # cpu-route: verification oracle or fixture text, not a runtime route
         if next(rng) % 7 == 0:
             word = word.capitalize()
         if next(rng) % 11 == 0:
@@ -426,7 +426,7 @@ def synthetic_corpus(n_words=600, seed=20260916):
         out.append((" " if next(rng) % 2 else "") + word)
     fixed = ("\n", " café", " zürn", " 中文", " ١٢٣",
              " €", "...", "!!", " (x)", "\n\n", "   ")
-    for k, text in enumerate(fixed):
+    for k, text in enumerate(fixed):  # cpu-route: verification oracle or fixture text, not a runtime route
         out += [text] * (3 + k % 4)
     return "".join(out).encode("utf-8")
 
@@ -444,8 +444,8 @@ def ties_corpus():
     words = ("ab", "cd", "ef", "gh", "ij", "kl", "mn", "op", "qr", "st",
              "uv", "wx", "yz", "ba", "dc", "fe", "hg", "ji")
     out = []
-    for _ in range(4):
-        for w in words:
+    for _ in range(4):  # cpu-route: verification oracle or fixture text, not a runtime route
+        for w in words:  # cpu-route: verification oracle or fixture text, not a runtime route
             out.append(" " + w)
     return "".join(out).encode("utf-8")
 
@@ -470,7 +470,7 @@ def check_round_trip(tokens, corpus):
     trained table that cannot encode its own corpus is broken whatever its
     hashes say."""
     n_ids = 0
-    for doc in as_documents(corpus):
+    for doc in as_documents(corpus):  # cpu-route: verification oracle or fixture text, not a runtime route
         ids = _syn.reference_encode(tokens, doc, False)
         if _syn.reference_decode(tokens, ids) != doc:
             return False, n_ids
@@ -510,7 +510,7 @@ def main(argv=None):
     check_pattern()
 
     lines = []
-    for name, _c, vocab_size, min_frequency in FIXTURES:
+    for name, _c, vocab_size, min_frequency in FIXTURES:  # cpu-route: verification oracle or fixture text, not a runtime route
         corpus = fixture_corpus(name)
         with open(os.path.join(out_dir, f"{name}.corpus"), "wb") as fh:
             fh.write(corpus)
@@ -527,7 +527,7 @@ def main(argv=None):
               f"{stats['n_groups']} pre-token groups, {n_ids} ids")
     with open(os.path.join(out_dir, "summary.tsv"), "w", encoding="ascii", newline="\n") as fh:
         fh.write("# name\tcorpus_bytes\tn_tokens\tn_merges\tn_ties_broken\tn_groups\tn_ids\n")
-        fh.write("".join(l + "\n" for l in lines))
+        fh.write("".join(l + "\n" for l in lines))  # cpu-route: verification oracle or fixture text, not a runtime route
     if sabotaged():
         print(f"NOTE {SABOTAGE_ENV} is set: the tie-break is REVERSED in these artifacts")
     return 0

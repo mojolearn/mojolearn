@@ -67,9 +67,9 @@ def corpus_pieces():
     merges only inside a piece, as it only merges inside a pre-token."""
     rng = _lcg(20260915)
     pieces = []
-    for _ in range(900):
+    for _ in range(900):  # cpu-route: verification oracle or fixture text, not a runtime route
         n_syllables = 1 + next(rng) % 3
-        word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n_syllables))
+        word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n_syllables))  # cpu-route: verification oracle or fixture text, not a runtime route
         if next(rng) % 5 == 0:
             word = word.capitalize()
         if next(rng) % 2 == 0:
@@ -80,28 +80,28 @@ def corpus_pieces():
         ("\n\n", 6), ("   ", 5), ("  ", 5), ("...", 4), ("!!", 3), (" (", 4), (")", 4),
         ("é", 5), (" café", 4), ("ü", 3), (" zürn", 3), ("中文", 4), ("\u0661\u0662\u0663", 3), ("€", 3),
     )
-    for text, count in fixed:
+    for text, count in fixed:  # cpu-route: verification oracle or fixture text, not a runtime route
         pieces += [text.encode("utf-8")] * count
-    for v in (0.0, 1.0, -1.0, 0.5, 2.0):
+    for v in (0.0, 1.0, -1.0, 0.5, 2.0):  # cpu-route: verification oracle or fixture text, not a runtime route
         pieces += [struct.pack("<d", v)] * 3
     return pieces
 
 
 @functools.lru_cache(maxsize=1)
 def _vocabulary():
-    tokens = [bytes([b]) for b in range(256)]
-    index = {t: i for i, t in enumerate(tokens)}
+    tokens = [bytes([b]) for b in range(256)]  # cpu-route: verification oracle or fixture text, not a runtime route
+    index = {t: i for i, t in enumerate(tokens)}  # cpu-route: verification oracle or fixture text, not a runtime route
     grouped = {}
-    for p in corpus_pieces():
+    for p in corpus_pieces():  # cpu-route: verification oracle or fixture text, not a runtime route
         grouped[p] = grouped.get(p, 0) + 1
-    seqs = [(list(p), c) for p, c in sorted(grouped.items())]
+    seqs = [(list(p), c) for p, c in sorted(grouped.items())]  # cpu-route: verification oracle or fixture text, not a runtime route
     while len(tokens) < TARGET_TOKENS:
         counts = {}
-        for s, c in seqs:
-            for a, b in zip(s, s[1:]):
+        for s, c in seqs:  # cpu-route: verification oracle or fixture text, not a runtime route
+            for a, b in zip(s, s[1:]):  # cpu-route: verification oracle or fixture text, not a runtime route
                 counts[(a, b)] = counts.get((a, b), 0) + c
         best = None
-        for pair, c in counts.items():
+        for pair, c in counts.items():  # cpu-route: verification oracle or fixture text, not a runtime route
             if c >= 2 and (best is None or (-c, pair) < best):
                 best = (-c, pair)
         if best is None:
@@ -113,7 +113,7 @@ def _vocabulary():
             new = len(tokens)
             tokens.append(merged)
             index[merged] = new
-        for s, _ in seqs:
+        for s, _ in seqs:  # cpu-route: verification oracle or fixture text, not a runtime route
             k = 0
             while k < len(s) - 1:
                 if s[k] == a and s[k + 1] == b:
@@ -160,7 +160,7 @@ def _decode_cp(data, i):
 
 
 def _is_space(cp):
-    return any(lo <= cp <= hi for lo, hi in WHITE_SPACE)
+    return any(lo <= cp <= hi for lo, hi in WHITE_SPACE)  # cpu-route: verification oracle or fixture text, not a runtime route
 
 
 def _in_class(cp, which):
@@ -192,7 +192,7 @@ def _pretoken_end(data, i):
             return i + 2
         if i + 2 < n and bytes(data[i + 1:i + 3]) in (b"ll", b"ve", b"re"):
             return i + 3
-    for which in ("L", "N", "O"):
+    for which in ("L", "N", "O"):  # cpu-route: verification oracle or fixture text, not a runtime route
         start = i + 1 if data[i] == 0x20 and i + 1 < n else i
         end = _run_end(data, start, which)
         if end > start:
@@ -228,35 +228,35 @@ def _bpe(index, data, start, end, out):
     bounds = list(range(start, end + 1))
     while len(bounds) > 2:
         best_rank, best_at = -1, -1
-        for k in range(len(bounds) - 2):
+        for k in range(len(bounds) - 2):  # cpu-route: verification oracle or fixture text, not a runtime route
             r = index.get(bytes(data[bounds[k]:bounds[k + 2]]))
             if r is not None and (best_at < 0 or r < best_rank):
                 best_rank, best_at = r, k
         if best_at < 0:
             break
         del bounds[best_at + 1]
-    for k in range(len(bounds) - 1):
+    for k in range(len(bounds) - 1):  # cpu-route: verification oracle or fixture text, not a runtime route
         out.append(index[bytes(data[bounds[k]:bounds[k + 1]])])
 
 
 def reference_encode(tokens, data, allow_endoftext=False):
     """The ids of `data` (bytes) under the rank table `tokens`."""
-    index = {t: i for i, t in enumerate(tokens)}
+    index = {t: i for i, t in enumerate(tokens)}  # cpu-route: verification oracle or fixture text, not a runtime route
     eot = ENDOFTEXT.encode()
     segments = data.split(eot) if allow_endoftext else [data]
     out = []
-    for k, seg in enumerate(segments):
+    for k, seg in enumerate(segments):  # cpu-route: verification oracle or fixture text, not a runtime route
         if k > 0:
             out.append(len(tokens))
         bounds = pretokenize(seg)
-        for a, b in zip(bounds, bounds[1:]):
+        for a, b in zip(bounds, bounds[1:]):  # cpu-route: verification oracle or fixture text, not a runtime route
             _bpe(index, seg, a, b, out)
     return out
 
 
 def reference_decode(tokens, ids):
     eot = ENDOFTEXT.encode()
-    return b"".join(eot if i == len(tokens) else tokens[i] for i in ids)
+    return b"".join(eot if i == len(tokens) else tokens[i] for i in ids)  # cpu-route: verification oracle or fixture text, not a runtime route
 
 
 # --------------------------------------------------------------------------
@@ -267,7 +267,7 @@ def cases():
     """(name, text, allow_endoftext). Every class, alternative and fallback
     the tokenizer has, on codepoints whose category is stable across the
     Unicode versions Python ships."""
-    words = [p.decode("utf-8") for p in corpus_pieces()[:40]]
+    words = [p.decode("utf-8") for p in corpus_pieces()[:40]]  # cpu-route: verification oracle or fixture text, not a runtime route
     return [
         ("empty", "", False),
         ("corpus_words", "".join(words[:12]), False),
@@ -299,7 +299,7 @@ def fixture():
     text with the reference encoder's ids."""
     tokens = vocabulary()
     out = []
-    for name, text, allow in cases():
+    for name, text, allow in cases():  # cpu-route: verification oracle or fixture text, not a runtime route
         raw = text.encode("utf-8")
         ids = reference_encode(tokens, raw, allow)
         out.append(dict(name=name, text=text, ids=ids, allow_endoftext=allow,
@@ -311,7 +311,7 @@ def fixture():
 def write_ranks(tokens, path):
     """`rank<TAB>hex` lines, the rank file `BpeTokenizer` loads."""
     with open(path, "w", encoding="ascii") as fh:
-        for i, t in enumerate(tokens):
+        for i, t in enumerate(tokens):  # cpu-route: verification oracle or fixture text, not a runtime route
             fh.write(f"{i}\t{t.hex()}\n")
 
 
@@ -328,7 +328,7 @@ def main(argv=None):
     with open(os.path.join(out_dir, "cases.json"), "w", encoding="ascii") as fh:
         json.dump(fx, fh, indent=1, ensure_ascii=True)
         fh.write("\n")
-    merges = sum(1 for t in tokens if len(t) > 1)
+    merges = sum(1 for t in tokens if len(t) > 1)  # cpu-route: verification oracle or fixture text, not a runtime route
     print(f"{out_dir}: {len(tokens)} ranks ({merges} merges) + {ENDOFTEXT}, {len(fx['cases'])} cases")
     return 0
 
