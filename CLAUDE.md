@@ -77,3 +77,14 @@ every vendor. A rule must come from size, hardware or cost reasoning that covers
 In IDENTICAL, removing such a rule may change bits: that is allowed, because bits only have to match across NVIDIA, AMD,
 Apple and the host column within one version, never across versions. Change all columns together. Each removal gets an
 A/B with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.
+
+## Measurement process (owner, 2026-10-05)
+
+1. Freeze one commit per A/B round. Compile it once on cheap boxes (Apple on the M2; NVIDIA/AMD on cheap fast-CPU boxes).
+   Only a green frozen build goes to the timing GPUs. New code waits for the next freeze.
+2. IDENTICAL switches are decided by NVIDIA and AMD together: combined faster, and neither vendor materially slower.
+   Apple never votes on IDENTICAL switches and IDENTICAL is never tuned for Apple; Apple must only match bits.
+3. Measure IDENTICAL on NVIDIA, AMD and Apple and update every board (main board included) as results land, through the
+   board tools only. A full-board run is IDENTICAL on the three; FAST is not rerun.
+4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.
+5. Read logs with grep and short tails; never paste whole logs. Tell every subagent the same.
