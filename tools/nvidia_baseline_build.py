@@ -69,7 +69,22 @@ def plan(commit, out, *, seconds=6000, lease=120, vcpu=32, jobs='auto'):
 
 
 def body_command(spec):
-    return shlex.join(['bash', BODY, spec['source_commit'], spec['origin'],
+    # The pinned ROCm development image lacks Git. Bootstrap transport tools
+    # outside the frozen checkout: source_commit and its compiler checks remain
+    # untouched, including when building an older advertised source revision.
+    preflight = """set -euo pipefail
+: "${LEG_OUT:?existing leased runner output directory required}"
+if ! command -v git >/dev/null 2>&1; then
+  command -v apt-get >/dev/null 2>&1 || { echo 'Missing git and apt-get' >&2; exit 2; }
+  command -v timeout >/dev/null 2>&1 || { echo 'Missing timeout for bounded Git bootstrap' >&2; exit 2; }
+  {
+    timeout -k 10 180 apt-get -o Acquire::Retries=2 update
+    DEBIAN_FRONTEND=noninteractive timeout -k 10 180 apt-get -o Acquire::Retries=2 install -y --no-install-recommends --no-upgrade git ca-certificates
+  } > "$LEG_OUT/ptx-prerequisites.log" 2>&1
+fi
+git --version > "$LEG_OUT/ptx-prerequisites-readback.txt"
+"""
+    return preflight + shlex.join(['bash', BODY, spec['source_commit'], spec['origin'],
                        str(spec['build_seconds']), spec['jobs']]) + '\n'
 
 
