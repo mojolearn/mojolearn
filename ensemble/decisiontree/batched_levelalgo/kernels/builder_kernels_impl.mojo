@@ -1796,6 +1796,10 @@ def launch_node_split_kernel[
                     ops_same = False
                     break
         if not ops_same:
+            # box-run-2: ops_host is the source of the previous queued async
+            # copy; drain before overwriting it (see DeviceArgs.upload).
+            if scratch.ops_staged:
+                ctx.synchronize()
             for i in range(size_of[OpsST]()):
                 ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
             log_launch_ctx(ctx, "xfer_nodesplit_ops")
@@ -1858,6 +1862,9 @@ def launch_node_split_kernel[
                     ops_same = False
                     break
         if not ops_same:
+            # box-run-2: drain the queued copy that reads ops_host first.
+            if scratch.ops_staged:
+                ctx.synchronize()
             for i in range(size_of[OpsT]()):
                 ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
             log_launch_ctx(ctx, "xfer_nodesplit_ops")
