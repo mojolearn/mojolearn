@@ -933,12 +933,34 @@ def forest_pack_device(
     ctx.enqueue_copy(dst_buf=dleft, src_ptr=left.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dleaf, src_ptr=leaves.unsafe_ptr())
     # validates and drains: the host lists are read by the time it returns
-    forest_validate_device(ctx, doff, dcol, dthr, dleft, dleaf, trees, nodes, features, outputs)
+    forest_pack_resident(
+        ctx, doff, dcol, dthr, dleft, dleaf, trees, nodes, features, outputs,
+        packed_out, leaves_out,
+    )
     _ = len(offsets)
     _ = len(columns)
     _ = len(thresholds)
     _ = len(left)
     _ = len(leaves)
+    _ = doff^
+    _ = dcol^
+    _ = dthr^
+    _ = dleft^
+    _ = dleaf^
+
+
+def forest_pack_resident(
+    ctx: DeviceContext, mut doff: DeviceBuffer[DType.int32], mut dcol: DeviceBuffer[DType.int32],
+    mut dthr: DeviceBuffer[DType.float32], mut dleft: DeviceBuffer[DType.int32],
+    mut dleaf: DeviceBuffer[DType.float32], trees: Int, nodes: Int, features: Int, outputs: Int,
+    mut packed_out: Optional[DeviceBuffer[DType.int32]],
+    mut leaves_out: Optional[DeviceBuffer[DType.float32]],
+) raises:
+    """`forest_pack_device` on a flat forest already resident on `ctx`
+    (lane cpu4-misc: the multi-GPU grove owners gather their groves on the
+    device and pack them here). Validates, then packs; the input buffers
+    stay the caller's. One word, the leaf count, comes back."""
+    forest_validate_device(ctx, doff, dcol, dthr, dleft, dleaf, trees, nodes, features, outputs)
     var rank = ctx.enqueue_create_buffer[DType.int32](nodes + 1)
     var grid = (nodes + FOREST_FINITE_TPB - 1) // FOREST_FINITE_TPB
     ctx.enqueue_function[forest_leaf_flag_kernel](
@@ -969,11 +991,6 @@ def forest_pack_device(
     )
     ctx.synchronize()
     _ = rank^
-    _ = doff^
-    _ = dcol^
-    _ = dthr^
-    _ = dleft^
-    _ = dleaf^
     packed_out = packed^
     leaves_out = compact^
 
