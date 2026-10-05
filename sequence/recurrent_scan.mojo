@@ -18,6 +18,8 @@ Switches (FAST + Apple GPU only; IDENTICAL and other vendors compile main):
   -D MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM  (with SCAN) h_prev / dGH_{s+1} staged
                                         in threadgroup memory per step, the
                                         same fold order (same bits)
+  -D MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE  (with SCAN) G H lanes per row: one per
+                                        gate column (see SEQ_LSTM_SCAN_WIDE)
   -D MOJOLEARN_SEQ_FAST_LSTM_WGRAD      the (time x batch)-long weight and bias
                                         gradient folds split over K
                                         (sequence/recurrent.mojo gemm/colsum;
@@ -26,7 +28,7 @@ Switches (FAST + Apple GPU only; IDENTICAL and other vendors compile main):
 The host executor runs the scan ops as the per-step launches they replace
 (row by row, step by step): the same cells in the same order.
 """
-from std.gpu import block_idx, thread_idx
+from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -46,8 +48,13 @@ comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
 #: nothing (h_T or the recurrent/weight gradients come out zero or unused).
 #: The cause is not evident from reading the code (the step pointers in
 #: fwd_step / bwd_step match the per-step launches, team_barrier orders device
-#: memory on Apple); not fixed here. Next: an ID check of SCAN alone against the
-#: per-step path (it claims the same bits), then SMEM, then WGRAD.
+#: memory on Apple). FIX CANDIDATE (lane apple-fast-s-seq, 2026-10-05): the
+#: kernels' Args came from a non-inlined `_scan_args` that started from
+#: `Args()`, whose pointer slots are integer-made (`dummy_ptr`): see the note
+#: at `_scan_args`. Re-judge SCAN, SCAN + SMEM and the bundle on quality.
+#: STILL BROKEN after the Args fix (8bb42b7de): M3 A/B rab10-scan (2026-10-05) lstm-clf synthetic accuracy 0.9608 -> 0.5002,
+#: lstm-reg synthetic r2 0.9804 -> -0.1043 (constant prediction), 20% faster. SCAN_SMEM, WGRAD and SCAN_WIDE inherit it. DROPPED-quality;
+#: the next step is a device-vs-host digest of SCAN alone, per step. Stays opt-in.
 #: nr-small (review D2, 2026-10-04): CANDIDATE, default OFF. The one-launch
 #: scan under IDENTICAL on every GPU, for the owed NV/AMD/Apple ID check
 #: (the chain order is the T-launch path's; `team_barrier` orders device
@@ -57,6 +64,20 @@ comptime SEQ_LSTM_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_def
 comptime SEQ_LSTM_SCAN = (_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()) or SEQ_LSTM_SCAN_IDN
 comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()
 comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()
+#: SEQ_FAST_LSTM_SCAN_WIDE (with SCAN; lane apple-fast-s-seq, 2026-10-05,
+#: READY-AB): one lane per GATE COLUMN (G H lanes, 256 for the board's LSTM
+#: H = 64) instead of one per unit. The scan's block of H lanes walks T steps
+#: and each lane's step is G H-long dot chains (forward: G of length H;
+#: backward: one of length G H), so a row's serial chain is G times what it
+#: needs to be and the M3's cores hold 3 blocks of 64 lanes each (256 rows
+#: over 80 cores): latency bound. Forward: lane n folds GH[row, n] alone
+#: (k ascending from 0, one fma per term: `op_cell_fwd_h`'s fold, the same
+#: bits), h_prev staged in threadgroup memory; then H lanes run the cell.
+#: Backward: lane g H + u folds gate g's H terms of dh[u] from zero, then lane
+#: u adds the G partials onto the direct part in g order: a different fold
+#: from the one G H chain (FAST only). Shapes with G H > SCAN_MAX_H keep the
+#: H-lane scan.
+comptime SEQ_LSTM_SCAN_WIDE = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE"]()
 
 comptime OP_CELL_FWD_SCAN = 120
 comptime OP_CELL_BWD_SCAN = 121
@@ -74,6 +95,17 @@ def scan_applies(H: Int, G: Int) -> Bool:
 
 def scan_tpb(H: Int) -> Int:
     return ((H + 31) // 32) * 32
+
+
+def scan_block(cell: Int, H: Int) -> Int:
+    """The scan launch's block width: G H lanes under SEQ_LSTM_SCAN_WIDE when
+    they fit, else H. The kernels take the wide path only when the block holds
+    G H lanes (block_dim), so the two sides cannot disagree."""
+    comptime if SEQ_LSTM_SCAN_WIDE:
+        var GH = gates_of(cell) * H
+        if GH <= SCAN_MAX_H:
+            return scan_tpb(GH)
+    return scan_tpb(H)
 
 
 # ------------------------------------------------------------------ per-step args
@@ -149,30 +181,29 @@ def op_cell_bwd_scan(row: Int, a: Args):
 
 
 # ------------------------------------------------------------------ device kernels
+@always_inline
 def _scan_args(
     p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
     p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
     cell: Int32, B: Int32, H: Int32, T: Int32, i4: Int32,
 ) -> Args:
-    var a = Args()
-    a.p0 = p0
-    a.p1 = p1
-    a.p2 = p2
-    a.p3 = p3
-    a.p4 = p4
-    a.p5 = p5
-    a.p6 = p6
-    a.p7 = p7
-    a.p8 = p8
-    a.p9 = p9
-    a.p10 = p10
-    a.p11 = p11
-    a.i0 = Int(cell)
-    a.i1 = Int(B)
-    a.i2 = Int(H)
-    a.i3 = Int(T)
-    a.i4 = Int(i4)
-    return a
+    #: THE BROKEN-BUNDLE FIX (lane apple-fast-s-seq, 2026-10-05). This built
+    #: `Args()` and then overwrote its slots, and was not inlined. `Args()`
+    #: fills every pointer slot with `dummy_ptr()`, a pointer made from the
+    #: integer 64, and the struct then crossed a non-inlined call (returned
+    #: through memory): the two Metal traps of
+    #: memory/metal-no-int-pointers-inline-oct2 (PageRank all zeros, lane
+    #: hr-graph). On Metal the kernel's loads and stores through those slots
+    #: silently missed, so h_T stayed the zero fill and the dG buffers stayed
+    #: zero: only the head bias trained, the constant predictor of the
+    #: OUTCOME above (logloss = ln 2, r2 ~ 0). `seq_kernel`, which works,
+    #: builds its Args with the fieldwise constructor in the kernel body
+    #: (sequence/exec_device.mojo seq_kernel); this now does the same, inlined,
+    #: with no integer-made pointer.
+    return Args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11,
+                Int(cell), Int(B), Int(H), Int(T), Int(i4), 0, 0, 0, 0, 0, 0, 0,
+                Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+                Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0))
 
 
 def cell_fwd_scan_kernel(
@@ -193,6 +224,31 @@ def cell_fwd_scan_kernel(
     if u < Hn:
         st(a.p3, t, Float32(0.0))
         st(a.p4, t, Float32(0.0))
+    comptime if SEQ_LSTM_SCAN_WIDE:
+        var Gw = gates_of(a.i0)
+        var GHw = Gw * Hn
+        if Int(block_dim.x) >= GHw:
+            # SEQ_LSTM_SCAN_WIDE: lane n = g H + u folds GH[row, n]; block-
+            # uniform branch (block_dim), so every lane meets every barrier
+            var hw = stack_allocation[SCAN_MAX_H, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+            team_barrier()
+            for s in range(a.i3):
+                var sa = fwd_step(a, s)
+                if u < Hn:
+                    hw[u] = ld(sa.p3, t)
+                team_barrier()
+                if u < GHw:
+                    # op_cell_fwd_h's fold for column n: k ascending from 0,
+                    # one fma per term, then + b_hh (the same bits)
+                    var acc = Float32(0.0)
+                    for k in range(Hn):
+                        acc = fma3(hw[k], ld(sa.p7, u * Hn + k), acc)
+                    st(sa.p1, row * GHw + u, add(ftz(acc), ld(sa.p8, u)))
+                team_barrier()
+                if u < Hn:
+                    op_cell_fwd(t, sa)
+                team_barrier()
+            return
     comptime if SEQ_LSTM_SCAN_SMEM:
         var hs = stack_allocation[SCAN_SMEM, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
         var G = gates_of(a.i0)
@@ -241,6 +297,41 @@ def cell_bwd_scan_kernel(
     if u < Hn:
         st(a.p5, t, Float32(0.0))
         st(a.p7, t, Float32(0.0))
+    comptime if SEQ_LSTM_SCAN_WIDE:
+        var Gw = gates_of(a.i0)
+        var GHw = Gw * Hn
+        if Int(block_dim.x) >= GHw:
+            # SEQ_LSTM_SCAN_WIDE: lane n = g H + v folds gate g's part of
+            # dh[v] = sum_{k in gate g} dGH_{s+1}[k] W_hh[k, v] from zero; lane
+            # v then adds the G parts onto the direct part in g order (FAST
+            # fold order). Block-uniform branch.
+            var dw = stack_allocation[SCAN_MAX_H, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+            var pw = stack_allocation[SCAN_MAX_H, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+            var g = u // Hn if Hn > 0 else 0
+            var v = u - g * Hn
+            team_barrier()
+            for j in range(a.i3):
+                var sa = bwd_step(a, j)
+                if sa.i3 != 0:
+                    if u < GHw:
+                        dw[u] = ld(sa.p9 + sa.i4, row * GHw + u)
+                    team_barrier()
+                    if u < GHw:
+                        var acc = Float32(0.0)
+                        var k0 = g * Hn
+                        for k in range(k0, k0 + Hn):
+                            acc = fma3(dw[k], ld(sa.p11, k * Hn + v), acc)
+                        pw[u] = acc
+                    team_barrier()
+                    if u < Hn:
+                        var dh = ld(sa.p5, t)
+                        for gg in range(Gw):
+                            dh = add(dh, pw[gg * Hn + u])
+                        st(sa.p5, t, dh)
+                if u < Hn:
+                    op_cell_bwd(t, sa)
+                team_barrier()
+            return
     comptime if SEQ_LSTM_SCAN_SMEM:
         var ds = stack_allocation[SCAN_SMEM, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
         var GH = gates_of(a.i0) * Hn
@@ -252,7 +343,7 @@ def cell_bwd_scan_kernel(
                 var k = u
                 while k < GH:
                     ds[k] = ld(sa.p9 + sa.i4, row * GH + k)
-                    k += Int(scan_tpb(Hn))
+                    k += Int(block_dim.x)
             team_barrier()
             if u < Hn:
                 if sa.i3 != 0:

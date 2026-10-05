@@ -1228,3 +1228,12 @@ Rows from board-quality-audit-2026-10-04 where FAST quality trailed the best opp
 | `SYM_ITER_ALL` | gbdt-symmetric-1000 / taxi | lane/apple-fast-verdicts-4 | rab4-symiter | +0.2% | RECORD NEUTRAL: stays off | quality identical |
 | `SYM_MULTI_ALL` | gbdt-rank-yetirank / istella | lane/apple-fast-verdicts-4 | rab4-symmulti | 3390.8 -> 3395.46 (+0.1%) | RECORD NEUTRAL | its pairlogit part (PL_GROUP_NARROW) is now default on its own |
 | rab7 per-define GBDT/SYM rows under 2% (`GBDT_BOOT_DEVICE`, `GBDT_EVAL_FUSED`, `GBDT_EVAL_SKIP_EM`, `GBDT_INDEX_PACK_D`, `GBDT_PREDICT_PACK`, `GBDT_QUANT_DEVICE`, `SYM_BUF_ARENA`, `SYM_RESOLVE_BLOCK`, `SYM_SORT_SWAP`, `YR_TASK_FUSED`, `EST_ITERS_DEVICE`, `CTR_PREP_SHARED`, `CTR_ONEHOT_DEVICE`) | gbdt-symmetric, gbdt-rank-yetirank, gbdt-categorical / istella, taxi | lane/apple-fast-verdicts-4 | rab7-* | -1.9% .. +0.4% | RECORD NEUTRAL: stay off alone (EST_ITERS_DEVICE, CTR_PREP_SHARED, CTR_ONEHOT_DEVICE ride their umbrellas, now on) | quality noise |
+
+## lane/apple-fast-s-seq (2026-10-05): LSTM scan fix + width, sequence targets
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `SEQ_FAST_LSTM_SCAN` (fixed) | lstm-clf, lstm-reg / synthetic, taxi-hourly | lane/apple-fast-s-seq @ 8bb42b7de | - | - | READY-AB | code changed since the DROPPED-quality bundle: the scan kernels built Args from `Args()` (integer-made `dummy_ptr` slots) in a non-inlined `_scan_args`, the Metal int-pointer / non-inlined-pointer trap; now the fieldwise constructor, inlined (sequence/recurrent_scan.mojo `_scan_args`). Judge quality first: accuracy / r2 must match arm A |
+| `SEQ_FAST_LSTM_SCAN + _SCAN_SMEM` | as above | lane/apple-fast-s-seq @ 8bb42b7de | - | - | READY-AB | re-judge after the fix |
+| `SEQ_FAST_LSTM_SCAN + _SCAN_SMEM + _WGRAD` (bundle) | as above | lane/apple-fast-s-seq @ 8bb42b7de | - | - | READY-AB | re-judge after the fix (was 1877 -> 1315 ms, broken quality) |
+| `SEQ_FAST_LSTM_SCAN + _SCAN_WIDE (+ _WGRAD)` | as above | lane/apple-fast-s-seq @ 826305835 | - | - | READY-AB | G H lanes per row (256 for H 64): forward gate columns folded one per lane (same fold), backward dh split by gate then summed in g order (FAST fold); 4x shorter serial chain per step |
