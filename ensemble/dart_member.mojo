@@ -15,6 +15,7 @@ the bag rows and the sampled columns when the round has them -- by
 the member forest is bit for bit the one the staged fit built.
 """
 
+from std.sys.compile import is_defined as _rfx_is_defined
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -82,19 +83,20 @@ def launch_dart_member_x(
     if total <= 0:
         return
     log_launch_ctx(ctx, "dart_member_x")
-    ctx.enqueue_function[dart_member_x_kernel](
-        x.unsafe_ptr(),
-        rows.unsafe_ptr(),
-        cols.unsafe_ptr(),
-        out.unsafe_ptr(),
-        Int32(d),
-        Int32(m),
-        Int32(dc),
-        Int32(1) if use_rows else Int32(0),
-        Int32(1) if use_cols else Int32(0),
-        grid_dim=ceildiv(total, DART_MEMBER_TPB),
-        block_dim=DART_MEMBER_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_38"]():
+        ctx.enqueue_function[dart_member_x_kernel](
+            x.unsafe_ptr(),
+            rows.unsafe_ptr(),
+            cols.unsafe_ptr(),
+            out.unsafe_ptr(),
+            Int32(d),
+            Int32(m),
+            Int32(dc),
+            Int32(1) if use_rows else Int32(0),
+            Int32(1) if use_cols else Int32(0),
+            grid_dim=ceildiv(total, DART_MEMBER_TPB),
+            block_dim=DART_MEMBER_TPB,
+        )
 
 
 def launch_dart_member_y(
@@ -107,11 +109,12 @@ def launch_dart_member_y(
     if m <= 0:
         return
     log_launch_ctx(ctx, "dart_member_y")
-    ctx.enqueue_function[dart_member_y_kernel](
-        target.unsafe_ptr(),
-        rows.unsafe_ptr(),
-        out.unsafe_ptr(),
-        Int32(m),
-        grid_dim=ceildiv(m, DART_MEMBER_TPB),
-        block_dim=DART_MEMBER_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_39"]():
+        ctx.enqueue_function[dart_member_y_kernel](
+            target.unsafe_ptr(),
+            rows.unsafe_ptr(),
+            out.unsafe_ptr(),
+            Int32(m),
+            grid_dim=ceildiv(m, DART_MEMBER_TPB),
+            block_dim=DART_MEMBER_TPB,
+        )

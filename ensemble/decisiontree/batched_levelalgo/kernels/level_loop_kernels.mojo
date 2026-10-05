@@ -80,6 +80,7 @@ two `dtype` values per node `[quesval, best_metric_val]` (written for split
 nodes only). QUEUE: four Int32 per item `[idx, depth, begin, count]`.
 """
 
+from std.sys.compile import is_defined as _rfx_is_defined
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceContext
@@ -702,7 +703,14 @@ def loop_retry_compact_kernel[
         var orig = Int32(i)
         if first == Int32(0):
             orig = a2o[unsafe_offset=i]
-        items_s[unsafe_offset=rank] = work_items[unsafe_offset=i]
+        items_s[unsafe_offset=rank] = NodeWorkItem(
+            work_items[unsafe_offset=i].idx,
+            work_items[unsafe_offset=i].depth,
+            InstanceRange(
+                work_items[unsafe_offset=i].instances.begin,
+                work_items[unsafe_offset=i].instances.count,
+            ),
+        )
         a2o_s[unsafe_offset=rank] = orig
     if i == Int(n_bound) - 1:
         hdr[unsafe_offset=LOOP_H_NEXT] = Int32(rank + flag)
@@ -744,7 +752,14 @@ def loop_retry_stage_kernel(
     if i == blk_last:
         block_totals[unsafe_offset = Int(block_idx.x)] = Int32(lp + own)
     if i < cur:
-        work_items[unsafe_offset=i] = items_s[unsafe_offset=i]
+        work_items[unsafe_offset=i] = NodeWorkItem(
+            items_s[unsafe_offset=i].idx,
+            items_s[unsafe_offset=i].depth,
+            InstanceRange(
+                items_s[unsafe_offset=i].instances.begin,
+                items_s[unsafe_offset=i].instances.count,
+            ),
+        )
         a2o[unsafe_offset=i] = a2o_s[unsafe_offset=i]
     else:
         work_items[unsafe_offset=i] = NodeWorkItem(
@@ -875,18 +890,19 @@ def launch_loop_pop(
     var bt = scan.unsafe_offset(3 * max_batch)
     var grid = ceildiv(n_bound, LOOP_TPB)
     log_launch_ctx(ctx, "loop_pop")
-    ctx.enqueue_function[loop_pop_kernel](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        queue.unsafe_origin_cast[MutAnyOrigin](),
-        work_items.unsafe_origin_cast[MutAnyOrigin](),
-        pre.unsafe_origin_cast[MutAnyOrigin](),
-        bt.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_bound),
-        Int32(max_batch),
-        Int32(rows_per_block),
-        grid_dim=grid,
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_42"]():
+        ctx.enqueue_function[loop_pop_kernel](
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            queue.unsafe_origin_cast[MutAnyOrigin](),
+            work_items.unsafe_origin_cast[MutAnyOrigin](),
+            pre.unsafe_origin_cast[MutAnyOrigin](),
+            bt.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_bound),
+            Int32(max_batch),
+            Int32(rows_per_block),
+            grid_dim=grid,
+            block_dim=LOOP_TPB,
+        )
     _launch_loop_map(
         ctx, hdr, workload_info, scan, max_batch, n_bound, blocks_bound,
         inert_scale,
@@ -909,24 +925,26 @@ def _launch_loop_map(
     var bt = scan.unsafe_offset(3 * max_batch)
     var grid = ceildiv(n_bound, LOOP_TPB)
     log_launch_ctx(ctx, "loop_scan_offsets")
-    ctx.enqueue_function[loop_scan_offsets_kernel](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        pre.unsafe_origin_cast[MutAnyOrigin](),
-        bt.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_bound),
-        grid_dim=grid,
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_43"]():
+        ctx.enqueue_function[loop_scan_offsets_kernel](
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            pre.unsafe_origin_cast[MutAnyOrigin](),
+            bt.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_bound),
+            grid_dim=grid,
+            block_dim=LOOP_TPB,
+        )
     log_launch_ctx(ctx, "loop_workload")
-    ctx.enqueue_function[loop_workload_kernel](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        pre.unsafe_origin_cast[MutAnyOrigin](),
-        workload_info.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(blocks_bound),
-        Int32(inert_scale),
-        grid_dim=ceildiv(blocks_bound, LOOP_TPB),
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_44"]():
+        ctx.enqueue_function[loop_workload_kernel](
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            pre.unsafe_origin_cast[MutAnyOrigin](),
+            workload_info.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(blocks_bound),
+            Int32(inert_scale),
+            grid_dim=ceildiv(blocks_bound, LOOP_TPB),
+            block_dim=LOOP_TPB,
+        )
 
 
 def launch_loop_finalize[
@@ -939,13 +957,14 @@ def launch_loop_finalize[
 ) raises:
     comptime k_fin = loop_finalize_splits_kernel[dtype, leaf_pure]
     log_launch_ctx(ctx, "loop_finalize_splits")
-    ctx.enqueue_function[k_fin](
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_bound),
-        grid_dim=ceildiv(n_bound, LOOP_TPB),
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_45"]():
+        ctx.enqueue_function[k_fin](
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_bound),
+            grid_dim=ceildiv(n_bound, LOOP_TPB),
+            block_dim=LOOP_TPB,
+        )
 
 
 def launch_loop_push[
@@ -981,57 +1000,61 @@ def launch_loop_push[
     comptime k_scan = loop_push_scan_kernel[dtype]
     comptime k_write = loop_push_write_kernel[dtype]
     log_launch_ctx(ctx, "loop_push_valid")
-    ctx.enqueue_function[k_valid](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        pre_v.unsafe_origin_cast[MutAnyOrigin](),
-        bt_v.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_bound),
-        grid_dim=grid,
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_46"]():
+        ctx.enqueue_function[k_valid](
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            pre_v.unsafe_origin_cast[MutAnyOrigin](),
+            bt_v.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_bound),
+            grid_dim=grid,
+            block_dim=LOOP_TPB,
+        )
     log_launch_ctx(ctx, "loop_push_scan")
-    ctx.enqueue_function[k_scan](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        work_items.unsafe_origin_cast[MutAnyOrigin](),
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        pre_v.unsafe_origin_cast[MutAnyOrigin](),
-        pre_a.unsafe_origin_cast[MutAnyOrigin](),
-        bt_v.unsafe_origin_cast[MutAnyOrigin](),
-        bt_a.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_bound),
-        Int32(max_depth),
-        Int32(min_samples_split),
-        Int32(max_leaves),
-        grid_dim=grid,
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_47"]():
+        ctx.enqueue_function[k_scan](
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            work_items.unsafe_origin_cast[MutAnyOrigin](),
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            pre_v.unsafe_origin_cast[MutAnyOrigin](),
+            pre_a.unsafe_origin_cast[MutAnyOrigin](),
+            bt_v.unsafe_origin_cast[MutAnyOrigin](),
+            bt_a.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_bound),
+            Int32(max_depth),
+            Int32(min_samples_split),
+            Int32(max_leaves),
+            grid_dim=grid,
+            block_dim=LOOP_TPB,
+        )
     log_launch_ctx(ctx, "loop_push_write")
-    ctx.enqueue_function[k_write](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        work_items.unsafe_origin_cast[MutAnyOrigin](),
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        pre_v.unsafe_origin_cast[MutAnyOrigin](),
-        pre_a.unsafe_origin_cast[MutAnyOrigin](),
-        bt_v.unsafe_origin_cast[MutAnyOrigin](),
-        bt_a.unsafe_origin_cast[MutAnyOrigin](),
-        queue.unsafe_origin_cast[MutAnyOrigin](),
-        nodes_i.unsafe_origin_cast[MutAnyOrigin](),
-        nodes_f.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_bound),
-        Int32(max_depth),
-        Int32(min_samples_split),
-        Int32(node_capacity),
-        Int32(max_leaves),
-        grid_dim=grid,
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_48"]():
+        ctx.enqueue_function[k_write](
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            work_items.unsafe_origin_cast[MutAnyOrigin](),
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            pre_v.unsafe_origin_cast[MutAnyOrigin](),
+            pre_a.unsafe_origin_cast[MutAnyOrigin](),
+            bt_v.unsafe_origin_cast[MutAnyOrigin](),
+            bt_a.unsafe_origin_cast[MutAnyOrigin](),
+            queue.unsafe_origin_cast[MutAnyOrigin](),
+            nodes_i.unsafe_origin_cast[MutAnyOrigin](),
+            nodes_f.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_bound),
+            Int32(max_depth),
+            Int32(min_samples_split),
+            Int32(node_capacity),
+            Int32(max_leaves),
+            grid_dim=grid,
+            block_dim=LOOP_TPB,
+        )
     log_launch_ctx(ctx, "loop_commit")
-    ctx.enqueue_function[loop_commit_kernel](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        grid_dim=1,
-        block_dim=1,
-    )
+    comptime if not _rfx_is_defined["RFX_49"]():
+        ctx.enqueue_function[loop_commit_kernel](
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            grid_dim=1,
+            block_dim=1,
+        )
 
 
 def loop_retry_words(max_batch: Int) -> Int:
@@ -1059,18 +1082,19 @@ def launch_loop_retry_merge[
     var rbt = retry.unsafe_offset(3 * max_batch)
     comptime k_merge = loop_retry_merge_kernel[dtype, retry_pure]
     log_launch_ctx(ctx, "loop_retry_merge")
-    ctx.enqueue_function[k_merge](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        final_splits.unsafe_origin_cast[MutAnyOrigin](),
-        a2o.unsafe_origin_cast[MutAnyOrigin](),
-        rpre.unsafe_origin_cast[MutAnyOrigin](),
-        rbt.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_bound),
-        Int32(1) if first else Int32(0),
-        grid_dim=ceildiv(n_bound, LOOP_TPB),
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_50"]():
+        ctx.enqueue_function[k_merge](
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            final_splits.unsafe_origin_cast[MutAnyOrigin](),
+            a2o.unsafe_origin_cast[MutAnyOrigin](),
+            rpre.unsafe_origin_cast[MutAnyOrigin](),
+            rbt.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_bound),
+            Int32(1) if first else Int32(0),
+            grid_dim=ceildiv(n_bound, LOOP_TPB),
+            block_dim=LOOP_TPB,
+        )
 
 
 def launch_loop_retry_next[
@@ -1102,36 +1126,38 @@ def launch_loop_retry_next[
     var grid = ceildiv(n_bound, LOOP_TPB)
     comptime k_compact = loop_retry_compact_kernel[dtype, retry_pure]
     log_launch_ctx(ctx, "loop_retry_compact")
-    ctx.enqueue_function[k_compact](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        work_items.unsafe_origin_cast[MutAnyOrigin](),
-        a2o.unsafe_origin_cast[MutAnyOrigin](),
-        rpre.unsafe_origin_cast[MutAnyOrigin](),
-        rbt.unsafe_origin_cast[MutAnyOrigin](),
-        items_s.unsafe_origin_cast[MutAnyOrigin](),
-        a2o_s.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_bound),
-        Int32(1) if first else Int32(0),
-        grid_dim=grid,
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_51"]():
+        ctx.enqueue_function[k_compact](
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            work_items.unsafe_origin_cast[MutAnyOrigin](),
+            a2o.unsafe_origin_cast[MutAnyOrigin](),
+            rpre.unsafe_origin_cast[MutAnyOrigin](),
+            rbt.unsafe_origin_cast[MutAnyOrigin](),
+            items_s.unsafe_origin_cast[MutAnyOrigin](),
+            a2o_s.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_bound),
+            Int32(1) if first else Int32(0),
+            grid_dim=grid,
+            block_dim=LOOP_TPB,
+        )
     var pre = scan
     var bt = scan.unsafe_offset(3 * max_batch)
     log_launch_ctx(ctx, "loop_retry_stage")
-    ctx.enqueue_function[loop_retry_stage_kernel](
-        hdr.unsafe_origin_cast[MutAnyOrigin](),
-        items_s.unsafe_origin_cast[MutAnyOrigin](),
-        a2o_s.unsafe_origin_cast[MutAnyOrigin](),
-        work_items.unsafe_origin_cast[MutAnyOrigin](),
-        a2o.unsafe_origin_cast[MutAnyOrigin](),
-        pre.unsafe_origin_cast[MutAnyOrigin](),
-        bt.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_bound),
-        Int32(rows_per_block),
-        grid_dim=grid,
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_52"]():
+        ctx.enqueue_function[loop_retry_stage_kernel](
+            hdr.unsafe_origin_cast[MutAnyOrigin](),
+            items_s.unsafe_origin_cast[MutAnyOrigin](),
+            a2o_s.unsafe_origin_cast[MutAnyOrigin](),
+            work_items.unsafe_origin_cast[MutAnyOrigin](),
+            a2o.unsafe_origin_cast[MutAnyOrigin](),
+            pre.unsafe_origin_cast[MutAnyOrigin](),
+            bt.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_bound),
+            Int32(rows_per_block),
+            grid_dim=grid,
+            block_dim=LOOP_TPB,
+        )
     _launch_loop_map(
         ctx, hdr, workload_info, scan, max_batch, n_bound, blocks_bound,
         inert_scale,
@@ -1148,13 +1174,14 @@ def launch_loop_retry_finish[
 ) raises:
     comptime k_fin = loop_retry_finish_kernel[dtype]
     log_launch_ctx(ctx, "loop_retry_finish")
-    ctx.enqueue_function[k_fin](
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        final_splits.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_bound),
-        grid_dim=ceildiv(n_bound, LOOP_TPB),
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_53"]():
+        ctx.enqueue_function[k_fin](
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            final_splits.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_bound),
+            grid_dim=ceildiv(n_bound, LOOP_TPB),
+            block_dim=LOOP_TPB,
+        )
 
 
 def launch_loop_tree[
@@ -1169,12 +1196,13 @@ def launch_loop_tree[
 ) raises:
     comptime k_tree = loop_tree_kernel[dtype]
     log_launch_ctx(ctx, "loop_tree")
-    ctx.enqueue_function[k_tree](
-        nodes_i.unsafe_origin_cast[MutAnyOrigin](),
-        nodes_f.unsafe_origin_cast[MutAnyOrigin](),
-        tree_out.unsafe_origin_cast[MutAnyOrigin](),
-        ranges_out.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_nodes),
-        grid_dim=ceildiv(n_nodes, LOOP_TPB),
-        block_dim=LOOP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_54"]():
+        ctx.enqueue_function[k_tree](
+            nodes_i.unsafe_origin_cast[MutAnyOrigin](),
+            nodes_f.unsafe_origin_cast[MutAnyOrigin](),
+            tree_out.unsafe_origin_cast[MutAnyOrigin](),
+            ranges_out.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_nodes),
+            grid_dim=ceildiv(n_nodes, LOOP_TPB),
+            block_dim=LOOP_TPB,
+        )

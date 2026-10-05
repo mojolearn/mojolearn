@@ -275,6 +275,7 @@ vendors instead of varying by vendor.
 ==================================================================
 """
 
+from std.sys.compile import is_defined as _rfx_is_defined
 from std.math import ceildiv, floor
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier
@@ -882,20 +883,21 @@ def compute_quantiles(
     # `:214-225` -- `dim3 sample_grid(n_cols, ceil(sample_count /
     # n_threads))`, block `n_threads = 256`.
     log_launch_ctx(ctx, "quantiles_sample_columns")
-    ctx.enqueue_function[sample_owned_columns_kernel](
-        sampled_columns.unsafe_ptr(),
-        data.unsafe_ptr(),
-        d_offsets.unsafe_ptr(),
-        d_u64.unsafe_ptr(),
-        Int32(comm_size),
-        Int32(sample_count),
-        Int32(rank),
-        Int32(n_rows),
-        Int32(n_cols),
-        Int32(1) if row_major else Int32(0),
-        grid_dim=(n_cols, ceildiv(sample_count, SAMPLE_BLOCK), 1),
-        block_dim=(SAMPLE_BLOCK, 1, 1),
-    )
+    comptime if not _rfx_is_defined["RFX_40"]():
+        ctx.enqueue_function[sample_owned_columns_kernel](
+            sampled_columns.unsafe_ptr(),
+            data.unsafe_ptr(),
+            d_offsets.unsafe_ptr(),
+            d_u64.unsafe_ptr(),
+            Int32(comm_size),
+            Int32(sample_count),
+            Int32(rank),
+            Int32(n_rows),
+            Int32(n_cols),
+            Int32(1) if row_major else Int32(0),
+            grid_dim=(n_cols, ceildiv(sample_count, SAMPLE_BLOCK), 1),
+            block_dim=(SAMPLE_BLOCK, 1, 1),
+        )
 
     # `:240-268`. DEVIATION 111. Their segment bounds are
     # `col * sample_count`, so the segments are uniform.
@@ -937,16 +939,17 @@ def compute_quantiles(
     if quantile_block > QUANTILE_BLOCK_CAP:
         quantile_block = QUANTILE_BLOCK_CAP
     log_launch_ctx(ctx, "quantiles_batched")
-    ctx.enqueue_function[compute_quantiles_batched_kernel](
-        quantiles_array.unsafe_ptr(),
-        n_bins_array.unsafe_ptr(),
-        sorted_samples.unsafe_ptr(),
-        d_bin_idx.unsafe_ptr(),
-        Int32(max_n_bins),
-        Int32(sample_count),
-        grid_dim=(n_cols, 1, 1),
-        block_dim=(quantile_block, 1, 1),
-    )
+    comptime if not _rfx_is_defined["RFX_41"]():
+        ctx.enqueue_function[compute_quantiles_batched_kernel](
+            quantiles_array.unsafe_ptr(),
+            n_bins_array.unsafe_ptr(),
+            sorted_samples.unsafe_ptr(),
+            d_bin_idx.unsafe_ptr(),
+            Int32(max_n_bins),
+            Int32(sample_count),
+            grid_dim=(n_cols, 1, 1),
+            block_dim=(quantile_block, 1, 1),
+        )
 
     # `:275`
     ctx.synchronize()

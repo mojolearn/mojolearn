@@ -44,6 +44,7 @@ to within 2^-30 of the largest). The weights never visit the host:
 the high word, `kept` count in the low word) and one scatter; four words
 come back (first refused row and its bits, kept count, refused count).
 """
+from std.sys.compile import is_defined as _rfx_is_defined
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -315,26 +316,30 @@ def _enqueue_u64_scan_upper(
     var incl3 = ctx.enqueue_create_buffer[DType.uint64](n3)
     var tot3 = ctx.enqueue_create_buffer[DType.uint64](n4)
     log_launch_ctx(ctx, "wboot_scan_l1")
-    ctx.enqueue_function[wb_u64_tile_scan_kernel](
-        tot0, Int32(n1), incl1.unsafe_ptr(), tot1.unsafe_ptr(),
-        grid_dim=ceildiv(n1, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_0"]():
+        ctx.enqueue_function[wb_u64_tile_scan_kernel](
+            tot0, Int32(n1), incl1.unsafe_ptr(), tot1.unsafe_ptr(),
+            grid_dim=ceildiv(n1, WB_TILE), block_dim=WB_TILE,
+        )
     log_launch_ctx(ctx, "wboot_scan_l2")
-    ctx.enqueue_function[wb_u64_tile_scan_kernel](
-        tot1.unsafe_ptr(), Int32(n2), incl2.unsafe_ptr(), tot2.unsafe_ptr(),
-        grid_dim=ceildiv(n2, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_1"]():
+        ctx.enqueue_function[wb_u64_tile_scan_kernel](
+            tot1.unsafe_ptr(), Int32(n2), incl2.unsafe_ptr(), tot2.unsafe_ptr(),
+            grid_dim=ceildiv(n2, WB_TILE), block_dim=WB_TILE,
+        )
     log_launch_ctx(ctx, "wboot_scan_l3")
-    ctx.enqueue_function[wb_u64_tile_scan_kernel](
-        tot2.unsafe_ptr(), Int32(n3), incl3.unsafe_ptr(), tot3.unsafe_ptr(),
-        grid_dim=ceildiv(n3, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_2"]():
+        ctx.enqueue_function[wb_u64_tile_scan_kernel](
+            tot2.unsafe_ptr(), Int32(n3), incl3.unsafe_ptr(), tot3.unsafe_ptr(),
+            grid_dim=ceildiv(n3, WB_TILE), block_dim=WB_TILE,
+        )
     log_launch_ctx(ctx, "wboot_scan_finish")
-    ctx.enqueue_function[wb_finish_kernel](
-        cdf, incl1.unsafe_ptr(), incl2.unsafe_ptr(),
-        incl3.unsafe_ptr(), Int32(n_rows),
-        grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_3"]():
+        ctx.enqueue_function[wb_finish_kernel](
+            cdf, incl1.unsafe_ptr(), incl2.unsafe_ptr(),
+            incl3.unsafe_ptr(), Int32(n_rows),
+            grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
+        )
     ctx.synchronize()
     _ = incl1^
     _ = tot1^
@@ -364,35 +369,40 @@ def build_weight_cdf_device(
     var m3 = ctx.enqueue_create_buffer[DType.uint32](n3)
     var m4 = ctx.enqueue_create_buffer[DType.uint32](n4)
     log_launch_ctx(ctx, "wboot_max_l0")
-    ctx.enqueue_function[wb_max_tile_kernel](
-        wbits, Int32(n_rows), m1.unsafe_ptr(),
-        grid_dim=ceildiv(n1, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_4"]():
+        ctx.enqueue_function[wb_max_tile_kernel](
+            wbits, Int32(n_rows), m1.unsafe_ptr(),
+            grid_dim=ceildiv(n1, WB_TILE), block_dim=WB_TILE,
+        )
     log_launch_ctx(ctx, "wboot_max_l1")
-    ctx.enqueue_function[wb_max_tile_kernel](
-        m1.unsafe_ptr(), Int32(n1), m2.unsafe_ptr(),
-        grid_dim=ceildiv(n2, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_5"]():
+        ctx.enqueue_function[wb_max_tile_kernel](
+            m1.unsafe_ptr(), Int32(n1), m2.unsafe_ptr(),
+            grid_dim=ceildiv(n2, WB_TILE), block_dim=WB_TILE,
+        )
     log_launch_ctx(ctx, "wboot_max_l2")
-    ctx.enqueue_function[wb_max_tile_kernel](
-        m2.unsafe_ptr(), Int32(n2), m3.unsafe_ptr(),
-        grid_dim=ceildiv(n3, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_6"]():
+        ctx.enqueue_function[wb_max_tile_kernel](
+            m2.unsafe_ptr(), Int32(n2), m3.unsafe_ptr(),
+            grid_dim=ceildiv(n3, WB_TILE), block_dim=WB_TILE,
+        )
     log_launch_ctx(ctx, "wboot_max_l3")
-    ctx.enqueue_function[wb_max_tile_kernel](
-        m3.unsafe_ptr(), Int32(n3), m4.unsafe_ptr(),
-        grid_dim=ceildiv(n4, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_7"]():
+        ctx.enqueue_function[wb_max_tile_kernel](
+            m3.unsafe_ptr(), Int32(n3), m4.unsafe_ptr(),
+            grid_dim=ceildiv(n4, WB_TILE), block_dim=WB_TILE,
+        )
     # n4 is 1 for every Int32 row count (256^4 > 2^31), so m4[0] is the max.
 
     var cdf = ctx.enqueue_create_buffer[DType.uint64](n_rows)
     var tot0 = ctx.enqueue_create_buffer[DType.uint64](n1)
     log_launch_ctx(ctx, "wboot_scan_l0")
-    ctx.enqueue_function[wb_quantum_tile_scan_kernel](
-        wbits, m4.unsafe_ptr(), Int32(n_rows),
-        cdf.unsafe_ptr(), tot0.unsafe_ptr(),
-        grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_8"]():
+        ctx.enqueue_function[wb_quantum_tile_scan_kernel](
+            wbits, m4.unsafe_ptr(), Int32(n_rows),
+            cdf.unsafe_ptr(), tot0.unsafe_ptr(),
+            grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
+        )
     # drains: the scratch below is named after it
     _enqueue_u64_scan_upper(
         ctx,
@@ -426,10 +436,11 @@ def scan_weights_device(
     var d_stats = ctx.enqueue_create_buffer[DType.uint32](4)
     d_stats.enqueue_fill(UInt32(0xFFFFFFFF))
     log_launch_ctx(ctx, "wboot_flags_l0")
-    ctx.enqueue_function[wb_flag_tile_scan_kernel](
-        wbits, Int32(n_rows), incl.unsafe_ptr(), tot0.unsafe_ptr(),
-        grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_9"]():
+        ctx.enqueue_function[wb_flag_tile_scan_kernel](
+            wbits, Int32(n_rows), incl.unsafe_ptr(), tot0.unsafe_ptr(),
+            grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
+        )
     _enqueue_u64_scan_upper(
         ctx,
         incl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
@@ -437,11 +448,12 @@ def scan_weights_device(
         n_rows,
     )
     log_launch_ctx(ctx, "wboot_kept_rows")
-    ctx.enqueue_function[wb_kept_rows_kernel](
-        wbits, incl.unsafe_ptr(), Int32(n_rows), Int32(cap),
-        kept_rows.unsafe_ptr(), d_stats.unsafe_ptr(),
-        grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_10"]():
+        ctx.enqueue_function[wb_kept_rows_kernel](
+            wbits, incl.unsafe_ptr(), Int32(n_rows), Int32(cap),
+            kept_rows.unsafe_ptr(), d_stats.unsafe_ptr(),
+            grid_dim=ceildiv(n_rows, WB_TILE), block_dim=WB_TILE,
+        )
     var h_stats = ctx.enqueue_create_host_buffer[DType.uint32](4)
     log_launch_ctx(ctx, "xfer_wboot_stats")
     ctx.enqueue_copy(dst_buf=h_stats, src_buf=d_stats)
@@ -475,12 +487,13 @@ def launch_weighted_bootstrap_rows(
     if s >= 2147483648:
         s -= 4294967296
     log_launch_ctx(ctx, "wboot_rows")
-    ctx.enqueue_function[weighted_bootstrap_rows_kernel](
-        rows.unsafe_ptr(),
-        cdf.unsafe_ptr(),
-        Int32(n_sampled),
-        Int32(n_rows),
-        Int32(s),
-        grid_dim=ceildiv(n_sampled, WB_TILE),
-        block_dim=WB_TILE,
-    )
+    comptime if not _rfx_is_defined["RFX_11"]():
+        ctx.enqueue_function[weighted_bootstrap_rows_kernel](
+            rows.unsafe_ptr(),
+            cdf.unsafe_ptr(),
+            Int32(n_sampled),
+            Int32(n_rows),
+            Int32(s),
+            grid_dim=ceildiv(n_sampled, WB_TILE),
+            block_dim=WB_TILE,
+        )

@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest estimator surface, parameters, metrics, training dispatch, and host inference, aligned with pinned cuML behavior."""
 
+from std.sys.compile import is_defined as _rfx_is_defined
 from std.math import fma
 from std.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys.compile import is_defined
@@ -1417,16 +1418,17 @@ def launch_gather_rows_colmajor(
     if n_sel <= 0 or n_cols <= 0:
         return
     log_launch_ctx(ctx, "session_gather_rows")
-    ctx.enqueue_function[gather_rows_colmajor_kernel](
-        src.unsafe_ptr(),
-        rows.unsafe_ptr(),
-        dst.unsafe_ptr(),
-        Int64(n_src_rows),
-        Int64(n_sel),
-        Int64(n_cols),
-        grid_dim=_ceildiv(n_sel * n_cols, 256),
-        block_dim=256,
-    )
+    comptime if not _rfx_is_defined["RFX_15"]():
+        ctx.enqueue_function[gather_rows_colmajor_kernel](
+            src.unsafe_ptr(),
+            rows.unsafe_ptr(),
+            dst.unsafe_ptr(),
+            Int64(n_src_rows),
+            Int64(n_sel),
+            Int64(n_cols),
+            grid_dim=_ceildiv(n_sel * n_cols, 256),
+            block_dim=256,
+        )
 
 
 def bootstrap_mask_fill_kernel(
@@ -1579,21 +1581,22 @@ struct OobForestStore(Movable):
             self._grow(ctx, self.used + n_nodes)
         comptime k_app = rf_oob_append_tree_kernel[dtype]
         log_launch_ctx(ctx, "oob_append_tree")
-        ctx.enqueue_function[k_app](
-            tree.unsafe_origin_cast[MutAnyOrigin](),
-            tree_leaves.unsafe_origin_cast[MutAnyOrigin](),
-            self.d_off.unsafe_ptr(),
-            self.d_col.unsafe_ptr(),
-            self.d_q.unsafe_ptr(),
-            self.d_left.unsafe_ptr(),
-            self.d_leaf.unsafe_ptr(),
-            Int32(n_nodes),
-            Int32(self.n_out),
-            Int32(self.used),
-            Int32(tree_idx),
-            grid_dim=_ceildiv(max(n_nodes, 1), OOB_TPB),
-            block_dim=OOB_TPB,
-        )
+        comptime if not _rfx_is_defined["RFX_16"]():
+            ctx.enqueue_function[k_app](
+                tree.unsafe_origin_cast[MutAnyOrigin](),
+                tree_leaves.unsafe_origin_cast[MutAnyOrigin](),
+                self.d_off.unsafe_ptr(),
+                self.d_col.unsafe_ptr(),
+                self.d_q.unsafe_ptr(),
+                self.d_left.unsafe_ptr(),
+                self.d_leaf.unsafe_ptr(),
+                Int32(n_nodes),
+                Int32(self.n_out),
+                Int32(self.used),
+                Int32(tree_idx),
+                grid_dim=_ceildiv(max(n_nodes, 1), OOB_TPB),
+                block_dim=OOB_TPB,
+            )
         self.used += n_nodes
 
 
@@ -1708,25 +1711,26 @@ def compute_oob_score[
     )
     var d_cnt = ctx.enqueue_create_buffer[DType.int32](n_rows)
     log_launch_ctx(ctx, "oob_rows")
-    ctx.enqueue_function[rf_oob_rows_kernel](
-        x.unsafe_ptr(),
-        d_masks.unsafe_ptr(),
-        store.d_off.unsafe_ptr(),
-        store.d_col.unsafe_ptr(),
-        store.d_q.unsafe_ptr(),
-        store.d_left.unsafe_ptr(),
-        store.d_leaf.unsafe_ptr(),
-        d_acc.unsafe_ptr(),
-        d_cnt.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        Int32(n_trees),
-        Int32(num_outputs),
-        Int32(1) if row_major else Int32(0),
-        Int32(1) if sabotage == 1 else Int32(0),
-        grid_dim=_ceildiv(n_rows, OOB_TPB),
-        block_dim=OOB_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_17"]():
+        ctx.enqueue_function[rf_oob_rows_kernel](
+            x.unsafe_ptr(),
+            d_masks.unsafe_ptr(),
+            store.d_off.unsafe_ptr(),
+            store.d_col.unsafe_ptr(),
+            store.d_q.unsafe_ptr(),
+            store.d_left.unsafe_ptr(),
+            store.d_leaf.unsafe_ptr(),
+            d_acc.unsafe_ptr(),
+            d_cnt.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(n_cols),
+            Int32(n_trees),
+            Int32(num_outputs),
+            Int32(1) if row_major else Int32(0),
+            Int32(1) if sabotage == 1 else Int32(0),
+            grid_dim=_ceildiv(n_rows, OOB_TPB),
+            block_dim=OOB_TPB,
+        )
     var h_acc = ctx.enqueue_create_host_buffer[DType.uint64](
         n_rows * num_outputs
     )
@@ -1752,89 +1756,101 @@ def compute_oob_score[
     log_launch_ctx(ctx, "oob_epilogue")
     comptime if O.LabelT.is_integral():
         comptime clf_kernel = rf_oob_clf_stats_kernel[O.LabelT]
-        ctx.enqueue_function[clf_kernel](
-            d_acc.unsafe_ptr(),
-            d_cnt.unsafe_ptr(),
-            y.unsafe_ptr(),
-            Int32(n_rows),
-            Int32(num_outputs),
-            d_stats.unsafe_ptr(),
-            grid_dim=_ceildiv(n_rows, OOB_TPB),
-            block_dim=OOB_TPB,
-        )
-        ctx.enqueue_function[rf_oob_score_kernel](
-            d_words.unsafe_ptr(),
-            d_stats.unsafe_ptr(),
-            d_eflags.unsafe_ptr(),
-            Int32(1),
-            grid_dim=1,
-            block_dim=1,
-        )
+        comptime if not _rfx_is_defined["RFX_18"]():
+            ctx.enqueue_function[clf_kernel](
+                d_acc.unsafe_ptr(),
+                d_cnt.unsafe_ptr(),
+                y.unsafe_ptr(),
+                Int32(n_rows),
+                Int32(num_outputs),
+                d_stats.unsafe_ptr(),
+                grid_dim=_ceildiv(n_rows, OOB_TPB),
+                block_dim=OOB_TPB,
+            )
+        comptime if not _rfx_is_defined["RFX_19"]():
+            ctx.enqueue_function[rf_oob_score_kernel](
+                d_words.unsafe_ptr(),
+                d_stats.unsafe_ptr(),
+                d_eflags.unsafe_ptr(),
+                Int32(1),
+                grid_dim=1,
+                block_dim=1,
+            )
     else:
         comptime assert (
             O.LabelT == DType.float32
         ), "the OOB r2 epilogue reads float32 labels"
         var y32 = y.unsafe_ptr().bitcast[Float32]()
         var egrid = E64_THREADS // OOB_TPB
-        ctx.enqueue_function[rf_oob_reg_ysum_kernel](
-            d_cnt.unsafe_ptr(),
-            y32,
-            Int32(n_rows),
-            d_p1.unsafe_ptr(),
-            d_stats.unsafe_ptr(),
-            d_eflags.unsafe_ptr(),
-            grid_dim=egrid,
-            block_dim=OOB_TPB,
-        )
-        ctx.enqueue_function[limb_reduce_kernel](
-            d_p1.unsafe_ptr(), d_t1.unsafe_ptr(),
-            grid_dim=1, block_dim=E64_LIMBS,
-        )
-        ctx.enqueue_function[round_kernel](
-            d_t1.unsafe_ptr(), d_words.unsafe_ptr(), Int64(0),
-            d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
-        )
-        ctx.enqueue_function[rf_oob_reg_mean_kernel](
-            d_words.unsafe_ptr(), d_stats.unsafe_ptr(),
-            grid_dim=1, block_dim=1,
-        )
-        ctx.enqueue_function[rf_oob_reg_sq_kernel](
-            d_acc.unsafe_ptr(),
-            d_cnt.unsafe_ptr(),
-            y32,
-            Int32(n_rows),
-            Int32(num_outputs),
-            d_words.unsafe_ptr(),
-            d_p1.unsafe_ptr(),
-            d_p2.unsafe_ptr(),
-            d_eflags.unsafe_ptr(),
-            grid_dim=egrid,
-            block_dim=OOB_TPB,
-        )
-        ctx.enqueue_function[limb_reduce_kernel](
-            d_p1.unsafe_ptr(), d_t1.unsafe_ptr(),
-            grid_dim=1, block_dim=E64_LIMBS,
-        )
-        ctx.enqueue_function[limb_reduce_kernel](
-            d_p2.unsafe_ptr(), d_t2.unsafe_ptr(),
-            grid_dim=1, block_dim=E64_LIMBS,
-        )
-        ctx.enqueue_function[round_kernel](
-            d_t1.unsafe_ptr(), d_words.unsafe_ptr(), Int64(1),
-            d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
-        )
-        ctx.enqueue_function[round_kernel](
-            d_t2.unsafe_ptr(), d_words.unsafe_ptr(), Int64(2),
-            d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
-        )
-        ctx.enqueue_function[rf_oob_score_kernel](
-            d_words.unsafe_ptr(),
-            d_stats.unsafe_ptr(),
-            d_eflags.unsafe_ptr(),
-            Int32(0),
-            grid_dim=1,
-            block_dim=1,
-        )
+        comptime if not _rfx_is_defined["RFX_20"]():
+            ctx.enqueue_function[rf_oob_reg_ysum_kernel](
+                d_cnt.unsafe_ptr(),
+                y32,
+                Int32(n_rows),
+                d_p1.unsafe_ptr(),
+                d_stats.unsafe_ptr(),
+                d_eflags.unsafe_ptr(),
+                grid_dim=egrid,
+                block_dim=OOB_TPB,
+            )
+        comptime if not _rfx_is_defined["RFX_21"]():
+            ctx.enqueue_function[limb_reduce_kernel](
+                d_p1.unsafe_ptr(), d_t1.unsafe_ptr(),
+                grid_dim=1, block_dim=E64_LIMBS,
+            )
+        comptime if not _rfx_is_defined["RFX_22"]():
+            ctx.enqueue_function[round_kernel](
+                d_t1.unsafe_ptr(), d_words.unsafe_ptr(), Int64(0),
+                d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
+            )
+        comptime if not _rfx_is_defined["RFX_23"]():
+            ctx.enqueue_function[rf_oob_reg_mean_kernel](
+                d_words.unsafe_ptr(), d_stats.unsafe_ptr(),
+                grid_dim=1, block_dim=1,
+            )
+        comptime if not _rfx_is_defined["RFX_24"]():
+            ctx.enqueue_function[rf_oob_reg_sq_kernel](
+                d_acc.unsafe_ptr(),
+                d_cnt.unsafe_ptr(),
+                y32,
+                Int32(n_rows),
+                Int32(num_outputs),
+                d_words.unsafe_ptr(),
+                d_p1.unsafe_ptr(),
+                d_p2.unsafe_ptr(),
+                d_eflags.unsafe_ptr(),
+                grid_dim=egrid,
+                block_dim=OOB_TPB,
+            )
+        comptime if not _rfx_is_defined["RFX_25"]():
+            ctx.enqueue_function[limb_reduce_kernel](
+                d_p1.unsafe_ptr(), d_t1.unsafe_ptr(),
+                grid_dim=1, block_dim=E64_LIMBS,
+            )
+        comptime if not _rfx_is_defined["RFX_26"]():
+            ctx.enqueue_function[limb_reduce_kernel](
+                d_p2.unsafe_ptr(), d_t2.unsafe_ptr(),
+                grid_dim=1, block_dim=E64_LIMBS,
+            )
+        comptime if not _rfx_is_defined["RFX_27"]():
+            ctx.enqueue_function[round_kernel](
+                d_t1.unsafe_ptr(), d_words.unsafe_ptr(), Int64(1),
+                d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
+            )
+        comptime if not _rfx_is_defined["RFX_28"]():
+            ctx.enqueue_function[round_kernel](
+                d_t2.unsafe_ptr(), d_words.unsafe_ptr(), Int64(2),
+                d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
+            )
+        comptime if not _rfx_is_defined["RFX_29"]():
+            ctx.enqueue_function[rf_oob_score_kernel](
+                d_words.unsafe_ptr(),
+                d_stats.unsafe_ptr(),
+                d_eflags.unsafe_ptr(),
+                Int32(0),
+                grid_dim=1,
+                block_dim=1,
+            )
     var h_words = ctx.enqueue_create_host_buffer[DType.uint64](OOB_WORDS)
     var h_stats = ctx.enqueue_create_host_buffer[DType.int32](OOB_STATS)
     log_launch_ctx(ctx, "xfer_oob_predictions")
@@ -2098,37 +2114,40 @@ def sort_selected_rows[
         var src = rows_u32 if bit % 2 == 0 else keys_u32
         var dst = keys_u32 if bit % 2 == 0 else rows_u32
         log_launch_ctx(ctx, "rows_sort_scan_bit")
-        ctx.enqueue_function[seg_scan_key_bit_kernel](
-            src,
-            Int32(bit),
-            Int32(n),
-            Int32(blocks_wide),
-            offsets_p,
-            block_sums_p,
-            grid_dim=(blocks_wide, 1, 1),
-            block_dim=(SORT_BLOCK, 1, 1),
-        )
+        comptime if not _rfx_is_defined["RFX_30"]():
+            ctx.enqueue_function[seg_scan_key_bit_kernel](
+                src,
+                Int32(bit),
+                Int32(n),
+                Int32(blocks_wide),
+                offsets_p,
+                block_sums_p,
+                grid_dim=(blocks_wide, 1, 1),
+                block_dim=(SORT_BLOCK, 1, 1),
+            )
         log_launch_ctx(ctx, "rows_sort_block_sums")
         enqueue_seg_scan_block_sums(ctx, block_sums_p, n, blocks_wide, 1)
         log_launch_ctx(ctx, "rows_sort_carry")
-        ctx.enqueue_function[seg_add_block_carry_kernel](
-            offsets_p,
-            block_sums_p,
-            Int32(n),
-            Int32(blocks_wide),
-            grid_dim=(blocks_wide, 1, 1),
-            block_dim=(SORT_BLOCK, 1, 1),
-        )
+        comptime if not _rfx_is_defined["RFX_31"]():
+            ctx.enqueue_function[seg_add_block_carry_kernel](
+                offsets_p,
+                block_sums_p,
+                Int32(n),
+                Int32(blocks_wide),
+                grid_dim=(blocks_wide, 1, 1),
+                block_dim=(SORT_BLOCK, 1, 1),
+            )
         log_launch_ctx(ctx, "rows_sort_reorder")
-        ctx.enqueue_function[seg_reorder_one_bit_kernel](
-            src,
-            offsets_p,
-            Int32(bit),
-            Int32(n),
-            dst,
-            grid_dim=(blocks_wide, 1, 1),
-            block_dim=(SORT_BLOCK, 1, 1),
-        )
+        comptime if not _rfx_is_defined["RFX_32"]():
+            ctx.enqueue_function[seg_reorder_one_bit_kernel](
+                src,
+                offsets_p,
+                Int32(bit),
+                Int32(n),
+                dst,
+                grid_dim=(blocks_wide, 1, 1),
+                block_dim=(SORT_BLOCK, 1, 1),
+            )
         bit += 1
     # NO synchronize -- the pass kernels ride the in-order queue exactly
     # as the sampler's own launches do, and every reader of
@@ -2194,17 +2213,18 @@ def launch_bootstrap_rows_labels[
     var n_blocks = min(full_blocks, need_blocks)
     comptime k = bootstrap_rows_labels_kernel[label_dtype, sabotage]
     log_launch_ctx(ctx, "philox_uniform_int_gather")
-    ctx.enqueue_function[k](
-        rows.unsafe_ptr(),
-        labels.unsafe_origin_cast[MutAnyOrigin](),
-        labels_s.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n),
-        Int32(n_rows),
-        (seed & 0xFFFFFFFF).cast[DType.uint32]().cast[DType.int32](),
-        (seed >> 32).cast[DType.uint32]().cast[DType.int32](),
-        grid_dim=n_blocks,
-        block_dim=RNG_BLOCK_THREADS,
-    )
+    comptime if not _rfx_is_defined["RFX_33"]():
+        ctx.enqueue_function[k](
+            rows.unsafe_ptr(),
+            labels.unsafe_origin_cast[MutAnyOrigin](),
+            labels_s.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n),
+            Int32(n_rows),
+            (seed & 0xFFFFFFFF).cast[DType.uint32]().cast[DType.int32](),
+            (seed >> 32).cast[DType.uint32]().cast[DType.int32](),
+            grid_dim=n_blocks,
+            block_dim=RNG_BLOCK_THREADS,
+        )
 
 
 struct RowSampler(Movable):
@@ -2511,24 +2531,26 @@ struct RowSampler(Movable):
         # `:178` -- `checked_mul<std::size_t>(tree_id, n_rows_)`
         var offset = Int64(Int(tree_id)) * Int64(self.n_rows)
         log_launch_ctx(ctx, "bootstrap_mask_fill")
-        ctx.enqueue_function[bootstrap_mask_fill_kernel](
-            self.bootstrap_masks.unsafe_ptr(),
-            offset,
-            Int32(self.n_rows),
-            grid_dim=_ceildiv(self.n_rows, 256),
-            block_dim=256,
-        )
-        if self.n_selected > 0:
-            log_launch_ctx(ctx, "bootstrap_mask_scatter")
-            ctx.enqueue_function[bootstrap_mask_scatter_kernel](
+        comptime if not _rfx_is_defined["RFX_34"]():
+            ctx.enqueue_function[bootstrap_mask_fill_kernel](
                 self.bootstrap_masks.unsafe_ptr(),
                 offset,
-                self.selected_rows_[slot].unsafe_ptr(),
-                Int32(self.n_selected),
                 Int32(self.n_rows),
-                grid_dim=_ceildiv(self.n_selected, 256),
+                grid_dim=_ceildiv(self.n_rows, 256),
                 block_dim=256,
             )
+        if self.n_selected > 0:
+            log_launch_ctx(ctx, "bootstrap_mask_scatter")
+            comptime if not _rfx_is_defined["RFX_35"]():
+                ctx.enqueue_function[bootstrap_mask_scatter_kernel](
+                    self.bootstrap_masks.unsafe_ptr(),
+                    offset,
+                    self.selected_rows_[slot].unsafe_ptr(),
+                    Int32(self.n_selected),
+                    Int32(self.n_rows),
+                    grid_dim=_ceildiv(self.n_selected, 256),
+                    block_dim=256,
+                )
         # NO synchronize. Their `thrust::fill` + `thrust::scatter` run on
         # the stream and `sample()` returns without a sync (`:163-165`);
         # everything that reads the mask or `selected_rows` is enqueued on
@@ -2619,13 +2641,14 @@ struct RowSampler(Movable):
         # fill. Consumers use this queue, so no host staging or wait is needed.
         self.n_selected = self.n_sampled_rows
         log_launch_ctx(ctx, "sampled_rows_sequence")
-        ctx.enqueue_function[row_ids_tiled_sequence_kernel](
-            self.selected_rows_[slot].unsafe_ptr(),
-            Int32(self.n_sampled_rows),
-            Int32(self.n_rows),
-            grid_dim=_ceildiv(self.n_sampled_rows, 256),
-            block_dim=256,
-        )
+        comptime if not _rfx_is_defined["RFX_36"]():
+            ctx.enqueue_function[row_ids_tiled_sequence_kernel](
+                self.selected_rows_[slot].unsafe_ptr(),
+                Int32(self.n_sampled_rows),
+                Int32(self.n_rows),
+                grid_dim=_ceildiv(self.n_sampled_rows, 256),
+                block_dim=256,
+            )
 
     @always_inline
     def rows_ptr(
@@ -2947,12 +2970,13 @@ def fit_forest_prepared[
     # See `ftz_features_kernel`. FAST never enqueues this.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         log_launch_ctx(ctx, "ftz_features")
-        ctx.enqueue_function[ftz_features_kernel](
-            x.unsafe_ptr(),
-            Int64(n_rows * n_cols),
-            grid_dim=_ceildiv(n_rows * n_cols, 256),
-            block_dim=256,
-        )
+        comptime if not _rfx_is_defined["RFX_37"]():
+            ctx.enqueue_function[ftz_features_kernel](
+                x.unsafe_ptr(),
+                Int64(n_rows * n_cols),
+                grid_dim=_ceildiv(n_rows * n_cols, 256),
+                block_dim=256,
+            )
 
     # `:317-325` -- ONCE, for the whole forest, with their literal 4.
     # `prep` (trees-apple3): with `keep_prep` a table a former fit of the

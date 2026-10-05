@@ -19,6 +19,7 @@ constant 1 (every writer writes the same word), so its result does not depend
 on thread order, grid shape or vendor.
 """
 
+from std.sys.compile import is_defined as _rfx_is_defined
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
 from std.memory import bitcast
@@ -74,18 +75,19 @@ def upload_forest_x(
     if row_major:
         var raw = ctx.enqueue_create_buffer[DType.float32](n)
         ctx.enqueue_copy(dst_buf=raw, src_ptr=src)
-        ctx.enqueue_function[transpose_kernel](
-            dx.unsafe_ptr(),
-            raw.unsafe_ptr(),
-            Int32(n_rows),
-            Int32(n_cols),
-            grid_dim=(
-                ceildiv(n_cols, TRANSPOSE_TILE),
-                min(ceildiv(n_rows, TRANSPOSE_TILE), CUDA_MAX_GRID_YZ),
-                1,
-            ),
-            block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
-        )
+        comptime if not _rfx_is_defined["RFX_12"]():
+            ctx.enqueue_function[transpose_kernel](
+                dx.unsafe_ptr(),
+                raw.unsafe_ptr(),
+                Int32(n_rows),
+                Int32(n_cols),
+                grid_dim=(
+                    ceildiv(n_cols, TRANSPOSE_TILE),
+                    min(ceildiv(n_rows, TRANSPOSE_TILE), CUDA_MAX_GRID_YZ),
+                    1,
+                ),
+                block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+            )
         ctx.synchronize()
         _ = raw^
     else:
@@ -105,13 +107,14 @@ def device_has_nan_f32(
     var flag = ctx.enqueue_create_buffer[DType.int32](1)
     flag.enqueue_fill(Int32(0))
     var blocks = min(ceildiv(n, FOREST_SCAN_TPB), FOREST_SCAN_MAX_BLOCKS)
-    ctx.enqueue_function[forest_nan_scan_kernel](
-        rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()),
-        Int64(n),
-        flag.unsafe_ptr(),
-        grid_dim=(blocks, 1, 1),
-        block_dim=(FOREST_SCAN_TPB, 1, 1),
-    )
+    comptime if not _rfx_is_defined["RFX_13"]():
+        ctx.enqueue_function[forest_nan_scan_kernel](
+            rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()),
+            Int64(n),
+            flag.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(FOREST_SCAN_TPB, 1, 1),
+        )
     var hflag = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_buf=hflag, src_buf=flag)
     ctx.synchronize()

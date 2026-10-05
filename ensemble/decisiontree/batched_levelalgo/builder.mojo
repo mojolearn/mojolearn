@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
+from std.sys.compile import is_defined as _rfx_is_defined
 from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
@@ -2224,18 +2225,19 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         )
         comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
             log_launch_ctx(ctx, "merge_split_candidates")
-            ctx.enqueue_function[
-                merge_split_candidates_kernel[Self.O.DataT]
-            ](
-                self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                self.split_cand.unsafe_ptr()
-                .unsafe_origin_cast[MutAnyOrigin]()
-                .unsafe_bitcast[Split[Self.O.DataT]](),
-                Int32(n_work_items),
-                Int32(n_blocks_dimy),
-                grid_dim=ceildiv(n_work_items, 128),
-                block_dim=128,
-            )
+            comptime if not _rfx_is_defined["RFX_55"]():
+                ctx.enqueue_function[
+                    merge_split_candidates_kernel[Self.O.DataT]
+                ](
+                    self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    self.split_cand.unsafe_ptr()
+                    .unsafe_origin_cast[MutAnyOrigin]()
+                    .unsafe_bitcast[Split[Self.O.DataT]](),
+                    Int32(n_work_items),
+                    Int32(n_blocks_dimy),
+                    grid_dim=ceildiv(n_work_items, 128),
+                    block_dim=128,
+                )
         instr.times.stop_host("host_best_launch", t_h)
 
     def enqueue_best_splits(
@@ -2401,23 +2403,24 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             if small_batch:
                 var dimy = min(N_BLKS_FOR_COLS, n_sampled_cols - c)
                 log_launch_ctx(ctx, "small_node_split")
-                ctx.enqueue_function[
-                    small_node_split_kernel[
-                        Self.O, TPB_DEFAULT, SMALL_NODE_SLOTS,
-                        Self.sampled_labels,
-                    ]
-                ](
-                    find_argsp.unsafe_origin_cast[MutAnyOrigin](),
-                    self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                    Int32(c),
-                    self.column_samples.unsafe_ptr()
-                    .unsafe_origin_cast[MutAnyOrigin](),
-                    self.mutex.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                    self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                    Int32(self.params.max_n_bins),
-                    grid_dim=(n, dimy),
-                    block_dim=TPB_DEFAULT,
-                )
+                comptime if not _rfx_is_defined["RFX_56"]():
+                    ctx.enqueue_function[
+                        small_node_split_kernel[
+                            Self.O, TPB_DEFAULT, SMALL_NODE_SLOTS,
+                            Self.sampled_labels,
+                        ]
+                    ](
+                        find_argsp.unsafe_origin_cast[MutAnyOrigin](),
+                        self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                        Int32(c),
+                        self.column_samples.unsafe_ptr()
+                        .unsafe_origin_cast[MutAnyOrigin](),
+                        self.mutex.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                        self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                        Int32(self.params.max_n_bins),
+                        grid_dim=(n, dimy),
+                        block_dim=TPB_DEFAULT,
+                    )
             else:
                 self._compute_split(
                     ctx, dataset, c, n_blocks_dimx, n,

@@ -13,6 +13,7 @@ reads X."""
 # Default since the M3 A/B (b272364e4, n=2, identical output hashes): ET
 # taxi 2,867 -> 2,829 ms, istella 4,143 -> 4,059 ms; RF neutral.
 
+from std.sys.compile import is_defined as _rfx_is_defined
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -77,13 +78,14 @@ struct ForestFiniteScan(Movable):
                 (n + FINITE_SCAN_TPB * 16 - 1) // (FINITE_SCAN_TPB * 16),
                 FINITE_SCAN_MAX_BLOCKS,
             )
-            ctx.enqueue_function[forest_nonfinite_scan_kernel](
-                data.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                Int64(n),
-                self.dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                grid_dim=(blocks, 1, 1),
-                block_dim=(FINITE_SCAN_TPB, 1, 1),
-            )
+            comptime if not _rfx_is_defined["RFX_14"]():
+                ctx.enqueue_function[forest_nonfinite_scan_kernel](
+                    data.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    Int64(n),
+                    self.dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    grid_dim=(blocks, 1, 1),
+                    block_dim=(FINITE_SCAN_TPB, 1, 1),
+                )
         ctx.enqueue_copy(dst_ptr=self.hflag.unsafe_ptr(), src_buf=self.dflag)
 
     def refuse_if_bad(self, who: String) raises:

@@ -378,6 +378,7 @@ which already priced the width for the reduction this scratch feeds.
 =================================================================
 """
 
+from std.sys.compile import is_defined as _rfx_is_defined
 from std.gpu import (
     WARP_SIZE,
     block_dim,
@@ -947,23 +948,24 @@ def launch_phase_setup_kernel[
     var hi_arg = hi_u.cast[DType.int32]()
     var lo_arg = lo_u.cast[DType.int32]()
     log_launch_ctx(ctx, "phase_setup")
-    ctx.enqueue_function[phase_setup_kernel[dtype]](
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_work_items),
-        mutex.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_mutex),
-        column_samples.unsafe_origin_cast[MutAnyOrigin](),
-        work_items.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_column_samples),
-        treeid,
-        lo_arg,
-        hi_arg,
-        Int32(sample_offset),
-        Int32(n_cols),
-        Int32(n_sampled_cols),
-        grid_dim=ceildiv(extent, PHASE_SETUP_TPB),
-        block_dim=PHASE_SETUP_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_57"]():
+        ctx.enqueue_function[phase_setup_kernel[dtype]](
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_work_items),
+            mutex.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_mutex),
+            column_samples.unsafe_origin_cast[MutAnyOrigin](),
+            work_items.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_column_samples),
+            treeid,
+            lo_arg,
+            hi_arg,
+            Int32(sample_offset),
+            Int32(n_cols),
+            Int32(n_sampled_cols),
+            grid_dim=ceildiv(extent, PHASE_SETUP_TPB),
+            block_dim=PHASE_SETUP_TPB,
+        )
 
 
 # ===========================================================================
@@ -1091,12 +1093,13 @@ def launch_finalize_pure_splits_kernel[
     comptime FINALIZE_TPB = 128
     comptime k_fin = finalize_pure_splits_kernel[dtype]
     log_launch_ctx(ctx, "nodesplit_finalize_pure")
-    ctx.enqueue_function[k_fin](
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_work_items),
-        grid_dim=ceildiv(n_work_items, FINALIZE_TPB),
-        block_dim=FINALIZE_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_58"]():
+        ctx.enqueue_function[k_fin](
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_work_items),
+            grid_dim=ceildiv(n_work_items, FINALIZE_TPB),
+            block_dim=FINALIZE_TPB,
+        )
 
 
 @fieldwise_init
@@ -1715,13 +1718,14 @@ def launch_node_split_kernel[
     var reset_grid = ceildiv(n_work_items, RESET_TPB)
     comptime k_reset = reset_local_left_counts_kernel[dtype]
     log_launch_ctx(ctx, "nodesplit_reset")
-    ctx.enqueue_function[k_reset](
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        scratch.local_nleft.unsafe_ptr(),
-        Int32(n_work_items),
-        grid_dim=reset_grid if reset_grid > 0 else 1,
-        block_dim=RESET_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_59"]():
+        ctx.enqueue_function[k_reset](
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            scratch.local_nleft.unsafe_ptr(),
+            Int32(n_work_items),
+            grid_dim=reset_grid if reset_grid > 0 else 1,
+            block_dim=RESET_TPB,
+        )
 
     # `:161-164`
     comptime count_sab = 1 if sabotage == 7 else 0
@@ -1729,27 +1733,29 @@ def launch_node_split_kernel[
         dtype, label_dtype, TPB, count_sab
     ]
     log_launch_ctx(ctx, "nodesplit_count_left")
-    ctx.enqueue_function[k_count](
-        argsp.unsafe_origin_cast[MutAnyOrigin](),
-        work_items.unsafe_origin_cast[MutAnyOrigin](),
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        workload_info.unsafe_origin_cast[MutAnyOrigin](),
-        scratch.local_nleft.unsafe_ptr(),
-        grid_dim=n_blocks_dimx,
-        block_dim=TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_60"]():
+        ctx.enqueue_function[k_count](
+            argsp.unsafe_origin_cast[MutAnyOrigin](),
+            work_items.unsafe_origin_cast[MutAnyOrigin](),
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            workload_info.unsafe_origin_cast[MutAnyOrigin](),
+            scratch.local_nleft.unsafe_ptr(),
+            grid_dim=n_blocks_dimx,
+            block_dim=TPB,
+        )
 
     # DEVIATION 127: their 64-bit atomic landed straight in the field;
     # ours widens the shadow into it here, before `:113` reads it.
     comptime k_pub = publish_local_left_counts_kernel[dtype]
     log_launch_ctx(ctx, "nodesplit_publish")
-    ctx.enqueue_function[k_pub](
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        scratch.local_nleft.unsafe_ptr(),
-        Int32(n_work_items),
-        grid_dim=reset_grid if reset_grid > 0 else 1,
-        block_dim=RESET_TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_61"]():
+        ctx.enqueue_function[k_pub](
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            scratch.local_nleft.unsafe_ptr(),
+            Int32(n_work_items),
+            grid_dim=reset_grid if reset_grid > 0 else 1,
+            block_dim=RESET_TPB,
+        )
 
     # `:166-206` -- the fused segmented scan. "Each slot corresponds to
     # one thread lane in the tiled workload_info layout. workload_info is
@@ -1829,17 +1835,18 @@ def launch_node_split_kernel[
             dtype, label_dtype, TPB, copy_sab
         ]
         log_launch_ctx(ctx, "nodesplit_copy_back")
-        ctx.enqueue_function[k_copy_s](
-            argsp.unsafe_origin_cast[MutAnyOrigin](),
-            work_items.unsafe_origin_cast[MutAnyOrigin](),
-            splits.unsafe_origin_cast[MutAnyOrigin](),
-            workload_info.unsafe_origin_cast[MutAnyOrigin](),
-            partition_row_ids.unsafe_origin_cast[MutAnyOrigin](),
-            partition_labels.unsafe_origin_cast[MutAnyOrigin](),
-            partition_sample_weight.unsafe_origin_cast[MutAnyOrigin](),
-            grid_dim=n_blocks_dimx,
-            block_dim=TPB,
-        )
+        comptime if not _rfx_is_defined["RFX_62"]():
+            ctx.enqueue_function[k_copy_s](
+                argsp.unsafe_origin_cast[MutAnyOrigin](),
+                work_items.unsafe_origin_cast[MutAnyOrigin](),
+                splits.unsafe_origin_cast[MutAnyOrigin](),
+                workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                partition_row_ids.unsafe_origin_cast[MutAnyOrigin](),
+                partition_labels.unsafe_origin_cast[MutAnyOrigin](),
+                partition_sample_weight.unsafe_origin_cast[MutAnyOrigin](),
+                grid_dim=n_blocks_dimx,
+                block_dim=TPB,
+            )
     else:
         comptime OpsT = NodeSplitPartitionOps[dtype, TPB, ops_sab]
         var ops = OpsT(
@@ -1894,15 +1901,16 @@ def launch_node_split_kernel[
             dtype, label_dtype, TPB, copy_sab
         ]
         log_launch_ctx(ctx, "nodesplit_copy_back")
-        ctx.enqueue_function[k_copy](
-            argsp.unsafe_origin_cast[MutAnyOrigin](),
-            work_items.unsafe_origin_cast[MutAnyOrigin](),
-            splits.unsafe_origin_cast[MutAnyOrigin](),
-            workload_info.unsafe_origin_cast[MutAnyOrigin](),
-            partition_row_ids.unsafe_origin_cast[MutAnyOrigin](),
-            grid_dim=n_blocks_dimx,
-            block_dim=TPB,
-        )
+        comptime if not _rfx_is_defined["RFX_63"]():
+            ctx.enqueue_function[k_copy](
+                argsp.unsafe_origin_cast[MutAnyOrigin](),
+                work_items.unsafe_origin_cast[MutAnyOrigin](),
+                splits.unsafe_origin_cast[MutAnyOrigin](),
+                workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                partition_row_ids.unsafe_origin_cast[MutAnyOrigin](),
+                grid_dim=n_blocks_dimx,
+                block_dim=TPB,
+            )
 
 
 # ===========================================================================
@@ -2010,17 +2018,18 @@ def launch_gather_sampled_order_kernel[
         return
     comptime k = gather_sampled_order_kernel[label_dtype, TPB, sabotage]
     log_launch_ctx(ctx, "gather_sampled_order")
-    ctx.enqueue_function[k](
-        labels.unsafe_origin_cast[MutAnyOrigin](),
-        sample_weight.unsafe_origin_cast[MutAnyOrigin](),
-        row_ids.unsafe_origin_cast[MutAnyOrigin](),
-        labels_s.unsafe_origin_cast[MutAnyOrigin](),
-        sample_weight_s.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(n_sampled_rows),
-        Int32(1) if gather_weights else Int32(0),
-        grid_dim=ceildiv(n_sampled_rows, TPB),
-        block_dim=TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_64"]():
+        ctx.enqueue_function[k](
+            labels.unsafe_origin_cast[MutAnyOrigin](),
+            sample_weight.unsafe_origin_cast[MutAnyOrigin](),
+            row_ids.unsafe_origin_cast[MutAnyOrigin](),
+            labels_s.unsafe_origin_cast[MutAnyOrigin](),
+            sample_weight_s.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(n_sampled_rows),
+            Int32(1) if gather_weights else Int32(0),
+            grid_dim=ceildiv(n_sampled_rows, TPB),
+            block_dim=TPB,
+        )
 
 
 # ===========================================================================
@@ -2203,14 +2212,15 @@ def launch_leaf_kernel[
         O, TPB, LEAF_SMEM_BIN_SLOTS, sabotage, zero_fill, sampled_labels
     ]
     log_launch_ctx(ctx, "leaf")
-    ctx.enqueue_function[k](
-        argsp.unsafe_origin_cast[MutAnyOrigin](),
-        tree.unsafe_origin_cast[MutAnyOrigin](),
-        instance_ranges.unsafe_origin_cast[MutAnyOrigin](),
-        leaves.unsafe_origin_cast[MutAnyOrigin](),
-        grid_dim=batch_size,
-        block_dim=TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_65"]():
+        ctx.enqueue_function[k](
+            argsp.unsafe_origin_cast[MutAnyOrigin](),
+            tree.unsafe_origin_cast[MutAnyOrigin](),
+            instance_ranges.unsafe_origin_cast[MutAnyOrigin](),
+            leaves.unsafe_origin_cast[MutAnyOrigin](),
+            grid_dim=batch_size,
+            block_dim=TPB,
+        )
 
 
 @fieldwise_init
@@ -2826,7 +2836,25 @@ def launch_build_histograms_kernel[
                 O, TPB, 1, True, sabotage, True, sampled_labels
             ]
             log_launch_ctx(ctx, "histogram_global_binned")
-            ctx.enqueue_function[kgb](
+            comptime if not _rfx_is_defined["RFX_66"]():
+                ctx.enqueue_function[kgb](
+                    argsp.unsafe_origin_cast[MutAnyOrigin](),
+                    histograms.unsafe_origin_cast[MutAnyOrigin](),
+                    Int32(max_n_bins),
+                    work_items.unsafe_origin_cast[MutAnyOrigin](),
+                    Int32(col_start),
+                    column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                    workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                    grid_dim=(histogram_grid_x, histogram_grid_y),
+                    block_dim=TPB,
+                )
+            return
+        comptime kg = build_histograms_kernel[
+            O, TPB, 1, True, sabotage, False, sampled_labels
+        ]
+        log_launch_ctx(ctx, "histogram_global")
+        comptime if not _rfx_is_defined["RFX_67"]():
+            ctx.enqueue_function[kg](
                 argsp.unsafe_origin_cast[MutAnyOrigin](),
                 histograms.unsafe_origin_cast[MutAnyOrigin](),
                 Int32(max_n_bins),
@@ -2837,22 +2865,6 @@ def launch_build_histograms_kernel[
                 grid_dim=(histogram_grid_x, histogram_grid_y),
                 block_dim=TPB,
             )
-            return
-        comptime kg = build_histograms_kernel[
-            O, TPB, 1, True, sabotage, False, sampled_labels
-        ]
-        log_launch_ctx(ctx, "histogram_global")
-        ctx.enqueue_function[kg](
-            argsp.unsafe_origin_cast[MutAnyOrigin](),
-            histograms.unsafe_origin_cast[MutAnyOrigin](),
-            Int32(max_n_bins),
-            work_items.unsafe_origin_cast[MutAnyOrigin](),
-            Int32(col_start),
-            column_samples.unsafe_origin_cast[MutAnyOrigin](),
-            workload_info.unsafe_origin_cast[MutAnyOrigin](),
-            grid_dim=(histogram_grid_x, histogram_grid_y),
-            block_dim=TPB,
-        )
     else:
         if dataset.has_bins:
             # NVIDIA and Apple use four-column tiles after exact Taxi/Istella
@@ -2911,18 +2923,19 @@ def launch_build_histograms_kernel[
                     if num_outputs > 0 and need > 0 and need <= SLOTS * size_of[O.BinT]():
                         comptime tiled = build_histograms_binned_columns_kernel[O, TPB, TILE, SLOTS, sampled_labels]
                         log_launch_ctx(ctx, "histogram_binned_columns" + String(TILE) + "_" + String(BYTES))
-                        ctx.enqueue_function[tiled](
-                            argsp.unsafe_origin_cast[MutAnyOrigin](),
-                            histograms.unsafe_origin_cast[MutAnyOrigin](),
-                            Int32(max_n_bins),
-                            work_items.unsafe_origin_cast[MutAnyOrigin](),
-                            Int32(col_start),
-                            column_samples.unsafe_origin_cast[MutAnyOrigin](),
-                            workload_info.unsafe_origin_cast[MutAnyOrigin](),
-                            Int32(histogram_grid_y),
-                            grid_dim=(histogram_grid_x, (histogram_grid_y + TILE - 1) // TILE),
-                            block_dim=TPB,
-                        )
+                        comptime if not _rfx_is_defined["RFX_68"]():
+                            ctx.enqueue_function[tiled](
+                                argsp.unsafe_origin_cast[MutAnyOrigin](),
+                                histograms.unsafe_origin_cast[MutAnyOrigin](),
+                                Int32(max_n_bins),
+                                work_items.unsafe_origin_cast[MutAnyOrigin](),
+                                Int32(col_start),
+                                column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                                workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                                Int32(histogram_grid_y),
+                                grid_dim=(histogram_grid_x, (histogram_grid_y + TILE - 1) // TILE),
+                                block_dim=TPB,
+                            )
                         return
             # DEVIATION 314, shared arm. Uses the default 103a blob; the
             # tier question below is orthogonal and pending its own A/B.
@@ -2940,17 +2953,18 @@ def launch_build_histograms_kernel[
                 SMEM_COPIES,
             ]
             log_launch_ctx(ctx, "histogram_binned")
-            ctx.enqueue_function[ksb](
-                argsp.unsafe_origin_cast[MutAnyOrigin](),
-                histograms.unsafe_origin_cast[MutAnyOrigin](),
-                Int32(max_n_bins),
-                work_items.unsafe_origin_cast[MutAnyOrigin](),
-                Int32(col_start),
-                column_samples.unsafe_origin_cast[MutAnyOrigin](),
-                workload_info.unsafe_origin_cast[MutAnyOrigin](),
-                grid_dim=(histogram_grid_x, histogram_grid_y),
-                block_dim=TPB,
-            )
+            comptime if not _rfx_is_defined["RFX_69"]():
+                ctx.enqueue_function[ksb](
+                    argsp.unsafe_origin_cast[MutAnyOrigin](),
+                    histograms.unsafe_origin_cast[MutAnyOrigin](),
+                    Int32(max_n_bins),
+                    work_items.unsafe_origin_cast[MutAnyOrigin](),
+                    Int32(col_start),
+                    column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                    workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                    grid_dim=(histogram_grid_x, histogram_grid_y),
+                    block_dim=TPB,
+                )
             return
         # DEVIATION 103a, TIER MACHINERY (2026-08-22, VERDICT PENDING).
         # Their launcher passes EXACTLY `histogram_dynamic_smem_size` as
@@ -3014,21 +3028,22 @@ def launch_build_histograms_kernel[
                         log_launch(
                             "histogram_binned_shared_" + String(TIER_BYTES)
                         )
-                        ctx.enqueue_function[ktb](
-                            argsp.unsafe_origin_cast[MutAnyOrigin](),
-                            histograms.unsafe_origin_cast[MutAnyOrigin](),
-                            Int32(max_n_bins),
-                            work_items.unsafe_origin_cast[MutAnyOrigin](),
-                            Int32(col_start),
-                            column_samples.unsafe_origin_cast[
-                                MutAnyOrigin
-                            ](),
-                            workload_info.unsafe_origin_cast[
-                                MutAnyOrigin
-                            ](),
-                            grid_dim=(histogram_grid_x, histogram_grid_y),
-                            block_dim=TPB,
-                        )
+                        comptime if not _rfx_is_defined["RFX_70"]():
+                            ctx.enqueue_function[ktb](
+                                argsp.unsafe_origin_cast[MutAnyOrigin](),
+                                histograms.unsafe_origin_cast[MutAnyOrigin](),
+                                Int32(max_n_bins),
+                                work_items.unsafe_origin_cast[MutAnyOrigin](),
+                                Int32(col_start),
+                                column_samples.unsafe_origin_cast[
+                                    MutAnyOrigin
+                                ](),
+                                workload_info.unsafe_origin_cast[
+                                    MutAnyOrigin
+                                ](),
+                                grid_dim=(histogram_grid_x, histogram_grid_y),
+                                block_dim=TPB,
+                            )
                     else:
                         comptime kt = build_histograms_kernel[
                             O,
@@ -3040,21 +3055,22 @@ def launch_build_histograms_kernel[
                             sampled_labels,
                         ]
                         log_launch_ctx(ctx, "histogram_shared_" + String(TIER_BYTES))
-                        ctx.enqueue_function[kt](
-                            argsp.unsafe_origin_cast[MutAnyOrigin](),
-                            histograms.unsafe_origin_cast[MutAnyOrigin](),
-                            Int32(max_n_bins),
-                            work_items.unsafe_origin_cast[MutAnyOrigin](),
-                            Int32(col_start),
-                            column_samples.unsafe_origin_cast[
-                                MutAnyOrigin
-                            ](),
-                            workload_info.unsafe_origin_cast[
-                                MutAnyOrigin
-                            ](),
-                            grid_dim=(histogram_grid_x, histogram_grid_y),
-                            block_dim=TPB,
-                        )
+                        comptime if not _rfx_is_defined["RFX_71"]():
+                            ctx.enqueue_function[kt](
+                                argsp.unsafe_origin_cast[MutAnyOrigin](),
+                                histograms.unsafe_origin_cast[MutAnyOrigin](),
+                                Int32(max_n_bins),
+                                work_items.unsafe_origin_cast[MutAnyOrigin](),
+                                Int32(col_start),
+                                column_samples.unsafe_origin_cast[
+                                    MutAnyOrigin
+                                ](),
+                                workload_info.unsafe_origin_cast[
+                                    MutAnyOrigin
+                                ](),
+                                grid_dim=(histogram_grid_x, histogram_grid_y),
+                                block_dim=TPB,
+                            )
                     launched = True
         if not launched:
             # Above 8 KiB the full 103a blob remains; anything past
@@ -3064,17 +3080,18 @@ def launch_build_histograms_kernel[
                 O, TPB, SMEM_BIN_SLOTS, False, sabotage, False, sampled_labels
             ]
             log_launch_ctx(ctx, "histogram_shared")
-            ctx.enqueue_function[ks](
-                argsp.unsafe_origin_cast[MutAnyOrigin](),
-                histograms.unsafe_origin_cast[MutAnyOrigin](),
-                Int32(max_n_bins),
-                work_items.unsafe_origin_cast[MutAnyOrigin](),
-                Int32(col_start),
-                column_samples.unsafe_origin_cast[MutAnyOrigin](),
-                workload_info.unsafe_origin_cast[MutAnyOrigin](),
-                grid_dim=(histogram_grid_x, histogram_grid_y),
-                block_dim=TPB,
-            )
+            comptime if not _rfx_is_defined["RFX_72"]():
+                ctx.enqueue_function[ks](
+                    argsp.unsafe_origin_cast[MutAnyOrigin](),
+                    histograms.unsafe_origin_cast[MutAnyOrigin](),
+                    Int32(max_n_bins),
+                    work_items.unsafe_origin_cast[MutAnyOrigin](),
+                    Int32(col_start),
+                    column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                    workload_info.unsafe_origin_cast[MutAnyOrigin](),
+                    grid_dim=(histogram_grid_x, histogram_grid_y),
+                    block_dim=TPB,
+                )
 
 
 @fieldwise_init
@@ -3610,39 +3627,41 @@ def launch_find_best_splits_kernel[
                         O, SLOTS, zero_after, candidates
                     ]
                     log_launch_ctx(ctx, "find_best_splits_warp")
-                    ctx.enqueue_function[kw](
-                        argsp.unsafe_origin_cast[MutAnyOrigin](),
-                        histograms.unsafe_origin_cast[MutAnyOrigin](),
-                        Int32(max_n_bins),
-                        Int32(col_start),
-                        column_samples.unsafe_origin_cast[MutAnyOrigin](),
-                        mutex.unsafe_origin_cast[MutAnyOrigin](),
-                        splits.unsafe_origin_cast[MutAnyOrigin](),
-                        (cand if candidates else splits).unsafe_origin_cast[MutAnyOrigin](),
-                        Int32(split_grid_y),
-                        grid_dim=(
-                            split_grid_x,
-                            ceildiv(split_grid_y, FBS_WARP_CELLS),
-                        ),
-                        block_dim=FBS_WARP_CELLS * WARP_SIZE,
-                    )
+                    comptime if not _rfx_is_defined["RFX_73"]():
+                        ctx.enqueue_function[kw](
+                            argsp.unsafe_origin_cast[MutAnyOrigin](),
+                            histograms.unsafe_origin_cast[MutAnyOrigin](),
+                            Int32(max_n_bins),
+                            Int32(col_start),
+                            column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                            mutex.unsafe_origin_cast[MutAnyOrigin](),
+                            splits.unsafe_origin_cast[MutAnyOrigin](),
+                            (cand if candidates else splits).unsafe_origin_cast[MutAnyOrigin](),
+                            Int32(split_grid_y),
+                            grid_dim=(
+                                split_grid_x,
+                                ceildiv(split_grid_y, FBS_WARP_CELLS),
+                            ),
+                            block_dim=FBS_WARP_CELLS * WARP_SIZE,
+                        )
                     return
     comptime k = find_best_splits_kernel[
         O, TPB, sabotage, pinned_reduce, zero_after, candidates
     ]
     log_launch_ctx(ctx, "find_best_splits")
-    ctx.enqueue_function[k](
-        argsp.unsafe_origin_cast[MutAnyOrigin](),
-        histograms.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(max_n_bins),
-        Int32(col_start),
-        column_samples.unsafe_origin_cast[MutAnyOrigin](),
-        mutex.unsafe_origin_cast[MutAnyOrigin](),
-        splits.unsafe_origin_cast[MutAnyOrigin](),
-        (cand if candidates else splits).unsafe_origin_cast[MutAnyOrigin](),
-        grid_dim=(split_grid_x, split_grid_y),
-        block_dim=TPB,
-    )
+    comptime if not _rfx_is_defined["RFX_74"]():
+        ctx.enqueue_function[k](
+            argsp.unsafe_origin_cast[MutAnyOrigin](),
+            histograms.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(max_n_bins),
+            Int32(col_start),
+            column_samples.unsafe_origin_cast[MutAnyOrigin](),
+            mutex.unsafe_origin_cast[MutAnyOrigin](),
+            splits.unsafe_origin_cast[MutAnyOrigin](),
+            (cand if candidates else splits).unsafe_origin_cast[MutAnyOrigin](),
+            grid_dim=(split_grid_x, split_grid_y),
+            block_dim=TPB,
+        )
 
 
 
@@ -3747,18 +3766,19 @@ def launch_bin_dataset[dtype: DType](
         return
     var blocks_x = ceildiv(n_rows, 256)
     log_launch_ctx(ctx, "bin_dataset")
-    ctx.enqueue_function[bin_dataset_kernel[dtype]](
-        data.unsafe_origin_cast[MutAnyOrigin](),
-        bins_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        quantiles_array.unsafe_origin_cast[MutAnyOrigin](),
-        n_bins_array.unsafe_origin_cast[MutAnyOrigin](),
-        Int32(max_n_bins),
-        Int32(n_rows),
-        Int32(n_cols),
-        Int64(row_stride),
-        Int64(col_stride),
-        Int32(1) if bins_row_major else Int32(0),
-        grid_dim=(blocks_x, n_cols),
-        block_dim=256,
-    )
+    comptime if not _rfx_is_defined["RFX_75"]():
+        ctx.enqueue_function[bin_dataset_kernel[dtype]](
+            data.unsafe_origin_cast[MutAnyOrigin](),
+            bins_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            quantiles_array.unsafe_origin_cast[MutAnyOrigin](),
+            n_bins_array.unsafe_origin_cast[MutAnyOrigin](),
+            Int32(max_n_bins),
+            Int32(n_rows),
+            Int32(n_cols),
+            Int64(row_stride),
+            Int64(col_stride),
+            Int32(1) if bins_row_major else Int32(0),
+            grid_dim=(blocks_x, n_cols),
+            block_dim=256,
+        )
     _ = bins_buf.unsafe_ptr()

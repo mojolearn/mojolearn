@@ -36,6 +36,7 @@ Float64 fma chain). Now the device does both and returns two integers
     sum gives NaN.
 y and the counts no longer cross the bus.
 """
+from std.sys.compile import is_defined as _rfx_is_defined
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.sys.compile import is_defined
@@ -92,7 +93,7 @@ def rf_oob_append_tree_kernel[
         offsets[unsafe_offset = Int(tree_idx)] = base
     if j >= Int(n_nodes):
         return
-    var nd = tree[unsafe_offset=j]
+    ref nd = tree[unsafe_offset=j]
     var g = Int(base) + j
     colid[unsafe_offset=g] = nd.ColumnId()
     left[unsafe_offset=g] = Int32(Int(nd.LeftChildId()))
