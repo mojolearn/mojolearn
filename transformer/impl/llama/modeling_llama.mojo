@@ -887,16 +887,16 @@ def _plant_bits(
             + String(len(plant_bits))
             + " bit patterns"
         )
-    var n = len(buf)
+    # cpu3-seq: each planted cell goes up on its own (a one-float copy into
+    # the cell), no download and re-upload of the whole buffer and no host
+    # walk over it. Same cells, same bits, same order (a repeated index:
+    # the later plant wins, as before).
+    var np = len(plant_idx)
     step_count_host_alloc()
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](np)
     step_count_sync()
     ctx.synchronize()
-    step_count_d2h()
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    step_count_sync()
-    ctx.synchronize()
-    for i in range(len(plant_idx)):
+    for i in range(np):  # small-loop(np: planted cells of one gate case, a handful): one-cell copies
         var j = plant_idx[i]
         if j < 0 or j >= count:
             raise Error(
@@ -907,11 +907,10 @@ def _plant_bits(
                 + " used cells REFUSED (a plant that misses is worse than"
                 + " no plant: the gate goes green and proves nothing)"
             )
-        host.unsafe_ptr().unsafe_store(
-            j, bitcast[DType.float32](plant_bits[i])
-        )
-    step_count_h2d()
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+        host.unsafe_ptr().unsafe_store(i, bitcast[DType.float32](plant_bits[i]))
+        var cell = buf.create_sub_buffer[DType.float32](j, 1)
+        step_count_h2d()
+        ctx.enqueue_copy(dst_buf=cell, src_ptr=host.unsafe_ptr() + i)
     step_count_sync()
     ctx.synchronize()
     _ = host^
@@ -1434,7 +1433,7 @@ struct LlamaDeviceWeights(Movable):
         opt_lens.append(len(self.b_gate))
         opt_lens.append(len(self.qn_w))
         opt_lens.append(len(self.kn_w))
-        for i in range(len(flags)):
+        for i in range(len(flags)):  # small-loop(flags: the 11 optional block tensors): scan lengths of the present ones
             if flags[i]:
                 lens.append(opt_lens[i])
         var batch = DeviceNonfiniteBatch(ctx, lens)
@@ -2388,7 +2387,7 @@ def llama_refuse_rope_angle_domain(
     this is `positions > 8192` exactly. REFUSED BY NAME; never clamped."""
     var worst = Float32(0.0)
     var worst_i = 0
-    for i in range(len(inv_freq)):
+    for i in range(len(inv_freq)):  # small-loop(inv_freq: head_dim/2 rotary columns): angle-domain refusal of the table, once per table
         var angle = ftz(identical_mul(Float32(positions - 1), ftz(inv_freq[i])))
         if angle > worst:
             worst = angle
@@ -3635,7 +3634,7 @@ def bias_silu_kernel(
 # ===========================================================================
 
 
-def _refuse_nonfinite_named(name: String, values: List[Float32]) raises:
+def _refuse_nonfinite_named_host(name: String, values: List[Float32]) raises:
     """Contract section 8 / IDENTITY_PATHS row 39, the device path's copy of
     the oracle's `refuse_nonfinite`. Tested BY BITS, not by compares: **Metal
     FLUSHES COMPARE OPERANDS** (row 49), so `-subnormal < 0.0` is FALSE
@@ -3669,7 +3668,7 @@ def _refuse_nonfinite_device(
     mut buf: DeviceBuffer[DType.float32],
     n: Int,
 ) raises:
-    """`_refuse_nonfinite_named` over a DEVICE buffer: the scan runs on
+    """`_refuse_nonfinite_named_host` over a DEVICE buffer: the scan runs on
     the device (`device_first_nonfinite`) and only the offending element is
     brought back to classify it, so the message is character for character
     the host loop's message at the same flat index."""
@@ -3844,33 +3843,33 @@ def llama_refuse_bad_inputs(
     var kw = dims.kv_width()
     var it = dims.intermediate
     var hd = dims.head_dim
-    _refuse_nonfinite_named("hidden_states", _download(ctx, x, b * l * dm))
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host("hidden_states", _download(ctx, x, b * l * dm))
+    _refuse_nonfinite_named_host(
         "input_layernorm.weight", _download(ctx, w.norm1_w, dm)
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "post_attention_layernorm.weight", _download(ctx, w.norm2_w, dm)
     )
-    _refuse_nonfinite_named("q_proj.weight", _download(ctx, w.w_q, qw * dm))
-    _refuse_nonfinite_named("k_proj.weight", _download(ctx, w.w_k, kw * dm))
-    _refuse_nonfinite_named("v_proj.weight", _download(ctx, w.w_v, kw * dm))
-    _refuse_nonfinite_named("o_proj.weight", _download(ctx, w.w_o, dm * qw))
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host("q_proj.weight", _download(ctx, w.w_q, qw * dm))
+    _refuse_nonfinite_named_host("k_proj.weight", _download(ctx, w.w_k, kw * dm))
+    _refuse_nonfinite_named_host("v_proj.weight", _download(ctx, w.w_v, kw * dm))
+    _refuse_nonfinite_named_host("o_proj.weight", _download(ctx, w.w_o, dm * qw))
+    _refuse_nonfinite_named_host(
         "gate_proj.weight", _download(ctx, w.w_gate, it * dm)
     )
-    _refuse_nonfinite_named("up_proj.weight", _download(ctx, w.w_up, it * dm))
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host("up_proj.weight", _download(ctx, w.w_up, it * dm))
+    _refuse_nonfinite_named_host(
         "down_proj.weight", _download(ctx, w.w_down, dm * it)
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "rotary_emb.inv_freq", _download(ctx, rope.inv_freq, dims.half())
     )
     if kv.s > 0:
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "past_key_values.key_cache",
             _download(ctx, kv.k, b * dims.n_kv * kv.s * hd),
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "past_key_values.value_cache",
             _download(ctx, kv.v, b * dims.n_kv * kv.s * hd),
         )

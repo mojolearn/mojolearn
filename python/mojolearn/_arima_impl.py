@@ -608,6 +608,14 @@ class ARIMA(NumericModeMixin):
         x0 = empty((batch_size * N,), "<f4")
         stats = empty((2 * batch_size,), "<f4")
         flags = empty((2 * batch_size,), "<i4")
+        # AIC then BIC, written by the fit on the device (lane cpu3-seq):
+        # -2 llf + penalty in binary64, `T` is n_samples AFTER differencing
+        # (their caller passes `n_obs - order.n_diff()`)
+        ics = empty((2 * batch_size,), "<f8")
+        T = n_obs - (d + s * D)
+        n_par = float(N)
+        pen_aic = 2.0 * n_par
+        pen_bic = (math.log(T) if T > 0 else 0.0) * n_par
         # EVERY ONE OF THOSE SIZES IS A FUNCTION OF (batch_size, n_obs,
         # order) ALONE, which is why this side can allocate before it calls.
         # There is no quantity in an ARIMA fit that is only known once the
@@ -623,9 +631,10 @@ class ARIMA(NumericModeMixin):
             addr(flags, name="flags"),
             # ORDER MATCHES bindings/_mojolearn_arima.mojo::arima_fit_binding.
             # batch_size, n_obs, p, d, q, P, D, Q, s, k, n_exog, method,
-            # max_iterations
+            # max_iterations, ic_addr, pen_aic, pen_bic
             [batch_size, n_obs, p, d, q, P, D, Q, s, self.k_,
-             n_exog, _METHODS[self.method], self.maxiter],
+             n_exog, _METHODS[self.method], self.maxiter,
+             addr(ics, name="ic"), pen_aic, pen_bic],
         )
         if int(written) != batch_size * N:
             raise RuntimeError(
@@ -655,24 +664,12 @@ class ARIMA(NumericModeMixin):
         llf = stats[:batch_size].astype("<f8")
         self.llf_ = llf
         self.fx_ = stats[batch_size:]
-        # DEVIATION 991: the host half of cuML's information_criterion.
-        # `T` is n_samples AFTER differencing, which is the number their
-        # caller passes (`n_obs - order.n_diff()`). Per series
-        # -2 llf + penalty in float64 from the float32 llf, in Mojo (the base
-        # binding's `ic_running_min_f64` at order 0, whose running choice is
-        # scratch here); pen + (-2 v) is pen - 2 v exactly, the old bits.
-        T = n_obs - (d + s * D)
-        n_par = float(N)
-        log_t = math.log(T) if T > 0 else 0.0
-        self.aic_ = empty((batch_size,), "<f8")
-        self.bic_ = empty((batch_size,), "<f8")
-        if batch_size:
-            best_ic = empty((batch_size,), "<f8")
-            best_at = empty((batch_size,), "<i8")
-            ic = _native("ic_running_min_f64")
-            for out, pen in ((self.aic_, 2.0 * n_par), (self.bic_, log_t * n_par)):  # glue: the two criteria aic and bic
-                ic(addr_ro(stats, name="stats"), batch_size, pen, 0, addr(out, name="ic"),
-                   addr(best_ic, name="best_ic"), addr(best_at, name="best_at"))
+        # DEVIATION 991: cuML's information_criterion, -2 llf + penalty in
+        # binary64, now written by the fit itself (device kernel; the host
+        # column runs the same soft-float64 arithmetic). A NaN criterion is
+        # the canonical quiet NaN.
+        self.aic_ = ics[:batch_size]
+        self.bic_ = ics[batch_size:]
         return self
 
     # -- the named views into params_ ---------------------------------------

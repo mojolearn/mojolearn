@@ -506,3 +506,80 @@ struct DeviceNonfiniteBatch(Movable):
             results.append(-1 if best == NONFINITE_NONE else Int(best))
             self.queued[slot] = False
         return results^
+
+
+def token_oob_partial_kernel(
+    part: MutPointer[Int32, MutAnyOrigin],
+    ids: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    vocab: Int32,
+):
+    """cpu3-seq (2026-10-04): `nonfinite_partial_kernel` with the integer
+    predicate `id < 0 or id >= vocab` over an Int32 token buffer. Same
+    partial shape and fold, so "first" means the smallest index, exactly
+    as the host walk over the token List it replaces reported it."""
+    var n = Int(n_in)
+    var red = stack_allocation[
+        SCAN_TPB,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * SCAN_TPB
+    var i = Int(block_idx.x) * SCAN_TPB + tid
+    var best = NONFINITE_NONE
+    while i < n:
+        var v = ids.unsafe_load(i)
+        if v < Int32(0) or v >= vocab:
+            best = Int32(i)
+            break
+        i += stride
+    red.unsafe_store(tid, best)
+    barrier()
+    var active = SCAN_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red.unsafe_load(tid + active)
+            if o < red.unsafe_load(tid):
+                red.unsafe_store(tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), red.unsafe_load(0))
+
+
+def device_first_token_oob(
+    ctx: DeviceContext, mut ids: DeviceBuffer[DType.int32], n: Int, vocab: Int
+) raises -> Int:
+    """cpu3-seq: the first flat index `i < n` with `ids[i]` outside
+    `[0, vocab)`, or -1. Same launch shape, ONE partials copy and ONE wait
+    as `device_first_nonfinite`; replaces the host token-range walks in the
+    byte-LM GPU routes (the ids are on the device already)."""
+    if n <= 0:
+        return -1
+    var blocks = _scan_blocks(n)
+    var part = take_dev_i32(ctx, blocks)
+    step_count_launch()
+    ctx.enqueue_function[token_oob_partial_kernel](
+        part.unsafe_ptr(),
+        ids.unsafe_ptr(),
+        Int32(n),
+        Int32(vocab),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(SCAN_TPB, 1, 1),
+    )
+    var host = take_host_i32(ctx, blocks)
+    step_count_d2h()
+    comptime if IDN_SCRATCH_POOL:
+        var head = part.create_sub_buffer[DType.int32](0, blocks)
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=head)
+        _ = head^
+    else:
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    # LOAD-BEARING: `_fold_partials` reads `host` on the next line.
+    step_count_sync()
+    ctx.synchronize()
+    var best = _fold_partials(host, blocks)
+    give_host_i32(ctx, host^)
+    give_dev_i32(ctx, part^)
+    return best

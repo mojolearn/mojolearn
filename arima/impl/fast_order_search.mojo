@@ -50,18 +50,18 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.neural_context import process_ctx
-from arima.estimator import _DEVCTX_SLOT, _upload_f32, _loglike_at, _write_list_f32, _write_list_i32
+from arima.estimator import _DEVCTX_SLOT, _upload_f32, _write_list_f32, _write_list_i32
 from arima.impl.batched_arima import _refuse_non_finite, canonical_nan
-from arima.impl.batched_fit import ARIMA_FIT_H, arima_fit_params, _download, _download_i32, _upload
+from arima.impl.batched_fit import ARIMA_FIT_H, arima_fit_params
 from arima.impl.batched_kalman import (
     KalmanWorkspace, eval_ws_fits, fast_kalman_init_into, _launch_loop_ll_only,
 )
 from arima.impl.estimate_x0 import estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.fast_lbfgs_async import ASYNC_READ_EVERY
-from arima.impl.fast_order_state import ARIMA_ORDER_BATCH, OrderOptimizer, order_x_from_list
+from arima.impl.fast_order_state import ARIMA_ORDER_BATCH, OrderOptimizer
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
-from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, pack, unpack, validate_order
+from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, pack, validate_order
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 
@@ -165,30 +165,6 @@ def order_ic_argmin_kernel(
     best_ic.unsafe_store(b, cur)
 
 
-def _initial_x(ctx: DeviceContext, mut y: DeviceBuffer[DType.float32],
-               mut exog: DeviceBuffer[DType.float32], bs: Int, nobs: Int,
-               order: ARIMAOrder) raises -> List[Float32]:
-    """Original fit's estimate_x0 and inverse Jones transform, unchanged."""
-    var params = ARIMAParams(ctx, order, bs)
-    var info = ctx.enqueue_create_buffer[DType.int32](bs)
-    var start = estimate_x0_x(ctx, params, y, exog, bs, nobs, order, info)
-    var inv = ARIMAParams(ctx, order, bs)
-    batched_jones_transform(ctx, order, bs, True, params, inv)
-    var x = ctx.enqueue_create_buffer[DType.float32](order.complexity() * bs)
-    pack(ctx, inv, order, bs, x)
-    ctx.synchronize()
-    var x0 = _download(ctx, x, order.complexity() * bs)
-    for i in range(len(x0)):
-        if not isfinite(x0[i]):
-            raise Error("AutoARIMA: non-finite initial parameter at index " + String(i))
-    _ = start^
-    _ = params^
-    _ = inv^
-    _ = info^
-    _ = x^
-    return x0^
-
-
 def _initial_x_device(ctx: DeviceContext, mut y: DeviceBuffer[DType.float32],
                       mut exog: DeviceBuffer[DType.float32], bs: Int, nobs: Int,
                       order: ARIMAOrder,
@@ -227,7 +203,7 @@ def _order_chunks(orders: List[ARIMAOrder], r: Int, k: Int, bs: Int,
     var chunks = List[List[Int]]()
     var cur = List[Int]()
     var members = 0
-    for i in range(len(orders)):
+    for i in range(len(orders)):  # small-loop(orders: the AutoARIMA order grid, a few dozen entries): plan entries, no series data
         if orders[i].r() != r or orders[i].k != k:
             continue
         var add = bs * (orders[i].complexity() + 1)
@@ -268,7 +244,7 @@ def _order_search_core(
     var nkf = nobs - first.n_diff()
     if nkf < 3:
         return 0
-    for i in range(len(orders)):
+    for i in range(len(orders)):  # small-loop(orders: the AutoARIMA order grid, a few dozen entries): plan entries, no series data
         var o = orders[i]
         validate_order(o)
         if o.n_exog != 0 or o.d != first.d or o.D != first.D:
@@ -298,7 +274,7 @@ def _order_search_core(
     else:
         ctx.enqueue_copy(dst_buf=ykf, src_buf=y)
     # the (order, series) log-likelihood table, grid order (ORDER_DEVICE)
-    var ll_all = ctx.enqueue_create_buffer[DType.float32](n_orders * bs if device else 1)
+    var ll_all = ctx.enqueue_create_buffer[DType.float32](n_orders * bs)
     var x0_flag = ctx.enqueue_create_buffer[DType.int32](1)
     var x0_flag_host = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_memset(x0_flag, Int32(0))
@@ -314,7 +290,7 @@ def _order_search_core(
             for c in range(len(chunks)):
                 var ids = chunks[c].copy()
                 var members = 0
-                for j in range(len(ids)):
+                for j in range(len(ids)):  # small-loop(ids: orders in one chunk of the grid): member-count plan arithmetic, no data
                     members += bs * (orders[ids[j]].complexity() + 1)
                 var group_order = ARIMAOrder(rd, 0, 0, 0, 0, 0, 0, 1, 0)
                 var group_ws = KalmanWorkspace(ctx, group_order, members, nkf, 0)
@@ -326,12 +302,10 @@ def _order_search_core(
                 for j in range(len(ids)):
                     var order = orders[ids[j]]
                     var okf = order.without_diff()
-                    var x_dev: DeviceBuffer[DType.float32]
-                    comptime if ARIMA_ORDER_DEVICE:
-                        x_dev = _initial_x_device(ctx, y, exog, bs, nobs, order, x0_flag)
-                    else:
-                        var x0 = _initial_x(ctx, y, exog, bs, nobs, order)
-                        x_dev = order_x_from_list(ctx, x0, bs * order.complexity())
+                    # lane cpu3-seq (2026-10-04): every build takes the
+                    # device start (was a download, a host finite walk and a
+                    # re-upload per order outside ARIMA_ORDER_DEVICE)
+                    var x_dev = _initial_x_device(ctx, y, exog, bs, nobs, order, x0_flag)
                     var ew = FastEvalWS(ctx, ykf, bs, nkf, okf,
                                         group_ws, group_y, group_params.mu, offset)
                     var state = OrderOptimizer(ctx, ew, bs, Float32(nobs - 1), okf,
@@ -339,8 +313,7 @@ def _order_search_core(
                     offset += ew.eb
                     evals.append(ew^)
                     states.append(state^)
-                comptime if ARIMA_ORDER_DEVICE:
-                    ctx.enqueue_copy(dst_ptr=x0_flag_host.unsafe_ptr(), src_buf=x0_flag)
+                ctx.enqueue_copy(dst_ptr=x0_flag_host.unsafe_ptr(), src_buf=x0_flag)
                 var rounds = 0
                 var max_rounds = hp.max_iterations * max(1, hp.max_linesearch) + 1
                 while rounds < max_rounds:
@@ -371,45 +344,28 @@ def _order_search_core(
                                   state.d_x_pert, state.f_fxc, state.gradc, state.bad)
                         state.advance(ctx)
                     rounds += 1
-                comptime if ARIMA_ORDER_DEVICE:
-                    # The fitted log-likelihood, re-evaluated as ARIMA.fit
-                    # does (never recovered by rescaling fx): one more
-                    # grouped evaluation AT x; member 0 of each order is the
-                    # unperturbed point.
-                    for j in range(len(states)):
-                        ref state = states[j]
-                        ref ew = evals[j]
-                        ew.prepare(ctx, state.order, state.h, state.x, state.bad)
-                        fast_kalman_init_into(ctx, ew.t_params, state.order, ew.eb, ew.ws)
-                    _launch_loop_ll_only(ctx, group_y, group_params, group_ws,
-                                         rd, nkf, members, k, 0, 32)
-                    for j in range(len(states)):
-                        ref ew = evals[j]
-                        ctx.enqueue_function[order_ll_kernel](
-                            ll_all.unsafe_ptr(), ew.ws.loglike.unsafe_ptr(),
-                            ew.ws.info_init.unsafe_ptr(), ew.ws.info_loop.unsafe_ptr(),
-                            Int32(bs), Int32(ids[j]),
-                            grid_dim=(ll_grid, 1, 1), block_dim=(ORDER_TPB, 1, 1),
-                        )
-                else:
-                    for j in range(len(states)):
-                        var order = orders[ids[j]]
-                        var result = states[j].result(ctx)
-                        var x = ctx.enqueue_create_buffer[DType.float32](bs * order.complexity())
-                        _upload(ctx, x, result.x)
-                        var raw = ARIMAParams(ctx, order, bs)
-                        var fitted = ARIMAParams(ctx, order, bs)
-                        unpack(ctx, raw, order, bs, x)
-                        batched_jones_transform(ctx, order, bs, False, raw, fitted)
-                        # Reevaluate the fitted likelihood exactly as public
-                        # ARIMA.fit does; never recover it by rescaling fx.
-                        var ll = _loglike_at(ctx, y, exog, bs, nobs, order, fitted)
-                        for b in range(bs):
-                            ll_out[ids[j] * bs + b] = ll[b]
-                        _ = result^
-                        _ = raw^
-                        _ = fitted^
-                        _ = x^
+                # lane cpu3-seq (2026-10-04): every build re-evaluates on the
+                # device (was, outside ARIMA_ORDER_DEVICE, a download, a
+                # re-upload and a host copy of each order's log-likelihoods)
+                # The fitted log-likelihood, re-evaluated as ARIMA.fit
+                # does (never recovered by rescaling fx): one more
+                # grouped evaluation AT x; member 0 of each order is the
+                # unperturbed point.
+                for j in range(len(states)):
+                    ref state = states[j]
+                    ref ew = evals[j]
+                    ew.prepare(ctx, state.order, state.h, state.x, state.bad)
+                    fast_kalman_init_into(ctx, ew.t_params, state.order, ew.eb, ew.ws)
+                _launch_loop_ll_only(ctx, group_y, group_params, group_ws,
+                                     rd, nkf, members, k, 0, 32)
+                for j in range(len(states)):
+                    ref ew = evals[j]
+                    ctx.enqueue_function[order_ll_kernel](
+                        ll_all.unsafe_ptr(), ew.ws.loglike.unsafe_ptr(),
+                        ew.ws.info_init.unsafe_ptr(), ew.ws.info_loop.unsafe_ptr(),
+                        Int32(bs), Int32(ids[j]),
+                        grid_dim=(ll_grid, 1, 1), block_dim=(ORDER_TPB, 1, 1),
+                    )
                 ctx.synchronize()
                 _ = states^
                 _ = evals^
@@ -417,32 +373,31 @@ def _order_search_core(
                 _ = group_y^
                 _ = group_ws^
     var written = n_orders * bs
-    comptime if ARIMA_ORDER_DEVICE:
-        if want_ic:
-            var d_pen = ctx.enqueue_create_buffer[DType.float32](n_orders)
-            var h_pen = pen.copy()
-            ctx.enqueue_copy(dst_buf=d_pen, src_ptr=h_pen.unsafe_ptr())
-            var d_best = ctx.enqueue_create_buffer[DType.int32](bs)
-            var d_ic = ctx.enqueue_create_buffer[DType.float32](bs)
-            ctx.enqueue_function[order_ic_argmin_kernel](
-                d_best.unsafe_ptr(), d_ic.unsafe_ptr(), ll_all.unsafe_ptr(), d_pen.unsafe_ptr(),
-                Int32(bs), Int32(n_orders),
-                grid_dim=(ll_grid, 1, 1), block_dim=(ORDER_TPB, 1, 1),
-            )
-            var got_best = _download_i32(ctx, d_best, bs)
-            var got_ic = _download(ctx, d_ic, bs)
-            for b in range(bs):
-                best_out[b] = got_best[b]
-                ic_out[b] = got_ic[b]
-            _ = h_pen^
-            _ = d_pen^
-            _ = d_best^
-            _ = d_ic^
-            written = bs
-        else:
-            var got_ll = _download(ctx, ll_all, n_orders * bs)
-            for i in range(n_orders * bs):
-                ll_out[i] = got_ll[i]
+    # lane cpu3-seq (2026-10-04): the results land straight in the caller's
+    # lists, one copy each (no download-and-walk); `want_ic` is refused above
+    # in a build without ARIMA_ORDER_DEVICE
+    if want_ic:
+        var d_pen = ctx.enqueue_create_buffer[DType.float32](n_orders)
+        var h_pen = pen.copy()
+        ctx.enqueue_copy(dst_buf=d_pen, src_ptr=h_pen.unsafe_ptr())
+        var d_best = ctx.enqueue_create_buffer[DType.int32](bs)
+        var d_ic = ctx.enqueue_create_buffer[DType.float32](bs)
+        ctx.enqueue_function[order_ic_argmin_kernel](
+            d_best.unsafe_ptr(), d_ic.unsafe_ptr(), ll_all.unsafe_ptr(), d_pen.unsafe_ptr(),
+            Int32(bs), Int32(n_orders),
+            grid_dim=(ll_grid, 1, 1), block_dim=(ORDER_TPB, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=best_out.unsafe_ptr(), src_buf=d_best)
+        ctx.enqueue_copy(dst_ptr=ic_out.unsafe_ptr(), src_buf=d_ic)
+        ctx.synchronize()
+        _ = h_pen^
+        _ = d_pen^
+        _ = d_best^
+        _ = d_ic^
+        written = bs
+    else:
+        ctx.enqueue_copy(dst_ptr=ll_out.unsafe_ptr(), src_buf=ll_all)
+        ctx.synchronize()
     _ = x0_flag_host^
     _ = x0_flag^
     _ = ll_all^

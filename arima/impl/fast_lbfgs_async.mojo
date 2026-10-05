@@ -125,14 +125,14 @@ def _series() -> Int:
 
 @always_inline
 def _copy_x(cand: FP, x: FP, b: Int, n: Int):
-    for i in range(n):
+    for i in range(n):  # small-loop(n: parameters of ONE series, the ARIMA complexity): per-thread device helper inside a kernel
         cand[b * n + i] = x[b * n + i]
 
 
 @always_inline
 def _candidate(cand: FP, xp: FP, drt: FP, s: Float32, b: Int, n: Int):
     """`lbfgs_candidate_kernel`'s searching arm."""
-    for i in range(n):
+    for i in range(n):  # small-loop(n: parameters of ONE series, the ARIMA complexity): per-thread device helper inside a kernel
         cand[b * n + i] = ftz(identical_mul_add(s, drt[b * n + i], xp[b * n + i]))
 
 
@@ -143,7 +143,7 @@ def _prelude(
 ) -> Bool:
     """`lbfgs_prelude_kernel` for an active series; True = searching."""
     ist[I_SEARCHING * bs + b] = 0
-    for i in range(n):
+    for i in range(n):  # small-loop(n: parameters of ONE series, the ARIMA complexity): per-thread device helper inside a kernel
         xp[b * n + i] = x[b * n + i]
         gradp[b * n + i] = grad[b * n + i]
     fst[F_FXP * bs + b] = fst[F_FX * bs + b]
@@ -202,14 +202,14 @@ def _verdict(
     ist[I_RETCODE * bs + b] = Int32(code)
     if restore:
         fst[F_FX * bs + b] = fp
-        for i in range(n):
+        for i in range(n):  # small-loop(n: parameters of ONE series, the ARIMA complexity): per-thread device helper inside a kernel
             x[b * n + i] = xp[b * n + i]
             grad[b * n + i] = gradp[b * n + i]
     ist[I_NITER * bs + b] = Int32(k)
     if stop:
         return True
     var e = Int(ist[I_ENDV * bs + b])
-    for i in range(n):
+    for i in range(n):  # small-loop(n: parameters of ONE series, the ARIMA complexity): per-thread device helper inside a kernel
         S[(b * m + e) * n + i] = ftz(
             identical_mul_add(Float32(-1.0), xp[b * n + i], x[b * n + i])
         )

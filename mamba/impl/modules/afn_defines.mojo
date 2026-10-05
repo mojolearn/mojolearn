@@ -154,7 +154,15 @@ comptime AFN_MAMBA3_SISO_FUSED = AFN_MAMBA_ALL or (
 comptime AFN_MAMBA_ARENA = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_ARENA"]()
 ) or IDN_MAMBA_ARENA
-comptime AFN_MAMBA_DEVICE_REFUSAL = AFN_MAMBA_ALL or (
+#: cpu3-seq (2026-10-04): the device refusal is THE refusal on every device
+#: column, IDENTICAL and FAST, NVIDIA, AMD and Apple (owner's rule: no CPU
+#: data work in a GPU route, and the old host walk is removed from the GPU
+#: route rather than kept behind an _OFF define). The download-and-walk
+#: form (`_refuse_nonfinite_named_host`) is reached only by a host-column
+#: build (`MOJOLEARN_COLUMN_CPU`). The names, their order and the messages
+#: are unchanged; `MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF` and
+#: `MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL` no longer change this switch.
+comptime AFN_MAMBA_DEVICE_REFUSAL = not is_defined["MOJOLEARN_COLUMN_CPU"]() or AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"]()
 ) or IDN_MAMBA_DEVICE_REFUSAL
 

@@ -34,6 +34,7 @@ from mamba.checks.mamba3_fixture import (
     M3_HEADDIM,
     M3_NUM_ROPE_ANGLES,
 )
+from mamba.host.gen.mamba3_refusal import mamba_refuse_grad_output
 from mamba.host.gen.mamba3 import (
     Mamba3DeviceStages,
     Mamba3DeviceWeights,
@@ -214,10 +215,6 @@ def mamba3_prefill_backward(
         raise Error("mamba3 backward: B and L must be positive")
     if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):
         raise Error("mamba3 backward: input and grad_output lengths must equal B*L*d_model")
-    for i in range(len(grad_output)):
-        var bits = bitcast[DType.uint32](grad_output[i])
-        if (bits & UInt32(0x7f800000)) == UInt32(0x7f800000):
-            raise Error("mamba3 backward: non-finite grad_output at flat index " + String(i))
     var dims = weights.dims.copy()
     var m = b * l
     # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
@@ -249,6 +246,10 @@ def mamba3_prefill_backward(
     var d_output = mamba_upload(
         ctx, grad_output
     )
+    # cpu3-seq: the grad_output finite refusal runs on the uploaded buffer
+    # (same predicate by bits, same first flat index and message), not as a
+    # host walk over the List.
+    mamba_refuse_grad_output(ctx, String("mamba3"), d_output, grad_output)
     var gradients = mamba3_prefill_backward_on(
         ctx, device_weights, stages, x, d_output, b, l, dims, ton, tk
     )

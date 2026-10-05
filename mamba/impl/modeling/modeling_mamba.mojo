@@ -1588,7 +1588,7 @@ def _gemm_op_nt() -> Int:
     return OP_NT
 
 
-def _refuse_nonfinite_named(name: String, values: List[Float32]) raises:
+def _refuse_nonfinite_named_host(name: String, values: List[Float32]) raises:
     """Contract section 6 / row 39, the device path's copy of the oracle's
     `refuse_nonfinite`. Tested BY BITS, not by compares: Metal flushes COMPARE
     operands (row 49), so a bit test is the only spelling with one meaning on
@@ -1689,40 +1689,40 @@ def mamba_refuse_bad_inputs(
         batch.finish(ctx)
         return
     # `x` CHANGES ON EVERY CALL and is always walked.
-    _refuse_nonfinite_named("x", mamba_download(ctx, x, b * l * dm))
+    _refuse_nonfinite_named_host("x", mamba_download(ctx, x, b * l * dm))
     if not w.weights_checked:
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "norm.weight", mamba_download(ctx, w.norm_w, dm)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "in_proj.weight", mamba_download(ctx, w.w_in, 2 * di * dm)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "conv1d.weight", mamba_download(ctx, w.conv_w, di * D_CONV)
         )
-        _refuse_nonfinite_named("conv1d.bias", mamba_download(ctx, w.conv_b, di))
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host("conv1d.bias", mamba_download(ctx, w.conv_b, di))
+        _refuse_nonfinite_named_host(
             "x_proj.weight", mamba_download(ctx, w.w_x, xr * di)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "dt_proj.weight", mamba_download(ctx, w.w_dt, di * r)
         )
-        _refuse_nonfinite_named("dt_proj.bias", mamba_download(ctx, w.b_dt, di))
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host("dt_proj.bias", mamba_download(ctx, w.b_dt, di))
+        _refuse_nonfinite_named_host(
             "A_log", mamba_download(ctx, w.a_log, di * D_STATE)
         )
-        _refuse_nonfinite_named("D", mamba_download(ctx, w.d_skip, di))
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host("D", mamba_download(ctx, w.d_skip, di))
+        _refuse_nonfinite_named_host(
             "out_proj.weight", mamba_download(ctx, w.w_out, dm * di)
         )
         w.weights_checked = True
     # The STATE changes on every call: the block WRITES it, so a second
     # call's input is the first call's output.
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.conv_win",
         mamba_download(ctx, state.conv_win, b * di * D_CONV),
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.h", mamba_download(ctx, state.h, b * di * D_STATE)
     )
 

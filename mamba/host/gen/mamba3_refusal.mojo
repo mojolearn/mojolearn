@@ -15,7 +15,7 @@ from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from mamba.host.gen.mamba3_transfer import m3_download
-from mamba.host.gen.modeling_mamba import _refuse_nonfinite_named
+from mamba.host.gen.modeling_mamba import _refuse_nonfinite_named_host
 
 comptime M3_REFUSAL_THREADS = 256
 comptime M3_REFUSAL_BLOCKS = 128
@@ -53,7 +53,7 @@ def m3_first_nonfinite_code(
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
     ctx.synchronize()
     var best = M3_REFUSAL_NONE
-    for i in range(blocks):
+    for i in range(blocks):  # small-loop(blocks: scan partials, at most M3_REFUSAL_BLOCKS): integer min fold of the device scan partials
         var candidate = host.unsafe_ptr().unsafe_load(i)
         if candidate < best:
             best = candidate
@@ -68,7 +68,7 @@ def m3_refuse_nonfinite_named(
 ) raises:
     """The existing refusal's exact text, buffer name and first index."""
     comptime if not M3_DEVICE_REFUSAL:
-        _refuse_nonfinite_named(name, m3_download(ctx, values, n))
+        _refuse_nonfinite_named_host(name, m3_download(ctx, values, n))
     else:
         var code = m3_first_nonfinite_code(ctx, values, n)
         if code == M3_REFUSAL_NONE:
@@ -85,3 +85,29 @@ def m3_refuse_nonfinite_named(
             String("mamba: infinity in ") + name + " at flat index "
             + String(index) + " REFUSED (row 39)"
         )
+
+
+def _refuse_grad_output_host(tag: String, values: List[Float32]) raises:
+    """The host column's grad_output refusal (a column without device
+    scans, where `M3_DEVICE_REFUSAL` is False): exponent all ones, by bits,
+    first flat index."""
+    for i in range(len(values)):
+        var bits = bitcast[DType.uint32](values[i])
+        if (bits & UInt32(0x7f800000)) == UInt32(0x7f800000):
+            raise Error(tag + " backward: non-finite grad_output at flat index " + String(i))
+
+
+def mamba_refuse_grad_output(
+    ctx: DeviceContext, tag: String,
+    mut uploaded: DeviceBuffer[DType.float32], values: List[Float32],
+) raises:
+    """cpu3-seq (2026-10-04): the Mamba-1/2/3 backward's grad_output finite
+    refusal on the UPLOADED buffer (one scan, at most 1 KiB read back), with
+    the message and first flat index of the host walk it replaces. `values`
+    is read only by the host column."""
+    comptime if M3_DEVICE_REFUSAL:
+        var code = m3_first_nonfinite_code(ctx, uploaded, len(values))
+        if code != M3_REFUSAL_NONE:
+            raise Error(tag + " backward: non-finite grad_output at flat index " + String(Int(code // 2)))
+    else:
+        _refuse_grad_output_host(tag, values)

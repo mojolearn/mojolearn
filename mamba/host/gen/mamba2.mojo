@@ -125,7 +125,7 @@ from mamba.host.gen.modeling_mamba import (
     mamba_rms_norm,
     mamba_upload,
     mamba_zeros,
-    _refuse_nonfinite_named,
+    _refuse_nonfinite_named_host,
     residual_add_kernel,
 )
 
@@ -990,45 +990,45 @@ def mamba2_refuse_bad_inputs(
         batch.add(ctx, String("state.buf_dtraw"), state.buf_dtraw, b * M2_CHUNK_SIZE * nh)
         batch.finish(ctx)
         return
-    _refuse_nonfinite_named("x", mamba_download(ctx, x, b * l * dm))
+    _refuse_nonfinite_named_host("x", mamba_download(ctx, x, b * l * dm))
     if not w.weights_checked:
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "norm.weight", mamba_download(ctx, w.norm_w, dm)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "in_proj.weight", mamba_download(ctx, w.w_in, dip * dm)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "conv1d.weight", mamba_download(ctx, w.conv_w, cd * M2_D_CONV)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "conv1d.bias", mamba_download(ctx, w.conv_b, cd)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "dt_bias", mamba_download(ctx, w.dt_bias, nh)
         )
-        _refuse_nonfinite_named("A_log", mamba_download(ctx, w.a_log, nh))
-        _refuse_nonfinite_named("D", mamba_download(ctx, w.d_skip, nh))
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host("A_log", mamba_download(ctx, w.a_log, nh))
+        _refuse_nonfinite_named_host("D", mamba_download(ctx, w.d_skip, nh))
+        _refuse_nonfinite_named_host(
             "norm_gated.weight", mamba_download(ctx, w.gnorm_w, di)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "out_proj.weight", mamba_download(ctx, w.w_out, dm * di)
         )
         w.weights_checked = True
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.conv_win",
         mamba_download(ctx, state.conv_win, b * cd * M2_D_CONV),
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.h",
         mamba_download(ctx, state.h, b * nh * M2_HEADDIM * M2_D_STATE),
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.buf_xbc",
         mamba_download(ctx, state.buf_xbc, b * M2_CHUNK_SIZE * cd),
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.buf_dtraw",
         mamba_download(ctx, state.buf_dtraw, b * M2_CHUNK_SIZE * nh),
     )
