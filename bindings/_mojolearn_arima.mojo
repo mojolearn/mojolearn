@@ -95,7 +95,7 @@ from arima.estimator import (
 )
 
 
-from arima.impl.fast_order_search import order_search_loglike, order_search_fit, ARIMA_FAST_SEARCH_REUSE
+from arima.impl.fast_order_search import order_search_loglike, order_search_fit, order_search_multi, ARIMA_FAST_SEARCH_REUSE, ARIMA_FAST_D_CONCURRENT
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH
 from arima.impl.tsa.arima_common import ARIMAOrder
 from core.identity_trace import IdentityTrace
@@ -154,6 +154,56 @@ def arima_order_search_fit_binding(y_addr: PythonObject, out_addr: PythonObject,
     var written = 0
     with GILReleased(Python()):
         written = order_search_fit(yp, op, orders, bs, nobs, maxiter, True, fp, ip)
+    return PythonObject(written)
+
+
+def arima_d_concurrent_enabled_binding() raises -> PythonObject:
+    """MOJOLEARN_ARIMA_FAST_D_CONCURRENT compiled in (FAST+Apple only)."""
+    var trace = IdentityTrace()
+    return PythonObject(ARIMA_FAST_D_CONCURRENT and not trace.enabled)
+
+
+def arima_order_search_multi_binding(y_addrs: PythonObject, out_addrs: PythonObject,
+                                     fit_addrs: PythonObject, grids: PythonObject,
+                                     config: PythonObject) raises -> PythonObject:
+    """Every same-d task's grouped search in one concurrent loop
+    (fast_order_search.order_search_multi). y_addrs / out_addrs: one address
+    per task; fit_addrs: [] or [f32_0, i32_0, f32_1, i32_1, ...]; grids: one
+    flat (p, q, k) list per task; config: [nobs, maxiter, d_0, bs_0, d_1,
+    bs_1, ...]."""
+    var nt = len(y_addrs)
+    if nt < 1 or len(out_addrs) != nt or len(grids) != nt or len(config) != 2 + 2 * nt:
+        raise Error("arima_order_search_multi: inconsistent task lists")
+    var want_fit = len(fit_addrs) > 0
+    if want_fit and len(fit_addrs) != 2 * nt:
+        raise Error("arima_order_search_multi: fit_addrs needs two addresses per task")
+    var nobs = Int(py=config[0])
+    var maxiter = Int(py=config[1])
+    var yps = List[Int]()
+    var ops = List[Int]()
+    var ffs = List[Int]()
+    var fis = List[Int]()
+    var task_orders = List[List[ARIMAOrder]]()
+    var bss = List[Int]()
+    for t in range(nt):
+        var d = Int(py=config[2 + 2 * t])
+        bss.append(Int(py=config[3 + 2 * t]))
+        yps.append(Int(py=y_addrs[t]))
+        ops.append(Int(py=out_addrs[t]))
+        if want_fit:
+            ffs.append(Int(py=fit_addrs[2 * t]))
+            fis.append(Int(py=fit_addrs[2 * t + 1]))
+        var g = grids[t]
+        if len(g) % 3 != 0:
+            raise Error("arima_order_search_multi: a grid is not (p, q, k) triples")
+        var orders = List[ARIMAOrder]()
+        for i in range(len(g) // 3):
+            orders.append(ARIMAOrder(Int(py=g[3*i]), d, Int(py=g[3*i+1]),
+                                     0, 0, 0, 0, Int(py=g[3*i+2]), 0))
+        task_orders.append(orders^)
+    var written = 0
+    with GILReleased(Python()):
+        written = order_search_multi(yps, ops, ffs, fis, task_orders, bss, nobs, maxiter, want_fit)
     return PythonObject(written)
 
 
@@ -475,6 +525,8 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
         m.def_function[arima_order_search_binding]("arima_order_search")
         m.def_function[arima_search_reuse_enabled_binding]("arima_search_reuse_enabled")
         m.def_function[arima_order_search_fit_binding]("arima_order_search_fit")
+        m.def_function[arima_d_concurrent_enabled_binding]("arima_d_concurrent_enabled")
+        m.def_function[arima_order_search_multi_binding]("arima_order_search_multi")
         m.def_function[arima_predict_binding]("arima_predict")
         m.def_function[arima_forecast_binding]("arima_forecast")
         return m.finalize()
