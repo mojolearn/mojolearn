@@ -650,7 +650,7 @@ def _validate_slot_table(addresses: List[Int], cells: List[Int], n_inputs: Int) 
         if addresses[i] <= 0 or addresses[i] % 4 != 0 or addresses[i] > Int(0x7FFFFFFFFFFFFFFF) - size_bytes:
             raise Error("byte LM: null/misaligned/overflowing span at address slot " + String(i))
     for i in range(n_inputs, len(cells)):  # small-loop(cells: the call's address slots, at most a handful): checks output slot overlap, no data
-        for j in range(len(cells)):
+        for j in range(len(cells)):  # small-loop(cells: the call's address slots, at most a handful): pairs of slots for the overlap check, no data
             if j == i:
                 continue
             if (addresses[i] < addresses[j] + cells[j] * 4
