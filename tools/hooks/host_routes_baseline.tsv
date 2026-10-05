@@ -845,8 +845,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	vs = [peak * t / w for t in range(t0, b)]
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	vs = [peak + d * k / span for k in range(k0, k1)]
-# why: KVCache._packed under a sliding window: two slice copies per (batch, kv head) unroll the ring (no per-token loop since pyglue-sweep); owed: one Mojo gather in the transformer binding
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_transformer_impl.py	0	for head in range(b * kv):
 # why: select_d on a CPU-only install folds KPSS flags per series in Python (B-sized); owed to the host tsa binding carrying select_d
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_tsa_impl.py	0	for index, stationary in enumerate(flags):
 # why: pca-init zero singular value check (nc values) and the categorical target label coding over n Python objects; owed to the _labels Mojo encoder
@@ -861,12 +859,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_umap_impl.py	0	if
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_umap_impl.py	0	order = sorted({v for v in vals if v != -1}, key=lambda v: (str(type(v)), v))
 # why: pca-init zero singular value check (nc values) and the categorical target label coding over n Python objects; owed to the _labels Mojo encoder
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_umap_impl.py	0	order = sorted({v for v in vals if v != -1}, key=lambda v: (str(type(v)), v))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_x_sequence_moe.py	0	for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_x_sequence_moe.py	0	for name, want in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_x_sequence_moe.py	0	r, gu, dn = (np.ascontiguousarray(a) for a in (self.router, self.gate_up_proj, self.down_proj))
 # why: per-optimizer-step learning rates from an lr_schedule (n_steps exact-rational lr_at calls) owed to a Mojo schedule table; lr_at needs multi-word fixed-point enclosures (DEVIATION 5540)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_rnn.py	0	return np.asarray([self.lr_schedule.lr_at(t) for t in range(1, n_steps + 1)], dtype=np.float32)
 # why: lrs(n) and OneCycle _fill loop over optimizer steps in exact-rational/binary64 Python; owed to a Mojo port of the fixed-point enclosure (big-int Fraction fallback has no Mojo equivalent yet)
@@ -905,8 +897,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/ensemble.py	0	retu
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/ensemble.py	0	values = [_f32_bits_to_float(bits) for tree in leaves for bits in tree]
 # why: CatBoost Pool argument walks over Python objects (group_id runs of str/bytes/int ids, pairs and pairs_weight entries, a list permutation's element types) and the O(leaves) model-text parse of get_leaf_values / get_tree_leaf_counts; owed to a native group-run helper for integer id buffers and a binding export of the leaf table; FeatureFreq's per-feature constant check dispatches reduce_stat per column (one helper call per feature, a per-column range helper owed)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/ensemble.py	0	weights = [float(w) for w in weights]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/language_model.py	0	return sorted(set(globals()) | set(__all__))
 # why: d-sized float64 finishing of the binding's column sums (means, weighted means, f32 rounding) and the exactly rounded intercept fsum over n_features, plus the per-leaf int test of a Python-list y (_flatten / _is_integer_labels); owed to an lm_col_means / lm_intercept binding entry; a buffer y never walks
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/linear_model.py	0	for a, b in zip(self._x_mean.tolist(), self.coef_.tolist())
 # why: d-sized float64 finishing of the binding's column sums (means, weighted means, f32 rounding) and the exactly rounded intercept fsum over n_features, plus the per-leaf int test of a Python-list y (_flatten / _is_integer_labels); owed to an lm_col_means / lm_intercept binding entry; a buffer y never walks
@@ -924,19 +914,9 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/linear_model.py	0	
 # why: d-sized float64 finishing of the binding's column sums (means, weighted means, f32 rounding) and the exactly rounded intercept fsum over n_features, plus the per-leaf int test of a Python-list y (_flatten / _is_integer_labels); owed to an lm_col_means / lm_intercept binding entry; a buffer y never walks
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/linear_model.py	0	return bool(leaves) and all(type(v) is int for v in leaves)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	**{k: v for k, v in token_ranges.items()},
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	for key in ("train_range", "validation_range", "test_range"):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	for name, value in (("vocab_size", vocab_size), ("min_frequency", min_frequency),
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	for r in ranges.values():
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	for step in range(start_step, start_step + steps):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	for x in r:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	token_ranges = {key: [boundaries[a], boundaries[b]] for key, (a, b) in ranges.items()}
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/lm_corpus.py	0	return sorted(points)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -1326,8 +1306,6 @@ py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	yield gc.rows(gc.mapped(table), 1, sum(gc.counts[g] for g in combo))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	0	for _, name, _ in self.layer_weights(i):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	0	for field in ("attn_logit_softcapping", "final_logit_softcapping", "query_pre_attn_scalar"):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	0	for field in ("num_local_experts", "num_experts", "num_experts_per_tok", "n_routed_experts"):
@@ -1335,10 +1313,6 @@ py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	0	for field, want in fixed.items():
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	1	for field, want in fixed.items():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	0	for i in range(self.n_layers):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/config.py	0	for key, template, rows in self._layer_map:
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/safetensors.py	0	begin, end = (int(v) for v in entry["data_offsets"])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
@@ -1449,20 +1423,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/parallel_neighbors
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/parallel_neighbors_reference.py	0	proba = empty((nq * sum(counts),), '<f4')
 # why: _vote: per-output-target class counts, class-set check and probability slicing (outputs x classes bookkeeping around knn_classify_neighbors); owed to the binding returning per-target views and checking the class sets itself
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/parallel_neighbors_reference.py	0	uniq = empty((sum(counts),), '<i4')
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	for c in live):
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	if any(math.isinf(v) for v in lo + hi):
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	live = [c for c in range(d) if seen[c] != 0]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	return [float(v) for v in seen.tolist()]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	total = [a + b for a, b in zip(old_n, new_n)]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	vals = [float(v) for v in counts]
-# why: per-feature (d-sized) NaN-column bookkeeping and n_samples_seen_ merging over the scaler statistics the x_prep program returns; owed to x_prep stages (colnan masks, stat fill, seen merge) in _expansion_prep (pyglue-numeric's program), no row loops left here
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/preprocessing.py	0	vals = [int(v) for v in counts]
 # why: class_weight: k-sized arithmetic on the per-class weights (balanced = n / (k * count)) and the dict lookup/validation per class; counts and row gather are already Mojo; owed: a class_weight_rows helper in the rf binding
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/randomforest.py	0	if all(v == 1 for v in values):
 # why: class_weight: k-sized arithmetic on the per-class weights (balanced = n / (k * count)) and the dict lookup/validation per class; counts and row gather are already Mojo; owed: a class_weight_rows helper in the rf binding
