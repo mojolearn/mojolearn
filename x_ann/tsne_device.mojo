@@ -193,6 +193,100 @@ def _ts_z(
 # loop. `repulse_split_kernel` forms the terms of RS_ROWS rows x RS_TJ
 # candidates with every thread of the block (`ts_repulse_terms`, the same
 # words) into threadgroup memory, then row i's owner folds them with
+#: lane idn-regress (2026-10-05): TS_LANE_FOLD on the tiled route (Apple)
+#: kept all TS_LANES lanes of three sums in one thread, 192 live floats, and
+#: M3 t-SNE ran 2.2-2.6x slower than the single chain (idn5 board). Here a
+#: row's lanes are split over RLQ threads (thread q owns lanes q * RLS ..
+#: q * RLS + RLS - 1, each folded j ascending with the same statements),
+#: the lane partials meet in threadgroup memory and the row's owner adds
+#: them in ascending s from +0, each add flushed: the same lanes, the same
+#: order, the same bits as `repulse_tiled_kernel`. Launch shape only.
+#: -D MOJOLEARN_IDN_TSNE_LANES_SPLIT_OFF restores the one-thread rows.
+comptime TS_LANES_SPLIT = TS_LANE_FOLD and not is_defined["MOJOLEARN_IDN_TSNE_LANES_SPLIT_OFF"]()
+comptime RLQ = 4
+comptime RLS = TS_LANES // RLQ
+comptime RLB = 32
+comptime RL_TPB = RLB * RLQ
+
+
+def repulse_lanes_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+    """`repulse_tiled_kernel` under TS_LANE_FOLD with RLQ threads a row
+    (see TS_LANES_SPLIT): the same words."""
+    comptime assert TS_LANES % RLQ == 0, "a row's lanes split evenly"
+    comptime assert RTJ % TS_LANES == 0, "the repulsion tile must hold whole lane groups"
+    var t = Int(thread_idx.x)
+    var nr = Int(n)
+    var rr = t // RLQ
+    var q = t % RLQ
+    var i = Int(block_idx.x) * RLB + rr
+    var tile = stack_allocation[2 * RTJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var part = stack_allocation[3 * RLB * TS_LANES, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var live = i < nr
+    var y0 = Float32(0.0)
+    var y1 = Float32(0.0)
+    if live:
+        y0 = ftz(y.unsafe_load(2 * i))
+        y1 = ftz(y.unsafe_load(2 * i + 1))
+    var lz = SIMD[DType.float32, RLS](0.0)
+    var l0 = SIMD[DType.float32, RLS](0.0)
+    var l1 = SIMD[DType.float32, RLS](0.0)
+    var j0 = 0
+    while j0 < nr:
+        for e in range(t, 2 * RTJ, RL_TPB):
+            var v = Float32(0.0)
+            if 2 * j0 + e < 2 * nr:
+                v = ftz(y.unsafe_load(2 * j0 + e))
+            tile[e] = v
+        barrier()
+        if live:
+            var jn = RTJ if nr - j0 > RTJ else nr - j0
+            for g in range(RTJ // TS_LANES):
+                comptime for u in range(RLS):
+                    var rl = g * TS_LANES + q * RLS + u
+                    if rl < jn and j0 + rl != i:
+                        var tm = ts_repulse_terms(y0, y1, tile[2 * rl], tile[2 * rl + 1])
+                        var zz = lz[u]
+                        var aa = l0[u]
+                        var bb = l1[u]
+                        ts_repulse_fold(tm, zz, aa, bb)
+                        lz[u] = zz
+                        l0[u] = aa
+                        l1[u] = bb
+        barrier()
+        j0 += RTJ
+    comptime for u in range(RLS):
+        var s = q * RLS + u
+        part[rr * TS_LANES + s] = lz[u]
+        part[(RLB + rr) * TS_LANES + s] = l0[u]
+        part[(2 * RLB + rr) * TS_LANES + s] = l1[u]
+    barrier()
+    if live and q == 0:
+        # the lane partials, ascending s, each add flushed
+        var z = Float32(0.0)
+        var r0 = Float32(0.0)
+        var r1 = Float32(0.0)
+        for s in range(TS_LANES):
+            z = ftz(z + part[rr * TS_LANES + s])
+            r0 = ftz(r0 + part[(RLB + rr) * TS_LANES + s])
+            r1 = ftz(r1 + part[(2 * RLB + rr) * TS_LANES + s])
+        row_z.unsafe_store(i, z)
+        rep.unsafe_store(2 * i, r0)
+        rep.unsafe_store(2 * i + 1, r1)
+
+
+def _enq_repulse(
+    ctx: DeviceContext, n: Int, mut y: DeviceBuffer[DType.float32], mut drz: DeviceBuffer[DType.float32],
+    mut drep: DeviceBuffer[DType.float32],
+) raises:
+    """The tiled route's repulsion launch (TS_LANES_SPLIT picks the shape)."""
+    comptime if TS_LANES_SPLIT:
+        ctx.enqueue_function[repulse_lanes_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                   grid_dim=(n + RLB - 1) // RLB, block_dim=RL_TPB)
+    else:
+        ctx.enqueue_function[repulse_tiled_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                   grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+
+
 # `ts_repulse_fold`'s statements in ascending j, skipping j == i: the same
 # fold in the same order. Z is `ts_sum_cell`'s pinned pairwise tree, folded
 # in parallel inside the same kernel (each block's rows, then the parts in
@@ -459,8 +553,7 @@ def _ts_iter(
             mom, lr, grid_dim=_grid(n), block_dim=TPB,
         )
         return
-    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    _enq_repulse(ctx, n, ycur, drz, drep)
     _ts_z(ctx, n, drz, dz, dzs)
     comptime if TS_STEP_ROWS:
         ctx.enqueue_function[step_rows_kernel](
@@ -487,8 +580,7 @@ def _ts_iter_timed(
     ann-apple3): the same three launches, drained one by one, their wall
     times added to t_rep / t_sum / t_step (ns)."""
     var t0 = Int(perf_counter_ns())
-    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    _enq_repulse(ctx, n, ycur, drz, drep)
     ctx.synchronize()
     var t1 = Int(perf_counter_ns())
     _ts_z(ctx, n, drz, dz, dzs)
@@ -519,8 +611,7 @@ def _ts_kl(
     mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32], mut dkl: DeviceBuffer[DType.float32],
     mut dzs: DeviceBuffer[DType.float32],
 ) raises:
-    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    _enq_repulse(ctx, n, y, drz, drep)
     _ts_z(ctx, n, drz, dz, dzs)
     ctx.enqueue_function[kl_kernel](Int32(n), y.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
                                     dval.unsafe_ptr(), dz.unsafe_ptr(), dkl.unsafe_ptr(), grid_dim=_grid(n),
