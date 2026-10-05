@@ -43,6 +43,7 @@ from sequence.ops import (
     OP_MLP_ROWPART,
     OP_MLP_PERM,
     OP_MLP_EPOCH_LOSS,
+    OP_SEQ_IOTA,
     OP_L2GRAD,
     OP_DIVS,
     OP_AF_ALPHA,
@@ -107,6 +108,7 @@ from sequence.ops import (
     op_sum,
     op_opt,
     op_fill,
+    op_seq_iota,
     op_copy,
     op_seq_out,
     op_softmax,
@@ -212,6 +214,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_mlp_perm(t, a)
     elif OP == OP_MLP_EPOCH_LOSS:
         op_mlp_epoch_loss(t, a)
+    elif OP == OP_SEQ_IOTA:
+        op_seq_iota(t, a)
     elif OP == OP_L2GRAD:
         op_l2grad(t, a)
     elif OP == OP_DIVS:
