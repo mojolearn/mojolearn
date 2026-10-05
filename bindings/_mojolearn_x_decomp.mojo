@@ -34,6 +34,7 @@ from x_decomp.nmf_dev import nmf_nndsvd_dev_py, nmf_solve_dev_py
 from x_decomp.ica_dev import ica_solve_dev_py
 from x_decomp.fa_em import dsum_f32_py
 from x_decomp.chi2_dev import chi2_cdf_dev_py, chi2_quantile_dev_py
+from x_decomp.als_dev import als_fit_dev_py
 from x_decomp.fa_em_dev import fa_em_main_dev_py
 from x_decomp.rotation_dev import ortho_rotation_dev_py
 from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
@@ -134,6 +135,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[ica_solve_dev_py]("x_decomp_ica_solve")
         m.def_function[fa_em_main_dev_py]("x_decomp_fa_em_main")
         m.def_function[dsum_f32_py]("x_decomp_dsum_f32")
+        m.def_function[als_fit_dev_py]("x_decomp_als_fit")
         m.def_function[chi2_cdf_dev_py]("x_decomp_chi2_cdf")
         m.def_function[chi2_quantile_dev_py]("x_decomp_chi2_quantile")
         m.def_function[ortho_rotation_dev_py]("x_decomp_ortho_rotation")

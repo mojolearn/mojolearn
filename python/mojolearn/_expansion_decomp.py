@@ -5256,26 +5256,23 @@ class AlternatingLeastSquares(_Base):
         R = _M.from_input(user_items, "user_items")
         n, m = R.r, R.c
         C = R if self.alpha == 1.0 else k.ew("scale", R, s=self.alpha)
-        # resident (lane gap-lda-als): C stays on the device and the item
-        # half-sweep reads it through strides; the host column transposes
-        res = not self.use_cg and k.als_resident(C)
-        Ct = None if res else C.T
         seed = _seed_of(self.random_state)
         f = int(self.factors)
         X = k.ew("scale", k.rand(n, f, seed, 80, 0), s=0.01)
         Y = k.ew("scale", k.rand(m, f, seed, 81, 0), s=0.01)
-        losses = []
         if self.use_cg and int(self.cg_steps) < 1:
             raise ValueError("AlternatingLeastSquares: cg_steps must be >= 1")
-        for _ in range(int(self.iterations)):
-            if self.use_cg:
-                X = k.als_cg(C, Y, X, self.regularization, self.cg_steps)
-                Y = k.als_cg(Ct, X, Y, self.regularization, self.cg_steps)
-            else:
-                X = k.als(C, Y, self.regularization)
-                Y = k.als(C, X, self.regularization, trans=True) if res else k.als(Ct, X, self.regularization)
-            if self.calculate_training_loss:
-                losses.append(self._loss(k, C, X, Y))
+        # the sweeps (and the losses) in ONE binding call (lane py-runtime-b:
+        # x_decomp/als.mojo on the host column, the item half-sweep on C^T;
+        # x_decomp/als_dev.mojo on the GPU binding, C resident and the item
+        # half-sweep through strides, as the kit ran them)
+        X, Y = X.copy(), Y.copy()
+        iters = int(self.iterations)
+        la = array.array("d", [0.0]) * max(iters, 1)
+        cnt = int(k.b.x_decomp_als_fit(C.addr, X.addr, Y.addr, la.buffer_info()[0],
+                                       [n, m, f, iters, int(bool(self.use_cg)), int(self.cg_steps),
+                                        int(bool(self.calculate_training_loss))], [float(self.regularization)]))
+        losses = la.tolist()[:cnt]
         if self.calculate_training_loss:
             self.training_loss_ = losses
         self.user_factors_m_, self.item_factors_m_ = X, Y
@@ -5284,17 +5281,6 @@ class AlternatingLeastSquares(_Base):
         self.user_factors_, self.item_factors_ = self.user_factors, self.item_factors
         self.components_m_ = Y
         return self
-
-    def _loss(self, k, C, X, Y):
-        P = k.mm(X, Y, tb=True)
-        seen = k.ew("gts", k.ew("abs", C), s=0.0)                     # 1 where c_ui != 0
-        obs = k.ew("mul", C, k.ew("sq", k.ew("adds", k.ew("scale", P, s=-1.0), s=1.0)))
-        term = k.ew("select", seen, obs, k.ew("sq", P), s=0.5)
-        reg = k.ew("add", k.total(k.ew("sq", X)), k.total(k.ew("sq", Y)))
-        tot = k.ew("add", k.total(term), k.ew("scale", reg, s=self.regularization)).s[0]
-        nnz = k.total(seen).s[0]
-        conf = k.total(k.ew("mul", C, seen)).s[0]
-        return tot / (conf + (C.r * C.c - nnz))
 
     def _check_fit(self):
         if not hasattr(self, "user_factors_m_"):
