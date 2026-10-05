@@ -13,6 +13,7 @@ from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.moves import MOVE_TAKE_COLS, MOVE_TRANSPOSE, move_src, order_f
 from x_decomp.select_ops import SEL_ORDER_MAX, order_rank, sel_fold
+from x_decomp.chi2 import lda_bound_host
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -308,6 +309,13 @@ struct Kit[E: Exec](Movable):
         var v = Mat(n, n)
         Self.E.svd(c.p(), m, n, s.p(), v.p())
         svd_order(s, v, S, Vt)
+
+    def lda_bound(self, X: Mat, ddt: Mat, dcomp: Mat, floor: Float64) raises -> Mat:
+        """The `_approx_bound` term matrix (the host twin of lda_bound_kernel)."""
+        var P = Mat(X.r, X.c)
+        if X.n() > 0:
+            lda_bound_host(X.p(), ddt.p(), dcomp.p(), P.p(), X.r, ddt.c, X.c, Float32(floor))
+        return P^
 
     def sqdist(self, A: Mat, B: Mat) raises -> Mat:
         """`_Kit.sqdist(A, B)`: the squared distances (A.r x B.r)."""

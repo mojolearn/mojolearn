@@ -74,6 +74,24 @@ def chi2_quantile_py(dof: PythonObject, upper: PythonObject) raises -> PythonObj
     return PythonObject(chi2_quantile(Float64(py=dof), Float64(py=upper)))
 
 
+def lda_bound_host(px: F32Ptr, pd: F32Ptr, pc: F32Ptr, po: F32Ptr, n: Int, kk: Int, vv: Int, floor: Float32):
+    """The bound's term matrix x * (lse_t + max) per (i, w) (see below)."""
+    var z = Float32(0)
+    for c in range(n * vv):  # host column only (registered in the host binding)
+        var i = c // vv
+        var w = c - i * vv
+        var mx = Float32(0)
+        for t in range(kk):
+            var term = ew_cell(_OP_ADD, ew_cell(_OP_ADD, z, pd.unsafe_load(i * kk + t), z, z), pc.unsafe_load(t * vv + w), z, z)
+            mx = term if t == 0 else ew_cell(_OP_MAX, mx, term, z, z)
+        var acc = Float32(0)
+        for t in range(kk):
+            var term = ew_cell(_OP_ADD, ew_cell(_OP_ADD, z, pd.unsafe_load(i * kk + t), z, z), pc.unsafe_load(t * vv + w), z, z)
+            acc = ew_cell(_OP_ADD, acc, ew_cell(_OP_EXP, ew_cell(_OP_SUB, term, mx, z, z), z, z, z), z, z)
+        var lse = ew_cell(_OP_ADD, ew_cell(_OP_LOGS, acc, z, z, floor), mx, z, z)
+        po.unsafe_store(c, ew_cell(_OP_MUL, px.unsafe_load(c), lse, z, z))
+
+
 def lda_bound_host_py(
     x: PythonObject, ddt: PythonObject, dcomp: PythonObject, dst: PythonObject, p: PythonObject, f: PythonObject
 ) raises -> PythonObject:
@@ -89,22 +107,5 @@ def lda_bound_host_py(
     if n < 0 or kk < 1 or vv < 0 or n * vv > 2147483647:
         raise Error("x_decomp: lda_bound shape out of range")
     var floor = Float32(Float64(py=f[0]))
-    var px = _fp(x)
-    var pd = _fp(ddt)
-    var pc = _fp(dcomp)
-    var po = _fp(dst)
-    var z = Float32(0)
-    for c in range(n * vv):  # host column only (registered in the host binding)
-        var i = c // vv
-        var w = c - i * vv
-        var mx = Float32(0)
-        for t in range(kk):
-            var term = ew_cell(_OP_ADD, ew_cell(_OP_ADD, z, pd.unsafe_load(i * kk + t), z, z), pc.unsafe_load(t * vv + w), z, z)
-            mx = term if t == 0 else ew_cell(_OP_MAX, mx, term, z, z)
-        var acc = Float32(0)
-        for t in range(kk):
-            var term = ew_cell(_OP_ADD, ew_cell(_OP_ADD, z, pd.unsafe_load(i * kk + t), z, z), pc.unsafe_load(t * vv + w), z, z)
-            acc = ew_cell(_OP_ADD, acc, ew_cell(_OP_EXP, ew_cell(_OP_SUB, term, mx, z, z), z, z, z), z, z)
-        var lse = ew_cell(_OP_ADD, ew_cell(_OP_LOGS, acc, z, z, floor), mx, z, z)
-        po.unsafe_store(c, ew_cell(_OP_MUL, px.unsafe_load(c), lse, z, z))
+    lda_bound_host(_fp(x), _fp(ddt), _fp(dcomp), _fp(dst), n, kk, vv, floor)
     return PythonObject(n * vv)

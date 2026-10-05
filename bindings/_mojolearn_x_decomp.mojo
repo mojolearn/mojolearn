@@ -38,6 +38,7 @@ from x_decomp.als_dev import als_fit_dev_py
 from x_decomp.mds_dev import mds_fit_dev_py
 from x_decomp.lle_iter_dev import lle_iterate_dev_py
 from x_decomp.pls_dev import pls_fit_dev_py
+from x_decomp.lda_fit_dev import lda_fit_dev_py
 from x_decomp.fa_em_dev import fa_em_main_dev_py
 from x_decomp.rotation_dev import ortho_rotation_dev_py
 from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
@@ -138,6 +139,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[ica_solve_dev_py]("x_decomp_ica_solve")
         m.def_function[fa_em_main_dev_py]("x_decomp_fa_em_main")
         m.def_function[dsum_f32_py]("x_decomp_dsum_f32")
+        m.def_function[lda_fit_dev_py]("x_decomp_lda_fit")
         m.def_function[pls_fit_dev_py]("x_decomp_pls_fit")
         m.def_function[lle_iterate_dev_py]("x_decomp_lle_iterate")
         m.def_function[mds_fit_dev_py]("x_decomp_mds_fit")

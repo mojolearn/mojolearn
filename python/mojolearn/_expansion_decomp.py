@@ -3868,19 +3868,25 @@ class LatentDirichletAllocation(_Base):
         M = self._check_X(X, "LatentDirichletAllocation.fit")
         n, d = M.r, M.c
         self._init(k, d)
-        last_bound = None
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            if self.learning_method == "online":
-                self._online_pass(k, M, n)
-            else:
-                self._em_step(k, M, n, True)
-            if self.evaluate_every > 0 and it % self.evaluate_every == 0:
-                Dt, _ = self._e_step(k, M, False, False)
-                bound = self._perplexity(k, M, Dt)
-                if last_bound is not None and abs(last_bound - bound) < self.perp_tol:
-                    break
-                last_bound = bound
+        if self.learning_method == "online":
+            bs = self.batch_size
+            if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
+                raise ValueError("batch_size must be a positive integer")
+        # the fit loop (batch EM steps or online epochs, the perplexity
+        # checks) in ONE binding call (lane py-runtime-b: x_decomp/lda_fit.mojo
+        # on the host column, lda_fit_dev.mojo on resident device matrices):
+        # the same cells, draws and float64 bound arithmetic
+        C, E = self.components_m_.copy(), self._exp_dir.copy()
+        nc, v = C.r, C.c
+        it, self._draw, self.n_batch_iter_ = k.b.x_decomp_lda_fit(
+            M.addr, C.addr, E.addr,
+            [n, v, nc, int(self.max_iter), int(self.learning_method == "online"),
+             int(self.batch_size) if self.learning_method == "online" else 1, int(self.max_doc_update_iter),
+             int(self._seed) & 0xFFFFFFFF, self._draw, self.n_batch_iter_, int(self.evaluate_every)],
+            [float(self.doc_topic_prior_), float(self.topic_word_prior_), float(self.learning_offset),
+             float(self.learning_decay), float(self.mean_change_tol), float(n), float(self.perp_tol)])
+        self.components_m_, self._exp_dir = C, E
+        it = int(it)
         self.n_iter_ = it
         Dt, _ = self._e_step(k, M, False, False)
         self.bound_ = self._perplexity(k, M, Dt)

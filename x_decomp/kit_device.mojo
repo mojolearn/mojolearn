@@ -50,6 +50,7 @@ from x_decomp.device import (
     launch_rowsum,
     launch_sqdist,
     launch_trisolve,
+    launch_lda_bound,
     absmax_scratch,
     launch_absmax,
     cd_rows_kernel,
@@ -582,6 +583,13 @@ struct DKit(Movable):
         svd_order(s, v, sh, vh)
         S = self.upload(sh)
         Vt = self.upload(vh)
+
+    def lda_bound(self, X: DMat, ddt: DMat, dcomp: DMat, floor: Float64) raises -> DMat:
+        """The `_approx_bound` term matrix (`lda_bound_kernel`)."""
+        var P = DMat(X.r, X.c)
+        if X.n() > 0:
+            launch_lda_bound(self.ctx, X.p(), ddt.p(), dcomp.p(), P.p(), X.r, ddt.c, X.c, Float32(floor))
+        return P^
 
     def word(mut self, A: DMat) raises -> Float64:
         """`A.s[0]` as Python reads it: one word home (a sync)."""
