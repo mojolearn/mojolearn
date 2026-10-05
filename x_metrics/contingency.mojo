@@ -222,9 +222,9 @@ def ct_ent_unit(t: Int, f: FP, q: IP):
     var n = p(q, 4)
     var v = SF64_ZERO
     if c != 0 and n > 0:
-        var fn = i2f(n)
+        var fn_ = i2f(n)
         var fc = i2f(c)
-        v = sf64_mul(sf64_div(fc, fn), sf64_sub(sf64_log(fc), sf64_log(fn)))
+        v = sf64_mul(sf64_div(fc, fn_), sf64_sub(sf64_log(fc), sf64_log(fn_)))
     var T = p(q, 5) + FF_REC * t
     st64(f, T, v)
     st64(f, T + 2, SF64_ZERO)

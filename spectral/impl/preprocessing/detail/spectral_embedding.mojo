@@ -98,10 +98,17 @@ comptime SPECTRAL_NCV_FAST = (
 )
 comptime FAST_NCV = 48
 comptime FAST_NCV_DENSE_ROW = 64
-comptime FAST_NCV_MIN_N = 8192
+comptime FAST_NCV_MIN_N = 8192 if is_defined[
+    "MOJOLEARN_LEGACY_NARROW_SPECTRAL_NCV"
+]() else 32 * FAST_NCV
 """The wider basis only from here: on a small graph 48 vectors are a large
 fraction of the space and the three-term recurrence can break down (the
-144-point blobs gate of check-spectral came back all NaN at ncv 48)."""
+144-point blobs gate of check-spectral came back all NaN at ncv 48, a basis
+of 1/3 of the space). The rule is now that ratio: the basis is at most 1/32
+of the space (n >= 32 * FAST_NCV = 1,536), ten times below the failing
+fraction. Was 8192, just below the board's 10k/20k graphs; removed as
+benchmark-tuned on 2026-10-04, replacement UNMEASURED. `-D
+MOJOLEARN_LEGACY_NARROW_SPECTRAL_NCV` restores 8192."""
 
 
 @fieldwise_init

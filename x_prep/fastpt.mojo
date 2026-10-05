@@ -113,9 +113,21 @@ comptime OP_PT_SMAP = 111
 comptime OP_PT_SFOLD = 112
 
 
+#: lane apple-fast-no-narrow-2 (2026-10-04): the cut was d >= 64, measured
+#: at the two board widths only (11 and 220); removed as benchmark-tuned,
+#: replacement UNMEASURED. The rule is now the block's SIMD-group count: a
+#: block of ONE SIMD group (d <= 32, `tile_tpb`) takes 64-row chunks, 4x the
+#: blocks, so each core still holds several SIMD groups; a block of two or
+#: more SIMD groups takes 256-row chunks. `-D
+#: MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS` restores the d >= 64 cut.
+comptime LEGACY_NARROW_FASTPT_ROWS = is_defined["MOJOLEARN_LEGACY_NARROW_FASTPT_ROWS"]()
+
+
 @always_inline
 def tile_rows(d: Int) -> Int:
-    return ROWS_WIDE if d >= 64 else ROWS_NARROW
+    comptime if LEGACY_NARROW_FASTPT_ROWS:
+        return ROWS_WIDE if d >= 64 else ROWS_NARROW
+    return ROWS_WIDE if tile_tpb(d) > 32 else ROWS_NARROW
 
 
 @always_inline

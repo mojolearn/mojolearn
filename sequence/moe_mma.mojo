@@ -29,6 +29,7 @@ from std.ffi import external_call
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from core.apple_air import simdgroup_load_legacy_air
 from checks.numerics import ftz, identical_silu
@@ -44,7 +45,9 @@ from sequence.moe_reg import MOE_DEVGROUP
 comptime MM_KB32 = is_defined["MOJOLEARN_MOE_FAST_MMA_KB32"]()
 comptime MM_WIDE = is_defined["MOJOLEARN_MOE_FAST_MMA_WIDE"]()
 comptime MM_PF = is_defined["MOJOLEARN_MOE_FAST_MMA_PF"]()
-comptime MOE_MMA = MOE_DEVGROUP and (
+# Apple simdgroup intrinsics only: an NVIDIA/AMD target cannot link them
+# (gfx942 lld: undefined air.simdgroup_matrix_*; box-run-2 compile fix).
+comptime MOE_MMA = has_apple_gpu_accelerator() and MOE_DEVGROUP and (
     (not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"]()) or MM_KB32 or MM_WIDE or MM_PF
 )
 

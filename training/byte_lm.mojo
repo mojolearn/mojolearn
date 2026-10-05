@@ -304,14 +304,26 @@ def _require_device_finite(ctx: DeviceContext, mut scan: DeviceScanScratch,
         raise Error("byte LM: nonfinite " + name + " at " + String(bad))
 
 
-def byte_validate_state(param: List[Float32], m: List[Float32], v: List[Float32],
-                        flags: List[Bool], completed: Int, config: ByteConfig = ByteConfig()) raises:
+def _byte_validate_state_shape(param: List[Float32], m: List[Float32], v: List[Float32],
+                               flags: List[Bool], completed: Int, config: ByteConfig = ByteConfig()) raises:
+    """The scalar half of `byte_validate_state`: the config, the four
+    lengths and the step bound, no per-parameter walk. Lane box-run-2-fix
+    (2026-10-05): ByteTrainer's open admits the host state with this before
+    any allocation and runs the per-parameter predicates on the device after
+    the upload (`validate_device_state`); it used to walk every parameter,
+    moment and flag on the host (`byte_validate_state`) at open."""
     config.validate()
     var n_total = config.n_total()
     if len(param) != n_total or len(m) != n_total or len(v) != n_total or len(flags) != config.n_tensors():
         raise Error("byte LM: state length differs from canonical registry")
     if completed < 0 or completed >= 1000000:
         raise Error("byte LM: completed step must be in [0,1000000)")
+
+
+def byte_validate_state(param: List[Float32], m: List[Float32], v: List[Float32],
+                        flags: List[Bool], completed: Int, config: ByteConfig = ByteConfig()) raises:
+    _byte_validate_state_shape(param, m, v, flags, completed, config)
+    var n_total = config.n_total()
     _require_finite(param, "parameters")
     _require_finite(m, "first moments")
     _require_finite(v, "second moments")
@@ -886,7 +898,11 @@ struct ByteTrainer(Movable):
         _require_profile()
         _byte_validate_allocations(config)
         self.config = config.copy()
-        byte_validate_state(initial_params, initial_m, initial_v, flags, completed_steps, config)
+        # lane box-run-2-fix (2026-10-05): only the scalar checks here (config,
+        # lengths, step bound); the finite / negative-moment predicates run on
+        # the device after the upload (end of this body). Was
+        # `byte_validate_state`, a host walk over every parameter and moment.
+        _byte_validate_state_shape(initial_params, initial_m, initial_v, flags, completed_steps, config)
         byte_validate_optimizer(optimizer)
         self.optimizer = optimizer.copy()
         self.completed_steps = completed_steps
@@ -915,6 +931,12 @@ struct ByteTrainer(Movable):
         arena_end(self.arena_id)
         step_count_sync()
         ctx.synchronize()
+        # lane box-run-2-fix: the state's per-parameter predicates (finite
+        # parameters, first and second moments, no negative second moment;
+        # the host messages, same order) as device scans over the uploaded
+        # buffers, before any step reads them. A pooled optimizer scans its
+        # owned moment slice, the only one this session uploads.
+        self.validate_device_state(ctx, completed_steps)
         # lane/neural-apple (2026-09-28): on a gated Apple build, the estash
         # attention word runs only when this trainer's kept stashes fit the
         # free device memory (a schedule choice; the bits are the same).

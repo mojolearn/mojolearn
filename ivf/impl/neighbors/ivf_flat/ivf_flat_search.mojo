@@ -91,6 +91,7 @@ from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import (
     GQPB,
 )
 from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
+    FIVF_DIM_TILE,
     FIVF_MAX_DIM,
     FIVF_QPB,
     fast_ivf_scan_kernel,
@@ -836,8 +837,14 @@ def ivf_flat_search_prepared(
             and not partial_storage
             and (not filtered or batched_filter_ok)
             and k <= 32
-            and (IVF_IDENTICAL_SCAN_ANY_DIM or dim <= FIVF_MAX_DIM)
         )
+        # IDENTICAL: every dimension under main's IVF_IDENTICAL_SCAN_ANY_DIM
+        # (lane/no-dim-idn), else its own kernels' tile (IIVF_MAX_DIM); FAST
+        # takes up to FIVF_MAX_DIM (lane apple-fast-no-narrow-2)
+        comptime if IVF_IDENTICAL_SCAN:
+            use_batched = use_batched and (IVF_IDENTICAL_SCAN_ANY_DIM or dim <= IIVF_MAX_DIM)
+        else:
+            use_batched = use_batched and dim <= FIVF_MAX_DIM
     # the trace records each query's probes sorted (checks only); no search
     # path reads the probes on the host
     var probe_dist = List[Float32]()
@@ -934,16 +941,29 @@ def ivf_flat_search_prepared(
                                     block_dim=IIVF_QPB * WARP_SIZE,
                                 )
                         else:
-                            ctx.enqueue_function[fast_ivf_scan_kernel[KM]](
-                                dq.unsafe_ptr(), dev.dlist_data.unsafe_ptr(),
-                                dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
-                                dprobe_idx.unsafe_ptr(),
-                                d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
-                                d_keep.unsafe_ptr(), Int32(keep_len),
-                                Int32(n_queries), Int32(dim), Int32(n_probes),
-                                Int32(k),
-                                grid_dim=grid, block_dim=FIVF_QPB * WARP_SIZE,
-                            )
+                            if dim <= FIVF_DIM_TILE:
+                                ctx.enqueue_function[fast_ivf_scan_kernel[KM]](
+                                    dq.unsafe_ptr(), dev.dlist_data.unsafe_ptr(),
+                                    dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
+                                    dprobe_idx.unsafe_ptr(),
+                                    d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                    d_keep.unsafe_ptr(), Int32(keep_len),
+                                    Int32(n_queries), Int32(dim), Int32(n_probes),
+                                    Int32(k),
+                                    grid_dim=grid, block_dim=FIVF_QPB * WARP_SIZE,
+                                )
+                            else:
+                                comptime if FIVF_MAX_DIM > FIVF_DIM_TILE:
+                                    ctx.enqueue_function[fast_ivf_scan_kernel[KM, FIVF_MAX_DIM]](
+                                        dq.unsafe_ptr(), dev.dlist_data.unsafe_ptr(),
+                                        dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
+                                        dprobe_idx.unsafe_ptr(),
+                                        d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                        d_keep.unsafe_ptr(), Int32(keep_len),
+                                        Int32(n_queries), Int32(dim), Int32(n_probes),
+                                        Int32(k),
+                                        grid_dim=grid, block_dim=FIVF_QPB * WARP_SIZE,
+                                    )
                 var host_root = not dist_is_identity
                 comptime if IVF_IDN_DEVICE_SQRT:
                     if host_root:

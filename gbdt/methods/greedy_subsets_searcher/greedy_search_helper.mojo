@@ -616,6 +616,21 @@ comptime SYM_LEVEL_QUANT_2580 = (
 # `MOJOLEARN_GBDT_PATH=1` prints each fit's per-width group counts.
 # ====================================================
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import NUMERIC_FAST
+
+comptime SYM_RIDX_GENERAL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_LEGACY_NARROW_SYM_RIDX"]()
+)
+"""lane apple-fast-no-narrow-2 (2026-10-04): under FAST the DEVIATION 2031
+ridx-only schedule takes every layout width. SYM_RIDX_MAX_FEATURES (64)
+sat between taxi's 16 and istella's 220 features with only those two points
+measured; removed as benchmark-tuned, replacement UNMEASURED. No kernel
+needs it: the schedule is bit-inert at any width (DEVIATION 1902's
+argument), so it is a speed choice only. `-D
+MOJOLEARN_LEGACY_NARROW_SYM_RIDX` restores the cap in FAST. IDENTICAL still
+uses the board-shaped rule; generalize it on every vendor together
+(same-bits rule), owed to the IDENTICAL program."""
 
 comptime SYM_GROUP_WIDTH_2581 = is_defined["MOJOLEARN_2581_GROUP_WIDTH"]() or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -5315,8 +5330,10 @@ def run_tree_layout_traced[
     # never mixes the two schedules.
     # lane/no-dim-idn: the cut is now the byte rule `ridx_schedule_pays`
     # (old 64-feature cut under -D MOJOLEARN_GBDT_RIDX_COST_RULE_OFF).
-    var use_ridx = SYM_RIDX_SPLITS_2031 and ridx_schedule_pays(
-        len(fold_counts) + len(dynamic_fold_counts)
+    # FAST: any width (SYM_RIDX_GENERAL, lane apple-fast-no-narrow-2).
+    var use_ridx = SYM_RIDX_SPLITS_2031 and (
+        SYM_RIDX_GENERAL
+        or ridx_schedule_pays(len(fold_counts) + len(dynamic_fold_counts))
     )
     # `statCount` is `1 + point.GetColumnCount()` -- their `StochasticDer`
     # sizes `StatsToAggregate` as one weight column plus one der column

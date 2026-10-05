@@ -99,10 +99,14 @@ def sparse_spectral_initialize(
         ctx, graph.offsets, graph.indices, graph.values, graph.n_samples
     )
     var nnz = coo.nnz
-    return spectral_initialize_device_coo(
-        ctx, graph.n_samples, nnz, coo.rows^, coo.cols^, coo.vals^,
+    # shared handles (DeviceBuffer copies retain the same allocation, no data
+    # copy): moving fields out of coo is refused (box-run-2 compile fix)
+    var res = spectral_initialize_device_coo(
+        ctx, graph.n_samples, nnz, coo.rows.copy(), coo.cols.copy(), coo.vals.copy(),
         n_components, graph.n_neighbors, seed,
     )
+    _ = coo^
+    return res^
 
 
 def supervise_graph(

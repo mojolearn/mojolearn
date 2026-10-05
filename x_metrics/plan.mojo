@@ -246,7 +246,7 @@ def _plan_curve_out(mut pl: Plan, r: IP, total: Int) raises:
 
 def _plan_ff(mut pl: Plan, src: Int, m: Int, dst: Int, mode: Int, x: Int):
     """The float-float fold of m records at src (x_metrics/contingency.mojo
-    ff_chunk, ff_fin) into the binary64 at out."""
+    ff_chunk, ff_fin) into the binary64 at dst."""
     var NC = (m + CT_CH - 1) // CT_CH
     var S = pl.alloc(FF_REC * NC)
     if NC > 0:

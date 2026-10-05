@@ -170,8 +170,8 @@ def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObj
     quesval addresses, left addresses, leaf value addresses], one per tree
     (int32 / float32 / int32 / float32, each at the tree's first node);
     sizes = the T node counts; coefs = the T float64 coefficients (tree j is
-    class j % k); inits = the k float64 class starts; out float64 k * n
-    class-major (out); params = [n, d, k]."""
+    class j % k); inits = the k float64 class starts; dst float64 k * n
+    class-major (dst); params = [n, d, k]."""
     var p = _dart_ints(params, 3, "x_trees_dart_predict")
     if len(forest) != 4:
         raise Error("x_trees_dart_predict: forest must hold 4 address lists")

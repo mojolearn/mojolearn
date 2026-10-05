@@ -175,7 +175,7 @@ def scatter_rows_kernel(dst: F32Ptr, idx: I32Ptr, src: F32Ptr, m: Int32):
 def logdet_sign_kernel(diag: F32Ptr, piv: I32Ptr, n: Int32, dst: I32Ptr):
     """`_slogdet`'s sign rule on the device: dst[0] = 1 when a pivot is 0;
     dst[1] counts the negative pivots plus the row swaps (integer atomics,
-    exact). out zeroed before."""
+    exact). dst zeroed before."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         var x = diag.unsafe_load(i)
