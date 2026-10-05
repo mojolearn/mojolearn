@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Evidence admission tests; these do not execute a GPU or time CPU work."""
 import unittest
-from identical_speed_ab import CHECKS, SCREENS, parse_record, compare_pair, selected
+from identical_speed_ab import CHECKS, SCREENS, parse_record, compare_pair, selected, profiles
 
 
 class EvidenceTests(unittest.TestCase):
@@ -48,13 +48,19 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(pair["b_over_a"], 0.5)
 
     def test_profiles_and_case_coverage(self):
-        self.assertEqual(len(selected(None)), 5)
+        self.assertEqual(len(selected(list(profiles()))), 5)
         self.assertEqual({x["op"] for x in CHECKS}, {0, 1, 2})
         self.assertEqual(len(CHECKS), 18)
         self.assertEqual(len(SCREENS), 18)
         self.assertEqual(len({x["name"] for x in CHECKS + SCREENS}), 36)
         with self.assertRaises(ValueError):
             selected(["typo"])
+
+    def test_single_experiment_branch_selection(self):
+        for name in profiles():
+            self.assertEqual(list(selected([name])), [name])
+        with self.assertRaises(ValueError):
+            selected(["one-page", "one-page"])
 
 
 if __name__ == "__main__":
