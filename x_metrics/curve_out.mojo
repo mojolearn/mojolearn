@@ -217,12 +217,12 @@ def co_emit_unit(t: Int, f: FP, q: IP):
         if t >= L:
             return
         var i = ldi(f, p(q, 8)) + t
-        var r = L - 1 - t
-        var F = w64(f, fps + c - 1)
-        var T = w64(f, tps + c - 1)
-        st64(f, A0 + 2 * r, sf64_div(_det_f(f, fps, i), F))
-        st64(f, A1 + 2 * r, sf64_div(sf64_sub(T, _det_f(f, tps, i)), T))
-        st64(f, A2 + 2 * r, SF64_INF if i == 0 else w64(f, thr + i - 1))
+        var rd = L - 1 - t
+        var Fd = w64(f, fps + c - 1)
+        var Td = w64(f, tps + c - 1)
+        st64(f, A0 + 2 * rd, sf64_div(_det_f(f, fps, i), Fd))
+        st64(f, A1 + 2 * rd, sf64_div(sf64_sub(Td, _det_f(f, tps, i)), Td))
+        st64(f, A2 + 2 * rd, SF64_INF if i == 0 else w64(f, thr + i - 1))
         return
     if t == 0:
         sti(f, LEN, 0 if c <= 0 else c + 1)
