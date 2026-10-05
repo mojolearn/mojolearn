@@ -378,6 +378,10 @@ def test_native_host_exports_are_classified_by_code():
         assert name in ex, f"{name} loops on the host and must be a native host helper"
     for name in ("check_indices_i64", "unique_inverse", "cast_f64_to_f32"):
         assert name not in ex, f"{name} runs on the device and is not a native host helper"
+    # lane py-runtime: an export whose only loops carry a reviewed small-loop
+    # note (d-sized binary64 finishes Apple cannot run on the device)
+    for name in ("lm_means_finish", "lm_intercept"):
+        assert name not in ex, f"{name} loops only over a reviewed small bound"
 
 
 def test_owed_rules_never_enter_the_baseline():

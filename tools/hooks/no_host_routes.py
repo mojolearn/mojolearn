@@ -621,6 +621,13 @@ class Tree:
                     for _, t in body:
                         lm = self._LOOP.match(t)
                         if lm and (lm.group(1) is None or _runtime_bound(lm.group(1))):
+                            # a reviewed d- or k-sized loop (the mojo-host-loop
+                            # rule's own `small-loop` note, its bound in the
+                            # range) is not CPU work over data
+                            sm = _SMALL_LOOP.search(t)
+                            if sm and lm.group(1) is not None and \
+                                    re.search(r"\b" + re.escape(sm.group(1)) + r"\b", lm.group(1)):
+                                continue
                             loops = True
                             break
                     if loops:

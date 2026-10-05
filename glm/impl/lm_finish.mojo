@@ -18,9 +18,62 @@ the same order. mean_j = sum_j / rows; weighted, (mean_j * rows) / total
 ONE round-to-nearest-even of the binary64 mean (`_round_f32`). The intercept
 is y_mean - fsum(xmean_j * coef_j): every product of two float32 values is
 exact in binary64, and the sum is CPython's math.fsum (Shewchuk's exact
-partials, rounded once), including its NaN and infinity rules."""
+partials, rounded once; the same steps as x_metrics/epilogue.mojo's `fsum`,
+written with bounded loops), including its NaN and infinity rules."""
 from std.math import inf, isinf, isnan, nan
-from x_metrics.epilogue import fsum
+
+
+def _exact_sum(vals: List[Float64]) -> Float64:
+    """CPython's math.fsum over finite values (Shewchuk's partials, rounded
+    once; a zero sum is +0.0): x_metrics/epilogue.mojo's `fsum` with its
+    `while` loops bounded by the partials count."""
+    var p = List[Float64]()
+    for k in range(len(vals)):  # small-loop(vals: one term per feature): the d products of one intercept
+        var x = vals[k]
+        var i = 0
+        for j in range(len(p)):  # small-loop(p: exact partials): at most one partial per binary64 exponent band
+            var y = p[j]
+            if abs(x) < abs(y):
+                var t = x
+                x = y
+                y = t
+            var hi = x + y
+            var yr = hi - x
+            var lo = y - yr
+            if lo != 0.0:
+                p[i] = lo
+                i += 1
+            x = hi
+        for _ in range(len(p) - i):  # small-loop(p: exact partials): drops the partials past the kept ones
+            _ = p.pop()
+        if x != 0.0:
+            p.append(x)
+    var n = len(p)
+    var hi: Float64 = 0.0
+    var lo: Float64 = 0.0
+    if n > 0:
+        n -= 1
+        hi = p[n]
+        for _ in range(len(p)):  # small-loop(p: exact partials): the final carry walk over the partials
+            if n <= 0:
+                break
+            var x = hi
+            n -= 1
+            var y = p[n]
+            hi = x + y
+            var yr = hi - x
+            lo = y - yr
+            if lo != 0.0:
+                break
+        if n > 0 and ((lo < 0.0 and p[n - 1] < 0.0) or (lo > 0.0 and p[n - 1] > 0.0)):
+            var y = lo * 2.0
+            var x = hi + y
+            var yr = x - hi
+            if y == yr:
+                hi = x
+    if hi == 0.0:
+        return 0.0
+    return hi
 
 
 def lm_means_finish(
@@ -76,7 +129,7 @@ def lm_intercept(
     elif ninf:
         dot = -inf[DType.float64]()
     else:
-        dot = fsum(terms)
+        dot = _exact_sum(terms)
         if isinf(dot):
             raise Error("intermediate overflow in fsum")
     return y_mean - dot
