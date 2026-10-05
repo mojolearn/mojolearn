@@ -1,0 +1,74 @@
+K3 compensated GPU private-kernel gate, 2026-10-04
+=================================================
+State: source-only, uncompiled, GPU quality RUN OWED. No timing admission.
+Base: current main1d425cb448987e71ef90a6c7e0dd7c39e0cb5a06.
+Proposal: reference9723a738309186db66d73e78de238f5a7bd212b5.
+The CPU-emulation PASS does not prove these GPU instructions pass.
+
+Scope and isolation
+-------------------
+MOJOLEARN_ARIMA_FAST_K3_DF_PROBE is default OFF and gated FAST + Apple.
+It adds only private _arima_k3_df_probe to the arima binding; product
+fit/predict, Jones transform, initializer, model ordering, refusals,
+optimizer and existing ew_finish_kernel are untouched. No original held
+SCALAR_LL implementation or production dispatch is restored. This is a
+limited actual-kernel candidate, not a working product optimization.
+
+arima/impl/fast_scalar_df.mojo implements compensated residual, square /
+variance, log, two 256-lane reduction levels, final LL and GPU gradient.
+LL high/low words stay resident through (perturbed-base)/2^-10/(nobs-1).
+The supplied states retain the exact reference model/perturbation contract.
+The private probe layout is model-major; eventual product integration must
+respect product member-major layout explicitly, not reinterpret its buffers.
+
+The log uses bit extraction for frexp, range reduction to [sqrt(.5),sqrt(2)),
+and the same odd series through25. It uses float32 only. The product residual
+uses pinned_mul_f32 and explicit no-fast-flags llvm.fma.f32. Addition also
+uses no-fast-flags fma(a,1,b) to protect the two-sum graph. Instruction lowering,
+FTZ/subnormal/nonfinite behavior and compiler syntax are not yet validated.
+The original baseline variance/nonfinite and earliest-error checks remain in
+the candidate; this corpus does not certify all edge inputs.
+
+Compile and quality sequence (manager only)
+------------------------------------------
+On M2 compile only binding arima in FAST mode with
+-D MOJOLEARN_ARIMA_FAST_K3_DF_PROBE; bindings/build_arima.sh and existing
+MOJOLEARN_MOJO_BUILD_FLAGS plumbing are unchanged. No extra core binding is
+needed by this direct extension probe. Also compile default-OFF arima to
+check the product export gate. Record source/compiler flags and binary SHA.
+No build, GPU launch or numerical reference was run by the source agent.
+
+After M2 success, prepare verified artifact + source + baseline-report
+manifest, add an explicit pinned helper/policy admission on the manager
+branch, stage only inside a serial transfer window, and preflight before
+queue insertion. This source commit alone is NOT queue-ready.
+
+Actual helper command inside an admitted M3 serial job:
+MOJOLEARN_NUMERIC_MODE=fast python tools/arima_k3_df_gpu_quality.py \
+  --baseline-report PINNED_ACTUAL_TAIL_JSON \
+  --binding VERIFIED_ABSOLUTE_ARIMA_SO --binding-sha256 EXACT_SHA256 \
+  --source FULL_CHECKOUT_SHA --output FRESH_OUTPUT_JSON
+
+The helper loads only the explicit hash-matched binary (no build fallback),
+requires M3 Ultra/FAST Metal/ABI3, refuses an existing report, and never times.
+Report status HOLD/failure blocks admission. An interrupted RUNNING report
+is not evidence and must remain preserved; repair under a new explicit tag.
+
+Unchanged acceptance
+--------------------
+Baseline SHA256:0bb5fa599ca808fd5d51c3dcc854c83edcc411f527e64dbf3744a53a7cf0e4ec.
+All13 original lengths,18models/length, base+3 perturbations; all4 controls.
+Regenerate states/y using original reference functions, require original
+labels/input hashes and independent reference gradients to match exactly.
+Each stage is compared per-model against original main-GPU error; every
+gradient component is compared independently. Zero degradation allowance.
+No fixture filtering, rescoring A, averaging, tolerance change or optimizer
+substitution. One GPU invocation per group/control; gradient computed in
+the same resident-buffer call. All original outputs still tested.
+
+If it passes, record a private kernel PASS only. Before actual AutoARIMA
+quality/timing: integrate two-word scratch and member-major tail in an
+isolated opt-in branch, validate actual device initializer/callpath/fit,
+full forecasts and heldout quality plus nonfinite/FTZ/eligibility fallbacks.
+No inference from supplied-state results to product initialization or to
+whole-board speed is authorized. Original actual-tail K3 HOLD is preserved.
