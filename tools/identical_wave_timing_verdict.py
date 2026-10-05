@@ -36,7 +36,9 @@ def main():
     proof = load(a.proof)
     waves = {'nvidia': a.nvidia_wave, 'amd': a.amd_wave}
     receipts = {v: load(w / ('timing-' + a.tag + '.json')) for v, w in waves.items()}
-    quality = {v: load(w / 'quality.json').get('status') for v, w in waves.items()}
+    # box-run-2: an in-place reconciled receipt (quality-reconciled.json, PASS only) supersedes quality.json
+    quality = {v: load(w / 'quality-reconciled.json' if (w / 'quality-reconciled.json').exists() else w / 'quality.json').get('status')
+               for v, w in waves.items()}
     cases = None
     for vendor, receipt in receipts.items():
         if receipt.get('phase') != 'timing':

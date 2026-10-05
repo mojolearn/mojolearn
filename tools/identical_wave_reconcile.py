@@ -39,7 +39,16 @@ def main():
     a = p.parse_args()
     wave = a.wave.resolve()
     identity = load(wave / 'wave.json')
-    prov = load(wave / 'revision-provenance.json')
+    # box-run-2 (2026-10-05): a wave that was never composed into a revision is
+    # reconciled IN PLACE: its own quality.json is the original receipt, and a
+    # PASS is written to quality-reconciled.json (quality.json is never touched);
+    # timing takes it with identical_wave_runner.py --quality-receipt.
+    in_place = not (wave / 'revision-provenance.json').exists()
+    if in_place:
+        prov = {'status': 'PRODUCTS_FROZEN_QUALITY_RECONCILIATION_REQUIRED', 'new_plan_sha256': digest(a.plan),
+                'old_plan_sha256': digest(a.plan), 'old_revision': str(wave), 'old_quality_sha256': digest(wave / 'quality.json')}
+    else:
+        prov = load(wave / 'revision-provenance.json')
     prepared = load(wave / 'prepare.json')
     if prepared.get('status') != 'PASS' or prepared.get('identity') != identity:
         p.error('revision prepare receipt invalid')
@@ -153,7 +162,7 @@ def main():
     with out.open('x') as stream:
         stream.write(json.dumps(report, indent=2) + '\n')
     if good:
-        with (wave / 'quality.json').open('x') as stream:  # never overwrite an existing quality receipt
+        with (wave / ('quality-reconciled.json' if in_place else 'quality.json')).open('x') as stream:  # never overwrite an existing quality receipt
             stream.write(json.dumps(report, indent=2) + '\n')
     print('QUALITY_RECONCILED', report['status'], json.dumps(counts, sort_keys=True), out, flush=True)
     return 0 if good else 1

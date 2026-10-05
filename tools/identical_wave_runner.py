@@ -99,6 +99,7 @@ def main():
     p.add_argument('--tag',default='',help='identity/timing only: write <phase>-<tag>.json and <arm>/<phase>-<tag>/ so a rerun never overwrites earlier evidence')
     p.add_argument('--cases',default='',help='identity/timing only: comma-separated lane--dataset subset (reruns of failed cases, or timing only proven cases)')
     p.add_argument('--case-timeout',type=int,help='identity reruns only: override the plan per-case timeout (e.g. single-thread host eigh n=4096 exceeded 1800 s); recorded in the receipt')
+    p.add_argument('--quality-receipt',type=Path,help='timing only: a PASS quality receipt bound to this identity (e.g. quality-reconciled.json from identical_wave_reconcile.py in place); default <out>/quality.json')
     p.add_argument('--identity-receipt',type=Path,help='timing only: complete identity receipt (e.g. merged after reruns); default <out>/identity.json')
     p.add_argument('--prepare-jobs',type=int,choices=range(1,5),default=1,help='Concurrent independent builders; shared compile semaphore remains authoritative')
     a=p.parse_args()
@@ -183,7 +184,7 @@ def main():
         # named explicitly with --cases; the identity receipt may then be incomplete.
         partial=proof_doc.get('kind')=='partial'
         if partial and not a.cases: p.error('timing blocked: a partial proof requires --cases naming PROVEN cases')
-        for phase,receipt in (('quality',a.out/'quality.json'),('identity',identity_receipt)):
+        for phase,receipt in (('quality',a.quality_receipt or a.out/'quality.json'),('identity',identity_receipt)):
             if not receipt.exists(): p.error('timing blocked: '+phase+' receipt missing')
             doc=json.loads(receipt.read_text())
             if doc.get('identity')!=identity: p.error('timing blocked: '+phase+' identity mismatch')
