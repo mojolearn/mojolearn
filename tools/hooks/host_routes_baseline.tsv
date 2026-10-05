@@ -2,7 +2,8 @@
 # It only shrinks. A fix deletes its rows (no_host_routes.py --prune-baseline).
 # state debt = on main; inflight = pre-authorized lines of an open PR; owed = debt of a rule
 # newer than the installed hooks (they skip it); owed-py = the same for the Python
-# glue-only rules (py-data-loop, py-np-compute, py-reduce, py-array-method).
+# glue-only rules (py-data-loop, py-np-compute, py-reduce, py-array-method, py-fsum,
+# py-map-arith).
 # A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).
 rule	class	owner	state	path	occ	text
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
@@ -23,8 +24,6 @@ block-per-n	serial-gpu	UNOWNED	owed2	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_fun
 block-per-n	serial-gpu	UNOWNED	owed2	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[xty_kernel](
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
 block-per-n	serial-gpu	UNOWNED	owed2	glm/impl/ridge_multi.mojo	0	ctx.enqueue_function[column_mean_kernel](
-# why: Array reference routines (eq of mixed dtypes, float16/bf16/int8 astype, ragged _flatten of user lists) kept for dtypes with no Mojo helper code and for tests/test_hotpath_native.py's reference arm; owed: give cast_elements/equal_elements f2/u2/i1 codes, then delete
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	bits = [1 if x == y else 0 for x, y in zip(mine, theirs)]
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for _ in range(int(self.iterations)):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
@@ -47,14 +46,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for r, Y0 in enumerate(starts):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for step in range(n_steps):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_prep.py	0	for a, s_ in zip(_as_list(mus), _as_list(sig))]),
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_prep.py	0	return [float(x) for x in (v.tolist() if hasattr(v, "tolist") else v)]
-# why: apple-fast-purity2 left it: scikit-learn estimator tag classes (metadata for sklearn's checks); no data is touched
-py-sklearn	py-numpy	apple-fast-purity2	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
-# why: _fsum_exact: the exact big-integer sum fsum falls back to only when math.fsum meets a NaN, an infinity or an intermediate overflow; Mojo has no arbitrary-precision integer, owed as a Mojo NaN/inf classifier plus an exact wide accumulator
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_portable_math.py	0	for value in values:
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	for i, f in enumerate(vals):
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
