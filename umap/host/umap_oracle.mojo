@@ -106,6 +106,7 @@ from umap.sparse_graph import (
     general_intersection,
 )
 from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
+from umap.host.spectral_post_pass_host import host_spectral_post_pass
 
 
 #: The gate's negative control (module docstring). Read back by
@@ -289,24 +290,9 @@ def host_umap_spectral_initialize(
         embedding.append(res.embedding[i])
     if n_out != n_components or len(embedding) != n_samples * n_components:
         raise Error("UMAP spectral solver returned the wrong shape")
-    for c in range(n_components):
-        var pivot = 0
-        var peak = Float32(0.0)
-        for i in range(n_samples):
-            var value = embedding[i * n_components + c]
-            if not _finite(value):
-                raise Error("UMAP spectral solver returned a non-finite value")
-            var magnitude = value if value >= Float32(0.0) else -value
-            if magnitude > peak:
-                peak = magnitude
-                pivot = i
-        if not (peak > Float32(0.0)):
-            raise Error("UMAP spectral solver returned a zero component")
-        var scale = Float32(10.0) / peak
-        if embedding[pivot * n_components + c] < Float32(0.0):
-            scale = -scale
-        for i in range(n_samples):
-            embedding[i * n_components + c] *= scale
+    # The device post-pass's host column (identical_div / identical_mul + ftz,
+    # lane cpu4-umap 2026-10-04): umap/host/spectral_post_pass_host.mojo.
+    host_spectral_post_pass(embedding, n_samples, n_components)
     return embedding^
 
 

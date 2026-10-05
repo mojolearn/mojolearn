@@ -3,17 +3,22 @@
 """UMAP spectral initialization over the shipped cuVS/Lanczos path."""
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.memory import bitcast
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast, stack_allocation
 
 from core.identity_trace import IdentityTrace
 from spectral.impl.sparse.coo import CooGraph
 from spectral.impl.spectral_embedding import (
     MLSpectralEmbeddingParams,
     to_cuvs,
-    transform_connectivity,
 )
-from spectral.impl.preprocessing.detail.spectral_embedding import transform_device_coo, transform_graph
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from spectral.impl.preprocessing.detail.spectral_embedding import (
+    transform_device_coo_device,
+    transform_graph_device,
+)
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -41,9 +46,166 @@ from umap.graph import FuzzySimplicialGraph
 from umap.optimizer_identical_device import umap_dense_positive_coo_device
 
 
-def _finite(v: Float32) -> Bool:
-    var bits = bitcast[DType.uint32](v)
-    return ((bits >> UInt32(23)) & UInt32(0xFF)) != UInt32(0xFF)
+comptime SPECTRAL_POST_TPB = 256
+"""Threads per column block of the post-pass pivot reduction (a power of
+two: the tree below halves it)."""
+
+comptime SPECTRAL_POST_FLAG_NONFINITE = UInt32(1)
+comptime SPECTRAL_POST_FLAG_ZERO = UInt32(2)
+
+
+def spectral_post_pivot_kernel(
+    emb: MutPointer[Float32, MutAnyOrigin],
+    scale: MutPointer[Float32, MutAnyOrigin],
+    flags: MutPointer[UInt32, MutAnyOrigin],
+    n_in: Int32,
+    nc_in: Int32,
+):
+    """One block per column `c` of the row-major `n x nc` embedding: the
+    column's pivot, its refusal flag and its scale.
+
+    The pivot is the FIRST row of largest magnitude (the host walk's strict
+    `>`): the pair (|v| bits, row) with the largest magnitude bits, the
+    smallest row among equals. Magnitudes are non-negative, so their bits
+    order as the floats do, and the integer comparison is exact and
+    order-free on every vendor. `flags[c]` is 1 on a non-finite value, 2 on
+    an all-zero column, else 0. `scale[c] = identical_div(10, peak)`,
+    negated when the pivot is negative (a sign flip moves no magnitude
+    bits)."""
+    # Fits gate: three 32-bit words per thread, far under every column's
+    # shared limit (Apple's 32 KiB is the smallest).
+    comptime assert SPECTRAL_POST_TPB * 12 <= 16384, "post-pass shared page must fit every column"
+    var c = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var n = Int(n_in)
+    var nc = Int(nc_in)
+    var s_mag = stack_allocation[
+        SPECTRAL_POST_TPB, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+    ]()
+    var s_row = stack_allocation[
+        SPECTRAL_POST_TPB, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+    ]()
+    var s_bad = stack_allocation[
+        SPECTRAL_POST_TPB, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+    ]()
+    var best_mag = UInt32(0)
+    var best_row = UInt32(0xFFFFFFFF)
+    var bad = UInt32(0)
+    var i = t
+    while i < n:
+        var bits = bitcast[DType.uint32](emb.unsafe_load(i * nc + c))
+        if ((bits >> UInt32(23)) & UInt32(0xFF)) == UInt32(0xFF):
+            bad = UInt32(1)
+        var mag = bits & UInt32(0x7FFFFFFF)
+        # rows rise along the stride, so the first row at a magnitude wins
+        if best_row == UInt32(0xFFFFFFFF) or mag > best_mag:
+            best_mag = mag
+            best_row = UInt32(i)
+        i += SPECTRAL_POST_TPB
+    s_mag[t] = best_mag
+    s_row[t] = best_row
+    s_bad[t] = bad
+    barrier()
+    var active = SPECTRAL_POST_TPB // 2
+    while active > 0:
+        if t < active:
+            var om = s_mag[t + active]
+            var orow = s_row[t + active]
+            var m = s_mag[t]
+            var r = s_row[t]
+            # an empty slot carries row 0xFFFFFFFF and magnitude 0: it never
+            # beats a real row (a real row is smaller at equal magnitude)
+            if om > m or (om == m and orow < r):
+                s_mag[t] = om
+                s_row[t] = orow
+            if s_bad[t + active] != UInt32(0):
+                s_bad[t] = UInt32(1)
+        barrier()
+        active //= 2
+    if t != 0:
+        return
+    var mag_bits = s_mag[0]
+    var pivot = Int(s_row[0])
+    var flag = UInt32(0)
+    if s_bad[0] != UInt32(0):
+        flag = SPECTRAL_POST_FLAG_NONFINITE
+    elif mag_bits == UInt32(0):
+        flag = SPECTRAL_POST_FLAG_ZERO
+    flags.unsafe_store(c, flag)
+    if flag != UInt32(0):
+        scale.unsafe_store(c, Float32(0.0))
+        return
+    var peak = bitcast[DType.float32](mag_bits)
+    var sc = identical_div(Float32(10.0), peak)
+    var pivot_bits = bitcast[DType.uint32](emb.unsafe_load(pivot * nc + c))
+    if (pivot_bits >> UInt32(31)) != UInt32(0):
+        sc = -sc
+    scale.unsafe_store(c, sc)
+
+
+def spectral_post_scale_kernel(
+    emb: MutPointer[Float32, MutAnyOrigin],
+    scale: MutPointer[Float32, MutAnyOrigin],
+    total_in: Int32,
+    nc_in: Int32,
+):
+    """`emb[i, c] = ftz(identical_mul(emb[i, c], scale[c]))`, one thread
+    per cell."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(total_in):
+        return
+    var c = i % Int(nc_in)
+    emb.unsafe_store(i, ftz(identical_mul(emb.unsafe_load(i), scale.unsafe_load(c))))
+
+
+def _spectral_post_pass_device(
+    ctx: DeviceContext,
+    mut d_emb: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_components: Int,
+) raises -> List[Float32]:
+    """The ordered post-pass both entries share, on the device (lane
+    cpu4-umap, 2026-10-04): the largest-magnitude entry of each column made
+    positive, each column scaled to max magnitude 10. Only the per-column
+    refusal flags are read before the ONE download of the result. The host
+    column is `umap/host/spectral_post_pass_host.mojo::host_spectral_post_pass`
+    (the same seams, the same bits)."""
+    var total = n_samples * n_components
+    var d_scale = ctx.enqueue_create_buffer[DType.float32](n_components)
+    var d_flags = ctx.enqueue_create_buffer[DType.uint32](n_components)
+    ctx.enqueue_function[spectral_post_pivot_kernel](
+        d_emb.unsafe_ptr(),
+        d_scale.unsafe_ptr(),
+        d_flags.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_components),
+        grid_dim=(n_components, 1, 1),
+        block_dim=(SPECTRAL_POST_TPB, 1, 1),
+    )
+    var flags = List[UInt32](length=n_components, fill=UInt32(0))
+    ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=d_flags)
+    ctx.synchronize()
+    # The refusals in the host walk's order: column by column, a non-finite
+    # value before a zero peak.
+    for c in range(n_components):  # small-loop(n_components: refusal flags, at most 32): one word per output dimension
+        if flags[c] == SPECTRAL_POST_FLAG_NONFINITE:
+            raise Error("UMAP spectral solver returned a non-finite value")
+        if flags[c] == SPECTRAL_POST_FLAG_ZERO:
+            raise Error("UMAP spectral solver returned a zero component")
+    ctx.enqueue_function[spectral_post_scale_kernel](
+        d_emb.unsafe_ptr(),
+        d_scale.unsafe_ptr(),
+        Int32(total),
+        Int32(n_components),
+        grid_dim=((total + SPECTRAL_POST_TPB - 1) // SPECTRAL_POST_TPB, 1, 1),
+        block_dim=(SPECTRAL_POST_TPB, 1, 1),
+    )
+    var out = List[Float32](length=total, fill=Float32(0.0))
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=d_emb)
+    ctx.synchronize()
+    _ = d_scale^
+    _ = d_flags^
+    return out^
 
 
 def spectral_initialize_weights(
@@ -58,8 +220,8 @@ def spectral_initialize_weights(
 
     The eigensolver and normalized Laplacian are the repository's shipped
     spectral implementation. IDENTICAL inherits its pinned reductions and
-    seeded Lanczos path. FAST inherits its faster numeric kernels. This host
-    post-pass is ordered in both modes: the largest-magnitude entry in each
+    seeded Lanczos path. FAST inherits its faster numeric kernels. The
+    device post-pass is ordered in both modes: the largest-magnitude entry in each
     column is made positive and each column is scaled to max magnitude 10.
     """
     if n_components != 2 and n_components != 3:
@@ -106,42 +268,19 @@ def spectral_initialize_coo(
         has_seed=True,
         seed=seed,
     )
-    var embedding = List[Float32]()
+    # `transform_connectivity` is `transform_graph` at 1e-5 over `to_cuvs`;
+    # its device-output twin leaves the embedding resident for the post-pass.
     var trace = IdentityTrace.disabled()
-    var n_out: Int
+    var cp = to_cuvs(config)
     comptime if UMAP_INIT_TOL_FAST:
-        var cp = to_cuvs(config)
         cp.tolerance = Float32(1e-3)
-        n_out = transform_graph(ctx, cp, graph, embedding, trace)
     else:
-        n_out = transform_connectivity(ctx, config, graph^, embedding, trace)
-    if n_out != n_components or len(embedding) != n_samples * n_components:
+        cp.tolerance = Float32(1e-5)
+    var d_emb = ctx.enqueue_create_buffer[DType.float32](1)
+    var n_out = transform_graph_device(ctx, cp, graph, d_emb, trace)
+    if n_out != n_components or len(d_emb) != n_samples * n_components:
         raise Error("UMAP spectral solver returned the wrong shape")
-    _spectral_post_pass(embedding, n_samples, n_components)
-    return embedding^
-
-
-def _spectral_post_pass(mut embedding: List[Float32], n_samples: Int, n_components: Int) raises:
-    """The ordered post-pass both entries share: the largest-magnitude entry
-    of each column made positive, each column scaled to max magnitude 10."""
-    for c in range(n_components):
-        var pivot = 0
-        var peak = Float32(0.0)
-        for i in range(n_samples):
-            var value = embedding[i * n_components + c]
-            if not _finite(value):
-                raise Error("UMAP spectral solver returned a non-finite value")
-            var magnitude = value if value >= Float32(0.0) else -value
-            if magnitude > peak:
-                peak = magnitude
-                pivot = i
-        if not (peak > Float32(0.0)):
-            raise Error("UMAP spectral solver returned a zero component")
-        var scale = Float32(10.0) / peak
-        if embedding[pivot * n_components + c] < Float32(0.0):
-            scale = -scale
-        for i in range(n_samples):
-            embedding[i * n_components + c] *= scale
+    return _spectral_post_pass_device(ctx, d_emb, n_samples, n_components)
 
 
 def spectral_initialize_device_coo(
@@ -171,20 +310,19 @@ def spectral_initialize_device_coo(
         has_seed=True,
         seed=seed,
     )
-    var embedding = List[Float32]()
     var trace = IdentityTrace.disabled()
     var cp = to_cuvs(config)
     comptime if UMAP_INIT_TOL_FAST:
         cp.tolerance = Float32(1e-3)
     else:
         cp.tolerance = Float32(1e-5)
-    var n_out = transform_device_coo(
-        ctx, cp, n_samples, nnz, rows^, cols^, vals^, embedding, trace
+    var d_emb = ctx.enqueue_create_buffer[DType.float32](1)
+    var n_out = transform_device_coo_device(
+        ctx, cp, n_samples, nnz, rows^, cols^, vals^, d_emb, trace
     )
-    if n_out != n_components or len(embedding) != n_samples * n_components:
+    if n_out != n_components or len(d_emb) != n_samples * n_components:
         raise Error("UMAP spectral solver returned the wrong shape")
-    _spectral_post_pass(embedding, n_samples, n_components)
-    return embedding^
+    return _spectral_post_pass_device(ctx, d_emb, n_samples, n_components)
 
 
 def spectral_initialize(
