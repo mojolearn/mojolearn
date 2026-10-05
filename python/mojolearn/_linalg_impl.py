@@ -1168,6 +1168,20 @@ def _svd_tsqr(a_arr, rows, cols):
     return SVDResult(U, S.out((cols,)), Vt.out())
 
 
+def _tsvd_cholqr_r(k, x, rows, cols):
+    """lane/apple-fast-s-linalg TSVD_FAST_CHOLQR3 (default off, FAST + Apple;
+    x_decomp/tsvd_fast.mojo): R of a tall x by shifted CholeskyQR3 on the
+    matrix unit, or None (the caller runs the TSQR) when the binding lacks
+    `x_decomp_tsvd_cholqr_r` (define off) or its device guard tripped."""
+    try:
+        fn = getattr(k._raw(), "x_decomp_tsvd_cholqr_r")
+    except Exception:
+        return None
+    R = empty((cols, cols), "<f4")
+    ok = fn(addr_ro(x, name="x"), addr(R, name="r_out"), [int(rows), int(cols)])
+    return R if int(ok) else None
+
+
 def _tsvd_tsqr_components(x, nc, mode):
     """lane/apple-fast-q-linalg TSVD_QFIX (x_decomp/qfix.mojo bit 2; FAST
     default, -D MOJOLEARN_TSVD_QOLD restores the Gram route): TruncatedSVD's
@@ -1189,7 +1203,9 @@ def _tsvd_tsqr_components(x, nc, mode):
     rows, cols = int(x.shape[0]), int(x.shape[1])
     if not on or not _tsqr_on(rows, cols) or not 1 <= nc <= cols:
         return None
-    R = _tsqr_r(k.b, x, rows, cols, False)
+    R = _tsvd_cholqr_r(k, x, rows, cols)
+    if R is None:
+        R = _tsqr_r(k.b, x, rows, cols, False)
     S, Vt = k.svd(_xd_matrix(R, cols, cols))
     V = Vt.rows(0, nc)
     V = V.neg_rows(k.absmax_flags(V, False))

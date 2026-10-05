@@ -1187,3 +1187,11 @@ Rows from board-quality-audit-2026-10-04 where FAST quality trailed the best opp
 | `FA_ITER_DEVICE` | factor-analysis / istella; taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | istella 10.4 s -> ~1.95-2.0 s; taxi 358 -> 192 | HOLD-quality | same istella log-likelihood loss as FA_GRAM_ONCE (M3, full board, 1 run per arm, 2026-10-04); stays off |
 | `FA_ALL` | factor-analysis / istella; taxi | lane/apple-fast-rec-ab3 @ 0ca521cc5 | afc_ab_def | istella 10.4 s -> 9.54 s; taxi 358 -> 30.4 | HOLD-quality | same istella log-likelihood loss (M3, full board, 1 run per arm, 2026-10-04); stays off |
 
+
+## Speed round 2: linear algebra (lane/apple-fast-s-linalg, 2026-10-04)
+
+Code only; every row is default off, FAST + Apple only, awaiting the M2 build and the M3 A/B.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_TSVD_FAST_CHOLQR3` | tsvd / istella, taxi (x_decomp/tsvd_fast.mojo, binding x_decomp) | lane/apple-fast-s-linalg | (owed) | istella 864 / taxi 42.2 (rab8-tsvd, TSVD_QFIX on) -> ? | READY-AB | TSVD_QFIX's R from shifted CholeskyQR3 (2 diagonal-shifted + 2 plain passes; Gram and Y R^-1 on the matrix unit via launch_gemm) instead of the scalar Householder TSQR; device guard (Cholesky info, last-pass Gram diagonal within 2^-6 of 1) falls back to the TSQR. Quality gate: istella relative_reconstruction_error stays ~1.22e-4 (not the Gram's 2.55e-3). Not SVD_FAST_CHOLQR (that was linalg.svd's U with an unshifted CholQR2 per orth pass) |
