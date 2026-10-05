@@ -1607,7 +1607,8 @@ comptime IDN_CNN_EPOCH_DEV = _FAM2_FAST or (IDN_XENT_DEV_FOLD and not is_defined
 #   (0 for a non-loop, 1 + node for a loop) and two gather kernels on the
 #   device (`gcn_loops_device`), the host twin `gcn_loops_host` on a CPU-only
 #   install. Selection and copies only: no arithmetic, so no bit moves on any
-#   column. `-D MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF` restores the NumPy form.
+#   column. Lane py-runtime round 2: the NumPy form is deleted; Python always
+#   calls `x_cnn_gcn_loops` (this flag only reports bit 2 of `x_cnn_idn2_flags`).
 comptime IDN_GCN_LOOPS_DEV = _FAM2_FAST or (_FAM2_IDN and not is_defined["MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF"]())
 #: CANDIDATE ARM (default OFF): `-D MOJOLEARN_IDN_XENT_FOLD_BLOCK_256` folds
 #: blocks of 256 (one level up to 256 rows, two up to 65,536) instead of 32

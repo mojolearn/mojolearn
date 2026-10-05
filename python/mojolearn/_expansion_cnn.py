@@ -2393,9 +2393,12 @@ class GCNConv(_Layer):
         if len(w) != len(src):
             raise ValueError("mojolearn: edge_weight must have one entry per edge")
         bl = self._binding()
-        if self.normalize and self.add_self_loops and _idn2(bl, _F2_GCN_LOOPS) and hasattr(bl, "x_cnn_gcn_loops"):
-            # lane fix-n1-lm-neural (IDN_GCN_LOOPS_DEV): the same edge list,
-            # built by the binding (glue: buffers and one call)
+        if self.normalize and self.add_self_loops:
+            # lane fix-n1-lm-neural (IDN_GCN_LOOPS_DEV): add_remaining_self_loops
+            # built by the binding (`x_cnn_gcn_loops`, device or host column);
+            # lane py-runtime round 2: the only route (the NumPy arm is gone)
+            if not hasattr(bl, "x_cnn_gcn_loops"):
+                raise RuntimeError("mojolearn: this x_cnn binding has no x_cnn_gcn_loops (an older binary); rebuild it")
             s32, d32 = np.ascontiguousarray(src, np.int32), np.ascontiguousarray(dst, np.int32)
             w32 = np.ascontiguousarray(w, np.float32)
             t = len(s32) + n
@@ -2403,15 +2406,6 @@ class GCNConv(_Layer):
             k = int(bl.x_cnn_gcn_loops([s32.ctypes.data, d32.ctypes.data, w32.ctypes.data, so.ctypes.data,
                                         dso.ctypes.data, wo.ctypes.data], [n, len(s32), int(self.improved)]))
             src, dst, w = so[:k + n], dso[:k + n], wo[:k + n]
-        elif self.normalize and self.add_self_loops:
-            fill = np.float32(2.0 if self.improved else 1.0)
-            loop = src == dst
-            loop_w = np.full(n, fill, np.float32)
-            loop_w[src[loop]] = w[loop]            # add_remaining_self_loops keeps an existing loop's weight
-            keep = ~loop
-            src = np.concatenate([src[keep], np.arange(n)])
-            dst = np.concatenate([dst[keep], np.arange(n)])
-            w = np.concatenate([w[keep], loop_w]).astype(np.float32)
         g = _Graph(src, dst, n, self._binding())
         wf = np.ascontiguousarray(w[g.order_f])
         if self.normalize:
