@@ -413,8 +413,8 @@ def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: 
     _ = d_c^
 
 
-# lane/apple-fast-graph (2026-10-02), FAST on Apple only, opt-in
-# `-D MOJOLEARN_CC_FAST`: the same hooking and pointer jumping as
+# lane/apple-fast-graph (2026-10-02), FAST on Apple only, the default since
+# 2026-10-04 (rollback `-D MOJOLEARN_CC_FAST_OFF`): the same hooking and pointer jumping as
 # `_cc_csr_device`, with the host waits taken out of the loop. The board's
 # race (20,000 nodes, 54,528 edges) spends its ~90 ms on overhead, not on
 # the kernels: one host wait and one memset per round, a pinned staging
@@ -432,7 +432,8 @@ def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: 
 # its root's number. One download of the labels and the count. Same labels
 # as the host rounds + Python relabel; the round count in info[0] includes
 # the batch's spare rounds (Python reads only the labels and the count).
-#: FAST Apple candidate, default OFF: `-D MOJOLEARN_CC_FAST`. Source
+#: FAST Apple, default ON since 2026-10-04 (rollback
+#: `-D MOJOLEARN_CC_FAST_OFF`; the old -D name is harmless). Source
 #: lane/apple-fast-graph@1fa36a7ec (ported 2026-10-04, lane
 #: apple-fast-rec-misc). connected_components on a CSR graph: batched
 #: hook + jump rounds (one change-word read per CC_FAST_BATCH rounds), the
@@ -443,10 +444,13 @@ def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: 
 #: main's `_p2m_iota` / `_p2m_relabel` (both already device ops). Board:
 #: connected-components taxi 0.68 (already a win); prior gap 88 ms vs
 #: networkx 7.3 ms was launch + wait overhead, not kernel time.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab3-ccfast): connected-components taxi 8.17 -> 3.60 ms (-56.0%);
+#: n_components 588 both arms, output digest identical. KEEP.
 comptime CC_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_CC_FAST"]()
+    and not is_defined["MOJOLEARN_CC_FAST_OFF"]()
 )
 #: hook + jump rounds between two reads of the change word
 comptime CC_FAST_BATCH = 4

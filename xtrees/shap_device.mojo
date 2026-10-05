@@ -47,8 +47,8 @@ leaf. Taken when the compiled width is 8 (at most 7 merged features per
 path, 128 patterns) and the table fits TABLE_BYTES; otherwise the
 per-row units run. Same terms, same cells, same order: the same bits."""
 comptime TABLE_BYTES = 256 * 1024 * 1024
-#: SHAP_TREE_TAB (FAST + Apple, on top of SHAP_TABLE; OPT-IN until its A/B
-#: passes: `-D MOJOLEARN_SHAP_TREE_TAB`): the leaf table's row unit finds
+#: SHAP_TREE_TAB (FAST + Apple, on top of SHAP_TABLE; the default since
+#: 2026-10-04, rollback `-D MOJOLEARN_SHAP_TREE_TAB_OFF`): the leaf table's row unit finds
 #: each leaf's pattern from ONE decision word per (row, tree) (one x read
 #: and compare per internal node) instead of walking every leaf's root path
 #: (xtrees/shap_tab.mojo). Source lane/apple-fast-shap@13343dd51 (commit
@@ -62,7 +62,11 @@ comptime TABLE_BYTES = 256 * 1024 * 1024
 #: than 64 internal nodes (the word's width) takes main's row unit inside
 #: the same launch: no host wait, no shape window. Same adds, same cells,
 #: same order as SHAP_TABLE's row unit: the same bits.
-comptime SHAP_TREE_TAB = SHAP_TABLE and is_defined["MOJOLEARN_SHAP_TREE_TAB"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab1d-shaptab): tree-shap istella 24.75 -> 19.57 ms (-21.0%), taxi 11.81 ->
+#: 9.69 ms (-17.9%); max_additivity_error and output digest identical. KEEP:
+#: the FAST + Apple default; the old -D name is harmless.
+comptime SHAP_TREE_TAB = SHAP_TABLE and not is_defined["MOJOLEARN_SHAP_TREE_TAB_OFF"]()
 comptime TABLE_ACC = 64
 
 
