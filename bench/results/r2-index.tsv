@@ -223,3 +223,5 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-04T20:16:14Z	measurements/2026-10-04/identical-blackwell/nv/20261004T201522Z.tar.gz	2daea7fe7aab3ad5836d5c63e2fdbdf28886e299179db9a9c0ba183a4dd49885	197494525	fcbc14b21d91	/root/lq
 2026-10-04T20:21:07Z	measurements/2026-10-04/identical-all/nv/20261004T202100Z.tar.gz	dea21250c2f8b4344cedecd4d9c106fabf559ff93c62d0fe29827ad664118a79	20728839	21429c3f03a0	/root/lq
 2026-10-04T20:22:23Z	measurements/2026-10-04/identical-all/amd/20261004T202146Z.tar.gz	f8503f2ac8737b81cb746b6c1bc3447eabd7dee92c91d4b3ef3e229e968ae13f	224670965	mojolearn-identical-amd	/root/lq
+2026-10-05T01:07:24Z	measurements/2026-10-05/box-run-2/amd/20261005T010722Z.tar.gz	801f7f8f9a40c0e1d2e386a0da26f24f388f9b126382d07c8a098e029ec48c23	585	mojolearn-br2-amd	/root/lq
+2026-10-05T01:21:53Z	measurements/2026-10-05/box-run-2/nv/20261005T012150Z.tar.gz	f78e2257fa6ea607715accb6f1b0944fde4ce52c6afea225d733006eda459ef2	572	aa9c56353c2f	/root/lq
