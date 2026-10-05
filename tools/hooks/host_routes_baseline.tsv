@@ -197,8 +197,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	vs = [peak * t / w for t in range(t0, b)]
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	vs = [peak + d * k / span for k in range(k0, k1)]
-# why: select_d on a CPU-only install folds KPSS flags per series in Python (B-sized); owed to the host tsa binding carrying select_d
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_tsa_impl.py	0	for index, stationary in enumerate(flags):
 # why: per-optimizer-step learning rates from an lr_schedule (n_steps exact-rational lr_at calls) owed to a Mojo schedule table; lr_at needs multi-word fixed-point enclosures (DEVIATION 5540)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_rnn.py	0	return np.asarray([self.lr_schedule.lr_at(t) for t in range(1, n_steps + 1)], dtype=np.float32)
 # why: lrs(n) and OneCycle _fill loop over optimizer steps in exact-rational/binary64 Python; owed to a Mojo port of the fixed-point enclosure (big-int Fraction fallback has no Mojo equivalent yet)

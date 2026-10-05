@@ -752,7 +752,7 @@ python/mojolearn/_training_impl.py	2273	runtime	cosine terms in Python; owed to 
 python/mojolearn/_training_impl.py	2332	runtime	cosine decay LR values in Python per optimizer step; owed to a Mojo schedule routine
 python/mojolearn/_training_impl.py	2333	runtime	cosine decay LR error bounds in Python; owed to a Mojo schedule routine
 python/mojolearn/_transformer_impl.py	543	glue	two slice copies per head of the KV ring
-python/mojolearn/_tsa_impl.py	302	runtime	CPU-only install route: first stationary order per series from the KPSS flags; needs select_d in the host binding (the GPU route is native) [py-data-loop]
+python/mojolearn/_tsa_impl.py	302	runtime-fixed	select_d on a CPU-only install calls the host binding select_d (bindings/kpss_host_test.mojo); the Python flag loop is deleted [py-data-loop]
 python/mojolearn/_umap_impl.py	225	glue	zero singular value check over nc components [py-data-loop]
 python/mojolearn/_umap_impl.py	261	cpu-input	categorical y label objects ordered by (type, value) [py-data-loop]
 python/mojolearn/_umap_impl.py	263	cpu-input	categorical y label objects ordered by (type, value) [py-data-loop,py-reduce]
