@@ -1,0 +1,638 @@
+path	line	class	reason
+python/mojolearn/_array.py	588	runtime	Python cast loop for dtypes without a Mojo helper code (f2, u2, i1); owed: give cast_elements those codes, then delete
+python/mojolearn/_array.py	605	runtime	Python cast loop for dtypes without a Mojo helper code (see line 588)
+python/mojolearn/_array.py	773	runtime	Python equality loop for mixed dtypes without a Mojo helper code; owed to equal_elements codes
+python/mojolearn/_array.py	775	runtime	Python equality loop for dtypes without a Mojo helper code; owed to equal_elements codes
+python/mojolearn/_array.py	854	runtime	Python min fallback for dtypes without a reduce_stat code (f2, u2, i1); owed with those codes
+python/mojolearn/_array.py	860	runtime	Python max fallback for dtypes without a reduce_stat code; owed with those codes
+python/mojolearn/_array.py	878	runtime	Python sum fallback for dtypes without a reduce_stat code; owed with those codes
+python/mojolearn/_array.py	880	runtime	Python sum fallback for dtypes without a reduce_stat code; owed with those codes
+python/mojolearn/_array.py	893	runtime	Python argmax fallback for dtypes without a helper code; owed with those codes
+python/mojolearn/_array.py	1002	cpu-input	flattens a ragged user Python list, the explicit input step
+python/mojolearn/_bpe_trainer.py	145	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	159	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	176	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	186	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	188	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	191	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	197	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	198	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	212	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	223	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	256	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	257	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	258	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	281	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	301	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	320	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	378	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	382	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	417	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	419	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	429	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	447	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	448	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	473	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	513	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_bpe_trainer.py	530	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_byte_lm_impl.py	67	glue	walks the small free logits pool
+python/mojolearn/_byte_lm_impl.py	75	glue	walks the small free logits pool
+python/mojolearn/_byte_lm_impl.py	171	glue	validates the schedule argument keys
+python/mojolearn/_byte_lm_impl.py	173	glue	validates the schedule argument values
+python/mojolearn/_byte_lm_impl.py	178	glue	validates the schedule argument items
+python/mojolearn/_byte_lm_impl.py	227	glue	converts the configuration arguments
+python/mojolearn/_byte_lm_impl.py	270	glue	one array per named model parameter
+python/mojolearn/_byte_lm_impl.py	273	glue	walks the named model parameter arrays
+python/mojolearn/_byte_lm_impl.py	364	glue	four named state arrays of a snapshot
+python/mojolearn/_byte_lm_impl.py	368	glue	lists the model parameter shapes
+python/mojolearn/_byte_lm_impl.py	383	glue	compares the model parameter shapes
+python/mojolearn/_byte_lm_impl.py	391	glue	validates three optimizer config keys
+python/mojolearn/_byte_lm_impl.py	412	glue	lists the model parameter shapes
+python/mojolearn/_byte_lm_impl.py	418	cpu-input	reads a binding file in chunks to hash it (file input)
+python/mojolearn/_byte_lm_impl.py	428	cpu-input	hashes the binding files (file input)
+python/mojolearn/_byte_lm_impl.py	487	glue	two native masks on the refusal path only
+python/mojolearn/_byte_lm_impl.py	490	glue	native argmax on the refusal path only
+python/mojolearn/_byte_lm_impl.py	659	glue	lists the model parameter shapes
+python/mojolearn/_byte_lm_impl.py	679	glue	one registry entry per named parameter
+python/mojolearn/_byte_lm_impl.py	810	glue	two status keys of the stage report
+python/mojolearn/_byte_lm_impl.py	811	glue	reads per-layer status codes from the binding
+python/mojolearn/_byte_lm_impl.py	814	glue	maps status code names
+python/mojolearn/_byte_lm_impl.py	816	glue	per-layer status names
+python/mojolearn/_byte_lm_impl.py	825	glue	per-layer status names
+python/mojolearn/_byte_lm_impl.py	829	glue	per-layer status names
+python/mojolearn/_byte_lm_impl.py	873	glue	one gradient view per named parameter
+python/mojolearn/_byte_lm_impl.py	913	glue	addresses of the session input buffers
+python/mojolearn/_byte_lm_impl.py	1038	runtime	copies every parameter-sized input buffer to bytes each training step to check the native call left it unchanged; owner decision: drop the guard (read-only pointers) or move it into the binding
+python/mojolearn/_byte_lm_impl.py	1048	glue	addresses of the step input buffers
+python/mojolearn/_byte_lm_impl.py	1069	runtime	compares the parameter-sized byte copies each step (see line 1038)
+python/mojolearn/_byte_lm_impl.py	1081	glue	four named state arrays
+python/mojolearn/_byte_lm_impl.py	1091	glue	one view per named parameter
+python/mojolearn/_byte_lm_impl.py	1106	glue	checks the session binding entries
+python/mojolearn/_byte_lm_impl.py	1292	glue	checks the session binding entries
+python/mojolearn/_byte_lm_impl.py	1363	glue	four named checkpoint arrays
+python/mojolearn/_byte_lm_impl.py	1486	glue	four named checkpoint arrays
+python/mojolearn/_byte_lm_impl.py	1508	glue	walks the checkpoint key value pairs
+python/mojolearn/_expansion_cnn.py	46	glue	converts a kernel size argument pair
+python/mojolearn/_expansion_cnn.py	182	glue	frees the device handle table
+python/mojolearn/_expansion_cnn.py	649	glue	one conv launch per channel group
+python/mojolearn/_expansion_cnn.py	709	glue	one conv backward launch per channel group
+python/mojolearn/_expansion_cnn.py	745	glue	product of the input shape entries
+python/mojolearn/_expansion_cnn.py	766	glue	unpacks three layer size arguments
+python/mojolearn/_expansion_cnn.py	891	glue	product of the output shape entries
+python/mojolearn/_expansion_cnn.py	1162	glue	releases the resident buffer handles
+python/mojolearn/_expansion_cnn.py	1223	glue	converts the input_shape argument
+python/mojolearn/_expansion_cnn.py	1224	glue	converts the conv_channels argument
+python/mojolearn/_expansion_cnn.py	1248	glue	builds one layer per conv_channels entry
+python/mojolearn/_expansion_cnn.py	1266	glue	walks the built layer list
+python/mojolearn/_expansion_cnn.py	1273	glue	walks the layer parameter list
+python/mojolearn/_expansion_cnn.py	1284	glue	plans one launch per conv block
+python/mojolearn/_expansion_cnn.py	1289	glue	product of the output shape entries
+python/mojolearn/_expansion_cnn.py	1290	glue	products of the plan shape entries
+python/mojolearn/_expansion_cnn.py	1303	glue	allocates one buffer per conv block
+python/mojolearn/_expansion_cnn.py	1304	glue	allocates one buffer per conv block
+python/mojolearn/_expansion_cnn.py	1305	glue	allocates one buffer per conv block
+python/mojolearn/_expansion_cnn.py	1306	glue	allocates one buffer per conv block
+python/mojolearn/_expansion_cnn.py	1315	glue	drives one device launch per conv block
+python/mojolearn/_expansion_cnn.py	1351	glue	walks the layer parameter list
+python/mojolearn/_expansion_cnn.py	1357	glue	walks the layer parameter list
+python/mojolearn/_expansion_cnn.py	1361	glue	sizes of the layer parameter arrays
+python/mojolearn/_expansion_cnn.py	1370	glue	product of the input shape entries
+python/mojolearn/_expansion_cnn.py	1382	glue	walks the conv block list
+python/mojolearn/_expansion_cnn.py	1388	glue	launch plan of every conv block
+python/mojolearn/_expansion_cnn.py	1389	glue	launch plan of every conv block
+python/mojolearn/_expansion_cnn.py	1401	glue	drives the device epochs
+python/mojolearn/_expansion_cnn.py	1425	glue	builds the per-step hyperparameter table
+python/mojolearn/_expansion_cnn.py	1442	glue	drives the device minibatch steps
+python/mojolearn/_expansion_cnn.py	1457	glue	drives the backward launch per conv block
+python/mojolearn/_expansion_cnn.py	1476	glue	one optimizer launch per parameter array
+python/mojolearn/_expansion_cnn.py	1490	glue	reads back each parameter array handle
+python/mojolearn/_expansion_cnn.py	1494	glue	reads back each optimizer buffer handle
+python/mojolearn/_expansion_cnn.py	1496	glue	product of the input shape entries
+python/mojolearn/_expansion_cnn.py	1518	glue	walks the layer list for device copies
+python/mojolearn/_expansion_cnn.py	1525	glue	drives the device prediction batches
+python/mojolearn/_expansion_cnn.py	1555	glue	walks the layer parameter list
+python/mojolearn/_expansion_cnn.py	1620	glue	packs fitted running statistics for the binding
+python/mojolearn/_expansion_cnn.py	1622	glue	packs initial running statistics for the binding
+python/mojolearn/_expansion_cnn.py	1834	glue	product of the spatial shape entries
+python/mojolearn/_expansion_cnn.py	1876	glue	product of the saved mask shape
+python/mojolearn/_expansion_cnn.py	2069	glue	walks the block BatchNorm layers
+python/mojolearn/_expansion_cnn.py	2089	glue	checks the block conv layer flags
+python/mojolearn/_expansion_cnn.py	2093	glue	product of the output shape entries
+python/mojolearn/_expansion_cnn.py	2101	glue	product of the spatial shape entries
+python/mojolearn/_expansion_cnn.py	2121	glue	product of the output shape entries
+python/mojolearn/_expansion_cnn.py	2126	glue	product of the output shape entries
+python/mojolearn/_expansion_cnn.py	2150	glue	product of the input shape entries
+python/mojolearn/_expansion_cnn.py	2176	glue	product of the saved shape entries
+python/mojolearn/_expansion_cnn.py	2228	glue	walks the block layer list
+python/mojolearn/_expansion_cnn.py	2326	glue	address key of the graph input arrays
+python/mojolearn/_expansion_cnn.py	2330	glue	compares the graph key references
+python/mojolearn/_expansion_cnn.py	2384	glue	scalar glorot bound of two sizes
+python/mojolearn/_expansion_cnn.py	2412	runtime	numpy self-loop edge list, reached only under -D MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF / IDN_ALL_OFF (the default is x_cnn_gcn_loops in Mojo); delete with that A/B arm when its A/B closes
+python/mojolearn/_expansion_cnn.py	2413	runtime	numpy self-loop edge list fallback (see line 2412)
+python/mojolearn/_expansion_cnn.py	2414	runtime	numpy self-loop edge list fallback (see line 2412)
+python/mojolearn/_expansion_decomp.py	319	glue	one C-level slice copy per selected column on the host matrix
+python/mojolearn/_expansion_decomp.py	363	runtime	builds the sign multiplier vector from flags in Python; owed to a device sign-flip stage (x_decomp sign moves)
+python/mojolearn/_expansion_decomp.py	369	runtime	builds the sign multiplier vector from flags in Python; owed to a device sign-flip stage
+python/mojolearn/_expansion_decomp.py	605	glue	walks the matrix arguments of one call
+python/mojolearn/_expansion_decomp.py	1523	runtime	reads device signs into Python flags that steer the result; owed to a device sign-flip stage
+python/mojolearn/_expansion_decomp.py	1527	runtime	reads host signs into Python flags that steer the result; owed to a device sign-flip stage
+python/mojolearn/_expansion_decomp.py	1638	glue	drives one device partial fit per batch
+python/mojolearn/_expansion_decomp.py	1866	glue	shape check of the input argument
+python/mojolearn/_expansion_decomp.py	2147	runtime	NNDSVD init per component with Python scalar arithmetic on device results; owed to a Mojo NMF init driver
+python/mojolearn/_expansion_decomp.py	2216	runtime	NMF multiplicative-update driver with the Python convergence test on read-back errors; owed to a Mojo solver driver (x_decomp/mcd.mojo style)
+python/mojolearn/_expansion_decomp.py	2249	runtime	NMF beta-update driver with Python arithmetic on read-back sums; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	2322	runtime	NMF coordinate-descent driver with the Python violation test; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	2456	runtime	FastICA parallel driver with the Python convergence test; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	2479	runtime	FastICA deflation per component with Python arithmetic on read-back dots; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	2486	runtime	FastICA deflation iterations with the Python convergence test; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	2626	runtime	sequential float64 sum in Python over d-sized device outputs; owed to the kit total fold
+python/mojolearn/_expansion_decomp.py	2683	runtime	varimax/quartimax rotation driver with the Python convergence test; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	2782	runtime	FactorAnalysis driver with Python log-likelihood sums; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	2830	glue	converts the noise_variance_init argument
+python/mojolearn/_expansion_decomp.py	3253	glue	drives the fixed randomized-SVD power iterations on the device
+python/mojolearn/_expansion_decomp.py	3487	runtime	PLS power driver with the Python convergence test; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	3532	runtime	PLS per-component driver with Python tests on read-back counts; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	3763	runtime	dictionary update per zero column with Python scalar arithmetic; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	3792	runtime	dictionary learning driver with the Python error test; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	3943	runtime	MiniBatchDictionaryLearning batch driver with Python cost arithmetic; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	3951	runtime	MiniBatchDictionaryLearning step driver with Python cost and diff arithmetic; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	4231	runtime	LDA EM driver with the Python bound test; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	4299	runtime	LDA approximate bound per component with Python arithmetic on read-back totals; owed to a Mojo bound stage
+python/mojolearn/_expansion_decomp.py	4301	runtime	LDA approximate bound per component (see line 4299)
+python/mojolearn/_expansion_decomp.py	4304	runtime	LDA approximate bound per component (see line 4299)
+python/mojolearn/_expansion_decomp.py	4630	glue	one device gather-and-min step per neighbor rank
+python/mojolearn/_expansion_decomp.py	4802	runtime	SMACOF driver with the Python stress test; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	4843	glue	draws one device start per restart
+python/mojolearn/_expansion_decomp.py	4847	runtime	MDS restart loop comparing read-back stress in Python; owed with the SMACOF driver
+python/mojolearn/_expansion_decomp.py	5077	runtime	LLE iteration driver with Python arithmetic on read-back norms; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	5303	runtime	chi2 quantile by Python bisection (parameter-only math, still a computed number); owed to a Mojo chi2 quantile routine
+python/mojolearn/_expansion_decomp.py	5581	runtime	ALS driver with Python loss arithmetic on read-back totals; owed to a Mojo solver driver
+python/mojolearn/_expansion_linear.py	105	glue	converts the int parameter list
+python/mojolearn/_expansion_linear.py	106	glue	converts the float parameter list
+python/mojolearn/_expansion_linear.py	175	glue	native Mojo min and sum of the weights via Array methods
+python/mojolearn/_expansion_linear.py	227	glue	per-class coefficient row views
+python/mojolearn/_expansion_linear.py	749	glue	reads the active feature indices
+python/mojolearn/_expansion_linear.py	1085	glue	converts the alphas argument
+python/mojolearn/_expansion_linear.py	1086	glue	validates the alphas argument
+python/mojolearn/_expansion_linear.py	1120	runtime	argmax over the device CV scores of each alpha in Python; owed to x_linear/ridgecv.mojo returning the best index
+python/mojolearn/_expansion_linear.py	1160	glue	validates the l1_ratio argument
+python/mojolearn/_expansion_linear.py	1174	glue	sorts the user alphas argument
+python/mojolearn/_expansion_linear.py	1180	glue	builds the float parameter list
+python/mojolearn/_expansion_linear.py	1194	glue	reshapes the returned mse path
+python/mojolearn/_expansion_linear.py	1196	glue	reshapes the returned alpha path
+python/mojolearn/_expansion_linear.py	1198	glue	reshapes the returned mse path
+python/mojolearn/_expansion_linear.py	1201	glue	maps the returned best l1_ratio to the argument entry
+python/mojolearn/_expansion_linear.py	1239	glue	converts the l1_ratio argument
+python/mojolearn/_expansion_linear.py	1284	glue	builds the Cs parameter grid
+python/mojolearn/_expansion_linear.py	1286	glue	converts the Cs argument
+python/mojolearn/_expansion_linear.py	1313	glue	maps the returned best C to its grid entry
+python/mojolearn/_expansion_linear.py	1318	glue	reshapes the returned score grid
+python/mojolearn/_expansion_linear.py	1320	glue	one score table per class label
+python/mojolearn/_expansion_metrics.py	474	glue	sorts the distinct class labels
+python/mojolearn/_expansion_metrics.py	479	glue	class index table
+python/mojolearn/_expansion_metrics.py	615	glue	appends the present class labels
+python/mojolearn/_expansion_metrics.py	1018	glue	appends the present class labels
+python/mojolearn/_expansion_metrics.py	1054	glue	sorts the distinct class labels
+python/mojolearn/_expansion_metrics.py	1602	glue	sorts the distinct class labels
+python/mojolearn/_expansion_metrics.py	2190	glue	checks the class labels are sorted
+python/mojolearn/_expansion_metrics.py	2197	glue	class index table
+python/mojolearn/_expansion_metrics.py	2371	glue	class index table
+python/mojolearn/_expansion_metrics.py	2422	glue	checks the class labels are sorted
+python/mojolearn/_expansion_metrics.py	2437	glue	class index table
+python/mojolearn/_expansion_metrics.py	2551	glue	sorts the distinct class labels
+python/mojolearn/_expansion_metrics.py	2555	glue	class index table
+python/mojolearn/_expansion_metrics.py	2640	glue	sorts the selected class labels
+python/mojolearn/_expansion_metrics.py	2651	glue	class index table
+python/mojolearn/_expansion_metrics.py	2800	glue	sorts the distinct cluster labels
+python/mojolearn/_expansion_metrics.py	2941	glue	sorts the distinct class labels
+python/mojolearn/_expansion_metrics.py	3154	glue	fold by class offsets for the device code stage
+python/mojolearn/_expansion_metrics.py	3157	glue	fold by class offsets for the device code stage
+python/mojolearn/_expansion_prep.py	337	glue	parses an env var name list
+python/mojolearn/_expansion_prep.py	471	glue	packs a caller parameter list into the program buffer
+python/mojolearn/_expansion_prep.py	480	glue	packs caller code list into program buffer
+python/mojolearn/_expansion_prep.py	495	glue	packs caller int parameters into program buffer
+python/mojolearn/_expansion_prep.py	503	glue	builds one stage parameter record
+python/mojolearn/_expansion_prep.py	534	glue	walks the program input buffers once
+python/mojolearn/_expansion_prep.py	568	glue	walks the program span records
+python/mojolearn/_expansion_prep.py	570	glue	flattens the stage parameter records
+python/mojolearn/_expansion_prep.py	579	glue	walks the program span records
+python/mojolearn/_expansion_prep.py	608	glue	debug print of stage names
+python/mojolearn/_expansion_prep.py	609	glue	debug print of stage names
+python/mojolearn/_expansion_prep.py	620	glue	walks the program span records
+python/mojolearn/_expansion_prep.py	628	glue	walks the shape tuple entries
+python/mojolearn/_expansion_prep.py	727	glue	copies estimator keyword arguments
+python/mojolearn/_expansion_prep.py	730	glue	copies estimator keyword arguments
+python/mojolearn/_expansion_prep.py	780	glue	unpacks the two quantile_range values
+python/mojolearn/_expansion_prep.py	929	glue	stages one device scan per column
+python/mojolearn/_expansion_prep.py	941	glue	stages one device scan per column
+python/mojolearn/_expansion_prep.py	948	glue	reads the per-column overflow flags the device set
+python/mojolearn/_expansion_prep.py	950	glue	reads per-column category counts for slicing
+python/mojolearn/_expansion_prep.py	951	glue	capacity check before slicing outputs
+python/mojolearn/_expansion_prep.py	954	glue	slices the per-column category outputs
+python/mojolearn/_expansion_prep.py	987	glue	stages one device scan per column
+python/mojolearn/_expansion_prep.py	995	glue	reads per-column category counts for slicing
+python/mojolearn/_expansion_prep.py	996	glue	slices the per-column category outputs
+python/mojolearn/_expansion_prep.py	1008	glue	validates the user categories argument
+python/mojolearn/_expansion_prep.py	1009	glue	converts the user categories argument
+python/mojolearn/_expansion_prep.py	1011	glue	validates the user categories argument
+python/mojolearn/_expansion_prep.py	1014	glue	validates the user categories argument is sorted
+python/mojolearn/_expansion_prep.py	1016	glue	validates the user categories argument has no duplicates
+python/mojolearn/_expansion_prep.py	1020	glue	canonicalizes the user categories argument
+python/mojolearn/_expansion_prep.py	1026	glue	reads the per-column unknown flags the device set
+python/mojolearn/_expansion_prep.py	1034	glue	largest category count for the program layout
+python/mojolearn/_expansion_prep.py	1036	glue	stages per-column category tables
+python/mojolearn/_expansion_prep.py	1047	glue	packs per-column category sizes
+python/mojolearn/_expansion_prep.py	1070	glue	packs per-column category sizes
+python/mojolearn/_expansion_prep.py	1133	glue	slices fitted categories per column
+python/mojolearn/_expansion_prep.py	1134	glue	walks fitted per-column category lists
+python/mojolearn/_expansion_prep.py	1141	glue	builds the category grouping table
+python/mojolearn/_expansion_prep.py	1147	glue	largest group index of one column grouping
+python/mojolearn/_expansion_prep.py	1149	glue	inverts one column grouping table
+python/mojolearn/_expansion_prep.py	1154	glue	grouping table stride
+python/mojolearn/_expansion_prep.py	1156	glue	pads the per-column grouping tables
+python/mojolearn/_expansion_prep.py	1158	glue	packs the grouping table lengths
+python/mojolearn/_expansion_prep.py	1199	glue	prefix offsets of the per-column block widths
+python/mojolearn/_expansion_prep.py	1208	glue	reads the per-column unknown flags the device set
+python/mojolearn/_expansion_prep.py	1252	glue	per-column NaN category slot
+python/mojolearn/_expansion_prep.py	1256	glue	per-column category cardinalities
+python/mojolearn/_expansion_prep.py	1258	glue	grouped per-column cardinalities
+python/mojolearn/_expansion_prep.py	1260	glue	validates unknown_value against cardinalities
+python/mojolearn/_expansion_prep.py	1263	glue	validates encoded_missing_value argument
+python/mojolearn/_expansion_prep.py	1264	glue	validates encoded_missing_value argument
+python/mojolearn/_expansion_prep.py	1286	glue	checks for a NaN category slot
+python/mojolearn/_expansion_prep.py	1304	glue	per-column grouped category counts
+python/mojolearn/_expansion_prep.py	1365	glue	per-column grouped category counts
+python/mojolearn/_expansion_prep.py	1366	glue	per-column grouped category counts
+python/mojolearn/_expansion_prep.py	1378	glue	drop index for binary columns
+python/mojolearn/_expansion_prep.py	1385	glue	validates the user drop argument
+python/mojolearn/_expansion_prep.py	1391	glue	finds the user drop category in its column
+python/mojolearn/_expansion_prep.py	1405	glue	formats the drop error message
+python/mojolearn/_expansion_prep.py	1410	glue	maps drop indices through the grouping
+python/mojolearn/_expansion_prep.py	1414	glue	per-column one-hot block widths
+python/mojolearn/_expansion_prep.py	1421	glue	per-column infrequent slot
+python/mojolearn/_expansion_prep.py	1429	glue	prefix offsets of the per-column block widths
+python/mojolearn/_expansion_prep.py	1430	glue	total one-hot output width
+python/mojolearn/_expansion_prep.py	1438	glue	packs drop indices for the program
+python/mojolearn/_expansion_prep.py	1446	glue	reads the per-column unknown flags the device set
+python/mojolearn/_expansion_prep.py	1460	glue	validates the input width
+python/mojolearn/_expansion_prep.py	1463	glue	packs drop indices for the program
+python/mojolearn/_expansion_prep.py	1474	glue	slices the per-column decoded outputs
+python/mojolearn/_expansion_prep.py	1633	glue	shape check of the target argument
+python/mojolearn/_expansion_prep.py	1723	glue	largest category count for the program layout
+python/mojolearn/_expansion_prep.py	1753	glue	packs per-column category sizes
+python/mojolearn/_expansion_prep.py	1802	glue	slices the per-column encodings outputs
+python/mojolearn/_expansion_prep.py	1826	cpu-input	input prep of a user cv splitter index lists
+python/mojolearn/_expansion_prep.py	1837	cpu-input	input prep of a user cv splitter index lists
+python/mojolearn/_expansion_prep.py	1983	glue	reads per-column non-missing counts
+python/mojolearn/_expansion_prep.py	1984	glue	flags empty columns
+python/mojolearn/_expansion_prep.py	1987	glue	slices the per-column compacted outputs
+python/mojolearn/_expansion_prep.py	1994	glue	kept column index list
+python/mojolearn/_expansion_prep.py	1995	glue	indicator column index list
+python/mojolearn/_expansion_prep.py	2007	cpu-input	calls the user strategy callable per column
+python/mojolearn/_expansion_prep.py	2011	glue	kept column index list
+python/mojolearn/_expansion_prep.py	2012	glue	indicator column index list
+python/mojolearn/_expansion_prep.py	2046	glue	stages one copy per column block
+python/mojolearn/_expansion_prep.py	2115	glue	converts the n_bins argument
+python/mojolearn/_expansion_prep.py	2116	glue	validates the n_bins argument
+python/mojolearn/_expansion_prep.py	2122	glue	largest bin count for the program layout
+python/mojolearn/_expansion_prep.py	2178	glue	reads per-column edge counts
+python/mojolearn/_expansion_prep.py	2179	glue	slices the per-column bin edges
+python/mojolearn/_expansion_prep.py	2180	glue	per-column bin counts from edge counts
+python/mojolearn/_expansion_prep.py	2201	glue	reads fitted per-column bin counts
+python/mojolearn/_expansion_prep.py	2202	glue	total one-hot output width
+python/mojolearn/_expansion_prep.py	2203	glue	prefix offsets of the per-column bin widths
+python/mojolearn/_expansion_prep.py	2212	glue	reads fitted per-column bin counts
+python/mojolearn/_expansion_prep.py	2224	glue	validates the input width
+python/mojolearn/_expansion_prep.py	2570	glue	converts the user priors argument
+python/mojolearn/_expansion_prep.py	2573	glue	validates the user priors argument
+python/mojolearn/_expansion_prep.py	2575	glue	validates the user priors argument sums to one
+python/mojolearn/_expansion_prep.py	2576	glue	validates the user priors argument sums to one
+python/mojolearn/_expansion_prep.py	2667	cpu-input	Python object labels of any kind, the explicit label input step
+python/mojolearn/_expansion_prep.py	2668	cpu-input	Python object labels of any kind, the explicit label input step
+python/mojolearn/_expansion_prep.py	2672	cpu-input	Python object labels of any kind, the explicit label input step
+python/mojolearn/_expansion_prep.py	2797	glue	unpacks the two shape entries
+python/mojolearn/_expansion_prep.py	2821	glue	raises on a negative per-column minimum
+python/mojolearn/_expansion_prep.py	3180	glue	per-class row block views for the user estimator
+python/mojolearn/_expansion_prep.py	3184	cpu-input	fits the user covariance estimator once per class
+python/mojolearn/_expansion_prep.py	3192	cpu-input	reads the user covariance estimator output
+python/mojolearn/_expansion_prep.py	3296	glue	validates the user priors argument sums to one
+python/mojolearn/_expansion_prep.py	3317	runtime-fixed	copied the d x d scalings through Python lists; now Array column slice (Mojo strided copy)
+python/mojolearn/_expansion_prep.py	3340	glue	validates the user priors argument sums to one
+python/mojolearn/_expansion_prep.py	3382	glue	raises when the device reports a non-positive eigenvalue
+python/mojolearn/_expansion_prep.py	3493	glue	raises when a class count from the binding is below two
+python/mojolearn/_expansion_prep.py	3519	glue	stages one pooled covariance copy per class
+python/mojolearn/_expansion_prep.py	3527	glue	raises when a class count from the binding is below two
+python/mojolearn/_expansion_prep.py	3530	glue	rank check per class before raising
+python/mojolearn/_expansion_prep.py	3531	glue	counts device singular values above tol to raise
+python/mojolearn/_expansion_prep.py	3536	glue	per-class covariance views
+python/mojolearn/_expansion_prep.py	3538	glue	per-class rotation views
+python/mojolearn/_expansion_prep.py	3539	glue	per-class scaling views
+python/mojolearn/_expansion_prep.py	3774	glue	stages the fixed optimizer evaluations on the device
+python/mojolearn/_expansion_prep.py	3797	glue	raises on a non-positive per-column minimum
+python/mojolearn/_expansion_prep.py	3881	glue	unpacks the two degree values
+python/mojolearn/_expansion_prep.py	3885	glue	enumerates polynomial terms of feature indices
+python/mojolearn/_expansion_prep.py	3888	glue	materializes the polynomial term list
+python/mojolearn/_expansion_prep.py	3896	glue	powers_ table of the polynomial terms
+python/mojolearn/_expansion_prep.py	3906	glue	flattens term index tables for the program
+python/mojolearn/_expansion_prep.py	4033	glue	raises on a NaN count from the device
+python/mojolearn/_expansion_prep.py	4077	glue	converts the user knots argument
+python/mojolearn/_expansion_prep.py	4082	glue	validates the user knots argument
+python/mojolearn/_expansion_prep.py	4084	glue	transposes the user knots argument
+python/mojolearn/_expansion_prep.py	4085	glue	validates the user knots argument is sorted
+python/mojolearn/_expansion_prep.py	4114	glue	packs the user knots argument
+python/mojolearn/_expansion_prep.py	4143	glue	per-column fitted spline knot views
+python/mojolearn/_expansion_prep.py	4144	glue	per-column fitted lower knot
+python/mojolearn/_expansion_prep.py	4145	glue	per-column fitted upper knot
+python/mojolearn/_expansion_prep.py	4175	glue	raises when data leave the fitted knot range
+python/mojolearn/_expansion_prep.py	4236	cpu-input	Python list labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4254	cpu-input	Python list labels kind test, the explicit label input step
+python/mojolearn/_expansion_prep.py	4255	glue	class list from the device categories
+python/mojolearn/_expansion_prep.py	4262	cpu-input	Python list labels to a buffer, the explicit label input step
+python/mojolearn/_expansion_prep.py	4286	cpu-input	Python list-of-lists y, the explicit label input step
+python/mojolearn/_expansion_prep.py	4287	cpu-input	Python list-of-lists y, the explicit label input step
+python/mojolearn/_expansion_prep.py	4292	runtime	walks every row of y (ndarray too, via tolist) to check widths; owed to a device multilabel check
+python/mojolearn/_expansion_prep.py	4295	runtime	walks every value of y (ndarray too, via tolist); owed to a device multilabel check
+python/mojolearn/_expansion_prep.py	4296	runtime	walks every value of y (ndarray too, via tolist); owed to a device multilabel check
+python/mojolearn/_expansion_prep.py	4302	runtime	rebuilds y through Python floats; owed to a device multilabel check
+python/mojolearn/_expansion_prep.py	4344	glue	shape check of the label argument
+python/mojolearn/_expansion_prep.py	4398	glue	class list from the device categories
+python/mojolearn/_expansion_prep.py	4542	cpu-input	str or object labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4543	cpu-input	str or object labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4546	cpu-input	str or object labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4584	cpu-input	str classes or a Python code list, the explicit label input step
+python/mojolearn/_expansion_prep.py	4585	cpu-input	str classes or a Python code list, the explicit label input step
+python/mojolearn/_expansion_prep.py	4587	cpu-input	str classes or a Python code list, the explicit label input step
+python/mojolearn/_expansion_prep.py	4695	cpu-input	str or object labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4696	cpu-input	str or object labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4737	cpu-input	str classes decode to Python objects, the explicit label output step
+python/mojolearn/_expansion_prep.py	4740	cpu-input	str classes decode to Python objects, the explicit label output step
+python/mojolearn/_expansion_prep.py	4815	cpu-input	Python iterables of labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4852	cpu-input	Python iterables of labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4865	cpu-input	Python iterables of labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4867	cpu-input	Python iterables of labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4868	cpu-input	Python iterables of labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4875	cpu-input	Python iterables of labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4876	cpu-input	Python iterables of labels, the explicit label input step
+python/mojolearn/_expansion_prep.py	4888	runtime	walks the n x K indicator in Python; owed to a device nonzero stage (building the Python tuples stays)
+python/mojolearn/_expansion_prep.py	4972	glue	converts the min_value / max_value arguments
+python/mojolearn/_expansion_prep.py	4974	glue	interleaves the bound arguments
+python/mojolearn/_expansion_prep.py	5036	glue	per-kept-column bound arguments
+python/mojolearn/_expansion_prep.py	5063	glue	indicator column index list from device counts
+python/mojolearn/_expansion_prep.py	5090	glue	drives the device imputation rounds
+python/mojolearn/_expansion_prep.py	5093	glue	drives one device regression per feature
+python/mojolearn/_expansion_prep.py	5096	glue	neighbor-feature mask of one step
+python/mojolearn/_expansion_prep.py	5124	glue	count of finished imputation steps
+python/mojolearn/_expansion_prep.py	5125	glue	fitted imputation sequence views
+python/mojolearn/_expansion_prep.py	5127	glue	fitted imputation sequence views
+python/mojolearn/_expansion_prep.py	5164	cpu-input	drives the user estimator per feature
+python/mojolearn/_expansion_prep.py	5167	cpu-input	drives the user estimator per feature
+python/mojolearn/_expansion_prep.py	5229	runtime-fixed	built m empty Python lists; now an empty (m, 0) Array
+python/mojolearn/_expansion_prep.py	5247	runtime	truncated-normal posterior sample per row in Python; owed to a Mojo truncnorm stage
+python/mojolearn/_expansion_prep.py	5325	glue	drives one device regression per step
+python/mojolearn/_expansion_prep.py	5332	glue	drives one device regression per step
+python/mojolearn/_expansion_prep.py	5336	glue	neighbor-feature mask of one step
+python/mojolearn/_expansion_prep.py	5354	runtime	copies user estimator outputs through Python floats for the per-row sampler; owed with the truncnorm stage
+python/mojolearn/_expansion_prep.py	5403	glue	support index list
+python/mojolearn/_expansion_prep.py	5410	glue	kept column index list
+python/mojolearn/_expansion_prep.py	5478	glue	raises on a negative per-column minimum
+python/mojolearn/_expansion_prep.py	5594	glue	validates the discrete_features argument
+python/mojolearn/_expansion_prep.py	5599	glue	converts the discrete_features argument
+python/mojolearn/_expansion_prep.py	5637	glue	continuous column index list
+python/mojolearn/_expansion_prep.py	5638	glue	discrete column index list
+python/mojolearn/_expansion_prep.py	5648	glue	raises when every class has one sample
+python/mojolearn/_expansion_prep.py	5683	glue	per-column category counts
+python/mojolearn/_expansion_prep.py	5684	glue	largest category count for the program layout
+python/mojolearn/_expansion_prep.py	5705	glue	scatters device MI values to their columns
+python/mojolearn/_expansion_prep.py	5707	glue	scatters device MI values to their columns
+python/mojolearn/_expansion_prep.py	5829	glue	support index list
+python/mojolearn/_expansion_prep.py	5833	glue	count of selected features
+python/mojolearn/_expansion_prep.py	5947	glue	raises on a negative category value
+python/mojolearn/_expansion_prep.py	5949	glue	per-column category counts for the program layout
+python/mojolearn/_expansion_prep.py	5952	glue	converts the min_categories argument
+python/mojolearn/_expansion_prep.py	5957	glue	applies the min_categories argument
+python/mojolearn/_expansion_prep.py	5959	glue	keeps fitted category counts on partial fit
+python/mojolearn/_expansion_prep.py	5960	glue	largest category count for the program layout
+python/mojolearn/_expansion_prep.py	5995	glue	per-column per-class count views
+python/mojolearn/_expansion_prep.py	5999	glue	per-column per-class log-prob views
+python/mojolearn/_expansion_prep.py	6014	glue	raises on a negative category value
+python/mojolearn/_expansion_prep.py	6015	glue	raises on an unseen category value
+python/mojolearn/_labels.py	149	cpu-input	plain Python list labels (str or Python numbers), the explicit label input step
+python/mojolearn/_labels.py	150	glue	class index table
+python/mojolearn/_labels.py	167	cpu-input	Python object labels walk (str allowed), the explicit label input step
+python/mojolearn/_labels.py	187	glue	sorts the distinct class labels
+python/mojolearn/_labels.py	188	glue	class index table
+python/mojolearn/_labels.py	189	cpu-input	Python object labels walk (str allowed), the explicit label input step
+python/mojolearn/_labels.py	325	glue	reads the native class table
+python/mojolearn/_labels.py	327	glue	reads the native class table
+python/mojolearn/_labels.py	334	glue	kind test of the class labels
+python/mojolearn/_labels.py	336	glue	kind test of the class labels
+python/mojolearn/_labels.py	350	cpu-input	str or bool classes decode to Python objects, the explicit label output step
+python/mojolearn/_labels.py	353	cpu-input	int classes past the native decode range, the explicit label output step
+python/mojolearn/_labels.py	355	cpu-input	float classes past the native decode range, the explicit label output step
+python/mojolearn/_labels.py	389	glue	packs the class table for the native decode
+python/mojolearn/_labels.py	390	glue	packs the class table for the native decode
+python/mojolearn/_labels.py	407	glue	kind test of the class labels
+python/mojolearn/_labels.py	408	glue	packs the class table
+python/mojolearn/_labels.py	410	glue	packs the class table
+python/mojolearn/_labels.py	411	glue	kind test of the class labels
+python/mojolearn/_labels.py	422	glue	converts a classes_ member of str labels
+python/mojolearn/_labels.py	427	glue	converts a classes_ member
+python/mojolearn/_labels.py	429	glue	converts a classes_ member
+python/mojolearn/_labels.py	431	glue	converts a classes_ member
+python/mojolearn/_labels.py	432	glue	converts a classes_ member
+python/mojolearn/_labels.py	514	glue	reads the class table
+python/mojolearn/_linalg_impl.py	1023	glue	one C-level zero fill per row
+python/mojolearn/_linalg_impl.py	1132	runtime	reads the R diagonal signs into Python; owed to a device sign normalization of R
+python/mojolearn/_linalg_impl.py	1133	runtime	flips R rows in Python; owed to a device sign normalization of R
+python/mojolearn/_linalg_impl.py	1135	runtime	negates R row values in Python; owed to a device sign normalization of R
+python/mojolearn/_linalg_impl.py	1137	runtime	builds the sign diagonal in Python; owed to a device sign normalization of R
+python/mojolearn/_linalg_impl.py	1461	runtime	counts the numerical rank over singular values in Python; owed to a device count
+python/mojolearn/_linalg_impl.py	1481	runtime	tests the orth diagonal for zeros in Python to pick the route; owed to a device test
+python/mojolearn/_linalg_impl.py	1482	runtime	reads orth diagonal signs into Python flags; owed to a device sign flip
+python/mojolearn/_linalg_impl.py	1501	runtime	reads R diagonal signs into Python flags; owed to a device sign flip
+python/mojolearn/_linalg_impl.py	1548	runtime	sorts eigenvalues by magnitude in Python; owed to a device argsort
+python/mojolearn/_linalg_impl.py	1551	runtime	reads eigenvalue signs into Python flags; owed to a device sign flip
+python/mojolearn/_metrics_impl.py	1100	cpu-input	str labels, the explicit label input step
+python/mojolearn/_metrics_impl.py	1102	cpu-input	Python int labels, the explicit label input step
+python/mojolearn/_metrics_impl.py	1181	glue	reads the native class table
+python/mojolearn/_metrics_impl.py	1198	glue	maps the class table through the label function
+python/mojolearn/_metrics_impl.py	1204	cpu-input	Python object labels mapped per row, the explicit label input step
+python/mojolearn/_metrics_impl.py	1218	glue	sorts the distinct class labels
+python/mojolearn/_metrics_impl.py	1246	glue	sorts the distinct class labels
+python/mojolearn/_metrics_impl.py	1249	glue	class index table
+python/mojolearn/_metrics_impl.py	1250	glue	checks the label set against the selected labels
+python/mojolearn/_metrics_impl.py	1296	glue	sorts the distinct class labels
+python/mojolearn/_metrics_impl.py	1402	glue	class index table
+python/mojolearn/_metrics_impl.py	1478	glue	appends the observed class labels
+python/mojolearn/_mode.py	130	glue	sklearn tags import inside __sklearn_tags__ (the sklearn interface itself); the py-sklearn line rule has no reviewed marker
+python/mojolearn/_parallel_pool.py	268	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	270	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	282	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	293	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	302	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	303	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	324	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	327	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	328	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	334	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	336	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	338	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	339	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	375	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	384	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	389	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	396	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_parallel_pool.py	410	glue	multi-device worker setup over device ids and request tuples
+python/mojolearn/_portable_math.py	243	runtime	exact Python sum fallback of fsum over data-derived values; owed to the native nsum_f64 fold
+python/mojolearn/_scale_gamma.py	78	cpu-input	exact gamma reference used only by tests; belongs in tests or _PY_CPU_SIDE
+python/mojolearn/_tokenizer_synthetic.py	70	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	72	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	83	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	85	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	92	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	93	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	95	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	97	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	100	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	101	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	104	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	116	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	163	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	195	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	231	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	238	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	244	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	248	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	252	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	259	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	270	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	302	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	314	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_tokenizer_synthetic.py	331	cpu-input	verification oracle or fixture text module (CPU-only, not a runtime route); belongs in _PY_CPU_SIDE once the hook is reinstalled
+python/mojolearn/_training_impl.py	1911	runtime	LR schedule cosine Taylor terms in Python (hyperparameter-only scalar math, still a computed number); owed to a Mojo schedule routine with the same exact-rational decision
+python/mojolearn/_training_impl.py	1947	runtime	LR schedule float32 decision in Python; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	1996	runtime	LR schedule float32 decisions in Python; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2015	runtime	LR schedule cosine terms in Python; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2047	runtime	LR schedule cosine run in Python; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2050	runtime	LR schedule error bounds in Python; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2074	runtime	LR table block in Python per optimizer step; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2076	runtime	LR table block in Python per optimizer step; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2179	runtime	warmup LR values in Python per optimizer step; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2180	runtime	warmup LR error bounds in Python; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2225	runtime	linear decay LR values in Python per optimizer step; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2227	runtime	linear decay LR error bounds in Python; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2273	runtime	cosine terms in Python; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2332	runtime	cosine decay LR values in Python per optimizer step; owed to a Mojo schedule routine
+python/mojolearn/_training_impl.py	2333	runtime	cosine decay LR error bounds in Python; owed to a Mojo schedule routine
+python/mojolearn/_transformer_impl.py	543	glue	two slice copies per head of the KV ring
+python/mojolearn/_x_sequence_moe.py	80	glue	three named expert weight shapes
+python/mojolearn/_x_sequence_moe.py	112	glue	checks three named expert weight shapes
+python/mojolearn/_x_sequence_moe.py	120	glue	three contiguous weight buffers for the binding
+python/mojolearn/_x_sequence_rnn.py	190	runtime	LR per optimizer step in Python; owed to a Mojo schedule routine
+python/mojolearn/_x_sequence_sched.py	221	runtime	LR per optimizer step in Python; owed to a Mojo schedule routine
+python/mojolearn/_x_sequence_sched.py	442	runtime	OneCycle LR fill in Python exact rationals; owed to a Mojo schedule routine
+python/mojolearn/_x_sequence_sched.py	452	runtime	OneCycle LR fill in Python exact rationals; owed to a Mojo schedule routine
+python/mojolearn/decomposition.py	400	runtime	PCA float n_components: cumulative explained-variance ratio fold in Python; owed to the estimators binding PCA finish
+python/mojolearn/decomposition.py	406	runtime	PCA float n_components: explained variance tail sum in Python; owed to the PCA finish
+python/mojolearn/decomposition.py	409	runtime	PCA float n_components: explained variance tail sum in Python; owed to the PCA finish
+python/mojolearn/language_model.py	53	glue	module attribute names for dir
+python/mojolearn/linear_model.py	170	cpu-input	flattens a user Python list y, the explicit input step
+python/mojolearn/linear_model.py	201	cpu-input	kind test of a user Python list y, the explicit input step
+python/mojolearn/linear_model.py	283	runtime-fixed	d-sized mean finish now lm_means_finish (glm/impl/lm_finish.mojo, host Mojo in both bindings)
+python/mojolearn/linear_model.py	318	runtime-fixed	weighted mean finish now lm_means_finish
+python/mojolearn/linear_model.py	319	runtime-fixed	float32 rounding now lm_means_finish
+python/mojolearn/linear_model.py	358	runtime-fixed	means stay a float32 Array from lm_means_finish; no Python list
+python/mojolearn/linear_model.py	713	runtime-fixed	intercept now lm_intercept (exact fsum in Mojo)
+python/mojolearn/linear_model.py	886	runtime-fixed	intercept now lm_intercept (exact fsum in Mojo)
+python/mojolearn/lm_corpus.py	132	glue	three named range arguments
+python/mojolearn/lm_corpus.py	143	cpu-input	split points of the corpus text ranges (text input)
+python/mojolearn/lm_corpus.py	144	cpu-input	split points of the corpus text ranges (text input)
+python/mojolearn/lm_corpus.py	147	cpu-input	sorts the corpus split points (text input)
+python/mojolearn/lm_corpus.py	265	glue	maps three named ranges to token offsets
+python/mojolearn/lm_corpus.py	281	glue	copies three named token ranges
+python/mojolearn/lm_corpus.py	332	glue	validates three trainer arguments
+python/mojolearn/lm_corpus.py	446	glue	yields one batch handle per step
+python/mojolearn/models/causal_lm.py	115	glue	walks the block constructor signature parameters
+python/mojolearn/models/causal_lm.py	127	glue	copies block keyword options
+python/mojolearn/models/causal_lm.py	356	glue	three named top-level weights
+python/mojolearn/models/causal_lm.py	385	glue	one native block per model layer
+python/mojolearn/models/causal_lm.py	399	glue	builds one block per model layer
+python/mojolearn/models/causal_lm.py	440	glue	checks the checkpoint weight names
+python/mojolearn/models/causal_lm.py	450	glue	reads weights per model layer
+python/mojolearn/models/causal_lm.py	452	glue	reads the named weights of one layer
+python/mojolearn/models/causal_lm.py	468	glue	lists unused checkpoint weight names
+python/mojolearn/models/causal_lm.py	482	glue	walks the model layers
+python/mojolearn/models/causal_lm.py	483	glue	names the weights of one layer
+python/mojolearn/models/causal_lm.py	484	glue	walks the named weights of one layer
+python/mojolearn/models/causal_lm.py	535	glue	drives one native forward per layer
+python/mojolearn/models/causal_lm.py	571	glue	allocates native state per layer
+python/mojolearn/models/causal_lm.py	625	glue	drives one native forward per decode step
+python/mojolearn/models/causal_lm.py	672	glue	walks the layer states
+python/mojolearn/models/causal_lm.py	689	glue	native session handles of the layers
+python/mojolearn/models/causal_lm.py	694	glue	closes the layer sessions
+python/mojolearn/models/config.py	147	glue	walks the layer weight name templates
+python/mojolearn/models/config.py	155	glue	names the checkpoint weights per layer
+python/mojolearn/models/config.py	156	glue	names the checkpoint weights of one layer
+python/mojolearn/models/config.py	244	cpu-input	reads the model config file fields (file input)
+python/mojolearn/models/config.py	364	cpu-input	reads the model config file fields (file input)
+python/mojolearn/models/config.py	401	cpu-input	checks the model config file fields (file input)
+python/mojolearn/models/config.py	428	cpu-input	checks the model config file fields (file input)
+python/mojolearn/models/parallel_causal_lm.py	46	glue	validates the layer_devices argument
+python/mojolearn/models/parallel_causal_lm.py	138	glue	validates the layer_devices argument
+python/mojolearn/models/parallel_causal_lm.py	147	glue	worker index per device
+python/mojolearn/models/parallel_causal_lm.py	151	glue	starts one worker per device
+python/mojolearn/models/parallel_causal_lm.py	173	glue	validates the layer_devices argument
+python/mojolearn/models/parallel_causal_lm.py	189	glue	one remote block per model layer
+python/mojolearn/models/parallel_causal_lm.py	212	glue	walks the model layers
+python/mojolearn/models/parallel_causal_lm.py	213	glue	names the weights of one layer
+python/mojolearn/models/parallel_causal_lm.py	214	glue	walks the named weights of one layer
+python/mojolearn/models/parallel_causal_lm.py	220	glue	closes the device worker pools
+python/mojolearn/models/safetensors.py	82	glue	product of the tensor shape entries
+python/mojolearn/models/safetensors.py	146	cpu-input	parses the safetensors file header (file input)
+python/mojolearn/models/safetensors.py	150	cpu-input	parses the safetensors file header (file input)
+python/mojolearn/models/safetensors.py	151	cpu-input	parses the safetensors file header (file input)
+python/mojolearn/models/safetensors.py	156	cpu-input	parses the safetensors file header (file input)
+python/mojolearn/models/safetensors.py	277	cpu-input	lists the checkpoint shard files (file input)
+python/mojolearn/models/safetensors.py	278	cpu-input	checks the checkpoint shard files exist (file input)
+python/mojolearn/models/safetensors.py	281	cpu-input	maps weight names to shard files (file input)
+python/mojolearn/models/safetensors.py	284	cpu-input	lists the checkpoint shard files (file input)
+python/mojolearn/models/safetensors.py	305	cpu-input	indexes the checkpoint shard files (file input)
+python/mojolearn/models/safetensors.py	307	cpu-input	indexes the checkpoint tensor names (file input)
+python/mojolearn/models/safetensors.py	311	cpu-input	indexes the checkpoint weight map (file input)
+python/mojolearn/models/safetensors.py	334	cpu-input	closes the open checkpoint files (file input)
+python/mojolearn/models/safetensors.py	358	cpu-input	writes the safetensors header in name order (file output)
+python/mojolearn/models/safetensors.py	369	cpu-input	writes the tensor payloads (file output)
+python/mojolearn/models/tokenizer.py	134	cpu-input	parses the tokenizer.json pretokenizer config (file input)
+python/mojolearn/models/tokenizer.py	204	cpu-input	walks the added special tokens (text input)
+python/mojolearn/models/tokenizer.py	208	cpu-input	walks the added special tokens (text input)
+python/mojolearn/models/tokenizer.py	212	glue	converts the bos id argument
+python/mojolearn/models/tokenizer.py	213	glue	converts the eos id argument
+python/mojolearn/models/tokenizer.py	217	cpu-input	encodes the added special tokens (text input)
+python/mojolearn/models/tokenizer.py	223	glue	unpacks three vocabulary sizes
+python/mojolearn/models/tokenizer.py	285	cpu-input	parses the tokenizer.json normalizer config (file input)
+python/mojolearn/models/tokenizer.py	292	cpu-input	parses the tokenizer.json added tokens (file input)
+python/mojolearn/models/tokenizer.py	304	cpu-input	parses the tokenizer.json added tokens (file input)
+python/mojolearn/models/tokenizer.py	318	cpu-input	parses the tokenizer.json post processor (file input)
+python/mojolearn/models/tokenizer.py	326	cpu-input	parses the tokenizer.json post processor ids (file input)
+python/mojolearn/models/tokenizer.py	343	cpu-input	parses the tokenizer config special tokens (file input)
+python/mojolearn/models/tokenizer.py	371	cpu-input	slices the text into pretokens at native bounds (text input)
+python/mojolearn/preprocessing.py	66	glue	raises on an infinite per-column statistic
+python/mojolearn/preprocessing.py	182	glue	converts the device sample counts
+python/mojolearn/preprocessing.py	184	glue	converts the device sample counts
+python/mojolearn/preprocessing.py	190	glue	per-column sample counts of n_samples_seen_
+python/mojolearn/preprocessing.py	636	glue	live column index list from device counts
+python/mojolearn/preprocessing.py	639	glue	raises on nonfinite device statistics
+python/mojolearn/preprocessing.py	667	glue	merges per-column integer sample counts
+python/mojolearn/tokenizer.py	80	glue	looks up the binding ABI entries
+python/mojolearn/tokenizer.py	119	glue	maps two native error prefixes
+python/mojolearn/tokenizer.py	151	cpu-input	byte to char table of the text encoding
+python/mojolearn/tokenizer.py	349	cpu-input	packs the text documents for the native encoder (text input)
+python/mojolearn/tokenizer.py	366	glue	checks the native token counts
+python/mojolearn/tokenizer.py	371	glue	splits the native token output per document
+python/mojolearn/tokenizer.py	427	glue	output capacity of the native decode
+python/mojolearn/tokenizer.py	433	glue	splits the native decode output per sequence
+python/mojolearn/tokenizer.py	440	cpu-input	decodes bytes to str per sequence (text output)
+python/mojolearn/tokenizer.py	588	cpu-input	packs the text documents for the native trainer (text input)
+python/mojolearn/tokenizer.py	616	glue	checks three trainer binding entries
+python/mojolearn/tokenizer.py	636	glue	unpacks five trainer sizes
+python/mojolearn/tokenizer.py	646	glue	splits the native trained token arena
