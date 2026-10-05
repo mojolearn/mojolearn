@@ -177,14 +177,19 @@ comptime MF_WIDE_DMAX = 256
 # candidate stops at step 0) runs three phase-wide 3,330-candidate 220-wide
 # Jacobi rounds without it; two of them are skipped.
 comptime MCD_SKIP_PINVH = MCD_BATCH_MMA and not is_defined["MOJOLEARN_MCD_SKIP_PINVH_OFF"]()
-#: MCD_DEFLATE, OPT-IN (-D MOJOLEARN_MCD_DEFLATE, wide d only; lane/apple-fast-w4-mcd
-#: d0b30bfe9): stays opt-in, no opponent comparison yet: the wide pinvh (mc_pinvh_kernel DEFL) drops indices whose
+#: MCD_DEFLATE, FAST + Apple DEFAULT since 2026-10-04 (wide d only; rollback
+#: -D MOJOLEARN_MCD_DEFLATE_OFF, the old -D name is harmless; lane/apple-fast-w4-mcd
+#: d0b30bfe9): the wide pinvh (mc_pinvh_kernel DEFL) drops indices whose
 # covariance row and column are exactly zero (constant-zero columns of the
 # support: istella's sparse features on 151-row phase-A supports) and runs
 # main's round-robin Jacobi on the live submatrix; Jacobi cost ~ ns^3. With
 # no zero row the kernel is main's statement for statement. Changed bits only
 # through the different rotation schedule over the live indices.
-comptime MCD_DEFLATE = MCD_WIDE and is_defined["MOJOLEARN_MCD_DEFLATE"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab3-mcddefl): elliptic-envelope istella 31817.99 -> 24566.39 ms (-22.8%);
+#: fraction_flagged 0.09253 both arms (digest differs: rotation schedule).
+#: KEEP.
+comptime MCD_DEFLATE = MCD_WIDE and not is_defined["MOJOLEARN_MCD_DEFLATE_OFF"]()
 # MCD_PROFILE, diagnostic only (-D MOJOLEARN_MCD_PROFILE): synchronizes around
 # each phase, each pinvh, each log determinant and the distance/covariance
 # launches, and prints one `MCDPROF` line per phase and per stage. Never a
