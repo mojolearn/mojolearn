@@ -21,6 +21,16 @@ struct Split(ImplicitlyCopyable, Movable):
     var n_left: Int32
     """Number of samples in the left child. Theirs is `int nLeft`."""
 
+    @always_inline
+    def __init__(out self, *, copy: Self):
+        """Metal: an inlined field-by-field copy (see `InstanceRange` in
+        `kernels/builder_kernels.mojo`): the synthesized out-of-line copy
+        crashes Apple's Metal compiler on a whole-record device load."""
+        self.quesval = copy.quesval
+        self.colid = copy.colid
+        self.best_metric_val = copy.best_metric_val
+        self.n_left = copy.n_left
+
     comptime Min = Float32.MIN_FINITE
     """`split.cuh:36`: `-std::numeric_limits<DataT>::max()`."""
 
