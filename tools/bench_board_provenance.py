@@ -113,7 +113,7 @@ def loaded_bindings():
         if not filename:
             continue
         path = Path(filename).resolve()
-        if path.suffix != '.so' or not path.name.startswith('_mojolearn_'):
+        if path.suffix != '.so' or not (path.name == '_mojolearn.so' or path.name.startswith('_mojolearn_')):
             continue
         rows.append(dict(module=name, file=str(path), sha256=sha(path),
                          role='host' if path.stem.endswith('_host') else 'gpu'))
