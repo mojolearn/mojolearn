@@ -1237,3 +1237,13 @@ Rows from board-quality-audit-2026-10-04 where FAST quality trailed the best opp
 | `SEQ_FAST_LSTM_SCAN + _SCAN_SMEM` | as above | lane/apple-fast-s-seq @ 8bb42b7de | - | - | READY-AB | re-judge after the fix |
 | `SEQ_FAST_LSTM_SCAN + _SCAN_SMEM + _WGRAD` (bundle) | as above | lane/apple-fast-s-seq @ 8bb42b7de | - | - | READY-AB | re-judge after the fix (was 1877 -> 1315 ms, broken quality) |
 | `SEQ_FAST_LSTM_SCAN + _SCAN_WIDE (+ _WGRAD)` | as above | lane/apple-fast-s-seq @ 826305835 | - | - | READY-AB | G H lanes per row (256 for H 64): forward gate columns folded one per lane (same fold), backward dh split by gate then summed in g order (FAST fold); 4x shorter serial chain per step |
+
+## lane/apple-fast-general-speed verdicts (2026-10-05, lane/apple-fast-verdicts-5)
+
+M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| LDA fused occupancy tiers (rollback `LEGACY_NARROW_LDA_FUSED_V`) | lda / taxi-zones | lane/apple-fast-general-speed @ 8027147c0, cherry-picked as c4156ee0d | rab11-ldatier (main's rule: rab3-legacylda) | main's general rule 3119 -> tiers 1701 (legacy 320-word window 1512) | ACCEPT (merged via lane/apple-fast-verdicts-5) | perplexity identical; the threadgroup row is sized from runtime v at hardware occupancy tiers (x_decomp/lda_fast.mojo). Still behind the legacy window: follow-up open |
+| SVM working-set rule (`SVM_FAST_WS_SELECT_OFF`, `LEGACY_NARROW_SVM_WS`) | svm / istella, taxi | lane/apple-fast-general-speed @ 79212453b | rab11-svmws | istella: main 210.1, legacy 205.6, new 214.3; taxi: main 1650.7, legacy 1643.4, new 1624.2 | NEUTRAL, not merged | within noise on both datasets; recoverable at 79212453b |
+| `ARD_EQ_ONEPASS` (rollback `ARD_EQ_ONEPASS_OFF`) | ard / board | lane/apple-fast-general-speed @ d42318df5, 7ec8ec5ff | rab11-ardonepass | 1349.6 -> 34.1 | DROPPED-quality | r2 0.327 -> -0.00001; not merged, recoverable at 7ec8ec5ff |
