@@ -26,7 +26,7 @@ from bindings.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32, list_i32
 from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 from std.ffi import _Global
-from std.memory import bitcast
+from std.memory import bitcast, memcmp
 from std.os import abort, getenv
 from std.python import Python, PythonObject
 from std.time import perf_counter_ns
@@ -314,6 +314,29 @@ def _validate_addresses(addresses: List[Int], action: Int, shape: ByteConfig) ra
 
 def _read_f32(address: Int, n: Int) raises -> List[Float32]:
     return read_f32(address, n)
+
+
+def _require_inputs_unchanged(addr: List[Int], initial_p: List[Float32], initial_m: List[Float32],
+                              initial_v: List[Float32], flags: List[Bool], ids: List[Int32],
+                              shape: ByteConfig) raises:
+    """The input-unchanged guard (lane py-runtime round 2; it was Python's
+    before/after `tobytes` copies of every parameter-sized input each step):
+    the borrowed parameter, m, v, flag and token buffers must still hold the
+    words this call read from them. Three n-float memcmps against the owned
+    copies, no extra copy."""
+    var n = shape.n_total()
+    var same = memcmp(f32_ptr(addr[0]), initial_p.unsafe_ptr(), n) == 0
+    same = same and memcmp(f32_ptr(addr[1]), initial_m.unsafe_ptr(), n) == 0
+    same = same and memcmp(f32_ptr(addr[2]), initial_v.unsafe_ptr(), n) == 0
+    var n_ids = shape.batch * (shape.length + 1)
+    var ids_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr[4])
+    same = same and memcmp(ids_ptr, ids.unsafe_ptr(), n_ids) == 0
+    var flags_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr[3])
+    for i in range(shape.n_tensors()):  # small-loop(n_tensors: momentum flags, one per parameter tensor): compares per tensor flags, not data
+        if (flags_ptr.unsafe_load(i) == 1) != flags[i]:
+            same = False
+    if not same:
+        raise Error("Byte-LM native call changed an input state/token buffer")
 
 
 def _write_f32(address: Int, values: List[Float32]) raises:
@@ -606,6 +629,9 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
         if session.ctx:
             session.ctx.value().synchronize()
         session.ctx = None
+    # lane py-runtime round 2: the input-unchanged guard runs here, in the
+    # binding, before anything is published
+    _require_inputs_unchanged(addr, initial_p, initial_m, initial_v, flags, ids, shape)
     # Publication starts after the synchronized GPU scope succeeds. The
     # Python wrapper commits these fresh arrays atomically to its state object.
     _write_f32(addr[5], out_p)

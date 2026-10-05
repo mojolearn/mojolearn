@@ -1035,8 +1035,6 @@ class SmallByteLanguageModelTrainer:
         _tick(ton, clock, 'step.py_validate_state', 3 * n4)
         binding = self._binding()
         inputs = [working['parameters'], working['m'], working['v'], working['flags'], tokens]
-        before = tuple(array.tobytes() for array in inputs)
-        _tick(ton, clock, 'step.py_before_bytes', 3 * n4)
         out_p = _buffers.full(shape.n_total, float("nan"), '<f4')
         out_m = _buffers.full(shape.n_total, float("nan"), '<f4')
         out_v = _buffers.full(shape.n_total, float("nan"), '<f4')
@@ -1064,11 +1062,8 @@ class SmallByteLanguageModelTrainer:
         expected = working['completed_steps'] + int(train)
         if _is_bool(completed) or not isinstance(completed, int) or completed != expected:
             raise RuntimeError('Byte-LM returned an invalid completed-step counter')
-        # Compare one snapshot at a time: constructing a second tuple keeps
-        # all three parameter-sized byte copies alive simultaneously.
-        if any(saved != array.tobytes() for saved, array in zip(before, inputs)):
-            raise RuntimeError('Byte-LM native call changed an input state/token buffer')
-        _tick(ton, clock, 'step.py_input_unchanged', 3 * n4)
+        # The input-unchanged guard runs in the binding (`_require_inputs_unchanged`,
+        # bindings/_mojolearn_byte_lm.mojo), before it publishes any output.
         if not all_finite(out_loss):
             raise RuntimeError('Byte-LM returned a nonfinite/unwritten loss')
         candidate = _validate_state(dict(working, parameters=out_p, m=out_m, v=out_v, flags=out_flags,

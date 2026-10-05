@@ -62,9 +62,9 @@ python/mojolearn/_byte_lm_impl.py	825	glue	per-layer status names
 python/mojolearn/_byte_lm_impl.py	829	glue	per-layer status names
 python/mojolearn/_byte_lm_impl.py	873	glue	one gradient view per named parameter
 python/mojolearn/_byte_lm_impl.py	913	glue	addresses of the session input buffers
-python/mojolearn/_byte_lm_impl.py	1038	runtime	copies every parameter-sized input buffer to bytes each training step to check the native call left it unchanged; owner decision: drop the guard (read-only pointers) or move it into the binding
+python/mojolearn/_byte_lm_impl.py	1038	runtime-fixed	input-unchanged guard now in the binding (_require_inputs_unchanged: memcmp against the owned input copies, no Python copies)
 python/mojolearn/_byte_lm_impl.py	1048	glue	addresses of the step input buffers
-python/mojolearn/_byte_lm_impl.py	1069	runtime	compares the parameter-sized byte copies each step (see line 1038)
+python/mojolearn/_byte_lm_impl.py	1069	runtime-fixed	input-unchanged guard now in the binding (_require_inputs_unchanged: memcmp against the owned input copies, no Python copies)
 python/mojolearn/_byte_lm_impl.py	1081	glue	four named state arrays
 python/mojolearn/_byte_lm_impl.py	1091	glue	one view per named parameter
 python/mojolearn/_byte_lm_impl.py	1106	glue	checks the session binding entries
