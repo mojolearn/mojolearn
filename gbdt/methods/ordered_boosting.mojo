@@ -308,9 +308,9 @@ def _ord_std_scale_kernel(
     mult_bits: UInt64,
     random_strength: Float32,
     row_count: Int32,
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
 ):
-    """IDN_ORD_STD_SCALE_DEVICE: `out[0]` = the score std dev, `out[1]` =
+    """IDN_ORD_STD_SCALE_DEVICE: `dst[0]` = the score std dev, `dst[1]` =
     the fixed-point scale. One thread; control plane, not compute.
 
     std (`has_std`), the host's binary64 statements in soft-float64 (no
@@ -336,14 +336,14 @@ def _ord_std_scale_kernel(
             sf64_mul(mult_bits, sf64_sqrt(q)), sf64_from_f32(random_strength)
         )
         std = sf64_to_f32(v)
-    out.unsafe_store(0, std)
+    dst.unsafe_store(0, std)
     var w = mags.unsafe_load(Int(mag_at))
     var g = mags.unsafe_load(Int(mag_at) + 1)
     var m = w
     if g > m:
         m = g
     if m == Float32(0.0):
-        out.unsafe_store(1, Float32(1.0))
+        dst.unsafe_store(1, Float32(1.0))
         return
     var limit = Int64((1 << 30) - 1) - Int64(Int(row_count))
     var floor_limit = Int64((1 << 28) - 1)
@@ -371,7 +371,7 @@ def _ord_std_scale_kernel(
     else:
         for _ in range(-k):
             scale = scale * Float32(0.5)
-    out.unsafe_store(1, scale)
+    dst.unsafe_store(1, scale)
 
 
 @fieldwise_init
@@ -2553,9 +2553,12 @@ def fit_ordered(
                     )
             comptime if IDN_ORD_STD_SCALE_DEVICE:
                 # d_sums = (noise sum, weight magnitude, gradient magnitude)
-                var sums_p = d_sums.unsafe_ptr()
+                # the same buffer is read (sums) and written (scale) by
+                # design; two untracked views pass the aliasing check (box-run-2).
+                var sums_p = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+                var sums_w = d_sums.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
                 ctx.enqueue_function[_ord_std_scale_kernel](
-                    sums_p, Int32(0), Int32(1), sums_p, Int32(1),
+                    sums_p, Int32(0), Int32(1), sums_w, Int32(1),
                     Int32(ord_count), bitcast[DType.uint64](Float64(1e-100)),
                     bitcast[DType.uint64](ord_mult), opts.random_strength,
                     Int32(total), d_ss.unsafe_ptr(),

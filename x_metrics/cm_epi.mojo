@@ -86,11 +86,11 @@ def _mlcm(t: Int, f: FP, q: IP):
     if not weighted:
         var tp = cnt_at(f, TP, t)
         var fp = cnt_at(f, PR, t) - tp
-        var fn = cnt_at(f, TR, t) - tp
-        var tn = tot - tp - fp - fn
+        var fn_ = cnt_at(f, TR, t) - tp
+        var tn = tot - tp - fp - fn_
         _st_i64(f, at, tn)
         _st_i64(f, at + 2, fp)
-        _st_i64(f, at + 4, fn)
+        _st_i64(f, at + 4, fn_)
         _st_i64(f, at + 6, tp)
         return
     var tp64 = sum_at(f, TP, t, True)
@@ -313,9 +313,9 @@ def _clr(f: FP, q: IP):
     var OUT = p(q, 3)
     var tn = sum_at(f, C, 0, weighted)
     var fp = sum_at(f, C, 1, weighted)
-    var fn = sum_at(f, C, 2, weighted)
+    var fn_ = sum_at(f, C, 2, weighted)
     var tp = sum_at(f, C, 3, weighted)
-    var support_pos = sf64_add(tp, fn)
+    var support_pos = sf64_add(tp, fn_)
     var support_neg = sf64_add(tn, fp)
     var flags = 0
     if is0(support_pos):
@@ -327,7 +327,7 @@ def _clr(f: FP, q: IP):
     if is0(tn):
         flags |= 4
     else:
-        st64(f, OUT + 4, sf64_div(sf64_mul(fn, support_neg), sf64_mul(tn, support_pos)))
+        st64(f, OUT + 4, sf64_div(sf64_mul(fn_, support_neg), sf64_mul(tn, support_pos)))
     sti(f, OUT, flags)
 
 

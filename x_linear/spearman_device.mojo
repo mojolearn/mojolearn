@@ -105,9 +105,9 @@ def sp_block_kernel(rx: IP, ry: IP, n: Int32, nb: Int32, parts: I64P, wf: IP, wo
     witness_end(wf, woff, nonce)
 
 
-def sp_sign_kernel(parts: I64P, nb: Int32, out: IP, wf: IP, woff: Int32, nonce: Int32):
+def sp_sign_kernel(parts: I64P, nb: Int32, dst: IP, wf: IP, woff: Int32, nonce: Int32):
     if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
-        sti(out, 0, sp_fold_sign(parts, Int(nb)))
+        sti(dst, 0, sp_fold_sign(parts, Int(nb)))
     witness_end(wf, woff, nonce)
 
 

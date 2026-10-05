@@ -175,12 +175,12 @@ def negative_partial_kernel(
 
 
 def min_partials_kernel(
-    out: MutPointer[Int32, MutAnyOrigin],
+    dst: MutPointer[Int32, MutAnyOrigin],
     part: MutPointer[Int32, MutAnyOrigin],
     n_in: Int32,
 ):
     """ONE block: the minimum of the block partials `part[0:n]` (n <=
-    SCAN_BLOCKS), written to `out[0]`; `NONFINITE_NONE` when none hit (and
+    SCAN_BLOCKS), written to `dst[0]`; `NONFINITE_NONE` when none hit (and
     when n is 0). An integer minimum, so the first index on every vendor."""
     var n = Int(n_in)
     var red = stack_allocation[
@@ -207,7 +207,7 @@ def min_partials_kernel(
         barrier()
         active = active // 2
     if tid == 0:
-        out.unsafe_store(0, red.unsafe_load(0))
+        dst.unsafe_store(0, red.unsafe_load(0))
 
 
 def _fold_partials(mut host: HostBuffer[DType.int32], blocks: Int) -> Int:
