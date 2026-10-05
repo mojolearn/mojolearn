@@ -133,7 +133,7 @@ from gbdt.methods.oblivious_tree_fold_tasks import (
     FoldLayout,
     create_fold_based_subsets,
     fold_tasks_from_folds,
-    make_fold_doc_indices,
+    make_fold_doc_indices_device,
     plan_fold_layout,
     plan_single_task_layout,
     write_fold_based_initial_bins,
@@ -217,7 +217,7 @@ def fold_bins_from_table_kernel(
 
 def _cindex_columns(layout: CompressedIndexLayout) -> Int:
     var m = 0
-    for f in range(len(layout.features)):
+    for f in range(len(layout.features)):  # small-loop(layout: one entry per feature group): column count from layout metadata
         m = max(m, Int(layout.features[f].offset) + 1)
     return m
 
@@ -343,7 +343,7 @@ struct PointwiseTreeWorkspace(Movable):
         # (`len(one_hot) == len(layout.features)` or all-False)
         var table = List[UInt32]()
         var have_oh = len(one_hot) == n_features
-        for f in range(n_features):
+        for f in range(n_features):  # small-loop(n_features: feature layout entries, once per pool): launch table of offsets and masks
             table.append(UInt32(Int(layout.features[f].offset) * n_rows))
             table.append(UInt32(layout.features[f].mask))
             table.append(UInt32(layout.features[f].shift))
@@ -396,9 +396,18 @@ def fit_oblivious_tree_structure_traced(
         DeviceBuffer[DType.uint32]
     ](),
     ord_wide: Bool = False,
+    std_scale_word: List[DeviceBuffer[DType.float32]] = List[
+        DeviceBuffer[DType.float32]
+    ](),
 ) raises -> List[TBinarySplit]:
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
+
+    `std_scale_word` (T5 drain, lane cpu3-gbdt-a): when non-empty, its
+    first buffer holds `(score std dev, fixed-point scale)` as the ordered
+    fit's `_ord_std_scale_kernel` wrote them, and the histogram and score
+    kernels read those device words; `fixed_scale` and `score_std_dev` are
+    then unread. Same values, same arithmetic, no drain to fetch them.
 
     `permutation_id` (fold arm only): a caller id for `permutation`, fixed
     for the span of `pool`; with it the fold doc ids are built once per id
@@ -487,7 +496,7 @@ def fit_oblivious_tree_structure_traced(
     var stride = doc_count if fold_order else n_rows
     var blocks = blocks_for(layout, stride)
     var global_ids = List[Int]()
-    for f in range(len(layout.features)):
+    for f in range(len(layout.features)):  # small-loop(layout: one id per feature, once per tree): global feature id list for the calcer
         global_ids.append(f)
 
     # `n_rows` is the compressed index's ROW STRIDE and `doc_count` is the
@@ -577,7 +586,7 @@ def fit_oblivious_tree_structure_traced(
     # three sites. Rather than grow a tree whose histograms are a fold
     # axis short, ask the calcer what it is carrying and refuse if it
     # disagrees with the layout.
-    for i in range(len(calcer.helpers)):
+    for i in range(len(calcer.helpers)):  # small-loop(helpers: policy helpers, at most three): configuration check that only raises
         if calcer.helpers[i].hist_helper.fold_count != fold_count:
             raise Error(
                 "DEVIATION 126: the fold layout has FoldCount "
@@ -600,35 +609,36 @@ def fit_oblivious_tree_structure_traced(
     # POSITION in the concatenated array instead of at a document id.
     var cached = -1
     if fold_count > 1 and permutation_id >= 0:
-        for i in range(len(pool[0].doc_ids_keys)):
+        for i in range(len(pool[0].doc_ids_keys)):  # small-loop(doc_ids_keys: cached permutation ids, a handful): cache lookup by id only
             if pool[0].doc_ids_keys[i] == permutation_id:
                 cached = i
     var d_doc_ids: DeviceBuffer[DType.uint32]
     if cached >= 0:
         d_doc_ids = pool[0].doc_ids[cached].copy()
     else:
-        var doc_ids_host = make_fold_doc_indices(folds, permutation) if (
-            fold_count > 1
-        ) else List[UInt32]()
+        # lane cpu3-gbdt-a: the doc ids built on the device
+        # (`make_fold_doc_indices_device`) from the permutation uploaded
+        # once, cached per permutation id as before
         d_doc_ids = ctx.enqueue_create_buffer[DType.uint32](
-            len(doc_ids_host) if fold_count > 1 else 1
+            doc_count if fold_count > 1 else 1
         )
         if fold_count > 1:
-            if len(doc_ids_host) != doc_count:
-                raise Error(
-                    "MakeDocIndices produced "
-                    + String(len(doc_ids_host))
-                    + " ids for "
-                    + String(doc_count)
-                    + " concatenated documents"
+            var has_perm = len(permutation) != 0
+            var d_perm = ctx.enqueue_create_buffer[DType.uint32](
+                len(permutation) if has_perm else 1
+            )
+            if has_perm:
+                ctx.enqueue_copy(
+                    dst_buf=d_perm, src_ptr=permutation.unsafe_ptr()
                 )
-            ctx.enqueue_copy(
-                dst_buf=d_doc_ids, src_ptr=doc_ids_host.unsafe_ptr()
+            _ = make_fold_doc_indices_device(
+                ctx, folds, d_perm, has_perm, d_doc_ids
             )
             ctx.synchronize()
-            # keep the host list alive across the queue: a raw pointer does
-            # not ([[mojo-buffer-freed-at-last-use]])
-            _ = doc_ids_host[0]
+            # held past the drain ([[mojo-buffer-freed-at-last-use]]): the
+            # upload read the list, the launches read `d_perm`
+            _ = d_perm^
+            _ = len(permutation)
             if permutation_id >= 0:
                 pool[0].doc_ids_keys.append(permutation_id)
                 pool[0].doc_ids.append(d_doc_ids.copy())
@@ -734,7 +744,21 @@ def fit_oblivious_tree_structure_traced(
                 GATHER_NO_MASK,
             )
             docs = d_observations.copy()
-        if fold_order:
+        if len(std_scale_word) > 0:
+            var scale_word = rebind[MutPointer[Float32, MutAnyOrigin]](
+                std_scale_word[0].unsafe_ptr().unsafe_offset(1)
+            )
+            if fold_order:
+                calcer.submit_compute_dev(
+                    ctx, subsets, d_fold_cindex, docs, doc_count, sm_count,
+                    scale_word,
+                )
+            else:
+                calcer.submit_compute_dev(
+                    ctx, subsets, cindex, docs, doc_count, sm_count,
+                    scale_word,
+                )
+        elif fold_order:
             calcer.submit_compute(
                 ctx, subsets, d_fold_cindex, docs, doc_count, sm_count,
                 fixed_scale,
@@ -768,16 +792,30 @@ def fit_oblivious_tree_structure_traced(
 
         var pstats = subsets.partition_stats.copy()
         times.begin(ctx)
-        calcer.compute_optimal_split_dev(
-            ctx,
-            pstats,
-            1 << depth,
-            pool[0].d_score_before,
-            score_function,
-            l2_leaf_reg,
-            score_std_dev,
-            level_rand.next_uniform_l(),
-        )
+        if len(std_scale_word) > 0:
+            calcer.compute_optimal_split_dev_std(
+                ctx,
+                pstats,
+                1 << depth,
+                pool[0].d_score_before,
+                score_function,
+                l2_leaf_reg,
+                rebind[MutPointer[Float32, MutAnyOrigin]](
+                    std_scale_word[0].unsafe_ptr()
+                ),
+                level_rand.next_uniform_l(),
+            )
+        else:
+            calcer.compute_optimal_split_dev(
+                ctx,
+                pstats,
+                1 << depth,
+                pool[0].d_score_before,
+                score_function,
+                l2_leaf_reg,
+                score_std_dev,
+                level_rand.next_uniform_l(),
+            )
         times.end(ctx, "pw.score")
 
         # their fold (`:113-120`) and the record's consumption, on the
@@ -787,7 +825,7 @@ def fit_oblivious_tree_structure_traced(
         # and the bin update are ONE launch, enqueued below where the bin
         # update stood (`pw_resolve_pack_bins_kernel`).
         var live_helpers = 0
-        for hi in range(len(calcer.helpers)):
+        for hi in range(len(calcer.helpers)):  # small-loop(helpers: policy helpers, at most three): counts live helpers for the dispatch
             if calcer.helpers[hi].feature_count != 0:
                 live_helpers += 1
         var fused_pw = PW_FUSED_SEARCH and live_helpers <= 3
@@ -840,7 +878,7 @@ def fit_oblivious_tree_structure_traced(
                 var r_ids = List[MutPointer[UInt32, MutAnyOrigin]]()
                 var r_scores = List[MutPointer[Float32, MutAnyOrigin]]()
                 var r_n = List[Int]()
-                for hi in range(len(calcer.helpers)):
+                for hi in range(len(calcer.helpers)):  # small-loop(helpers: policy helpers, at most three): result pointer launch arguments per helper
                     if calcer.helpers[hi].feature_count == 0:
                         continue
                     r_ids.append(
@@ -955,7 +993,7 @@ def fit_oblivious_tree_structure_traced(
     # in LEVEL ORDER, so the first stop at level k discards levels k..
     # exactly as the loop would never have grown them, and the returned
     # structure is unchanged record for record.
-    for depth2 in range(max_depth):
+    for depth2 in range(max_depth):  # small-loop(max_depth: tree levels, at most 16): the winner records become the split list
         var fid_u = pool[0].h_winners_ids[2 * depth2]
         var bin_u = pool[0].h_winners_ids[2 * depth2 + 1]
 
@@ -974,7 +1012,7 @@ def fit_oblivious_tree_structure_traced(
 
         # `structure.HasSplit(bestSplit)` (`:134`), BEFORE applying it
         var seen = False
-        for i in range(len(structure)):
+        for i in range(len(structure)):  # small-loop(structure: splits so far, at most 16): the HasSplit repeat test
             if (
                 structure[i].feature_id == Int32(fid)
                 and structure[i].bin_idx == Int32(bin_u)

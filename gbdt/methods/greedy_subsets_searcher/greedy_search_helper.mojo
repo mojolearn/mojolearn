@@ -3,6 +3,11 @@
 """One complete CatBoost-compatible oblivious-tree level on the GPU. Kernel ordering is contractual: copy precedes subtract, and scan precedes scoring."""
 
 from std.math import sqrt
+from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from std.atomic import Atomic
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
@@ -65,6 +70,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_level_quantize_kernel,
     snap_gradients_to_scale_kernel,
     snap_plane_to_scale_kernel,
+    snap_plane_to_scale_dev_kernel,
 )
 from checks.numerics import numeric_mode_name
 from std.os import getenv
@@ -1029,6 +1035,159 @@ def upload_scale(
     return d^
 
 
+# ---- lane cpu3-gbdt-a: per-leaf bookkeeping on the device -----------------
+# The leaf-id lists, the uniform probe's split descriptors, the pairwise
+# rollback merge and the leaf-size folds used to be host loops over the live
+# leaves followed by an upload (or preceded by a readback). They are integer
+# work, so moving them changes no bit on any vendor or in the host column.
+
+#: Threads per block of the leaf-size fold. Its shared page is
+#: `LEAF_REDUCE_BLOCK` words (1 KiB), far under every vendor's limit.
+comptime LEAF_REDUCE_BLOCK = 256
+comptime LEAF_REDUCE_SUM = Int32(0)
+comptime LEAF_REDUCE_MAX = Int32(1)
+#: Threads per block of the per-leaf fill kernels below.
+comptime LEAF_FILL_BLOCK = 256
+
+
+def leaf_iota_kernel(
+    ids: MutPointer[UInt32, MutAnyOrigin],
+    n_in: Int32,
+    base_in: Int32,
+):
+    """`ids[i] = base + i` for `i < n`: a level's dense left ids (`base = 0`)
+    or their `rightIds` (`base = leavesCount`)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        ids.unsafe_store(i, UInt32(Int(base_in) + i))
+
+
+def uniform_probe_split_kernel(
+    out_bin: MutPointer[UInt32, MutAnyOrigin],
+    n_features_in: Int32,
+    n_live_in: Int32,
+    sp_feats: MutPointer[UInt8, MutAnyOrigin],
+    sp_bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`run_tree`'s step 4 on the device: the level's one winning binary
+    feature (`out_bin[0]`, an out-of-range winner taken as feature 0 as the
+    host did) packed into every live leaf's split descriptor."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_live_in):
+        return
+    var best = Int(out_bin.unsafe_load(0))
+    if best > Int(n_features_in):
+        best = 0
+    var feats = sp_feats.bitcast[CFeature]()
+    feats[unsafe_offset=i] = CFeature(
+        offset=UInt32(0),
+        mask=UInt32(1),
+        shift=UInt32(31 - best),
+        first_fold_index=UInt32(0),
+        folds=UInt32(1),
+        one_hot_feature=False,
+    )
+    sp_bins.unsafe_store(i, UInt32(0))
+
+
+def merge_leaf_sizes_kernel(
+    sizes: MutPointer[UInt32, MutAnyOrigin],
+    half_in: Int32,
+):
+    """One discarded level of the post-tree rollback: `sizes[i] +=
+    sizes[half + i]` for `i < half` (the left child kept the parent's slot,
+    so the pairwise merge restores the parent level's sizes exactly)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var half = Int(half_in)
+    if i < half:
+        sizes.unsafe_store(i, sizes.unsafe_load(i) + sizes.unsafe_load(half + i))
+
+
+def leaf_size_reduce_kernel(
+    sizes: MutPointer[UInt32, MutAnyOrigin],
+    n_in: Int32,
+    op: Int32,
+    dst: MutPointer[UInt32, MutAnyOrigin],
+    out_slot: Int32,
+):
+    """`sizes[0..n)` folded to ONE word at `dst[out_slot]`: the sum
+    (`LEAF_REDUCE_SUM`, the root-coverage invariant) or the max
+    (`LEAF_REDUCE_MAX`, the next level's launch bound). One thread per
+    leaf over `ceil(n / LEAF_REDUCE_BLOCK)` blocks; each block folds its
+    tile in shared memory and thread 0 merges it into the (pre-zeroed)
+    word with an integer atomic. Integer add and max are order-free, so
+    every vendor and every block schedule give the same word."""
+    comptime assert LEAF_REDUCE_BLOCK * 4 <= 16384, "leaf fold shared page"
+    var sh = stack_allocation[
+        LEAF_REDUCE_BLOCK,
+        Scalar[DType.uint32],
+        address_space=AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var i = Int(block_idx.x) * LEAF_REDUCE_BLOCK + tid
+    var want_max = op == LEAF_REDUCE_MAX
+    var acc = UInt32(0)
+    if i < Int(n_in):
+        acc = sizes.unsafe_load(i)
+    sh[unsafe_offset=tid] = acc
+    barrier()
+    var active = LEAF_REDUCE_BLOCK // 2
+    while active > 0:
+        if tid < active:
+            var x = sh[unsafe_offset=tid]
+            var y = sh[unsafe_offset=tid + active]
+            if want_max:
+                if y > x:
+                    sh[unsafe_offset=tid] = y
+            else:
+                sh[unsafe_offset=tid] = x + y
+        barrier()
+        active = active // 2
+    if tid == 0:
+        var v = sh[unsafe_offset=0]
+        if want_max:
+            _ = Atomic.max(dst.unsafe_offset(Int(out_slot)), v)
+        else:
+            _ = Atomic.fetch_add(dst.unsafe_offset(Int(out_slot)), v)
+
+
+def enqueue_leaf_iota(
+    ctx: DeviceContext,
+    mut ids: DeviceBuffer[DType.uint32],
+    n: Int,
+    base: Int,
+) raises:
+    """`ids[0..n) = base, base + 1, ...` on the device."""
+    if n < 1:
+        return
+    ctx.enqueue_function[leaf_iota_kernel](
+        ids.unsafe_ptr(), Int32(n), Int32(base),
+        grid_dim=((n + LEAF_FILL_BLOCK - 1) // LEAF_FILL_BLOCK, 1, 1),
+        block_dim=(LEAF_FILL_BLOCK, 1, 1),
+    )
+
+
+def enqueue_leaf_size_reduce(
+    ctx: DeviceContext,
+    mut sizes: DeviceBuffer[DType.uint32],
+    n: Int,
+    op: Int32,
+    mut dst: DeviceBuffer[DType.uint32],
+    out_slot: Int = 0,
+) raises:
+    """One-word fold of the first `n` leaf sizes; see the kernel. `dst` is
+    zeroed first (the blocks merge into it atomically)."""
+    enqueue_fill(ctx, dst, UInt32(0))
+    var blocks = (n + LEAF_REDUCE_BLOCK - 1) // LEAF_REDUCE_BLOCK
+    if blocks < 1:
+        return
+    ctx.enqueue_function[leaf_size_reduce_kernel](
+        sizes.unsafe_ptr(), Int32(n), op, dst.unsafe_ptr(), Int32(out_slot),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(LEAF_REDUCE_BLOCK, 1, 1),
+    )
+
+
 def run_tree(
     ctx: DeviceContext,
     n_rows: Int,
@@ -1252,9 +1411,8 @@ def run_tree(
     var ids_a = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
     var ids_b = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
     var ids_c = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var h_ids_a = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var h_ids_b = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-    var h_ids_c = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
+    # lane cpu3-gbdt-a: the one-word leaf-size fold's device slot
+    var hp_scalar = ctx.enqueue_create_buffer[DType.uint32](1)
 
     # feature descriptors, constant for the fit
     var folds = ctx.enqueue_create_buffer[DType.uint32](n_features)
@@ -1344,7 +1502,6 @@ def run_tree(
     var out_score = ctx.enqueue_create_buffer[DType.float32](1)
     var out_bin = ctx.enqueue_create_buffer[DType.uint32](1)
     var hos = ctx.enqueue_create_host_buffer[DType.float32](1)
-    var hob = ctx.enqueue_create_host_buffer[DType.uint32](1)
 
     # Their `MakeSplit` packs every ui32 it has to send into ONE buffer and
     # copies once (`split_properties_helper.cpp:886-905`):
@@ -1363,9 +1520,7 @@ def run_tree(
     # `allUi32Data`.
     var built_f = make_split_features_buffers(ctx, max_leaves)
     var sp_feats = built_f[0]
-    var sp_feats_h = built_f[1]
     var sp5 = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
-    var hs5 = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
     ctx.synchronize()
     _ = hfw^  # past the drain (step-33 race class)
     _ = hbf^  # past the drain (step-33 race class)
@@ -1393,9 +1548,7 @@ def run_tree(
         # Depth 0 has one leaf and no sibling, so it is a plain build. Below
         # that every leaf of the previous level became a pair, and only the
         # SMALLER of each pair is accumulated.
-        for i in range(n_live):
-            h_ids_a.unsafe_ptr().unsafe_store(i, UInt32(i))
-        ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
+        enqueue_leaf_iota(ctx, ids_a, n_live, 0)
         comptime if IDENTICAL_DRAIN_SCHEDULE:
             ctx.synchronize()
 
@@ -1550,30 +1703,16 @@ def run_tree(
         )
         comptime if IDENTICAL_DRAIN_SCHEDULE:
             ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=hob.unsafe_ptr(), src_buf=out_bin)
-        ctx.synchronize()
-        var best = Int(hob.unsafe_ptr().unsafe_load(0))
-        if best > n_features:
-            best = 0
 
         # ---- 4. apply it to every leaf ----------------------------------
-        var hfeat = sp_feats_h.unsafe_ptr().bitcast[CFeature]()
-        for i in range(n_live):
-            hfeat[unsafe_offset=i] = (
-                CFeature(
-                    offset=UInt32(0),
-                    mask=UInt32(1),
-                    shift=UInt32(31 - best),
-                    first_fold_index=UInt32(0),
-                    folds=UInt32(1),
-                    one_hot_feature=False,
-                )
-            )
-            hs5.unsafe_ptr().unsafe_store(i, UInt32(0))
-        ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=sp_feats_h.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=sp5, src_ptr=hs5.unsafe_ptr())
-        ctx.synchronize()
-        _ = hs5^  # past the drain (step-33 race class)
+        # lane cpu3-gbdt-a: on the device, straight from `out_bin` -- no
+        # winner readback, no host descriptor loop, no upload.
+        ctx.enqueue_function[uniform_probe_split_kernel](
+            out_bin.unsafe_ptr(), Int32(n_features), Int32(n_live),
+            sp_feats.unsafe_ptr(), sp5.unsafe_ptr(),
+            grid_dim=((n_live + LEAF_FILL_BLOCK - 1) // LEAF_FILL_BLOCK, 1, 1),
+            block_dim=(LEAF_FILL_BLOCK, 1, 1),
+        )
 
         ctx.enqueue_function[split_and_make_sequence_kernel](
             cindex.unsafe_ptr(),
@@ -1626,11 +1765,8 @@ def run_tree(
         # their numbering for the same reason. Nothing in this loop wants
         # children adjacent: every per-leaf kernel here is handed an id list
         # plus `p_off` / `p_sz` and never assumes an order over them.
-        for i in range(n_live):
-            h_ids_b.unsafe_ptr().unsafe_store(i, UInt32(i))
-            h_ids_c.unsafe_ptr().unsafe_store(i, UInt32(n_live + i))
-        ctx.enqueue_copy(dst_buf=ids_b, src_ptr=h_ids_b.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=ids_c, src_ptr=h_ids_c.unsafe_ptr())
+        enqueue_leaf_iota(ctx, ids_b, n_live, 0)
+        enqueue_leaf_iota(ctx, ids_c, n_live, n_live)
 
         # `hp_off` / `hp_size` are their `partsCpu`, and ours are ORDINARY
         # DEVICE BUFFERS that no host read reaches. That is a deviation and
@@ -1667,25 +1803,22 @@ def run_tree(
         # READABLE on the host. It is the sole drain this path needs; the
         # three that used to sit above it ordered nothing the queue did not
         # already order, and CatBoost has one.
-        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+        # lane cpu3-gbdt-a: the largest leaf is folded on the device and
+        # only that ONE word comes home (the next level's launch bound).
+        enqueue_leaf_size_reduce(
+            ctx, p_sz, n_live, LEAF_REDUCE_MAX, hp_scalar, 0
+        )
+        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=hp_scalar)
         ctx.synchronize()
-        _ = h_ids_c^  # past the drain (step-33 race class)
-        _ = h_ids_b^  # past the drain (step-33 race class)
-        max_live_rows = 1
-        for i in range(n_live):
-            var s = Int(h_sz.unsafe_ptr().unsafe_load(i))
-            if s > max_live_rows:
-                max_live_rows = s
+        max_live_rows = Int(h_sz.unsafe_ptr().unsafe_load(0))
+        if max_live_rows < 1:
+            max_live_rows = 1
 
     # ---- leaf values, once the structure is final ----------------------
     # `compute_partition_stats` over the FINAL partitions, then the Newton
     # step. The stats kernel is reused rather than a second reduction
     # written: the layout it produces is exactly what the estimator reads.
-    for i in range(n_live):
-        h_ids_a.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=ids_a, src_ptr=h_ids_a.unsafe_ptr())
-    ctx.synchronize()
-    _ = h_ids_a^  # past the drain (step-33 race class)
+    enqueue_leaf_iota(ctx, ids_a, n_live, 0)
     compute_partition_stats(
         ctx, n_live, max_live_rows, stat_count, n_rows,
         ids_a, p_off, p_sz, stats, stat_partials, part_stats,
@@ -1709,7 +1842,7 @@ def run_tree(
     ctx.synchronize()
     _ = h_leaf_values^  # past the drain (step-33 race class)
     var out = List[Int]()
-    for i in range(n_live):
+    for i in range(n_live):  # small-loop(n_live: final leaves, at most 2^max_depth): leaf sizes returned to the check caller
         out.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
     # keep the scale staging alive past every enqueued kernel
     _ = scale_dev_local^
@@ -1758,7 +1891,7 @@ def upload_blocks(
         var h4 = ctx.enqueue_create_host_buffer[DType.uint32](n)
         var total = 0
         var widest = 0
-        for k in range(n):
+        for k in range(n):  # small-loop(n: block feature descriptors, once per layout): host layout metadata staged for upload
             h1.unsafe_ptr().unsafe_store(k, blk.folds[k])
             h2.unsafe_ptr().unsafe_store(k, blk.fold_offset[k])
             h3.unsafe_ptr().unsafe_store(k, blk.group_offset[k])
@@ -1832,18 +1965,18 @@ def upload_width_plans(
             continue
         var n = blk.count()
         var total = 0
-        for k in range(n):
+        for k in range(n):  # small-loop(n: block feature fold counts, once per layout): width plan metadata, not data
             total += Int(blk.folds[k])
         var n_groups = (n + 3) // 4
         var gmax = List[Int]()
         var gw = List[Int]()
         var per = [0, 0, 0, 0]
-        for g in range(n_groups):
+        for g in range(n_groups):  # small-loop(n_groups: four-feature groups, once per layout): width plan metadata from fold counts
             var m = 0
             var end = 4 * g + 4
             if end > n:
                 end = n
-            for k in range(4 * g, end):
+            for k in range(4 * g, end):  # small-loop(end: features of one group, at most 4): group widest fold count
                 if Int(blk.folds[k]) > m:
                     m = Int(blk.folds[k])
             gmax.append(m)
@@ -1870,7 +2003,7 @@ def upload_width_plans(
             h3.unsafe_ptr().unsafe_store(i, UInt32(0))
             h4.unsafe_ptr().unsafe_store(i, UInt32(total))
         var slot = [0, 0, 0, 0]
-        for g in range(n_groups):
+        for g in range(n_groups):  # small-loop(n_groups: four-feature groups, once per layout): width plan descriptor staging only
             var w = gw[g]
             var s = starts[w]
             for j in range(4):
@@ -1924,7 +2057,7 @@ def sym_arms_path_line(blocks: List[PolicyBlock]) -> String:
         line += String(" one_byte_route=fused8_every_width")
     else:
         line += String(" one_byte_route=ladder_by_block_widest")
-    for b in range(len(blocks)):
+    for b in range(len(blocks)):  # small-loop(blocks: policy blocks, at most 3): path log line only
         ref blk = blocks[b]
         if blk.policy != POLICY_ONE_BYTE:
             continue
@@ -1937,7 +2070,7 @@ def sym_arms_path_line(blocks: List[PolicyBlock]) -> String:
             var end = 4 * g + 4
             if end > n:
                 end = n
-            for k in range(4 * g, end):
+            for k in range(4 * g, end):  # small-loop(end: features of one group, at most 4): group widest fold count
                 if Int(blk.folds[k]) > m:
                     m = Int(blk.folds[k])
             per[one_byte_width_index(m)] += 1
@@ -2018,6 +2151,25 @@ def enqueue_snap_plane(
             return
         ctx.enqueue_function[snap_plane_to_scale_kernel](
             plane.unsafe_ptr(), Int32(n), fixed_scale,
+            grid_dim=((n + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
+            block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
+        )
+
+
+def enqueue_snap_plane_dev(
+    ctx: DeviceContext,
+    mut plane: DeviceBuffer[DType.float32],
+    n: Int,
+    scale_word: MutPointer[Float32, MutAnyOrigin],
+) raises:
+    """T5 drain (lane cpu3-gbdt-a): `enqueue_snap_plane` with the scale a
+    device word (`snap_plane_to_scale_dev_kernel`); same gate, same
+    geometry, same arithmetic."""
+    comptime if acc_i32_is_live[HIST2_SMEM_MODE]():
+        if n < 1:
+            return
+        ctx.enqueue_function[snap_plane_to_scale_dev_kernel](
+            plane.unsafe_ptr(), Int32(n), scale_word,
             grid_dim=((n + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
             block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
         )
@@ -2164,7 +2316,7 @@ def launch_one_byte_arms[level_quant: Bool, group_width: Bool, fused_all: Bool](
         )
     comptime if group_width:
         var pi = -1
-        for i in range(len(width_plans)):
+        for i in range(len(width_plans)):  # small-loop(width_plans: one-byte blocks, at most 3): picks the launch plan
             if width_plans[i].parent_block == block_index:
                 pi = i
         if pi < 0:
@@ -3389,7 +3541,7 @@ def resolve_split(
     scales with the TREE's feature count, never with rows. See
     archive/reference/HOST_AND_DEVICE.md.
     """
-    for i in range(len(layout.features)):
+    for i in range(len(layout.features)):  # small-loop(features: layout feature descriptors): metadata lookup of the winning feature
         ref f = layout.features[i]
         if f.folds == 0:
             continue
@@ -3579,6 +3731,10 @@ struct TTreeWorkspace(Movable):
     var winners_bf: DeviceBuffer[DType.uint32]
     var h_wsc: HostBuffer[DType.float32]
     var h_wbf: HostBuffer[DType.uint32]
+    # lane cpu3-gbdt-a: one word for the device leaf-size folds (the
+    # root-coverage sum, the live-row count) and its host landing slot
+    var cover_dev: DeviceBuffer[DType.uint32]
+    var h_cover: HostBuffer[DType.uint32]
     # DEVIATION 2002: the per-tree canary nonce. Counts up once per
     # `run_tree_layout_traced` call on this pool, so a previous tree's
     # leftover canary word can never satisfy the current tree's check
@@ -3626,9 +3782,9 @@ struct TTreeWorkspace(Movable):
         var hist_cells_per_leaf = layout.hist_cells
         var hist_cells = max_leaves * stat_count * hist_cells_per_leaf
         var widest_block = 1
-        for b in range(len(blocks)):
+        for b in range(len(blocks)):  # small-loop(blocks: policy blocks, at most 3): workspace capacity from fold counts
             var tf = 0
-            for k in range(blocks[b].count()):
+            for k in range(blocks[b].count()):  # small-loop(count: block feature fold counts, once per layout): workspace capacity from metadata
                 tf += Int(blocks[b].folds[k])
             if tf > widest_block:
                 widest_block = tf
@@ -3733,6 +3889,8 @@ struct TTreeWorkspace(Movable):
         self.h_wbf = ctx.enqueue_create_host_buffer[DType.uint32](
             max_depth + 1
         )
+        self.cover_dev = ctx.enqueue_create_buffer[DType.uint32](1)
+        self.h_cover = ctx.enqueue_create_host_buffer[DType.uint32](1)
         self.canary_nonce = UInt32(0)
         var built_f = make_split_features_buffers(ctx, max_leaves)
         self.sp_feats = built_f[0]
@@ -3794,12 +3952,12 @@ struct TTreeWorkspace(Movable):
         var blocks = blocks_for(layout,self.n_rows_key)
         if len(blocks) != len(self.dblocks):
             return False
-        for b in range(len(blocks)):
+        for b in range(len(blocks)):  # small-loop(blocks: policy blocks, at most 3): arena shape compatibility test only
             ref current = self.dblocks[b]
             ref desired = blocks[b]
             var total = 0
             var widest = 0
-            for i in range(len(desired.folds)):
+            for i in range(len(desired.folds)):  # small-loop(folds: block feature fold counts, once per layout): arena shape compatibility test only
                 total += Int(desired.folds[i])
                 widest = max(widest,Int(desired.folds[i]))
             if current.policy != desired.policy or current.n_features != desired.count() or current.total_folds != total or current.max_folds != widest:
@@ -3984,7 +4142,7 @@ def accept_symmetric_level_winner(
     var choice = resolve_split(layout, Int(best_bin_u))
     if not (best_score > Float32(0.0)):
         return False
-    for i in range(len(out_splits)):
+    for i in range(len(out_splits)):  # small-loop(out_splits: accepted tree splits, at most max_depth): CatBoost repeat-split gate per level
         if (
             out_splits[i].feature_id == Int32(choice.feature)
             and out_splits[i].bin_idx == Int32(choice.bin)
@@ -4481,14 +4639,16 @@ struct TSynchronizedSymmetricLevelState(Movable):
     def drain_live_row_count(mut self, ctx: DeviceContext) raises -> Int:
         """Return the host-visible live partition cardinality for diagnostics."""
         ref workspace = self.workspace[0]
+        # lane cpu3-gbdt-a: summed on the device; one word comes home
+        enqueue_leaf_size_reduce(
+            ctx, workspace.p_sz, self.live_leaves, LEAF_REDUCE_SUM,
+            workspace.cover_dev, 0,
+        )
         ctx.enqueue_copy(
-            dst_ptr=workspace.h_sz.unsafe_ptr(), src_buf=workspace.p_sz
+            dst_ptr=workspace.h_cover.unsafe_ptr(), src_buf=workspace.cover_dev
         )
         ctx.synchronize()
-        var total = 0
-        for leaf in range(self.live_leaves):
-            total += Int(workspace.h_sz.unsafe_ptr().unsafe_load(leaf))
-        return total
+        return Int(workspace.h_cover.unsafe_ptr().unsafe_load(0))
 
     def enqueue_winner_reduction(
         mut self, ctx: DeviceContext, argmax_blocks: Int
@@ -4943,7 +5103,7 @@ def run_sequential_two_level_feature_freq_tree[
     ctx.synchronize()
     var offsets = List[Int]()
     var sizes = List[Int]()
-    for leaf in range(state.live_leaves):
+    for leaf in range(state.live_leaves):  # small-loop(live_leaves: final leaves, at most 2^depth): end-of-tree partition readback, copy only
         offsets.append(Int(workspace.h_off.unsafe_ptr().unsafe_load(leaf)))
         sizes.append(Int(workspace.h_sz.unsafe_ptr().unsafe_load(leaf)))
     return TSynchronizedTensorTreeResult(
@@ -5020,7 +5180,7 @@ def run_bounded_synchronized_tensor_tree[
     )
     var stable_borders = base_borders.copy()
     var stable_folds = base_fold_counts.copy()
-    for level in range(depth):
+    for level in range(depth):  # small-loop(depth: tree levels): model border lists per level
         if tensor_columns[level] < 0:
             continue
         stable_borders.append(retained[level].candidate.borders.copy())
@@ -5031,7 +5191,7 @@ def run_bounded_synchronized_tensor_tree[
     ctx.enqueue_copy(dst_ptr=workspace.h_off.unsafe_ptr(), src_buf=workspace.p_off)
     ctx.enqueue_copy(dst_ptr=workspace.h_sz.unsafe_ptr(), src_buf=workspace.p_sz)
     ctx.synchronize()
-    for leaf in range(state.live_leaves):
+    for leaf in range(state.live_leaves):  # small-loop(live_leaves: final leaves, at most 2^depth): end-of-tree partition readback, copy only
         leaf_offsets.append(Int(workspace.h_off.unsafe_ptr().unsafe_load(leaf)))
         leaf_sizes.append(Int(workspace.h_sz.unsafe_ptr().unsafe_load(leaf)))
     return TSynchronizedTensorTreeResult(
@@ -5190,6 +5350,8 @@ def run_tree_layout_traced[
     ref hp_sz = ws[0].hp_sz
     ref h_off = ws[0].h_off
     ref h_sz = ws[0].h_sz
+    ref cover_dev = ws[0].cover_dev
+    ref h_cover = ws[0].h_cover
     ref part_stats = ws[0].part_stats
     ref stat_partials = ws[0].stat_partials
     ref flags = ws[0].flags
@@ -6123,6 +6285,13 @@ def run_tree_layout_traced[
     if spec_tail and export_offsets:
         ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+    # lane cpu3-gbdt-a: DEVIATION 2002's root-coverage sum, folded on the
+    # device; the poisoned host word only changes if the copy lands.
+    h_cover.unsafe_ptr().unsafe_store(0, DEAD_DEVICE_POISON)
+    enqueue_leaf_size_reduce(
+        ctx, p_sz, n_live, LEAF_REDUCE_SUM, cover_dev, 0
+    )
+    ctx.enqueue_copy(dst_ptr=h_cover.unsafe_ptr(), src_buf=cover_dev)
     ctx.enqueue_copy(dst_ptr=h_wsc.unsafe_ptr(), src_buf=winners_score)
     ctx.enqueue_copy(dst_ptr=h_wbf.unsafe_ptr(), src_buf=winners_bf)
     if spec_tail:
@@ -6155,7 +6324,7 @@ def run_tree_layout_traced[
                 if SAB_2002_DEAD_DEVICE else ""
             )
         )
-    for i in range(max_depth):
+    for i in range(max_depth):  # small-loop(max_depth: tree levels): dead-device poison check per winner
         if h_wbf.unsafe_ptr().unsafe_load(i) == DEAD_DEVICE_POISON:
             raise Error(
                 "DEVIATION 2002: refusing to return this tree -- the"
@@ -6193,7 +6362,7 @@ def run_tree_layout_traced[
     # exactly, and the reorders permuted rows only within ancestor
     # ranges, so every leaf sum the tail computes is unchanged.
     var grown = 0
-    for depth2 in range(max_depth):
+    for depth2 in range(max_depth):  # small-loop(max_depth: tree levels): CatBoost per-level accept gates
         var best_score = h_wsc.unsafe_ptr().unsafe_load(depth2)
         var best_bin_u = h_wbf.unsafe_ptr().unsafe_load(depth2)
         if not accept_symmetric_level_winner(
@@ -6206,18 +6375,21 @@ def run_tree_layout_traced[
     if grown < max_depth:
         # the speculative tail (DEVIATION 3110) assumed a full tree
         spec_tail = False
-        # merge the final sizes pairwise once per discarded level
+        # merge the final sizes pairwise once per discarded level -- lane
+        # cpu3-gbdt-a: on the device, in `p_sz` itself (one launch per
+        # discarded level, in queue order), so nothing goes up from the
+        # host; `spec_tail` is now False, so the tail's `h_sz` read below
+        # brings the merged sizes home.
         var live = n_live
         for _ in range(max_depth - grown):
             var h2 = live // 2
-            for i in range(h2):
-                var merged = (
-                    h_sz.unsafe_ptr().unsafe_load(i)
-                    + h_sz.unsafe_ptr().unsafe_load(h2 + i)
+            if h2 > 0:
+                ctx.enqueue_function[merge_leaf_sizes_kernel](
+                    p_sz.unsafe_ptr(), Int32(h2),
+                    grid_dim=((h2 + LEAF_FILL_BLOCK - 1) // LEAF_FILL_BLOCK, 1, 1),
+                    block_dim=(LEAF_FILL_BLOCK, 1, 1),
                 )
-                h_sz.unsafe_ptr().unsafe_store(i, merged)
             live = h2
-        ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
         comptime if IDENTICAL_DRAIN_SCHEDULE:
             ctx.synchronize()
         n_live = live
@@ -6314,6 +6486,13 @@ def run_tree_layout_traced[
     # race each other. Drain count is back to the pre-2009 three.
     # ============================================================
     if not spec_tail:
+        # lane cpu3-gbdt-a: the coverage sum again, over the final (possibly
+        # rolled-back) sizes, riding the same wait as the sizes read
+        h_cover.unsafe_ptr().unsafe_store(0, DEAD_DEVICE_POISON)
+        enqueue_leaf_size_reduce(
+            ctx, p_sz, n_live, LEAF_REDUCE_SUM, cover_dev, 0
+        )
+        ctx.enqueue_copy(dst_ptr=h_cover.unsafe_ptr(), src_buf=cover_dev)
         ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
         mgr.wait_complete()
     # ---- DEVIATION 2002: the root-coverage invariant, the model-shape
@@ -6329,9 +6508,10 @@ def run_tree_layout_traced[
     # first drain and here the host may legitimately rewrite `h_sz` (the
     # rollback merge) and re-upload it, so a poison would race that
     # upload's DMA read; the sum is the invariant instead.
-    var covered_rows = 0
-    for i in range(n_live):
-        covered_rows += Int(h_sz.unsafe_ptr().unsafe_load(i))
+    # lane cpu3-gbdt-a: the sum is the device fold's one word (enqueued
+    # with the tree drain, or after the rollback merge); a copy that never
+    # landed leaves the poison, which no row count equals.
+    var covered_rows = Int(h_cover.unsafe_ptr().unsafe_load(0))
     if covered_rows != n_rows:
         raise Error(
             "DEVIATION 2002: refusing to return this tree -- the fit"
@@ -6347,7 +6527,7 @@ def run_tree_layout_traced[
     if apply_to_cursor:
         # their `result[i].AddWeakModel(model)`, the half that keeps the tree
         # rather than only its effect on the cursor.
-        for i in range(n_live):
+        for i in range(n_live):  # small-loop(n_live: final leaves, at most 2^max_depth): model leaf values, copy only
             out_leaf_values.append(h_leaf_values.unsafe_ptr().unsafe_load(i))
         # ---- identity checkpoint: this tree's leaf values ------------
         # The Simple-method leaves (the searcher's own Newton step),
@@ -6358,7 +6538,7 @@ def run_tree_layout_traced[
             tree_tag + ".leaves", h_leaf_values.unsafe_ptr(), n_live
         )
     var out = List[Int]()
-    for i in range(n_live):
+    for i in range(n_live):  # small-loop(n_live: final leaves, at most 2^max_depth): leaf sizes for the model, copy only
         out.append(Int(h_sz.unsafe_ptr().unsafe_load(i)))
 
     # THE OFFSETS GO OUT WITH THE SIZES, and they are the DEVICE's, not a
@@ -6386,7 +6566,7 @@ def run_tree_layout_traced[
             ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
             ctx.synchronize()
         out_leaf_offsets.clear()
-        for i in range(n_live):
+        for i in range(n_live):  # small-loop(n_live: final leaves, at most 2^max_depth): leaf offsets for the estimator, copy only
             out_leaf_offsets.append(Int(h_off.unsafe_ptr().unsafe_load(i)))
     return out^
 
@@ -6496,7 +6676,7 @@ struct FeatureHistogramShard(Movable):
 def _feature_descriptor(ctx: DeviceContext, values: List[UInt32]) raises -> DeviceBuffer[DType.uint32]:
     var out = ctx.enqueue_create_buffer[DType.uint32](len(values))
     var host = ctx.enqueue_create_host_buffer[DType.uint32](len(values))
-    for i in range(len(values)):
+    for i in range(len(values)):  # small-loop(values: shard descriptor words): launch argument staging only
         host.unsafe_ptr()[i] = values[i]
     ctx.enqueue_copy(dst_buf=out, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
@@ -6556,7 +6736,7 @@ def launch_feature_shards[hist2_smem_mode: Int, ridx_stats: Bool](
         ctx.enqueue_copy(dst_buf=host_folds, src_buf=block.folds)
         ctx.synchronize()
         var prefix = List[Int](length=block.n_features + 1, fill=0)
-        for f in range(block.n_features):
+        for f in range(block.n_features):  # small-loop(n_features: block fold counts): shard bin ranges are launch shape
             prefix[f + 1] = prefix[f] + Int(host_folds.unsafe_ptr()[f])
         var shards = List[FeatureHistogramShard]()
         for rank in range(active):
@@ -6573,7 +6753,7 @@ def launch_feature_shards[hist2_smem_mode: Int, ridx_stats: Bool](
             var desc_offsets = List[UInt32]()
             var desc_groups = List[UInt32](length=nf, fill=0)
             var desc_sizes = List[UInt32](length=nf, fill=UInt32(folds))
-            for f in range(first_feature, end_feature):
+            for f in range(first_feature, end_feature):  # small-loop(end_feature: shard feature descriptors): launch argument lists per shard
                 desc_folds.append(host_folds.unsafe_ptr()[f])
                 desc_offsets.append(UInt32(prefix[f] - prefix[first_feature]))
             var local_blocks = List[DeviceBlock]()

@@ -45,7 +45,9 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT
      3, packed by `pack_quantized_columns_host`.
   3. `fit_two_level_feature_freq_tree` (`gbdt/methods/doc_parallel_boosting.
      mojo:443-535`): plane 0 the unit weight, plane 1 `1.0 * y`, the Float32
-     row-order magnitudes and `choose_scale(max(weight, gradient), n_rows)`
+     magnitudes in `two_level_prep_kernel`'s fixed two-stage lane fold
+     (`_ff_two_stage_sum`, lane cpu3-gbdt-a) and
+     `choose_scale(max(weight, gradient), n_rows)`
      (`initialize_tree`, `greedy_search_helper.mojo:4192-4232`).
   4. `run_sequential_two_level_feature_freq_tree`
      (`greedy_search_helper.mojo:4621-4719`) and, per level,
@@ -69,9 +71,11 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT
      (`tensor_ctr_value_table.mojo:1126-1184`): the split-history table
      over the level-one winner's bit (`_split_bit`, `:235-247`), its values,
      borders, bins, and the repacked words.
-  5. The leaves: `two_level_weighted_leaf_value` (`doc_parallel_boosting.
-     mojo:424-440`), the Float32 fold in final row order, then
-     `learning_rate * total / (total_weight + l2)`.
+  5. The leaves: `two_level_leaf_partials_kernel` and
+     `two_level_leaf_values_kernel` (`gbdt/methods/kernel/two_level_leaves.
+     mojo`, lane cpu3-gbdt-a), the same two-stage lane fold over the final
+     row order (`_ff_two_stage_sum`), then
+     `identical_div(identical_mul(learning_rate, total), total_weight + l2)`.
   6. `persist_synchronized_mixed_path` (`tensor_ctr_value_table.mojo`) for
      a tensor-column winner: the level's table at model column
      `n_features + k`, a split history naming an earlier tensor winner's
@@ -113,7 +117,9 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,
 )
+from checks.numerics import identical_div, identical_mul
 from gbdt.host.gbdt_oracle import (
+    _halving_fold,
     GBDT_FLOAT32_MAX,
     GBDT_ORACLE_HOST_SABOTAGE,
     GBDT_SENTINEL,
@@ -761,15 +767,21 @@ def gbdt_feature_freq_host_fit(
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var grad_mag = Float32(0.0)
     var weight_mag = Float32(0.0)
+    var abs_targets = List[Float32](length=n_rows, fill=Float32(0.0))
+    var unit_weights = List[Float32](length=n_rows, fill=Float32(1.0))
     for r in range(n_rows):
         var weight = Float32(1.0)
-        var weighted_target = weight * y[r]
+        var weighted_target = identical_mul(weight, y[r])
         if not isfinite(weighted_target):
             raise Error("two-level tensor fit weighted target is not finite")
         stats[r] = weight
         stats[n_rows + r] = weighted_target
-        weight_mag += weight
-        grad_mag += -weighted_target if weighted_target < Float32(0.0) else weighted_target
+        abs_targets[r] = (
+            -weighted_target if weighted_target < Float32(0.0) else weighted_target
+        )
+    # `two_level_prep_kernel`'s fold, not a row-order chain (lane cpu3-gbdt-a)
+    weight_mag = _ff_two_stage_sum(unit_weights)
+    grad_mag = _ff_two_stage_sum(abs_targets)
     if not isfinite(weight_mag) or not isfinite(grad_mag):
         raise Error("two-level tensor fit weighted statistics overflow")
     var magnitude = Float64(weight_mag)
@@ -866,15 +878,20 @@ def gbdt_feature_freq_host_fit(
         l2 = l2 + Float32(1.0)
     var leaves = List[Float32]()
     for leaf in range(4):
-        var total = Float32(0.0)
-        var total_weight = Float32(0.0)
+        # the device's leaf fold (`two_level_leaf_partials_kernel`), over
+        # the final row order's slice: plane 1 and plane 0 per row
+        var leaf_targets = List[Float32](length=p_sz[leaf], fill=Float32(0.0))
+        var leaf_weights = List[Float32](length=p_sz[leaf], fill=Float32(0.0))
         for i in range(p_sz[leaf]):
             var row = row_index[p_off[leaf] + i]
-            var weight = Float32(1.0)
-            total += weight * y[row]
-            total_weight += weight
+            leaf_targets[i] = stats[n_rows + row]
+            leaf_weights[i] = stats[row]
+        var total = _ff_two_stage_sum(leaf_targets)
+        var total_weight = _ff_two_stage_sum(leaf_weights)
         if total_weight > Float32(0.0):
-            leaves.append(learning_rate * total / (total_weight + l2))
+            leaves.append(
+                identical_div(identical_mul(learning_rate, total), total_weight + l2)
+            )
         else:
             leaves.append(Float32(0.0))
 
@@ -929,3 +946,34 @@ def gbdt_feature_freq_host_fit(
     for i in range(4):
         out += String("leaf 0 ") + String(i) + " " + gbdt_f32_token(leaves[i]) + "\n"
     return out^
+
+
+#: `TL_BLOCK`, `TL_GRID` (`gbdt/methods/kernel/two_level_leaves.mojo`):
+#: restated, not imported, so this module stays free of GPU imports.
+comptime _FF_TL_BLOCK = 256
+comptime _FF_TL_GRID = 256
+
+
+def _ff_two_stage_sum(items: List[Float32]) -> Float32:
+    """`two_level_prep_kernel` / `two_level_leaf_partials_kernel` then the
+    stage-2 fold (lane cpu3-gbdt-a), statement for statement: block `b`'s
+    thread `t` folds items `b * 256 + t`, stride `256 * 256`, ascending
+    from +0.0; each block's 256 lanes take the halving tree; the 256 block
+    partials enter stage 2 as `+0.0 + partial` and take the halving tree."""
+    var n = len(items)
+    var stride = _FF_TL_BLOCK * _FF_TL_GRID
+    var parts = List[Float32](length=_FF_TL_GRID, fill=Float32(0.0))
+    var slab = List[Float32](length=_FF_TL_BLOCK, fill=Float32(0.0))
+    for b in range(_FF_TL_GRID):
+        for t in range(_FF_TL_BLOCK):
+            var acc = Float32(0.0)
+            var i = b * _FF_TL_BLOCK + t
+            while i < n:
+                acc = acc + items[i]
+                i += stride
+            slab[t] = acc
+        parts[b] = _halving_fold(slab)
+    var top = List[Float32](length=_FF_TL_GRID, fill=Float32(0.0))
+    for t in range(_FF_TL_GRID):
+        top[t] = Float32(0.0) + parts[t]
+    return _halving_fold(top)

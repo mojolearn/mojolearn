@@ -119,7 +119,7 @@ from gbdt.methods.oblivious_tree_fold_tasks import (
     create_fold_based_subsets,
     fold_tasks_from_folds,
     int_log2_ceil,
-    make_fold_doc_indices,
+    make_fold_doc_indices_host,
     plan_fold_layout,
 )
 
@@ -330,7 +330,7 @@ def main() raises:
     var fold_bits = lay.fold_bits
 
     # =============================================================== O2
-    var ids = make_fold_doc_indices(folds)
+    var ids = make_fold_doc_indices_host(folds)
     bad = 0
     if len(ids) != n_docs:
         print("FAIL O2: MakeDocIndices gave", len(ids), "want", n_docs)
@@ -356,7 +356,7 @@ def main() raises:
     var perm = List[UInt32]()
     for r in range(N_ROWS):
         perm.append(UInt32((r * 421 + 17) % N_ROWS))
-    var ids_p = make_fold_doc_indices(folds, perm)
+    var ids_p = make_fold_doc_indices_host(folds, perm)
     var moved = 0
     for i in range(len(ids_p)):
         if ids_p[i] != ids[i]:

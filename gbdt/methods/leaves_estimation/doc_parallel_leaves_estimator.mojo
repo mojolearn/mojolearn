@@ -134,7 +134,7 @@ def compute_bins_for_model(
     var h_mask = ctx.enqueue_create_host_buffer[DType.uint32](depth)
     var h_bin = ctx.enqueue_create_host_buffer[DType.uint32](depth)
     var h_eq = ctx.enqueue_create_host_buffer[DType.uint8](depth)
-    for level in range(depth):
+    for level in range(depth):  # small-loop(depth: tree levels, at most 16): per-level bin launch arguments
         ref cf = layout.features[Int(splits[level].feature_id)]
         h_off.unsafe_ptr().unsafe_store(level, cf.offset * UInt32(n_rows))
         h_shift.unsafe_ptr().unsafe_store(level, cf.shift)

@@ -115,7 +115,15 @@ from gbdt.methods.leaves_estimation.leaves_estimation import (
     newton_one_step_kernel,
     weight_keep_mask_kernel,
 )
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
+from gbdt.methods.kernel.two_level_leaves import (
+    TL_BLOCK,
+    TL_GRID,
+    TL_PREP_LANES,
+    two_level_leaf_partials_kernel,
+    two_level_leaf_values_kernel,
+    two_level_prep_kernel,
+)
 from gbdt.models.kernel.add_bin_values import (
     IDN_APPLY_WIDE,
     IDN_PREDICT_FOUR,
@@ -390,7 +398,7 @@ def _apply_last_tree_to_test(
     if depth == 0:
         return
 
-    for level in range(depth):
+    for level in range(depth):  # small-loop(depth: tree levels, at most 16): per-level apply launch arguments
         ref cf = layout.features[
             Int(weak.structure.splits[level].feature_id)
         ]
@@ -527,12 +535,17 @@ struct TTwoLevelTensorFitResult(Movable):
     var leaf_sizes: List[Int]
 
 
-def two_level_weighted_leaf_value(
+def two_level_weighted_leaf_value_host(
     y: List[Float32], sample_weight: List[Float32],
     row_order: HostBuffer[DType.uint32], begin: Int, size: Int,
     learning_rate: Float32, l2_leaf_reg: Float32,
 ) raises -> Float32:
-    """Estimate one validated partition; zero-mass occupied leaves return zero."""
+    """Estimate one validated partition; zero-mass occupied leaves return zero.
+
+    A host reference only (lane cpu3-gbdt-a): the fit estimates its leaves
+    on the device (`two_level_leaf_values_kernel`, a fixed lane fold); this
+    sequential form stays for `checks/tree_ctr_slice_check.mojo`'s
+    zero-mass statements."""
     var total = Float32(0.0)
     var total_weight = Float32(0.0)
     for i in range(size):
@@ -578,35 +591,52 @@ def fit_two_level_feature_freq_tree(
         raise Error("two-level tensor fit raw shape mismatch")
     if len(base_one_hot) != 0 and len(base_one_hot) != n_raw_features:
         raise Error("two-level tensor fit one-hot shape mismatch")
+    # lane cpu3-gbdt-a: the stat planes, the weight checks and the two
+    # magnitudes on the device (`two_level_prep_kernel`, then the fixed
+    # lane fold); the host reads back four scalars (two sums, two flag
+    # counts), never the rows. The inputs are uploaded once.
     var rows = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-    var h_rows = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     var stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
-    var h_stats = ctx.enqueue_create_host_buffer[DType.float32](2 * n_rows)
-    var grad_mag = Float32(0.0)
-    var weight_mag = Float32(0.0)
-    for r in range(n_rows):
-        var weight = (
-            Float32(1.0) if len(sample_weight) == 0 else sample_weight[r]
-        )
-        if weight < Float32(0.0) or not isfinite(weight):
-            raise Error("two-level tensor fit weight is invalid")
-        var weighted_target = weight * y[r]
-        if not isfinite(weighted_target):
-            raise Error("two-level tensor fit weighted target is not finite")
-        h_rows.unsafe_ptr().unsafe_store(r, UInt32(r))
-        h_stats.unsafe_ptr().unsafe_store(r, weight)
-        h_stats.unsafe_ptr().unsafe_store(n_rows + r, weighted_target)
-        weight_mag += weight
-        grad_mag += (
-            -weighted_target
-            if weighted_target < Float32(0.0) else weighted_target
-        )
+    var d_y = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=y.unsafe_ptr())
+    var has_w = len(sample_weight) != 0
+    var d_w = ctx.enqueue_create_buffer[DType.float32](
+        n_rows if has_w else 1
+    )
+    if has_w:
+        ctx.enqueue_copy(dst_buf=d_w, src_ptr=sample_weight.unsafe_ptr())
+    var prep_part = ctx.enqueue_create_buffer[DType.float32](
+        TL_GRID * TL_PREP_LANES
+    )
+    ctx.enqueue_function[two_level_prep_kernel](
+        d_y.unsafe_ptr(), d_w.unsafe_ptr(), Int32(1) if has_w else Int32(0),
+        Int32(n_rows), rows.unsafe_ptr(), stats.unsafe_ptr(),
+        prep_part.unsafe_ptr(),
+        grid_dim=(TL_GRID, 1, 1), block_dim=(TL_BLOCK, 1, 1),
+    )
+    var prep_sums = ctx.enqueue_create_buffer[DType.float32](TL_PREP_LANES)
+    ctx.enqueue_function[deterministic_sum_lanes_kernel[TL_PREP_LANES]](
+        prep_part.unsafe_ptr(), Int32(TL_GRID), prep_sums.unsafe_ptr(),
+        grid_dim=1, block_dim=256,
+    )
+    var h_prep = ctx.enqueue_create_host_buffer[DType.float32](TL_PREP_LANES)
+    ctx.enqueue_copy(dst_buf=h_prep, src_buf=prep_sums)
+    ctx.synchronize()
+    var weight_mag = h_prep[0]
+    var grad_mag = h_prep[1]
+    if h_prep[2] != Float32(0.0):
+        raise Error("two-level tensor fit weight is invalid")
+    if h_prep[3] != Float32(0.0):
+        raise Error("two-level tensor fit weighted target is not finite")
+    _ = h_prep^
+    _ = prep_part^
+    _ = prep_sums^
+    _ = d_y^
+    _ = d_w^
     if not isfinite(weight_mag) or not isfinite(grad_mag):
         raise Error("two-level tensor fit weighted statistics overflow")
     if not (weight_mag > Float32(0.0)):
         raise Error("two-level tensor fit weights sum to zero")
-    ctx.enqueue_copy(dst_buf=rows, src_ptr=h_rows.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=stats, src_ptr=h_stats.unsafe_ptr())
     var trace = IdentityTrace.disabled()
     var times = StageTimes()
     times.enabled = False
@@ -618,33 +648,52 @@ def fit_two_level_feature_freq_tree(
         l2_leaf_reg, Float32(0.0), random_seed, True,
         n_raw_features, base_borders, trace, times, "tensor_fit",
     )
-    var h_final_rows = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
-    ctx.enqueue_copy(dst_ptr=h_final_rows.unsafe_ptr(), src_buf=rows)
+    # lane cpu3-gbdt-a: the leaves on the device over the final row order
+    # (`two_level_leaf_partials_kernel`, `two_level_leaf_values_kernel`);
+    # the leaf table is the tree's launch arguments (two words a leaf) and
+    # only the leaf values come back, once, for the model.
+    var n_leaves = len(tree.leaf_sizes)
+    var h_tab = ctx.enqueue_create_host_buffer[DType.uint32](2 * n_leaves)
+    for leaf in range(n_leaves):  # small-loop(n_leaves: the depth-two tree's four leaves): launch table of offsets and sizes
+        h_tab.unsafe_ptr().unsafe_store(2 * leaf, UInt32(tree.leaf_offsets[leaf]))
+        h_tab.unsafe_ptr().unsafe_store(2 * leaf + 1, UInt32(tree.leaf_sizes[leaf]))
+    var d_tab = ctx.enqueue_create_buffer[DType.uint32](2 * n_leaves)
+    ctx.enqueue_copy(dst_buf=d_tab, src_ptr=h_tab.unsafe_ptr())
+    var leaf_part = ctx.enqueue_create_buffer[DType.float32](
+        n_leaves * TL_GRID * 2
+    )
+    ctx.enqueue_function[two_level_leaf_partials_kernel](
+        rows.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows),
+        d_tab.unsafe_ptr(), leaf_part.unsafe_ptr(),
+        grid_dim=(TL_GRID, n_leaves, 1), block_dim=(TL_BLOCK, 1, 1),
+    )
+    var d_leaves = ctx.enqueue_create_buffer[DType.float32](n_leaves)
+    ctx.enqueue_function[two_level_leaf_values_kernel](
+        leaf_part.unsafe_ptr(), learning_rate, l2_leaf_reg,
+        d_leaves.unsafe_ptr(),
+        grid_dim=(n_leaves, 1, 1), block_dim=(TL_GRID, 1, 1),
+    )
+    var h_leaves = ctx.enqueue_create_host_buffer[DType.float32](n_leaves)
+    ctx.enqueue_copy(dst_buf=h_leaves, src_buf=d_leaves)
     ctx.synchronize()
-    # past the drain [[mojo-buffer-freed-at-last-use]]: the two staging
-    # buffers' last named uses were their upload enqueues, so Mojo freed
-    # them under the queued copies, and the tree's first allocation
-    # (`insert_staged_tensor_candidate_device`'s `h_words`) reused that
-    # pinned memory and filled it with cindex words before the copy ran.
-    # `rows` then carried packed bins as row ids and the leaf estimate
-    # read `y` out of bounds (L40S `wide`: row 197378 = 0x00030302 of
-    # 20,000). The device pair is kept for the same reason.
-    _ = h_rows^
-    _ = h_stats^
+    # past the drain [[mojo-buffer-freed-at-last-use]]: every buffer a
+    # queued launch or copy read is held to here
+    _ = h_tab^
+    _ = d_tab^
+    _ = leaf_part^
+    _ = d_leaves^
     _ = rows^
     _ = stats^
     var structure = TObliviousTreeStructure()
-    for level in range(len(tree.splits)):
-        structure.splits.append(tree.splits[level])
+    structure.splits = tree.splits.copy()
     var weak = TObliviousTreeModel(structure^)
     weak.dim = 1
-    for leaf in range(len(tree.leaf_sizes)):
-        weak.leaf_values.append(
-            two_level_weighted_leaf_value(
-                y, sample_weight, h_final_rows, tree.leaf_offsets[leaf],
-                tree.leaf_sizes[leaf], learning_rate, l2_leaf_reg,
-            )
-        )
+    weak.leaf_values = List[Float32](length=n_leaves, fill=Float32(0.0))
+    memcpy(
+        dest=weak.leaf_values.unsafe_ptr(), src=h_leaves.unsafe_ptr(),
+        count=n_leaves,
+    )
+    _ = h_leaves^
     var model = TAdditiveModel()
     model.add_weak_model(weak^)
     var output_one_hot = base_one_hot.copy()
@@ -1771,7 +1820,7 @@ def _estimate_prepare(
     if sm < 0:
         sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
     var ds = -1
-    for i in range(len(est_ws[0].arena_scratch)):
+    for i in range(len(est_ws[0].arena_scratch)):  # small-loop(arena_scratch: pooled scratch keys, a few shapes): cache lookup by shape only
         if est_ws[0].arena_scratch[i].matches(
             n_rows, n_leaves, dims[0], dims[1], fv_blocks, sm
         ):
@@ -1785,7 +1834,7 @@ def _estimate_prepare(
         )
         ds = len(est_ws[0].arena_scratch) - 1
     var hsi = -1
-    for i in range(len(est_ws[0].arena_host)):
+    for i in range(len(est_ws[0].arena_host)):  # small-loop(arena_host: pooled host scratch keys, a few shapes): cache lookup by shape only
         if est_ws[0].arena_host[i].matches(
             n_leaves, dims[0], dims[1], fv_blocks
         ):
@@ -2162,8 +2211,8 @@ def fit_with_test(
     # `1 + point.GetColumnCount()` (`pointwise_target_impl.h:186`).
     check_feature_fraction(feature_fraction)
     if feature_fraction < 1:
-        for flag in one_hot:
-            if flag:
+        for fi in range(len(one_hot)):  # small-loop(one_hot: one flag per feature): a parameter check that only raises
+            if one_hot[fi]:
                 raise Error("feature_fraction<1 supports numeric features only")
     var approx_dim = 1
     if objective == OBJECTIVE_MULTICLASS:
@@ -2813,13 +2862,14 @@ def fit_with_test(
                 Float32(1) if reused_workspace else Float32(0),
             )
             pw_pool.clear()
-            var selected_ids = List[Int32]()
-            for f in range(len(tree_folds)):
-                if tree_folds[f] > 0:
-                    selected_ids.append(Int32(f))
-            trace.record_list_i32(
-                _tree_tag(iteration) + ".sampled_features", selected_ids,
-            )
+            if trace.enabled:
+                var selected_ids = List[Int32]()
+                for f in range(len(tree_folds)):
+                    if tree_folds[f] > 0:
+                        selected_ids.append(Int32(f))
+                trace.record_list_i32(
+                    _tree_tag(iteration) + ".sampled_features", selected_ids,
+                )
         var lcur = cursors[learn_p].copy()
         # `TTargetAtPointTrait::Create(learnTarget, cursor)` (`:353`).
         # The gradients are taken AT THE CURRENT PREDICTIONS, which is the
@@ -3290,7 +3340,7 @@ def fit_with_test(
                     while walking:
                         ctx.synchronize()
                         walking = False
-                        for p in range(perm_count):
+                        for p in range(perm_count):  # small-loop(perm_count: learn permutations, a handful): walker orchestration per permutation task
                             if pend[p].phase != 2:
                                 if estimate_advance(pend[p]):
                                     walking = True
@@ -3969,7 +4019,7 @@ def predict(
     # `total_leaves` counts VALUES, so it carries the approx dimension.
     var total_levels = 0
     var total_leaves = 0
-    for t in range(model.size()):
+    for t in range(model.size()):  # small-loop(model: one entry per tree): sums tree depths to size the apply buffers
         total_levels += model.weak_models[t].structure.get_depth()
         total_leaves += (
             (1 << model.weak_models[t].structure.get_depth()) * approx_dim
@@ -4071,7 +4121,7 @@ def predict(
     var grouped = False
     comptime if IDN_PREDICT_FOUR or IDN_APPLY_WIDE:
         var tree_depths = List[Int](capacity=model.size())
-        for t in range(model.size()):
+        for t in range(model.size()):  # small-loop(model: one entry per tree): collects tree depths for the apply dispatch
             tree_depths.append(model.weak_models[t].structure.get_depth())
         comptime if IDN_APPLY_WIDE:
             var uniform = uniform_positive_depth(tree_depths)

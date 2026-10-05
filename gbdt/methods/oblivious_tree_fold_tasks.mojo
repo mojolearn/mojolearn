@@ -69,6 +69,7 @@ streams only overlap the FILLS, never the layout.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 
 from gbdt.gpu_util.gpu_data.partitions import DataPartition
@@ -140,7 +141,7 @@ def plan_fold_layout(tasks: List[FoldTask]) raises -> FoldLayout:
         )
     var parts = List[DataPartition]()
     var cursor = 0
-    for i in range(len(tasks)):
+    for i in range(len(tasks)):  # small-loop(tasks: fold tasks, a handful): partition plan entries per task
         # LEARN first, then TEST, and the order is load-bearing: the
         # dynamic scorer reads `(fold, fold + 1)` as `(estimate, test)`.
         parts.append(DataPartition(UInt32(cursor), UInt32(tasks[i].learn_size)))
@@ -238,7 +239,7 @@ def fold_tasks_from_folds(folds: List[TFold]) raises -> List[FoldTask]:
     document per fold, each carrying that fold's own cursor value.
     """
     var tasks = List[FoldTask]()
-    for i in range(len(folds)):
+    for i in range(len(folds)):  # small-loop(folds: the fold plan, a handful of nested prefixes): fold task sizes per fold
         ref f = folds[i]
         var learn = f.estimate_samples.right - f.estimate_samples.left
         var test = (
@@ -254,7 +255,7 @@ def fold_tasks_from_folds(folds: List[TFold]) raises -> List[FoldTask]:
     return tasks^
 
 
-def make_fold_doc_indices(
+def make_fold_doc_indices_host(
     folds: List[TFold], permutation: List[UInt32] = List[UInt32]()
 ) raises -> List[UInt32]:
     """`TFeatureParallelObliviousTreeSearcher::MakeDocIndices`, fold arm
@@ -294,6 +295,75 @@ def make_fold_doc_indices(
                 UInt32(p) if len(permutation) == 0 else permutation[p]
             )
     return out^
+
+
+
+def _fold_doc_ids_kernel(
+    perm: MutPointer[UInt32, MutAnyOrigin],
+    has_perm: Int32,
+    src_left: Int32,
+    count: Int32,
+    dst: MutPointer[UInt32, MutAnyOrigin],
+    dst_off: Int32,
+):
+    """lane cpu3-gbdt-a: one fold slice of `make_fold_doc_indices_host`,
+    `dst[dst_off + k] = perm[src_left + k]` (or `src_left + k` with no
+    permutation). Row-parallel, a pure copy."""
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if k < Int(count):
+        var p = Int(src_left) + k
+        var v = UInt32(p)
+        if has_perm != Int32(0):
+            v = perm.unsafe_load(p)
+        dst.unsafe_store(Int(dst_off) + k, v)
+
+
+def make_fold_doc_indices_device(
+    ctx: DeviceContext,
+    folds: List[TFold],
+    mut d_perm: DeviceBuffer[DType.uint32],
+    has_perm: Bool,
+    mut out: DeviceBuffer[DType.uint32],
+) raises -> Int:
+    """lane cpu3-gbdt-a: `make_fold_doc_indices_host` on the device, into
+    `out` (sized by the caller to the concatenated count); returns that
+    count. `d_perm` holds the learn permutation (read only when
+    `has_perm`). Two copy launches per fold, learn slice then quality
+    slice, the host function's order exactly. Raises, before any launch,
+    when the folds' slices do not fill `out` exactly."""
+    var want = 0
+    for i in range(len(folds)):  # small-loop(folds: the fold plan, a handful of nested prefixes): slice-length arithmetic per fold
+        want += (
+            folds[i].estimate_samples.right - folds[i].estimate_samples.left
+        ) + (
+            folds[i].quality_evaluate_samples.right
+            - folds[i].quality_evaluate_samples.left
+        )
+    if want != len(out):
+        raise Error(
+            "MakeDocIndices produced " + String(want) + " ids for "
+            + String(len(out)) + " concatenated documents"
+        )
+    var cursor = 0
+    for i in range(len(folds)):
+        ref f = folds[i]
+        var lo = InlineArray[Int, 2](
+            f.estimate_samples.left, f.quality_evaluate_samples.left
+        )
+        var hi = InlineArray[Int, 2](
+            f.estimate_samples.right, f.quality_evaluate_samples.right
+        )
+        for s in range(2):
+            var n = hi[s] - lo[s]
+            if n <= 0:
+                continue
+            ctx.enqueue_function[_fold_doc_ids_kernel](
+                d_perm.unsafe_ptr(), Int32(1) if has_perm else Int32(0),
+                Int32(lo[s]), Int32(n), out.unsafe_ptr(), Int32(cursor),
+                grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+            )
+            cursor += n
+    return cursor
 
 
 def create_fold_based_subsets(

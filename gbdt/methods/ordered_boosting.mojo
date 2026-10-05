@@ -190,7 +190,10 @@ from gbdt.methods.dynamic_boosting_folds import (
     create_folds,
 )
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
-from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import enqueue_snap_plane
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    enqueue_snap_plane,
+    enqueue_snap_plane_dev,
+)
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     compute_bins_for_model,
     LeafPartition,
@@ -275,15 +278,16 @@ comptime IDN_ORD_ONE_STEP_DEVICE = (
 #: (`_ord_std_scale_kernel`, one thread of control plane) from the noise sum
 #: and the two magnitudes, which never come to the host: the std through
 #: the correctly rounded `sf64_sqrt` (checks/soft_f64.mojo), the scale by
-#: `choose_scale_kernel`'s exact integer search; the host reads the two
-#: floats back on the drain it already took and does no arithmetic on the
+#: `choose_scale_kernel`'s exact integer search; the host does not read the
+#: two floats back (see below) and does no arithmetic on the
 #: data. The statements are the host's, `Float32(mult * sqrt(s2 / (count +
 #: 1e-100)) * random_strength)` in binary64 with one rounding each (sqrt,
 #: like every IEEE sqrt, correctly rounded), and `choose_scale(max(m0, m1),
 #: total)`, so bits do not move and the host column (`gbdt_oracle_ordered`)
-#: is untouched. The drain itself stays: the histogram and score kernels
-#: still take the scale and the std as launch values (owed: a device-scalar
-#: form of `compute_hist2`, `find_optimal_split` and the snap).
+#: is untouched. Lane cpu3-gbdt-a removed the drain: the two floats stay
+#: in `d_ss` and the snap (`enqueue_snap_plane_dev`), the histogram kernels
+#: (`compute_hist2_dev`) and the score kernels (`find_optimal_split_dev`)
+#: read them as device words; only a traced run reads them back.
 #: `-D MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF` (or the master `-D
 #: MOJOLEARN_IDN_ALL_OFF`) restores the host arithmetic.
 comptime IDN_ORD_STD_SCALE_DEVICE = (
@@ -1077,14 +1081,14 @@ struct _PermPartition(Movable):
         leaf_capacity: Int,
     ) raises:
         var need = 0
-        for i in range(len(bounds)):
+        for i in range(len(bounds)):  # small-loop(bounds: fold prefixes, a handful): the largest prefix
             if bounds[i] > need:
                 need = bounds[i]
         # ascending, unique (a handful of fold prefixes)
         var uniq = List[Int]()
-        for i in range(len(bounds)):
+        for i in range(len(bounds)):  # small-loop(bounds: fold prefixes, a handful): the unique sorted prefix list
             var seen = False
-            for j in range(len(uniq)):
+            for j in range(len(uniq)):  # small-loop(uniq: unique fold prefixes, a handful): duplicate test
                 if uniq[j] == bounds[i]:
                     seen = True
             if not seen:
@@ -1246,7 +1250,7 @@ struct _PermPartition(Movable):
         `[0, estimate_size)`: the same sizes and offsets on the host, the
         same `row_index` on the device (`_ord_segment_rows_kernel`)."""
         var k = -1
-        for i in range(len(self.bounds)):
+        for i in range(len(self.bounds)):  # small-loop(bounds: fold prefixes, a handful): snapshot lookup by prefix
             if self.bounds[i] == estimate_size:
                 k = i
         if k < 0:
@@ -1891,7 +1895,7 @@ def _ord_fast_init_cursors(
         var cat = ctx.enqueue_create_buffer[DType.float32](total)
         enqueue_fill(ctx, cat, start_value)
         var per = List[DeviceBuffer[DType.float32]]()
-        for f in range(len(folds)):
+        for f in range(len(folds)):  # small-loop(folds: the fold plan, a handful): sub-buffer views per fold
             per.append(
                 cat.create_sub_buffer[DType.float32](
                     offsets[f], folds[f].quality_evaluate_samples.right
@@ -1937,12 +1941,12 @@ def _ord_fast_init_tasks(
     var n_folds = len(folds)
     var n_tasks = learn_count * n_folds + 1
     var hk = ctx.enqueue_create_host_buffer[DType.uint32](n_folds)
-    for f in range(n_folds):
+    for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): snapshot index per fold for the launch table
         var est = folds[f].estimate_samples.right
         comptime if ORDERED_SABOTAGE:
             est = folds[f].quality_evaluate_samples.right
         var k = -1
-        for i in range(len(parts[0].bounds)):
+        for i in range(len(parts[0].bounds)):  # small-loop(bounds: fold prefixes, a handful): snapshot lookup by prefix
             if parts[0].bounds[i] == est:
                 k = i
         if k < 0:
@@ -1951,7 +1955,7 @@ def _ord_fast_init_tasks(
     var dk = ctx.enqueue_create_buffer[DType.uint32](n_folds)
     ctx.enqueue_copy(dst_buf=dk, src_ptr=hk.unsafe_ptr())
     var ke = -1
-    for i in range(len(parts[est_p].bounds)):
+    for i in range(len(parts[est_p].bounds)):  # small-loop(bounds: fold prefixes, a handful): snapshot lookup by prefix
         if parts[est_p].bounds[i] == n_rows:
             ke = i
     if ke < 0:
@@ -2159,19 +2163,26 @@ def fit_ordered(
     # slice first; `quality` marks the quality slices
     var offsets = List[Int]()
     var total = 0
-    for f in range(n_folds):
+    for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): fold offsets in the concatenated layout
         offsets.append(total)
         total += folds[f].quality_evaluate_samples.right
-    var hq = ctx.enqueue_create_host_buffer[DType.uint32](total)
+    # lane cpu3-gbdt-a: the mask on the device, two fills per fold (the
+    # learn slice 0, the quality slice 1) instead of a host walk over every
+    # position and an upload
+    var quality = ctx.enqueue_create_buffer[DType.uint32](total)
     for f in range(n_folds):
         var left = folds[f].estimate_samples.right
         var right = folds[f].quality_evaluate_samples.right
-        for i in range(right):
-            hq.unsafe_ptr().unsafe_store(
-                offsets[f] + i, UInt32(1) if i >= left else UInt32(0)
+        if left > 0:
+            var learn_part = quality.create_sub_buffer[DType.uint32](
+                offsets[f], left
             )
-    var quality = ctx.enqueue_create_buffer[DType.uint32](total)
-    ctx.enqueue_copy(dst_buf=quality, src_ptr=hq.unsafe_ptr())
+            enqueue_fill(ctx, learn_part, UInt32(0))
+        if right > left:
+            var quality_part = quality.create_sub_buffer[DType.uint32](
+                offsets[f] + left, right - left
+            )
+            enqueue_fill(ctx, quality_part, UInt32(1))
 
     # cursors: [learn permutation][fold], each over [0, R_f); the
     # estimation cursor over every row in the estimation permutation's order
@@ -2346,7 +2357,7 @@ def fit_ordered(
     comptime if ORDERED_BATCH_EST:
         fast_on = batch and not trace.enabled
     var n_slots = learn_count * n_folds + 1 if batch else n_folds + 1
-    for _ in range(n_slots):
+    for _ in range(n_slots):  # small-loop(n_slots: estimation tasks, permutations times folds): empty workspace lists per task
         est_pools.append(List[TEstimationWorkspace]())
     var slots = List[_OrderedSlot]()
     if batch and not fast_on:
@@ -2366,7 +2377,7 @@ def fit_ordered(
         for p in range(perm_count):
             var bounds = List[Int]()
             if p < learn_count:
-                for f in range(n_folds):
+                for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): fold prefixes per permutation
                     var est = folds[f].estimate_samples.right
                     comptime if ORDERED_SABOTAGE:
                         est = folds[f].quality_evaluate_samples.right
@@ -2408,7 +2419,6 @@ def fit_ordered(
     var test_losses = List[Float64]()
     var stopped_early = False
     ctx.synchronize()
-    _ = hq^
     # `MOJOLEARN_STAGE_TIMES=1`: the per-stage triage table (drains per
     # stage, NOT a benchmark); one Bool test per stage when unset
     var times = StageTimes()
@@ -2481,7 +2491,7 @@ def fit_ordered(
         # fold plan and the fit's parameters, not of the data)
         var dev_scale = Float32(1.0)
         var ord_count = 0
-        for f in range(n_folds):
+        for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): noise count from fold sizes
             ord_count += (
                 folds[f].quality_evaluate_samples.right
                 - folds[f].estimate_samples.right
@@ -2552,11 +2562,10 @@ def fit_ordered(
                     Int32(total), d_ss.unsafe_ptr(),
                     grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
                 )
-                ctx.enqueue_copy(dst_buf=h_ss, src_buf=d_ss)
-                ctx.synchronize()
-                _ = part^
-                score_std = h_ss[0]
-                dev_scale = h_ss[1]
+                # T5 drain (cpu3-gbdt-a): (std, scale) stay in `d_ss` for
+                # the snap and the searcher; no readback, no drain here.
+                # `part` is held past the learn-loss drain.
+                held.append(part^)
             else:
                 ctx.enqueue_copy(dst_buf=h_sums, src_buf=d_sums)
                 ctx.synchronize()
@@ -2564,7 +2573,7 @@ def fit_ordered(
                 m0 = Float64(h_sums[1])
                 m1 = Float64(h_sums[2])
                 var count = 0
-                for f in range(n_folds):
+                for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): noise count from fold sizes
                     count += (
                         folds[f].quality_evaluate_samples.right
                         - folds[f].estimate_samples.right
@@ -2608,7 +2617,7 @@ def fit_ordered(
                 else:
                     ctx.synchronize()
                     var count = 0
-                    for f in range(n_folds):
+                    for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): noise count from fold sizes
                         count += (
                             folds[f].quality_evaluate_samples.right
                             - folds[f].estimate_samples.right
@@ -2674,12 +2683,10 @@ def fit_ordered(
                     Int32(total), d_ss.unsafe_ptr(),
                     grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
                 )
-                ctx.enqueue_copy(dst_buf=h_ss, src_buf=d_ss)
-                ctx.synchronize()
-                _ = absv^
-                _ = mags^
-                score_std = h_ss[0]
-                dev_scale = h_ss[1]
+                # T5 drain (cpu3-gbdt-a): (std, scale) stay in `d_ss`; the
+                # temporaries are held past the learn-loss drain
+                held.append(absv^)
+                held.append(mags^)
             else:
                 var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
                 ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
@@ -2693,7 +2700,7 @@ def fit_ordered(
                     # the deferred noise readback (DEVIATION 3111), the
                     # statements of the branch above
                     var count = 0
-                    for f in range(n_folds):
+                    for f in range(n_folds):  # small-loop(n_folds: the fold plan, a handful): noise count from fold sizes
                         count += (
                             folds[f].quality_evaluate_samples.right
                             - folds[f].estimate_samples.right
@@ -2708,10 +2715,21 @@ def fit_ordered(
                         * sqrt(Float64(held_h[0][0]) / (Float64(count) + 1e-100))
                         * Float64(opts.random_strength)
                     )
-        _ = held^
         _ = held_h^
         var scale: Float32
+        # T5 drain (lane cpu3-gbdt-a): under IDN_ORD_STD_SCALE_DEVICE the
+        # std and the scale are device words (`d_ss`) that the snap, the
+        # histogram kernels and the score kernels read; the host holds
+        # neither, so the per-tree drain is gone. A traced run (not a
+        # timing) reads them back for its two records.
+        var ss_words = List[DeviceBuffer[DType.float32]]()
         comptime if IDN_ORD_STD_SCALE_DEVICE:
+            ss_words.append(d_ss.copy())
+            if trace.enabled:
+                ctx.enqueue_copy(dst_buf=h_ss, src_buf=d_ss)
+                ctx.synchronize()
+                score_std = h_ss[0]
+                dev_scale = h_ss[1]
             scale = dev_scale
         else:
             scale = Float32(choose_scale(m1 if m1 > m0 else m0, total))
@@ -2721,7 +2739,15 @@ def fit_ordered(
         # lane/sym-quality: the gradient plane onto the tree's grid before
         # the search (`enqueue_snap_plane`), after the score std dev, the
         # bootstrap and the scale, as gbdt_oracle_ordered restates it
-        enqueue_snap_plane(ctx, sg, total, scale)
+        comptime if IDN_ORD_STD_SCALE_DEVICE:
+            enqueue_snap_plane_dev(
+                ctx, sg, total,
+                rebind[MutPointer[Float32, MutAnyOrigin]](
+                    d_ss.unsafe_ptr().unsafe_offset(1)
+                ),
+            )
+        else:
+            enqueue_snap_plane(ctx, sg, total, scale)
         times.end(ctx, "ord.scale")
         # 5. the structure, on the learn permutation's folds
         times.begin(ctx)
@@ -2732,7 +2758,7 @@ def fit_ordered(
             score_std_dev=score_std, seed=tree_seed, one_hot=one_hot,
             folds=folds, permutation=perms[learn_p], permutation_id=learn_p,
             fold_part_off=fast_part_off, obs_scratch=fast_obs,
-            ord_wide=ord_wide,
+            ord_wide=ord_wide, std_scale_word=ss_words^,
         )
         times.end(ctx, "ord.structure")
         times.begin(ctx)
@@ -2826,13 +2852,13 @@ def fit_ordered(
             # still walking (a one-iteration walk is one round); none when
             # every task finished on the device (IDN_ORD_ONE_STEP_DEVICE)
             var walking = False
-            for t in range(len(pend)):
+            for t in range(len(pend)):  # small-loop(pend: pending estimation tasks, a handful): walker phase orchestration only
                 if pend[t].est.phase != 2:
                     walking = True
             while walking:
                 ctx.synchronize()
                 walking = False
-                for t in range(len(pend)):
+                for t in range(len(pend)):  # small-loop(pend: pending estimation tasks, a handful): walker phase orchestration only
                     if pend[t].est.phase != 2:
                         if estimate_advance(pend[t].est):
                             walking = True
@@ -2909,6 +2935,8 @@ def fit_ordered(
         ctx.enqueue_copy(dst_buf=h_fv, src_buf=fv)
         ctx.synchronize()
         _ = pend_held^
+        # the score-std / scale temporaries (T5 drain), past this drain
+        _ = held^
         losses.append(-Float64(h_fv[0]) / Float64(n_rows))
         if ord_dev_leaves:
             leaves = _ordered_device_leaves(est_pools[ord_dev_slot], n_leaves)
@@ -2991,7 +3019,7 @@ def fit_ordered(
     if has_test:
         best = detector.best_iteration
     else:
-        for i in range(1, len(losses)):
+        for i in range(1, len(losses)):  # small-loop(losses: one value per tree, already read): the best-iteration argmin
             if losses[i] < losses[best]:
                 best = i
     return OrderedFitOutput(losses^, test_losses^, best, stopped_early)
