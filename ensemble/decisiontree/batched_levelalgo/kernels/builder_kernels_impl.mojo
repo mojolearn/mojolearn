@@ -1048,7 +1048,7 @@ def finalize_pure_splits_kernel[
 ):
     """NOT IN THEIR SOURCE. fam2-forests `IDN_RF_FUSED_PARTITION`.
 
-    The device form of what `_read_splits` + `enqueue_node_split` did on
+    The device form of what `_read_splits_host` + `enqueue_node_split_replay` did on
     the host between the split search and the partition: a PURE node
     (DEVIATION 2502) is a leaf whatever candidate its slot holds, so its
     `colid` becomes -1 and every `split.IsValid()` guard of the partition
@@ -3265,7 +3265,7 @@ def find_best_splits_kernel[
     # order of this store and any merge does not matter; a node no block
     # published keeps initSplit's 0 until this store. The host reads it
     # as `terminal` and leaves the node out regardless of `colid`
-    # (`_read_splits`). Regression has one plane and is never marked.
+    # (`_read_splits_host`). Regression has one plane and is never marked.
     if Int(block_idx.y) == 0 and Int(thread_idx.x) == 0:
         # A word store through the field's own pointer: a struct-level
         # read-modify-write here could race a concurrent publish.

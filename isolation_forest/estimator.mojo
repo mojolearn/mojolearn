@@ -20,7 +20,7 @@ name here. Treelite / nvForest export (`as_treelite`, `as_nvforest`,
 
 Host only; the device work is `impl/isolation_forest/`. The percentile
 is numpy/cupy's default `linear` interpolation computed in Float64 over
-the sorted float32 scores (`percentile_linear`); the threshold handed to
+the sorted float32 scores (`percentile_linear_host`); the threshold handed to
 the device is `Float32(-offset_)` as their `<float>threshold` cast.
 `random_state=None` is NOT a fresh random seed here: it is 0, stated,
 because a fit whose seed nobody recorded cannot be reproduced and this
@@ -58,10 +58,11 @@ from isolation_forest.impl.isolation_forest import (
     predict_into as if_predict_into,
     score_samples as if_score_samples,
     score_samples_into as if_score_samples_into,
+    contamination_offset as if_contamination_offset,
 )
 
 
-def percentile_linear(values: List[Float32], q: Float64) -> Float64:
+def percentile_linear_host(values: List[Float32], q: Float64) -> Float64:
     """`np.percentile(values, q)` with the default `linear` method:
     sorted, `index = q/100 * (n-1)`, `lo + (hi - lo) * frac`."""
     var s = values.copy()
@@ -220,70 +221,82 @@ struct IsolationForestEstimator(Movable):
         self.n_features_in_ = n_cols
 
         var trace = IdentityTrace()
-        if src_addr != 0:
-            # DEVIATION 2638: order="F" (:599-605) happens inside the upload.
-            if_fit(ctx, self.model, List[Float32](), n_rows, n_cols, params, trace,
-                   self.knobs, src_addr)
-        else:
-            # order="F" for fit (:599-605): a copy, no arithmetic
-            var x_col = List[Float32]()
-            for k in range(n_cols):
-                for i in range(n_rows):
-                    x_col.append(x_rowmajor[i * n_cols + k])
-            if_fit(ctx, self.model, x_col, n_rows, n_cols, params, trace, self.knobs)
+        # DEVIATION 2638 / cpu4-forest: the ROW-major X goes to the device
+        # from its address -- the lent block, or the List's own storage --
+        # and order="F" (:599-605) happens there.
+        var x_addr = src_addr
+        if x_addr == 0:
+            if len(x_rowmajor) < n_rows * n_cols:
+                raise Error(
+                    "X holds "
+                    + String(len(x_rowmajor))
+                    + " values, expected n_rows * n_cols = "
+                    + String(n_rows * n_cols)
+                )
+            x_addr = Int(x_rowmajor.unsafe_ptr())
+        if_fit(ctx, self.model, List[Float32](), n_rows, n_cols, params, trace,
+               self.knobs, x_addr)
         self.fitted = True
 
         if use_quantile:
-            var training_scores: List[Float32]
-            if src_addr != 0:
-                comptime if IDN_IF_QUERY_DEVICE:
-                    # lane fam-forests: the borrowed block is scored from its
-                    # address (no List copy of n x d cells).
-                    training_scores = self.score_samples(
-                        ctx, List[Float32](), n_rows, n_cols, src_addr
-                    )
-                else:
-                    var sp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
-                    var x_rows = List[Float32](capacity=n_rows * n_cols)
-                    for i in range(n_rows * n_cols):
-                        x_rows.append(sp.unsafe_load(i))
-                    training_scores = self.score_samples(ctx, x_rows, n_rows, n_cols)
-            else:
-                training_scores = self.score_samples(ctx, x_rowmajor, n_rows, n_cols)
-            self.offset_ = percentile_linear(training_scores, 100.0 * self.contamination)
+            # cpu4-forest: the training scores, their sort and the two
+            # order statistics stay on the device (`contamination_offset`)
+            self.offset_ = if_contamination_offset(
+                ctx, self.model, n_rows, n_cols, self.knobs, x_addr,
+                100.0 * self.contamination,
+            )
         else:
             self.offset_ = -0.5
+
+    def _query_addr(
+        self, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int, src_addr: Int
+    ) raises -> Int:
+        """The ROW-major query's address: the lent block, or the List's own
+        storage (cpu4-forest: no List route stages it cell by cell)."""
+        if src_addr != 0:
+            return src_addr
+        if len(x_rowmajor) < n_rows * n_cols:
+            raise Error(
+                "X_query holds "
+                + String(len(x_rowmajor))
+                + " values, expected n_rows * n_cols = "
+                + String(n_rows * n_cols)
+            )
+        return Int(x_rowmajor.unsafe_ptr())
 
     def score_samples(
         self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int,
         src_addr: Int = 0,
     ) raises -> List[Float32]:
-        """`score_samples(X)` (`:894-959`): `-paper_score`. A nonzero
-        `src_addr` lends the ROW-major X instead of `x_rowmajor`
-        (`IDN_IF_QUERY_DEVICE`)."""
+        """`score_samples(X)` (`:894-959`): `-paper_score`, negated on the
+        device (`if_score_epilogue_kernel`) and downloaded into the
+        returned List. A nonzero `src_addr` lends the ROW-major X instead
+        of `x_rowmajor`."""
         if not self.fitted:
             raise Error("Model has not been fitted. Call fit() first.")
-        var trace = IdentityTrace.disabled()
-        var paper = if_score_samples(
-            ctx, self.model, x_rowmajor, n_rows, n_cols, trace, self.knobs, src_addr
+        var out = List[Float32](length=n_rows, fill=Float32(0.0))
+        if_score_samples_into(
+            ctx, self.model, List[Float32](), n_rows, n_cols, self.knobs,
+            self._query_addr(x_rowmajor, n_rows, n_cols, src_addr),
+            Int(out.unsafe_ptr()), False, Float32(0.0),
         )
-        var out = List[Float32]()
-        for i in range(n_rows):
-            out.append(-paper[i])
         return out^
 
     def decision_function(
         self, ctx: DeviceContext, x_rowmajor: List[Float32], n_rows: Int, n_cols: Int,
         src_addr: Int = 0,
     ) raises -> List[Float32]:
-        """`decision_function(X) = score_samples(X) - offset_` (`:978`).
-        The subtraction is the Python layer's (float32 array minus a
-        Python float: numpy/cupy compute it in float32)."""
-        var s = self.score_samples(ctx, x_rowmajor, n_rows, n_cols, src_addr)
-        var off = Float32(self.offset_)
-        var out = List[Float32]()
-        for i in range(n_rows):
-            out.append(s[i] - off)
+        """`decision_function(X) = score_samples(X) - offset_` (`:978`):
+        the float32 negation and subtraction the Python layer does (numpy /
+        cupy compute it in float32), on the device."""
+        if not self.fitted:
+            raise Error("Model has not been fitted. Call fit() first.")
+        var out = List[Float32](length=n_rows, fill=Float32(0.0))
+        if_score_samples_into(
+            ctx, self.model, List[Float32](), n_rows, n_cols, self.knobs,
+            self._query_addr(x_rowmajor, n_rows, n_cols, src_addr),
+            Int(out.unsafe_ptr()), True, Float32(self.offset_),
+        )
         return out^
 
     def predict(
@@ -291,16 +304,17 @@ struct IsolationForestEstimator(Movable):
         src_addr: Int = 0,
     ) raises -> List[Int32]:
         """`predict(X)` (`:981-1042`): `-C++predict(X, threshold =
-        -offset_)`; sklearn convention, -1 = anomaly, 1 = inlier."""
+        -offset_)`; sklearn convention, -1 = anomaly, 1 = inlier, flipped on
+        the device (`if_predict_epilogue_kernel`)."""
         if not self.fitted:
             raise Error("Model has not been fitted. Call fit() first.")
-        var threshold = Float32(-self.offset_)
-        var raw = if_predict(
-            ctx, self.model, x_rowmajor, n_rows, n_cols, threshold, self.knobs, src_addr
+        var out = List[Int32](length=n_rows, fill=Int32(0))
+        if_predict_into(
+            ctx, self.model, List[Float32](), n_rows, n_cols,
+            Float32(-self.offset_), self.knobs,
+            self._query_addr(x_rowmajor, n_rows, n_cols, src_addr),
+            Int(out.unsafe_ptr()),
         )
-        var out = List[Int32]()
-        for i in range(n_rows):
-            out.append(-raw[i])
         return out^
 
     def fit_predict(
@@ -733,37 +747,22 @@ def iforest_run_resident(
     out.n_features_in_ = held[0].est.n_features_in_
     out.token = held[0].token
     var n_features = key.n_features
-    comptime if IDN_IF_EPILOGUE_DEVICE:
-        if not held[0].est.fitted:
-            raise Error("Model has not been fitted. Call fit() first.")
-        if want == IF_WANT_PREDICT:
-            if_predict_into(
-                ctx, held[0].est.model, query, n_query, n_features,
-                Float32(-held[0].est.offset_), held[0].est.knobs, query_addr, out_i32_addr,
-            )
-        else:
-            if_score_samples_into(
-                ctx, held[0].est.model, query, n_query, n_features, held[0].est.knobs,
-                query_addr, out_f32_addr, want == IF_WANT_DECISION_FUNCTION,
-                Float32(held[0].est.offset_),
-            )
+    # The scoring epilogue runs on the device and lands in the caller's
+    # buffer (fam2-forests' `IDN_IF_EPILOGUE_DEVICE`; the only route on
+    # every tier since cpu4-forest: the host epilogue arm is gone).
+    if not held[0].est.fitted:
+        raise Error("Model has not been fitted. Call fit() first.")
+    if want == IF_WANT_PREDICT:
+        if_predict_into(
+            ctx, held[0].est.model, query, n_query, n_features,
+            Float32(-held[0].est.offset_), held[0].est.knobs, query_addr, out_i32_addr,
+        )
     else:
-        if want == IF_WANT_PREDICT:
-            var labels = held[0].est.predict(ctx, query, n_query, n_features, query_addr)
-            var oi = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=out_i32_addr)
-            for i in range(n_query):
-                oi.unsafe_store(i, labels[i])
-        else:
-            var values: List[Float32]
-            if want == IF_WANT_DECISION_FUNCTION:
-                values = held[0].est.decision_function(
-                    ctx, query, n_query, n_features, query_addr
-                )
-            else:
-                values = held[0].est.score_samples(ctx, query, n_query, n_features, query_addr)
-            var of = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_f32_addr)
-            for i in range(n_query):
-                of.unsafe_store(i, values[i])
+        if_score_samples_into(
+            ctx, held[0].est.model, query, n_query, n_features, held[0].est.knobs,
+            query_addr, out_f32_addr, want == IF_WANT_DECISION_FUNCTION,
+            Float32(held[0].est.offset_),
+        )
     # The context dies after everything this call launched (DEVIATION 1946);
     # the resident buffers hold their own copy of it.
     _ = ctx^

@@ -18,7 +18,7 @@ with each batch, which is exactly the staging a merged batch could get wrong
 (`device_batched_check` sabotages that mechanism directly). So the trees are
 compared to each other, pairwise, ALL pairs.
 
-**THE VOTE CAN BE THE LAST TREE INSTEAD OF THE AVERAGE.** `forest_vote` is
+**THE VOTE CAN BE THE LAST TREE INSTEAD OF THE AVERAGE.** `forest_vote_host` is
 shared by both arms, and deviation 147's accumulating `predict_one` is what
 makes it a forest sum. A zeroing wrapper there returns the last tree's leaf
 vector and is invisible on any fixture where the trees agree — so the vote is
@@ -48,13 +48,13 @@ Each was applied, seen, and reverted:
 
 * **the tree id replaced by a constant** in `fit_classification_device` --
   RED: 13 of 24 trees differed in node count and 276 of 563 nodes differed;
-* **the vote zeroed before each tree** in `forest_vote` -- RED at the first
+* **the vote zeroed before each tree** in `forest_vote_host` -- RED at the first
   per-(row, class) cell;
 * **the estimator device arm rewired to `fit_classification`** -- RED, and
   ONLY at `[reach]`. Every identity assertion above it passed while the device
   arm was secretly the host arm, which is the whole reason `[reach]` is not
   an output comparison;
-* **the class-id cast permuted** (`+1 mod n_classes`) in `class_ids_for` --
+* **the class-id cast permuted** (`+1 mod n_classes`) in `class_ids_for_host` --
   RED at the LEAF VALUES, with 0 nodes differing. A cyclic relabelling leaves
   Gini invariant, so the same splits win and only the leaves move; the
   structural comparison alone would have stayed green;
@@ -105,7 +105,7 @@ from extratrees.impl.decisiontree.decisiontree import (
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     fill_row_slots,
 )
-from extratrees.impl.randomforest.randomforest import row_sample_for
+from extratrees.impl.randomforest.randomforest import row_sample_for_host
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from extratrees.impl.decisiontree.flatnode import (
     TreeMetaDataNode,
@@ -116,10 +116,10 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
 )
 from extratrees.impl.randomforest.randomforest import (
     Forest,
-    class_ids_for,
+    class_ids_for_host,
     fit_classification_device,
-    forest_vote,
-    predict_class_forest,
+    forest_vote_host,
+    predict_class_forest_host,
 )
 from extratrees.impl.randomforest.host_forest import (
     fit_classification,
@@ -331,7 +331,7 @@ def main() raises:
                 # and whether any of it reaches a prediction
                 for r in range(0, hashed.n_rows, 3):
                     var row = row_of(hashed, r)
-                    if predict_class_forest(hf, row, 0) != predict_class_forest(
+                    if predict_class_forest_host(hf, row, 0) != predict_class_forest_host(
                         df, row, 0
                     ):
                         pred_diff += 1
@@ -555,7 +555,7 @@ def main() raises:
     var vote_cells = 0
     for r in range(0, hashed.n_rows, 11):
         var row = row_of(hashed, r)
-        var got = forest_vote(dforest, row, 0)
+        var got = forest_vote_host(dforest, row, 0)
         # INDEPENDENT: route the row through each tree by hand, take each
         # tree's leaf vector, and average them HERE rather than in the code
         # under test.
@@ -611,7 +611,7 @@ def main() raises:
     var wrong = 0
     for r in range(gap.n_rows):
         var row = row_of(gap, r)
-        if predict_class_forest(gforest, row, 0) != Int(gap.label[r]):
+        if predict_class_forest_host(gforest, row, 0) != Int(gap.label[r]):
             wrong += 1
     assert_equal(
         wrong,
@@ -651,7 +651,7 @@ def main() raises:
         )
         cells += 1
     var frow = row_of(flat, 0)
-    var fvote = forest_vote(fforest, frow, 0)
+    var fvote = forest_vote_host(fforest, frow, 0)
     var fs = Float32(0.0)
     for k in range(Int(fforest.num_outputs)):
         fs += fvote[k]
@@ -669,7 +669,7 @@ def main() raises:
     var pin_rows = List[Int32]()
     for r in range(hashed.n_rows):
         pin_rows.append(Int32(r))
-    var pin_ids = class_ids_for(
+    var pin_ids = class_ids_for_host(
         labels, Int32(hashed.n_rows), Int32(hashed.n_classes)
     )
     var pin_tree = train_classification_device(
@@ -1077,7 +1077,7 @@ def main() raises:
 
     # ================= 11. DEVIATIONS 459 / 460 on the device arm ========
     # (a) the bootstrap SAMPLER, cell for cell: the device slots
-    # `fill_row_slots` writes against the host list `row_sample_for` draws
+    # `fill_row_slots` writes against the host list `row_sample_for_host` draws
     # for the same (seed, tree). Integer draws, so bit-equal or wrong.
     print("[bootstrap] device row slots == host row sample, per tree")
     var slot_rows = Int32(hashed.n_rows)
@@ -1101,7 +1101,7 @@ def main() raises:
     var slot_mismatch = 0
     var slot_cells = 0
     for si in range(n_slots):
-        var host_rows = row_sample_for(
+        var host_rows = row_sample_for_host(
             Int32(hashed.n_rows), True, 0, 0xABC123, slot_trees[si]
         )
         for i in range(Int(slot_rows)):

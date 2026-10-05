@@ -55,6 +55,7 @@ from ensemble.oob_device import (
     rf_oob_reg_mean_kernel,
     rf_oob_reg_sq_kernel,
     rf_oob_reg_ysum_kernel,
+    rf_oob_append_tree_kernel,
     rf_oob_rows_kernel,
     rf_oob_score_kernel,
 )
@@ -1471,11 +1472,164 @@ def bootstrap_mask_scatter_kernel(
 
 
 
+struct OobForestStore(Movable):
+    """The forest's flat OOB model ON THE DEVICE (cpu4-forest): per-tree
+    node offsets, and per node the column, the left child, the float32
+    threshold and the float32 leaf row -- the arrays `rf_oob_rows_kernel`
+    walks. Each finished tree is appended straight from its builder's
+    device tree (`rf_oob_append_tree_kernel`), so the model is never
+    flattened on the host nor uploaded. Allocated only when the fit asks
+    for an OOB score; growth doubles the node arrays with a device copy
+    and keeps the old ones alive until the fit's final drain."""
+
+    var enabled: Bool
+    var n_out: Int
+    var cap: Int
+    var used: Int
+    var d_off: DeviceBuffer[DType.int32]
+    var d_col: DeviceBuffer[DType.int32]
+    var d_left: DeviceBuffer[DType.int32]
+    var d_q: DeviceBuffer[DType.float32]
+    var d_leaf: DeviceBuffer[DType.float32]
+    var retired_i: List[DeviceBuffer[DType.int32]]
+    var retired_f: List[DeviceBuffer[DType.float32]]
+
+    def __init__(
+        out self, ctx: DeviceContext, n_trees: Int, n_out: Int, enabled: Bool
+    ) raises:
+        self.enabled = enabled
+        self.n_out = max(n_out, 1)
+        self.cap = 4096 if enabled else 1
+        self.used = 0
+        self.d_off = ctx.enqueue_create_buffer[DType.int32](
+            max(n_trees, 1) if enabled else 1
+        )
+        self.d_col = ctx.enqueue_create_buffer[DType.int32](self.cap)
+        self.d_left = ctx.enqueue_create_buffer[DType.int32](self.cap)
+        self.d_q = ctx.enqueue_create_buffer[DType.float32](self.cap)
+        self.d_leaf = ctx.enqueue_create_buffer[DType.float32](
+            self.cap * self.n_out
+        )
+        self.retired_i = List[DeviceBuffer[DType.int32]]()
+        self.retired_f = List[DeviceBuffer[DType.float32]]()
+
+    def _grow(mut self, ctx: DeviceContext, need: Int) raises:
+        var cap = self.cap * 2
+        while cap < need:
+            cap *= 2
+        var nc = ctx.enqueue_create_buffer[DType.int32](cap)
+        var nl = ctx.enqueue_create_buffer[DType.int32](cap)
+        var nq = ctx.enqueue_create_buffer[DType.float32](cap)
+        var nf = ctx.enqueue_create_buffer[DType.float32](cap * self.n_out)
+        if self.used > 0:
+            log_launch_ctx(ctx, "copy_oob_forest_grow")
+            ctx.enqueue_copy(
+                dst_buf=nc.create_sub_buffer[DType.int32](0, self.used),
+                src_buf=self.d_col.create_sub_buffer[DType.int32](
+                    0, self.used
+                ),
+            )
+            ctx.enqueue_copy(
+                dst_buf=nl.create_sub_buffer[DType.int32](0, self.used),
+                src_buf=self.d_left.create_sub_buffer[DType.int32](
+                    0, self.used
+                ),
+            )
+            ctx.enqueue_copy(
+                dst_buf=nq.create_sub_buffer[DType.float32](0, self.used),
+                src_buf=self.d_q.create_sub_buffer[DType.float32](
+                    0, self.used
+                ),
+            )
+            ctx.enqueue_copy(
+                dst_buf=nf.create_sub_buffer[DType.float32](
+                    0, self.used * self.n_out
+                ),
+                src_buf=self.d_leaf.create_sub_buffer[DType.float32](
+                    0, self.used * self.n_out
+                ),
+            )
+        swap(self.d_col, nc)
+        swap(self.d_left, nl)
+        swap(self.d_q, nq)
+        swap(self.d_leaf, nf)
+        self.retired_i.append(nc^)
+        self.retired_i.append(nl^)
+        self.retired_f.append(nq^)
+        self.retired_f.append(nf^)
+        self.cap = cap
+
+    def append[
+        dtype: DType
+    ](
+        mut self,
+        ctx: DeviceContext,
+        tree: MutPointer[SparseTreeNode[dtype], MutUntrackedOrigin],
+        tree_leaves: MutPointer[Scalar[dtype], MutUntrackedOrigin],
+        n_nodes: Int,
+        tree_idx: Int,
+    ) raises:
+        """Enqueue tree `tree_idx`'s append. Call while the builder's
+        device tree still holds it (before that builder's next leaf
+        pass, which the in-order queue guarantees for every append
+        enqueued at the tree's completion)."""
+        if not self.enabled or n_nodes <= 0:
+            return
+        if self.used + n_nodes > self.cap:
+            self._grow(ctx, self.used + n_nodes)
+        comptime k_app = rf_oob_append_tree_kernel[dtype]
+        log_launch_ctx(ctx, "oob_append_tree")
+        ctx.enqueue_function[k_app](
+            tree.unsafe_origin_cast[MutAnyOrigin](),
+            tree_leaves.unsafe_origin_cast[MutAnyOrigin](),
+            self.d_off.unsafe_ptr(),
+            self.d_col.unsafe_ptr(),
+            self.d_q.unsafe_ptr(),
+            self.d_left.unsafe_ptr(),
+            self.d_leaf.unsafe_ptr(),
+            Int32(n_nodes),
+            Int32(self.n_out),
+            Int32(self.used),
+            Int32(tree_idx),
+            grid_dim=_ceildiv(max(n_nodes, 1), OOB_TPB),
+            block_dim=OOB_TPB,
+        )
+        self.used += n_nodes
+
+
+def _oob_append_from_builder[
+    O: ObjectiveLike, sampled_labels: Bool
+](
+    ctx: DeviceContext,
+    mut store: OobForestStore,
+    mut builder: Builder[O, sampled_labels],
+    n_nodes: Int,
+    tree_idx: Int,
+) raises:
+    """A finished tree's append from the builder that grew it: its device
+    tree is `leaf_d_tree` / `leaf_d_leaves` (`set_leaf_predictions` and
+    `_finish_tree_device` both leave it there)."""
+    if not store.enabled:
+        return
+    store.append[O.DataT](
+        ctx,
+        builder.leaf_d_tree.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin]()
+        .unsafe_bitcast[SparseTreeNode[O.DataT]](),
+        builder.leaf_d_leaves.unsafe_ptr().unsafe_origin_cast[
+            MutUntrackedOrigin
+        ](),
+        n_nodes,
+        tree_idx,
+    )
+
+
 def compute_oob_score[
     O: ObjectiveLike, sabotage: Int = 0
 ](
     ctx: DeviceContext,
     mut forest: RandomForestMetaData[O.DataT, O.LabelT],
+    mut store: OobForestStore,
     sampler: RowSampler,
     mut x: DeviceBuffer[DType.float32],
     mut y: DeviceBuffer[O.LabelT],
@@ -1536,56 +1690,14 @@ def compute_oob_score[
     # device (`ensemble/oob_device.mojo`).
     var dev_n_valid = 0
     var dev_score = Float64(0.0)
-    # fam2-forests: the (tree, row) walk, the binary64 accumulation
-    # and the division by the count run on the device
-    # (`ensemble/oob_device.mojo`); X and the masks stay there. What
-    # crosses the bus: the flat model up (control data the host
-    # owns), the averaged predictions (an attribute the API returns),
-    # the counts and y back, once.
-    var total_nodes = 0
-    for t in range(n_trees):  # small-loop(n_trees: per-tree node counts): sums list lengths into one buffer size, no data
-        total_nodes += len(forest.trees[t].sparsetree)
-    var h_off = ctx.enqueue_create_host_buffer[DType.int32](n_trees)
-    var h_col = ctx.enqueue_create_host_buffer[DType.int32](total_nodes)
-    var h_left = ctx.enqueue_create_host_buffer[DType.int32](total_nodes)
-    var h_q = ctx.enqueue_create_host_buffer[DType.float32](total_nodes)
-    var h_leaf = ctx.enqueue_create_host_buffer[DType.float32](
-        total_nodes * num_outputs
-    )
-    var node_base = 0
-    for t in range(n_trees):
-        h_off.unsafe_ptr().unsafe_store(t, Int32(node_base))
-        var nn = len(forest.trees[t].sparsetree)
-        for jn in range(nn):
-            var nd = forest.trees[t].sparsetree[jn]
-            h_col.unsafe_ptr().unsafe_store(node_base + jn, nd.ColumnId())
-            h_left.unsafe_ptr().unsafe_store(
-                node_base + jn, Int32(Int(nd.LeftChildId()))
-            )
-            h_q.unsafe_ptr().unsafe_store(
-                node_base + jn, nd.QueryValue().cast[DType.float32]()
-            )
-            for k in range(num_outputs):
-                h_leaf.unsafe_ptr().unsafe_store(
-                    (node_base + jn) * num_outputs + k,
-                    forest.trees[t].vector_leaf[
-                        jn * num_outputs + k
-                    ].cast[DType.float32](),
-                )
-        node_base += nn
-    var d_off = ctx.enqueue_create_buffer[DType.int32](n_trees)
-    var d_col = ctx.enqueue_create_buffer[DType.int32](total_nodes)
-    var d_left = ctx.enqueue_create_buffer[DType.int32](total_nodes)
-    var d_q = ctx.enqueue_create_buffer[DType.float32](total_nodes)
-    var d_leaf = ctx.enqueue_create_buffer[DType.float32](
-        total_nodes * num_outputs
-    )
-    log_launch_ctx(ctx, "xfer_oob_forest")
-    ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_col, src_ptr=h_col.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_left, src_ptr=h_left.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_q, src_ptr=h_q.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_leaf, src_ptr=h_leaf.unsafe_ptr())
+    # The (tree, row) walk, the binary64 accumulation and the division
+    # by the count run on the device (`ensemble/oob_device.mojo`) over the
+    # flat model the fit appended tree by tree (`OobForestStore`,
+    # cpu4-forest); X, the masks and the model stay there. What crosses
+    # the bus: the averaged predictions (an attribute the API returns),
+    # the counts and the score words, once.
+    if not store.enabled or store.n_out != num_outputs:
+        raise Error("OOB score: the fit did not keep the device OOB model")
     # The sampler is borrowed immutably and a device buffer hands out
     # a pointer only when mutable, so the masks take one device copy.
     var d_masks = ctx.enqueue_create_buffer[DType.uint8](n_trees * n_rows)
@@ -1599,11 +1711,11 @@ def compute_oob_score[
     ctx.enqueue_function[rf_oob_rows_kernel](
         x.unsafe_ptr(),
         d_masks.unsafe_ptr(),
-        d_off.unsafe_ptr(),
-        d_col.unsafe_ptr(),
-        d_q.unsafe_ptr(),
-        d_left.unsafe_ptr(),
-        d_leaf.unsafe_ptr(),
+        store.d_off.unsafe_ptr(),
+        store.d_col.unsafe_ptr(),
+        store.d_q.unsafe_ptr(),
+        store.d_left.unsafe_ptr(),
+        store.d_leaf.unsafe_ptr(),
         d_acc.unsafe_ptr(),
         d_cnt.unsafe_ptr(),
         Int32(n_rows),
@@ -1751,16 +1863,6 @@ def compute_oob_score[
     _ = d_t2^
     _ = h_words^
     _ = h_stats^
-    _ = h_off^
-    _ = h_col^
-    _ = h_left^
-    _ = h_q^
-    _ = h_leaf^
-    _ = d_off^
-    _ = d_col^
-    _ = d_left^
-    _ = d_q^
-    _ = d_leaf^
     _ = d_masks^
     _ = d_acc^
     _ = d_cnt^
@@ -3079,6 +3181,14 @@ def fit_forest_prepared[
     var split_staging = SplitStaging(
         ctx, k_streams, builders[0].splits_capacity_bytes()
     )
+    # cpu4-forest: the OOB model is appended on the device as each tree
+    # finishes (`OobForestStore`); nothing is allocated without OOB.
+    var oob_store = OobForestStore(
+        ctx,
+        Int(rf_params.n_trees),
+        Int(builders[0].num_outputs),
+        oob_score,
+    )
     for k in range(k_streams):
         builders[k].adopt_shared_splits(split_staging, k)
 
@@ -3204,6 +3314,10 @@ def fit_forest_prepared[
             instr.times.stop_host("host_begin_tree", t_host)
             if ts.done:
                 t_host = instr.times.start()
+                _oob_append_from_builder(
+                    ctx, oob_store, builders[k],
+                    len(ts.tree.sparsetree), next_tree,
+                )
                 forest.trees[next_tree] = ts.tree.copy()
                 _record_tree(instr, forest.trees[next_tree], next_tree)
                 instr.times.stop_host("tree_copy", t_host)
@@ -3246,6 +3360,10 @@ def fit_forest_prepared[
                 continue
             while True:
                 t_host = instr.times.start()
+                _oob_append_from_builder(
+                    ctx, oob_store, builders[k],
+                    len(states[k].tree.sparsetree), slot_tree[k],
+                )
                 forest.trees[slot_tree[k]] = states[k].tree.copy()
                 _record_tree(
                     instr, forest.trees[slot_tree[k]], slot_tree[k]
@@ -3364,7 +3482,8 @@ def fit_forest_prepared[
     if oob_score:
         t_stage = instr.times.start()
         compute_oob_score[O, oob_sabotage](
-            ctx, forest, sampler, x, y, n_rows, n_cols, row_major, host_x_addr
+            ctx, forest, oob_store, sampler, x, y, n_rows, n_cols, row_major,
+            host_x_addr,
         )
         instr.times.stop(ctx, "oob", t_stage)
 
@@ -3372,6 +3491,7 @@ def fit_forest_prepared[
     # kernel as a raw pointer. These uses keep them alive past the final
     # synchronize. Measured hazard, not a precaution.
     _ = sampler^
+    _ = oob_store^
     if not keep_prep:
         prep.clear()
     # DEVIATION 402 -- the stage table, printed only under

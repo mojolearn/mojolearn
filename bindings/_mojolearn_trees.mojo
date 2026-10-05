@@ -14,7 +14,7 @@ THE MODEL LAYOUT REMAINS FLAT ARRAYS: per-node `colid` / `quesval` /
 `left_child_id`, the flat
 `vector_leaf`, and a `tree_offsets` prefix so tree `t` is the node range
 `[offsets[t], offsets[t+1])`. `et_predict` rebuilds the forest from those
-arrays and calls the IMPLEMENTED `forest_vote` -- the traversal is
+arrays and calls the IMPLEMENTED `forest_vote_host` -- the traversal is
 `decisiontree.cuh:394-413` through `flatnode.mojo`, not a reimplementation at
 this boundary. `instance_count` and `best_metric_val` are not carried: the
 traversal never reads either (`flatnode.mojo` says so of `best_metric_val`
@@ -73,7 +73,7 @@ from extratrees.impl.decisiontree.flatnode import (
     SparseTreeNode,
     TreeMetaDataNode,
 )
-from extratrees.impl.randomforest.randomforest import Forest, forest_vote
+from extratrees.impl.randomforest.randomforest import Forest, forest_vote_host
 from core.forest_inference_model import (
     resident_prepare, resident_predict_into, resident_release,
 )
@@ -484,7 +484,7 @@ def et_predict_binding(
     Model arrays are int32/float32 as `_forest_out` laid them out (the
     wrapper exports and keeps host Arrays). `x` here is
     ROW-major (the traversal reads `row[offset + colid]`). `out` is
-    n_rows * num_outputs float32 and receives `forest_vote`'s average --
+    n_rows * num_outputs float32 and receives `forest_vote_host`'s average --
     per-class probabilities for the classifier (argmax is the wrapper's,
     exactly as `RandomForest::predict` argmaxes over `predict_proba`), the
     mean prediction for the regressor. `params` is `[n_rows, n_features,
@@ -514,7 +514,7 @@ def et_predict_binding(
     # cpu-gpu-cleanup t-gbdt: the `sequential` engine runs on the device.
     # The host walk (`core/forest_host_predict.mojo`'s `et_host_predict`,
     # DEVIATION 2900) is the CPU-only install's (`_mojolearn_trees_host`);
-    # here `forest_vote`'s arithmetic -- zero, add every tree's leaf in
+    # here `forest_vote_host`'s arithmetic -- zero, add every tree's leaf in
     # increasing tree order, divide by `Float32(n_trees)` -- is
     # `forest_ordered_kernel`, one thread per (row, output), through a
     # one-call ordered snapshot. The GIL stays held for the registry.
