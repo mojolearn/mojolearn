@@ -224,6 +224,44 @@ def xd_flag_first_kernel(flags: F32Ptr, count: Int32, first: I32Ptr):
             _ = Atomic.min(first, Int32(t))
 
 
+def xd_first_where_kernel(v: F32Ptr, count: Int32, stride: Int32, mode: Int32, first: I32Ptr):
+    """first[0] = the lowest t < count whose word v[t * stride] meets the
+    mode's test (mode 0: < 0; mode 1: == 0; mode 2: NaN), left at
+    XD_NO_FLAG when none does (lane cpu3-core: the host walks over the
+    convergence marks and singular values became this)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(count):
+        var x = v.unsafe_load(t * Int(stride))
+        var hit: Bool
+        if mode == Int32(0):
+            hit = x < Float32(0.0)
+        elif mode == Int32(1):
+            hit = x == Float32(0.0)
+        else:
+            hit = x != x
+        if hit:
+            _ = Atomic.min(first, Int32(t))
+
+
+def xd_first_where(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], count: Int, stride: Int, mode: Int) raises -> Int:
+    """`xd_first_where_kernel` on the device; one word home (-1 for none)."""
+    if count <= 0:
+        return -1
+    var dfirst = ctx.enqueue_create_buffer[DType.int32](1)
+    var hfirst = ctx.enqueue_create_host_buffer[DType.int32](1)
+    enqueue_fill(ctx, dfirst, XD_NO_FLAG)
+    ctx.enqueue_function[xd_first_where_kernel](
+        _p(buf), Int32(count), Int32(stride), Int32(mode), dfirst.unsafe_ptr(),
+        grid_dim=_blocks(count), block_dim=TPB,
+    )
+    ctx.enqueue_copy(dst_buf=hfirst, src_buf=dfirst)
+    ctx.synchronize()
+    var f = hfirst.unsafe_ptr().unsafe_load(0)
+    _ = hfirst^
+    _ = dfirst^
+    return -1 if f == XD_NO_FLAG else Int(f)
+
+
 struct _XdContext(Defaultable, Movable):
     """ONE process-lifetime DeviceContext for every x_decomp entry (the x_cnn
     `_Global` pattern, CURRENT DIRECTIVES 2026-09-27): a context per call
@@ -2767,24 +2805,25 @@ struct DevExec(Exec):
             _p(da), _p(dv), _p(dcs), _p(dpart), _p(ddg), _p(dinfo), _p(dw), _p(dvo), Int32(n),
             Int32(RR_EIGH_SWEEPS), Float32(JACOBI_TOL), grid_dim=batch, block_dim=RR_OFF_TPB,
         )
-        var hinfo = List[Float32](length=2 * batch, fill=Float32(0.0))
-        _down(ctx, dinfo, F32Ptr(unsafe_from_address=Int(hinfo.unsafe_ptr())), 2 * batch)
-        ctx.synchronize()
+        # the convergence marks are read on the device (lane cpu3-core):
+        # the first problem whose block never ran, and the first unconverged
+        var b_neg = xd_first_where(ctx, dinfo, batch, 2, 0)
+        var b_zero = xd_first_where(ctx, dinfo, batch, 2, 1)
         _ = dv^
         _ = dcs^
         _ = dpart^
         _ = ddg^
         _ = dinfo^
-        for b in range(batch):
-            if hinfo[2 * b] < Float32(0.0):
+        if b_neg >= 0 or b_zero >= 0:
+            var b = b_neg if (b_zero < 0 or (b_neg >= 0 and b_neg < b_zero)) else b_zero
+            if b == b_neg:
                 raise Error("eigh_batch: a block of the batched Jacobi did not run (a launch failure)")
-            if hinfo[2 * b] == Float32(0.0):
+            else:
                 raise Error(
                     "eigh_batch: problem " + String(b) + " of " + String(batch) + " (n = " + String(n)
                     + ") did not converge in " + String(RR_EIGH_SWEEPS) + " sweeps. An unconverged"
                     " decomposition is not returned as if it were one (DEVIATION 590)."
                 )
-        _ = hinfo^
 
     @staticmethod
     def eigh_batch(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) raises:
@@ -3023,7 +3062,6 @@ struct DevExec(Exec):
         var mm = n + (n % 2)
         var h = mm // 2
         var flags = ctx.enqueue_create_buffer[DType.float32](max(h, 1))
-        var hflags = List[Float32](length=max(h, 1), fill=Float32(0.0))
         var dfirst = ctx.enqueue_create_buffer[DType.int32](1)
         var hfirst = ctx.enqueue_create_host_buffer[DType.int32](1)
         ctx.synchronize()
@@ -3043,21 +3081,15 @@ struct DevExec(Exec):
                     grid_dim=h, block_dim=RS_TPB,
                 )
                 _round_sync(ctx, rd)
-            var any = False
-            comptime if IDN_XD_SWEEP:
-                enqueue_fill(ctx, dfirst, XD_NO_FLAG)
-                ctx.enqueue_function[xd_flag_first_kernel](
-                    _p(flags), Int32(h), dfirst.unsafe_ptr(), grid_dim=_blocks(h), block_dim=TPB
-                )
-                ctx.enqueue_copy(dst_buf=hfirst, src_buf=dfirst)
-                ctx.synchronize()
-                any = hfirst.unsafe_ptr().unsafe_load(0) != XD_NO_FLAG
-            else:
-                _down(ctx, flags, F32Ptr(unsafe_from_address=Int(hflags.unsafe_ptr())), h)
-                ctx.synchronize()
-                for b in range(h):
-                    if hflags[b] != Float32(0.0):
-                        any = True
+            # the sweep's rotation flags fold on the device in every mode
+            # (lane cpu3-core: the host walk over the h flags is gone)
+            enqueue_fill(ctx, dfirst, XD_NO_FLAG)
+            ctx.enqueue_function[xd_flag_first_kernel](
+                _p(flags), Int32(h), dfirst.unsafe_ptr(), grid_dim=_blocks(h), block_dim=TPB
+            )
+            ctx.enqueue_copy(dst_buf=hfirst, src_buf=dfirst)
+            ctx.synchronize()
+            var any = hfirst.unsafe_ptr().unsafe_load(0) != XD_NO_FLAG
             if not any:
                 converged = True
         if not converged:
@@ -3071,11 +3103,12 @@ struct DevExec(Exec):
         _down(ctx, s_buf, s, n)
         _down(ctx, v_buf, v, n * n)
         ctx.synchronize()
-        # a NaN left is a launch cut short (or a NaN input): refused
-        for t in range(n):
-            if s.unsafe_load(t) != s.unsafe_load(t):
-                raise Error("x_decomp svd: singular value " + String(t) + " of " + String(n)
-                            + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
+        # a NaN left is a launch cut short (or a NaN input): refused (the
+        # test runs on the device copy, lane cpu3-core)
+        var t_nan = xd_first_where(ctx, s_buf, n, 1, 2)
+        if t_nan >= 0:
+            raise Error("x_decomp svd: singular value " + String(t_nan) + " of " + String(n)
+                        + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
         _ = scratch^
         _ = r_buf^
         _ = rt^
@@ -3083,7 +3116,6 @@ struct DevExec(Exec):
         _ = v_buf^
         _ = s_buf^
         _ = flags^
-        _ = hflags^
         _ = dfirst^
         _ = hfirst^
 
@@ -3438,21 +3470,16 @@ struct DevExec(Exec):
 
     @staticmethod
     def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
-        comptime if IDN_QR_R_DIRECT:
-            _validate_shape(m, n, "qr")
-            var ctx = xd_ctx()
-            var da = _up(ctx, a, m * n)
-            DevExec._qr_r_on(ctx, da, m, n, r)
-            _ = da^
-            ctx.synchronize()
-            _ = ctx^
-        else:
-            var w = List[Float32](capacity=m * n)
-            for t in range(m * n):
-                w.append(a.unsafe_load(t))
-            var got = device_qr_r(xd_ctx(), w, m, n)
-            for t in range(n * n):
-                r.unsafe_store(t, got[t])
+        # A goes up straight from the caller's memory in every mode (lane
+        # cpu3-core: the List staging arm, a host copy loop, is gone; the
+        # same buffers and launch, the same words)
+        _validate_shape(m, n, "qr")
+        var ctx = xd_ctx()
+        var da = _up(ctx, a, m * n)
+        DevExec._qr_r_on(ctx, da, m, n, r)
+        _ = da^
+        ctx.synchronize()
+        _ = ctx^
 
     @staticmethod
     def _qr_r_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr) raises:

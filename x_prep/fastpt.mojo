@@ -514,7 +514,7 @@ def cs_tile_stats(mut ctx: DeviceContext, f: FP, pp: FP, X: Int, n: Int, d: Int,
 def ptimpute_part_words(host_q: IP, stages: Int) -> Int:
     """The partials buffer's words over the program (1 when nothing here runs)."""
     var words = 1
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         var hq = host_q + (s * STAGE_INTS + 2)
         comptime if PT_COLBATCH:

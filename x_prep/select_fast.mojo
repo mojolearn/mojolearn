@@ -97,7 +97,7 @@ def _col_tiles(w: Int) -> Int:
 
 def program_has_op(host_q: IP, stages: Int, op: Int) -> Bool:
     """Whether any stage of the program is `op`."""
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         if Int(host_q.unsafe_load(s * STAGE_INTS)) == op:
             return True
     return False

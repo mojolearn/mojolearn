@@ -482,24 +482,21 @@ def gpr_optimize_device(
     ctx.enqueue_function[gp_opt_final_kernel](  # small-launch(nt: hyperparameters): one block writes the winning theta, a few entries only
         _gp(dst), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dout), Int32(nt), grid_dim=1, block_dim=GP_OPT_TPB,
     )
-    var hrec = ctx.enqueue_create_host_buffer[DType.float32](n_runs * 4)
-    var hout = ctx.enqueue_create_host_buffer[DType.float32](2 * nt)
-    var hsi = ctx.enqueue_create_host_buffer[DType.int32](GP_OPT_SI_LEN)
-    ctx.enqueue_copy(dst_ptr=hrec.unsafe_ptr(), src_buf=drec)
-    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
-    ctx.enqueue_copy(dst_ptr=hsi.unsafe_ptr(), src_buf=dsi)
-    ctx.synchronize()
+    # the results land straight in their lists (no host unpack loops)
     var theta = List[Float32](length=nt, fill=Float32(0.0))
     var values = List[Float32](length=nt, fill=Float32(0.0))
-    for i in range(nt):
-        theta[i] = hout.unsafe_ptr().unsafe_load(i)
-        values[i] = hout.unsafe_ptr().unsafe_load(nt + i)
     var runs = List[Float32](length=n_runs * 4, fill=Float32(0.0))
-    for i in range(n_runs * 4):
-        runs[i] = hrec.unsafe_ptr().unsafe_load(i)
+    var hsi = ctx.enqueue_create_host_buffer[DType.int32](GP_OPT_SI_LEN)
+    var out_theta = dout.create_sub_buffer[DType.float32](0, nt)
+    var out_values = dout.create_sub_buffer[DType.float32](nt, nt)
+    ctx.enqueue_copy(dst_ptr=runs.unsafe_ptr(), src_buf=drec)
+    ctx.enqueue_copy(dst_ptr=theta.unsafe_ptr(), src_buf=out_theta)
+    ctx.enqueue_copy(dst_ptr=values.unsafe_ptr(), src_buf=out_values)
+    ctx.enqueue_copy(dst_ptr=hsi.unsafe_ptr(), src_buf=dsi)
+    ctx.synchronize()
     var best = Int(hsi.unsafe_ptr().unsafe_load(GP_OPT_SI_BEST))
-    _ = hrec^
-    _ = hout^
+    _ = out_theta^
+    _ = out_values^
     _ = hsi^
     _ = hstop^
     _ = stop_word^

@@ -174,6 +174,42 @@ def negative_partial_kernel(
         part.unsafe_store(Int(block_idx.x), red.unsafe_load(0))
 
 
+def min_partials_kernel(
+    out: MutPointer[Int32, MutAnyOrigin],
+    part: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """ONE block: the minimum of the block partials `part[0:n]` (n <=
+    SCAN_BLOCKS), written to `out[0]`; `NONFINITE_NONE` when none hit (and
+    when n is 0). An integer minimum, so the first index on every vendor."""
+    var n = Int(n_in)
+    var red = stack_allocation[
+        SCAN_TPB,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var best = NONFINITE_NONE
+    var i = tid
+    while i < n:
+        var v = part.unsafe_load(i)
+        if v < best:
+            best = v
+        i += SCAN_TPB
+    red.unsafe_store(tid, best)
+    barrier()
+    var active = SCAN_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red.unsafe_load(tid + active)
+            if o < red.unsafe_load(tid):
+                red.unsafe_store(tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        out.unsafe_store(0, red.unsafe_load(0))
+
+
 def _fold_partials(mut host: HostBuffer[DType.int32], blocks: Int) -> Int:
     """The host half of every scan: the minimum over the block partials, in
     ascending block order (the order the moved code used; an integer
@@ -401,12 +437,14 @@ struct DeviceNonfiniteBatch(Movable):
     var offsets: List[Int]
     var queued: List[Bool]
     var part: DeviceBuffer[DType.int32]
+    var res: DeviceBuffer[DType.int32]
     var host: HostBuffer[DType.int32]
 
     def __init__(out self, ctx: DeviceContext, lengths: List[Int]) raises:
         var offsets = List[Int]()
         var total = 0
-        for n in lengths:
+        for slot in range(len(lengths)):  # small-loop(lengths: batch slots): one entry per scanned buffer, a handful
+            var n = lengths[slot]
             if n < 0 or n > Int(NONFINITE_NONE):
                 raise Error("nonfinite batch: length outside Int32 index range")
             offsets.append(total)
@@ -416,8 +454,11 @@ struct DeviceNonfiniteBatch(Movable):
         self.queued = List[Bool](length=len(lengths), fill=False)
         step_count_device_alloc()
         self.part = ctx.enqueue_create_buffer[DType.int32](max(total, 1))
+        # one finished word per slot (the device folds each slot's partials)
+        step_count_device_alloc()
+        self.res = ctx.enqueue_create_buffer[DType.int32](max(len(lengths), 1))
         step_count_host_alloc()
-        self.host = ctx.enqueue_create_host_buffer[DType.int32](max(total, 1))
+        self.host = ctx.enqueue_create_host_buffer[DType.int32](max(len(lengths), 1))
 
     def enqueue(
         mut self, ctx: DeviceContext, slot: Int,
@@ -430,30 +471,38 @@ struct DeviceNonfiniteBatch(Movable):
         if self.queued[slot] or n > len(buf):
             ctx.synchronize()
             raise Error("nonfinite batch: duplicate slot or short source")
+        var blocks = 0
         if n > 0:
+            blocks = _scan_blocks(n)
             step_count_launch()
             ctx.enqueue_function[nonfinite_partial_kernel](
                 self.part.unsafe_ptr() + self.offsets[slot], buf.unsafe_ptr(),
-                Int32(n), grid_dim=(_scan_blocks(n), 1, 1),
+                Int32(n), grid_dim=(blocks, 1, 1),
                 block_dim=(SCAN_TPB, 1, 1),
             )
+        # the slot's partials fold on the device into one word (n = 0 writes
+        # NONFINITE_NONE)
+        step_count_launch()
+        ctx.enqueue_function[min_partials_kernel](
+            self.res.unsafe_ptr() + slot, self.part.unsafe_ptr() + self.offsets[slot],
+            Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+        )
         self.queued[slot] = True
 
     def finish(mut self, ctx: DeviceContext) raises -> List[Int]:
         # Even an incomplete batch drains before raising; its sources must
         # remain live through this method. Never read unfinished host data.
         step_count_d2h()
-        ctx.enqueue_copy(dst_ptr=self.host.unsafe_ptr(), src_buf=self.part)
+        ctx.enqueue_copy(dst_ptr=self.host.unsafe_ptr(), src_buf=self.res)
         step_count_sync()
         ctx.synchronize()
-        for done in self.queued:
-            if not done:
+        for slot in range(len(self.queued)):  # small-loop(queued: batch slots): one flag per scanned buffer, a handful
+            if not self.queued[slot]:
                 raise Error("nonfinite batch: missing slot")
+        # one finished word per slot, folded on the device at enqueue
         var results = List[Int]()
-        for slot in range(len(self.lengths)):
-            var best = NONFINITE_NONE
-            for i in range(_scan_blocks(self.lengths[slot])):
-                best = min(best, self.host.unsafe_ptr().unsafe_load(self.offsets[slot] + i))
+        for slot in range(len(self.lengths)):  # small-loop(lengths: batch slots): one answer word per scanned buffer
+            var best = self.host.unsafe_ptr().unsafe_load(slot)
             results.append(-1 if best == NONFINITE_NONE else Int(best))
             self.queued[slot] = False
         return results^

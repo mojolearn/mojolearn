@@ -42,7 +42,7 @@ def ctx_cache_key(ctx: DeviceContext) raises -> Int:
 
 def ctx_cache_slot(ids: List[Int], ctx: DeviceContext) raises -> Int:
     var key = ctx_cache_key(ctx)
-    for i in range(len(ids)):
+    for i in range(len(ids)):  # small-loop(ids: cached device contexts): one entry per live device context
         if ids[i] == key:
             return i
     return -1

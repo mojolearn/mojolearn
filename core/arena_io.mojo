@@ -47,7 +47,7 @@ def check_in_ranges(ins_addr: Int, nins: Int, arena_len: Int) raises:
         raise Error("arena ranges: invalid input range list")
     var r = ArenaIP(unsafe_from_address=ins_addr)
     var at = 0
-    for k in range(nins):
+    for k in range(nins):  # small-loop(nins: arena input ranges): validates the per-launch range list, a handful of entries
         var lo = Int(r.unsafe_load(IN_INTS * k))
         var hi = Int(r.unsafe_load(IN_INTS * k + 1))
         var src = Int(r.unsafe_load(IN_INTS * k + 2))
@@ -61,7 +61,7 @@ def check_out_ranges(outs_addr: Int, nouts: Int, arena_len: Int) raises:
     if nouts < 0 or (nouts > 0 and outs_addr == 0):
         raise Error("arena ranges: invalid output range list")
     var o = ArenaIP(unsafe_from_address=outs_addr)
-    for k in range(nouts):
+    for k in range(nouts):  # small-loop(nouts: arena output ranges): validates the per-launch range list, a handful of entries
         var lo = Int(o.unsafe_load(OUT_INTS * k))
         var hi = Int(o.unsafe_load(OUT_INTS * k + 1))
         var cn = Int(o.unsafe_load(OUT_INTS * k + 2))

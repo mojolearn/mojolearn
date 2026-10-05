@@ -57,7 +57,12 @@ from x_decomp.kit import (
     Mat, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
     mat_from,
 )
-from x_decomp.mcd import Est, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
+from std.atomic import Atomic
+from std.builtin.sort import sort
+from core.device_zero import enqueue_fill
+from core.device_fold import device_exclusive_scan_total_from
+from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
+from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
 
@@ -92,6 +97,95 @@ def pinv_mask_kernel(keep: F32Ptr, w: F32Ptr, dst: F32Ptr, n: Int32, cut: Float3
         var cb = bitcast[DType.uint32](cut) & UInt32(0x7FFFFFFF)
         var take = ab <= UInt32(0x7F800000) and cb <= UInt32(0x7F800000) and ab > cb
         dst.unsafe_store(j, keep.unsafe_load(j) if take else Float32(0))
+
+
+
+# ---- the C-step's selections on the device (lane cpu3-core) ---------------
+# The search used to download every distance vector and every draw vector and
+# select / sort on the host (`smallest_sorted`, `argsort_values`). Here the
+# (value, index) order is a stable radix sort of the values' monotone images
+# (ties keep index order, so the order is Python's tuple order), the h
+# smallest are marked and compacted in index order by a scan, and the rows
+# are gathered from the resident index vector: the same rows, the same
+# order, so the same bits as the host column.
+comptime U32Ptr = MutPointer[UInt32, MutAnyOrigin]
+
+
+def mcd_sort_keys_kernel(v: F32Ptr, n: Int32, keys: U32Ptr, vals: U32Ptr, bad: I32Ptr):
+    """keys[i] = `_key(v[i], i)`'s high word (v's monotone image, -0.0 as
+    +0.0), vals[i] = i; a NaN sets bad[0] (`_key`'s refusal)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        var x = v.unsafe_load(i)
+        if x != x:
+            bad.unsafe_store(0, Int32(1))
+        var w = x
+        if w == Float32(0):
+            w = Float32(0)
+        var ub = bitcast[DType.uint32](w)
+        var tw = ub ^ UInt32(0xFFFFFFFF) if (ub >> 31) == UInt32(1) else ub | UInt32(0x80000000)
+        keys.unsafe_store(i, tw)
+        vals.unsafe_store(i, UInt32(i))
+
+
+def u32_to_idx_kernel(vals: U32Ptr, n: Int32, dst: I32Ptr):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        dst.unsafe_store(i, Int32(Int(vals.unsafe_load(i))))
+
+
+def mark_head_kernel(order: U32Ptr, h: Int32, flag: I32Ptr):
+    """flag[order[a]] = 1 for a < h (flag zeroed before)."""
+    var a = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if a < Int(h):
+        flag.unsafe_store(Int(order.unsafe_load(a)), Int32(1))
+
+
+def emit_marked_kernel(flag: I32Ptr, scan: I32Ptr, n: Int32, dst: I32Ptr):
+    """dst[scan[i]] = i for every marked i: the marked rows in index order."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        if flag.unsafe_load(i) != Int32(0):
+            dst.unsafe_store(Int(scan.unsafe_load(i)), Int32(i))
+
+
+def mark_rows_kernel(dst: I32Ptr, idx: I32Ptr, m: Int32):
+    """dst[idx[a]] = 1 for a < m (the support vector)."""
+    var a = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if a < Int(m):
+        dst.unsafe_store(Int(idx.unsafe_load(a)), Int32(1))
+
+
+def mark_rows_of_kernel(dst: I32Ptr, base: I32Ptr, idx: I32Ptr, m: Int32):
+    """dst[base[idx[a]]] = 1 for a < m (a support inside a row subset)."""
+    var a = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if a < Int(m):
+        dst.unsafe_store(Int(base.unsafe_load(Int(idx.unsafe_load(a)))), Int32(1))
+
+
+def scatter_rows_kernel(dst: F32Ptr, idx: I32Ptr, src: F32Ptr, m: Int32):
+    """dst[idx[a]] = src[a] for a < m (distances back to their rows)."""
+    var a = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if a < Int(m):
+        dst.unsafe_store(Int(idx.unsafe_load(a)), src.unsafe_load(a))
+
+
+def logdet_sign_kernel(diag: F32Ptr, piv: I32Ptr, n: Int32, out: I32Ptr):
+    """`_slogdet`'s sign rule on the device: out[0] = 1 when a pivot is 0;
+    out[1] counts the negative pivots plus the row swaps (integer atomics,
+    exact). out zeroed before."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        var x = diag.unsafe_load(i)
+        if x == Float32(0):
+            out.unsafe_store(0, Int32(1))
+        var c = Int32(0)
+        if x < Float32(0):
+            c += 1
+        if Int(piv.unsafe_load(i)) != i:
+            c += 1
+        if c != Int32(0):
+            _ = Atomic.fetch_add(out.unsafe_offset(1), c)
 
 
 # ---- the resident matrix
@@ -240,6 +334,104 @@ struct DKit(Movable):
         self.hold_i.append(idx^)
         return out^
 
+    # ---- selections on the device (lane cpu3-core)
+    def _sorted_order(mut self, v: DMat, bad: DMat) raises -> DeviceBuffer[DType.uint32]:
+        """v's indices in (value, index) order, resident (a stable radix
+        sort of the monotone images); a NaN sets bad's word."""
+        var n = v.n()
+        var keys = self.ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+        var vals = self.ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+        var tk = self.ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+        var tv = self.ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+        var cnt = self.ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
+        if n > 0:
+            self.ctx.enqueue_function[mcd_sort_keys_kernel](
+                v.p(), Int32(n), keys.unsafe_ptr(), vals.unsafe_ptr(),
+                I32Ptr(unsafe_from_address=Int(bad.p())), grid_dim=_blocks(n), block_dim=TPB,
+            )
+            fast_radix_sort_pairs_u32(self.ctx, n, keys, vals, tk, tv, cnt)
+        _ = keys^
+        _ = tk^
+        _ = tv^
+        _ = cnt^
+        return vals^
+
+    def _bad_flag(mut self) raises -> DMat:
+        var bad = DMat(1, 1)
+        var pool = X_DECOMP_POOL.get_or_create_ptr()
+        var bv = pool[].bufs[bad.id].create_sub_buffer[DType.float32](0, 1)
+        enqueue_fill(self.ctx, bv, Float32(0))
+        _ = bv^
+        return bad^
+
+    def _refuse_nan(mut self, bad: DMat) raises:
+        """One word home: `_key`'s NaN refusal, as the host sort raised it."""
+        var h = List[Int32](length=1, fill=Int32(0))
+        var pool = X_DECOMP_POOL.get_or_create_ptr()
+        self.ctx.enqueue_copy(
+            dst_ptr=F32Ptr(unsafe_from_address=Int(h.unsafe_ptr())),
+            src_buf=pool[].bufs[bad.id].create_sub_buffer[DType.float32](0, 1),
+        )
+        self.sync()
+        if h[0] != Int32(0):
+            raise Error("x_decomp MinCovDet: a NaN distance or draw has no order (refused)")
+
+    def argsort_dev(mut self, v: DMat) raises -> DMat:
+        """`argsort_values(v)` as a resident (n x 1) index vector."""
+        var n = v.n()
+        var bad = self._bad_flag()
+        var order = self._sorted_order(v, bad)
+        var out = DMat(n, 1)
+        if n > 0:
+            self.ctx.enqueue_function[u32_to_idx_kernel](
+                order.unsafe_ptr(), Int32(n), I32Ptr(unsafe_from_address=Int(out.p())),
+                grid_dim=_blocks(n), block_dim=TPB,
+            )
+        self._refuse_nan(bad)
+        _ = order^
+        return out^
+
+    def smallest_dev(mut self, v: DMat, h: Int) raises -> DMat:
+        """`smallest_sorted(v, h)` as a resident (h x 1) index vector: the h
+        rows with the smallest (value, index) keys, in index order."""
+        var n = v.n()
+        if h <= 0:
+            return DMat(0, 1)
+        var take = min(h, n)
+        var bad = self._bad_flag()
+        var order = self._sorted_order(v, bad)
+        var flag = self.ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+        var scan = self.ctx.enqueue_create_buffer[DType.int32](n + 1)
+        enqueue_fill(self.ctx, flag, Int32(0))
+        var out = DMat(take, 1)
+        if n > 0:
+            self.ctx.enqueue_function[mark_head_kernel](
+                order.unsafe_ptr(), Int32(take), flag.unsafe_ptr(), grid_dim=_blocks(take), block_dim=TPB,
+            )
+            device_exclusive_scan_total_from(self.ctx, flag, scan, n)
+            self.ctx.enqueue_function[emit_marked_kernel](
+                flag.unsafe_ptr(), scan.unsafe_ptr(), Int32(n), I32Ptr(unsafe_from_address=Int(out.p())),
+                grid_dim=_blocks(n), block_dim=TPB,
+            )
+        self._refuse_nan(bad)
+        _ = order^
+        _ = flag^
+        _ = scan^
+        return out^
+
+    def gather_dev(mut self, X: DMat, idx: DMat) raises -> DMat:
+        """`take_rows(X, idx)` with the index vector resident (in range by
+        construction: every index came from a device selection over X)."""
+        var m = idx.n()
+        var out = DMat(m, X.c)
+        if m * X.c == 0:
+            return out^
+        self.ctx.enqueue_function[gather_rows_kernel](
+            X.p(), I32Ptr(unsafe_from_address=Int(idx.p())), out.p(), Int32(m), Int32(X.c),
+            grid_dim=_blocks(m * X.c), block_dim=TPB,
+        )
+        return out^
+
     # ---- the kit's calls (Kit's operands, modes and float32 scalars)
     def ew1(self, op: Int, A: DMat, s: Float64) raises -> DMat:
         var out = DMat(A.r, A.c)
@@ -379,32 +571,33 @@ struct DKit(Movable):
         if n > 0:
             self.ctx.enqueue_function[diag_kernel](lu.p(), diag.p(), Int32(n), grid_dim=_blocks(n), block_dim=TPB)
         var t = self.total(self.ew1(OP_LOGS, self.ew1(OP_ABS, diag, 0.0), _FLT_MIN))
-        var dh = self.get(diag)
         var th = self.get(t)
-        var piv = List[Int32](length=max(n, 1), fill=Int32(0))
+        # the sign rule on the device (lane cpu3-core): two words come home
+        var sg = DMat(1, 2)
+        var pool = X_DECOMP_POOL.get_or_create_ptr()
+        var sgv = pool[].bufs[sg.id].create_sub_buffer[DType.float32](0, 2)
+        enqueue_fill(self.ctx, sgv, Float32(0))
         if n > 0:
-            var pool = X_DECOMP_POOL.get_or_create_ptr()
-            self.ctx.enqueue_copy(
-                dst_ptr=F32Ptr(unsafe_from_address=Int(piv.unsafe_ptr())),
-                src_buf=pool[].bufs[pid].create_sub_buffer[DType.float32](0, n),
+            self.ctx.enqueue_function[logdet_sign_kernel](
+                diag.p(), I32Ptr(unsafe_from_address=Int(_ptr(pid, max(n, 1)))), Int32(n),
+                I32Ptr(unsafe_from_address=Int(sg.p())), grid_dim=_blocks(n), block_dim=TPB,
             )
+        var sh = List[Int32](length=2, fill=Int32(0))
+        self.ctx.enqueue_copy(
+            dst_ptr=F32Ptr(unsafe_from_address=Int(sh.unsafe_ptr())),
+            src_buf=pool[].bufs[sg.id].create_sub_buffer[DType.float32](0, 2),
+        )
         self.sync()
         pool_free(pid)
         pool_free(iid)
         pool_free(sid)
         pool_free(aid)
         _ = lu^
-        for i in range(n):
-            if dh.d[i] == Float32(0):
-                return _neg_inf()             # sign 0 -> -inf
-        var neg = 0
-        for i in range(n):
-            if dh.d[i] < Float32(0):
-                neg += 1
-        for i in range(n):
-            if Int(piv[i]) != i:
-                neg += 1
-        if neg % 2 != 0:
+        _ = sgv^
+        _ = sg^
+        if sh[0] != Int32(0):
+            return _neg_inf()                 # sign 0 -> -inf
+        if Int(sh[1]) % 2 != 0:
             return _neg_inf()
         return Float64(th.d[0])
 
@@ -434,11 +627,12 @@ struct DMcd:
         var e = self.k.eigh(A)
         var wmax: Float64 = 0.0
         if n > 0:
+            # w is ascending (the solve's own permutation), so max|w| is at
+            # an end: no host walk over the n eigenvalues (lane cpu3-core)
             wmax = abs(Float64(e.wh.d[0]))
-            for j in range(1, n):
-                var a = abs(Float64(e.wh.d[j]))
-                if a > wmax:                  # Python max(): replace on >
-                    wmax = a
+            var a_last = abs(Float64(e.wh.d[n - 1]))
+            if a_last > wmax:                 # Python max(): replace on >
+                wmax = a_last
         var cut = Float32((wmax * Float64(n)) * _F32_EPS)
         var keep = self.k.ew1(OP_RECIP, e.wd, 0.0)
         var inv = DMat(1, n)
@@ -448,39 +642,26 @@ struct DMcd:
             )
         return self.k.mm(self.k.ew2(OP_MUL, e.vd, inv), e.vd, False, True)
 
-    def perm(mut self, n: Int) raises -> List[Int]:
-        """`MinCovDet._perm`: a sort of the next Philox stream's draws."""
-        self.draws += 1
-        var r = self.k.rand(1, n, self.seed, 1000 + self.draws, 0)
-        var h = self.k.get(r)
-        self.k.sync()
-        return argsort_values(h)
-
-    def perm_head_sorted(mut self, n: Int, h: Int) raises -> List[Int]:
-        """`sorted(self._perm(n)[:h])`."""
-        self.draws += 1
-        var r = self.k.rand(1, n, self.seed, 1000 + self.draws, 0)
-        var v = self.k.get(r)
-        self.k.sync()
-        return smallest_sorted(v, h)
-
     def c_step(
-        mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: Mat, cov0: Mat, want_dist: Bool
-    ) raises -> Est:
+        mut self, X: DMat, h: Int, n_iter: Int, has_init: Bool, loc0: DMat, cov0: DMat, want_dist: Bool
+    ) raises -> DEst:
+        """x_decomp/mcd.mojo's `c_step` with every selection, gather and
+        distance resident (lane cpu3-core): the host reads only the log
+        determinants the loop branches on (and the NaN refusal words)."""
         var iters = n_iter
-        var dist_h = Mat(0, 0)
-        var sel: List[Int]
+        var dist = DMat(0, 1)
+        var sel: DMat
         if not has_init:
-            sel = self.perm_head_sorted(X.r, h)
+            # `sorted(self._perm(n)[:h])`: the next Philox stream's draws
+            self.draws += 1
+            var r = self.k.rand(1, X.r, self.seed, 1000 + self.draws, 0)
+            sel = self.k.smallest_dev(r, h)
         else:
-            var c0 = self.k.upload(cov0)
-            var l0 = self.k.upload(loc0)
-            var P0 = self.pinvh(c0)
-            var d0 = self.mahal(X, l0, P0)
-            dist_h = self.k.get(d0)
-            self.k.sync()
-            sel = smallest_sorted(dist_h, h)
-        var Xs = self.k.gather_rows(X, sel)
+            var P0 = self.pinvh(cov0)
+            var d0 = self.mahal(X, loc0, P0)
+            sel = self.k.smallest_dev(d0, h)
+            dist = d0^
+        var Xs = self.k.gather_dev(X, sel)
         var loc = self.k.colmean(Xs)
         var cov = self.emp_cov(Xs)
         var det = self.k.lu_logdet(cov)
@@ -493,20 +674,19 @@ struct DMcd:
         var have_prev = False
         var prev_loc = DMat(0, 0)
         var prev_cov = DMat(0, 0)
-        var prev_sel = List[Int]()
+        var prev_sel = DMat(0, 1)
         while det < prev_det and iters > 0 and det != _neg_inf():
             P = self.pinvh(cov)
             has_p = True
             var dd = self.mahal(X, loc, P)
-            dist_h = self.k.get(dd)
-            self.k.sync()
             prev_loc = loc^
             prev_cov = cov^
             prev_sel = sel^
             have_prev = True
             prev_det = det
-            sel = smallest_sorted(dist_h, h)
-            Xs = self.k.gather_rows(X, sel)
+            sel = self.k.smallest_dev(dd, h)
+            dist = dd^
+            Xs = self.k.gather_dev(X, sel)
             loc = self.k.colmean(Xs)
             cov = self.emp_cov(Xs)
             det = self.k.lu_logdet(cov)
@@ -520,48 +700,80 @@ struct DMcd:
         if iters == 0:
             use_prev = False
         if use_prev:
-            var plh = self.k.get(prev_loc)
-            var pch = self.k.get(prev_cov)
-            self.k.sync()
-            return Est(plh^, pch^, prev_det, prev_sel^, dist_h^)
-        var final = Mat(0, 0)
+            return DEst(prev_loc^, prev_cov^, prev_det, prev_sel^, dist^)
+        var final = DMat(0, 1)
         if want_dist:
-            var fd = self.mahal(X, loc, P)
-            final = self.k.get(fd)
-        var lh = self.k.get(loc)
-        var ch = self.k.get(cov)
-        self.k.sync()
-        return Est(lh^, ch^, det, sel^, final^)
+            final = self.mahal(X, loc, P)
+        return DEst(loc^, cov^, det, sel^, final^)
 
-    def select_random(mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, want_dist: Bool) raises -> List[Est]:
-        var est = List[Est]()
-        var none = Mat(0, 0)
-        for _ in range(trials):
-            est.append(self.c_step(X, h, n_iter, False, none, none, want_dist))
+    def select_random(
+        mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, want_dist: Bool
+    ) raises -> List[Optional[DEst]]:
+        var est = List[Optional[DEst]]()
+        var none = DMat(0, 0)
+        for _t in range(trials):  # small-loop(trials: C-step candidates): one enqueued C-step a candidate, the plan's trial count
+            est.append(Optional(self.c_step(X, h, n_iter, False, none, none, want_dist)))
         return _top(est, keep)
 
     def select_init(
-        mut self, X: DMat, h: Int, inits: List[Est], keep: Int, n_iter: Int, want_dist: Bool
-    ) raises -> List[Est]:
-        var est = List[Est]()
-        for t in range(len(inits)):
-            est.append(self.c_step(X, h, n_iter, True, inits[t].loc, inits[t].cov, want_dist))
+        mut self, X: DMat, h: Int, mut inits: List[Optional[DEst]], keep: Int, n_iter: Int, want_dist: Bool
+    ) raises -> List[Optional[DEst]]:
+        var est = List[Optional[DEst]]()
+        for t in range(len(inits)):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
+            ref e = inits[t].value()
+            est.append(Optional(self.c_step(X, h, n_iter, True, e.loc, e.cov, want_dist)))
         return _top(est, keep)
 
 
-def _top(est: List[Est], keep: Int) raises -> List[Est]:
-    var order = _order_by_det(est, keep)
-    var out = List[Est]()
-    for a in range(len(order)):
-        out.append(est[order[a]].copy())
+struct DEst(Movable):
+    """`Est` with every matrix resident: location, covariance, the log
+    determinant, the support rows (an index vector) and the distances."""
+    var loc: DMat
+    var cov: DMat
+    var det: Float64
+    var sel: DMat
+    var dist: DMat
+
+    def __init__(out self, var loc: DMat, var cov: DMat, det: Float64, var sel: DMat, var dist: DMat):
+        self.loc = loc^
+        self.cov = cov^
+        self.det = det
+        self.sel = sel^
+        self.dist = dist^
+
+
+def _top(mut est: List[Optional[DEst]], keep: Int) raises -> List[Optional[DEst]]:
+    """`_order_by_det`'s order: `sorted(range(len(est)), key=(det, j))[:keep]`."""
+    var keys = List[UInt64](capacity=len(est))
+    for j in range(len(est)):  # small-loop(est: C-step candidates): one log determinant per candidate
+        keys.append(_key(Float32(est[j].value().det), j))
+    sort(keys)
+    var out = List[Optional[DEst]]()
+    for a in range(min(keep, len(keys))):  # small-loop(keep: kept candidates): moves the kept candidates
+        out.append(est[Int(keys[a] & UInt64(0xFFFFFFFF))].take())
     return out^
+
+
+def _write_dev(
+    mut k: DKit, loc: DMat, cov: DMat, sup: DMat, dist: DMat, n: Int, d: Int,
+    loc_out: F32Ptr, cov_out: F32Ptr, sup_out: I32Ptr, dist_out: F32Ptr,
+) raises:
+    """`_write` from the resident answer: four copies, one wait."""
+    if d > 0:
+        k.ctx.enqueue_copy(dst_ptr=loc_out, src_buf=k._sub(loc))
+        k.ctx.enqueue_copy(dst_ptr=cov_out, src_buf=k._sub(cov))
+    if n > 0:
+        k.ctx.enqueue_copy(dst_ptr=F32Ptr(unsafe_from_address=Int(sup_out)), src_buf=k._sub(sup))
+        k.ctx.enqueue_copy(dst_ptr=dist_out, src_buf=k._sub(dist))
+    k.sync()
 
 
 def fast_mcd_dev(
     X: Mat, p: List[Int], loc_out: F32Ptr, cov_out: F32Ptr, sup_out: I32Ptr, dist_out: F32Ptr,
 ) raises:
     """`fast_mcd` (x_decomp/mcd.mojo) with X resident: the same plan, the
-    same C-steps, the same draws and orders."""
+    same C-steps, the same draws and orders. Every permutation, selection,
+    support and distance stays on the device (lane cpu3-core)."""
     # FAST on Apple, OPT-IN (-D MOJOLEARN_MCD_DEVICE_CSTEPS; DROPPED-quality
     # 2026-10-03, see x_decomp/mcd_fast.mojo's docstring): every candidate's
     # C-steps together on the device (lane/apple-fast-robust; M3 A/B min-cov-det
@@ -574,9 +786,16 @@ def fast_mcd_dev(
     var h = p[2]
     var run = DMcd(p[3])
     var Xd = run.k.upload(X)
-    var best: Est
-    var support = List[Int32](length=n, fill=Int32(0))
-    var dist = List[Float32](length=n, fill=Float32(0))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var sup = DMat(n, 1)
+    var dist = DMat(n, 1)
+    var supv = pool[].bufs[sup.id].create_sub_buffer[DType.float32](0, max(n, 1))
+    var distv = pool[].bufs[dist.id].create_sub_buffer[DType.float32](0, max(n, 1))
+    enqueue_fill(run.k.ctx, supv, Float32(0))
+    enqueue_fill(run.k.ctx, distv, Float32(0))
+    _ = supv^
+    _ = distv^
+    var best: DEst
     if n > 500:
         var n_sub = p[4]
         var n_ss = p[5]
@@ -585,43 +804,50 @@ def fast_mcd_dev(
         var n_m = p[8]
         var h_m = p[9]
         var n_best_m = p[10]
-        var shuf = run.perm(n)
-        var pool = List[Est]()
-        for i in range(n_sub):
-            var rows = List[Int](capacity=n_ss)
-            for a in range(i * n_ss, (i + 1) * n_ss):
-                rows.append(shuf[a])
-            var cur = run.k.gather_rows(Xd, rows)
+        var shuf = run.k.argsort_dev(run.k.rand(1, n, run.seed, 1000 + run.draws + 1, 0))
+        run.draws += 1
+        var cands = List[Optional[DEst]]()
+        for i in range(n_sub):  # small-loop(n_sub: row subsets): one gather and its C-steps a subset, the plan's subset count
+            var rows = DMat(rows_of=shuf, row0=i * n_ss, rows=n_ss)
+            var cur = run.k.gather_dev(Xd, rows)
             var got = run.select_random(cur, h_sub, n_trials, 10, 2, False)
-            for e in range(len(got)):
-                pool.append(got[e].copy())
-        var selection_all = run.perm(n)
-        var selection = List[Int](capacity=n_m)
-        for a in range(n_m):
-            selection.append(selection_all[a])
-        var Xm = run.k.gather_rows(Xd, selection)
-        var merged = run.select_init(Xm, h_m, pool, n_best_m, 30, n < 1500)
+            for e in range(len(got)):  # small-loop(got: kept candidates): moves at most ten candidates
+                cands.append(got[e].take())
+        var selection_all = run.k.argsort_dev(run.k.rand(1, n, run.seed, 1000 + run.draws + 1, 0))
+        run.draws += 1
+        var selection = DMat(rows_of=selection_all, row0=0, rows=n_m)
+        var Xm = run.k.gather_dev(Xd, selection)
+        var merged = run.select_init(Xm, h_m, cands, n_best_m, 30, n < 1500)
         if n < 1500:
-            ref m0 = merged[0]
-            for a in range(len(selection)):
-                dist[selection[a]] = m0.dist.d[a]
-            for a in range(len(m0.sel)):
-                support[selection[m0.sel[a]]] = Int32(1)
-            _write(m0.loc, m0.cov, support, dist, d, loc_out, cov_out, sup_out, dist_out)
-            run.k.sync()
+            ref m0 = merged[0].value()
+            var sp = I32Ptr(unsafe_from_address=Int(sup.p()))
+            var selp = I32Ptr(unsafe_from_address=Int(selection.p()))
+            if n_m > 0:
+                run.k.ctx.enqueue_function[scatter_rows_kernel](
+                    dist.p(), selp, m0.dist.p(), Int32(n_m), grid_dim=_blocks(n_m), block_dim=TPB,
+                )
+            var ms = m0.sel.n()
+            if ms > 0:
+                run.k.ctx.enqueue_function[mark_rows_of_kernel](
+                    sp, selp, I32Ptr(unsafe_from_address=Int(m0.sel.p())), Int32(ms),
+                    grid_dim=_blocks(ms), block_dim=TPB,
+                )
+            _write_dev(run.k, m0.loc, m0.cov, sup, dist, n, d, loc_out, cov_out, sup_out, dist_out)
+            _ = Xd^
             return
         var full = run.select_init(Xd, h, merged, 1, 30, True)
-        best = full[0].copy()
+        best = full[0].take()
     else:
         var first = run.select_random(Xd, h, 30, 10, 2, False)
         var full = run.select_init(Xd, h, first, 1, 30, True)
-        best = full[0].copy()
-    for a in range(len(best.sel)):
-        support[best.sel[a]] = Int32(1)
-    for i in range(n):
-        dist[i] = best.dist.d[i]
-    _write(best.loc, best.cov, support, dist, d, loc_out, cov_out, sup_out, dist_out)
-    run.k.sync()
+        best = full[0].take()
+    var bs = best.sel.n()
+    if bs > 0:
+        run.k.ctx.enqueue_function[mark_rows_kernel](
+            I32Ptr(unsafe_from_address=Int(sup.p())), I32Ptr(unsafe_from_address=Int(best.sel.p())), Int32(bs),
+            grid_dim=_blocks(bs), block_dim=TPB,
+        )
+    _write_dev(run.k, best.loc, best.cov, sup, best.dist, n, d, loc_out, cov_out, sup_out, dist_out)
     _ = Xd^
 
 

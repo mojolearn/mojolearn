@@ -21,9 +21,15 @@ of n, the same on NVIDIA, AMD, Apple and the host column:
      `b * 256 + t + k * stride` into a register that starts at 0.0.
   3. the block folds its 256 registers with the halving tree
      `red[t] += red[t + s]`, s = 128, 64, ..., 1.
-  4. the host adds the block partials in ascending block order onto 0.0.
+  4. the block partials are folded on the device by ONE more pass of steps
+     2 and 3 over them (one block, n = blocks): thread t adds partials t and
+     t + 256 (when present) in ascending order onto 0.0, then the halving
+     tree. Only the one total word is read back (lane cpu3-core: the host no
+     longer combines partials).
 
 `host_sum_f32_fixed` is that order on the host, for the CPU-only column.
+The integer folds and the first-index minimum finish the same way (one
+block over the partials), exact in any order.
 Every add is flushed (`checks.numerics.ftz`), so a subnormal is zero on
 every vendor; no multiply appears, so no fused multiply-add can change a bit.
 """
@@ -262,15 +268,70 @@ def _scan_tail_kernel(buf: _I32P, n_in: Int32):
 # ------------------------------------------------------------ host side ----
 
 
+def _sum_i64_kernel(out: _I64P, part: _I64P, n_in: Int32):
+    """One block: the Int64 sum of `part[0:n]` (n <= 2 * SCAN_TPB partials),
+    written to `out[0]`. Integer, so exact in any order."""
+    var n = Int(n_in)
+    var red = stack_allocation[SCAN_TPB, Scalar[DType.int64], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var acc = Int64(0)
+    var i = tid
+    while i < n:
+        acc += part.unsafe_load(i)
+        i += SCAN_TPB
+    red.unsafe_store(tid, acc)
+    barrier()
+    var active = SCAN_TPB // 2
+    while active > 0:
+        if tid < active:
+            red.unsafe_store(tid, red.unsafe_load(tid) + red.unsafe_load(tid + active))
+        barrier()
+        active = active // 2
+    if tid == 0:
+        out.unsafe_store(0, red.unsafe_load(0))
+
+
+def _min_i32_kernel(out: _I32P, part: _I32P, n_in: Int32):
+    """One block: the minimum of `part[0:n]` (n <= 2 * SCAN_TPB partials),
+    written to `out[0]`; `NONFINITE_NONE` when every partial is. Exact."""
+    var n = Int(n_in)
+    var red = stack_allocation[SCAN_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var best = NONFINITE_NONE
+    var i = tid
+    while i < n:
+        var v = part.unsafe_load(i)
+        if v < best:
+            best = v
+        i += SCAN_TPB
+    red.unsafe_store(tid, best)
+    barrier()
+    var active = SCAN_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red.unsafe_load(tid + active)
+            if o < red.unsafe_load(tid):
+                red.unsafe_store(tid, o)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        out.unsafe_store(0, red.unsafe_load(0))
+
+
 def _fold_i64(ctx: DeviceContext, mut part: DeviceBuffer[DType.int64], blocks: Int) raises -> Int64:
-    var host = ctx.enqueue_create_host_buffer[DType.int64](blocks)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    """The sum of the block partials, folded on the device; one word read back."""
+    var one = ctx.enqueue_create_buffer[DType.int64](1)
+    ctx.enqueue_function[_sum_i64_kernel](
+        one.unsafe_ptr(), part.unsafe_ptr(), Int32(blocks),
+        grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    var host = ctx.enqueue_create_host_buffer[DType.int64](1)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=one)
     # the host reads `host` next: the one wait this fold needs
     ctx.synchronize()
-    var total = Int64(0)
-    for b in range(blocks):
-        total += host.unsafe_ptr().unsafe_load(b)
+    var total = host.unsafe_ptr().unsafe_load(0)
     _ = host^
+    _ = one^
     return total
 
 
@@ -324,15 +385,17 @@ def device_first_nonneg_i32(ctx: DeviceContext, mut buf: DeviceBuffer[DType.int3
         part.unsafe_ptr(), buf.unsafe_ptr(), Int32(n),
         grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
     )
-    var host = ctx.enqueue_create_host_buffer[DType.int32](blocks)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    var one = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_function[_min_i32_kernel](
+        one.unsafe_ptr(), part.unsafe_ptr(), Int32(blocks),
+        grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    var host = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=one)
     ctx.synchronize()
-    var best = NONFINITE_NONE
-    for b in range(blocks):
-        var v = host.unsafe_ptr().unsafe_load(b)
-        if v < best:
-            best = v
+    var best = host.unsafe_ptr().unsafe_load(0)
     _ = host^
+    _ = one^
     _ = part^
     return -1 if best == NONFINITE_NONE else Int(best)
 
@@ -369,13 +432,18 @@ def device_sum_f32_fixed(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32
         part.unsafe_ptr(), buf.unsafe_ptr(), Int32(n),
         grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
     )
-    var host = ctx.enqueue_create_host_buffer[DType.float32](blocks)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    # step 4: one block folds the partials (steps 2 and 3 over n = blocks)
+    var one = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.enqueue_function[_sum_f32_kernel](
+        one.unsafe_ptr(), part.unsafe_ptr(), Int32(blocks),
+        grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    var host = ctx.enqueue_create_host_buffer[DType.float32](1)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=one)
     ctx.synchronize()
-    var total = Float32(0.0)
-    for b in range(blocks):
-        total = ftz(total + host.unsafe_ptr().unsafe_load(b))
+    var total = host.unsafe_ptr().unsafe_load(0)
     _ = host^
+    _ = one^
     _ = part^
     return total
 
@@ -387,7 +455,7 @@ def host_sum_f32_fixed(x: List[Float32], n: Int) -> Float32:
     var blocks = fold_blocks(n)
     var stride = blocks * SCAN_TPB
     var red = List[Float32](length=SCAN_TPB, fill=Float32(0.0))
-    var total = Float32(0.0)
+    var part = List[Float32](length=blocks, fill=Float32(0.0))
     for b in range(blocks):
         for t in range(SCAN_TPB):
             var acc = Float32(0.0)
@@ -401,8 +469,21 @@ def host_sum_f32_fixed(x: List[Float32], n: Int) -> Float32:
             for t in range(active):
                 red[t] = ftz(red[t] + red[t + active])
             active = active // 2
-        total = ftz(total + red[0])
-    return total
+        part[b] = red[0]
+    # step 4: the same pass over the partials, as one block of the device
+    for t in range(SCAN_TPB):
+        var acc = Float32(0.0)
+        var i = t
+        while i < blocks:
+            acc = ftz(acc + part[i])
+            i += SCAN_TPB
+        red[t] = acc
+    var active = SCAN_TPB // 2
+    while active > 0:
+        for t in range(active):
+            red[t] = ftz(red[t] + red[t + active])
+        active = active // 2
+    return red[0]
 
 
 def _grid(n: Int) -> Int:
@@ -474,15 +555,12 @@ def device_sorted_unique_i32(
         grid_dim=(_grid(n), 1, 1), block_dim=(SCAN_TPB, 1, 1),
     )
     var k = device_count_nonzero_i32(ctx, flag, n)
-    var host = ctx.enqueue_create_host_buffer[DType.int32](k)
-    var head = uniq.create_sub_buffer[DType.int32](0, k)
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=head)
-    ctx.synchronize()
-    res = List[Int32](capacity=k)
-    for j in range(k):
-        res.append(host.unsafe_ptr().unsafe_load(j))
-    _ = head^
-    _ = host^
+    res = List[Int32](length=k, fill=Int32(0))
+    if k > 0:
+        var head = uniq.create_sub_buffer[DType.int32](0, k)
+        ctx.enqueue_copy(dst_ptr=res.unsafe_ptr(), src_buf=head)
+        ctx.synchronize()
+        _ = head^
     _ = uniq^
     _ = bsum^
     _ = scan^

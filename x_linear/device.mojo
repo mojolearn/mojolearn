@@ -1282,7 +1282,7 @@ def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[
     var active = List[Bool](length=problems, fill=True)
     var failed = List[Bool](length=problems, fill=False)
     var epochs = List[Int](length=problems, fill=0)
-    for c in range(problems):
+    for c in range(problems):  # small-loop(problems: OvR problems): per-problem launch constants, one row of parameters a class
         var o = c * SGD_OVR_CF
         hcf[o] = eps
         hcf[o + 1] = fp[6 + c] if has_cw else Float32(1)
@@ -1330,7 +1330,7 @@ def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[
     for epoch in range(max_iter):
         if live == 0:
             break
-        for c in range(problems):
+        for c in range(problems):  # small-loop(problems: OvR problems): per-problem epoch counters, bookkeeping only
             if active[c]:
                 epochs[c] = epoch + 1
         var par = epoch % 2
@@ -1409,7 +1409,7 @@ def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[
                 wit.fail()
         ctx.synchronize()
         var changed = False
-        for c in range(problems):
+        for c in range(problems):  # small-loop(problems: OvR problems): reads each problem's two stop words, the epoch's scalar decision
             if active[c]:
                 if hstt[c * SGD_MB_WORDS + SGD_MB_FLAGS + 1] != Float32(0):
                     failed[c] = True
@@ -2653,7 +2653,7 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var hlive = List[Int32](length=1, fill=Int32(0))
     var dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
     dres.enqueue_fill(Float32(0))
-    for c in range(problems):
+    for c in range(problems):  # small-loop(problems: OvR problems): per-problem launch constants and start state, a few words a class
         hps[SGD_PS_ST * c] = Float32(1) if one_class else Float32(0)
         hps[SGD_PS_ST * c + 4] = Float32(1)
         hpf[3 * c] = eta0

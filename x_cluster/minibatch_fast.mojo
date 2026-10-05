@@ -47,7 +47,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
-from x_cluster.bodies import FPtr, IPtr, SplitMix64
+from x_cluster.bodies import FPtr, IPtr, SPLITMIX_GAMMA, SplitMix64, splitmix_at
 from x_cluster.common import weighted_draw
 
 # Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
@@ -514,6 +514,14 @@ def _mbf_shift_kernel(c_old: FPtr, c_new: FPtr, kd: Int32, dst: FPtr):
         dst[0] = red[0]
 
 
+def _mbf_draw_kernel(idx: IPtr, m: Int32, n: Int32, state: UInt64):
+    """idx[t] = `SplitMix64(state).below(n)`'s draw t + 1 (one thread a draw):
+    the unit-weight batch rows of a step group, drawn on the device."""
+    var t = Int(block_idx.x) * MBF_TPB + Int(thread_idx.x)
+    if t < Int(m):
+        idx[t] = Int32(Int(splitmix_at(state, UInt64(t + 1)) % UInt64(Int(n))))
+
+
 def minibatch_fast_steps(
     ctx: DeviceContext, x: FPtr, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
     ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
@@ -596,15 +604,26 @@ def minibatch_fast_steps(
             var gsz = n_steps - step0
             if gsz > G:
                 gsz = G
-            var h_idx = List[Int32](capacity=gsz * batch)
-            for _s in range(gsz):
-                for _t in range(batch):
-                    if weighted:
+            var h_idx = List[Int32]()
+            if weighted:
+                # the weighted draw searches the host's Float64 cumulative
+                # weights (`weighted_draw`), which Apple GPUs cannot hold
+                h_idx = List[Int32](capacity=gsz * batch)
+                for _s in range(gsz):
+                    for _t in range(batch):
                         h_idx.append(Int32(weighted_draw(cum_w, rng)))
-                    else:
-                        h_idx.append(Int32(rng.below(n)))
-            var iv = d_idx.create_sub_buffer[DType.int32](0, gsz * batch)
-            ctx.enqueue_copy(dst_buf=iv, src_ptr=h_idx.unsafe_ptr())
+                var iv = d_idx.create_sub_buffer[DType.int32](0, gsz * batch)
+                ctx.enqueue_copy(dst_buf=iv, src_ptr=h_idx.unsafe_ptr())
+            else:
+                # unit weights: draw t of the group is `rng.below(n)`'s draw
+                # t + 1 of the stream (`splitmix_at`), written on the device
+                # where the batch rows are read; the host stream skips ahead
+                # past the group's draws (the same words as the host loop)
+                var m = gsz * batch
+                ctx.enqueue_function[_mbf_draw_kernel](
+                    p_idx, Int32(m), Int32(n), rng.state, grid_dim=(m + MBF_TPB - 1) // MBF_TPB, block_dim=MBF_TPB,
+                )
+                rng.state = rng.state + UInt64(m) * SPLITMIX_GAMMA
             for g in range(gsz):
                 var slot_in = in0 if g == 0 else g
                 var slot_out = g + 1
@@ -651,7 +670,7 @@ def minibatch_fast_steps(
             ctx.synchronize()
             _ = h_idx^
             final_slot = gsz
-            for g in range(gsz):
+            for g in range(gsz):  # small-loop(gsz: steps in the group): gsz <= MBF_GROUP per-step convergence scalars
                 var step = step0 + g
                 var bi = Float64(h_in[g]) / Float64(batch)
                 if step == 0:
