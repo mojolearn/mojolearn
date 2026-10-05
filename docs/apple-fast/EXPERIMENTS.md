@@ -5,6 +5,33 @@ Sources: `~/mojolearn-evidence/apple-fast/LEDGER.md` (every KEEP / DROP / MERGED
 
 Process: [experiment validation, toggle lifecycle and promotion](EXPERIMENT_PROCESS.md).
 
+## Untried candidates (2026-10-05)
+
+The OPEN / READY-AB rows below had no result in this file, in the M3 A/B extract (`~/mojolearn-evidence/briefs-2026-10-04/ab_all_latest.txt`, tags rab*), in `~/mojolearn-evidence/apple-fast/LEDGER.md`, or in a `#:` comment beside the define. Every other OPEN / READY-AB row was reconciled on 2026-10-05: its verdict cell now holds the verdict, and its note starts with "reconciled 2026-10-05:" and the evidence tag. Their rows still say OPEN.
+
+| define | lane | branch @ sha | what it needs (build, quality tool, A/B line) |
+|---|---|---|---|
+| `HUBER_FAST_BLOCK512` | robust | lane/apple-fast-robust @ cfdb95e48; on main default OFF (x_linear/huber_fast.mojo) | M2 build `-D MOJOLEARN_HUBER_FAST_BLOCK512`; quality: board r2 / rmse; A/B huber taxi, istella against main, where HUBER_DEVICE_LBFGS is now the default (the old-base 226 -> 196 does not count) |
+| `NB_CAT_ATOMIC` (FAST) | nb | lane/apple-fast-nb @ be2ea3a05; on main opt-in (x_prep/fastnb.mojo; the IDENTICAL twin is the default) | build `-D MOJOLEARN_NB_CAT_ATOMIC`; quality: board accuracy / log loss; A/B categorical-nb taxi, istella |
+| `MI_REG_RANKMAJOR` (+ `MI_REG_SORTCOUNT`) | mi | lane/apple-fast-mi @ 6944ebb57; on main opt-in (x_prep/device.mojo:188) | build `-D MOJOLEARN_MI_REG_RANKMAJOR`; quality: tools/miv_quality.sh selected-set gate; A/B select-mutual-info-reg istella, taxi against main (MI_REG_TIES is the default) |
+| `MI_WORK` (env) | mi | lane/apple-fast-mi @ 6944ebb57; on main, env `MOJOLEARN_MI_WORK=1` (python/mojolearn/_expansion_prep.py:5614) | no build; output digest must match (no bit change claimed); A/B with the env set on select-mutual-info(-reg) istella, taxi |
+| `X_PREP_FAST_II_CONV` (env) | prep2 | lane/apple-fast-prep2 @ 8762eb33f; on main, env read (x_prep/fastprep2.mojo) | the old env-form line errored in both arms; rerun as an env A/B on iterative-imputer taxi; quality: masked_rmse (a max is exact: digest should match) |
+| `X_PREP_FAST_II_GRAM_TILE` (env) | prep2 | lane/apple-fast-prep2 @ 8762eb33f; on main, env read (x_prep/fastprep2.mojo) | as II_CONV: env A/B on iterative-imputer taxi; quality: masked_rmse |
+| `X_PREP_FAST_QSELECT` (env) | prep2 | lane/apple-fast-prep2 @ 8762eb33f; on main, env read (python/mojolearn/_expansion_prep.py:311) | env A/B on simple-imputer and robust-scaler istella; same order statistics, so digest must match |
+| `FA_LIVEBUF` (on the FA_ITER_DEVICE default) | fa | lane/apple-fast-fa @ 3efbce2af; on main default OFF (x_decomp/fa_fast.mojo) | build `-D MOJOLEARN_FA_LIVEBUF`; quality: mean_log_likelihood; A/B factor-analysis istella, taxi (the prior arms predate the FA_GRAM_DF fix) |
+| `DBSCAN_FAST_CC_BATCH` | core | lane/apple-fast-core @ 9a31ebb4c; on main opt-in (dbscan/impl/sparse/detail/csr.mojo) | both arms time out on taxi; A/B on dbscan istella (main finishes there, 247 s in rab3-denseball); quality: labels / n_clusters |
+| `BPE_TRAIN_DEVICE`, `BPE_ENCODE_DEVICE`, `BPE_LIVEBUF`, `BPE_GROUP_FILTER`, `BPE_MERGE_BATCH`, `BPE_ALL` (7 rows) | bpe | lane/apple-fast-bpe @ 3355d37b3; NOT on main | merge main into the branch, M2 build per define; quality: merges and token ids identical to arm A; A/B bpe-train, bpe-encode enwik8 (the neural A/Bs were skipped on Oct 3) |
+| `PURITY2_2` (`_OFF`) | purity2 | lane/apple-fast-purity2 @ 6f1ad9cf7; merged as the default in b994bfc88, never timed | build `-D MOJOLEARN_PURITY2_2_OFF` as arm A, main as arm B; quality: logreg accuracy / log loss; A/B logreg istella, taxi |
+| `SVGP_FAST_BSPLIT` | w2-svgp | lane/apple-fast-w2-svgp @ 146898d2c; on main opt-in (x_neighbors/iter_device.mojo) | build `-D MOJOLEARN_SVGP_FAST_BSPLIT`; quality: tools/svgp_fast_quality.py first; then tools/svgp_fast_pair.py on svgp taxi, istella |
+| `AFN_OPT_FUSE_SCAN` (alone) | neural | lane/apple-fast-neural @ 600237d7c; on main opt-in (training/afn_optim.mojo) | build the define; a quality metric for the optimizer lanes (the bundle AFN_OPTIM_ALL is HOLD: digest moves, no metric); A/B sgd, adam, adamw synthetic on top of the TRAIN_OPT_FAST_PIPE_DOWN default |
+| `AFN_OPT_VEC4` (alone) | neural | lane/apple-fast-neural @ 600237d7c; on main opt-in | as FUSE_SCAN; A/B adam, adamw synthetic |
+| `AFN_OPT_RESIDENT_STATE` (alone) | neural | lane/apple-fast-neural @ 600237d7c; on main opt-in | as FUSE_SCAN; A/B sgd, adam, adamw synthetic |
+| `OPT_FAST_PIPE_CH=524288` | gap-optim | lane/apple-fast-gap-optim @ cf4513f8a; on main | build `-D MOJOLEARN_OPT_FAST_PIPE_CH=524288`; digest must match; A/B rmsprop, adagrad, adamax, nadam synthetic |
+| `SCHED_FAST_INLINE` (env) | gap-optim | lane/apple-fast-gap-optim @ cf4513f8a; on main (python/mojolearn/_x_sequence_sched.py:55) | env A/B on lr-exponential synthetic; host-only Python schedule by contract; digest must match. Note: `SCHED_FAST_TABLE` (lane/apple-fast-s-ts, not on main) measured rab13-schedtable 231.85 -> 19.19 ms on the same row |
+| AutoARIMA search at maxiter 1000 (board env `MOJOLEARN_AUTOARIMA_SEARCH_QOLD=1` = old) | q-misc | lane/apple-fast-q-misc @ 4daac2998; on main as the board default (tools/bench_board_algos.py:2855), never timed | env A/B on autoarima taxi-hourly, synthetic; quality: forecast_rmse (statsforecast 68.21). The rab13-arima* lines errored and test other defines |
+
+Measured, verdict owed (2 rows, OPEN): `DECOMP_FAST_OMP_BLOCK` (lane/apple-fast-decomp-sparse @ 5fb1740cd, on main default OFF): rab3-ompblock sparse-coder istella 0.282833 -> 0.215584 ms (-23.8%), digest same. Arm A is far from the board's 6,669 ms, so check that the arm reached the OMP path before flipping the default.
+
 ## Rule: FAST needs no identical anything (2026-10-04)
 
 FAST never needs identical results: not bits, digests or arm-A equality, and not across vendors or runs. A FAST A/B is judged on speed, and on quality not going down. The board quality metric must show no material drop against FAST main (arm A), and must be at least as good as the best opponent's. A noise-level difference, a new fold order or new bits is never a reason to hold. Any real quality loss is. Strict "B <= A on every metric, zero allowance" gates are retired for FAST verdicts; they may still be reported as information.
