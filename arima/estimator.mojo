@@ -368,12 +368,14 @@ def arima_ic_from_loglike_ptr_host(
         raise Error("arima_ic_from_loglike: a null ic address")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     var d_ll = _upload_f32(ctx, ll_ptr, batch_size)
-    var d_info = ctx.enqueue_create_buffer[DType.int32](batch_size)
-    ctx.enqueue_memset(d_info, Int32(0))
+    var d_info0 = ctx.enqueue_create_buffer[DType.int32](batch_size)
+    var d_info1 = ctx.enqueue_create_buffer[DType.int32](batch_size)
+    ctx.enqueue_memset(d_info0, Int32(0))
+    ctx.enqueue_memset(d_info1, Int32(0))
     var d_ic = ctx.enqueue_create_buffer[DType.uint64](2 * batch_size)
     ctx.enqueue_function[arima_ic_kernel](
-        d_ic.unsafe_ptr(), d_ll.unsafe_ptr(), d_info.unsafe_ptr(),
-        d_info.unsafe_ptr(), Int32(batch_size),
+        d_ic.unsafe_ptr(), d_ll.unsafe_ptr(), d_info0.unsafe_ptr(),
+        d_info1.unsafe_ptr(), Int32(batch_size),
         bitcast[DType.uint64](pen_aic), bitcast[DType.uint64](pen_bic),
         grid_dim=((batch_size + ARIMA_IC_TPB - 1) // ARIMA_IC_TPB, 1, 1),
         block_dim=(ARIMA_IC_TPB, 1, 1),
@@ -382,7 +384,8 @@ def arima_ic_from_loglike_ptr_host(
     ctx.enqueue_copy(dst_ptr=dst, src_buf=d_ic)
     ctx.synchronize()
     _ = d_ic^
-    _ = d_info^
+    _ = d_info1^
+    _ = d_info0^
     _ = d_ll^
     return batch_size
 
