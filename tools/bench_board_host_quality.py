@@ -70,10 +70,30 @@ def enrich(lane, inputs, outputs, quality, python, directory, timeout):
     return str(receipt)
 
 
+def host_binding_artifacts(modules=None):
+    """Hash actual loaded files, including the host loader's private aliases."""
+    import hashlib
+    modules = sys.modules if modules is None else modules
+    rows = []
+    for name, module in list(modules.items()):
+        filename = getattr(module, '__file__', None)
+        if not filename:
+            continue
+        path = Path(filename).resolve()
+        if not path.name.startswith('_mojolearn') or path.suffix != '.so':
+            continue
+        if not path.name.endswith('_host.so'):
+            raise RuntimeError('Reference loaded a non-host binding: ' + str(path))
+        rows.append({'module': name, 'file': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                     'size': path.stat().st_size, 'artifact_source_commit': 'unverified'})
+    if not rows:
+        raise RuntimeError('Reference loaded no host binding')
+    return sorted(rows, key=lambda row: row['module'])
+
+
 def main():
     import numpy as np
     import mojolearn as ml
-    from mojolearn._verify import binding_artifacts
     import bench_board_algos as board
     lane, data, output, receipt = sys.argv[1:]
     if ml.vendor() != 'cpu' or ml.numeric_mode() != 'identical':
@@ -84,9 +104,7 @@ def main():
     runner.fit()
     runner.infer()
     np.savez(output, **runner.outputs())
-    bindings = binding_artifacts()
-    if not bindings or any(not row['module'].endswith('_host') for row in bindings):
-        raise RuntimeError('Reference loaded a non-host binding')
+    bindings = host_binding_artifacts()
     Path(receipt).write_text(json.dumps({'vendor': ml.vendor(), 'numeric_mode': ml.numeric_mode(),
                                         'lane': lane, 'bindings': bindings, 'timed': False}, indent=2) + '\n')
 

@@ -29,3 +29,25 @@ def test_existing_quality_errors_are_not_replaced(tmp_path):
     q = {'ours-fast': {'error': 'real failure'}}
     assert quality.enrich('adam', {}, {'ours-fast': {}}, q, 'not-a-python', tmp_path, 1) is None
     assert q == {'ours-fast': {'error': 'real failure'}}
+
+
+def test_host_binding_private_alias_is_hashed(tmp_path):
+    from types import SimpleNamespace
+    from bench_board_host_quality import host_binding_artifacts
+    path = tmp_path / '_mojolearn_training_host.so'; path.write_bytes(b'host fixture')
+    rows = host_binding_artifacts({'mojolearn._host._mojolearn_training_host': SimpleNamespace(__file__=str(path))})
+    assert len(rows) == 1 and rows[0]['file'] == str(path.resolve()) and len(rows[0]['sha256']) == 64
+
+
+def test_actual_gpu_file_refused_even_with_host_alias(tmp_path):
+    from types import SimpleNamespace
+    from bench_board_host_quality import host_binding_artifacts
+    path = tmp_path / '_mojolearn_training.so'; path.write_bytes(b'gpu fixture')
+    with pytest.raises(RuntimeError, match='non-host'):
+        host_binding_artifacts({'pretend_host': SimpleNamespace(__file__=str(path))})
+
+
+def test_no_loaded_binding_refused():
+    from bench_board_host_quality import host_binding_artifacts
+    with pytest.raises(RuntimeError, match='no host binding'):
+        host_binding_artifacts({})
