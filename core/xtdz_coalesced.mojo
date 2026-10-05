@@ -28,9 +28,11 @@ caller then launches the one-block-per-cell kernel.
 """
 
 from std.gpu import block_idx, thread_idx
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.numerics import ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
 from core.column_stats import STATS_TPB, column_mean_kernel, xty_kernel
 from core.pinned_reduce import pinned_block_sum
 from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, STRIDED_UNROLL, strided_mul_add
@@ -41,6 +43,20 @@ from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, STRIDED_UNROLL, strid
 comptime XTDZ_CO_MAX_CELLS = 1024
 #: Target threads per pass-1 block; `S = max(1, this // cells)` residues.
 comptime XTDZ_CO_BLOCK_TARGET = 256
+#: lane/apple-fast-s-linalg (2026-10-04), default OFF, FAST + Apple only
+#: (`-D MOJOLEARN_PCA_FAST_COLMEAN`). What: `column_mean_launch` takes the
+#: coalesced two-pass form below under FAST too. Without it FAST runs
+#: `column_mean_kernel`, one block per column whose SIMD groups read one
+#: column at a stride of D floats (every load its own cache line, X re-read
+#: once per column): the pattern this file's header measured at 99.8 ms for
+#: `xty` at 1,000,000 x 220 on the M4, against one front-to-back sweep here.
+#: PCA's fit (decomposition/impl/linalg/detail/pca.mojo `compute_covariance`)
+#: runs it on the whole 1M x 220 X every fit. Same chains, same fold, so the
+#: same bits (the coalesced form is `column_mean_kernel` bit for bit).
+#: Expect: pca istella 217.8 -> ~150-190 ms.
+comptime PCA_FAST_COLMEAN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_PCA_FAST_COLMEAN"]()
+)
 
 
 def xtdz_coalesced_applies(d: Int, c: Int) -> Bool:
@@ -227,7 +243,10 @@ def column_mean_launch(
     """`mu = column_mean_kernel(x)` bit for bit. The coalesced form
     allocates its workspace here and SYNCHRONIZES before releasing it;
     otherwise the one-block-per-column launch, asynchronous as before."""
-    if xtdz_coalesced_applies(n_cols, 1):
+    var co = xtdz_coalesced_applies(n_cols, 1)
+    comptime if PCA_FAST_COLMEAN:
+        co = co or (n_cols >= 1 and n_cols <= XTDZ_CO_MAX_CELLS)
+    if co:
         var ws = ctx.enqueue_create_buffer[DType.float32](n_cols * STATS_TPB)
         var s = max(1, XTDZ_CO_BLOCK_TARGET // n_cols)
         ctx.enqueue_function[mean_partial_kernel](
