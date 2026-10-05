@@ -468,6 +468,8 @@ def lane_settings(lane):
         s["quality"] = "max_abs_diff_vs_ours, max_rel_diff_vs_ours" + (
             ", mean_nll" if lane in ("lm-forward", "samba-forward", "samba-infer") else "") + (
             ", max_rel_err_vs_fp64" if MODEL_OF[lane] == "gemm" else "")
+        if lane in FORWARD_REFERENCE_LANES:
+            s["quality"] += ", untimed Mojo CPU host-reference finite/shape check and atol=1e-6 + rtol=1e-5 * abs(reference)"
     s["torch_settings"] = {a: precision_text(arm_setting(a)[1]) for a in
                            ["torch-" + x for x in TORCH_SETTINGS]}
     return s
@@ -1529,7 +1531,67 @@ def _mean_nll(np, logits, targets):
     return float((lse - picked).mean())
 
 
-def quality(lane, data, outs):
+# Same fp32 forward tolerance used by the Mamba and transformer surface gates.
+# This checks saved benchmark output, never a timed opponent or a GPU rerun.
+FORWARD_REFERENCE_LANES = ("transformer-forward", "mamba1-forward", "mamba2-forward", "mamba3-forward")
+FORWARD_REFERENCE_ATOL = 1e-6
+FORWARD_REFERENCE_RTOL = 1e-5
+
+
+def forward_host_quality(lane, shape, data, outs):
+    import numpy as np
+    own = {arm: out for arm, out in outs.items() if arm in ("ours", "ours-fast")}
+    if not own:
+        return {}
+    ml = _ours_module()
+    weights = {k: np.ascontiguousarray(v) for k, v in _weights(data).items()}
+    model = MODEL_OF[lane]
+    kwargs = {"numeric_mode": "identical"}
+    if model == "transformer":
+        d = _dims_of(lane, shape)
+        cls = ml.TransformerBlockInference
+        kwargs.update(n_heads=d["n_heads"], n_kv_heads=d["n_kv"], head_dim=d["head_dim"],
+                      norm_eps=BLOCK_NORM_EPS, rope_theta=BLOCK_ROPE_THETA)
+    else:
+        cls = getattr(ml, {"mamba1": "Mamba1BlockInference", "mamba2": "Mamba2BlockInference",
+                           "mamba3": "Mamba3BlockInference"}[model])
+    block = cls(weights, **kwargs)
+    # The public inference classes dispatch only to the shipped Mojo CPU host
+    # binding. Their fresh forward uses exactly the race's weights and inputs.
+    ref = np.asarray(block.forward(np.ascontiguousarray(data["x"])), dtype=np.float64)
+    result = {}
+    for arm, out in own.items():
+        got = np.asarray(out["y"], dtype=np.float64)
+        matching_shape = got.shape == ref.shape
+        finite = bool(np.isfinite(got).all() and np.isfinite(ref).all())
+        q = {"host_reference": cls.__name__, "host_reference_atol": FORWARD_REFERENCE_ATOL,
+             "host_reference_rtol": FORWARD_REFERENCE_RTOL, "host_reference_finite": finite,
+             "host_reference_passed": False}
+        if not matching_shape:
+            q["shape_mismatch_vs_host"] = "%s vs %s" % (list(got.shape), list(ref.shape))
+        elif finite and ref.size:
+            error = np.abs(got - ref)
+            bound = FORWARD_REFERENCE_ATOL + FORWARD_REFERENCE_RTOL * np.abs(ref)
+            q.update(max_abs_diff_vs_host=float(error.max()),
+                     max_rel_diff_vs_host=float(error.max()) / (float(np.abs(ref).max()) or 1.0),
+                     host_reference_tolerance_ratio=float((error / bound).max()),
+                     host_reference_passed=bool(np.all(error <= bound)))
+        result[arm] = q
+    return result
+
+
+def mark_forward_quality_failures(result):
+    """A missing/failed host reference cannot leave a timed own arm marked ok."""
+    if result["lane"] not in FORWARD_REFERENCE_LANES:
+        return
+    for arm in ("ours", "ours-fast"):
+        row = result["arms"].get(arm)
+        if row and row.get("status") == "ok" and not result.get("quality", {}).get(arm, {}).get("host_reference_passed"):
+            row.update(status="quality_failed", error={"host_reference": result.get("quality", {}).get(arm,
+                       result.get("quality", {}).get("error", "missing saved output or host reference"))})
+
+
+def quality(lane, data, outs, *, shape="full"):
     import numpy as np
     q = {}
     if lane in TRAIN_LANES:
@@ -1544,6 +1606,8 @@ def quality(lane, data, outs):
         return q
     for arm, o in outs.items():
         q[arm] = {}
+    if lane in FORWARD_REFERENCE_LANES:
+        q.update(forward_host_quality(lane, shape, data, outs))
     if lane in ("lm-forward", "lm-infer", "samba-forward", "samba-infer"):
         targets = data["batches"][0][:, 1:].astype(np.int64)
         for arm, o in outs.items():
@@ -1721,9 +1785,10 @@ def race(args):
     try:
         with np.load(data_path) as z:
             data = {k: z[k] for k in z.files}
-        result["quality"] = quality(lane, data, outs)
+        result["quality"] = quality(lane, data, outs, shape=args.shape)
     except Exception as exc:  # noqa: BLE001
         result["quality"] = {"error": repr(exc)}
+    mark_forward_quality_failures(result)
     try:
         os.remove(data_path)
     except OSError:
