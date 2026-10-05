@@ -40,6 +40,7 @@ comptime OP_FMA = 15
 comptime OP_LE = 34
 comptime OP_MAX = 30
 comptime OP_SIGN = 33
+comptime OP_SOFT = 17
 comptime OP_TANH = 11
 comptime OP_ONEMSQ = 12
 comptime OP_EXPG = 25
@@ -316,6 +317,51 @@ struct Kit[E: Exec](Movable):
         if X.n() > 0:
             lda_bound_host(X.p(), ddt.p(), dcomp.p(), P.p(), X.r, ddt.c, X.c, Float32(floor))
         return P^
+
+    def diag(self, A: Mat) -> Mat:
+        """`_Kit.diag`: A's diagonal as 1 x n (exact copies)."""
+        var out = Mat(1, A.r)
+        for i in range(A.r):
+            out.d[i] = A.d[i * (A.c + 1)]
+        return out^
+
+    @staticmethod
+    def fill0(mut A: Mat, start: Int, stride: Int, count: Int):
+        """`_Kit.fill0`: A[start + t * stride] = 0 for t < count."""
+        for t in range(count):
+            A.d[start + t * stride] = Float32(0)
+
+    def lasso_rows(self, G: Mat, Q: Mat, mut W: Mat, alpha: Float64, max_iter: Int, tol: Float64,
+                   positive: Bool) raises:
+        """`_Kit.lasso_rows`: W (n x k, the warm start) updated in place."""
+        var n = Q.r
+        var kk = Q.c
+        if n * kk == 0:
+            return
+        var h = Mat(n, kk)
+        var its = Mat(n, 1)
+        Self.E.lasso_rows(G.p(), Q.p(), W.p(), h.p(), its.p(), n, kk, Float32(alpha), max_iter, Float32(tol), positive)
+
+    def lars_rows(self, G: Mat, Q: Mat, m: Int, nnz: Int) raises -> Mat:
+        var W = Mat(Q.r, Q.c)
+        if Q.n() > 0:
+            if Q.r * (Q.c * Q.c + 7 * Q.c) > 2147483647:
+                raise Error("x_decomp: lars_rows exceeds the Int32 index bound")
+            var na = Mat(Q.r, 1)
+            Self.E.lars_rows(G.p(), Q.p(), W.p(), na.p(), Q.r, Q.c, m, nnz)
+        return W^
+
+    def omp_rows(self, G: Mat, Q: Mat, nnz: Int) raises -> Mat:
+        var W = Mat(Q.r, Q.c)
+        if Q.n() > 0:
+            var s = Mat(Q.r, Q.c * Q.c + 3 * Q.c)
+            var na = Mat(Q.r, 1)
+            Self.E.omp_rows(G.p(), Q.p(), W.p(), s.p(), na.p(), Q.r, Q.c, nnz)
+        return W^
+
+    def dict_fused(self, D: Mat, A: Mat, B: Mat, mut Dn: Mat) raises -> Bool:
+        """The FAST fused atom update (GPU binding only): never here."""
+        return False
 
     def sqdist(self, A: Mat, B: Mat) raises -> Mat:
         """`_Kit.sqdist(A, B)`: the squared distances (A.r x B.r)."""

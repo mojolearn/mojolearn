@@ -3428,18 +3428,19 @@ def _dict_learning(k, X, nc, alpha, max_iter, tol, method, seed, code_init=None,
     else:
         code = k.hstack([code, _M.zeros(code.r, nc - r)])
         D = k.vstack([D, _M.zeros(nc - r, D.c)])
-    errors = []
-    ii = 0
-    counter = [0]
-    for ii in range(1, max_iter + 1):
-        code = _sparse_encode(k, X, D, method, alpha=alpha, init=code, max_iter=method_max_iter,
-                              positive=positive_code)
-        D, code = _update_dict(k, D, X, code, positive=positive_dict, seed=seed, counter=counter)
-        errors.append(_cost(k, X, code, D, alpha))
-        if len(errors) > 1:
-            if errors[-2] - errors[-1] < tol * errors[-1]:
-                break
-    return code, D, errors, ii
+    if method not in _SPARSE_ALGOS:
+        raise ValueError(f"algorithm={method!r} is not carried; one of {_SPARSE_ALGOS}")
+    # the loop (encode, atom update, cost, stopping test) in ONE binding call
+    # (lane py-runtime-b: x_decomp/dictl.mojo on the host column, dictl_dev.mojo
+    # on resident device matrices), the same cells, solvers and draws
+    code, D = code.copy(), D.copy()
+    ea = array.array("d", [0.0]) * max(int(max_iter), 1)
+    ii, ne = k.b.x_decomp_dict_learning(
+        X.addr, code.addr, D.addr, ea.buffer_info()[0],
+        [X.r, X.c, nc, _SPARSE_ALGOS.index(method), int(max_iter), int(method_max_iter), int(bool(positive_dict)),
+         int(bool(positive_code)), int(seed) & 0xFFFFFFFF, -1, -1], [float(alpha), float(tol)])
+    errors = ea.tolist()[:int(ne)]
+    return code, D, errors, int(ii)
 
 
 class _SparseCoding(_Base):
@@ -3577,50 +3578,18 @@ class MiniBatchDictionaryLearning(_SparseCoding):
             Xt = k.take_rows(M, k.order(k.rand(1, n, seed, 50, 0)))
         else:
             Xt = M
-        A, B = _M.zeros(nc, nc), _M.zeros(m, nc)
         steps_per_iter = -(-n // bs)
         n_steps = self.max_iter * steps_per_iter
-        batches = []
-        start = 0
-        for _ in range(n // bs):
-            batches.append((start, start + bs))
-            start += bs
-        if start < n:
-            batches.append((start, n))
-        ewa, ewa_min, no_imp = None, None, 0
-        counter = [0]
-        step = -1
-        for step in range(n_steps):
-            a, b = batches[step % len(batches)]
-            Xb = Xt.rows(a, b)
-            b_n = Xb.r
-            code = _sparse_encode(k, Xb, D, "lasso_" + self.fit_algorithm, alpha=float(self.alpha),
-                                  max_iter=self.transform_max_iter, positive=self.positive_code)
-            cost = _cost(k, Xb, code, D, float(self.alpha)) / b_n
-            theta = (step + 1) * b_n if step < b_n - 1 else b_n ** 2 + step + 1 - b_n
-            beta = (theta + 1 - b_n) / (theta + 1)
-            A = k.ew("add", k.ew("scale", A, s=beta), k.ew("scale", k.mm(code, code, ta=True), s=1.0 / b_n))
-            B = k.ew("add", k.ew("scale", B, s=beta), k.ew("scale", k.mm(Xb, code, ta=True), s=1.0 / b_n))
-            old = D
-            D, code = _update_dict(k, D, Xb, code, A, B, self.positive_dict, seed, counter)
-            # _check_convergence
-            s1 = step + 1
-            if s1 <= min(100, n / b_n):
-                continue
-            if ewa is None:
-                ewa = cost
-            else:
-                al = min(b_n / (n + 1), 1)
-                ewa = ewa * (1 - al) + cost * al
-            diff = math.sqrt(k.total(k.ew("sqdiff", D, old)).s[0]) / nc
-            if self.tol > 0 and diff <= self.tol:
-                break
-            if ewa_min is None or ewa < ewa_min:
-                no_imp, ewa_min = 0, ewa
-            else:
-                no_imp += 1
-            if self.max_no_improvement is not None and no_imp >= self.max_no_improvement:
-                break
+        # the step loop (encode, the running A and B, atom update, the
+        # convergence tests) in ONE binding call (lane py-runtime-b:
+        # x_decomp/dictl.mojo, dictl_dev.mojo), the same cells and float64 tests
+        D = D.copy()
+        mni = self.max_no_improvement
+        step = int(k.b.x_decomp_dict_minibatch(
+            Xt.addr, D.addr,
+            [n, m, nc, _SPARSE_ALGOS.index("lasso_" + self.fit_algorithm), 0, int(self.transform_max_iter),
+             int(bool(self.positive_dict)), int(bool(self.positive_code)), seed & 0xFFFFFFFF, -1,
+             -1 if mni is None else int(mni), bs, n_steps], [float(self.alpha), float(self.tol)])) - 1
         self.n_steps_ = step + 1
         self.n_iter_ = -(-self.n_steps_ // steps_per_iter)
         self.components_m_ = D
