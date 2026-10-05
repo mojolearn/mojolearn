@@ -4,7 +4,8 @@
 V=$1; A=$2; PHASES=${3:-prepare quality identity}
 R=/root/mojolearn-main; PY=/root/mojolearn/.pixi/envs/default/bin/python; DATA=/root/board-0833/cache/algos-data/rows-small
 git -C /root/mojolearn fetch -q origin main || exit 2
-if [ ! -d $R ]; then git -C /root/mojolearn worktree add -q --detach $R FETCH_HEAD || exit 2; else git -C $R checkout -q --detach FETCH_HEAD || exit 2; fi
+F=$(git -C /root/mojolearn rev-parse FETCH_HEAD)  # FETCH_HEAD is per worktree: resolve it in the main tree
+if [ ! -d $R ]; then git -C /root/mojolearn worktree add -q --detach $R $F || exit 2; else git -C $R checkout -q --detach $F || exit 2; fi
 SHA=$(git -C $R rev-parse HEAD); W=/root/lq/br2-wave-${SHA:0:9}; C=/root/lq/br2-ctl-${SHA:0:9}; mkdir -p $C
 ln -sfn /root/mojolearn/.pixi $R/.pixi
 for ph in $PHASES; do
