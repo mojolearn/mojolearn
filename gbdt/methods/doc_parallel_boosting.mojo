@@ -115,6 +115,19 @@ from gbdt.methods.leaves_estimation.leaves_estimation import (
     newton_one_step_kernel,
     weight_keep_mask_kernel,
 )
+from gbdt.methods.leaves_estimation.device_walker import (
+    WALK_FOLD_BLOCK,
+    WalkBuffers,
+    count_nonzero_u32_kernel,
+    device_walk_begin,
+    device_walk_enqueue_line_search,
+    device_walk_estimate,
+    device_walk_flag,
+    device_walk_supported,
+    enqueue_copy_values,
+    enqueue_zero_average,
+    weight_keep_mask_strided_kernel,
+)
 from std.memory import bitcast, memcpy
 from gbdt.methods.kernel.two_level_leaves import (
     TL_BLOCK,
@@ -788,6 +801,13 @@ struct TEstimationWorkspace(Movable):
     #: search drain (`finish_deferred_estimation` settles it). Empty
     #: otherwise.
     var pending: List[PendingEstimationTail]
+    #: lane cpu4-gbdt: the device leaf walk's state (`device_walker.mojo`)
+    #: for up to `n_leaves_cap` leaves, kept for the fit like the buffers
+    #: above, and a one-word device count (DEVIATION 74's fallback flags)
+    #: with its host word
+    var walk: WalkBuffers
+    var d_count: DeviceBuffer[DType.uint32]
+    var h_count: HostBuffer[DType.uint32]
 
     def __init__(
         out self,
@@ -821,6 +841,9 @@ struct TEstimationWorkspace(Movable):
         self.mc_grad_len = 0
         self.mc_hess_len = 0
         self.pending = List[PendingEstimationTail]()
+        self.walk = WalkBuffers(ctx, arena, n_leaves)
+        self.d_count = arena.device[DType.uint32](ctx, 1)
+        self.h_count = arena.host_buffer[DType.uint32](ctx, 1)
 
     def __init__(
         out self,
@@ -879,6 +902,9 @@ struct TEstimationWorkspace(Movable):
         self.mc_grad_len = mc_grad_len
         self.mc_hess_len = mc_hess_len
         self.pending = List[PendingEstimationTail]()
+        self.walk = WalkBuffers(ctx, n_leaves)
+        self.d_count = ctx.enqueue_create_buffer[DType.uint32](1)
+        self.h_count = ctx.enqueue_create_host_buffer[DType.uint32](1)
 
 
 struct PendingEstimationTail(Movable):
@@ -998,9 +1024,8 @@ def finish_deferred_estimation(
     ctx.synchronize()
     var tail = est_ws[0].pending.pop()
     if tail.count_not_pd:
-        for i in range(tail.n_leaves):
-            if est_ws[0].h_mc_not_pd.unsafe_ptr().unsafe_load(i) != UInt32(0):
-                not_pd_total += 1
+        # the per-leaf fallback flags counted on the device (one word)
+        not_pd_total += Int(est_ws[0].h_count.unsafe_ptr().unsafe_load(0))
     leaf_values.clear()
     for i in range(tail.n_values):
         leaf_values.append(est_ws[0].h_est.unsafe_ptr().unsafe_load(i))
@@ -1246,63 +1271,32 @@ def _estimate_and_apply(
     # positive definite. Accumulated across the whole fit and
     # reported once, because the number that matters is whether
     # it is ever nonzero.
-    # lane/fam2-gbdt F5 (`IDN_EST_ONE_STEP_DEVICE`): the one-step Newton
-    # estimation of an unweighted single-dimensional pointwise loss finishes
-    # on the device and the task drains once.
-    var one_step_device = False
-    comptime if IDN_EST_ONE_STEP_DEVICE:
-        one_step_device = (
-            iters == 1
-            and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
-            and estimate_can_batch(objective, leaf_estimation_method, iters)
-            and approx_dim == 1
-            # a weighted fit needs the constructor's per-leaf weight sums
-            # already on the host (not the deferred-weights oracle)
-            and not oracle.h_weight_stats.__bool__()
-            and len(oracle.weights_cpu) == n_leaves
-            and oracle.single_bin_dim == 1
-            and oracle.hessian_block_size() == 1
-        )
-    if one_step_device:
-        # the walker's own first calls, in its order: `MoveTo(start)` and the
-        # evaluation at it, both enqueued, not drained
+    # lane cpu4-gbdt: THE WALK ON THE DEVICE. Every single-dimensional walk
+    # (pointwise losses, QueryRMSE, PairLogit, YetiRank; Newton or Gradient;
+    # any iteration count; weighted or not) runs `device_walker.mojo`: the
+    # walker's state and statements in kernels, one accept word read per
+    # line-search evaluation, MakeZeroAverage on the device, and the leaves
+    # handed to the cursor add without a host round trip. It replaces both
+    # the host walker on this route and lane fam2-gbdt F5's one-step arm
+    # (`IDN_EST_ONE_STEP_DEVICE`, whose weighted fit filled its keep mask on
+    # the host): the one-step walk is the same statements as
+    # `newton_one_step_kernel`, so the same bits.
+    if leaf_estimation_method != LEAF_ESTIMATION_EXACT and approx_dim == 1 and device_walk_supported(
+        oracle, BACKTRACKING_ANY_IMPROVEMENT, n_leaves, est_ws[0].walk.cap
+    ):
         oracle.times.enabled = stage_times.enabled
-        var start_point = List[Float32](length=n_leaves, fill=Float32(0.0))
-        oracle.move_to(start_point)
-        oracle.enqueue_single_dim_evaluation()
+        var walk = est_ws[0].walk.handles()
+        device_walk_estimate(ctx, oracle, walk, iters)
         stage_times.begin(ctx)
-        # weighted fit: `Regularize`'s per-leaf decision (1.0 keep, 0.0
-        # zero) from the weight sums the constructor read, in its own host
-        # buffer, alive until the drain below
-        # sized as `d_est` (the copy below moves the whole device buffer's
-        # length); one element when there is nothing to upload
-        var mask_len = 1
-        if has_weights:
-            mask_len = est_ws[0].n_leaves_cap * approx_dim
-        var h_mask = ctx.enqueue_create_host_buffer[DType.float32](mask_len)
-        if has_weights:
-            for i in range(mask_len):
-                h_mask.unsafe_ptr().unsafe_store(i, Float32(0.0))
-            for i in range(n_leaves):
-                var keep = Float32(1.0)
-                if oracle.weights_cpu[i] < oracle.min_leaf_weight:
-                    keep = Float32(0.0)
-                h_mask.unsafe_ptr().unsafe_store(i, keep)
-            ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_mask.unsafe_ptr())
-        ctx.enqueue_function[newton_one_step_kernel](
-            oracle.d_part_stats.unsafe_ptr(),
-            oracle.d_p_sz.unsafe_ptr(),
-            bitcast[DType.uint64](oracle.lambda_reg),
-            bitcast[DType.uint64](oracle.min_leaf_weight),
-            Int32(n_leaves),
-            d_est.unsafe_ptr(),
-            Int32(1) if has_weights else Int32(0),
-            grid_dim=((n_leaves + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
-        var os_gx = 2 * oracle.sm_count
-        if os_gx < 1:
-            os_gx = 1
+        var est_buf = walk.result()
+        if objective == OBJECTIVE_PAIR_LOGIT or objective == OBJECTIVE_YETI_RANK:
+            # `LeavesEstimationConfig.MakeZeroAverage`
+            # (`doc_parallel_leaves_estimator.cpp:25-37`, `NeedZeroAverage`)
+            enqueue_zero_average(ctx, est_buf, n_leaves)
+        enqueue_copy_values(ctx, est_buf, n_leaves, d_est)
+        var walk_gx = 2 * oracle.sm_count
+        if walk_gx < 1:
+            walk_gx = 1
         ctx.enqueue_function[add_model_value_kernel](
             oracle.d_p_off.unsafe_ptr(),
             oracle.d_p_sz.unsafe_ptr(),
@@ -1310,10 +1304,13 @@ def _estimate_and_apply(
             d_est.unsafe_ptr(),
             learning_rate,
             cursor.unsafe_ptr(),
-            Int32(approx_dim), Int32(n_rows),
-            grid_dim=(os_gx, n_leaves, approx_dim),
+            Int32(1), Int32(n_rows),
+            grid_dim=(walk_gx, n_leaves, 1),
             block_dim=(256, 1, 1),
         )
+        # the fitted leaves for the host model (item 3 of lane cpu4-gbdt,
+        # the device-resident model, is not done: the boosting loop still
+        # keeps its ensemble on the host)
         ctx.enqueue_copy(dst_ptr=h_est.unsafe_ptr(), src_buf=d_est)
         comptime if IDN_GBDT_SYM_EST_DEFER_DRAIN:
             if defer_tail:
@@ -1321,14 +1318,14 @@ def _estimate_and_apply(
                 # drain settles this task (`finish_deferred_estimation`)
                 stage_times.end(ctx, "est.tail_apply")
                 leaf_values.clear()
+                var walk_mask = ctx.enqueue_create_host_buffer[DType.float32](1)
                 est_ws[0].pending.append(
                     PendingEstimationTail(
-                        oracle^, h_mask^, n_leaves, n_leaves, False, leaf_tag
+                        oracle^, walk_mask^, n_leaves, n_leaves, False, leaf_tag
                     )
                 )
                 return
-        # the task's one settle point (DEVIATION 1891's holds, as the
-        # ordinary tail below)
+        # the task's one settle point (DEVIATION 1891's holds)
         ctx.synchronize()
         leaf_values.clear()
         for i in range(n_leaves):
@@ -1336,7 +1333,7 @@ def _estimate_and_apply(
         merge_stage_times(stage_times, oracle.times)
         trace.record_list_f32(leaf_tag, leaf_values)
         stage_times.end(ctx, "est.tail_apply")
-        _ = h_mask^  # past the drain (step-33 race class)
+        _ = walk^
         _ = oracle^  # past the drain (step-33 race class, device side)
         return
     # lane fix-g1-gbdt (`IDN_GBDT_MC_ONE_STEP_DEVICE`): the one-step
@@ -1369,6 +1366,21 @@ def _estimate_and_apply(
         )
     if mc_one_step_device:
         oracle.times.enabled = stage_times.enabled
+        if has_weights:
+            # weighted fit: `Regularize`'s per-leaf decision (1.0 keep, 0.0
+            # zero) at each leaf's first slot of `d_est`, formed on the
+            # device from the constructor's weight fold, still in
+            # `d_part_stats` (lane cpu4-gbdt; the host filled it from
+            # `weights_cpu`)
+            ctx.enqueue_function[weight_keep_mask_strided_kernel](
+                oracle.d_part_stats.unsafe_ptr(),
+                bitcast[DType.uint64](oracle.min_leaf_weight),
+                Int32(n_leaves),
+                Int32(approx_dim),
+                d_est.unsafe_ptr(),
+                grid_dim=((n_leaves + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
         # the walker's own first call, `MoveTo(start)` at the zero point in
         # the walker's gauge (`SingleBinDim()` components per leaf)
         var mc_start = List[Float32](
@@ -1381,25 +1393,9 @@ def _estimate_and_apply(
         var mc_not_pd = est_ws[0].mc_not_pd.copy()
         oracle.enqueue_multiclass_one_step_inputs(mc_grad, mc_hess)
         stage_times.begin(ctx)
-        # weighted fit: `Regularize`'s per-leaf decision (1.0 keep, 0.0
-        # zero) at each leaf's first slot of `d_est`, from the weight sums
-        # the constructor read; sized as `d_est` (the copy moves the whole
-        # device buffer's length)
-        var mc_mask_len = 1
-        if has_weights:
-            mc_mask_len = est_ws[0].n_leaves_cap * approx_dim
-        var h_mc_mask = ctx.enqueue_create_host_buffer[DType.float32](
-            mc_mask_len
-        )
-        if has_weights:
-            for i in range(mc_mask_len):
-                h_mc_mask.unsafe_ptr().unsafe_store(i, Float32(0.0))
-            for i in range(n_leaves):
-                var keep = Float32(1.0)
-                if oracle.weights_cpu[i] < oracle.min_leaf_weight:
-                    keep = Float32(0.0)
-                h_mc_mask.unsafe_ptr().unsafe_store(i * approx_dim, keep)
-            ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_mc_mask.unsafe_ptr())
+        # the deferred tail's keep-alive slot (the mask is formed on the
+        # device above)
+        var h_mc_mask = ctx.enqueue_create_host_buffer[DType.float32](1)
         ctx.enqueue_function[multiclass_one_step_kernel](
             mc_grad.unsafe_ptr(),
             mc_hess.unsafe_ptr(),
@@ -1429,8 +1425,17 @@ def _estimate_and_apply(
             block_dim=(256, 1, 1),
         )
         ctx.enqueue_copy(dst_ptr=h_est.unsafe_ptr(), src_buf=d_est)
+        # DEVIATION 74's counter: the per-leaf fallback flags counted on the
+        # device, one word home
+        ctx.enqueue_function[count_nonzero_u32_kernel](
+            mc_not_pd.unsafe_ptr(),
+            Int32(n_leaves),
+            est_ws[0].d_count.unsafe_ptr(),
+            grid_dim=(1, 1, 1),
+            block_dim=(WALK_FOLD_BLOCK, 1, 1),
+        )
         ctx.enqueue_copy(
-            dst_ptr=est_ws[0].h_mc_not_pd.unsafe_ptr(), src_buf=mc_not_pd
+            dst_ptr=est_ws[0].h_count.unsafe_ptr(), src_buf=est_ws[0].d_count
         )
         comptime if IDN_GBDT_SYM_EST_DEFER_DRAIN:
             if defer_tail:
@@ -1452,10 +1457,8 @@ def _estimate_and_apply(
         # the task's one settle point (DEVIATION 1891's holds, as the
         # ordinary tail below)
         ctx.synchronize()
-        # DEVIATION 74's counter, from the per-leaf fallback flags
-        for i in range(n_leaves):
-            if est_ws[0].h_mc_not_pd.unsafe_ptr().unsafe_load(i) != UInt32(0):
-                not_pd_blocks += 1
+        # DEVIATION 74's counter, counted on the device
+        not_pd_blocks += Int(est_ws[0].h_count.unsafe_ptr().unsafe_load(0))
         not_pd_total += not_pd_blocks
         leaf_values.clear()
         for i in range(n_leaves * approx_dim):
@@ -1490,17 +1493,15 @@ def _estimate_and_apply(
     # `Float32(Float64 + Float64)` does. A shift of every leaf moves every
     # row by the same amount, so no pairwise loss or ranking metric sees it;
     # the raw predictions do.
+    #
+    # lane cpu4-gbdt: PairLogit and YetiRank are single-dimensional and walk
+    # on the device, which applies the shift there (`enqueue_zero_average`);
+    # they never reach this host walk.
     if objective == OBJECTIVE_PAIR_LOGIT or objective == OBJECTIVE_YETI_RANK:
-        var zero_sum = Float64(0.0)
-        var zero_weight = Float64(0.0)
-        for i in range(len(estimated)):
-            zero_sum += Float64(estimated[i])
-            zero_weight += Float64(1.0)
-        var zero_bias = Float64(0.0)
-        if zero_weight > Float64(0.0):
-            zero_bias = -zero_sum / zero_weight
-        for i in range(len(estimated)):
-            estimated[i] = Float32(Float64(estimated[i]) + zero_bias)
+        raise Error(
+            "_estimate_and_apply: a ranking target reached the host walker"
+            " (the device walk restates MakeZeroAverage)"
+        )
     leaf_values.clear()
     for i in range(len(estimated)):
         leaf_values.append(estimated[i])
@@ -1559,40 +1560,33 @@ def _estimate_and_apply(
 
 
 struct PendingEstimation(Movable):
-    """One estimation task of `_estimate_and_apply` as a RESUMABLE WALK:
-    the oracle, and `TNewtonLikeWalker::Estimate`'s locals
-    (`descent_helpers.newton_like_walker_estimate`) between two of its
-    evaluations. Every evaluation is enqueued by `_estimate_prepare` or
-    `estimate_advance` and read back by the next `estimate_advance`, after
-    the caller's drain; so several tasks walk in lock step, one drain per
-    round for all of them, each task's oracle calls in exactly the order
-    its own walk makes them. `_estimate_complete` is the rest of the task.
+    """One estimation task of `_estimate_and_apply` as a RESUMABLE WALK.
+
+    lane cpu4-gbdt: the walk runs ON THE DEVICE (`device_walker.mojo`): the
+    walker's points, direction and value live in the fit's `WalkBuffers`
+    (handles here), and this struct keeps only the walker's loop counters
+    between two of its evaluations. Every line-search evaluation is enqueued
+    by `_estimate_prepare` or `estimate_advance` with its one-word accept
+    flag, and read by the next `estimate_advance` after the caller's drain;
+    so several tasks walk in lock step, one drain per round for all of them.
+    When the walk finishes its estimate is copied into the task workspace's
+    `d_est` (`device_done`), which `_estimate_complete` (or the Ordered
+    fit's device arm) applies on the device.
     """
 
     var oracle: BinOptimizedOracle
     var n_rows: Int
     var n_leaves: Int
     var iterations: Int
-    #: 0: the start point's evaluation is in flight; 1: a line-search
-    #: evaluation (`next_point`) is in flight; 2: the walk is finished
+    #: 1: a line-search evaluation is in flight; 2: the walk is finished
     var phase: Int
     var iteration: Int
     var updated: Bool
     var step: Float64
-    var cur_point: List[Float32]
-    var next_point: List[Float32]
-    var cur_value: Float64
-    var cur_grad: List[Float64]
-    var cur_hess: List[Float64]
-    var direction: List[Float32]
-    var estimator: StepEstimator
-    var not_pd: Int
-    #: the walk's return, `MakeEstimationResult(point)`, once `phase == 2`
-    var final_point: List[Float32]
-    #: lane ml-gbdt T4 (`_estimate_prepare(one_step_device=True)`): the
-    #: one-step Newton leaves were ENQUEUED on the device into the task
-    #: workspace's `d_est` (`newton_one_step_kernel`); `phase` is 2 at once,
-    #: `final_point` stays empty and `_estimate_complete` must not run
+    #: handles onto the task workspace's walk state and `d_est`
+    var walk: WalkBuffers
+    var d_est: DeviceBuffer[DType.float32]
+    #: the leaves are in `d_est` (always, once `phase == 2`)
     var device_done: Bool
 
     def __init__(
@@ -1601,112 +1595,75 @@ struct PendingEstimation(Movable):
         n_rows: Int,
         n_leaves: Int,
         iterations: Int,
-        var start_point: List[Float32],
+        var walk: WalkBuffers,
+        var d_est: DeviceBuffer[DType.float32],
     ):
         self.oracle = oracle^
         self.n_rows = n_rows
         self.n_leaves = n_leaves
         self.iterations = iterations
-        self.phase = 0
+        self.phase = 1
         self.iteration = 0
         self.updated = False
         self.step = 1.0
-        self.cur_point = start_point^
-        self.next_point = List[Float32]()
-        self.cur_value = 0.0
-        self.cur_grad = List[Float64]()
-        self.cur_hess = List[Float64]()
-        self.direction = List[Float32]()
-        self.estimator = StepEstimator(BACKTRACKING_ANY_IMPROVEMENT, 0.0, 0.0)
-        self.not_pd = 0
-        self.final_point = List[Float32]()
+        self.walk = walk^
+        self.d_est = d_est^
         self.device_done = False
 
 
+def _walk_finish(mut p: PendingEstimation) raises:
+    """The walk's return, `MakeEstimationResult(cur_point)` (the identity
+    here), copied into the task's `d_est` on the device."""
+    var ctx = p.oracle.ctx
+    var est = p.walk.result()
+    var dst = p.d_est.copy()
+    enqueue_copy_values(ctx, est, p.n_leaves, dst)
+    p.phase = 2
+    p.device_done = True
+
+
 def _walk_line_search_or_finish(mut p: PendingEstimation) raises -> Bool:
-    """The walker's inner `while` test and its body up to the evaluation
-    (`descent_helpers.newton_like_walker_estimate`): either enqueue the
-    next line-search evaluation (True), or -- the inner loop ending with no
-    accepted step, which breaks the outer loop -- finish the walk (False).
-    """
+    """The walker's inner `while` test: enqueue the next line-search
+    evaluation (True), or -- the inner loop ending with no accepted step,
+    which breaks the outer loop -- finish the walk (False)."""
     if p.iteration < p.iterations or (
         (not p.updated) and p.iteration < 100
     ):
-        var next_point = _move(p.cur_point, p.direction, p.step)
-        p.oracle.regularize(next_point)
-        p.oracle.move_to(next_point)
-        p.oracle.enqueue_single_dim_evaluation()
-        p.next_point = next_point^
+        var ctx = p.oracle.ctx
+        device_walk_enqueue_line_search(ctx, p.oracle, p.walk, p.step)
         p.phase = 1
         return True
-    p.final_point = p.oracle.make_estimation_result(p.cur_point)
-    p.phase = 2
+    _walk_finish(p)
     return False
 
 
 def _walk_outer_or_finish(mut p: PendingEstimation) raises -> Bool:
     """The walker's outer `while iteration < iterations` test and a round's
-    start: freeze the step rule and begin its line search (True when an
-    evaluation was enqueued), or finish the walk at the current point."""
+    start (`step = 1`), or finish the walk at the current point."""
     if p.iteration < p.iterations:
-        p.estimator = create_step_estimator(
-            BACKTRACKING_ANY_IMPROVEMENT, p.cur_value, p.cur_grad, p.direction
-        )
         p.step = 1.0
         return _walk_line_search_or_finish(p)
-    p.final_point = p.oracle.make_estimation_result(p.cur_point)
-    p.phase = 2
+    _walk_finish(p)
     return False
 
 
 def estimate_advance(mut p: PendingEstimation) raises -> Bool:
-    """Read back the evaluation in flight (the caller has drained since it
-    was enqueued) and run the walk to its next evaluation: True when one is
-    enqueued, False when the walk has finished (`final_point`). The
-    statements, and their order, are
-    `descent_helpers.newton_like_walker_estimate`'s with
-    `BACKTRACKING_ANY_IMPROVEMENT`, `_estimate_and_apply`'s choice."""
-    if p.phase == 0:
-        p.oracle.settle_weights()
-        p.oracle.finish_single_dim_evaluation(p.cur_value, p.cur_grad)
-        p.oracle.write_second_derivatives(p.cur_hess)
-        var not_pd_here = 0
-        p.direction = _update_move_direction(
-            p.cur_grad, p.cur_hess, p.oracle.hessian_block_size(),
-            not_pd_here,
-        )
-        p.not_pd += not_pd_here
-        if p.iterations == 1:
-            var result = _move(p.cur_point, p.direction, 1.0)
-            p.oracle.regularize(result)
-            p.final_point = p.oracle.make_estimation_result(result)
-            p.phase = 2
-            return False
-        p.iteration = 0
-        p.updated = False
-        return _walk_outer_or_finish(p)
-    if p.phase == 1:
-        var next_value = Float64(0.0)
-        var next_grad = List[Float64]()
-        p.oracle.finish_single_dim_evaluation(next_value, next_grad)
-        if p.estimator.is_satisfied(p.step, next_value):
-            p.oracle.write_second_derivatives(p.cur_hess)
-            p.cur_point = p.next_point.copy()
-            p.cur_value = next_value
-            p.cur_grad = next_grad^
-            var not_pd_here = 0
-            p.direction = _update_move_direction(
-                p.cur_grad, p.cur_hess, p.oracle.hessian_block_size(),
-                not_pd_here,
-            )
-            p.not_pd += not_pd_here
-            p.iteration += 1
-            p.updated = True
-            return _walk_outer_or_finish(p)
+    """Read the accept word of the line-search evaluation in flight (the
+    caller has drained since it was enqueued) and run the walk's counters
+    to its next evaluation: True when one is enqueued, False when the walk
+    has finished (the leaves are in `d_est`). The statements, and their
+    order, are `descent_helpers.newton_like_walker_estimate`'s with
+    `BACKTRACKING_ANY_IMPROVEMENT`, `_estimate_and_apply`'s choice; the
+    acceptance itself (and the new direction) ran on the device."""
+    if p.phase != 1:
+        return False
+    if device_walk_flag(p.walk):
         p.iteration += 1
-        p.step /= 2
-        return _walk_line_search_or_finish(p)
-    return False
+        p.updated = True
+        return _walk_outer_or_finish(p)
+    p.iteration += 1
+    p.step /= 2
+    return _walk_line_search_or_finish(p)
 
 
 def estimate_can_batch(
@@ -1905,63 +1862,36 @@ def _estimate_prepare(
         defer_weights=True,
         host_scratch=oracle_hs^,
         leaves_ready=True,
+        weights_on_device=True,
     )
     stage_times.end(ctx, "est.make_oracle")
-    # `TNewtonLikeWalker::Estimate` at one iteration
-    # (`descent_helpers.newton_like_walker_estimate`), its first half:
-    # `MoveTo(startPoint)`, then the evaluation up to its readback
+    # `TNewtonLikeWalker::Estimate` (`descent_helpers.newton_like_walker_
+    # estimate`) ON THE DEVICE (lane cpu4-gbdt, `device_walker.mojo`): the
+    # start `MoveTo`, its evaluation and the first direction, ENQUEUED; a
+    # one-iteration walk also takes its full step and is finished (the
+    # leaves go to `d_est`, no readback, no walk drain, no upload). Any other
+    # walk enqueues its first line-search evaluation and its accept word,
+    # which `estimate_advance` reads after the caller's drain. The weighted
+    # regularizer reads the constructor's weight fold, still in
+    # `d_part_stats` here (stream order). `one_step_device` (lane ml-gbdt
+    # T4's `newton_one_step_kernel` arm) is subsumed: the device walk's one
+    # step is the same statements.
     oracle.times.enabled = stage_times.enabled
-    # lane ml-gbdt T4 (`one_step_device`, the Ordered fit's
-    # `IDN_ORD_ONE_STEP_DEVICE`): a one-step diagonal Newton task finishes on
-    # the device as `_estimate_and_apply`'s `IDN_EST_ONE_STEP_DEVICE` arm
-    # does (same kernel, same statements, so the host walker's bits), with
-    # `Regularize`'s weighted keep/zero decision formed on the device from
-    # the deferred weight fold (`weight_keep_mask_kernel`), so the task needs
-    # no readback, no walk drain and no leaf upload
-    var one_step = False
-    if one_step_device:
-        one_step = (
-            iterations == 1
-            and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
-            and oracle.single_bin_dim == 1
-            and oracle.hessian_block_size() == 1
-            and n_leaves <= est_ws[0].n_leaves_cap
-        )
-    if one_step and has_weights:
-        # the deferred weight fold sits in `d_part_stats[0, n_leaves)` until
-        # the evaluation below overwrites it (stream order)
-        ctx.enqueue_function[weight_keep_mask_kernel](
-            oracle.d_part_stats.unsafe_ptr(),
-            bitcast[DType.uint64](oracle.min_leaf_weight),
-            Int32(n_leaves),
-            est_ws[0].d_est.unsafe_ptr(),
-            grid_dim=((n_leaves + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
-    var start = List[Float32]()
-    for _ in range(oracle.point_dim()):
-        start.append(Float32(0.0))
-    oracle.move_to(start)
-    oracle.enqueue_single_dim_evaluation()
-    if one_step:
-        ctx.enqueue_function[newton_one_step_kernel](
-            oracle.d_part_stats.unsafe_ptr(),
-            oracle.d_p_sz.unsafe_ptr(),
-            bitcast[DType.uint64](oracle.lambda_reg),
-            bitcast[DType.uint64](oracle.min_leaf_weight),
-            Int32(n_leaves),
-            est_ws[0].d_est.unsafe_ptr(),
-            Int32(1) if has_weights else Int32(0),
-            grid_dim=((n_leaves + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
-        var done = PendingEstimation(
-            oracle^, n_rows, n_leaves, iterations, start^
-        )
-        done.phase = 2
-        done.device_done = True
-        return done^
-    return PendingEstimation(oracle^, n_rows, n_leaves, iterations, start^)
+    if not device_walk_supported(
+        oracle, BACKTRACKING_ANY_IMPROVEMENT, n_leaves, est_ws[0].walk.cap
+    ):
+        raise Error("_estimate_prepare: the device walk does not cover this task")
+    var walk = est_ws[0].walk.handles()
+    var d_est = est_ws[0].d_est.copy()
+    var finished = device_walk_begin(ctx, oracle, walk, iterations)
+    var pending = PendingEstimation(
+        oracle^, n_rows, n_leaves, iterations, walk^, d_est^
+    )
+    if finished:
+        _walk_finish(pending)
+        return pending^
+    _ = _walk_line_search_or_finish(pending)
+    return pending^
 
 
 def _estimate_complete(
@@ -1979,52 +1909,55 @@ def _estimate_complete(
     append_to_cursor: Bool = True,
 ) raises:
     """The rest of a `_estimate_prepare` task once its walk has finished
-    (`estimate_advance` returned False): the walker's trace record and
-    `DEVIATION 74` count, then `_estimate_and_apply`'s
-    `AppendModels` onto `cursor`, ENQUEUED: the caller drains before it
-    reuses `est_ws` or lets `pending` die (the oracle's buffers are read by
-    the launch below)."""
-    ref oracle = pending.oracle
-    if pending.phase != 2:
+    (`estimate_advance` returned False): the walker's trace record, then
+    `_estimate_and_apply`'s `AppendModels` onto `cursor` from the task's
+    `d_est`, ENQUEUED, and the leaves' copy into the workspace's `h_est`.
+
+    lane cpu4-gbdt: the leaves are on the device (`device_done`), so
+    `leaf_values` comes back EMPTY; the caller reads the task's leaves from
+    `est_ws[0].h_est` after its next drain (`walk_leaf_values`). The caller
+    drains before it reuses `est_ws` or lets `pending` die (the oracle's
+    buffers are read by the launch below)."""
+    if pending.phase != 2 or not pending.device_done:
         raise Error("_estimate_complete before the walk finished")
-    if pending.device_done:
-        raise Error("_estimate_complete on a device one-step task")
-    var estimated = pending.final_point.copy()
+    ref oracle = pending.oracle
     merge_stage_times(stage_times, oracle.times)
-    trace.record_list_f32(leaf_tag, estimated)
-    not_pd_total += pending.not_pd
-    leaf_values.clear()
-    for i in range(len(estimated)):
-        leaf_values.append(estimated[i])
     var n_leaves = pending.n_leaves
-    if len(estimated) != n_leaves:
-        raise Error(
-            "the estimator returned " + String(len(estimated))
-            + " leaf values for " + String(n_leaves) + " leaves x 1 dims"
-        )
-    if not append_to_cursor:
-        # a caller whose `cursor` is a private copy it discards (the Ordered
-        # fit's gathered cursor): nothing reads the move, so it is not made
-        return
     ref d_est = est_ws[0].d_est
-    ref h_est = est_ws[0].h_est
-    for i in range(n_leaves):
-        h_est.unsafe_ptr().unsafe_store(i, estimated[i])
-    ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
-    var amv_gx = 2 * oracle.sm_count
-    if amv_gx < 1:
-        amv_gx = 1
-    ctx.enqueue_function[add_model_value_kernel](
-        oracle.d_p_off.unsafe_ptr(),
-        oracle.d_p_sz.unsafe_ptr(),
-        row_index.unsafe_ptr(),
-        d_est.unsafe_ptr(),
-        learning_rate,
-        cursor.unsafe_ptr(),
-        Int32(1), Int32(pending.n_rows),
-        grid_dim=(amv_gx, n_leaves, 1),
-        block_dim=(256, 1, 1),
+    trace.record_device(ctx, leaf_tag, d_est, n_leaves)
+    leaf_values.clear()
+    if append_to_cursor:
+        var amv_gx = 2 * oracle.sm_count
+        if amv_gx < 1:
+            amv_gx = 1
+        ctx.enqueue_function[add_model_value_kernel](
+            oracle.d_p_off.unsafe_ptr(),
+            oracle.d_p_sz.unsafe_ptr(),
+            row_index.unsafe_ptr(),
+            d_est.unsafe_ptr(),
+            learning_rate,
+            cursor.unsafe_ptr(),
+            Int32(1), Int32(pending.n_rows),
+            grid_dim=(amv_gx, n_leaves, 1),
+            block_dim=(256, 1, 1),
+        )
+    ctx.enqueue_copy(dst_ptr=est_ws[0].h_est.unsafe_ptr(), src_buf=d_est)
+
+
+def walk_leaf_values(
+    mut est_ws: List[TEstimationWorkspace], n_leaves: Int
+) -> List[Float32]:
+    """A finished device walk's leaves, from the `h_est` copy
+    `_estimate_complete` enqueued, after the caller's drain: the host model's
+    download (the boosting loop keeps its ensemble on the host; lane
+    cpu4-gbdt's device-resident model item is not done)."""
+    var out = List[Float32](length=n_leaves, fill=Float32(0.0))
+    memcpy(
+        dest=out.unsafe_ptr(),
+        src=est_ws[0].h_est.unsafe_ptr(),
+        count=n_leaves,
     )
+    return out^
 
 
 def fit_with_test(
@@ -3344,7 +3277,7 @@ def fit_with_test(
                             if pend[p].phase != 2:
                                 if estimate_advance(pend[p]):
                                     walking = True
-                    for p in range(perm_count):
+                    for p in range(perm_count):  # small-loop(perm_count: learn permutations, a handful): one completion launch set per permutation task
                         var pv_b = List[Float32]()
                         _estimate_complete(
                             ctx, pend[p], parts[p].row_index, cursors[p],
@@ -3354,12 +3287,11 @@ def fit_with_test(
                             + ".leaves.estimated",
                             perm_est_ws[p],
                         )
-                        if p == est_p:
-                            leaf_values.clear()
-                            for i in range(len(pv_b)):
-                                leaf_values.append(pv_b[i])
                     # the batch's closing drain: one per tree
                     ctx.synchronize()
+                    # the estimation permutation's leaves for the host model
+                    # (one memcpy of the `h_est` copy the completion queued)
+                    leaf_values = walk_leaf_values(perm_est_ws[est_p], n_bins)
                     _ = parts^  # past the drain (step-33 race class)
                     _ = pend^  # past the drain (step-33 race class)
                     loop_times.stop_host("iter_estimate_apply", t_est_b)

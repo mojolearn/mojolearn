@@ -122,6 +122,8 @@ from gbdt.targets.kernel.pointwise_targets import (
 )
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
+    REDUCE_LANES_BLOCK,
+    deterministic_sum_lanes_kernel,
     launch_approximate,
     launch_approximate_move_eval,
 )
@@ -577,14 +579,22 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             return
         self._write_multi_dim_value_and_first_derivatives(value, gradient)
 
-    def enqueue_single_dim_evaluation(mut self) raises:
+    def enqueue_single_dim_evaluation(mut self, readback: Bool = True) raises:
         """The single-dim arm of `write_value_and_first_derivatives` up to
-        its drain: the evaluation launch, the per-leaf fold, and the two
-        readback copies, ENQUEUED. `finish_single_dim_evaluation` reads them
-        after the caller's drain. The ordinary method is exactly
-        enqueue -> drain -> finish; the Ordered fit's batched estimation
-        (`ordered_boosting.mojo`) enqueues every task's evaluation behind
-        ONE drain instead of one each."""
+        its drain: the evaluation launch, the per-leaf fold, the value fold
+        and (with `readback`) the two readback copies, ENQUEUED.
+        `finish_single_dim_evaluation` reads them after the caller's drain.
+        The ordinary method is exactly enqueue -> drain -> finish. The
+        device walk (`device_walker.mojo`) passes `readback=False`: it reads
+        `d_part_stats` and `d_fv` on the device.
+
+        THE VALUE FOLD (lane cpu4-gbdt) is `deterministic_sum_lanes_kernel
+        [1]` over the per-block partials, on the device, into
+        `d_mag_dummy[0]` (never written by the evaluation, whose magnitude
+        output is off here); one float comes home in `h_fv[0]`. It was the
+        host's ascending Float32 chain over every block; the order changed
+        on every column together (`gbdt/host/gbdt_oracle*.mojo` fold with
+        `_deterministic_sum_lanes`)."""
         var blocks = (
             self.n_rows + MSE_BLOCK_SIZE - 1
         ) // MSE_BLOCK_SIZE
@@ -708,13 +718,23 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 row_bound=self.max_leaf_size,
             )
             self.times.end(self.ctx, "est.pstats")
+            if not readback:
+                return
             self.times.begin(self.ctx)
+            self.ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+                self.d_fv.unsafe_ptr(),
+                Int32(self.fv_blocks),
+                self.d_mag_dummy.unsafe_ptr(),
+                grid_dim=(1, 1, 1),
+                block_dim=(REDUCE_LANES_BLOCK, 1, 1),
+            )
             self.ctx.enqueue_copy(
                 dst_ptr=self.h_part_stats.unsafe_ptr(),
                 src_buf=self.d_part_stats,
             )
             self.ctx.enqueue_copy(
-                dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
+                dst_ptr=self.h_fv.unsafe_ptr(),
+                src_buf=self.d_mag_dummy.create_sub_buffer[DType.float32](0, 1),
             )
 
     def finish_single_dim_evaluation(
@@ -755,10 +775,9 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # rounds where 6-7 sit at the float32 noise floor. Found
             # 2026-08-22 in the Newton-walk audit; the walk-divergence
             # entry carries the measurement.
-            var fv32 = Float32(0.0)
-            for b in range(self.fv_blocks):
-                fv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
-            value = Float64(fv32)
+            # lane cpu4-gbdt: folded on the device in the fixed lanes order
+            # (`enqueue_single_dim_evaluation`), one float read here
+            value = Float64(self.h_fv.unsafe_ptr().unsafe_load(0))
 
     def _write_multi_dim_value_and_first_derivatives(
         mut self, mut value: Float64, mut gradient: List[Float64]
@@ -1959,6 +1978,11 @@ def make_bin_optimized_oracle(
     defer_weights: Bool = False,
     var host_scratch: Optional[OracleHostScratch] = None,
     leaves_ready: Bool = False,
+    # lane cpu4-gbdt: with `defer_weights`, leave the weighted fold in
+    # `d_part_stats` for the device walk (`device_walker.mojo` stashes it)
+    # and copy nothing home: `weights_cpu` stays empty and `settle_weights`
+    # is a no-op
+    weights_on_device: Bool = False,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -2150,7 +2174,15 @@ def make_bin_optimized_oracle(
     # here (the evaluation's readback reuses `h_part_stats`, so the two
     # copies may not share it while both are in flight)
     var h_weight_stats = Optional[HostBuffer[DType.float32]]()
-    if has_weights and defer_weights:
+    if has_weights and defer_weights and weights_on_device:
+        compute_partition_stats(
+            ctx, bin_count, 0, 1, n_rows,
+            d_leaves, d_p_off, d_p_sz,
+            d_weights, d_partials, d_part_stats,
+            sm_count=sm,
+            row_bound=widest_leaf,
+        )
+    elif has_weights and defer_weights:
         compute_partition_stats(
             ctx, bin_count, 0, 1, n_rows,
             d_leaves, d_p_off, d_p_sz,

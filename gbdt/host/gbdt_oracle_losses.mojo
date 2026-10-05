@@ -460,10 +460,9 @@ def _loss_eval(
             Float64(_partition_stat(stats, n_rows, 1, offsets[leaf], sizes[leaf]))
             + lambda_reg
         )
-    var fv32 = Float32(0.0)
-    for b in range(blocks):
-        fv32 += fv[b]
-    value = Float64(fv32)
+    # lane cpu4-gbdt: the oracle's value fold is the device's
+    # `deterministic_sum_lanes_kernel[1]` order (was an ascending chain)
+    value = Float64(_deterministic_sum_lanes(fv, 1, blocks)[0])
 
 
 def _second_derivatives(
@@ -1187,18 +1186,10 @@ def gbdt_losses_host_fit(
         )
         if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
             # `MakeZeroAverage` (`doc_parallel_leaves_estimator.cpp:25-37`),
-            # restated from `_estimate_and_apply`: minus the unweighted mean
-            # over all `n_live` leaves, summed in double in leaf order.
-            var zero_sum = Float64(0.0)
-            var zero_weight = Float64(0.0)
-            for i in range(len(estimated)):
-                zero_sum += Float64(estimated[i])
-                zero_weight += Float64(1.0)
-            var zero_bias = Float64(0.0)
-            if zero_weight > Float64(0.0):
-                zero_bias = -zero_sum / zero_weight
-            for i in range(len(estimated)):
-                estimated[i] = Float32(Float64(estimated[i]) + zero_bias)
+            # restated from `device_walker.walker_zero_average_kernel`: minus
+            # the unweighted mean over all `n_live` leaves, the double sum in
+            # the kernel's order (lane cpu4-gbdt; was an ascending chain).
+            _zero_average_host(estimated)
         for leaf in range(n_live):
             for k in range(sizes[leaf]):
                 var row = row_index[offsets[leaf] + k]
@@ -1236,3 +1227,30 @@ def gbdt_losses_host_fit(
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
         model_leaves^, losses^, 0, False,
     )
+
+
+def _zero_average_host(mut estimated: List[Float32]):
+    """`walker_zero_average_kernel` (`gbdt/methods/leaves_estimation/
+    device_walker.mojo`) on the host: lane `t` of 256 adds leaves
+    `t, t + 256, ...` ascending in double from +0.0, then the 256-lane
+    halving tree; `bias = -sum / count`; `leaf = float(double(leaf) +
+    bias)`."""
+    var n = len(estimated)
+    if n == 0:
+        return
+    var red = List[Float64](length=256, fill=Float64(0.0))
+    for t in range(256):
+        var acc = Float64(0.0)
+        var i = t
+        while i < n:
+            acc = acc + Float64(estimated[i])
+            i += 256
+        red[t] = acc
+    var step = 128
+    while step > 0:
+        for t in range(step):
+            red[t] = red[t] + red[t + step]
+        step //= 2
+    var bias = -red[0] / Float64(n)
+    for i in range(n):
+        estimated[i] = Float32(Float64(estimated[i]) + bias)
