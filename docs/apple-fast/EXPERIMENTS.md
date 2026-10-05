@@ -1406,5 +1406,8 @@ M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05. KEEP rows are the FAS
 | `PSHAP_FAST_OVERLAP` | permutation-shap / taxi | lane/apple-fast-s-shap | verdicts batch 6 | taxi +26.6% | DROPPED-slower | stays off |
 | `LLE_FAST_NULL_CANON` | lle / taxi, istella | lane/apple-fast-s-shap | verdicts batch 6 | - | DROPPED-quality | trustworthiness down on both datasets; stays off |
 | `AFN_OPT_FUSE_SCAN`, `AFN_OPT_VEC4`, `AFN_OPT_RESIDENT_STATE` | adam / board | main | rab19 | within +-2% | DROPPED-noise | digest changes, no quality metric; stay off |
+| `ARIMA_FAST_CSS_SEARCH` | autoarima / synthetic, taxi-hourly | main a6ff25ff8 (arima-ics: search paths get device aic/bic) | rab26 | synthetic -45.2%, taxi -30.5% | DROPPED-quality | forecast_rmse 2.465 -> 3.485 and 75.71 -> 76.06; stays off |
+| `ARIMA_FAST_STEPWISE` | autoarima / synthetic, taxi-hourly | main a6ff25ff8 | rab26 | synthetic +51.6%, taxi +102.5% | DROPPED-slower | also rmse 75.71 -> 90.54 on taxi; stays off |
+| `ARIMA_FAST_CSS_SEARCH` + `ARIMA_FAST_STEPWISE` | autoarima / synthetic, taxi-hourly | main a6ff25ff8 | rab26 | synthetic -36.3%, taxi -22.9% | DROPPED-quality | rmse 2.465 -> 5.702 and 75.71 -> 93.49; stay off |
 
 Pending (not applied): rab14-gathernarrow (missing arm); rab17-* (narrow round 2), rab18 (CTR re-measure), rab19 bgmm / dbscanccbatch / nbcatatomic / falivebuf: rerun after main builds again (both arms failed on broken main or the nn2 build).
