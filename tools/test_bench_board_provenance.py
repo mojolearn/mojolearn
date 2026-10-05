@@ -34,7 +34,9 @@ class Provenance(unittest.TestCase):
         import types
         gpu = self.root/'_mojolearn_linalg.so'; gpu.write_bytes(b'gpu')
         host = self.root/'_mojolearn_training_host.so'; host.write_bytes(b'host')
+        core = self.root/'_mojolearn.so'; core.write_bytes(b'core')
         modules = {
+            'mojolearn._mojolearn': types.SimpleNamespace(__file__=str(core)),
             'mojolearn._sets.identical._mojolearn_linalg': types.SimpleNamespace(__file__=str(gpu)),
             'mojolearn._host.training_alias': types.SimpleNamespace(__file__=str(host)),
             'mojolearn.missing': types.SimpleNamespace(),
@@ -42,7 +44,7 @@ class Provenance(unittest.TestCase):
         }
         with patch.dict(P.sys.modules, modules, clear=True):
             rows = P.loaded_bindings()
-        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows), 3)
         self.assertEqual({r['role'] for r in rows}, {'host', 'gpu'})
         self.assertEqual(next(r for r in rows if r['role']=='host')['sha256'], P.sha(host))
         self.assertTrue(all(r['module'].startswith('mojolearn.') for r in rows))
