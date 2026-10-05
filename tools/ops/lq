@@ -1,0 +1,92 @@
+#!/bin/bash
+# lq: the lane job queue. Lanes ADD jobs and READ results; they never ssh, rent, extend or release a box.
+# The orchestrator session owns the boxes and watches the queues.
+#
+#   lq add <box> RACE <branch> <lane[,lane]> <dataset[,dataset]> [ARMS=ours,sklearn] [BUILDS=build_x,build_x_host] [ENV=VALUE ...]   (nv/amd)
+#   lq add <box> ID   <branch> <lane[,lane]> <dataset[,dataset]>   SAME-BITS CHECK: device vs host digests on 50k-row
+#                                                        data; refuses when the branch changes no .mojo/bindings file
+#   lq add <box> CMD  <branch> <tag> <command...>        (runs in the branch tree with its bindings built)
+#   lq results <box> [grep pattern]                      (last 40 matching result lines)
+#   lq log <box> <job id|tag> [grep pattern]             (last 40 matching lines of that job's logs)
+#   lq status                                            (queue depth per box)
+#
+# Boxes: nv  = RunPod L40S (sm_89)       amd = DigitalOcean MI325X (gfx942)
+#        apple = the M2 Pro for every lane (the M3 belongs to the Apple FAST peer; only lane/apple-fast* may use m3)
+# A CMD and the RACE lines that rely on its builds must go to the SAME Mac (always the M2 for gap lanes).
+# The branch must be pushed to GitHub first. On nv/amd one RACE line = one build + every lane x dataset: batch them.
+# Mac RACE lines take ONE lane, ONE dataset, at most one ENV, arms "ours" (Macs cache the build per head).
+# Scripts a CMD runs must be committed in the branch (e.g. tools/), never only on the laptop.
+# LQ_FRONT=1 lq add m3 ...: put the line next in the Mac queue (apple-fast lane only).
+# Use MOJOLEARN_VENDOR=cpu only for the host DIGEST column, never for timing.
+set -u
+PEM=$HOME/.ssh/mambik-l8.pem; SO="-o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=no"
+NV="-p 32448 root@81.27.69.178"; AMD="root@107.170.16.163"
+M3="-i $PEM ec2-user@54.157.1.251"; M2="-i $PEM ec2-user@54.237.205.45"
+REPO=$HOME/CascadeProjects/mojolearn
+die() { echo "lq: $*" >&2; exit 2; }
+target() { case $1 in nv) echo "$NV";; amd) echo "$AMD";; m3) echo "$M3";; m2) echo "$M2";; *) die "unknown box '$1' (nv, amd, m3, m2)";; esac; }
+qfile() { case $1 in m3|m2) echo '~/mq/queue.txt';; *) echo /root/lq/queue.txt;; esac; }
+rfile() { case $1 in m3|m2) echo '~/mq/results.txt';; *) echo /root/lq/results.txt;; esac; }
+cmd=${1:-}; shift || true
+case $cmd in
+add)
+  box=${1:-}; kind=${2:-}; br=${3:-}; [ $# -ge 5 ] || die "usage: lq add <box> RACE|CMD <branch> ..."
+  # Oct 2: the M3 belongs to the Apple FAST peer (lane/apple-fast*); every other lane's Apple work goes to the M2
+  if [ "$box" = apple ]; then
+    case $br in lane/apple-fast*) box=m3;; *) box=m2;; esac; echo "apple -> $box"
+    set -- $box "${@:2}"
+  fi
+  if [ "$box" = m3 ]; then case $br in lane/apple-fast*) ;; *) die "the M3 belongs to the Apple FAST peer; use apple (the M2)";; esac; fi
+  T=$(target $box); shift 2
+  case $kind in RACE|CMD|ID) ;; *) die "kind must be RACE, CMD or ID";; esac
+  if [ $kind = ID ] && [ -z "${LQ_FORCE_ID:-}" ]; then  # identity only when GPU kernel code changed (LQ_FORCE_ID=1: always, e.g. on main)
+    git -C $REPO fetch -q origin "+refs/heads/$br:refs/remotes/origin/$br" main 2>/dev/null
+    if [ -z "$(git -C $REPO diff --name-only origin/main...origin/$br -- '*.mojo' 'bindings/*')" ]; then
+      echo "lq: $br changes no .mojo or bindings file, so the kernels are main's: no identity check needed"; exit 0
+    fi
+  fi
+  case "$*" in *\;*|*\|*|*\`*|*'$('*) [ $kind = CMD ] || die "no shell metacharacters in RACE lines";; esac
+  git -C $REPO ls-remote --exit-code -q origin "refs/heads/$br" > /dev/null || die "$br is not on GitHub; push it first"
+  if [ $box = m3 ] || [ $box = m2 ]; then
+    h=${M3##* }; [ $box = m2 ] && h=${M2##* }
+    git -C $REPO fetch -q origin "+refs/heads/$br:refs/remotes/origin/$br" "+refs/heads/main:refs/remotes/origin/main"
+    GIT_SSH_COMMAND="ssh -i $PEM $SO" git -C $REPO push -q --no-verify -f "$h:mojolearn.git" $([ "$br" != main ] && echo "refs/remotes/origin/$br:refs/heads/$br") "refs/remotes/origin/main:refs/heads/main" 2>&1 | tail -2
+    line="$kind $*"
+    if [ $kind = ID ]; then  # Mac: one idcheck CMD per lane x dataset, in the branch's built mq worktree
+      for l in ${2//,/ }; do for d in ${3//,/ }; do
+        LQ_FRONT=${LQ_FRONT:-0} "$0" add $box CMD $br id-$l-$d "bash ~/mq/idcheck.sh $l $d"
+      done; done; exit 0
+    fi
+    if [ "${LQ_FRONT:-0}" = 1 ]; then  # run next: insert right after the current position
+      ssh $SO $T "cd ~/mq && p=\$(cat pos) && f=\$(cat front_end 2>/dev/null || echo 0) && { [ \$f -gt \$p ] && p=\$f; true; } && echo \$((p+1)) > front_end && { head -n \$p queue.txt; echo $(printf '%q' "$line"); tail -n +\$((p+1)) queue.txt; } > queue.new && mv queue.new queue.txt && echo queued-front at \$((p+1))"
+    else
+      ssh $SO $T "echo $(printf '%q' "$line") >> ~/mq/queue.txt; echo queued \$(wc -l < ~/mq/queue.txt) pos \$(cat ~/mq/pos)"
+    fi
+  elif [ $box = amd ]; then
+    ssh $SO $T "echo $(printf '%q' "$kind $*") >> /root/lq/queue.txt; echo queued \$(wc -l < /root/lq/queue.txt) pos \$(cat /root/lq/pos)"
+  else
+    ssh $SO $T "set -e; mkdir -p /root/lq/jobs; n=\$(ls /root/lq/jobs | grep -c '\.line\$' || true); id=\$(printf 'n%04d' \$((n+1)));
+      echo $(printf '%q' "$kind $*") > /root/lq/jobs/\$id.line
+      printf '#!/bin/bash\nbash /root/lq/box_job.sh nvidia %s \$(cat /root/lq/jobs/%s.line)\n' \$id \$id > /root/lq/jobs/\$id.sh
+      /root/gpu-queue/bin/nvq ensure > /dev/null; q=\$(/root/gpu-queue/bin/nvq submit pr80b 1 240 /root/lq/jobs/\$id.sh lq-\$id); echo \"queued \$id (gpu-queue \$q)\""
+  fi ;;
+results)
+  box=${1:-}; pat=${2:-.}; T=$(target $box)
+  ssh $SO $T "grep -E $(printf '%q' "$pat") $(rfile $box) | tail -40" | cut -c1-400 ;;
+log)
+  box=${1:-}; id=${2:?lq log <box> <job id or tag> [grep pattern]}; pat=${3:-.}; T=$(target $box)
+  case $id in *[!A-Za-z0-9_.-]*) die "bad id";; esac
+  case $box in m3|m2) where="~/mq/out/$id.log ~/mqf/out/$id.log ~/mq/out/race-*$id*/race.log";; *) where="/root/lq/out/$id/*.log /root/lq/out/$id/*.txt";; esac
+  ssh $SO $T "setopt nullglob 2>/dev/null; grep -h -E $(printf '%q' "$pat") $where 2>/dev/null | tail -40" | cut -c1-400 ;;
+status)
+  for b in nv amd m3 m2; do
+    T=$(target $b)
+    case $b in
+      m3|m2) s=$(ssh $SO $T 'echo "$(wc -l < ~/mq/queue.txt) lines, done through $(cat ~/mq/pos)"' 2>&1 | tail -1);;
+      amd) s=$(ssh $SO $T 'echo "$(wc -l < /root/lq/queue.txt) lines, done through $(cat /root/lq/pos)"' 2>&1 | tail -1);;
+      nv) s=$(ssh $SO $T 'for d in /root/gpu-queue/0*; do cat $d/status; done | sort | uniq -c | tr "\n" " "' 2>&1 | tail -1);;
+    esac
+    echo "$b: $s"
+  done ;;
+*) sed -n 2,14p "$0"; exit 2 ;;
+esac
