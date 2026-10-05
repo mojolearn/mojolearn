@@ -863,6 +863,7 @@ comptime XTREES_FAST_SWITCHES = (
     + (8 if agn_dev.KSHAP_FAST_BATCH else 0)
     + (32 if agn_dev.PSHAP_DELTA else 0)
     + (64 if agn_dev.KSHAP_FAST_OVERLAP else 0)
+    + (128 if agn_dev.PSHAP_FAST_OVERLAP else 0)
 )
 
 
@@ -870,7 +871,8 @@ def fast_switches_binding() raises -> PythonObject:
     """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2
     MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
     MOJOLEARN_KSHAP_FAST_BATCH, bit 32 MOJOLEARN_PSHAP_DELTA, bit 64
-    MOJOLEARN_KSHAP_FAST_OVERLAP (xtrees/agnostic_device.mojo)."""
+    MOJOLEARN_KSHAP_FAST_OVERLAP, bit 128 MOJOLEARN_PSHAP_FAST_OVERLAP
+    (xtrees/agnostic_device.mojo)."""
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
@@ -1256,6 +1258,29 @@ def pshap_dsynth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, t
     return PythonObject(p[0])
 
 
+def pshap_dsynth_async_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, tot: PythonObject,
+                               params: PythonObject) raises -> PythonObject:
+    """MOJOLEARN_PSHAP_FAST_OVERLAP: `x_trees_pshap_dsynth` whose rows reach
+    syn by `x_trees_pshap_dsynth_wait` (tot is final on return); the same
+    params. Refused in a build without the define (switches bit 128)."""
+    var p = _agn_ints(params, 6, "x_trees_pshap_dsynth_async")
+    if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 0 or p[4] < 0:
+        raise Error("x_trees_pshap_dsynth_async: bad counts")
+    comptime if agn_dev.PSHAP_FAST_OVERLAP:
+        agn_dev.pshap_dsynth_async(Int(py=x), Int(py=bg), Int(py=syn), Int(py=tot), p[0], p[1], p[2], p[3], p[5],
+                                   p[4])
+    else:
+        raise Error("x_trees_pshap_dsynth_async: built without MOJOLEARN_PSHAP_FAST_OVERLAP")
+    return PythonObject(p[0])
+
+
+def pshap_dsynth_wait_binding() raises -> PythonObject:
+    """MOJOLEARN_PSHAP_FAST_OVERLAP: wait for the chunk in flight."""
+    comptime if agn_dev.PSHAP_FAST_OVERLAP:
+        agn_dev.pshap_dsynth_wait()
+    return PythonObject(0)
+
+
 def pshap_dvalues_binding(x: PythonObject, bg: PythonObject, yout: PythonObject, phi: PythonObject,
                           tot: PythonObject, params: PythonObject) raises -> PythonObject:
     """MOJOLEARN_PSHAP_DELTA: phi float64 R x d x k from out Float32 (rows
@@ -1346,3 +1371,5 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[pshap_values_binding]("x_trees_pshap_values")
     m.def_function[pshap_dsynth_binding]("x_trees_pshap_dsynth")
     m.def_function[pshap_dvalues_binding]("x_trees_pshap_dvalues")
+    m.def_function[pshap_dsynth_async_binding]("x_trees_pshap_dsynth_async")
+    m.def_function[pshap_dsynth_wait_binding]("x_trees_pshap_dsynth_wait")

@@ -81,6 +81,18 @@ comptime SHAP_PERM_CACHE = PSHAP_DELTA and not is_defined["MOJOLEARN_SHAP_PERM_C
 #: device buffers wait in KS_PEND until then. The same kernels on the same
 #: words in the same order: no bit moves (phi byte-identical expected).
 comptime KSHAP_FAST_OVERLAP = KSHAP_FAST_BATCH and is_defined["MOJOLEARN_KSHAP_FAST_OVERLAP"]()
+#: PSHAP_FAST_OVERLAP (lane apple-fast-s-shap, 2026-10-04; READY-AB, opt-in
+#: `-D MOJOLEARN_PSHAP_FAST_OVERLAP`, needs SHAP_PERM_CACHE): the same overlap
+#: for PermutationExplainer istella (~150 ms a row vs shap-cpu's ~123): each
+#: row's varying synthetic rows (up to 441,000 x 220 floats, 388 MB) come
+#: down by a raw host-pointer copy (~3 GB/s) with the model idle. Here
+#: `pshap_dsynth_async` builds chunk r + 1's `_Delta` (its one count sync,
+#: with the stream otherwise idle), enqueues its compaction and download into
+#: the caller's other host buffer and returns; the model runs on chunk r
+#: meanwhile; chunk r's `pshap_dvalues` takes chunk r's cached `_Delta`
+#: (SHAP_PERM_CACHE's slot), and `pshap_dsynth_wait` then moves chunk r + 1's
+#: into that slot. The same kernels on the same words: no bit moves.
+comptime PSHAP_FAST_OVERLAP = SHAP_PERM_CACHE and is_defined["MOJOLEARN_PSHAP_FAST_OVERLAP"]()
 comptime AGN_MAX_BLOCKS = 65535 * 16
 comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
 
@@ -265,7 +277,7 @@ def _up_i64(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.
     return b^
 
 
-struct _Masks(Copyable, Movable):
+struct _Masks(Movable):
     """A chunk's coalition masks and weights, on the device."""
     var masks: DeviceBuffer[DType.int32]
     var w: DeviceBuffer[DType.uint64]
@@ -776,6 +788,64 @@ def pshap_dsynth(x: Int, bg: Int, syn: Int, tot: Int, R: Int, nb: Int, d: Int, n
         slot[].key = _delta_key(x, bg, tot, R, nb, d, np, seed, row0)
     else:
         _ = dl^
+
+
+struct _DeltaPend(Defaultable, Movable):
+    """PSHAP_FAST_OVERLAP: the chunk whose compacted rows are in flight, and
+    its SHAP_PERM_CACHE key."""
+    var dl: Optional[_Delta]
+    var key: List[Int]
+
+    def __init__(out self):
+        self.dl = Optional[_Delta]()
+        self.key = List[Int]()
+
+
+comptime AGN_DELTA_PEND = _Global[StorageType=_DeltaPend, name="MojoXTreesAgnosticDeltaPendFast",
+                                  init_fn=_DeltaPend.__init__]
+
+
+def pshap_dsynth_wait() raises:
+    """PSHAP_FAST_OVERLAP: wait for the chunk `pshap_dsynth_async` left in
+    flight (its rows are then at the caller's host address) and move its
+    `_Delta` into SHAP_PERM_CACHE's slot for its `pshap_dvalues`. A no-op
+    with nothing in flight."""
+    var pend = AGN_DELTA_PEND.get_or_create_ptr()
+    if pend[].dl:
+        _ctx().synchronize()
+        var slot = AGN_DELTA_SLOT.get_or_create_ptr()
+        slot[].dl = Optional[_Delta](pend[].dl.take())
+        slot[].key = pend[].key.copy()
+        pend[].dl = Optional[_Delta]()
+        pend[].key = List[Int]()
+
+
+def pshap_dsynth_async(x: Int, bg: Int, syn: Int, tot: Int, R: Int, nb: Int, d: Int, np: Int, seed: Int,
+                       row0: Int) raises:
+    """PSHAP_FAST_OVERLAP: `pshap_dsynth` whose compaction and download are
+    enqueued WITHOUT the final wait (the count at tot is final on return;
+    the rows reach syn by `pshap_dsynth_wait`, or by the next call that
+    synchronizes the stream). Leaves SHAP_PERM_CACHE's slot alone (it may
+    hold the previous chunk's `_Delta` for its `pshap_dvalues`). Until the
+    wait the caller must not read or free syn, and keeps x and bg alive and
+    unchanged."""
+    if R * np * (2 * d + 1) * nb * d <= 0:
+        return
+    var pend = AGN_DELTA_PEND.get_or_create_ptr()
+    if pend[].dl:
+        raise Error("x_trees_pshap_dsynth_async: a chunk is already in flight")
+    var ctx = _ctx()
+    var dl = _Delta(ctx, x, bg, tot, R, nb, d, np, seed, row0)
+    var total = dl.total * d
+    if total > 0:
+        var ps = _pool_syn(ctx, total)
+        ctx.enqueue_function[dsynth_kernel](
+            Int64(total), Int32(nb), Int32(d), Int32(np), dl.dx.unsafe_ptr(), dl.dbg.unsafe_ptr(),
+            dl.inv.unsafe_ptr(), dl.src.unsafe_ptr(), ps, grid_dim=_blocks(total), block_dim=AGN_TPB,
+        )
+        _pool_down(ctx, syn, total)
+    pend[].dl = Optional[_Delta](dl^)
+    pend[].key = _delta_key(x, bg, tot, R, nb, d, np, seed, row0)
 
 
 def pshap_dvalues(x: Int, bg: Int, yout: Int, phi: Int, tot: Int, R: Int, nb: Int, d: Int, k: Int, np: Int,

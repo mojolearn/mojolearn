@@ -503,6 +503,12 @@ _KSHAP_FAST_OVERLAP = 64
 #     from the previous coalition's (`x_trees_pshap_dsynth` +
 #     `x_trees_pshap_dvalues`); see xtrees/agnostic_device.mojo.
 _PSHAP_DELTA = 32
+#   MOJOLEARN_PSHAP_FAST_OVERLAP (lane apple-fast-s-shap, opt-in, needs
+#     SHAP_PERM_CACHE): PermutationExplainer's delta path enqueues the next
+#     chunk's compacted rows and their download into a second host buffer
+#     (`x_trees_pshap_dsynth_async`) before the model runs on the current
+#     chunk; the same words.
+_PSHAP_FAST_OVERLAP = 128
 
 
 def _trees_fast_tier(est):
@@ -3351,6 +3357,9 @@ class PermutationExplainer(_AgnosticExplainer):
         # bound them as if d were at least 16 (a narrow X would else index
         # up to the whole synthetic budget in Int64 triples)
         R = min(R, self._chunk(mm * nb * max(d, 16), n))
+        if n > R and _trees_switch(self, _PSHAP_FAST_OVERLAP):
+            self._delta_overlapped(b, x0, bg0, p0, n, d, k, nb, npm, seed, R, mm)
+            return
         tot = zeros((1,), "<i8")
         t0 = addr(tot, name="count")
         syn = empty((R * mm * nb * d,), "<f4")
@@ -3366,3 +3375,39 @@ class PermutationExplainer(_AgnosticExplainer):
             b.x_trees_pshap_dvalues(x0 + 4 * r0 * d, bg0, addr_ro(out, name="y"), p0 + 8 * r0 * d * k, t0,
                                     params + [k])
             del out
+
+    def _delta_overlapped(self, b, x0, bg0, p0, n, d, k, nb, npm, seed, R, mm):
+        """MOJOLEARN_PSHAP_FAST_OVERLAP: `_delta`'s chunk loop with two host
+        buffers (and two counts): chunk r + 1's varying rows are enqueued
+        (`x_trees_pshap_dsynth_async`) before the model runs on chunk r;
+        chunk r's `x_trees_pshap_dvalues` finds its cached state, and
+        `x_trees_pshap_dsynth_wait` hands chunk r + 1's over. The same calls
+        on the same words as `_delta`."""
+        tots = [zeros((1,), "<i8"), zeros((1,), "<i8")]
+        bufs = [empty((R * mm * nb * d,), "<f4"), empty((R * mm * nb * d,), "<f4")]
+
+        def start(r0, j):
+            rows = min(R, n - r0)
+            b.x_trees_pshap_dsynth_async(x0 + 4 * r0 * d, bg0, addr(bufs[j], name="synthetic"),
+                                         addr(tots[j], name="count"), [rows, nb, d, npm, r0, seed])
+
+        try:
+            start(0, 0)
+            b.x_trees_pshap_dsynth_wait()
+            cur = 0
+            for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
+                rows = min(R, n - r0)
+                nv = int(tots[cur].tolist()[0])
+                if r0 + R < n:
+                    start(r0 + R, 1 - cur)              # in flight while the model runs
+                front = memory_at(addr(bufs[cur], name="synthetic"), 4 * nv * d, writable=True).cast("f")
+                out = self._eval(Array.from_buffer(front).reshape((nv, d)))
+                del front
+                b.x_trees_pshap_dvalues(x0 + 4 * r0 * d, bg0, addr_ro(out, name="y"), p0 + 8 * r0 * d * k,
+                                        addr(tots[cur], name="count"), [rows, nb, d, npm, r0, seed, k])
+                del out
+                b.x_trees_pshap_dsynth_wait()
+                cur = 1 - cur
+        finally:
+            b.x_trees_pshap_dsynth_wait()       # never leave a download aimed at a freed buffer
+        del bufs
