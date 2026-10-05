@@ -629,17 +629,17 @@ def enetcv_fast(
     # KFold(shuffle=False): contiguous folds, the first n % k one row longer
     var meta = List[Int32]()
     var start = 0
-    for f in range(f_n):
+    for f in range(f_n):  # small-loop(f_n: CV folds): fold start offsets for the launch plan, no data read
         meta.append(Int32(start))
         start += n // f_n + (1 if f < n % f_n else 0)
     meta.append(Int32(n))
     var nch = 0
-    for f in range(f_n):
+    for f in range(f_n):  # small-loop(f_n: CV folds): chunk counts per fold for the launch plan, no data read
         meta.append(Int32(nch))
         var nf = Int(meta[f + 1]) - Int(meta[f])
         nch += (nf + EF_CH - 1) // EF_CH
     meta.append(Int32(nch))
-    for f in range(f_n):
+    for f in range(f_n):  # small-loop(f_n: CV folds): emits the chunk descriptors, one per 8192 rows, plan words only, no data read
         var lo = Int(meta[f])
         var hi = Int(meta[f + 1])
         while lo < hi:

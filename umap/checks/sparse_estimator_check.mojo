@@ -11,10 +11,10 @@ from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from std.os import getenv
 from checks.numerics import numeric_mode_name
-from umap.estimator import fuzzy_graph_from_data
+from umap.estimator import fuzzy_graph_from_data_reference
 from umap.curve import fit_umap_curve
 from umap.graph import fuzzy_simplicial_graph
-from umap.optimizer import optimize_layout, optimize_layout_identical
+from umap.optimizer import optimize_layout, optimize_layout_identical_reference
 from umap.optimizer_fast import optimize_layout_fast
 from umap.params import UMAPParams
 from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
@@ -22,7 +22,7 @@ from umap.sparse_estimator import (
     sparse_fit_transform, sparse_fuzzy_graph_from_data, sparse_spectral_initialize,
 )
 from umap.sparse_optimizer import (
-    optimize_sparse_layout, optimize_sparse_layout_identical,
+    optimize_sparse_layout, optimize_sparse_layout_identical_reference,
     optimize_sparse_layout_fast, validate_sparse_weights,
 )
 from umap.spectral_init import spectral_initialize
@@ -43,7 +43,7 @@ def fit_case(
     ctx: DeviceContext, x: List[Float32], n: Int, d: Int,
     params: UMAPParams, tag: String,
 ) raises:
-    var dense = fuzzy_graph_from_data(ctx, x, n, d, params)
+    var dense = fuzzy_graph_from_data_reference(ctx, x, n, d, params)
     var sparse = sparse_fuzzy_graph_from_data(ctx, x, n, d, params)
     bits(dense.rhos, sparse.rhos, tag + ".rho")
     bits(dense.sigmas, sparse.sigmas, tag + ".sigma")
@@ -92,11 +92,11 @@ def optimizer_case(ctx: DeviceContext, n: Int, dimensions: Int, zeros: Bool) rai
             for at in range(sparse.offsets[row], sparse.offsets[row + 1]):
                 if Int(sparse.indices[at]) == 1 - row:
                     sparse.values[at] = Float32(0.0)
-    var expected = optimize_layout_identical(
+    var expected = optimize_layout_identical_reference(
         initial, dense.weights, n, dimensions, 4, negative_sample_rate=3,
         seed=UInt64(29),
     )
-    var actual = optimize_sparse_layout_identical(
+    var actual = optimize_sparse_layout_identical_reference(
         initial, sparse, n, dimensions, 4, negative_sample_rate=3,
         seed=UInt64(29),
     )

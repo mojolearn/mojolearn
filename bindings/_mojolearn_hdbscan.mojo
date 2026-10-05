@@ -426,12 +426,12 @@ def _soft_shape_refusal(where: String, vals: List[Int]) raises:
     """Every count the soft clustering calls take must be positive (m at
     least 2), else a refusal naming them."""
     var ok = vals[0] >= 2
-    for i in range(1, len(vals)):
+    for i in range(1, len(vals)):  # small-loop(vals: a handful of shape counts): shape refusal, not data
         if vals[i] < 1:
             ok = False
     if not ok:
         var s = String(where) + ": shape refused by name ("
-        for i in range(len(vals)):
+        for i in range(len(vals)):  # small-loop(vals: a handful of shape counts): refusal message, not data
             if i > 0:
                 s += ", "
             s += String(vals[i])

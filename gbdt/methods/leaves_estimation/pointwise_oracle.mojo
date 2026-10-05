@@ -101,6 +101,9 @@ from gbdt.methods.leaves_estimation.leaves_estimation_helper import (
     compute_exact_approx,
     make_exact_quantile_scratch,
 )
+from gbdt.methods.leaves_estimation.leaves_estimation import (
+    f32_stash_kernel,
+)
 from gbdt.targets.kernel.multilogit import (
     MC_CLASS_BATCH_DERIV,
     MC_CLASS_BATCH_EST,
@@ -125,6 +128,8 @@ from gbdt.targets.kernel.pointwise_targets import (
 )
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
+    REDUCE_LANES_BLOCK,
+    deterministic_sum_lanes_kernel,
     launch_approximate,
     launch_approximate_move_eval,
 )
@@ -149,7 +154,7 @@ from std.sys.compile import is_defined
 from std.gpu import block_idx, thread_idx
 
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 # ================= DEVIATION BLOCK 2030 =================
 # FUSED MoveTo + evaluation for the Newton walker (single-dim losses).
@@ -214,9 +219,9 @@ def merge_stage_times(mut dst: StageTimes, src: StageTimes):
     method on."""
     if not src.enabled:
         return
-    for i in range(len(src.tags)):
+    for i in range(len(src.tags)):  # small-loop(tags: stage-time tags, a few dozen): merges timing counters, not data
         var found = False
-        for j in range(len(dst.tags)):
+        for j in range(len(dst.tags)):  # small-loop(tags: stage-time tags, a few dozen): finds the matching timing counter
             if dst.tags[j] == src.tags[i]:
                 dst.ns[j] += src.ns[i]
                 found = True
@@ -225,6 +230,34 @@ def merge_stage_times(mut dst: StageTimes, src: StageTimes):
             dst.tags.append(src.tags[i].copy())
             dst.ns.append(src.ns[i])
 
+
+def _mirror_second_der_row(
+    mut second_der: List[Float64],
+    h_stats: HostBuffer[DType.float32],
+    off: Int,
+    bin_stride: Int,
+    row: Int,
+    hbs: Int,
+    bin_count: Int,
+    lambda_reg: Float64,
+):
+    """Mirror Hessian row `row` of every bin from the read-back partition
+    stats (`h_stats[off + bin * bin_stride + col]`, `col <= row`) into both
+    triangles of the per-bin `hbs x hbs` blocks (`:166-180`); the diagonal
+    takes `+ lambda` (`:178`). Shared by the per-row wait path and the
+    IDENTICAL one-wait arm (`IDN_MULTI_HESS_ONE_WAIT`) so both mirror the
+    same way."""
+    var matrix_size = hbs * hbs
+    var column_count = row + 1
+    for bin in range(bin_count):  # small-loop(bin_count: feature borders, never rows): the per-bin Hessian block of one class row
+        var base = bin * matrix_size
+        for col in range(column_count):
+            var val = Float64(h_stats[off + bin * bin_stride + col])
+            if col == row:
+                second_der[base + row * hbs + row] = val + lambda_reg
+            else:
+                second_der[base + row * hbs + col] = val
+                second_der[base + col * hbs + row] = val
 
 @fieldwise_init
 struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
@@ -370,18 +403,11 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     var h_weight_stats: Optional[HostBuffer[DType.float32]]
 
     def settle_weights(mut self) raises:
-        """`WeightsCpu` from the deferred weight fold (see
-        `h_weight_stats`): the SAME per-leaf float32 sums the constructor's
-        drained readback reads, widened the same way. The caller must have
-        drained the queue since construction. A no-op on an ordinary
-        oracle."""
-        if not self.h_weight_stats.__bool__():
-            return
-        var h = self.h_weight_stats.take()
-        self.weights_cpu.clear()
-        for leaf in range(self.bin_count):
-            self.weights_cpu.append(Float64(h.unsafe_ptr().unsafe_load(leaf)))
-        _ = h^
+        """Retired with the host walk (lane cpu4-gbdt): a deferred-weights
+        oracle keeps its weight fold on the device for the device walk, so
+        there is nothing to settle. `h_weight_stats` is always None."""
+        if self.h_weight_stats.__bool__():
+            raise Error("settle_weights: a host weight copy exists; none should")
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -580,14 +606,22 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             return
         self._write_multi_dim_value_and_first_derivatives(value, gradient)
 
-    def enqueue_single_dim_evaluation(mut self) raises:
+    def enqueue_single_dim_evaluation(mut self, readback: Bool = True) raises:
         """The single-dim arm of `write_value_and_first_derivatives` up to
-        its drain: the evaluation launch, the per-leaf fold, and the two
-        readback copies, ENQUEUED. `finish_single_dim_evaluation` reads them
-        after the caller's drain. The ordinary method is exactly
-        enqueue -> drain -> finish; the Ordered fit's batched estimation
-        (`ordered_boosting.mojo`) enqueues every task's evaluation behind
-        ONE drain instead of one each."""
+        its drain: the evaluation launch, the per-leaf fold, the value fold
+        and (with `readback`) the two readback copies, ENQUEUED.
+        `finish_single_dim_evaluation` reads them after the caller's drain.
+        The ordinary method is exactly enqueue -> drain -> finish. The
+        device walk (`device_walker.mojo`) passes `readback=False`: it reads
+        `d_part_stats` and `d_fv` on the device.
+
+        THE VALUE FOLD (lane cpu4-gbdt) is `deterministic_sum_lanes_kernel
+        [1]` over the per-block partials, on the device, into
+        `d_mag_dummy[0]` (never written by the evaluation, whose magnitude
+        output is off here); one float comes home in `h_fv[0]`. It was the
+        host's ascending Float32 chain over every block; the order changed
+        on every column together (`gbdt/host/gbdt_oracle*.mojo` fold with
+        `_deterministic_sum_lanes`)."""
         var blocks = (
             self.n_rows + MSE_BLOCK_SIZE - 1
         ) // MSE_BLOCK_SIZE
@@ -711,13 +745,23 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                 row_bound=self.max_leaf_size,
             )
             self.times.end(self.ctx, "est.pstats")
+            if not readback:
+                return
             self.times.begin(self.ctx)
+            self.ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+                self.d_fv.unsafe_ptr(),
+                Int32(self.fv_blocks),
+                self.d_mag_dummy.unsafe_ptr(),
+                grid_dim=(1, 1, 1),
+                block_dim=(REDUCE_LANES_BLOCK, 1, 1),
+            )
             self.ctx.enqueue_copy(
                 dst_ptr=self.h_part_stats.unsafe_ptr(),
                 src_buf=self.d_part_stats,
             )
             self.ctx.enqueue_copy(
-                dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
+                dst_ptr=self.h_fv.unsafe_ptr(),
+                src_buf=self.d_mag_dummy.create_sub_buffer[DType.float32](0, 1),
             )
 
     def finish_single_dim_evaluation(
@@ -758,10 +802,9 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # rounds where 6-7 sit at the float32 noise floor. Found
             # 2026-08-22 in the Newton-walk audit; the walk-divergence
             # entry carries the measurement.
-            var fv32 = Float32(0.0)
-            for b in range(self.fv_blocks):
-                fv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
-            value = Float64(fv32)
+            # lane cpu4-gbdt: folded on the device in the fixed lanes order
+            # (`enqueue_single_dim_evaluation`), one float read here
+            value = Float64(self.h_fv.unsafe_ptr().unsafe_load(0))
 
     def _write_multi_dim_value_and_first_derivatives(
         mut self, mut value: Float64, mut gradient: List[Float64]
@@ -904,6 +947,94 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         for b in range(ml_blocks):
             mfv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
         value = Float64(mfv32)
+
+    def _stash_multi_stats(
+        mut self,
+        mut dst: DeviceBuffer[DType.float32],
+        dst_offset: Int,
+        n: Int,
+    ) raises:
+        """`IDN_GBDT_MC_ONE_STEP_DEVICE`: `d_multi_stats[0:n]` into
+        `dst[dst_offset:dst_offset + n]`, stream-ordered (no wait)."""
+        if n <= 0:
+            return
+        self.ctx.enqueue_function[f32_stash_kernel](
+            self.d_multi_stats.unsafe_ptr(),
+            dst.unsafe_ptr(),
+            Int32(dst_offset),
+            Int32(n),
+            grid_dim=((n + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+
+    def enqueue_multiclass_one_step_inputs(
+        mut self,
+        mut d_grad: DeviceBuffer[DType.float32],
+        mut d_hess: DeviceBuffer[DType.float32],
+    ) raises:
+        """lane fix-g1-gbdt, `IDN_GBDT_MC_ONE_STEP_DEVICE`: the walker's
+        first evaluation and blocked second derivatives for MultiClass at
+        the current point, ENQUEUED with no wait and no host read: the SAME
+        launches, grids and reductions as
+        `_write_multi_dim_value_and_first_derivatives` (MultiClass arm) and
+        `_write_blocked_second_derivatives` (the row loop), so every per-leaf
+        float is the host path's. Each reduction is stashed on the device
+        instead of copied to the host:
+
+          `d_grad[leaf * cursor_dim + d]`, the reduced der planes;
+          `d_hess`, row `r` (columns `0..r`) at `bin_count * r (r + 1) / 2`.
+
+        `multiclass_one_step_kernel` reads both. The der-at-point and der2
+        caches are cleared, as a `move_to` leaves them: nothing on this
+        path reads them."""
+        if self.objective != OBJECTIVE_MULTICLASS:
+            raise Error(
+                "enqueue_multiclass_one_step_inputs: MultiClass only, got"
+                " objective " + String(self.objective)
+            )
+        self.times.begin(self.ctx)
+        launch_multilogit_value_and_der(
+            self.ctx, self.num_classes, self.n_rows,
+            self.d_target, self.d_weights, self.has_weights,
+            self.d_cursor, self.n_rows,
+            self.d_identity, False,
+            self.d_fv, True,
+            self.d_multi_der, self.n_rows,
+            self.d_mag_dummy, False,
+        )
+        self.times.end(self.ctx, "est.approx")
+        self.times.begin(self.ctx)
+        compute_partition_stats(
+            self.ctx, self.bin_count, 0, self.cursor_dim, self.n_rows,
+            self.d_leaves, self.d_p_off, self.d_p_sz,
+            self.d_multi_der, self.d_multi_partials, self.d_multi_stats,
+            sm_count=self.sm_count,
+        )
+        self._stash_multi_stats(d_grad, 0, self.bin_count * self.cursor_dim)
+        var hbs = self.single_bin_dim
+        for row in range(hbs):  # small-loop(hbs: the class dimensions of one cursor): enqueues one launch pair per class row
+            var column_count = row + 1
+            launch_multilogit_second_der(
+                self.ctx, self.num_classes, self.n_rows,
+                self.d_weights, self.has_weights,
+                self.d_cursor, self.n_rows,
+                self.d_multi_der, row, self.n_rows,
+            )
+            compute_partition_stats(
+                self.ctx, self.bin_count, 0, column_count, self.n_rows,
+                self.d_leaves, self.d_p_off, self.d_p_sz,
+                self.d_multi_der, self.d_multi_partials,
+                self.d_multi_stats,
+                sm_count=self.sm_count,
+            )
+            self._stash_multi_stats(
+                d_hess,
+                self.bin_count * ((row * (row + 1)) // 2),
+                self.bin_count * column_count,
+            )
+        self.times.end(self.ctx, "est.pstats")
+        self.der_at_point.clear()
+        self.cached_der2.clear()
 
     def _write_multiclass_fused_evaluation(
         mut self, mut value: Float64, mut gradient: List[Float64]
@@ -1286,6 +1417,46 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                                 second_der[base + col * hbs + row] = val
                 return
 
+        comptime if IDN_MULTI_HESS_ONE_WAIT:
+            # lane/fam-gbdt: the loop below with ONE wait. Row `row`'s copy
+            # of the whole `d_multi_stats` (`hbs * bin_count` floats, the
+            # scratch's `multi_planes * bin_count`) goes to slot `row` of
+            # `h_multi_stats` (`_oracle_multi_host_len`).
+            var stats_len = hbs * self.bin_count
+            for row in range(hbs):
+                var column_count = row + 1
+                if self.objective == OBJECTIVE_MULTIRMSE:
+                    launch_multi_rmse_second_der(
+                        self.ctx, self.n_rows,
+                        self.d_weights, self.has_weights,
+                        self.d_multi_der, row, self.n_rows,
+                    )
+                else:
+                    launch_multilogit_second_der(
+                        self.ctx, self.num_classes, self.n_rows,
+                        self.d_weights, self.has_weights,
+                        self.d_cursor, self.n_rows,
+                        self.d_multi_der, row, self.n_rows,
+                    )
+                compute_partition_stats(
+                    self.ctx, self.bin_count, 0, column_count, self.n_rows,
+                    self.d_leaves, self.d_p_off, self.d_p_sz,
+                    self.d_multi_der, self.d_multi_partials,
+                    self.d_multi_stats,
+                    sm_count=self.sm_count,
+                )
+                self.ctx.enqueue_copy(
+                    dst_ptr=self.h_multi_stats.unsafe_ptr() + row * stats_len,
+                    src_buf=self.d_multi_stats,
+                )
+            self.ctx.synchronize()
+            for row in range(hbs):  # small-loop(hbs: class dimensions of one cursor): one mirror call per class row
+                _mirror_second_der_row(
+                    second_der, self.h_multi_stats, row * stats_len, row + 1,
+                    row, hbs, self.bin_count, self.lambda_reg,
+                )
+            return
+
         for row in range(hbs):
             var column_count = row + 1
             if self.objective == OBJECTIVE_MULTIRMSE:
@@ -1319,22 +1490,10 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             self.ctx.synchronize()
 
             # mirror this row into both triangles (`:166-180`)
-            for bin in range(self.bin_count):
-                var base = bin * matrix_size
-                for col in range(column_count):
-                    var val = Float64(
-                        self.h_multi_stats.unsafe_ptr().unsafe_load(
-                            bin * column_count + col
-                        )
-                    )
-                    if col == row:
-                        # `sigma[row*hbs + row] = ... + lambda` (`:178`)
-                        second_der[base + row * hbs + row] = (
-                            val + self.lambda_reg
-                        )
-                    else:
-                        second_der[base + row * hbs + col] = val
-                        second_der[base + col * hbs + row] = val
+            _mirror_second_der_row(
+                second_der, self.h_multi_stats, 0, column_count,
+                row, hbs, self.bin_count, self.lambda_reg,
+            )
 
     def make_estimation_result(
         self, point: List[Float32]
@@ -1452,6 +1611,36 @@ def multiclass_hessian_batch_for[column: Int]() -> Bool:
 
 
 comptime MULTICLASS_HESSIAN_BATCH = multiclass_hessian_batch_for[TARGET_COLUMN]()
+
+#: lane/fam-gbdt (2026-10-04), IDN_MULTI_HESS_ONE_WAIT: IDENTICAL, every
+#: vendor, default on. The blocked Hessian's row loop
+#: (`_write_blocked_second_derivatives`, DEVIATION 75) keeps its launch and
+#: its reduce PER ROW, at the row's own column count, but waits ONCE for all
+#: `numClasses` rows instead of once per row: each row's whole-buffer copy
+#: of `d_multi_stats` lands in its own slot of `h_multi_stats` (the stream
+#: orders the copy before the next row's reduce rewrites the buffer), and
+#: the mirror reads the slots after the one wait. Same kernels, same grids,
+#: same order: no bit moves on any column and the host column is untouched.
+#: The host staging buffer is `multi_planes` times longer (floats per leaf,
+#: not per row). `-D MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF` (or the
+#: master `-D MOJOLEARN_IDN_ALL_OFF`) restores the wait per row.
+comptime IDN_MULTI_HESS_ONE_WAIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not MULTICLASS_HESSIAN_BATCH
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+def _oracle_multi_host_len(multi_planes: Int, bin_count: Int) -> Int:
+    """The length of `h_multi_stats`: `d_multi_stats`' own length, times one
+    slot per Hessian row under `IDN_MULTI_HESS_ONE_WAIT`."""
+    comptime if IDN_MULTI_HESS_ONE_WAIT:
+        return multi_planes * multi_planes * bin_count
+    else:
+        return multi_planes * bin_count
 #: the widest class count batched: `d_multi_der` is `K (K + 1) / 2` planes
 #: of `n_rows` floats under the batch (36 at 8), the row loop above that
 comptime MULTICLASS_HESSIAN_BATCH_MAX_CLASSES = 8
@@ -1761,7 +1950,7 @@ struct OracleHostScratch(Movable):
             ctx, 2 * bin_count
         )
         self.h_multi_stats = arena.host_buffer[DType.float32](
-            ctx, multi_planes * bin_count
+            ctx, _oracle_multi_host_len(multi_planes, bin_count)
         )
         # the size of `d_part_stats`, the WHOLE-BUFFER copy's source (the
         # weight fold fills its first `bin_count` cells): a staging buffer
@@ -1904,7 +2093,7 @@ struct OracleScratchPool(Movable):
             n_rows, dims[1], fv_blocks
         ):
             self.entries.clear()
-        for i in range(len(self.entries)):
+        for i in range(len(self.entries)):  # small-loop(entries: pooled scratch keys, at most ORACLE_POOL_MAX_BIN_KEYS): cache lookup by shape only
             if self.entries[i].matches(
                 n_rows, bin_count, dims[0], dims[1], fv_blocks, sm
             ):
@@ -1955,6 +2144,11 @@ def make_bin_optimized_oracle(
     defer_weights: Bool = False,
     var host_scratch: Optional[OracleHostScratch] = None,
     leaves_ready: Bool = False,
+    # lane cpu4-gbdt: with `defer_weights`, leave the weighted fold in
+    # `d_part_stats` for the device walk (`device_walker.mojo` stashes it)
+    # and copy nothing home: `weights_cpu` stays empty and `settle_weights`
+    # is a no-op
+    weights_on_device: Bool = False,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -2122,7 +2316,7 @@ def make_bin_optimized_oracle(
             2 * bin_count
         )
         h_multi_stats = ctx.enqueue_create_host_buffer[DType.float32](
-            multi_planes * bin_count
+            _oracle_multi_host_len(multi_planes, bin_count)
         )
 
     # `CurrentPoint` lives in the CURSOR's gauge -- `cursorDim` per bin,
@@ -2147,6 +2341,10 @@ def make_bin_optimized_oracle(
     # copies may not share it while both are in flight)
     var h_weight_stats = Optional[HostBuffer[DType.float32]]()
     if has_weights and defer_weights:
+        # lane cpu4-gbdt: the deferred fold stays on the device for the
+        # device walk (`device_walker.mojo` stashes it before the first
+        # evaluation); nothing is copied home (`weights_on_device` is kept
+        # as the callers' spelling of the same request)
         compute_partition_stats(
             ctx, bin_count, 0, 1, n_rows,
             d_leaves, d_p_off, d_p_sz,
@@ -2154,14 +2352,6 @@ def make_bin_optimized_oracle(
             sm_count=sm,
             row_bound=widest_leaf,
         )
-        var h_w: HostBuffer[DType.float32]
-        if have_host:
-            h_w = host_scratch.value().h_weight_stats.copy()
-        else:
-            # `d_part_stats`' length: the copy below is whole-buffer
-            h_w = ctx.enqueue_create_host_buffer[DType.float32](2 * bin_count)
-        ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=d_part_stats)
-        h_weight_stats = Optional(h_w^)
     elif has_weights:
         compute_partition_stats(
             ctx, bin_count, 0, 1, n_rows,

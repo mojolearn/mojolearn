@@ -69,8 +69,8 @@ from holtwinters.impl.internal.hw_decompose import stl_decomposition_gpu
 from holtwinters.impl.internal.hw_estimate import (
     HW_INIT_ESTIMATED,
     HW_INIT_HEURISTIC,
-    holtwinters_estimate_gpu,
 )
+from holtwinters.impl.internal.hw_estimate_launch import holtwinters_estimate_gpu
 from holtwinters.impl.internal.hw_eval import HW_WRITE_ALL, holtwinters_eval_gpu
 from holtwinters.impl.internal.hw_forecast import holtwinters_forecast_gpu
 from holtwinters.impl.internal.hw_optim import holtwinters_optim_gpu

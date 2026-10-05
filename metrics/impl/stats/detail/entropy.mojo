@@ -64,6 +64,13 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from metrics.impl.stats.detail.histogram import histogram
+from metrics.impl.stats.detail.sf_epilogue import entropy_epilogue_device
+from metrics.impl.stats.detail.sf_epilogue_core import (
+    IDN_METRIC_EPI,
+    entropy_sf_parts,
+    sf_fold_list,
+    sf_to_f64,
+)
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -136,7 +143,19 @@ def entropy_from_counts_traced(
     main.mojo` calls this path through `homogeneity_score` in a TIMED
     window, and a card instrument may not put an allocation in it."""
     var accs = List[Float64]()
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if IDN_METRIC_EPI:
+        # lane fam2-prep-metrics (sf_epilogue.mojo): binary64 terms in the
+        # chunked order the device kernels use; `.acc` records the chunk sums
+        var parts = entropy_sf_parts(counts, size)
+        if trace.enabled:
+            for i in range(len(parts)):
+                accs.append(sf_to_f64(parts[i]))
+            trace.record_host(
+                tag_prefix + ".acc", accs.unsafe_ptr(), len(accs)
+            )
+        _ = accs^
+        return sf_to_f64(sf_fold_list(parts))
+    elif GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var acc = Float32(0.0)
         var fsize = Float32(size)
         for i in range(len(counts)):
@@ -221,6 +240,16 @@ def entropy_traced(
     STRUCTURAL divergence, which is the correct visible behavior."""
     if size == 0:
         return 1.0  # `if (!size) return 1.0;` (:112); sklearn agrees
+    comptime if IDN_METRIC_EPI:
+        if not trace.enabled:
+            # lane fam2-prep-metrics: no card to fill, so the histogram stays on
+            # the device and its epilogue runs there (one word comes back)
+            var n_unique = Int(upper_label_range - lower_label_range + 1)
+            var bins = ctx.enqueue_create_buffer[DType.int32](n_unique)
+            histogram(ctx, bins, n_unique, cluster_array, size, lower_label_range)
+            var value = entropy_epilogue_device(ctx, bins, n_unique, size)
+            _ = bins^
+            return value
     var counts = count_labels(
         ctx, cluster_array, size, lower_label_range, upper_label_range
     )

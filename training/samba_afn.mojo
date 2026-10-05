@@ -326,7 +326,7 @@ struct AfnAdmit(Movable):
     def check(self) raises:
         """After the wait: the first raised flag, by name."""
         comptime if AFN_SAMBA_FLAGS:
-            for i in range(len(self.names)):
+            for i in range(len(self.names)):  # small-loop(names: admission flags of one op, a handful): first raised flag by name
                 if self.host[i] != Int32(0):
                     raise Error("mojolearn samba ops: " + self.names[i] + " (device admit)")
 
@@ -1126,7 +1126,7 @@ def _afn_addrs(addresses: PythonObject, want: Int, name: String) raises -> List[
             + String(len(addresses))
         )
     var out = List[Int]()
-    for i in range(want):
+    for i in range(want):  # small-loop(want: buffer addresses of one op): address slot admission
         var a = Int(py=addresses[i])
         if a == 0:
             raise Error(name + ": null buffer address at slot " + String(i))

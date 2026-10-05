@@ -230,7 +230,9 @@ def _strided_copy(src_addr, dst_addr, itemsize, shape, src_strides, dst_strides,
     src[src_base + sum i_j * src_strides[j]] to dst[dst_base + sum i_j *
     dst_strides[j]] (strides and bases in elements, bits unchanged), in Mojo
     (`strided_copy_bytes`, `bindings/array_helpers.mojo`; lane pyglue-sweep:
-    the per-row and per-column Python loops it replaces are gone)."""
+    the per-row and per-column Python loops it replaces are gone). The GPU
+    base binding runs it on the device (lane cpu2-l1-input,
+    `core/input_device.mojo`); the host loop is the host column."""
     from . import _buffer
     dims = array.array("q", (*shape, *src_strides, *dst_strides, src_base, dst_base))
     _buffer._native("strided_copy_bytes")(src_addr, dst_addr, dims.buffer_info()[0],

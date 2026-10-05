@@ -33,6 +33,7 @@ from checks.numerics import (
     identical_softplus,
 )
 from gemm.contract import OP_NT
+from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_list
 from gemm.checks.gemm_oracle import gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
 from mamba.checks.mamba_fixture import (
@@ -241,11 +242,10 @@ def mamba_block_oracle(
     # ---- MambaRMSNorm (modeling_mamba.py:485-503, eps 1e-5 MC:70) --------
     # variance = mean(x^2)  -> serial ascending fma from +0.0 (seam S1);
     # x * rsqrt(variance + eps) (S2, S3); weight * hidden (S4).
+    # lane nr-mamba (B11): S1 is the shared lanes + tree fold
+    # (mamba/checks/mamba_rms_fold.mojo, IDN_MAMBA_RMS_TREE).
     for t in range(m):
-        var acc = Float32(0.0)
-        for j in range(dm):
-            var xj = ftz(x[t * dm + j])
-            acc = ftz(identical_mul_add(xj, xj, acc))
+        var acc = mamba_rms_row_sumsq_list(x, t * dm, dm)
         st.norm_sumsq.append(acc)
         var mean = ftz(identical_div(acc, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))

@@ -14,7 +14,14 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE, X_PREP_POOL_ARENA
 from x_prep.folds import I32P, kfold_folds, strat_folds
-from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py
+from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py, IDN_NB_CSR, nb_csr_fit_int_py, nb_csr_jll_chk_py
+from x_prep.blocked import IDN_NB_ONEPASS, IDN_NB_CSR_DENSE
+from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
+from x_prep.select_blocked import IDN_SELECT_BLOCKED
+from x_prep.pt_blocked import IDN_PT_BLOCKED
+from x_prep.host.rr_eigh_host import IDN_RR_EIGH
+from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, IDN_LABEL_INV
+from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 from x_prep.py2mojo import PY2MOJO_PREP
 from x_prep.proba64 import PROBA64
@@ -22,7 +29,7 @@ from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from x_prep.fastmaxabs import maxabs_fit_direct
 
 from x_prep.fastpt import PTIMPUTE_FLAGS
-from x_prep.label_fast import LABEL_PRESENT
+from x_prep.label_fast import LABEL_PRESENT, IDN_LABEL
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -111,6 +118,22 @@ def dev_free_binding(id: PythonObject) raises -> PythonObject:
     with GILReleased(Python()):
         X_PREP_STORE.get_or_create_ptr()[].free(x_prep_ctx(), i)
     return PythonObject(None)
+
+
+def dev_take_rows_binding(
+    src_id: PythonObject, row_words: PythonObject, idx_addr: PythonObject, n_idx: PythonObject
+) raises -> PythonObject:
+    """A new resident slot: rows `idx` (n_idx host int64 words) of slot
+    src_id, gathered on the device (core/device_store.mojo `take_rows`,
+    lane cpu4-misc device-rows input); its id."""
+    var s = Int(py=src_id)
+    var w = Int(py=row_words)
+    var a = Int(py=idx_addr)
+    var n = Int(py=n_idx)
+    var id: Int
+    with GILReleased(Python()):
+        id = X_PREP_STORE.get_or_create_ptr()[].take_rows(x_prep_ctx(), s, w, a, n)
+    return PythonObject(id)
 
 
 def dev_live_binding() raises -> PythonObject:
@@ -241,6 +264,18 @@ def label_present_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def idn_int_binding() raises -> PythonObject:
+    """Lane idn-int-prep (IDENTICAL): the bits of the integer prep switches
+    this binding was built with, read by python/mojolearn/_expansion_prep.py
+    `_idn_int` (1 IDN_LABEL, 2 IDN_NB_ONEPASS, 4 IDN_NB_CSR, 8
+    IDN_NB_CSR_DENSE: op 164 densifies a CSR input on the device); registered
+    only when one is on."""
+    return PythonObject(
+        (1 if IDN_LABEL else 0) | (2 if IDN_NB_ONEPASS else 0) | (4 if IDN_NB_CSR else 0)
+        | (8 if IDN_NB_CSR_DENSE else 0)
+    )
+
+
 def pool_arena_binding() raises -> PythonObject:
     """Present only in a FAST Apple build with X_PREP_POOL_ARENA on (default; absent under -D MOJOLEARN_X_PREP_POOL_ARENA_OFF). A probe for checkers."""
     return PythonObject(1)
@@ -277,6 +312,34 @@ def py2mojo_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def idn_fam_binding() raises -> PythonObject:
+    """Lane fam-prep-metrics (IDENTICAL, device and host column alike): the
+    bits of the family switches this binding was built with, read by
+    python/mojolearn/_expansion_prep.py `_idn_fam` (1 IDN_STATS_BLOCKED, 2
+    IDN_CLASS_ONEPASS: op 165, 4 IDN_SELECT_BLOCKED: ops 166-171, 8
+    IDN_PT_BLOCKED: ops 172-176, 16 IDN_RR_EIGH: informational, the eigh
+    stage's order is the binding's own); registered only when one is on."""
+    return PythonObject(
+        (1 if IDN_STATS_BLOCKED else 0) | (2 if IDN_CLASS_ONEPASS else 0) | (4 if IDN_SELECT_BLOCKED else 0)
+        | (8 if IDN_PT_BLOCKED else 0) | (16 if IDN_RR_EIGH else 0)
+    )
+
+
+def idn_fam2_binding() raises -> PythonObject:
+    """Lane fam2-prep-metrics (IDENTICAL, device and host column alike): the
+    bits of the x_prep/fam2.mojo switches this binding was built with, read
+    by python/mojolearn/_expansion_prep.py `_idn_fam2` (1 IDN_WDRAW: ops
+    230-232, 2 IDN_PERM_DRAW: op 233, 4 IDN_WPICK: op 234, 8
+    IDN_PARTIAL_CODES: op 235, 16 IDN_GRAM_BLOCKED: ops 236, 238-240, 32
+    IDN_GRAM_ROWTILE: op 237 (candidate), 64 IDN_LABEL_INV: op 241, bits 16 and up: the Gram's rows per
+    block); registered only when one is on."""
+    return PythonObject(
+        (1 if IDN_WDRAW else 0) | (2 if IDN_PERM_DRAW else 0) | (4 if IDN_WPICK else 0)
+        | (8 if IDN_PARTIAL_CODES else 0) | (16 if IDN_GRAM_BLOCKED else 0) | (32 if IDN_GRAM_ROWTILE else 0)
+        | (64 if IDN_LABEL_INV else 0) | (IDN_GRAM_ROWS << 16)
+    )
+
+
 @export
 def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
     try:
@@ -286,12 +349,25 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             # lane apple-fast-nb: FAST + Apple default (M3 A/B 186.9 -> 35.4 ms), -D MOJOLEARN_NB_TEXT_CSR_OFF reverts (x_prep/fastnb_csr.mojo)
             m.def_function[nb_csr_fit_py]("x_prep_nb_csr_fit")
             m.def_function[nb_csr_jll_py]("x_prep_nb_csr_jll")
+        comptime if IDN_NB_CSR:
+            # lane idn-int-prep: IDENTICAL, every vendor, -D MOJOLEARN_IDN_NB_CSR_OFF reverts (x_prep/fastnb_csr.mojo)
+            m.def_function[nb_csr_fit_int_py]("x_prep_nb_csr_fit")
+            m.def_function[nb_csr_jll_chk_py]("x_prep_nb_csr_jll")
+        comptime if IDN_LABEL or IDN_NB_ONEPASS or IDN_NB_CSR or IDN_NB_CSR_DENSE:
+            m.def_function[idn_int_binding]("x_prep_idn_int")
+        comptime if IDN_STATS_BLOCKED or IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED or IDN_RR_EIGH:
+            # lane fam-prep-metrics
+            m.def_function[idn_fam_binding]("x_prep_idn_fam")
+        comptime if IDN_WDRAW or IDN_PERM_DRAW or IDN_WPICK or IDN_PARTIAL_CODES or IDN_GRAM_BLOCKED or IDN_LABEL_INV:
+            # lane fam2-prep-metrics: the fam2 switches (x_prep/fam2.mojo)
+            m.def_function[idn_fam2_binding]("x_prep_idn_fam2")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[run_out_binding]("x_prep_run_out")
         m.def_function[run_ranges_binding]("x_prep_run_ranges")
         m.def_function[dev_put_binding]("x_prep_dev_put")
         m.def_function[dev_free_binding]("x_prep_dev_free")
         m.def_function[dev_live_binding]("x_prep_dev_live")
+        m.def_function[dev_take_rows_binding]("x_prep_dev_take_rows")
         m.def_function[strat_folds_binding]("x_prep_strat_folds")
         m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         comptime if PREP3_MAXABS:

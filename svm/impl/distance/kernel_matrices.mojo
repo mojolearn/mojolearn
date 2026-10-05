@@ -374,6 +374,140 @@ def rbf_fused_tile(
     return True
 
 
+# ---------------------------------------------------------------------------
+# lane/fam-linear (2026-10-04): THE FUSED IDENTICAL RBF TILE
+# ---------------------------------------------------------------------------
+# IDENTICAL's RBF tile is `identical_gemm_into` followed by the expansion
+# epilogue, a second launch that reads and rewrites every cell. At k <= 64
+# profile `identical.gemm.fp32.v1` is ONE leaf and no fold addition
+# (`gemm/contract.mojo::contract_leaf_size`: k <= 128 is the serial ascending
+# chain `acc = ftz(fma(ftz(a), ftz(b), acc))` from +0.0, output `ftz(acc)`),
+# so DEVIATION 2492's kernel shape can evaluate the same cell in one launch
+# with the pinned arithmetic: the chain over exactly k terms, then
+# `rbf_kernel_expanded_kernel`'s expression character for character. No bit
+# moves, on any vendor, and the host column is untouched. Every vendor;
+# `-D MOJOLEARN_SVM_IDN_FUSED_TILE_OFF` (or the master
+# `MOJOLEARN_IDN_ALL_OFF`) keeps the two launches, and so do the two sabotage
+# builds, which must keep failing through the kernels they name.
+comptime SVM_IDN_FUSED_TILE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_SVM_IDN_FUSED_TILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not SAB_STD_EXP
+    and not SAB_NO_FTZ
+)
+
+
+def idn_rbf_fused_tile_kernel[KPAD: Int](
+    dst: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    norm_a: MutPointer[Float32, MutAnyOrigin],
+    norm_b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    gain: Float32,
+):
+    """`rbf_fused_tile_kernel`'s shape with IDENTICAL's cell: one thread per
+    column j, `a` tiled through shared memory, `out[i, j]` written once."""
+    comptime ROWS = RBF_FUSED_TILE_FLOATS // KPAD
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var tid = Int(thread_idx.x)
+    var j = Int(block_idx.x) * RBF_FUSED_TPB + tid
+    var active = j < n
+
+    var tile = stack_allocation[
+        RBF_FUSED_TILE_FLOATS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tile_norm = stack_allocation[
+        ROWS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var breg = stack_allocation[KPAD, Scalar[DType.float32]]()
+    var nb = Float32(0.0)
+    comptime for f in range(KPAD):
+        var v = Float32(0.0)
+        if active and f < k:
+            v = ftz(b.unsafe_load(j * k + f))
+        breg.unsafe_store(f, v)
+    if active:
+        nb = ftz(norm_b.unsafe_load(j))
+
+    var i0 = 0
+    while i0 < m:
+        var rows_here = m - i0
+        if rows_here > ROWS:
+            rows_here = ROWS
+        barrier()
+        var total = rows_here * KPAD
+        var idx = tid
+        while idx < total:
+            var r = idx // KPAD
+            var f = idx - r * KPAD
+            var v = Float32(0.0)
+            if f < k:
+                v = ftz(a.unsafe_load((i0 + r) * k + f))
+            tile.unsafe_store(idx, v)
+            idx += RBF_FUSED_TPB
+        idx = tid
+        while idx < rows_here:
+            tile_norm.unsafe_store(idx, ftz(norm_a.unsafe_load(i0 + idx)))
+            idx += RBF_FUSED_TPB
+        barrier()
+        if active:
+            for r in range(rows_here):
+                var tb = r * KPAD
+                var dot = Float32(0.0)
+                comptime for f in range(KPAD):
+                    if f < k:
+                        dot = ftz(
+                            identical_mul_add(
+                                tile.unsafe_load(tb + f), breg.unsafe_load(f), dot
+                            )
+                        )
+                # the GEMM's output seam; the epilogue's read seam is the same ftz
+                dot = ftz(dot)
+                var s = ftz(
+                    ftz(tile_norm.unsafe_load(r) + nb)
+                    - ftz(Float32(2.0) * dot)
+                )
+                var e = ftz((-gain) * s)
+                dst.unsafe_store((i0 + r) * n + j, ftz(identical_exp(e)))
+        i0 += ROWS
+
+
+def idn_rbf_fused_tile(
+    ctx: DeviceContext,
+    mut out: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut norm_a: DeviceBuffer[DType.float32],
+    mut norm_b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    gain: Float32,
+) raises -> Bool:
+    """True when the fused IDENTICAL kernel served the tile, False when k is
+    outside 1..64 and the caller must take the GEMM path."""
+    if k < 1 or k > RBF_FUSED_KREG:
+        return False
+    var kpad = ((k + 3) // 4) * 4
+    comptime for KP in [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64]:
+        if kpad == KP:
+            ctx.enqueue_function[idn_rbf_fused_tile_kernel[KP]](
+                out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                norm_a.unsafe_ptr(), norm_b.unsafe_ptr(),
+                Int32(m), Int32(n), Int32(k), gain,
+                grid_dim=(_grid_tpb(n, RBF_FUSED_TPB), 1, 1),
+                block_dim=(RBF_FUSED_TPB, 1, 1),
+            )
+    return True
+
+
 def kernel_op(
     ctx: DeviceContext,
     kp: KernelParams,
@@ -409,6 +543,11 @@ def kernel_op(
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         if kp.kernel == KERNEL_RBF and k <= RBF_FUSED_KREG:
             if rbf_fused_tile(ctx, out, a, b, norm_a, norm_b, m, n, k, Float32(kp.gamma)):
+                return
+    # lane/fam-linear: IDENTICAL RBF at k <= 64 in one launch, same bits.
+    comptime if SVM_IDN_FUSED_TILE:
+        if kp.kernel == KERNEL_RBF:
+            if idn_rbf_fused_tile(ctx, out, a, b, norm_a, norm_b, m, n, k, Float32(kp.gamma)):
                 return
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         identical_gemm_into(ctx, out, a, b, ws, m, n, k, OP_NT)

@@ -93,9 +93,10 @@ def arm_plan_sort(rep):
     equal plan="scan"'s bit for bit: plain, padded, carried, and a degenerate
     one-id run whose length is not a power of two (the sort's sentinel slack)."""
     w, ids, dy = _data(2)
-    scan = Embedding(V, D, weight=w)
+    scan = Embedding(V, D, weight=w, plan="scan")
     sort = Embedding(V, D, weight=w, plan="sort")
-    rep.check("PLAN", scan.plan == "scan" and sort.plan == "sort", "plan is stored, default 'scan'", (scan.plan, sort.plan))
+    auto = Embedding(V, D, weight=w)
+    rep.check("PLAN", scan.plan == "scan" and sort.plan == "sort" and auto.plan == "auto", "plan is stored, default 'auto'", (scan.plan, sort.plan, auto.plan))
     dw_scan = np.asarray(scan.backward(ids, dy))
     dw_sort = np.asarray(sort.backward(ids, dy))
     rep.check("PLAN", np.array_equal(_bits(dw_sort), _bits(dw_scan)), "plan='sort' backward equals plan='scan' bit for bit")

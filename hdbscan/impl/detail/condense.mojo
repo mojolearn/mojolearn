@@ -3,7 +3,7 @@
 """The condensed tree: collapse every subtree below `min_cluster_size`.
 
 Reference: `cuml-v26.08.00/cpp/src/hdbscan/detail/condense.cuh`
-(cuML `265b9da`): `bfs_from_node` (`:37-66`), `_build_condensed_hierarchy`
+(cuML `265b9da`): `bfs_from_node_host` (`:37-66`), `_build_condensed_hierarchy`
 (`:91-212`) and `build_condensed_hierarchy` (`:237-286`), with the
 reference branches in the reference order.
 
@@ -11,7 +11,7 @@ ON THE DEVICE FOR OUR DEVICE FIT (lane cgr2-hdbscan, 2026-10-03):
 `build_condensed_hierarchy` below hands off to
 `tree_device.mojo::build_condensed_device`, which computes the walk's
 result in closed form by pointer jumping and a radix sort. The walk in this
-file (`bfs_from_node`, `_collapse`, `_add_edge`) is the CPU column's
+file (`bfs_from_node_host`, `_collapse_host`, `_add_edge`) is the CPU column's
 (`hdbscan_host_oracle.mojo::hdbh_condense`), and the two trees are equal
 element for element.
 
@@ -30,7 +30,7 @@ INDEX. (IDENTITY hazard 3, first half.)
 ======================================================================
 `next_label` starts at `n_samples + 1` and increments ONCE PER SELECTED
 CHILD, in the order `node_list` is visited (`:156-160`). `node_list` is
-`bfs_from_node(root)`, a LEVEL-BY-LEVEL breadth-first order:
+`bfs_from_node_host(root)`, a LEVEL-BY-LEVEL breadth-first order:
 `process_queue` holds one whole level, the level is appended to `result`
 in queue order, and the next level is built by walking the level's
 internal nodes left child then right child (`:46-64`).
@@ -47,7 +47,7 @@ tree_vs_oracle` comparing NODE FOR NODE rather than comparing a summary.
 WHERE THE TRAVERSAL DOES *NOT* REACH, because a reader is owed the
 narrower claim rather than the wide one. The traversal order also decides
 the order in which edges are APPENDED to `out_parent`/`out_child` below,
-and the order in which `_collapse` emits a subtree's leaves -- and
+and the order in which `_collapse_host` emits a subtree's leaves -- and
 NEITHER of those is observable, because `CondensedHierarchy.condense()`
 sorts the four arrays on `(parent, child)` (DEVIATION 1611) and a
 collapsed subtree's leaf set is the same set whichever way it is walked.
@@ -109,7 +109,7 @@ from hdbscan.impl.detail.tree_device import (
 )
 
 
-def bfs_from_node(
+def bfs_from_node_host(
     bfs_root: Int,
     n_samples: Int,
     h_children: List[Int32],
@@ -139,7 +139,7 @@ def bfs_from_node(
     makes the two walks agree on every ancestor/descendant pair and
     disagree only where a LEFT-branch node is deeper than a RIGHT-branch
     one. On a LEFT-LEANING CATERPILLAR -- which is what
-    `bfs_from_node(subtree_root, ...)` is handed inside `_collapse`, and
+    `bfs_from_node_host(subtree_root, ...)` is handed inside `_collapse_host`, and
     what a single-linkage dendrogram is where one growing cluster absorbs
     one point at a time -- the two walks are IDENTICAL node for node, not
     merely equivalent. `HDB_SAB_CONDENSE_DFS`'s docstring in
@@ -200,7 +200,7 @@ def build_condensed_hierarchy(
 ) raises -> DeviceTree:
     """`condense.cuh:237-286` for the device fit: built on the device
     (`tree_device.mojo::build_condensed_device`, the closed form of the
-    walk below). The walk (`bfs_from_node`, `_collapse`, `_add_edge`) is
+    walk below). The walk (`bfs_from_node_host`, `_collapse_host`, `_add_edge`) is
     the CPU column's (`hdbh_condense`)."""
     return build_condensed_device(
         ctx, children, delta, sizes, min_cluster_size, n_leaves, sabotage
@@ -239,7 +239,7 @@ def _add_edge(
     out_size.append(Int32(size))
 
 
-def _collapse(
+def _collapse_host(
     subtree_root: Int,
     node: Int,
     n_samples: Int,
@@ -263,7 +263,7 @@ def _collapse(
 
     """
     var descendants = List[Int32]()
-    bfs_from_node(subtree_root, n_samples, h_children, descendants, sabotage)
+    bfs_from_node_host(subtree_root, n_samples, h_children, descendants, sabotage)
     for i in range(len(descendants)):
         var sub_node = Int(descendants[i])
         if sub_node < n_samples:

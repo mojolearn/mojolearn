@@ -36,7 +36,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from tsa.impl.stationarity import kpss_test
 from tsa.impl.timeSeries.stationarity import download_results
-from tsa.impl.select_d_fast import SELECT_D_FAST, select_d_fast
+from tsa.impl.select_d_fast import SELECT_D_FAST, SELECT_D_IDN, select_d_fast
 
 
 def select_d(
@@ -60,6 +60,22 @@ def select_d(
         # FAST on Apple (lane/apple-fast-select, default; -D MOJOLEARN_SELECT_D_OFF off): every round on the
         # device, one download (tsa/impl/select_d_fast.mojo)
         return select_d_fast(ctx, d_y, batch_size, n_obs, D, s, d_max, pval_threshold)
+    comptime if SELECT_D_IDN:
+        # IDENTICAL on every vendor (lane/fam-timeseries; -D
+        # MOJOLEARN_IDN_SELECT_D_OFF off): the same device rounds, one
+        # download. A refusal (shape or non-finite input) is not reported
+        # from there: the loop below raises it by its own name and index.
+        # A differencing refusal (D > 0 with s < 2) is left to the loop
+        # outright, so nothing is queued before it is raised.
+        if D == 0 or s >= 2:
+            var device_ok = True
+            var device_d = List[Int32]()
+            try:
+                device_d = select_d_fast(ctx, d_y, batch_size, n_obs, D, s, d_max, pval_threshold)
+            except e:
+                device_ok = False
+            if device_ok:
+                return device_d^
     var chosen = List[Int32]()
     var decided = List[Bool]()
     for _ in range(batch_size):

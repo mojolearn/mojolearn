@@ -92,7 +92,11 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,
 )
-from gbdt.grid_creator.binarization import best_split
+from gbdt.grid_creator.binarization import (
+    IDN_ORDERED_RMSE_DEVICE_GRID,
+    best_split,
+)
+from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_util.kernel.random_gen import (
     advance_seed_k,
@@ -111,6 +115,7 @@ from gbdt.host.gbdt_oracle import (
     _hist2_dither,
     _pinned_partition_stat,
     _hist2_quantize,
+    gbdt_host_grid,
     gbdt_host_model_text,
 )
 
@@ -1195,17 +1200,33 @@ def gbdt_ordered_rmse_host_fit(
     var borders = List[List[Float32]]()
     var fold_counts = List[Int]()
     var nan_treatment = List[Int]()
-    for f in range(n_features):
-        var column = List[Float32]()
-        for r in range(n_rows):
-            var value = x_colmajor[f * n_rows + r]
-            if not isfinite(value):
+    comptime if IDN_ORDERED_RMSE_DEVICE_GRID:
+        # lane/fam-gbdt: the device fit takes `device_float_borders` over
+        # every row at NaN mode Forbidden; `gbdt_host_grid` is that build on
+        # host memory (no subsample at `border_build_max_samples = 0`).
+        for i in range(n_rows * n_features):
+            if not isfinite(x_colmajor[i]):
                 raise Error("train_ordered_rmse requires finite numeric features")
-            column.append(value)
-        var grid = best_split(column^, border_count)
-        fold_counts.append(len(grid))
-        borders.append(grid^)
-        nan_treatment.append(NAN_TREATMENT_AS_IS)
+        var dev_grid = gbdt_host_grid(
+            x_colmajor, n_rows, n_features, border_count, 0, UInt64(0),
+            NAN_MODE_FORBIDDEN,
+        )
+        for f in range(n_features):
+            fold_counts.append(len(dev_grid.borders[f]))
+            borders.append(dev_grid.borders[f].copy())
+            nan_treatment.append(NAN_TREATMENT_AS_IS)
+    else:
+        for f in range(n_features):
+            var column = List[Float32]()
+            for r in range(n_rows):
+                var value = x_colmajor[f * n_rows + r]
+                if not isfinite(value):
+                    raise Error("train_ordered_rmse requires finite numeric features")
+                column.append(value)
+            var grid = best_split(column^, border_count)
+            fold_counts.append(len(grid))
+            borders.append(grid^)
+            nan_treatment.append(NAN_TREATMENT_AS_IS)
     var layout = build_layout(fold_counts)
     var host_grid = GbdtHostGrid(borders.copy(), fold_counts.copy(), nan_treatment.copy())
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, host_grid, layout)
@@ -1409,7 +1430,6 @@ from gbdt.host.gbdt_oracle import (
     GbdtHostParams,
     gbdt_bootstrap_seeds,
     _deterministic_sum_lanes,
-    gbdt_host_grid,
 )
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_OBJ_MAE,

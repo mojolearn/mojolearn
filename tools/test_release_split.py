@@ -63,10 +63,10 @@ class Switch(SplitBase):
             for s in p["builds"] + p["checks"] + [p["publish"]]:
                 self.assertIn(s, r.STEPS)
         # THE PLUGINS FIRST, THE CORE LAST: the core requires both plugins
-        self.assertEqual(set(r.NEEDS["publish-nvidia"]), {"gpu-column-nvidia", "linux-joint-diff"})
+        self.assertEqual(set(r.NEEDS["publish-nvidia"]), {"gpu-column-nvidia", "linux-joint-diff", "gpu-column-nvidia-hopper"})
         self.assertEqual(set(r.NEEDS["publish-amd"]), {"gpu-column-amd", "linux-joint-diff"})
         self.assertEqual(set(r.NEEDS["publish-core-linux"]), {"linux-joint-diff", "publish-nvidia", "publish-amd"})
-        self.assertEqual(set(r.AFTER["linux-joint-diff"]), {"gpu-column-nvidia", "gpu-column-amd"})
+        self.assertEqual(set(r.AFTER["linux-joint-diff"]), {"gpu-column-nvidia", "gpu-column-nvidia-hopper", "gpu-column-amd"})
 
 
 class Gates(SplitBase):
@@ -119,6 +119,13 @@ class Gates(SplitBase):
         self.assertEqual(r.go(), 1)
         self.assertEqual(self.published(r), ["amd", "macos"])
         self.assertNotIn("publish-core-linux", order)
+
+    def test_failed_hopper_holds_its_payload_vendor_aggregate_and_core(self):
+        r, order = self.staged(fail={"gpu-column-nvidia-hopper"})
+        self.assertEqual(r.go(), 1)
+        self.assertEqual(self.published(r), ["amd", "macos"])
+        for step in ("publish-nvidia", "publish-core-linux"):
+            self.assertNotIn(step, order)
 
     def test_a_divergent_joint_diff_holds_all_three(self):
         r, order = self.staged(fail={"linux-joint-diff"})
@@ -194,7 +201,7 @@ class Pack(SplitBase):
         self.assertEqual(report["problems"], [])
         self.assertEqual(r.state["linux_layout"], "split")
         self.assertIn("mojolearn_amd-", result)
-        # done means done: a rerun takes the three finals as they are
+        # A rerun takes the six finals as they are
         calls.clear()
         self.assertTrue(r.step_linux_pack().startswith("have "))
         self.assertEqual(calls, [])
@@ -215,16 +222,17 @@ class ColumnsAndPublish(SplitBase):
         core = fake_wheel(final / "mojolearn-0.8.99-py3-none-manylinux_2_35_x86_64.whl", sev.Y)
         cuda = fake_wheel(final / "mojolearn_nvidia-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"cuda")
         rocm = fake_wheel(final / "mojolearn_amd-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"rocm")
+        self.plugins = [cuda, rocm]
         return core, cuda, rocm
 
-    def receipt(self, out, core, plugins, vendor):
+    def receipt(self, out, core, plugins, vendor, arch=None):
         """A column receipt that installed `plugins` (one wheel or several)
-        beside the core; a real split column installs BOTH."""
+        beside the core; a real split column installs all five GPU distributions."""
         plugins = plugins if isinstance(plugins, (list, tuple)) else [plugins]
         out.mkdir(parents=True, exist_ok=True)
         (out / "results.json").write_text(json.dumps(dict(
             status="PASSED", scope="expanded", source_commit=sev.Y, wheel=str(core), wheel_sha256=release.sha256(core),
-            installed=dict(vendor=vendor),
+            installed=dict(vendor=vendor, gpu_arch=arch or ("sm_89" if vendor == "cuda" else "gfx942")),
             plugins=[dict(wheel="/box/" + p.name, wheel_sha256=release.sha256(p)) for p in plugins])))
         (out / f"column-{vendor}.json").write_text(json.dumps(sev.column(vendor)))
         (out / f"diff-ref-{vendor}.txt").write_text("summary: IDENTICAL=1\n")
@@ -246,10 +254,11 @@ class ColumnsAndPublish(SplitBase):
 
         def plugins(cmd):
             return [cmd[i + 1] for i, a in enumerate(cmd) if a == "--plugin"]
-        # BOTH plugins on every column (the core requires both), its own first
-        self.assertEqual(plugins(nv), [str(cuda), str(rocm)])
-        self.assertEqual(plugins(amd), [str(rocm), str(cuda)])
-        self.assertEqual(legs["amd"].provenance["wheel_sha256"], release.sha256(rocm), "keyed to the plugin")
+        # All native payloads and both aggregates on every column, its aggregate first
+        self.assertEqual(plugins(nv), [str(p) for p in self.plugins])
+        self.assertEqual(plugins(amd), [str(rocm), *[str(p) for p in self.plugins if p != rocm]])
+        self.assertEqual(plugins(legs["nvidia-hopper"].command), [str(p) for p in self.plugins])
+        self.assertEqual(legs["amd"].provenance["wheel_sha256"], release.sha256(r.split_final("amd")), "keyed to the native payload")
         self.assertEqual(legs["amd"].provenance["core_sha256"], release.sha256(core))
         self.assertEqual(r.column_legs(("amd",))[0].name, "amd")
 
@@ -259,27 +268,40 @@ class ColumnsAndPublish(SplitBase):
         self.assertFalse(r.nvidia_column_ok())
         self.receipt(r.rel / "smoke-linux", core, cuda, "cuda")         # its own plugin alone: not what pip installs
         self.assertFalse(r.nvidia_column_ok())
-        self.receipt(r.rel / "smoke-linux", core, (cuda, rocm), "cuda")
+        self.receipt(r.rel / "smoke-linux", core, self.plugins, "cuda")
         self.assertTrue(r.nvidia_column_ok())
         self.receipt(r.rel / "column-amd", core, cuda, "hip")          # the wrong plugin
         self.assertFalse(r.amd_column_ok())
         self.receipt(r.rel / "column-amd", core, rocm, "hip")          # its own alone
         self.assertFalse(r.amd_column_ok())
         other = fake_wheel(self.tmp / "other" / rocm.name, data=b"not the final")
-        self.receipt(r.rel / "column-amd", core, (other, cuda), "hip")  # a plugin of other bytes
+        self.receipt(r.rel / "column-amd", core, [other, *[p for p in self.plugins if p != rocm]], "hip")  # a plugin of other bytes
         self.assertFalse(r.amd_column_ok())
-        self.receipt(r.rel / "column-amd", core, (rocm, cuda), "hip")
+        self.receipt(r.rel / "column-amd", core, self.plugins, "hip")
         self.assertTrue(r.amd_column_ok())
 
-    def test_the_core_publishes_only_when_both_columns_passed(self):
+    def test_complete_wheel_receipt_cannot_qualify_the_wrong_architecture(self):
+        r = self.release()
+        core, _, _ = self.finals(r)
+        self.receipt(r.rel / "column-nvidia-hopper", core, self.plugins, "cuda", "sm_89")
+        self.assertFalse(r.hopper_column_ok(), "Ada execution does not qualify Hopper payload")
+        self.receipt(r.rel / "column-nvidia-hopper", core, self.plugins, "cuda", "sm_90a")
+        self.assertTrue(r.hopper_column_ok())
+        self.receipt(r.rel / "smoke-linux", core, self.plugins, "cuda", "sm_90a")
+        self.assertFalse(r.nvidia_column_ok(), "Hopper execution does not qualify Ada payload")
+
+    def test_the_core_publishes_only_when_all_three_columns_passed(self):
         r = self.release()
         core, cuda, rocm = self.finals(r)
-        with self.assertRaisesRegex(release.StepFailed, "not PASSED: NVIDIA, AMD"):
+        with self.assertRaisesRegex(release.StepFailed, "not PASSED: NVIDIA Ada, NVIDIA Hopper, AMD"):
             r.core_receipt()
-        self.receipt(r.rel / "column-amd", core, (rocm, cuda), "hip")
-        with self.assertRaisesRegex(release.StepFailed, "not PASSED: NVIDIA$"):
+        self.receipt(r.rel / "column-amd", core, self.plugins, "hip")
+        with self.assertRaisesRegex(release.StepFailed, "not PASSED: NVIDIA Ada, NVIDIA Hopper$"):
             r.core_receipt()
-        self.receipt(r.rel / "smoke-linux", core, (cuda, rocm), "cuda")
+        self.receipt(r.rel / "smoke-linux", core, self.plugins, "cuda")
+        with self.assertRaisesRegex(release.StepFailed, "not PASSED: NVIDIA Hopper$"):
+            r.core_receipt()
+        self.receipt(r.rel / "column-nvidia-hopper", core, self.plugins, "cuda", "sm_90a")
         self.assertEqual(r.core_receipt(), r.rel / "smoke-linux" / "results.json")
         (r.rel / "column-amd" / "results.json").unlink()
         with self.assertRaisesRegex(release.StepFailed, "not PASSED: AMD$"):
@@ -291,15 +313,16 @@ class ColumnsAndPublish(SplitBase):
         r.runner = lambda cmd, env, log, detach=False: calls.append([str(c) for c in cmd]) or 0
         r.on_pypi = lambda wheel: False
         core, cuda, rocm = self.finals(r)
-        self.receipt(r.rel / "smoke-linux", core, (cuda, rocm), "cuda")
-        self.receipt(r.rel / "column-amd", core, (rocm, cuda), "hip")
+        self.receipt(r.rel / "smoke-linux", core, self.plugins, "cuda")
+        self.receipt(r.rel / "column-amd", core, self.plugins, "hip")
+        self.receipt(r.rel / "column-nvidia-hopper", core, self.plugins, "cuda", "sm_90a")
         for step in ("publish_nvidia", "publish_amd", "publish_core_linux"):
             result, data = getattr(r, "step_" + step)()
             self.assertIn("testpypi via alpha-api-0.8.99-", result)
-        published = [(pathlib.Path(c[2]).name.split("-")[0], c[3].split("-")[3], pathlib.Path(c[-1]).parent.name)
+        published = [(pathlib.Path(c[2]).name.split("-")[0], pathlib.Path(c[-1]).parent.name)
                      for c in calls]
-        self.assertEqual(published, [("mojolearn_nvidia", "nvidia", "smoke-linux"), ("mojolearn_amd", "amd", "column-amd"),
-                                     ("mojolearn", "linux", "smoke-linux")])
+        self.assertEqual(published, [("mojolearn_nvidia", "smoke-linux"), ("mojolearn_amd", "column-amd"),
+                                    ("mojolearn", "smoke-linux")])
 
     def test_a_plugin_is_not_published_on_a_receipt_that_did_not_install_it(self):
         r = self.release(publish="testpypi")

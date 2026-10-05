@@ -36,7 +36,7 @@ one stable radix sort keyed by parent (`core/fast_radix_sort.mojo`):
 (parent, child) order, the order below, element for element.
 
 WHAT THE CPU COLUMN DOES. `hierarchy/impl/sparse/op/sort.mojo::
-merge_sort_u64_with_index` -- the SAME host merge sort DEVIATION 621
+merge_sort_u64_with_index_host` -- the SAME host merge sort DEVIATION 621
 already put under the MST, imported rather than rewritten -- on the key
 `(UInt64(parent) << 32) | UInt64(child)`. Both fields are non-negative
 and below `2 * n_leaves < 2^31` (DEVIATION 1620 lifted the 46340
@@ -63,7 +63,7 @@ fields and says so, rather than bending a neighbouring lane's function.
 ======================================================================
 """
 
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 
 
 def pack_parent_child(parent: Int32, child: Int32) -> UInt64:
@@ -187,7 +187,7 @@ struct CondensedHierarchy(Copyable, Movable):
                 )
             keys.append(pack_parent_child(parents[i], children[i]))
             idx.append(i)
-        merge_sort_u64_with_index(keys, idx)
+        merge_sort_u64_with_index_host(keys, idx)
 
         self.parents = List[Int32](capacity=n_edges)
         self.children = List[Int32](capacity=n_edges)

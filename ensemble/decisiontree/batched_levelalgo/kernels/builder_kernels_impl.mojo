@@ -387,6 +387,7 @@ from std.gpu import (
     thread_idx,
 )
 from std.sys.info import (
+    has_amd_gpu_accelerator,
     has_apple_gpu_accelerator,
     has_nvidia_gpu_accelerator,
 )
@@ -461,10 +462,21 @@ comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 
 comptime SPLIT_REDUCE_PINNED_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL
 
+comptime IDN_RF_SAMPLE_PER_NODE = BUILD_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""fam-forests (2026-10-04), IDENTICAL on every vendor: the per-node feature
+sampler below (`SAMPLE_PER_NODE_DEFAULT`). `sampled_columns_for_node` writes
+the same integers as `k` calls of `sampled_column_at` (one Feistel bijection
+per node instead of one per (node, column)), so no bit of a forest moves and
+the host column needs no change. `-D MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF`
+restores the per-column arm."""
+
 comptime SAMPLE_PER_NODE_DEFAULT = (
     BUILD_MODE == NUMERIC_FAST
     and not is_defined["MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN"]()
-)
+) or IDN_RF_SAMPLE_PER_NODE
 """FAST only: the fused setup's feature sampler runs one thread per node
 (`sampled_columns_for_node`) instead of one per (node, column), drawing
 each node's 24-key bijection once instead of `k` times. Same columns.
@@ -521,10 +533,25 @@ comptime SMALL_NODE_ROWS = 256 if is_defined[
 ]() else 4096
 """The largest node `small_node_split_kernel` takes."""
 
+comptime IDN_RF_HIST_ZERO = (
+    BUILD_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_RF_HIST_ZERO_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+"""fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: zero-after-read
+(`HIST_ZERO_AFTER_READ_DEFAULT`, below), which Apple IDENTICAL already takes.
+One `hist_zero` launch fewer per column pass of every sampling round; zeros
+are zeros, so no bit moves. `-D MOJOLEARN_IDN_RF_HIST_ZERO_OFF` restores the
+per-round zero launch on NVIDIA and AMD."""
+
 comptime HIST_ZERO_AFTER_READ_DEFAULT = (
     (
         BUILD_MODE == NUMERIC_FAST
         or (BUILD_MODE == NUMERIC_IDENTICAL and has_apple_gpu_accelerator())
+        or IDN_RF_HIST_ZERO
     )
     and not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"]()
 )
@@ -754,7 +781,7 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
         var cp = self.cmp.unsafe_ptr()
         if self.staged:
             var same = True
-            for i in range(nbytes):
+            for i in range(nbytes):  # small-loop(nbytes: launch-argument bytes): compares one staged args struct
                 if hp.unsafe_load(i) != cp.unsafe_load(i):
                     same = False
                     break
@@ -1011,6 +1038,53 @@ def publish_local_left_counts_kernel[
         var s = splits[unsafe_offset=idx]
         s.local_nLeft = Int64(Int(local_nleft[unsafe_offset=idx]))
         splits[unsafe_offset=idx] = s
+
+
+def finalize_pure_splits_kernel[
+    dtype: DType
+](
+    splits: MutPointer[Split[dtype], MutAnyOrigin],
+    n_splits: Int32,
+):
+    """NOT IN THEIR SOURCE. fam2-forests `IDN_RF_FUSED_PARTITION`.
+
+    The device form of what `_read_splits_host` + `enqueue_node_split_replay` did on
+    the host between the split search and the partition: a PURE node
+    (DEVIATION 2502) is a leaf whatever candidate its slot holds, so its
+    `colid` becomes -1 and every `split.IsValid()` guard of the partition
+    kernels skips it. A slot that is not pure is left byte for byte as
+    the split search published it, which is what the host re-upload
+    carried for the fields the partition reads (`colid`, `quesval`).
+    One thread per slot; no float work.
+    """
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx < Int(n_splits):
+        var s = splits[unsafe_offset=idx]
+        if s.pure != Int32(0):
+            s.colid = Int32(-1)
+            splits[unsafe_offset=idx] = s
+
+
+def launch_finalize_pure_splits_kernel[
+    dtype: DType
+](
+    ctx: DeviceContext,
+    splits: MutPointer[Split[dtype], MutUntrackedOrigin],
+    n_work_items: Int,
+) raises:
+    """Launcher for `finalize_pure_splits_kernel`, the reset kernel's
+    shape (`launch_node_split_kernel`'s first launch)."""
+    if n_work_items == 0:
+        return
+    comptime FINALIZE_TPB = 128
+    comptime k_fin = finalize_pure_splits_kernel[dtype]
+    log_launch_ctx(ctx, "nodesplit_finalize_pure")
+    ctx.enqueue_function[k_fin](
+        splits.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_work_items),
+        grid_dim=ceildiv(n_work_items, FINALIZE_TPB),
+        block_dim=FINALIZE_TPB,
+    )
 
 
 @fieldwise_init
@@ -2505,10 +2579,28 @@ def build_histograms_kernel[
 
 
 
+comptime IDN_RF_HIST_SIMD_AGG = (
+    BUILD_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+"""fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: the warp
+aggregation below (`HIST_SIMD_AGG_DEFAULT`) in the column-tile histogram.
+A skewed column (Istella: the median column holds 74% of its rows in one
+value) otherwise sends most of a warp to one shared-memory address, where
+the atomics retry against each other. Unweighted bins only, whose fields
+are integers: the same per-bin totals in another order, so no bit moves.
+`-D MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF` restores one atomic per lane."""
+
 comptime HIST_SIMD_AGG_DEFAULT = (
     has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_HIST_SIMD_AGG_OFF"]()
-)
+    # lane/review-fixes: the Apple IDENTICAL arm is off under ALL_OFF
+    and not (BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+) or IDN_RF_HIST_SIMD_AGG
 """Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28: in the column-tile histogram, the lanes of a SIMD group
 whose bin equals lane 0's bin add their contributions with one SIMD sum and
 lane 0 issues ONE threadgroup atomic for them; the other lanes add as
@@ -2753,6 +2845,22 @@ def launch_build_histograms_kernel[
                 and (
                     has_nvidia_gpu_accelerator()
                     or has_apple_gpu_accelerator()
+                    # fam-forests (2026-10-04), IDENTICAL on AMD: the
+                    # four-column tile there too (integer / fixed-point
+                    # bins added by atomics, so the same histogram cells
+                    # as the one-column route: no bit moves). `-D
+                    # MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF` restores the
+                    # one-column route on AMD.
+                    or (
+                        has_amd_gpu_accelerator()
+                        and BUILD_MODE == NUMERIC_IDENTICAL
+                        and not (
+                            is_defined[
+                                "MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF"
+                            ]()
+                            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+                        )
+                    )
                 )
             )
             comptime USE4 = (
@@ -3157,7 +3265,7 @@ def find_best_splits_kernel[
     # order of this store and any merge does not matter; a node no block
     # published keeps initSplit's 0 until this store. The host reads it
     # as `terminal` and leaves the node out regardless of `colid`
-    # (`_read_splits`). Regression has one plane and is never marked.
+    # (`_read_splits_host`). Regression has one plane and is never marked.
     if Int(block_idx.y) == 0 and Int(thread_idx.x) == 0:
         # A word store through the field's own pointer: a struct-level
         # read-modify-write here could race a concurrent publish.

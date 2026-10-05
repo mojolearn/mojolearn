@@ -3491,6 +3491,18 @@ def _build_layer(lane, arm, D):
             info["weights_loaded"] = True
         x = x_cpu.detach().numpy()
         extra = tuple(e.numpy() for e in extra_cpu)
+        # lane idn-cnn-resident: a layer that takes device tensors (conv, pool, BasicBlock, GCNConv,
+        # SAGEConv) gets x and dy on the device before the clock and keeps y and dx there, as the
+        # torch arm does (x_cpu.to(dev), dy.to(dev) on the first fit, y and the gradients left on
+        # the device, a synchronize before the clock stops: ours' entries wait before they return).
+        # y is read back in outputs(), outside the clock, as torch's .cpu() is.
+        # MOJOLEARN_XCNN_DEVICE_IO_OFF=1 keeps host arrays (the before arm).
+        to_dev = None
+        if getattr(layer, "_device_io", False):
+            from mojolearn._expansion_cnn import to_device as to_dev
+            x = to_dev(x)
+            if getattr(x, "_device_tensor", False):
+                info["input_home"] = "device"
         fwd = getattr(layer, "forward", None) or layer
         import inspect
         try:
@@ -3506,7 +3518,9 @@ def _build_layer(lane, arm, D):
             if s.get("forward_only"):
                 return
             if dy is None:
-                dy = torch.randn(tuple(np.shape(y)), generator=g).numpy()
+                dy = torch.randn(tuple(y.shape if to_dev else np.shape(y)), generator=g).numpy()
+                if to_dev:
+                    dy = to_dev(dy)
             if not hasattr(layer, "backward"):
                 raise RuntimeError("CONTRACT: mojolearn.%s has no backward(dy); the training "
                                    "column needs it" % name)
@@ -3521,7 +3535,8 @@ def _build_layer(lane, arm, D):
             k.endswith("weight") and not k.startswith(("bn", "norm")) and s["task"] not in (
                 "batchnorm1d", "batchnorm2d", "layernorm") for k in state)
         info["output_comparable"] = bool(comparable)
-        out = (lambda: {"y": _arr(S["y"], np.float32)}) if comparable else (lambda: {})
+        out = (lambda: {"y": _arr(S["y"].numpy() if getattr(S["y"], "_device_tensor", False) else S["y"],
+                                  np.float32)}) if comparable else (lambda: {})
         rec = dict(kw, __library__="mojolearn")
         return Runner(info, fit, out, infer, record=rec)
     setting = arm[len("torch-"):]

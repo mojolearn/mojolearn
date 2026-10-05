@@ -69,6 +69,7 @@ from cluster.impl.distance.fused_distance_nn.simt_kernel import (
     FUSED_SKINNY_KBLK,
     FUSED_SKINNY_TC,
     FUSED_SKINNY_TR,
+    fused_distance_nn_gated_kernel,
     fused_distance_nn_kernel,
     fused_is_skinny,
     fused_veclen_for,
@@ -266,6 +267,121 @@ def min_cluster_and_distance_compute(
             ](
                 ctx, out_key, out_value, x, centroids, x_norm, centroid_norm,
                 n_samples, n_clusters, n_features, is_sqrt,
+            )
+
+
+def _launch_fused_gated[
+    veclen: Int, kblk: Int, tr: Int, tc: Int
+](
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut out_key: DeviceBuffer[DType.uint32],
+    mut out_value: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut centroid_norm: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_clusters: Int,
+    n_features: Int,
+    is_sqrt: Int32,
+) raises:
+    """`_launch_fused` on one device with the kernel gated on `gate[0]`
+    (fam2-cluster, `IDN_KMEANS_DEVICE_CONV`). The caller has already ruled
+    out the multi-device split (`assignment_device_count() == 1`)."""
+    comptime nthreads = tr * tc
+    comptime mblk = 4 * tr
+    comptime nblk = 4 * tc
+    comptime smem_stride = kblk + veclen
+    comptime smem_bytes = (mblk + nblk) * smem_stride * 4 + (mblk + nblk) * 4
+
+    var cfg = launch_config_generator(
+        n_samples, n_clusters, mblk, nblk, nthreads, smem_bytes
+    )
+    comptime kern = fused_distance_nn_gated_kernel[veclen, kblk, tr, tc]
+    ctx.enqueue_function[kern](
+        gate.unsafe_ptr(),
+        out_key.unsafe_ptr(),
+        out_value.unsafe_ptr(),
+        x.unsafe_ptr(),
+        centroids.unsafe_ptr(),
+        x_norm.unsafe_ptr(),
+        centroid_norm.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_clusters),
+        Int32(n_features),
+        is_sqrt,
+        grid_dim=(1, cfg[1], 1),
+        block_dim=(nthreads, 1, 1),
+    )
+
+
+def min_cluster_and_distance_compute_gated(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut centroid_norm: DeviceBuffer[DType.float32],
+    mut out_key: DeviceBuffer[DType.uint32],
+    mut out_value: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    metric: Int,
+) raises:
+    """`min_cluster_and_distance_compute`'s fused dispatch, same policy
+    selection, with the kernel gated on the device flag `gate[0]` (nonzero:
+    the launch does nothing and the outputs keep their values). Single
+    device only; the Lloyd loop keeps the per-iteration form when the
+    assignment is split across devices."""
+    var is_sqrt = Int32(1 if metric_is_sqrt(metric) else 0)
+    var vl = fused_veclen_for(
+        n_features, Int(x.unsafe_ptr()), Int(centroids.unsafe_ptr())
+    )
+    if fused_is_skinny(n_features):
+        if vl == 4:
+            _launch_fused_gated[
+                4, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
+            ](
+                ctx, gate, out_key, out_value, x, centroids, x_norm,
+                centroid_norm, n_samples, n_clusters, n_features, is_sqrt,
+            )
+        elif vl == 2:
+            _launch_fused_gated[
+                2, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
+            ](
+                ctx, gate, out_key, out_value, x, centroids, x_norm,
+                centroid_norm, n_samples, n_clusters, n_features, is_sqrt,
+            )
+        else:
+            _launch_fused_gated[
+                1, FUSED_SKINNY_KBLK, FUSED_SKINNY_TR, FUSED_SKINNY_TC
+            ](
+                ctx, gate, out_key, out_value, x, centroids, x_norm,
+                centroid_norm, n_samples, n_clusters, n_features, is_sqrt,
+            )
+    else:
+        if vl == 4:
+            _launch_fused_gated[
+                4, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
+            ](
+                ctx, gate, out_key, out_value, x, centroids, x_norm,
+                centroid_norm, n_samples, n_clusters, n_features, is_sqrt,
+            )
+        elif vl == 2:
+            _launch_fused_gated[
+                2, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
+            ](
+                ctx, gate, out_key, out_value, x, centroids, x_norm,
+                centroid_norm, n_samples, n_clusters, n_features, is_sqrt,
+            )
+        else:
+            _launch_fused_gated[
+                1, FUSED_NORMAL_KBLK, FUSED_NORMAL_TR, FUSED_NORMAL_TC
+            ](
+                ctx, gate, out_key, out_value, x, centroids, x_norm,
+                centroid_norm, n_samples, n_clusters, n_features, is_sqrt,
             )
 
 

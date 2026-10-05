@@ -178,7 +178,15 @@ def test_identity_command_runs_public_reference_probes_on_a_cpu():
             assert lane in ("cross-val-folds",), "unclassified pure-Python lane"
             continue
         f = host_surface.family(family)
-        assert f["ships_in_wheel"] and f["routes"] is None, f"{lane}: not a shipped host-only family"
+        assert f["ships_in_wheel"], f"{lane}: native host family does not ship"
+        if lane == "cross-val-folds":
+            # The descriptor uses CPU helpers in the mixed core binding.
+            # A GPU install loads those same host operations through core's
+            # routed name; that does not turn fold metadata into GPU work.
+            assert family == "core" and f["routes"] == "_mojolearn"
+            assert {"fold_ids", "select_fold_i64"} <= set(f["exports"])
+        else:
+            assert f["routes"] is None, f"{lane}: not a shipped host-only family"
 
 
 def test_core_host_binding_registers_the_fold_gather():
@@ -187,7 +195,12 @@ def test_core_host_binding_registers_the_fold_gather():
     assert "gather_rows_bytes" in host_surface.family("core")["exports"]
     helpers = _read("bindings/host_helpers.mojo")
     assert "def gather_rows_bytes_binding(" in helpers
-    assert '_native("gather_rows_bytes")' in _read("python/mojolearn/model_selection.py")
+    # lane cpu2-l4-modelsel: cross-validation's fold rows are the msel store's
+    # device gather; the core host binding carries its host column
+    assert "_native('msel_take_rows')" in _read("python/mojolearn/model_selection.py")
+    for name in ("msel_put", "msel_take_rows", "msel_free"):
+        assert '("%s")' % name in src
+        assert name in host_surface.family("core")["exports"]
 
 
 def test_oracle_refuses_an_unknown_metric_in_the_device_words():

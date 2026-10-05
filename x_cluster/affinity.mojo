@@ -127,18 +127,28 @@ def affinity_fit[O: ClusterOps](
     var split = False
     comptime if AP_SPLIT:
         split = ops.fast_device()
-    while it < max_iter:
-        ops.ap_r(ss, a_s, r_s, n, damping)
-        if split:
-            ops.ap_a_split(r_s, a_s, n, damping)
-        else:
-            ops.ap_a(r_s, a_s, n, damping)
-        ops.ap_e(a_s, r_s, n, e_s)
-        # the convergence window on the device; one flag read per iteration
-        if ops.ap_conv(e_s, ring, n, conv_iter, it):
+    # fam2-cluster: the device column runs the whole loop with the window
+    # decided on the device (`ap_loop`; -1: this column does not take it)
+    var taken = -1
+    if not split:
+        taken = ops.ap_loop(ss, a_s, r_s, e_s, ring, n, damping, max_iter, conv_iter)
+    if taken >= 0:
+        it = taken
+        if taken < max_iter:
             never_converged = False
-            break
-        it += 1
+    else:
+        while it < max_iter:
+            ops.ap_r(ss, a_s, r_s, n, damping)
+            if split:
+                ops.ap_a_split(r_s, a_s, n, damping)
+            else:
+                ops.ap_a(r_s, a_s, n, damping)
+            ops.ap_e(a_s, r_s, n, e_s)
+            # the convergence window on the device; one flag read per iteration
+            if ops.ap_conv(e_s, ring, n, conv_iter, it):
+                never_converged = False
+                break
+            it += 1
     ar_diag = List[Float32](capacity=2 * n)
     var a_d = ops.get_diag(a_s, n)
     var r_d = ops.get_diag(r_s, n)

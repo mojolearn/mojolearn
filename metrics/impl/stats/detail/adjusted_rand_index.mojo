@@ -46,6 +46,9 @@ from metrics.impl.stats.detail.contingency_matrix import (
     get_input_class_cardinality,
 )
 from metrics.impl.stats.detail.histogram import histogram
+from metrics.impl.stats.detail.contingency_matrix import contingency_matrix
+from metrics.impl.stats.detail.sf_epilogue import ari_epilogue_device
+from metrics.impl.stats.detail.sf_epilogue_core import IDN_METRIC_EPI
 from metrics.impl.stats.detail.mutual_info_score import (
     col_sums,
     contingency_matrix_host,
@@ -206,6 +209,25 @@ def compute_adjusted_rand_index_traced(
     if n_uniq_first == n_uniq_second:
         if n_uniq_first == 1 or n_uniq_first == size:
             return 1.0  # (:130-132)
+    comptime if IDN_METRIC_EPI:
+        if not trace.enabled:
+            # lane fam2-prep-metrics: no card to fill, so the contingency
+            # matrix stays on the device: its pair-count sums (exact Int64)
+            # and the five binary64 operations run there (sf_epilogue.mojo;
+            # the same IEEE results, one word comes back instead of k^2 ints)
+            var cm = ctx.enqueue_create_buffer[DType.int32](n_classes * n_classes)
+            contingency_matrix(
+                ctx,
+                first_cluster_array,
+                second_cluster_array,
+                size,
+                cm,
+                lower_label_range,
+                upper_label_range,
+            )
+            var value = ari_epilogue_device(ctx, cm, n_classes, size)
+            _ = cm^
+            return value
     var c = contingency_matrix_host(
         ctx,
         first_cluster_array,

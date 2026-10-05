@@ -59,7 +59,7 @@ Two are spent, both on the SURFACE and neither on arithmetic:
 Nothing else in this file computes.
 """
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
@@ -76,12 +76,22 @@ from spectral.impl.spectral_predict_common import (
 from spectral.impl.spectral_clustering import (
     MLSpectralClusteringParams,
     fit_predict_connectivity_keep,
+    fit_predict_dense_connectivity_keep,
     fit_predict_keep,
 )
 from spectral.impl.spectral_embedding import (
     MLSpectralEmbeddingParams,
     transform,
     transform_connectivity,
+    transform_dense_connectivity,
+)
+from spectral.impl.sparse.linalg.detail.dense_graph import (
+    DG_ANY_NONZERO,
+    DG_NEGATIVE,
+    DG_NONFINITE,
+    DG_TOTAL,
+    dense_graph_check_size,
+    dense_graph_scan,
 )
 from spectral.impl.spectral_predict import spectral_predict_device
 from spectral.impl.sparse.coo import CooGraph
@@ -452,3 +462,121 @@ def spectral_embedding_graph_host(
     var v = vals.copy()
     var graph = coo_remove_diagonal(CooGraph(n_samples, r^, c^, v^))
     return transform_connectivity(ctx, config, graph, embedding, trace, tolerance)
+
+
+# ---- dense affinity routes (lane cpu2-l9-neighbors, 2026-10-04) ----------
+#: Refusal codes of the two dense entries (returned, not raised, so the
+#: Python caller raises its own ValueError by name, in its own order).
+comptime SPECTRAL_DENSE_EMPTY = -1
+comptime SPECTRAL_DENSE_NONFINITE = -2
+comptime SPECTRAL_DENSE_NEGATIVE = -3
+
+
+def _dense_upload(
+    ctx: DeviceContext, dense_addr: Int, n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """The caller's host n x n float32 matrix, uploaded once."""
+    dense_graph_check_size(n)
+    var d = ctx.enqueue_create_buffer[DType.float32](n * n)
+    ctx.enqueue_copy(
+        dst_buf=d, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=dense_addr)
+    )
+    return d^
+
+
+def _dense_refusal(flags: List[Int32]) -> Int:
+    """The COO route's refusal order: no nonzero, then non-finite, then
+    negative; 0 when the graph is accepted."""
+    if flags[DG_ANY_NONZERO] == Int32(0):
+        return SPECTRAL_DENSE_EMPTY
+    if flags[DG_NONFINITE] != Int32(0):
+        return SPECTRAL_DENSE_NONFINITE
+    if flags[DG_NEGATIVE] != Int32(0):
+        return SPECTRAL_DENSE_NEGATIVE
+    return 0
+
+
+def spectral_fit_predict_dense_host_keep(
+    dense_addr: Int,
+    n_samples: Int,
+    n_clusters: Int,
+    n_components: Int,
+    n_init: Int,
+    n_neighbors: Int,
+    eigen_tol: Float32,
+    seed: UInt64,
+    mut labels: List[Int32],
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+) raises -> Int:
+    """`spectral_fit_predict_graph_host_keep` on the DENSE affinity at
+    `dense_addr` (n x n float32, host): one upload, and the COO the host
+    scan built (row-major nonzeros, the diagonal kept) compacted on the
+    device instead (`dense_graph.mojo`). Returns `n_out`, or a negative
+    SPECTRAL_DENSE_* refusal code before any fit work."""
+    var config = _config(
+        n_clusters, n_components, n_init, n_neighbors, eigen_tol, seed
+    )
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var d = _dense_upload(ctx, dense_addr, n_samples)
+    var indptr = ctx.enqueue_create_buffer[DType.int32](n_samples + 1)
+    var flags = dense_graph_scan(ctx, d, n_samples, indptr)
+    var code = _dense_refusal(flags)
+    if code != 0:
+        return code
+    var trace = IdentityTrace()
+    trace.header(
+        "spectral clustering (dense affinity): n_samples="
+        + String(n_samples) + " kept=" + String(Int(flags[DG_TOTAL]))
+        + " n_clusters=" + String(n_clusters)
+        + " n_components=" + String(n_components)
+        + " n_init=" + String(n_init)
+        + " eigen_tol=" + String(eigen_tol)
+        + " seed=" + String(seed)
+    )
+    fit_predict_dense_connectivity_keep(
+        ctx, config, d, n_samples, Int(flags[DG_TOTAL]), indptr^, labels, embedding, state, keep, trace
+    )
+    _ = d^
+    return len(embedding) // n_samples
+
+
+def spectral_embedding_dense_host(
+    dense_addr: Int,
+    n_samples: Int,
+    n_components: Int,
+    norm_laplacian: Bool,
+    drop_first: Bool,
+    seed: UInt64,
+    mut embedding: List[Float32],
+    tolerance: Float32 = Float32(1e-5),
+) raises -> Int:
+    """`spectral_embedding_graph_host` on the DENSE affinity at
+    `dense_addr` (n x n float32, host): the diagonal dropped as that route's
+    `coo_remove_diagonal` drops it, the graph compacted on the device.
+    Returns `n_out`, or a negative SPECTRAL_DENSE_* refusal code."""
+    var config = _embedding_config(
+        n_components, 0, norm_laplacian, drop_first, seed
+    )
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var d = _dense_upload(ctx, dense_addr, n_samples)
+    var indptr = ctx.enqueue_create_buffer[DType.int32](n_samples + 1)
+    var flags = dense_graph_scan(ctx, d, n_samples, indptr)
+    var code = _dense_refusal(flags)
+    if code != 0:
+        return code
+    var trace = IdentityTrace()
+    trace.header(
+        "spectral embedding (dense affinity): n_samples="
+        + String(n_samples) + " kept=" + String(Int(flags[DG_TOTAL]))
+        + " n_components=" + String(n_components)
+        + " norm_laplacian=" + String(norm_laplacian)
+        + " drop_first=" + String(drop_first)
+        + " seed=" + String(seed)
+    )
+    var n_out = transform_dense_connectivity(
+        ctx, config, d, n_samples, Int(flags[DG_TOTAL]), indptr^, embedding, trace, tolerance
+    )
+    _ = d^
+    return n_out

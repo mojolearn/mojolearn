@@ -42,7 +42,8 @@ docs/apple-fast/ab-neural/mamba.md the one-paragraph mechanisms):
 """
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 
 #: The FAST tier on an Apple GPU: the only place any afn-mamba switch can be on.
 comptime AFN_APPLE_FAST = (
@@ -50,6 +51,93 @@ comptime AFN_APPLE_FAST = (
 )
 
 comptime AFN_MAMBA_ALL = AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_ALL"]()
+
+#: lane fam-lm (2026-10-04), IDENTICAL on a device column (NVIDIA, AMD and
+#: Apple alike; never the host column). Both switches are plumbing: the
+#: kernels, their launch geometry and every fold are main's, so no bit moves.
+#:
+#: IDN_MAMBA_ARENA (default ON; `-D MOJOLEARN_IDN_MAMBA_ARENA_OFF` or
+#: `-D MOJOLEARN_IDN_ALL_OFF` restores main): the arena form below under
+#: IDENTICAL. A Mamba-1/2/3 block call's weights, state, stages and x are
+#: views of ONE allocation filled once, the caller's arrays are copied in
+#: with no per-buffer wait, the per-stage waits are kept only on a traced
+#: run, and the call waits once at its end. Main paid one allocation, one
+#: fill and one wait per buffer (about fifty per forward) plus a wait per
+#: stage.
+#:
+#: IDN_MAMBA_DEVICE_REFUSAL (default ON; `-D
+#: MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: restores main): the non-finite refusal of every named input as device
+#: reductions with ONE readback per call (afn_refusal.mojo), in the same
+#: name order with the same message, where main downloaded each named buffer
+#: to the host and walked it there (Mamba-1, Mamba-2) or read back once per
+#: name (Mamba-3).
+comptime _IDN_MAMBA_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: IDN_MAMBA_ALLOC_NOWAIT (default ON; `-D MOJOLEARN_IDN_MAMBA_ALLOC_NOWAIT_OFF`
+#: or `-D MOJOLEARN_IDN_ALL_OFF` restores main): `mamba_zeros` and
+#: `mamba_scratch` return without waiting for their fill. The buffer is
+#: returned to its owner and the fill is ahead of every reader on the same
+#: in-order context, so the wait ordered nothing; it was one host round trip
+#: per stage, state and scratch buffer on every path the arena does not
+#: serve (the prefill sessions, the Mamba-2 and Mamba-3 backward: about
+#: forty to sixty waits per call). The poison build's guarded fill keeps its
+#: wait.
+comptime IDN_MAMBA_ALLOC_NOWAIT = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_MAMBA_ALLOC_NOWAIT_OFF"
+]()
+#: lane/fam2-lm (2026-10-04) IDN_MAMBA3_REPORTS_ON_REQUEST (default ON;
+#: `-D MOJOLEARN_IDN_MAMBA3_REPORTS_ON_REQUEST_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: restores the refusal of a null report address): the Mamba-3 prefill
+#: session forward downloads a report (h_last, k_last, v_last, theta_last)
+#: only where the caller passed an address for it. A stack forward (Samba)
+#: reads none of them, and h_last alone is B * H * 64 * 128 floats per layer
+#: per call. The device computes the same stages either way; y is unchanged.
+comptime IDN_MAMBA3_REPORTS_ON_REQUEST = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_MAMBA3_REPORTS_ON_REQUEST_OFF"
+]()
+#: lane/fam2-lm (2026-10-04) IDN_M3_SESSION_STAGE_REUSE (default ON;
+#: `-D MOJOLEARN_IDN_M3_SESSION_STAGE_REUSE_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: rebuilds per call): a Mamba-3 prefill session forward at the (B, L,
+#: d_model) of the stages it retained refills those 43 buffers with zeros
+#: instead of freeing them and allocating 43 new ones. The forward starts
+#: from the same zeros, so no bit moves.
+comptime IDN_M3_SESSION_STAGE_REUSE = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_M3_SESSION_STAGE_REUSE_OFF"
+]()
+comptime IDN_MAMBA_ARENA = _IDN_MAMBA_DEVICE and not is_defined["MOJOLEARN_IDN_MAMBA_ARENA_OFF"]()
+comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF"
+]()
+#: lane nr-mamba (2026-10-04, roadmap B2) IDN_MAMBA_CONV_CELL (default ON;
+#: `-D MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: restores main): the Mamba-1 and Mamba-2 causal depthwise conv + SiLU
+#: launch one thread per (batch, position, channel) instead of one thread per
+#: (batch, channel) walking the sequence. Every output cell is the same
+#: bias-seeded four-tap fma chain over the same inputs (no recurrence), so no
+#: bit moves; the host column keeps the walking kernel (same cells, same bits).
+comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
+    "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF"
+]()
+#: lane nr-mamba (2026-10-04, roadmap B1) IDN_M2_SSD_TILES (default ON where
+#: the 20,480-byte shared page fits the column; `-D
+#: MOJOLEARN_IDN_M2_SSD_TILES_OFF` or `-D MOJOLEARN_IDN_ALL_OFF` restores
+#: main): the Mamba-2 SSD Y_diag (S13/S14) and C_state (S16) cells and the
+#: backward's ydiag/xd reverse as threadgroup tiles. M = G o L is formed once
+#: per (row, column) and B * decay once per (row, n) in shared memory instead
+#: of once per output column p; X_d / d_y rows are staged once per tile. Every
+#: output keeps its chain: the same leaves (two of 128 at Q = 256), the same
+#: ascending order, the structural j > i fma(+0) steps kept (dropping them
+#: could turn a -0 leaf into +0), so no bit moves. The host column keeps the
+#: cell kernels (it has no shared memory).
+comptime IDN_M2_SSD_TILES = (
+    _IDN_MAMBA_DEVICE
+    and not is_defined["MOJOLEARN_IDN_M2_SSD_TILES_OFF"]()
+    and lib_smem_page_fits_for[TARGET_COLUMN, 20480]()
+)
 
 comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"]()
@@ -65,10 +153,18 @@ comptime AFN_MAMBA3_SISO_FUSED = AFN_MAMBA_ALL or (
 )
 comptime AFN_MAMBA_ARENA = AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_ARENA"]()
-)
-comptime AFN_MAMBA_DEVICE_REFUSAL = AFN_MAMBA_ALL or (
+) or IDN_MAMBA_ARENA
+#: cpu3-seq (2026-10-04): the device refusal is THE refusal on every device
+#: column, IDENTICAL and FAST, NVIDIA, AMD and Apple (owner's rule: no CPU
+#: data work in a GPU route, and the old host walk is removed from the GPU
+#: route rather than kept behind an _OFF define). The download-and-walk
+#: form (`_refuse_nonfinite_named_host`) is reached only by a host-column
+#: build (`MOJOLEARN_COLUMN_CPU`). The names, their order and the messages
+#: are unchanged; `MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF` and
+#: `MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL` no longer change this switch.
+comptime AFN_MAMBA_DEVICE_REFUSAL = not is_defined["MOJOLEARN_COLUMN_CPU"]() or AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"]()
-)
+) or IDN_MAMBA_DEVICE_REFUSAL
 
 
 def afn_mamba_switches() -> String:

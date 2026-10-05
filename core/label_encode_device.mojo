@@ -97,13 +97,19 @@ def _emit_kernel(
         count.unsafe_store(0, cls + Int32(1))
 
 
-def device_unique_inverse(
-    ctx: DeviceContext, src_addr: Int, n: Int, kind: Int, classes_addr: Int, codes_addr: Int,
+def device_unique_inverse_resident(
+    ctx: DeviceContext,
+    mut d_src: DeviceBuffer[DType.uint64],
+    n: Int,
+    kind: Int,
+    mut d_codes: DeviceBuffer[DType.int32],
+    mut d_classes: DeviceBuffer[DType.uint64],
 ) raises -> Int:
-    """`host_unique_inverse`'s contract (host `src` of n 64-bit labels,
-    host `classes` of n slots, host `codes` of n int32) with every step on
-    the device. Returns the class count, or -2 for a NaN label."""
-    var d_src = ctx.enqueue_create_buffer[DType.uint64](n)
+    """`device_unique_inverse` over buffers already on the device (lane
+    fam2-shared, 2026-10-04): `d_src` holds the n 64-bit labels, `d_codes`
+    (n int32) and `d_classes` (n slots) receive the result. Returns the
+    class count, or -2 for a NaN label. Synchronizes once, for the two
+    status words."""
     var d_lo = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_hi = ctx.enqueue_create_buffer[DType.uint32](n)
     var d_his = ctx.enqueue_create_buffer[DType.uint32](n)
@@ -115,11 +121,8 @@ def device_unique_inverse(
     var d_flag = ctx.enqueue_create_buffer[DType.int32](n)
     var d_scan = ctx.enqueue_create_buffer[DType.int32](n)
     var d_bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n))
-    var d_codes = ctx.enqueue_create_buffer[DType.int32](n)
-    var d_classes = ctx.enqueue_create_buffer[DType.uint64](n)
     var d_status = ctx.enqueue_create_buffer[DType.int32](2)
     enqueue_fill(ctx, d_status, Int32(0))
-    ctx.enqueue_copy(dst_buf=d_src, src_ptr=_U64(unsafe_from_address=src_addr))
     ctx.enqueue_function[_key_kernel](
         d_src.unsafe_ptr(), Int32(n), Int32(kind), d_lo.unsafe_ptr(), d_hi.unsafe_ptr(),
         d_row.unsafe_ptr(), d_status.unsafe_ptr(), grid_dim=_blocks(n), block_dim=_TPB,
@@ -144,13 +147,10 @@ def device_unique_inverse(
     )
     var h_status = ctx.enqueue_create_host_buffer[DType.int32](2)
     ctx.enqueue_copy(dst_ptr=h_status.unsafe_ptr(), src_buf=d_status)
-    ctx.enqueue_copy(dst_ptr=_I(unsafe_from_address=codes_addr), src_buf=d_codes)
-    ctx.enqueue_copy(dst_ptr=_U64(unsafe_from_address=classes_addr), src_buf=d_classes)
     ctx.synchronize()
     var nan = h_status.unsafe_ptr()[0] != Int32(0)
     var k = Int(h_status.unsafe_ptr()[1])
     _ = h_status^
-    _ = d_src^
     _ = d_lo^
     _ = d_hi^
     _ = d_his^
@@ -162,7 +162,25 @@ def device_unique_inverse(
     _ = d_flag^
     _ = d_scan^
     _ = d_bsum^
-    _ = d_codes^
-    _ = d_classes^
     _ = d_status^
     return -2 if nan else k
+
+
+def device_unique_inverse(
+    ctx: DeviceContext, src_addr: Int, n: Int, kind: Int, classes_addr: Int, codes_addr: Int,
+) raises -> Int:
+    """`host_unique_inverse`'s contract (host `src` of n 64-bit labels,
+    host `classes` of n slots, host `codes` of n int32) with every step on
+    the device. Returns the class count, or -2 for a NaN label."""
+    var d_src = ctx.enqueue_create_buffer[DType.uint64](n)
+    var d_codes = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_classes = ctx.enqueue_create_buffer[DType.uint64](n)
+    ctx.enqueue_copy(dst_buf=d_src, src_ptr=_U64(unsafe_from_address=src_addr))
+    var k = device_unique_inverse_resident(ctx, d_src, n, kind, d_codes, d_classes)
+    ctx.enqueue_copy(dst_ptr=_I(unsafe_from_address=codes_addr), src_buf=d_codes)
+    ctx.enqueue_copy(dst_ptr=_U64(unsafe_from_address=classes_addr), src_buf=d_classes)
+    ctx.synchronize()
+    _ = d_src^
+    _ = d_codes^
+    _ = d_classes^
+    return k

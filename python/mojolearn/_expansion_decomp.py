@@ -276,6 +276,11 @@ class _M:
         return self.s[i * self.c:(i + 1) * self.c]
 
     def rows(self, a, b):
+        if self._d is not None and 0 <= a < b <= self.r and _res_moves(self, (b - a) * self.c):
+            # lane fam2-decomp: rows a .. b - 1 gathered on the device
+            # (TAKE_ROWS, the row numbers as exact floats); lane
+            # cpu2-l8-decomp: at every size and in every mode
+            return _dev_gather(self, _MV_TAKE_ROWS, range(a, b))
         return _M(self.s[a * self.c:b * self.c], b - a, self.c)
 
     def take_rows(self, idx):
@@ -287,9 +292,13 @@ class _M:
             idx = _M(a, len(a), 1)
         I = idx
         m = I.r * I.c
+        if m * self.c and k._res():
+            # lane cpu3-python: the kit's device TAKE_ROWS move on a GPU
+            # binding (the operand goes up once if it is a host matrix)
+            return k.take_rows(self, I)
         out = _M.zeros(m, self.c)
         if m * self.c:
-            k.b.x_decomp_move(self.addr, I.addr, out.addr,
+            k.b.x_decomp_move(self.addr, I.addr, out.addr,  # cpu-route: host binding only (CPU-only installs), the GPU binding moved above
                               [_MV_TAKE_ROWS, m * self.c, self.c, 0, 0, 1, 0, len(self.s), m * self.c, m])
         return out
 
@@ -300,6 +309,11 @@ class _M:
         """Data movement by strided slices: one C-level copy per column."""
         idx = list(idx)
         w = len(idx)
+        in_range = all(0 <= j < self.c for j in idx)  # glue: range check of the caller's column-index argument
+        if self._d is not None and in_range and w and _res_moves(self, self.r * w):
+            # lane fam2-decomp: the columns gathered on the device (TAKE_COLS);
+            # lane cpu2-l8-decomp: at every size and in every mode
+            return _dev_gather(self, _MV_TAKE_COLS, idx)
         out = array.array("f", [0.0]) * (self.r * w)
         for t, j in enumerate(idx):
             out[t::w] = self.s[j::self.c]
@@ -307,15 +321,37 @@ class _M:
 
     @property
     def T(self):
+        d = self._d
+        n = self.r * self.c
+        if d is None and n and self.r != 1 and self.c != 1 and n < _I32_MAX:
+            # lane cpu3-python: a host matrix on a GPU binding goes up once
+            # (it moves) and is transposed there; the move has no index operand
+            k = _host_kit()
+            if k._res():
+                k._did(self)
+                d = self._d
+        if d is not None and (self.r == 1 or self.c == 1):
+            # lane cpu2-l8-decomp: a vector's transpose is the same words, a
+            # view of the same device buffer (as the host form shares its store)
+            return _M._on_device(d, self.c, self.r)
+        if d is not None and n < _I32_MAX:
+            # lane fam2-decomp: transposed on the device (the TRANSPOSE move's
+            # index functions; the index operand is unused, so the source's
+            # own id stands in for it)
+            out = _M._on_device(_DevBuf(d.b, n), self.c, self.r)
+            d.b.x_decomp_dev_move(d.id, d.id, out._d.id, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])
+            return out
         if self.r == 1 or self.c == 1:
             return _M(self.s, self.c, self.r)
         k = _host_kit()
         out = _M.zeros(self.c, self.r)
         n = self.r * self.c
-        k.b.x_decomp_move(self.addr, _M._one.addr, out.addr, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])
+        k.b.x_decomp_move(self.addr, _M._one.addr, out.addr, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])  # cpu-route: host binding only (CPU-only installs); a GPU binding transposed above
         return out
 
     def reshape(self, r, c):
+        if self._d is not None and r * c == self.r * self.c:
+            return _M._on_device(self._d, r, c)     # lane cpu2-l8-decomp: a view, no download
         return _M(self.s, r, c)
 
     def neg_rows(self, flags):
@@ -366,7 +402,39 @@ _M._dev_one = staticmethod(_dev_one)
 #: lane apple-fast-py2mojo-decomp (2026-10-03): x_decomp/moves.mojo `move`
 #: ops and the float32 row-index bound (indices travel as exact floats).
 _MV_TAKE_ROWS, _MV_TRANSPOSE, _MV_PLACE_COLS, _MV_FILL0 = 0, 1, 2, 3
+_MV_TAKE_COLS = 4
 _F32_INDEX_MAX = 1 << 24
+_I32_MAX = (1 << 31) - 1    # the move entries' int32 counts
+
+
+def _res_moves(M, count):
+    """Whether a move of the device matrix M with `count` result values runs
+    on the device (shape facts only). Lane cpu2-l8-decomp (re-audit L8, the
+    `_M.take_cols` row): every size and every mode; the IDENTICAL-only
+    binding bit and the small-result floor are gone, so a resident matrix
+    is never downloaded whole to slice a part of it."""
+    return count > 0 and M.r < _F32_INDEX_MAX and M.c < _F32_INDEX_MAX
+
+
+def _dev_gather(M, op, idx):
+    """Rows (TAKE_ROWS) or columns (TAKE_COLS) `idx` of the device matrix M
+    as a device matrix: the indices go up once as exact floats (range
+    checked by the caller), one thread a moved value."""
+    raw = M._d.b
+    ia = array.array("f", idx)
+    w = len(ia)
+    di = _DevBuf(raw, w)
+    raw.x_decomp_dev_upload(di.id, ia.buffer_info()[0], w)
+    n = M.r * M.c
+    if op == _MV_TAKE_ROWS:
+        count = w * M.c
+        out = _M._on_device(_DevBuf(raw, count), w, M.c)
+        raw.x_decomp_dev_move(M._d.id, di.id, out._d.id, [op, count, M.c, 0, 0, 1, 0, n, count, w])
+    else:
+        count = M.r * w
+        out = _M._on_device(_DevBuf(raw, count), M.r, w)
+        raw.x_decomp_dev_move(M._d.id, di.id, out._d.id, [op, count, w, M.c, 0, 0, 0, n, count, w])
+    return out
 
 
 def _host_kit():
@@ -399,7 +467,7 @@ def _hstack(*ms):
     off = 0
     for m in ms:  # glue: one Mojo move per argument matrix
         if m.r * m.c:
-            k.b.x_decomp_move(m.addr, _M._one.addr, out.addr,
+            k.b.x_decomp_move(m.addr, _M._one.addr, out.addr,  # cpu-route: host binding only, _Kit.hstack moves on a GPU binding
                               [_MV_PLACE_COLS, m.r * m.c, m.c, w, off, 0, 0, m.r * m.c, r * w, 1])
         off += m.c
     return out
@@ -528,9 +596,26 @@ class _Kit:
                 big = True
         return big
 
+    def _opt_dev(self, name):
+        """Whether this binding exports the optional resident entry `name`
+        (lane fam-decomp: entries compiled only into an IDENTICAL GPU build
+        whose _OFF define is not set); asked once per kit and name."""
+        got = self.__dict__.setdefault("_opt_fns", {})
+        r = got.get(name)
+        if r is None:
+            r = False
+            if self._res():
+                try:
+                    getattr(self._raw(), name)
+                    r = True
+                except Exception:
+                    r = False
+            got[name] = r
+        return r
+
     def _dict_dev(self):
         """`x_decomp_dev_dict_update` when this binding exports it (a FAST
-        Apple build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF), else None."""
+        GPU build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF), else None."""
         if "_dd_fn" not in self.__dict__:
             fn = None
             if self._res():
@@ -681,7 +766,26 @@ class _Kit:
         self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c, int(kind), float(pw)])
         return out
 
+    def _idn_flags(self):
+        """The binding's `x_decomp_idn_flags` (0 when it has none); asked once
+        per kit."""
+        f = self.__dict__.get("_idn_bits")
+        if f is None:
+            try:
+                f = int(getattr(self._raw(), "x_decomp_idn_flags")())
+            except Exception:
+                f = 0
+            self._idn_bits = f
+        return f
+
     def rand(self, r, c, seed, stream, kind):
+        if r * c >= 1024 and self._res():   # a small draw is read at once: one call
+            # lane fam-decomp: drawn into a device matrix by the same kernel,
+            # downloaded only if Python reads it (lane cpu2-l8-decomp: in
+            # every mode, no longer behind the IDENTICAL-only binding bit)
+            out = self._dout(r, c)
+            self.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
+            return out
         out = _M.zeros(r, c)
         if r * c:
             self.b.x_decomp_rand(out.addr, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
@@ -695,6 +799,13 @@ class _Kit:
         device), 0 the whole matrix."""
         n = A.r
         w, v = _M.zeros(1, n), _M.zeros(n, n)
+        if n >= 1 and A.c == n and A._d is not None and A._d.b is self._raw() and self._opt_dev("x_decomp_dev_eigh"):
+            # lane fam-decomp: an operand already on the device is solved on
+            # a device copy (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF); a host operand keeps the
+            # host-address call (one upload either way)
+            self.b.x_decomp_dev_eigh(A._d.id, w.addr, v.addr, [n, int(uplo)])
+            return w, v
         self.b.x_decomp_eigh(A.addr, w.addr, v.addr, [n, int(uplo)])
         return w, v
 
@@ -710,9 +821,16 @@ class _Kit:
 
     def lu(self, A):
         n = A.r
-        lu = A.copy()
         piv = array.array("i", [0] * n)
         info = _M.zeros(1, 1)
+        if n >= 1 and A.c == n and self._opt_dev("x_decomp_dev_lu") and self._use(A):
+            # lane fam-decomp: the factor made in a device matrix from a
+            # device copy of A (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_LU_RESIDENT_OFF); pivots and info come down
+            lu = self._dout(n, n)
+            self.b.x_decomp_dev_lu(self._did(A), lu._d.id, piv.buffer_info()[0], info.addr, [n])
+            return lu, piv, int(info.s[0])
+        lu = A.copy()
         self.b.x_decomp_lu(lu.addr, piv.buffer_info()[0], info.addr, [n])
         return lu, piv, int(info.s[0])
 
@@ -762,7 +880,7 @@ class _Kit:
             return out
         out = _M.zeros(m, A.c)
         if count:
-            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
         return out
 
     def copy(self, A):
@@ -785,16 +903,185 @@ class _Kit:
             did = self._did(A)
             self.b.x_decomp_dev_move(did, _M._dev_one(self), did, p)
             return A
-        self.b.x_decomp_move(A.addr, _M._one.addr, A.addr, p)
+        self.b.x_decomp_move(A.addr, _M._one.addr, A.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
         return A
+
+    # ---- lane cpu2-l8-decomp (2026-10-04, re-audit L8): scalar decisions
+    # and small moves without a download of the operand. Each has one host
+    # form (host-address entries of both bindings) and one device form (the
+    # resident entries) with the same words: select reductions and moves
+    # are exact, and the elementwise steps are the kit's own cells.
+    _SEL_MAXABS, _SEL_MAX, _SEL_MIN = 0, 1, 2
+
+    def reduce(self, A, op):
+        """max |A| (op 0), max A (1) or min A (2) as a 1 x 1 matrix
+        (x_decomp/select_ops.mojo; a NaN anywhere gives NaN)."""
+        n = A.r * A.c
+        if not n:
+            raise ValueError("x_decomp: reduce of an empty matrix")
+        if self._use(A):
+            out = self._dout(1, 1)
+            self.b.x_decomp_dev_reduce(self._did(A), out._d.id, [n, int(op)])
+            return out
+        out = _M.zeros(1, 1)
+        self.b.x_decomp_reduce(A.addr, out.addr, [n, int(op)])  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+        return out
+
+    def word(self, A, i=0):
+        """A's value at flat position i as a float: one word down (the
+        element gathered first when A is on the device)."""
+        if A._d is not None and A.r * A.c > 1:
+            return float(self.strided(A, 1, 1, i).s[0])
+        return float(A.s[i])
+
+    def strided(self, A, count, stride, off=0):
+        """A's values at off + t * stride (t < count) as a 1 x count matrix:
+        the TAKE_COLS move with one column index, off (off < stride, or
+        count 1). Exact copies."""
+        if count == 1:
+            stride = off + 1
+        idx = _M.of([float(off)], 1, 1)
+        n = A.r * A.c
+        p = [_MV_TAKE_COLS, count, 1, stride, 0, 0, 0, n, count, 1]
+        if count and self._use(A):
+            out = self._dout(1, count)
+            self.b.x_decomp_dev_move(self._did(A), self._did(idx), out._d.id, p)
+            return out
+        out = _M.zeros(1, count)
+        if count:
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+        return out
+
+    def place_strided(self, D, V, stride, off=0):
+        """D[off + t * stride] = V[t] for every t of V, in place (the
+        PLACE_COLS move with width 1). Returns D."""
+        cnt = V.r * V.c
+        if not cnt:
+            return D
+        p = [_MV_PLACE_COLS, cnt, 1, stride, off, 0, 0, cnt, D.r * D.c, 1]
+        if self._use(D, V):
+            self.b.x_decomp_dev_move(self._did(V), _M._dev_one(self), self._did(D), p)
+            return D
+        self.b.x_decomp_move(V.addr, _M._one.addr, D.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+        return D
+
+    def place_rows(self, D, V, row):
+        """V (r x D.c) into rows row .. row + r - 1 of D, in place."""
+        return self.place_strided(D, V.reshape(1, V.r * V.c), 1, row * D.c) if V.r * V.c else D
+
+    def diag(self, A):
+        """The diagonal of square A as 1 x n."""
+        return self.strided(A, A.r, A.r + 1, 0)
+
+    def diag_add(self, A, v):
+        """A copy of square A with v (1 x 1, or 1 x n) added to its
+        diagonal: one add per diagonal value, the rest copied."""
+        return self.place_strided(self.copy(A), self.ew("add", self.diag(A), v), A.r + 1, 0)
+
+    def order_small(self, A):
+        """The stable ascending order of A's values (ties to the lower
+        index, NaN last) as an n x 1 matrix of exact floats, on the device
+        for a resident kit (x_decomp/select_*.mojo; n <= 65536)."""
+        n = A.r * A.c
+        if n and self._use(A):
+            out = self._dout(n, 1)
+            self.b.x_decomp_dev_order_small(self._did(A), out._d.id, [n])
+            return out
+        out = _M.zeros(n, 1)
+        if n:
+            self.b.x_decomp_order_small(A.addr, out.addr, [n])  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+        return out
+
+    def take_cols_m(self, A, idx, w):
+        """Columns idx[0 .. w) of A (idx an _M of exact floats, which may
+        live on the device)."""
+        p = [_MV_TAKE_COLS, A.r * w, w, A.c, 0, 0, 0, A.r * A.c, A.r * w, w]
+        if A.r * w and self._use(A, idx):
+            out = self._dout(A.r, w)
+            self.b.x_decomp_dev_move(self._did(A), self._did(idx), out._d.id, p)
+            return out
+        out = _M.zeros(A.r, w)
+        if A.r * w:
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+        return out
+
+    def count_gt(self, A, s):
+        """How many values of A are > s (an exact count; one word down)."""
+        if not A.r * A.c:
+            return 0
+        return int(self.total(self.ew("gts", A, s=float(s))).s[0])
+
+    def vstack(self, ms):
+        """`_vstack` on the device for a resident kit (copies only)."""
+        if self._res() and sum(m.r * m.c for m in ms):  # glue: value count of argument matrices
+            return self.vstack_dev(ms)
+        return _vstack(*ms)
+
+    def hstack(self, ms):
+        """`_hstack` with the device PLACE_COLS moves for a resident kit."""
+        r = ms[0].r
+        w = sum(m.c for m in ms)  # glue: column count of argument matrices
+        if not (self._res() and r * w):
+            return _hstack(*ms)
+        out = self._dout(r, w)
+        one = _M._dev_one(self)
+        off = 0
+        for m in ms:  # glue: one Mojo move per argument matrix
+            if m.r * m.c:
+                self.b.x_decomp_dev_move(self._did(m), one, out._d.id,
+                                         [_MV_PLACE_COLS, m.r * m.c, m.c, w, off, 0, 0, m.r * m.c, r * w, 1])
+            off += m.c
+        return out
+
+    def absmax_signs(self, A, by_col):
+        """Per column (by_col, 1 x c) or row (r x 1) of A: -1 where its
+        largest-|.| entry (ties to the lower index) is negative, else +1
+        (`absmax_sign_cell`, DEVIATION 5317, then one select cell)."""
+        cnt = A.c if by_col else A.r
+        if cnt and A.r * A.c and self._use(A):
+            out = self._dout(1, cnt)
+            self.b.x_decomp_dev_absmax(self._did(A), out._d.id, [A.r, A.c, 1 if by_col else 0])
+        else:
+            out = _M.zeros(1, cnt)
+            if cnt and A.r * A.c:
+                self.b.x_decomp_absmax_sign(A.addr, out.addr, [A.r, A.c, 1 if by_col else 0])
+        return self.neg_signs(out if by_col else out.reshape(cnt, 1))
+
+    def neg_signs(self, V):
+        """-1 where V < 0, else +1 (NaN: +1), elementwise: select(-V > 0)."""
+        return self.ew("select", self.ew("scale", V, s=-1.0), _M.of([-1.0], 1, 1), _M.of([1.0], 1, 1), s=0.0)
+
+    def _refuse_nan(self, A):
+        """A device operand's NaN refusal (the host forms' `f32_key`): its max
+        is NaN when any value is, one word down."""
+        v = self.word(self.reduce(A, self._SEL_MAX))
+        if v != v:
+            raise ValueError("x_decomp: a NaN has no order (refused)")
+
+    def _order_dev(self, A, neg=0, skip=None):
+        """(order, count) of `x_decomp_dev_order_f` on a resident kit: the
+        n x 1 device order and the number of positions not skipped."""
+        n = A.r * A.c
+        if n >= _F32_INDEX_MAX:
+            raise ValueError("x_decomp: order_f exceeds the float32 index bound")
+        self._refuse_nan(A)
+        out = self._dout(n, 1)
+        cnt = self._dout(1, 1)
+        sid = self._did(skip) if skip is not None else self._did(A)
+        self.b.x_decomp_dev_order_f(self._did(A), sid, out._d.id, cnt._d.id,
+                                    [n, int(neg), 1 if skip is not None else 0])
+        return out, cnt
 
     def order(self, A):
         """The stable ascending order of A's values (ties to the lower index)
-        as an n x 1 _M of exact floats; NaN refused."""
+        as an n x 1 _M of exact floats; NaN refused. Lane cpu3-python: a
+        radix sort on the device for a resident kit."""
         n = A.r * A.c
+        if n and self._use(A):
+            return self._order_dev(A)[0]
         out = _M.zeros(n, 1)
         if n:
-            self.b.x_decomp_order_f(A.addr, n, out.addr)
+            self.b.x_decomp_order_f(A.addr, n, out.addr)  # cpu-route: host binding only (CPU-only installs); a GPU binding sorts on the device above
         return out
 
     def select_smallest(self, A, h):
@@ -802,17 +1089,35 @@ class _Kit:
         ascending by position (h x 1 exact floats), and the int32 membership
         of every position."""
         n = A.r * A.c
+        if n and self._use(A):
+            # lane cpu3-python: two stable radix sorts on the device; the
+            # membership is an n x 1 device matrix of 0 / 1
+            if n >= _F32_INDEX_MAX or h < 0 or h > n:
+                raise ValueError("x_decomp: select_smallest out of range")
+            self._refuse_nan(A)
+            sel, mask = self._dout(h, 1), self._dout(n, 1)
+            self.b.x_decomp_dev_select_smallest(self._did(A), sel._d.id, mask._d.id, [n, h])
+            return sel, mask
         sel = _M.zeros(h, 1)
         mask = array.array("i", [0]) * n
         if n:
-            self.b.x_decomp_select_smallest(A.addr, [n, h], sel.addr, mask.buffer_info()[0])
+            self.b.x_decomp_select_smallest(A.addr, [n, h], sel.addr, mask.buffer_info()[0])  # cpu-route: host binding only (CPU-only installs); a GPU binding selects on the device above
         return sel, mask
 
     def argmin_all(self, A):
         """Every position (exact floats, c x 1) whose value equals the minimum."""
         n = A.r * A.c
+        if n and self._use(A):
+            # lane cpu3-python: the min, an equality key and a stable sort on
+            # the device; the count is one word down
+            if n >= _F32_INDEX_MAX:
+                raise ValueError("x_decomp: argmin_all exceeds the float32 index bound")
+            out, cnt = self._dout(n, 1), self._dout(1, 1)
+            self.b.x_decomp_dev_argmin_all(self._did(A), out._d.id, cnt._d.id, [n])
+            c = int(self.word(cnt))
+            return out.rows(0, c) if c else _M.zeros(0, 1)
         buf = _M.zeros(max(n, 1), 1)
-        c = int(self.b.x_decomp_argmin_all(A.addr, n, buf.addr)) if n else 0
+        c = int(self.b.x_decomp_argmin_all(A.addr, n, buf.addr)) if n else 0  # cpu-route: host binding only (CPU-only installs); a GPU binding finds them on the device above
         return _M(buf.s[:c], c, 1)
 
     def lu_solve(self, lu, piv, B, trans=0):
@@ -825,8 +1130,26 @@ class _Kit:
         """One sklearn `_update_cdnmf_fast` sweep over every row of W, in
         place; returns the total violation (rows ascending)."""
         n, kc = W.r, W.c
-        viol = _M.zeros(n, 1)
         p = array.array("i", perm)
+        if "_cd_fn" not in self.__dict__:
+            # lane fam-decomp: `x_decomp_dev_cd_rows` when this binding
+            # exports it (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_CD_RESIDENT_OFF), else None
+            fn = None
+            if self._res():
+                try:
+                    fn = getattr(self._raw(), "x_decomp_dev_cd_rows")
+                except Exception:
+                    fn = None
+            self._cd_fn = fn
+        if self._cd_fn is not None and n * kc and self._use(W, HHt, XHt):
+            # W swept where it lives (it has moved to the device: no host
+            # store to go stale), the violations folded there, one float read
+            viol = self._dout(n, 1)
+            self.b.x_decomp_dev_cd_rows(self._did(W), self._did(HHt), self._did(XHt), p.buffer_info()[0],
+                                        viol._d.id, [n, kc])
+            return self.total(viol).s[0]
+        viol = _M.zeros(n, 1)
         self.b.x_decomp_cd_rows(W.addr, HHt.addr, XHt.addr, p.buffer_info()[0], viol.addr, [n, kc])
         return self.total(viol).s[0]
 
@@ -836,7 +1159,13 @@ class _Kit:
         values sorted descending with ties to the lower index."""
         m, n = A.r, A.c
         s, v = _M.zeros(1, n), _M.zeros(n, n)
-        self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
+        if m >= n >= 1 and self._opt_dev("x_decomp_dev_svd") and self._use(A):
+            # lane fam-decomp: the solve on a device copy of the resident
+            # operand (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_SVD_RESIDENT_OFF); A stays on the device
+            self.b.x_decomp_dev_svd(self._did(A), s.addr, v.addr, [m, n])
+        else:
+            self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
         # descending by value, ties to the lower index: the stable ascending
         # order of -s (an exact negation), and the gathers, in Mojo
         o = self.order(self.ew("scale", s, s=-1.0))
@@ -869,6 +1198,12 @@ class _Kit:
     def lasso_rows(self, G, Q, W, alpha, max_iter, tol, positive):
         """Row-parallel Lasso CD on the Gram (x_decomp/cells.mojo `lasso_row`),
         W (n x k) the warm start, updated in place."""
+        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q, W):
+            # lane fam-decomp: the Gram, Q and the codes stay on the device
+            # (an IDENTICAL GPU build without -D MOJOLEARN_IDN_CODE_RESIDENT_OFF)
+            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), self._did(W),
+                                          [0, Q.r, Q.c, int(max_iter), int(positive)], [float(alpha), float(tol)])
+            return W
         its = _M.zeros(Q.r, 1)
         self.b.x_decomp_lasso_rows(G.addr, Q.addr, W.addr, its.addr, [Q.r, Q.c, int(max_iter), int(positive)],
                                    [float(alpha), float(tol)])
@@ -901,6 +1236,11 @@ class _Kit:
         under eps * max |u_ii| in `lu` itself."""
         n = lu.r
         pm, im, diag, st = _M.zeros(n, 1), _M.zeros(n, 1), _M.zeros(1, n), _M.zeros(1, 4)
+        if n >= 1 and lu._d is not None and lu._d.b is self._raw() and self._opt_dev("x_decomp_dev_lu"):
+            # lane fam-decomp: read (and clamped) where the factor lives
+            self.b.x_decomp_dev_lu_aux(lu._d.id, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
+                                       [n, int(bool(clamp))])
+            return [float(v) for v in st.s], diag, pm, im  # glue: the four-field lu_aux status
         self.b.x_decomp_lu_aux(lu.addr, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
                                [n, int(bool(clamp))])
         return [float(v) for v in st.s], diag, pm, im  # glue: the four-field lu_aux status
@@ -908,6 +1248,11 @@ class _Kit:
     def lars_rows(self, G, Q, m, nnz):
         """Row-parallel Lars on the Gram (x_decomp/cells.mojo `lars_row`): the
         n x k coefficients, m the samples of each row's problem."""
+        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q):
+            W = self._dout(Q.r, Q.c)       # lane fam-decomp: see lasso_rows
+            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), W._d.id,
+                                          [1, Q.r, Q.c, int(m), int(nnz)], [0.0, 0.0])
+            return W
         W = _M.zeros(Q.r, Q.c)
         na = _M.zeros(Q.r, 1)
         if Q.r * Q.c:
@@ -915,6 +1260,11 @@ class _Kit:
         return W
 
     def omp_rows(self, G, Q, nnz):
+        if Q.r * Q.c and self._opt_dev("x_decomp_dev_code_rows") and self._use(G, Q):
+            W = self._dout(Q.r, Q.c)       # lane fam-decomp: see lasso_rows
+            self.b.x_decomp_dev_code_rows(self._did(G), self._did(Q), W._d.id,
+                                          [2, Q.r, Q.c, int(nnz), 0], [0.0, 0.0])
+            return W
         W = _M.zeros(Q.r, Q.c)
         na = _M.zeros(Q.r, 1)
         self.b.x_decomp_omp_rows(G.addr, Q.addr, W.addr, na.addr, [Q.r, Q.c, int(nnz)])
@@ -1104,11 +1454,45 @@ class _Kit:
                                     float(reg))
         return X
 
-    def qr_r(self, A):
-        """R (n x n) of the Householder QR of a tall A (decomposition/'s TSQR)."""
+    def qr_r(self, A, consume=False):
+        """R (n x n) of the Householder QR of a tall A (decomposition/'s TSQR).
+
+        consume=True: the caller gives A up (it is not read again). A device
+        A may then be factored in place (lane fix-d1-decomp,
+        IDN_QR_R_INPLACE: no second m x n device buffer); A is left empty
+        (0 x 0) when the binding consumed it."""
         R = _M.zeros(A.c, A.c)
+        if A.r >= A.c >= 1 and self._opt_dev("x_decomp_dev_qr_r") and self._use(A):
+            # lane fam-decomp: the QR of a device copy of the resident
+            # operand (an IDENTICAL GPU build without
+            # -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF); only R comes down
+            used = self.b.x_decomp_dev_qr_r(self._did(A), R.addr, [A.r, A.c, 1 if consume else 0])
+            if consume and int(used) == 1:
+                # its buffer holds the destroyed factorization: drop it
+                # (back to the pool) and leave A an empty matrix
+                A._s, A._d, A.r, A.c = array.array("f"), None, 0, 0
+            return R
         self.b.x_decomp_qr_r(A.addr, R.addr, [A.r, A.c])
         return R
+
+    def pad_zero_row(self, X):
+        """[X; 0]: X ((r) x c) over one zero row. A device X stays on the
+        device (lane fix-d1-decomp, `x_decomp_idn_flags` bit 8,
+        IDN_LLE_PAD_DEV: a PLACE_COLS move and a FILL0 move, copies only);
+        else the host stack."""
+        r, c = X.r, X.c
+        if c and X._d is not None and self._use(X):     # lane cpu2-l8-decomp: every mode
+            tot = (r + 1) * c
+            out = self._dout(r + 1, c)
+            one = _M._dev_one(self)
+            cnt = r * c
+            if cnt:
+                self.b.x_decomp_dev_move(self._did(X), one, out._d.id,
+                                         [_MV_PLACE_COLS, cnt, c, c, 0, 0, 0, cnt, tot, 1])
+            did = out._d.id
+            self.b.x_decomp_dev_move(did, one, did, [_MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1])
+            return out
+        return _M(array.array("f", X.s) + array.array("f", [0.0]) * c, r + 1, c)
 
     def absmax_flags(self, A, by_col):
         """Per column (by_col) or row of A: True when its largest-|.| entry
@@ -1145,7 +1529,8 @@ def _mode(numeric_mode):
 def _svd_flip_v(Vt):
     """sklearn `svd_flip(u_based_decision=False)`: each row of Vt signed so its
     largest-|.| entry (first on a tie) is positive. Exact sign flips."""
-    return Vt.neg_rows(_Kit(_backend.default_mode()).absmax_flags(Vt, False))
+    k = _Kit(_backend.default_mode())
+    return k.ew("mul", Vt, k.absmax_signs(Vt, False))
 
 
 def _gram_svd(k, Z):
@@ -1189,13 +1574,10 @@ def _ipca_dev_on(k):
     with -D MOJOLEARN_IPCA_FAST_DEV (FAST + Apple): IncrementalPCA.fit stacks
     each batch's matrix on the device (no download and re-upload of the
     centered batch) and reads its public arrays once after the last batch.
-    Read back from the binding's compile-time constant (no env read)."""
-    if not k._res():
-        return False
-    try:
-        return int(k._raw().x_decomp_ipca_dev_on()) == 1
-    except Exception:
-        return False
+    Lane cpu2-l8-decomp: every GPU kit in every mode (the stack is copies,
+    the same words; the IDENTICAL and NVIDIA/AMD FAST fits downloaded each
+    centered batch to stack it on the host)."""
+    return k._res()
 
 
 class IncrementalPCA(_Base):
@@ -1294,7 +1676,7 @@ class IncrementalPCA(_Base):
             Xc = k.ew("sub", Xb, bmean)
             mc = k.ew("scale", k.ew("sub", self.mean_m_, bmean), s=math.sqrt((seen / total) * n))
             prev = k.ew("mul", self.components_m_, self.singular_values_m_.T)
-            Z = k.vstack_dev([prev, Xc, mc]) if dev else _vstack(prev, Xc, mc)
+            Z = k.vstack([prev, Xc, mc])
         S, Vt = _gram_svd(k, Z)
         ev = k.ew("scale", k.ew("sq", S), s=1.0 / (total - 1))
         tot_var = k.total(k.ew("scale", upd_var, s=float(total)))
@@ -1453,7 +1835,8 @@ class _RandomProjection(_Base):
         # (lane neural-pass27: fit_transform converted the 880 MB input
         # twice at the board's shape)
         k = self._kit()
-        cls2 = _grp_cls2(k) if self.numeric_mode_ == "fast" else 0
+        # lane/idn-gates: the IDENTICAL GPU binding compiles DEVSCAN (bit 2) too
+        cls2 = _grp_cls2(k)
         if cls2 & 8 and not _is_sparse(X) and self._fused_fit(k, X):
             return self
         if cls2 & 3 and not _is_sparse(X):
@@ -1663,8 +2046,14 @@ def _thin_svd(k, X, nc, u_based=True):
         S, Ut = S.cols(0, nc), Ut.rows(0, nc)
         U = Ut.T
         Vt = k.ew("div", k.mm(U, X, ta=True), S.T)
-    fl = k.absmax_flags(U, True) if u_based else k.absmax_flags(Vt, False)
-    U, Vt = U.neg_cols(fl), Vt.neg_rows(fl)
+    # the signs as a +-1 vector on the device (lane cpu2-l8-decomp): exact
+    # multiplies, no flag list on the host
+    if u_based:
+        sg = k.absmax_signs(U, True)
+        U, Vt = k.ew("mul", U, sg), k.ew("mul", Vt, sg.T)
+    else:
+        sg = k.absmax_signs(Vt, False)
+        U, Vt = k.ew("mul", U, sg.T), k.ew("mul", Vt, sg)
     return U, S, Vt
 
 
@@ -1732,14 +2121,18 @@ class NMF(_Base):
             W = k.ew("scale", k.ew("abs", k.rand(n, nc, seed, 11, 1)), s=avg)
             return W, H
         U, S, Vt = _thin_svd(k, M, nc, u_based=(n >= d))
+        # lane cpu2-l8-decomp (re-audit L8, NMF._init): S[j] stays a 1 x 1
+        # operand where S lives and sqrt(S[j]) / sqrt(S[j] sigma) are cells
+        # (float32, correctly rounded) instead of host doubles; the factor
+        # columns and rows are stacked where they live (k.hstack / k.vstack)
         Wc, Hr = [], []
         for j in range(nc):
             x, y = U.cols(j, j + 1), Vt.rows(j, j + 1)
-            sj = S.s[j]
+            sj = S.cols(j, j + 1)
             if j == 0:
-                r = math.sqrt(sj)
-                Wc.append(k.ew("scale", k.ew("abs", x), s=r))
-                Hr.append(k.ew("scale", k.ew("abs", y), s=r))
+                r = k.ew("sqrt", sj)
+                Wc.append(k.ew("mul", k.ew("abs", x), r))
+                Hr.append(k.ew("mul", k.ew("abs", y), r))
                 continue
             xp, yp = k.ew("maxs", x, s=0.0), k.ew("maxs", y, s=0.0)
             xn, yn = k.ew("abs", k.ew("mins", x, s=0.0)), k.ew("abs", k.ew("mins", y, s=0.0))
@@ -1750,10 +2143,10 @@ class NMF(_Base):
                 u, v, sigma = k.ew("scale", xp, s=1.0 / xpn if xpn else 0.0), k.ew("scale", yp, s=1.0 / ypn if ypn else 0.0), mp
             else:
                 u, v, sigma = k.ew("scale", xn, s=1.0 / xnn if xnn else 0.0), k.ew("scale", yn, s=1.0 / ynn if ynn else 0.0), mn
-            lbd = math.sqrt(_f32(sj * sigma))
-            Wc.append(k.ew("scale", u, s=lbd))
-            Hr.append(k.ew("scale", v, s=lbd))
-        W, H = _hstack(*Wc), _vstack(*Hr)
+            lbd = k.ew("sqrt", k.ew("scale", sj, s=sigma))
+            Wc.append(k.ew("mul", u, lbd))
+            Hr.append(k.ew("mul", v, lbd))
+        W, H = k.hstack(Wc), k.vstack(Hr)
         z = _M.zeros(1, 1)
         W = k.ew("select", W, W, z, s=1e-6 - 1e-13)
         H = k.ew("select", H, H, z, s=1e-6 - 1e-13)
@@ -1879,9 +2272,11 @@ class NMF(_Base):
         HHt = k.mm(Ht, Ht, ta=True)
         XHt = k.mm(M, Ht, ta=trans)
         if l2:
-            HHt = HHt.copy()
-            for t in range(HHt.r):
-                HHt.s[t * HHt.c + t] = _f32(HHt.s[t * HHt.c + t] + l2)
+            # lane fix-d1-decomp: HHt + l2 I in one fused `axpy` cell against
+            # the identity mask (made on the device for a device HHt); lane
+            # cpu2-l8-decomp: in every mode (the host diagonal edit is gone)
+            mask = k.diag_mask(HHt.r) if HHt._d is not None else None
+            HHt = k.ew("axpy", HHt, mask if mask is not None else _eye(HHt.r), s=l2)
         if l1:
             XHt = k.ew("adds", XHt, s=-l1)
         return k.cd_rows(W, HHt, XHt, perm)
@@ -1893,8 +2288,11 @@ class NMF(_Base):
         if not self.shuffle:
             return list(range(kc))
         self._draws = getattr(self, "_draws", 0) + 1
-        u = k.rand(1, kc, _seed_of(self.random_state), 200 + self._draws, 0).s
-        return sorted(range(kc), key=lambda i: (u[i], i))
+        # lane cpu2-l8-decomp: the order of the draws (ties to the lower
+        # index) made where they are drawn (x_decomp/select_*.mojo
+        # `order_small`); cd_rows takes the int32 list, kc words
+        u = k.rand(1, kc, _seed_of(self.random_state), 200 + self._draws, 0)
+        return [int(v) for v in k.order_small(u).s]  # glue: kc exact-float positions to the int32 argument list
 
     def _cd(self, k, M, W, H, update_H, regs):
         l1W, l1H, l2W, l2H = regs
@@ -2042,29 +2440,35 @@ class FastICA(_Base):
             W1 = _sym_decorrelation(k, k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p),
                                             k.ew("mul", W, gp)))
             dots = k.rowsum(k.ew("mul", W1, W))
-            lim = max(k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0)).s)
+            # lane fix-d1-decomp: one word down; lane cpu2-l8-decomp: in every
+            # mode (the select reduction of x_decomp/select_*.mojo)
+            lim = k.word(k.reduce(k.ew("adds", k.ew("abs", dots), s=-1.0), k._SEL_MAXABS))
             W = W1
             if lim < self.tol:
                 break
         return W, it
 
     def _def(self, k, X1, Winit):
+        # lane cpu2-l8-decomp (re-audit L8, FastICA `_vstack`): the unmixing
+        # rows found so far live in ONE matrix where the kit keeps it (the
+        # device for a GPU kit), row j written in place once it converges;
+        # Wp is a view of its first j rows: the same values as the host stack
+        # of the downloaded rows, with no download
         nc = Winit.r
         p = X1.c
-        rows = []
+        Wall = k.copy(Winit)
         its = []
         for j in range(nc):
             w = Winit.rows(j, j + 1)
-            if rows:
-                Wp = _vstack(*rows)
+            Wp = Wall.rows(0, j) if j else None
+            if j:
                 w = k.ew("sub", w, k.mm(k.mm(w, Wp, tb=True), Wp))
             w = k.ew("scale", w, s=1.0 / _norm(k, w) if _norm(k, w) else 0.0)
             it = 0
             for it in range(1, self.max_iter + 1):
                 gx, gp = self._g(k, k.mm(w, X1))
                 w1 = k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p), k.ew("mul", w, gp))
-                if rows:
-                    Wp = _vstack(*rows)
+                if j:
                     w1 = k.ew("sub", w1, k.mm(k.mm(w1, Wp, tb=True), Wp))
                 nw = _norm(k, w1)
                 w1 = k.ew("scale", w1, s=1.0 / nw if nw else 0.0)
@@ -2073,8 +2477,8 @@ class FastICA(_Base):
                 if lim < self.tol:
                     break
             its.append(it)
-            rows.append(w)
-        return _vstack(*rows), max(its)
+            k.place_rows(Wall, w, j)
+        return Wall, max(its)  # glue: the largest of nc iteration counts
 
     def fit_transform(self, X, y=None):
         return self._fit(X, True).out()
@@ -2108,7 +2512,7 @@ class FastICA(_Base):
             ev = k.ew("maxs", ev.take_cols(order), s=_F32_EPS * 10)
             sv = k.ew("sqrt", ev)
             u = u.take_cols(order)
-            u = u.neg_cols([v < 0 for v in u.row(0)])
+            u = k.ew("mul", u, k.neg_signs(u.rows(0, 1)))   # row 0's signs, on the device
             K = k.ew("div", u, sv).T.rows(0, nc)
             X1 = k.ew("scale", k.mm(K, Xc, tb=True), s=math.sqrt(n))
         else:
@@ -2182,10 +2586,20 @@ def _support_of(mask, n):
 
 
 def _dsum_sq(k, M):
-    """The in-order float64 sum of the squares of M's float32 values
-    (x_decomp/moves.mojo `dsum_sq`, the product pinned)."""
+    """The binary64 sum of the squares of M's float32 values (each square
+    exact), DSUM_CHUNK values per partial then the partials folded the same
+    way: on the device in software binary64 for a resident kit (lane
+    cpu3-python), the same words on the host binding (`dsum_sq_host`)."""
     n = M.r * M.c
-    return float(k.b.x_decomp_dsum_sq(M.addr, n)) if n else 0.0
+    if not n:
+        return 0.0
+    if k._use(M):
+        out = k._dout(1, 2)
+        k.b.x_decomp_dev_dsum_sq(k._did(M), out._d.id, [n])
+        w = array.array("d")
+        w.frombytes(out.s.tobytes())   # glue: the binary64 result's two words, as bytes
+        return w[0]
+    return float(k.b.x_decomp_dsum_sq(M.addr, n))  # cpu-route: host binding only (CPU-only installs); a GPU binding sums on the device above
 
 
 def _dsum(values):
@@ -2215,7 +2629,7 @@ def _eye(n):
 def _logdet(k, A):
     """log|det A| from the LU diagonal (sum ascending); sign ignored."""
     lu, piv, info = k.lu(A)
-    diag = _M.of([lu.s[i * A.r + i] for i in range(A.r)], 1, A.r)
+    diag = k.diag(lu)       # lane cpu2-l8-decomp: gathered where the LU lives
     return k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
 
 
@@ -2231,7 +2645,8 @@ def _polar(k, A):
     reference's `wide` fixture, columns up to 1e4) cubed them into an A whose
     A^T A was inf in float32, and eigh refused it (DEVIATION 590) on every
     column. A is n_components x n_components: the max is a k x k host read."""
-    m = max((abs(float(v)) for v in A.s), default=0.0)
+    # lane fix-d1-decomp: one word down; lane cpu2-l8-decomp: in every mode
+    m = k.word(k.reduce(A, k._SEL_MAXABS)) if A.r * A.c else 0.0
     # clamped so 2^-e stays a normal float32 in the device's scale
     e = max(-120, min(120, math.frexp(m)[1])) if m > 0.0 and math.isfinite(m) else 0
     if e:
@@ -2324,20 +2739,24 @@ class FactorAnalysis(_Base):
         mean = k.ew("add", mean, k.colmean(k.ew("sub", M, mean)))
         llconst = d * _LOG_2PI + nc
         # FAST on Apple (lane/apple-fast-fa, recovered 2026-10-04): taken only
-        # when the binding was built with -D MOJOLEARN_FA_GRAM_ONCE or
-        # MOJOLEARN_FA_ITER_DEVICE (x_decomp/fa_fast.mojo); an IDENTICAL
+        # when the binding reports MOJOLEARN_FA_GRAM_ONCE or
+        # MOJOLEARN_FA_ITER_DEVICE (x_decomp/fa_fast.mojo; ITER_DEVICE is the
+        # FAST + Apple default since 2026-10-04, rollback
+        # -D MOJOLEARN_FA_ITER_DEVICE_OFF); an IDENTICAL
         # binding registers no FA entry, so this never runs there
         fdefs = _fa_fast_defines(k)
         if (("MOJOLEARN_FA_GRAM_ONCE" in fdefs or "MOJOLEARN_FA_ITER_DEVICE" in fdefs)
                 and d <= _FA_MAX_D and 1 <= nc <= d and self.max_iter >= 1):
             return self._fit_fast(k, M, mean, n, d, nc, llconst, fdefs)
         Xc = k.ew("sub", M, mean)
+        M = None     # not read again: the input's device copy goes back to the pool before the QR
         nsqrt = math.sqrt(n)
         psi = self._psi_init(k, d)
         SMALL = 1e-12
         # Xc = Q R once; the scaled data Xc D / sqrt(n) then has the singular
         # values and right vectors of the d x d R D / sqrt(n) (Q orthogonal)
-        Rx = k.qr_r(Xc) if n >= d else None
+        # (n >= d never reads Xc again, so the QR may consume it: one copy of X on the device)
+        Rx = k.qr_r(Xc, consume=True) if n >= d else None
         old_ll = -math.inf
         loglike = []
         it = 0
@@ -2403,7 +2822,9 @@ class FactorAnalysis(_Base):
         eigh of D G D / n, main's psi update) or as ONE binding call
         (MOJOLEARN_FA_ITER_DEVICE, `fa_em_py`)."""
         psi = self._psi_init(k, d)
-        G = k._dout(d, d)
+        # MOJOLEARN_FA_GRAM_DF (lane/apple-fast-fa-quality): the binding forms
+        # G in double-float, hi words then lo words, so G's buffer is 2 d x d
+        G = k._dout(2 * d if "MOJOLEARN_FA_GRAM_DF" in fdefs else d, d)
         var = k._dout(1, d)
         k.b.x_decomp_fa_gram(k._did(M), k._did(mean), G._d.id, var._d.id, [n, d])
         if "MOJOLEARN_FA_ITER_DEVICE" in fdefs:
@@ -2485,11 +2906,9 @@ class FactorAnalysis(_Base):
 
     def _cov(self, k):
         W = self.components_m_
-        C = k.mm(W, W, ta=True)
-        d = C.r
-        for i in range(d):
-            C.s[i * d + i] = _f32(C.s[i * d + i] + self.noise_variance_m_.s[i])
-        return C
+        # lane cpu2-l8-decomp: the noise variances added to the diagonal
+        # where C lives (one add a diagonal value; no d x d round trip)
+        return k.diag_add(k.mm(W, W, ta=True), self.noise_variance_m_)
 
     def get_covariance(self):
         self._check()
@@ -2542,49 +2961,28 @@ _LOG2, _LOGPI, _LOG2PI_D = 0.6931471805599453, 1.1447298858494002, 1.83787706640
 
 def _pca_mle_rank(spectrum, n_samples, mode):
     """scikit-learn `_pca.py::_infer_dimension` / `_assess_dimension`
-    (Minka's MLE of the PCA rank) over the full explained-variance spectrum.
-    Every log and gammaln of data runs in the cells (float32 results, one
-    call per rank); the sums and products are IEEE double in sklearn's order
-    and the constants log 2, log pi and log 2 pi are literals, so the rank is
-    the same on every column. The argmax takes the first maximum, as numpy."""
+    (Minka's MLE of the PCA rank) over the full explained-variance spectrum,
+    in software binary64 on the device on every vendor (x_decomp/pca_mle.mojo,
+    lane cpu3-python): the spectrum goes up once as binary64 words, the rank
+    comes back as one word. The host binding (CPU-only installs, the host
+    column) runs the same phases on the host. The argmax takes the first
+    maximum, as numpy."""
     k = _Kit(mode)
     d = len(spectrum)
-    sp = [float(v) for v in spectrum]
-    tiny = 1.1754943508222875e-38
-
-    def logs(values):
-        return k.ew("logs", _M.of(values, 1, len(values)), s=tiny).s if values else []
-
-    lsp = logs(sp)
-    lg = k.ew("lgamma", _M.of([(d - i + 1) / 2.0 for i in range(1, d + 1)], 1, d)).s
-    logn = logs([float(n_samples)])[0]
-    best, arg = -math.inf, 0
-    if d > 1:
-        spd = array.array("d", sp)
-        spa = spd.buffer_info()[0]
-        tbuf = _M.zeros(1, max(d * (d - 1) // 2, 1))
-    for rank in range(1, d):
-        if sp[rank - 1] < 1e-15:
-            continue
-        pu = -rank * _LOG2
-        for i in range(1, rank + 1):
-            pu += lg[i - 1] - _LOGPI * (d - i + 1) / 2.0
-        pl = -_dsum(lsp[:rank]) * n_samples / 2.0
-        v = max(1e-15, _dsum(sp[rank:]) / (d - rank))
-        logv = logs([v])[0]
-        pv = -logv * n_samples * (d - rank) / 2.0
-        m = d * rank - rank * (rank + 1.0) / 2.0
-        pp = _LOG2PI_D * (m + rank) / 2.0
-        # the rank * (2d - rank - 1) / 2 cross terms and their in-order
-        # sum in x_decomp/moves.mojo (pca_mle_terms / pca_mle_pa): the
-        # same double expressions, rounded to float32 as _M.of stores them
-        cnt = int(k.b.x_decomp_pca_mle_terms(spa, [d, rank], float(v), tbuf.addr))
-        tl = k.ew("logs", _M(tbuf.s[:cnt], 1, cnt), s=tiny)
-        pa = float(k.b.x_decomp_pca_mle_pa(tl.addr, cnt, float(logn)))
-        ll = pu + pl + pv + pp - pa / 2.0 - rank * logn / 2.0
-        if ll > best:
-            best, arg = ll, rank
-    return arg
+    if d < 2:
+        return 0
+    words = array.array("f")
+    words.frombytes(array.array("d", spectrum).tobytes())   # glue: the binary64 words, as bytes
+    if k._res():
+        raw = k._raw()
+        sp = _DevBuf(raw, 2 * d)
+        raw.x_decomp_dev_upload(sp.id, words.buffer_info()[0], 2 * d)
+        out = _DevBuf(raw, 1)
+        raw.x_decomp_dev_pca_mle_rank(sp.id, out.id, [d, int(n_samples)])
+        got = array.array("f", [0.0])
+        raw.x_decomp_dev_download(out.id, got.buffer_info()[0], 1)
+        return int(got[0])
+    return int(k.b.x_decomp_pca_mle_rank(words.buffer_info()[0], [d, int(n_samples)]))  # cpu-route: host column binding, CPU-only installs without device entries
 
 
 # ================================================================ LU
@@ -2617,7 +3015,8 @@ class _LUPair(tuple):
     step of iterative refinement, x += LU^-1 (B - A x), the residual in
     float-float on the device. #: audit 2026-10-04: lu-solve / lu-factor
     synthetic relative_residual 3.26e-06 vs numpy 3.26e-08, torch-gpu
-    8.23e-07; -D MOJOLEARN_LU_QOLD restores the unrefined solve."""
+    8.23e-07; -D MOJOLEARN_LU_QOLD restores the unrefined solve. KEPT for
+    quality 2026-10-04 (rab5-lu: 2.59e-6 -> 3.26e-8, +14-15% time)."""
 
     def __new__(cls, pair, a_m):
         obj = super().__new__(cls, pair)
@@ -2654,8 +3053,34 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
 
 
 def solve(a, b, *, numeric_mode=None):
-    """numpy.linalg.solve through lu_factor + lu_solve (gesv)."""
-    return lu_solve(lu_factor(a, numeric_mode=numeric_mode), b, numeric_mode=numeric_mode)
+    """numpy.linalg.solve through lu_factor + lu_solve (gesv). Lane
+    idn-dense-linalg: one binding entry (`x_decomp_lu_gesv`) when the
+    binding routes there (`x_decomp_idn_flags` bit 1): the same launches
+    with the factor and the pivots resident, so only A and B go up and X
+    comes down; the same words, warning and refusals."""
+    k = _Kit(_mode(numeric_mode))
+    try:
+        flags = int(getattr(k._raw(), "x_decomp_idn_flags")())
+    except (ImportError, AttributeError):
+        flags = 0
+    if not flags & 2:
+        return lu_solve(lu_factor(a, numeric_mode=numeric_mode), b, numeric_mode=numeric_mode)
+    A = _M.from_input(a, "a")
+    if A.r != A.c:
+        raise ValueError(f"expected a square matrix, got {A.r} x {A.c}")
+    n = A.r
+    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
+    B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
+    if B.r != n:
+        raise ValueError(f"b has {B.r} rows, the factorization has {n}")
+    X = B          # from_input's own store: solved in place
+    info = _M.zeros(1, 1)
+    # ORDER MATCHES x_decomp/api.mojo lu_gesv_py: (a, b in/out, info), (n, nrhs)
+    k.b.x_decomp_lu_gesv(A.addr, X.addr, info.addr, [n, B.c])
+    if int(info.s[0]):
+        import warnings
+        warnings.warn(f"Diagonal number {int(info.s[0])} is exactly zero. Singular matrix.", RuntimeWarning, stacklevel=2)
+    return X.out((n,)) if vec else X.out()
 
 
 def _row_of(b):
@@ -2677,8 +3102,9 @@ def _orthonormal_cols(k, A):
 def _flip_u(U, Vt):
     """sklearn svd_flip(u_based_decision=True): each column of U signed so its
     largest-|.| entry (first on a tie) is positive; Vt's rows follow."""
-    fl = _Kit(_backend.default_mode()).absmax_flags(U, True)
-    return U.neg_cols(fl), Vt.neg_rows(fl)
+    k = _Kit(_backend.default_mode())
+    sg = k.absmax_signs(U, True)
+    return k.ew("mul", U, sg), k.ew("mul", Vt, sg.T)
 
 
 def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_iteration_normalizer="auto",
@@ -2752,12 +3178,17 @@ def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normal
     # noise of the column it drives to zero forever, so the small SVD runs on
     # the live columns only; the components past the numerical rank are 0
     # (singular value 0, zero vectors), as the zero Q column already says.
-    live = [j for j, v in enumerate(k.colsum(k.ew("abs", Q)).s) if v != 0.0]
-    if not live:
+    # lane cpu2-l8-decomp: the live count is one word and the live columns
+    # are compacted where Q lives (the stable order of the 0 (live) / 1
+    # (dead) keys puts them first, in column order)
+    cs = k.colsum(k.ew("abs", Q))
+    nlive = k.count_gt(k.ew("abs", cs), 0.0)
+    if not nlive:
         raise ValueError("randomized_svd: M is numerically zero")
     full = Q.c
-    if len(live) < full:
-        Q = Q.take_cols(live)
+    if nlive < full:
+        dead = k.ew("adds", k.ew("scale", k.ew("gts", k.ew("abs", cs), s=0.0), s=-1.0), s=1.0)
+        Q = k.take_cols_m(Q, k.order_small(dead), nlive)
     B = k.mm(Q, A, ta=True)
     Uh, S, Vt = _thin_svd(k, B, min(B.r, B.c), u_based=True)
     if S.c < full:
@@ -2803,7 +3234,7 @@ def _tsqr_lstsq_on(m, nn, nrhs):
     return nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs
 
 
-def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False):
+def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False, Ra=None):
     """(X nn x nrhs, residuals _M 1 x nrhs or None, rank, S 1 x nn) of
     min ||A X - B|| through the blocked TSQR of [A | B] (lane
     neural-pass140; x_decomp/tsqr_core.mojo): R_aug = [[R, C], [0, R22]]
@@ -2821,13 +3252,18 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False):
     in balanced units as the normal equations route did, and X is
     multiplied by s after. A power of two scales without rounding, so
     R S is what the TSQR of A S gives; every step stays on the binding's
-    cells (the same words on every column)."""
+    cells (the same words on every column).
+
+    `Ra` (lane idn-dense-linalg): R_aug already factored by the caller
+    (`linear_model._ols_tsqr_centered`'s one entry); a_arr and b_arr are
+    then not read."""
     from ._linalg_impl import _svd_tall
     n = nn + nrhs
-    Ra = _M.zeros(n, n)
-    # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), (m, d, nrhs, keep)
-    k.b.x_decomp_tsqr_r(addr_ro(a_arr, name="a"), addr_ro(b_arr, name="b"), Ra.addr,
-                        [int(m), int(nn), int(nrhs), 0])
+    if Ra is None:
+        Ra = _M.zeros(n, n)
+        # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), (m, d, nrhs, keep)
+        k.b.x_decomp_tsqr_r(addr_ro(a_arr, name="a"), addr_ro(b_arr, name="b"), Ra.addr,
+                            [int(m), int(nn), int(nrhs), 0])
     top = Ra.rows(0, nn)
     R, C = top.cols(0, nn), top.cols(nn, n)
     sc = None
@@ -2835,8 +3271,8 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False):
         sc = k.ew("p2scale", k.colsum(k.ew("sq", R)))
         R = k.ew("mul", R, sc)
     Ur, S, Vt = _svd_tall(k, R, False)
-    cut = _f32(S.s[0] * rcond)
-    rank = sum(1 for v in S.s if v > cut)
+    cut = _f32(k.word(S, 0) * rcond)
+    rank = k.count_gt(S, cut)       # lane cpu2-l8-decomp: two words, not S
     inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
     X = k.mm(Vt, k.ew("mul", k.mm(Ur, C, ta=True), inv.T), ta=True)
     if sc is not None:
@@ -2887,8 +3323,8 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     U, S, Vt = _thin_svd(k, A, r, u_based=True)
     if rcond is None:
         rcond = _F32_EPS * max(m, nn)
-    cut = _f32(S.s[0] * rcond) if r else 0.0
-    rank = sum(1 for v in S.s if v > cut)
+    cut = _f32(k.word(S, 0) * rcond) if r else 0.0
+    rank = k.count_gt(S, cut)       # lane cpu2-l8-decomp: two words, not S
     inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
     X = k.mm(Vt, k.ew("mul", k.mm(U, B, ta=True), inv.T), ta=True)
     if rank == nn and m > nn:
@@ -2953,14 +3389,15 @@ class _PLS(_Base):
 
     def _power(self, k, X, Y, norm_y):
         eps = _F32_EPS
-        y_score = None
-        for j in range(Y.c):
-            col = Y.cols(j, j + 1)
-            if any(abs(v) > eps for v in col.s):
-                y_score = col
-                break
-        if y_score is None:
+        # the first column of Y with some |y| > eps (lane cpu2-l8-decomp,
+        # re-audit L8 `_PLS._power`): per-column counts on the device, one
+        # word for "any", and the column found by the stable order of the
+        # 0 (live) / 1 (dead) keys, gathered where Y lives (no column download)
+        cnt = k.colsum(k.ew("gts", k.ew("abs", Y), s=eps))
+        if k.count_gt(cnt, 0.0) == 0:
             raise StopIteration("y residual is constant")
+        first = k.order_small(k.ew("adds", k.ew("scale", k.ew("gts", cnt, s=0.0), s=-1.0), s=1.0))
+        y_score = k.take_cols_m(Y, first, 1)
         xw_old = None
         if self._pmode == "B":
             Xp, Yp = _pinv(k, X), _pinv(k, Y)
@@ -3015,9 +3452,10 @@ class _PLS(_Base):
             # column, the count of |y| >= thr (-|y| <= -thr, exact) on the
             # device; q values come back
             live = k.colsum(k.ew("le", k.ew("scale", k.ew("abs", Yk), s=-1.0), _M.of([-thr], 1, 1)))
-            dead = [v == 0.0 for v in live.s]
-            if any(dead):
-                Yk = k.ew("mul", Yk, _M.of([0.0 if d else 1.0 for d in dead], 1, q))
+            # lane cpu2-l8-decomp: one word ("is any column dead?") and the
+            # 0/1 mask made on the device (live count > 0), not q flags
+            if k.count_gt(live, 0.0) < q:
+                Yk = k.ew("mul", Yk, k.ew("gts", live, s=0.0))
             try:
                 if getattr(self, "algorithm", "nipals") == "svd":
                     # `_get_first_singular_vectors_svd`: the first singular pair of X^T Y
@@ -3032,13 +3470,11 @@ class _PLS(_Base):
                 break
             if getattr(self, "algorithm", "nipals") != "svd":
                 self.n_iter_.append(it)
-            # _svd_flip_1d: the largest-|.| entry of x_weights positive
-            best, arg = -1.0, 0
-            for j, v in enumerate(xw.s):
-                if abs(v) > best:
-                    best, arg = abs(v), j
-            if xw.s[arg] < 0:
-                xw, yw = xw.neg_cols([True]), yw.neg_cols([True])
+            # _svd_flip_1d: the largest-|.| entry of x_weights (the first on
+            # a tie) positive; its sign as a 1 x 1 device value (lane
+            # cpu2-l8-decomp: absmax_sign_cell over xw's one column)
+            sg = k.absmax_signs(xw, True)
+            xw, yw = k.ew("mul", xw, sg), k.ew("mul", yw, sg)
             x_scores = k.mm(Xk, xw)
             y_ss = k.const(1.0) if norm_y else _dot(k, yw, yw)
             y_scores = k.ew("div", k.mm(Yk, yw), y_ss)
@@ -3052,11 +3488,11 @@ class _PLS(_Base):
                 Yk = k.ew("sub", Yk, k.mm(x_scores, y_load, tb=True))
             xw_c.append(xw); yw_c.append(yw); xs_c.append(x_scores); ys_c.append(y_scores)
             xl_c.append(x_load); yl_c.append(y_load)
-        self.x_weights_m_ = _hstack(*xw_c)
-        self.y_weights_m_ = _hstack(*yw_c)
-        self.x_loadings_m_ = _hstack(*xl_c)
-        self.y_loadings_m_ = _hstack(*yl_c)
-        self._x_scores_m, self._y_scores_m = _hstack(*xs_c), _hstack(*ys_c)
+        self.x_weights_m_ = k.hstack(xw_c)
+        self.y_weights_m_ = k.hstack(yw_c)
+        self.x_loadings_m_ = k.hstack(xl_c)
+        self.y_loadings_m_ = k.hstack(yl_c)
+        self._x_scores_m, self._y_scores_m = k.hstack(xs_c), k.hstack(ys_c)
         self.x_rotations_m_ = k.mm(self.x_weights_m_, _pinv(k, k.mm(self.x_loadings_m_, self.x_weights_m_, ta=True)))
         self.y_rotations_m_ = k.mm(self.y_weights_m_, _pinv(k, k.mm(self.y_loadings_m_, self.y_weights_m_, ta=True)))
         coef = k.mm(self.x_rotations_m_, self.y_loadings_m_, tb=True)          # p x q
@@ -3203,39 +3639,48 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
         A = k.mm(code, code, ta=True)
     if B is None:
         B = k.mm(Y, code, ta=True)
-    # lane/apple-fast-gap-clus3: the atom loop on the device when the build
-    # exports it (FAST + Apple default, off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF, x_decomp/dict_fast.mojo);
-    # an unused atom (the Philox resample) or positive_dict keep the loop
+    # lane/apple-fast-gap-clus3: the atom loop in one fused device entry when
+    # the build exports it (FAST on every vendor since lane cpu2-l8-decomp;
+    # off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF, x_decomp/dict_fast.mojo); an
+    # unused atom (the Philox resample) or positive_dict keep the loop below
+    nc = D.r
+    dg = k.diag(A)                       # A's diagonal, 1 x nc, where A lives
+    used = k.count_gt(dg, 1e-6)          # one word: every atom used?
     fn = k._dict_dev() if not positive and D.r * D.c else None
-    if fn is not None:
-        As = A.s
-        if all(As[j * A.c + j] > 1e-6 for j in range(D.r)):  # glue: the nc diagonal reads the loop made
-            Dn = k._dout(D.r, D.c)
-            fn(k._did(D), k._did(A), k._did(B), Dn._d.id, [D.r, D.c])
-            return Dn, code
-    rows = [D.rows(j, j + 1) for j in range(D.r)]
+    if fn is not None and used == nc:
+        Dn = k._dout(D.r, D.c)
+        fn(k._did(D), k._did(A), k._did(B), Dn._d.id, [D.r, D.c])
+        return Dn, code
+    # lane cpu2-l8-decomp (re-audit L8, `_update_dict`): the loop keeps the
+    # dictionary as ONE matrix where the kit keeps it (on the device for a
+    # GPU kit) and writes atom j's new row into it in place: the same values
+    # the per-atom host stack of the rows gave (rows before j updated), with
+    # no download of an atom, of A or of B. A[j, j] is a 1 x 1 operand of the
+    # division (the same cell as the old host constant); the per-atom
+    # used/unused decision is one word, read only when some atom is unused.
+    Dm = k.copy(D)
     zero_cols = []
-    for j in range(D.r):
-        ajj = A.s[j * A.c + j]
-        if ajj > 1e-6:
-            Dcur = _vstack(*rows)
-            upd = k.ew("sub", B.cols(j, j + 1).T, k.mm(A.rows(j, j + 1), Dcur))
-            rows[j] = k.ew("add", rows[j], k.ew("div", upd, k.const(ajj)))
+    for j in range(nc):  # glue: sklearn's atom order, each atom a chain of kit cells on the resident D
+        ajj = dg.cols(j, j + 1)
+        if used == nc or k.word(ajj) > 1e-6:
+            upd = k.ew("sub", B.cols(j, j + 1).T, k.mm(A.rows(j, j + 1), Dm))
+            row = k.ew("add", Dm.rows(j, j + 1), k.ew("div", upd, ajj))
         else:
             c = counter[0] if counter is not None else 0
-            rows[j] = _resample_atom(k, Y, seed, c)
+            row = _resample_atom(k, Y, seed, c)
             if counter is not None:
                 counter[0] += 1
             zero_cols.append(j)
         if positive:
-            rows[j] = k.ew("maxs", rows[j], s=0.0)
-        nrm = k.ew("sqrt", k.total(k.ew("sq", rows[j])))
-        rows[j] = k.ew("div", rows[j], k.ew("maxs", nrm, s=1.0))
+            row = k.ew("maxs", row, s=0.0)
+        nrm = k.ew("sqrt", k.total(k.ew("sq", row)))
+        row = k.ew("div", row, k.ew("maxs", nrm, s=1.0))
+        k.place_rows(Dm, row, j)
     if zero_cols:
         code = k.copy(code)
         for j in zero_cols:
             k.fill0(code, j, code.c, code.r)
-    return _vstack(*rows), code
+    return Dm, code
 
 
 def _cost(k, X, code, D, alpha):
@@ -3257,8 +3702,8 @@ def _dict_learning(k, X, nc, alpha, max_iter, tol, method, seed, code_init=None,
     if nc <= r:
         code, D = code.cols(0, nc), D.rows(0, nc)
     else:
-        code = _hstack(code, _M.zeros(code.r, nc - r))
-        D = _vstack(D, _M.zeros(nc - r, D.c))
+        code = k.hstack([code, _M.zeros(code.r, nc - r)])
+        D = k.vstack([D, _M.zeros(nc - r, D.c)])
     errors = []
     ii = 0
     counter = [0]
@@ -3285,7 +3730,7 @@ class _SparseCoding(_Base):
                               alpha=ta, n_nonzero_coefs=self.transform_n_nonzero_coefs,
                               max_iter=self.transform_max_iter, positive=self.positive_code)
         if self.split_sign:
-            code = _hstack(k.ew("maxs", code, s=0.0), k.ew("scale", k.ew("mins", code, s=0.0), s=-1.0))
+            code = k.hstack([k.ew("maxs", code, s=0.0), k.ew("scale", k.ew("mins", code, s=0.0), s=-1.0)])
         return code
 
     def transform(self, X):
@@ -3355,7 +3800,7 @@ class DictionaryLearning(_SparseCoding):
         self.n_iter_ = it
         self.n_features_in_ = M.c
         if self.split_sign:
-            code = _hstack(k.ew("maxs", code, s=0.0), k.ew("scale", k.ew("mins", code, s=0.0), s=-1.0))
+            code = k.hstack([k.ew("maxs", code, s=0.0), k.ew("scale", k.ew("mins", code, s=0.0), s=-1.0)])
         return code.out()
 
 
@@ -3403,7 +3848,7 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         if nc <= D.r:
             D = D.rows(0, nc)
         else:
-            D = _vstack(D, _M.zeros(nc - D.r, m))
+            D = k.vstack([D, _M.zeros(nc - D.r, m)])
         if self.shuffle:
             Xt = k.take_rows(M, k.order(k.rand(1, n, seed, 50, 0)))
         else:
@@ -3476,10 +3921,8 @@ class _BaseSparsePCA(_Base):
         k = self._kit()
         Xc = k.ew("sub", _M.from_input(X), self.mean_m_)
         C = self.components_m_
-        G = k.mm(C, C, tb=True)
-        G = G.copy()
-        for i in range(G.r):
-            G.s[i * G.c + i] = _f32(G.s[i * G.c + i] + self.ridge_alpha)
+        # lane cpu2-l8-decomp: ridge_alpha added to the diagonal where G lives
+        G = k.diag_add(k.mm(C, C, tb=True), _M.of([float(self.ridge_alpha)], 1, 1))
         lu, piv, _ = k.lu(G)
         U = k.lu_solve(lu, piv, k.mm(C, Xc, tb=True)).T
         return U.out()
@@ -3889,11 +4332,10 @@ def _kdot(k, a, b):
     return float(k.mm(a, b, ta=True).s[0])
 
 
-def _lanczos_dev_batch(k, aid, Qd, ABd, ab, n, j, m, cap, alphas, betas):
-    """Steps j .. m-1 on the device, then their alphas and betas appended up to
+def _lanczos_batch(run, ab, n, j, m, cap, alphas, betas):
+    """Steps j .. m-1 (`run`), then their alphas and betas appended up to
     the first stop (`_lanczos_top`'s breakdown test). Returns (j, stop)."""
-    k.b.x_decomp_dev_lanczos(aid, Qd._d.id, ABd._d.id, [n, j, m, cap])
-    k.b.x_decomp_dev_download(ABd._d.id, ab.buffer_info()[0], 2 * cap)
+    run(j, m)
     for jj in range(j, m):  # glue: per-step scalars, at most _LANCZOS_MAX_M
         a, b = float(ab[jj]), float(ab[cap + jj])
         alphas.append(a)
@@ -3903,62 +4345,62 @@ def _lanczos_dev_batch(k, aid, Qd, ABd, ab, n, j, m, cap, alphas, betas):
     return m, False
 
 
+#: the Lanczos basis cap in floats ((cap + 1) * n): past it the exact dense solve runs
+_LANCZOS_DEV_MAX_FLOATS = 1 << 26
+
+
 def _lanczos_top(k, A, nc):
     """The nc largest eigenpairs of symmetric A by Lanczos with full
-    reorthogonalization (classical Gram-Schmidt, twice), every product on
-    the kit: A q, the basis projections and the updates. The basis starts at
+    reorthogonalization (classical Gram-Schmidt, twice). The basis starts at
     max(2 nc + 1, 20) vectors (ARPACK's ncv) and doubles until every wanted
     Ritz pair's residual estimate beta_m |y_m| is at most _LANCZOS_TOL times
     the largest |Ritz value|. Returns None when that has not happened by
     _LANCZOS_MAX_M vectors (the caller then runs the exact solve), so the
     route never returns a less converged answer than it promises. The start
     vector is a seeded uniform draw centred at 0 (a constant vector is
-    orthogonal to a centred kernel's spectrum)."""
+    orthogonal to a centred kernel's spectrum).
+
+    Lane cpu2-l8-decomp (re-audit L8, `_lanczos_top`): the steps run in Mojo
+    in every mode, the basis in ONE matrix that never leaves where the kit
+    keeps it: on a GPU kit `x_decomp_dev_lanczos` (x_decomp/lanczos_dev.mojo,
+    enqueued, the alphas and betas read once a batch), on the host column
+    `x_decomp_lanczos` (x_decomp/lanczos_host.mojo, the same steps and
+    words). The Python step that downloaded q and re-uploaded the basis twice
+    a step is deleted, and the Ritz test reads two words (max |theta| and
+    max |beta y|, reduced where they live)."""
     n = A.r
+    cap = min(n, _LANCZOS_MAX_M)
+    if (cap + 1) * n > _LANCZOS_DEV_MAX_FLOATS:
+        return None
     q = k.ew("adds", k.rand(n, 1, 0x1A2C05, 91, 0), s=-0.5)
     q = k.ew("scale", q, s=1.0 / math.sqrt(_kdot(k, q, q)))
-    QT = array.array("f")
+    ab = array.array("f", [0.0]) * (2 * cap)
+    if k._res():
+        Qd = k._dout(cap + 1, n)
+        k.place_rows(Qd, q.reshape(1, n), 0)
+        ABd = k._dout(1, 2 * cap)
+        aid = k._did(A)
+
+        def run(j0, j1):
+            k.b.x_decomp_dev_lanczos(aid, Qd._d.id, ABd._d.id, [n, j0, j1, cap])
+            k.b.x_decomp_dev_download(ABd._d.id, ab.buffer_info()[0], 2 * cap)
+    else:
+        Qd = _M.zeros(cap + 1, n)
+        k.place_rows(Qd, q.reshape(1, n), 0)
+
+        def run(j0, j1):
+            k.b.x_decomp_lanczos(A.addr, Qd.addr, ab.buffer_info()[0], [n, j0, j1, cap])
     alphas, betas = [], []
     m = min(n, max(2 * nc + 1, 20))
     j = 0
     stop = False
-    dev = _lanczos_dev_on(k, A)
-    if dev:
-        # lane/apple-fast-gap-linalg2-kpca (-D MOJOLEARN_KPCA_FAST_LANCZOS_DEV,
-        # x_decomp/lanczos_dev.mojo): the basis on the device (row j = q_j),
-        # each batch of steps enqueued in Mojo and its alphas and betas read
-        # in ONE download; the restart test and the Ritz extraction below
-        # are this route's
-        cap = min(n, _LANCZOS_MAX_M)
-        Qd = k._dout(cap + 1, n)
-        qs = q.s
-        k.b.x_decomp_dev_upload(Qd._d.id, qs.buffer_info()[0], n)
-        ABd = k._dout(1, 2 * cap)
-        aid = k._did(A)
-        ab = array.array("f", [0.0]) * (2 * cap)
     while True:
-        if dev and j < m and not stop:
-            j, stop = _lanczos_dev_batch(k, aid, Qd, ABd, ab, n, j, m, cap, alphas, betas)
-        while j < m and not stop:
-            QT.extend(q.s)
-            w = k.mm(A, q)
-            Qj = _M(QT[:], j + 1, n)
-            c = k.mm(Qj, w)
-            a = float(c.s[j])
-            w = k.ew("sub", w, k.mm(Qj, c, ta=True))
-            c = k.mm(Qj, w)
-            a += float(c.s[j])
-            w = k.ew("sub", w, k.mm(Qj, c, ta=True))
-            alphas.append(a)
-            b = math.sqrt(max(_kdot(k, w, w), 0.0))
-            betas.append(b)
-            j += 1
-            if b <= 1e-30 * max(1.0, abs(a)) or j == n:
-                stop = True
-                break
-            q = k.ew("scale", w, s=1.0 / b)
+        if j < m and not stop:
+            j, stop = _lanczos_batch(run, ab, n, j, m, cap, alphas, betas)
+        # the tridiagonal T from the per-step scalars the batch read (m-sized
+        # scalar control, at most _LANCZOS_MAX_M squared words)
         T = [0.0] * (j * j)
-        for i in range(j):
+        for i in range(j):  # glue: the batch's own alphas and betas into T
             T[i * j + i] = alphas[i]
             if i + 1 < j:
                 T[i * j + i + 1] = T[(i + 1) * j + i] = betas[i]
@@ -3966,36 +4408,17 @@ def _lanczos_top(k, A, nc):
         top = list(range(j - 1, max(j - 1 - nc, -1), -1))
         if len(top) < nc:
             return None
-        big = max(abs(th.s[i]) for i in top) or 1.0
-        res = [abs(betas[j - 1] * Y.s[(j - 1) * j + i]) for i in top]
-        if stop or max(res) <= _LANCZOS_TOL * big:
+        big = k.word(k.reduce(th.take_cols(top), k._SEL_MAXABS)) or 1.0
+        res = k.word(k.reduce(k.ew("scale", Y.rows(j - 1, j).take_cols(top), s=betas[j - 1]), k._SEL_MAXABS))
+        if stop or res <= _LANCZOS_TOL * big:
             break
-        if m >= min(n, _LANCZOS_MAX_M):
+        if m >= cap:
             return None
         m = min(n, 2 * m, _LANCZOS_MAX_M)
     Yt = Y.take_cols(top)
-    QM = _M._on_device(Qd._d, j, n) if dev else _M(QT[:j * n], j, n)
+    QM = _M._on_device(Qd._d, j, n) if Qd._d is not None else _M(Qd.s[:j * n], j, n)
     V = k.mm(QM, Yt, ta=True)
     return th.take_cols(top), V
-
-
-#: the device Lanczos basis cap in floats ((cap + 1) * n): past it the host loop runs
-_LANCZOS_DEV_MAX_FLOATS = 1 << 26
-
-
-def _lanczos_dev_on(k, A):
-    """lane/apple-fast-gap-linalg2-kpca: whether this kit's binding carries
-    the device Lanczos (`-D MOJOLEARN_KPCA_FAST_LANCZOS_DEV`, FAST + Apple,
-    x_decomp/lanczos_dev.mojo), read back from its compile-time constant (no
-    env read), and the basis fits its cap."""
-    if not k._res():
-        return False
-    try:
-        on = int(k._raw().x_decomp_lanczos_dev_on())
-    except Exception:
-        return False
-    n = A.r
-    return on == 1 and (min(n, _LANCZOS_MAX_M) + 1) * n <= _LANCZOS_DEV_MAX_FLOATS
 
 
 def _top_eig(k, A, nc, topk=False):
@@ -4020,7 +4443,7 @@ def _top_eig(k, A, nc, topk=False):
         w, V = k.eigh(A)
         order = list(range(n - 1, n - 1 - nc, -1))
         w, V = w.take_cols(order), V.take_cols(order)
-    return w, V.neg_cols(k.absmax_flags(V, True))
+    return w, k.ew("mul", V, k.absmax_signs(V, True))
 
 
 class Isomap(_Base):
@@ -4151,11 +4574,10 @@ class Isomap(_Base):
     def reconstruction_error(self):
         self._check("embedding_m_")
         k = self._kit()
-        # a difference of two nearly equal sums: accumulated in float64
-        # (sequential IEEE adds of exact float32 squares) or it cancels
+        # a difference of two nearly equal sums: accumulated in binary64
+        # (exact float32 squares, `_dsum_sq`'s chunked adds) or it cancels
         Kc, ev = self._Kc, self.eigenvalues_m_
-        t = (float(k.b.x_decomp_dsum_sq(Kc.addr, len(Kc.s))) if Kc.r * Kc.c else 0.0) - \
-            (float(k.b.x_decomp_dsum_sq(ev.addr, len(ev.s))) if ev.r * ev.c else 0.0)
+        t = _dsum_sq(k, Kc) - _dsum_sq(k, ev)
         return math.sqrt(t) / self._Kc.r if t > 0 else 0.0
 
 
@@ -4218,73 +4640,58 @@ class MDS(_Base):
         return k.ew("sqrt", k.sqdist(Y, Y))
 
     def _nm_native(self, k, Dis, n):
-        """The non-metric SMACOF bookkeeping in native calls (lane/py-decomp-nbrs):
-        Python gathered n (n - 1) / 2 pairs, fed them to IsotonicRegression as
-        lists (a lambda sort of every pair) and scattered and mirrored them back
-        one element at a time, every iteration (about 1 s per iteration at
-        n = 3000). The same positions, the same stable (x, y) order, the same
-        x_linear isotonic fit and predict calls and the same scatter, as
-        buffers. Returns the per-iteration disparity function."""
-        from . import _expansion_linear as _xlin
-        b = k.b
-        cap = max(n * (n - 1) // 2, 1)
-        pos, mir = array.array("i", [0]) * cap, array.array("i", [0]) * cap
-        m = int(b.x_decomp_triu_nonzero(Dis.addr, n, pos.buffer_info()[0], mir.buffer_info()[0]))
-        pa, ma = pos.buffer_info()[0], mir.buffer_info()[0]
-        dis_w = array.array("f", [0.0]) * max(m, 1)
-        b.x_decomp_gather(Dis.addr, pa, m, dis_w.buffer_info()[0])
-        xorder = array.array("i", [0]) * max(m, 1)
-        b.x_decomp_argsort_f32(dis_w.buffer_info()[0], m, xorder.buffer_info()[0])
-        ir = _xlin.IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)
-        lin = ir._bind(_xlin._BINDING)
+        """Non-metric SMACOF's disparity function (lane cpu2-l8-decomp,
+        re-audit L8 `MDS._nm_native`): one Mojo entry a fit for the setup and
+        one an iteration for the disparities (x_decomp/mds_iso.mojo, the
+        device form x_decomp/mds_iso_dev.mojo, the same words), the pairs
+        and the isotonic fit never leaving where the kit keeps them. The old
+        bookkeeping (host-address triu/gather/sort helpers and x_linear's
+        isotonic fit and predict on host buffers, every iteration) is
+        deleted. Returns disparities(d, first) -> the symmetric n x n P,
+        normalized to sum of squares n (n - 1) / 2 over the upper triangle."""
+        if k._res():
+            N2 = 1 << max(0, (n * n - 1).bit_length())
+            keys, idx, gid = k._dout(1, N2), k._dout(1, N2), k._dout(1, N2)
+            tmp, gst, word = k._dout(1, N2), k._dout(1, N2 + 1), k._dout(1, 1)
+            m, G = k.b.x_decomp_dev_mds_setup(
+                k._did(Dis), [keys._d.id, idx._d.id, gid._d.id, tmp._d.id, gst._d.id, word._d.id], [n, N2])
+            del tmp, word
+            m, G = int(m), int(G)
+            # sm, wt, end, prv, last, hf, hd0, hd1, gv: G values each
+            work = [k._dout(1, max(G, 1)) for _ in range(9)]  # glue: nine scratch matrices
+            hold = (keys, idx, gid, gst, work)
+            ids = [keys._d.id, idx._d.id, gid._d.id, gst._d.id] + [w._d.id for w in work]  # glue: the scratch buffer ids
 
-        def call(algo, X, Y, rows, ip, fp, n_out, n_fw, n_iw):
-            # _expansion_linear._run's one x_linear_fit call, its parameter
-            # list verbatim, the output kept as a buffer (no Python list)
-            out = array.array("f", [0.0]) * max(n_out, 1)
-            lin.x_linear_fit(int(algo), X.buffer_info()[0], Y.buffer_info()[0],
-                             [rows, 1, rows, len(Y), n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)],
-                             [int(v) for v in ip], [float(v) for v in fp], out.buffer_info()[0])  # glue: small x_linear parameter lists
-            return out
+            def run(d, first):
+                _ = hold                # the buffers live as long as this function
+                P = k._dout(n, n)
+                k.b.x_decomp_dev_mds_disp(P._d.id if first else k._did(d), P._d.id, ids,
+                                          [n, m, G, 1 if first else 0])
+                return P
+        else:
+            cap = max(n * (n - 1) // 2, 1)
+            keys = array.array("f", [0.0]) * cap
+            idx, gid = array.array("i", [0]) * cap, array.array("i", [0]) * cap
+            gst = array.array("i", [0]) * (cap + 1)
+            m, G = k.b.x_decomp_mds_setup(Dis.addr, keys.buffer_info()[0], idx.buffer_info()[0],
+                                          gid.buffer_info()[0], gst.buffer_info()[0], [n])
+            m, G = int(m), int(G)
+            gw = max(G, 1)
+            ints = [array.array("i", [0]) * gw for _ in range(5)]  # glue: five int32 scratch buffers
+            work = [array.array("f", [0.0]) * gw] + ints + [array.array("f", [0.0]) * gw]
+            addrs = [a.buffer_info()[0] for a in [keys, idx, gid, gst] + work]  # glue: the scratch buffer addresses
+
+            def run(d, first):
+                _ = (keys, idx, gid, gst, work)     # alive as long as this function
+                P = _M.zeros(n, n)
+                k.b.x_decomp_mds_disp(P.addr if first else d.addr, P.addr, addrs, [n, m, G, 1 if first else 0])
+                return P
 
         def disparities(d, first):
-            # the closure holds pos and mir themselves: their addresses alone
-            # would let the arrays die when _nm_native returns
-            pa, ma = pos.buffer_info()[0], mir.buffer_info()[0]
-            if first:
-                flat = dis_w
-            else:
-                ds = array.array("f", [0.0]) * max(m, 1)
-                b.x_decomp_gather(d.addr, pa, m, ds.buffer_info()[0])
-                order = array.array("i", [0]) * max(m, 1)
-                b.x_decomp_iso_order(dis_w.buffer_info()[0], ds.buffer_info()[0], xorder.buffer_info()[0], m,
-                                     order.buffer_info()[0])
-                ob = order.buffer_info()[0]
-                xa = array.array("f", [0.0]) * max(m, 1)
-                b.x_decomp_gather(dis_w.buffer_info()[0], ob, m, xa.buffer_info()[0])
-                yy = array.array("f", [0.0]) * m
-                b.x_decomp_gather(ds.buffer_info()[0], ob, m, yy.buffer_info()[0])
-                # IsotonicRegression(out_of_bounds='clip').fit(dis_w, ds): increasing, no bounds,
-                # no sample_weight. The ABI of IsotonicRegression.fit since lane/neural-pass70:
-                # ip [increasing, has_y_min, has_y_max, has_weights], float work 6 m, int work
-                # 3 m. This call still passed the old 3 flags and 3 m / m work words, so the
-                # binding read ip[3] past the list and wrote past both work buffers: NaN
-                # thresholds on every device column ("y contains NaN or infinity", refcol
-                # smoke at 811275d5b) and the host column's heap.
-                vals = call(_xlin.ALGO_ISOTONIC, xa, yy, m, [1, 0, 0, 0], [0.0, 0.0], 3 + 2 * m, 6 * m, 3 * m)
-                kk = int(vals[0])
-                thr = vals[3:3 + kk] + vals[3 + m:3 + m + kk]
-                # .transform(dis_w): clip, the thresholds and bounds above
-                flat = call(_xlin.ALGO_ISOTONIC_PREDICT, dis_w, thr, m, [kk, 1],
-                            [float(vals[1]), float(vals[2])], m, 1, 1)
-            P = _M.zeros(n, n)
-            b.x_decomp_scatter(P.addr, pa, m, flat.buffer_info()[0])
+            P = run(d, first)
             ss = k.total(k.ew("sq", P)).s[0]
             P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss))
-            tmp = array.array("f", [0.0]) * max(m, 1)
-            b.x_decomp_gather(P.addr, pa, m, tmp.buffer_info()[0])
-            b.x_decomp_scatter(P.addr, ma, m, tmp.buffer_info()[0])
-            return P
+            return k.ew("add", P, P.T)          # the mirror: u + 0 above, 0 + u below
 
         return disparities
 
@@ -4377,11 +4784,10 @@ class MDS(_Base):
 #: 2,000 on the M3 Ultra). method='standard' only (its factor I - W is
 #: square); 'ltsa', 'hessian' and 'modified' keep the dense route.
 _LLE_ITER_MIN_N = 200
-#: lane/apple-fast-gap-manprep: `_lle_smallest` builds F0 on the device, FAST +
-#: Apple default since the M3 A/B gmp-lle-devf0-* (taxi 3,827 -> 2,570 ms,
-#: istella 3,895 -> 2,653 ms, trustworthiness the same);
-#: MOJOLEARN_LLE_FAST_DEV_F0_OFF=1 restores the host F.cols + _hstack route
-_LLE_FAST_DEV_F0 = _os.environ.get("MOJOLEARN_LLE_FAST_DEV_F0_OFF") != "1"
+#: lane/apple-fast-gap-manprep: `_lle_smallest` builds F0 in cells (FAST +
+#: Apple A/B gmp-lle-devf0-*: taxi 3,827 -> 2,570 ms, istella 3,895 ->
+#: 2,653 ms, trustworthiness the same); every mode and vendor since lane
+#: cpu2-l8-decomp (the env switch and the host route are gone)
 _LLE_ITER_MAX_K = 10
 #: Converged: the sine of the largest principal angle between two successive
 #: wanted Ritz subspaces is at most _LLE_SUBSPACE_TOL, or, under
@@ -4407,8 +4813,10 @@ def _lle_orth(k, Z):
     columns lean together). Each column is first scaled by its 1-norm (the
     shift-invert operator reaches 1 / sigma^2, 1e18 on a null space at
     float32 resolution, whose squares overflow)."""
-    nr = [float(v) for v in k.colsum(k.ew("abs", Z)).s]
-    sc = _M.of([1.0 / v if v > 0.0 and math.isfinite(v) else 1.0 for v in nr], 1, Z.c)
+    # lane cpu2-l8-decomp: the scale vector made where Z lives: 1 / norm
+    # (a zero norm gives 0, an infinite one 0), and 1 where that is not > 0
+    rc = k.ew("recip", k.colsum(k.ew("abs", Z)))
+    sc = k.ew("select", rc, rc, _M.of([1.0], 1, 1), s=0.0)
     h, tau = k.geqrf(k.ew("mul", Z, sc))
     return k.orgqr(h, tau, Z.c)
 
@@ -4461,8 +4869,11 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     un = _M.of([rn] * n, n, 1)
     hrow = _M.of([rn] * n1, 1, n1)
     Fh = k.mm(F, h)
-    dev_f0 = (_LLE_FAST_DEV_F0 and str(k.mode).strip().lower() == "fast" and k._use(F)
-              and _kit_vendor(k) == "metal")
+    # lane fam-decomp / apple-fast-gap-manprep: F0 in cells; lane
+    # cpu2-l8-decomp: in every mode on every column (device and host binding
+    # alike: one arithmetic), no longer behind the IDENTICAL binding bit or
+    # FAST's Metal-only switch (the F.cols + host stack route is gone)
+    dev_f0 = True
     if dev_f0:
         # lane/apple-fast-gap-manprep (2026-10-03), FAST + Apple default: F0 = [F^ | u] built on the device in three cells
         # instead of F.cols (F downloaded, then one strided Python slice per
@@ -4485,7 +4896,7 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
         return None
     floor = _LLE_NULL_FLOOR * _F32_EPS * rms
     if not dev_f0:
-        F0 = _hstack(Fhat, un)
+        F0 = k.hstack([Fhat, un])
     if dev_f0 and k.w4_flags() & 1:
         # lane/apple-fast-w4-decomp LLE_FAST_DEV_LU (-D MOJOLEARN_LLE_FAST_DEV_LU,
         # FAST + Apple): F0 factored where it lives; the same launches as the
@@ -4526,16 +4937,16 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
         # [X; 0] (range(F^), n x p), then F^+ of that = the first n - 1 rows
         # of F0^-1; each half stretches the block by 1 / sigma, not
         # 1 / sigma^2, so the columns stay far from float32 dependence
-        Y = solve_t(_M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c))
+        Y = solve_t(k.pad_zero_row(X))      # [X; 0] (lane fix-d1-decomp: on the device, IDN_LLE_PAD_DEV)
         Y = _lle_orth(k, k.ew("sub", Y, k.mm(z, k.mm(z, Y, ta=True))))
         X = _lle_orth(k, solve(Y).rows(0, n1))
         if dev_f0:          # F^ X = F0 [X; 0] (the last column of F0 meets a zero row)
-            S, Vt = k.svd(k.mm(F0, _M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c)))
+            S, Vt = k.svd(k.mm(F0, k.pad_zero_row(X)))
         else:
             S, Vt = k.svd(k.mm(Fhat, X))
         X = k.mm(X, Vt, tb=True)
         Y = X.take_cols(want)
-        if it >= 2 and max(float(v) for v in S.take_cols(want).s) <= floor:
+        if it >= 2 and k.word(k.reduce(S.take_cols(want), k._SEL_MAX)) <= floor:
             break
         if prev is not None:
             E = k.ew("sub", Y, k.mm(prev, k.mm(prev, Y, ta=True)))
@@ -4552,16 +4963,19 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     sv = S.take_cols(want)
     # back to R^n: H [Y; 0] = [Y; 0] - coef h (h^T [Y; 0])
     t = k.mm(hrow, Y)
-    full = _M(array.array("f", Y.s) + array.array("f", [0.0]) * nc, n, nc)
+    full = k.pad_zero_row(Y)
     V = k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
     # the columns are unit vectors or the solve is not an answer (an
     # overflow, a dropped launch): refuse rather than return them
-    sq = k.colsum(k.ew("sq", V)).s
-    if not all(0.9 <= float(v) <= 1.1 for v in sq) or not all(math.isfinite(float(v)) for v in sv.s):
+    # the unit-norm and finiteness guard as three words (lane cpu2-l8-decomp:
+    # min and max of the squared norms, max |sv|, reduced where they live)
+    sq = k.colsum(k.ew("sq", V))
+    lo, hi = k.word(k.reduce(sq, k._SEL_MIN)), k.word(k.reduce(sq, k._SEL_MAX))
+    if not (0.9 <= lo and hi <= 1.1) or not math.isfinite(k.word(k.reduce(sv, k._SEL_MAXABS))):
         raise RuntimeError(
             "LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of squared norm "
-            f"{[float(v) for v in sq]} (not unit); pass eigen_solver='dense' for the full SVD.")
-    return V.neg_cols(k.absmax_flags(V, True)), sv
+            f"{[float(v) for v in sq.s]} (not unit); pass eigen_solver='dense' for the full SVD.")
+    return k.ew("mul", V, k.absmax_signs(V, True)), sv
 
 
 class LocallyLinearEmbedding(_Base):
@@ -4659,10 +5073,11 @@ class LocallyLinearEmbedding(_Base):
 def _pinvh(k, A):
     """scipy.linalg.pinvh: V diag(1/w) V^T over |w| > max|w| * n * float32 eps."""
     w, V = k.eigh(A)
-    wmax = max(abs(v) for v in w.s) if w.c else 0.0
+    # lane cpu2-l8-decomp: max |w| is one word; the cutoff mask is a select
+    # cell where w lives
+    wmax = k.word(k.reduce(w, k._SEL_MAXABS)) if w.c else 0.0
     cut = _f32(wmax * A.r * _F32_EPS)
-    keep = k.ew("recip", w)
-    inv = _M.of([keep.s[j] if abs(w.s[j]) > cut else 0.0 for j in range(w.c)], 1, w.c)
+    inv = k.ew("select", k.ew("abs", w), k.ew("recip", w), _M.zeros(1, 1), s=cut)
     return k.mm(k.ew("mul", V, inv), V, tb=True)
 
 
@@ -4811,7 +5226,8 @@ class MinCovDet(_Base):
             cen = k.ew("abs", k.ew("sub", X, loc))
             sel, mask = k.select_smallest(cen, h)
             Xs = k.take_rows(X, sel)
-            support = _support_of(mask, n)
+            # the device form's membership is a 0 / 1 float matrix (lane cpu3-python)
+            support = mask.out((n,)).astype("<u1") if isinstance(mask, _M) else _support_of(mask, n)
         else:
             loc = k.colmean(X)
             Xs = X
@@ -4931,13 +5347,14 @@ class EllipticEnvelope(MinCovDet):
         # is -(d in ascending order)[n - 1 - i] (negation is exact)
         dm = self.dist_m_
         nv = dm.r * dm.c
-        o = array.array("i", [0]) * nv
-        k.b.x_decomp_argsort_f32(dm.addr, nv, o.buffer_info()[0])
-        ds = dm.s
         q = 100.0 * self.contamination / 100.0 * (nv - 1)
         lo = int(math.floor(q))
         hi = min(lo + 1, nv - 1)
-        vlo, vhi = -ds[o[nv - 1 - lo]], -ds[o[nv - 1 - hi]]
+        # lane cpu3-python: the kit's order (a device radix sort on a GPU
+        # binding), then the two order statistics one word each
+        o = k.order(dm)
+        vlo = -k.word(dm, int(k.word(o, nv - 1 - lo)))
+        vhi = -k.word(dm, int(k.word(o, nv - 1 - hi)))
         self.offset_ = vlo + (vhi - vlo) * (q - lo)
         return self
 
@@ -4956,10 +5373,13 @@ class EllipticEnvelope(MinCovDet):
         k = self._kit()
         d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
         dec = k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_)
-        out = array.array("i", [0]) * d.r
-        if d.r:
-            k.b.x_decomp_sign_labels(dec.addr, d.r, out.buffer_info()[0])
-        return _fb(out.tobytes(), "<i4", (len(out),))
+        if not d.r:
+            return _fb(b"", "<i4", (0,))
+        # lane cpu3-python: 1 where dec >= 0 (-dec <= 0), else -1 (NaN: -1),
+        # in the kit's cells on either binding
+        ge = k.ew("le", k.ew("scale", dec, s=-1.0), _M.of([0.0], 1, 1))
+        lab = k.ew("select", ge, _M.of([1.0], 1, 1), _M.of([-1.0], 1, 1), s=0.5)
+        return lab.out((d.r,)).astype("<i4")
 
     def fit_predict(self, X, y=None):
         return self.fit(X).predict(X)
@@ -4967,24 +5387,23 @@ class EllipticEnvelope(MinCovDet):
     def score(self, X, y, sample_weight=None):
         """sklearn OutlierMixin/ClassifierMixin.score: accuracy_score(y,
         predict(X), sample_weight), the (weighted) share of exact label
-        matches as an IEEE double (weights summed in order)."""
-        k = self._kit()
+        matches. Lane cpu4-python: the x_metrics device program
+        (`accuracy_fraction`: exact match counts, the weight total its
+        PairSum, the ratio binary64 on the device; the host column runs the
+        same units) replaces the host loop `x_decomp_accuracy`."""
+        from ._expansion_metrics import accuracy_fraction
         pa = self.predict(X)
         n = len(pa)
         ya = as_f64_c(y, ndim=1, name="y")[0]
         if len(ya) != n:
             raise ValueError("y and X have different numbers of rows")
-        if sample_weight is None:
-            hit, tot = k.b.x_decomp_accuracy(addr_ro(ya, name="y"), addr_ro(pa, name="pred"), 0, n)
-            return float(hit) / n
-        wa = as_f64_c(sample_weight, ndim=1, name="sample_weight")[0]
-        if len(wa) != n:
+        if sample_weight is not None and len(as_f64_c(sample_weight, ndim=1, name="sample_weight")[0]) != n:
             raise ValueError("sample_weight and X have different numbers of rows")
-        hit, tw = k.b.x_decomp_accuracy(addr_ro(ya, name="y"), addr_ro(pa, name="pred"),
-                                        addr_ro(wa, name="sample_weight"), n)
-        if float(tw) == 0:
-            raise ZeroDivisionError("Weights sum to zero, can't be normalized")
-        return float(hit) / float(tw)
+        # both sides Float64 labels: one label kind for the encoder
+        try:
+            return accuracy_fraction(ya, pa.astype("<f8"), sample_weight, self.numeric_mode_)
+        except ZeroDivisionError:
+            raise ZeroDivisionError("Weights sum to zero, can't be normalized") from None
 
 
 # ================================================================ implicit ALS
@@ -5073,11 +5492,25 @@ class AlternatingLeastSquares(_Base):
         from ._buffer import frombytes as _fb
         m = S.r * S.c
         n = max(min(N, m), 0)
+        if n and k._use(S):
+            # lane cpu3-python: the (-score, id) order on the device, the
+            # skipped items last; the N first ids and their scores gathered there
+            sk = None
+            if skip:
+                sk = _M.zeros(1, m)
+                ctypes.memmove(sk.addr, skip, 4 * m)   # glue: the caller's skip row, one C copy
+            o, cnt = k._order_dev(S, neg=1, skip=sk)
+            c = min(n, int(k.word(cnt)))
+            if not c:
+                return (_fb(b"", "<i4", (0,)), _fb(b"", "<f4", (0,)))
+            ids = o.rows(0, c)
+            vals = k.take_cols_m(S.reshape(1, m), ids, c)
+            return (ids.out((c,)).astype("<i4"), vals.out((c,)))
         order = array.array("i", [0]) * max(n, 1)
-        c = int(k.b.x_decomp_topn_desc(S.addr, [m, n], skip, order.buffer_info()[0])) if n else 0
+        c = int(k.b.x_decomp_topn_desc(S.addr, [m, n], skip, order.buffer_info()[0])) if n else 0  # cpu-route: host binding only (CPU-only installs); a GPU binding orders on the device above
         vals = array.array("f", [0.0]) * max(c, 1)
         if c:
-            k.b.x_decomp_gather(S.addr, order.buffer_info()[0], c, vals.buffer_info()[0])
+            k.b.x_decomp_gather(S.addr, order.buffer_info()[0], c, vals.buffer_info()[0])  # cpu-route: host binding only, the device route returned above
         return (_fb(order[:c].tobytes(), "<i4", (c,)), _fb(vals[:c].tobytes(), "<f4", (c,)))
 
     def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):
@@ -5154,8 +5587,8 @@ def _randomized_decompose(X, nc, *, center, n_oversamples, n_iter, power_iterati
     Um, Sm, Vm = _rsvd_core(k, A, nc, n_oversamples, n_iter, power_iteration_normalizer, "auto", False,
                             random_state)
     # svd_flip(u_based_decision=False): each row of Vt, U's columns follow
-    fl = k.absmax_flags(Vm, False)
-    Vm, Um = Vm.neg_rows(fl), Um.neg_cols(fl)
+    sg = k.absmax_signs(Vm, False)
+    Vm, Um = k.ew("mul", Vm, sg), k.ew("mul", Um, sg.T)
     out = dict(components=Vm.out(), singular_values=Sm.out((nc,)), mean=mean.out((d,)))
     if center:
         ev = k.ew("scale", k.ew("sq", Sm), s=1.0 / (n - 1))

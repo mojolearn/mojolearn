@@ -40,8 +40,8 @@ from std.math import isinf, isnan
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from glm.impl.qn.glm_base import GLMWithData, QN_FAST_DCONV
-from glm.impl.qn.qn_dconv import dconv_applies, dconv_run
+from glm.impl.qn.glm_base import GLMWithData, QN_FAST_DCONV, QN_IDN_DCONV
+from glm.impl.qn.qn_dconv import dconv_applies, dconv_run, dconv_idn_applies, dconv_idn_run
 from glm.impl.qn.qn_linesearch import (
     ls_backtrack,
     ls_backtrack_projected,
@@ -262,6 +262,29 @@ def min_lbfgs(
                     scalar, n, k, fx, end, n_vec, fx_hist, retcode,
                 )
                 if dc == 1:
+                    _ = len(s_all)
+                    _ = len(y_all)
+                    _ = len(hist)
+                    _ = len(unused)
+                    _ = stage.unsafe_ptr()
+                    _release(S, Y, xp, grad, gradp, drt, scalar)
+                    return retcode
+                saved = True
+                dg_ready = True
+                dir_pending = False
+                step = Float32(1.0)
+                continue
+        # lane fam2-linear, QN_IDN_DCONV (candidate, -D MOJOLEARN_QN_IDN_DCONV):
+        # the same handover in IDENTICAL arithmetic (`dconv_idn_run`); the
+        # device accepts only clean step-1 Armijo iterations and hands every
+        # other one back here, so the iterates are the host loop's.
+        comptime if QN_IDN_DCONV:
+            if k + 1 <= param.max_iterations and dconv_idn_applies(param, f, trace.enabled):
+                var dci = dconv_idn_run(
+                    ctx, param, f, x, xp, grad, gradp, drt, s_all, y_all, hist,
+                    scalar, n, k, fx, end, n_vec, fx_hist, retcode,
+                )
+                if dci == 1:
                     _ = len(s_all)
                     _ = len(y_all)
                     _ = len(hist)

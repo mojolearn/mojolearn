@@ -91,6 +91,8 @@ from svm.checks.device_select import (
 )
 from svm.impl.kernelcache import BatchDescriptor, CACHE_READY, KernelCache
 from svm.impl.fast_update_f import fast_update_f
+from svm.impl.idn_update_f import idn_update_f
+from std.os import getenv
 from svm.impl.results import Results
 from svm.impl.smoblocksolve import (
     SMO_GRID_MAX_BLOCKS,
@@ -145,6 +147,53 @@ comptime SVM_FUSED_UPDATE_F = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_
 """FAST on Apple: the gradient update computes each kernel value where it
 is used (`fast_update_f.mojo`) instead of writing the `nnz x batch` kernel
 tile and reading it back; RBF and linear kernels, n_cols <= 64."""
+
+
+#: lane/fam-linear (2026-10-04): IDENTICAL, every vendor. The gradient update
+#: computes each kernel value where it is used (`idn_update_f.mojo`) instead
+#: of writing the `nnz x batch` kernel tile (identical GEMM + RBF epilogue
+#: launch) and reading it back: RBF and linear kernels, n_cols <= 64, one
+#: device. Same expressions in the same order per cell, so no bit moves and
+#: the host column is untouched. `-D MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF`
+#: (or the master `MOJOLEARN_IDN_ALL_OFF`) keeps the tile path; the sabotage
+#: builds keep it too, so each still fails its gate through the kernels it
+#: names.
+comptime SVM_IDN_FUSED_UPDATE_F = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_SVM_IDN_FUSED_UPDATE_F_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+    and not SAB_FOLD_ROTATE
+    and not SAB_NO_FTZ
+    and not is_defined["MOJOLEARN_SVM_SABOTAGE_STD_EXP"]()
+)
+
+
+#: lane/fam-linear (2026-10-04): IDENTICAL, every vendor. DEVIATION 637's NaN
+#: scan of `alpha` and `f` was three launches per outer iteration (clear the
+#: flag, scan alpha, scan f); it is one: the flag is cleared once before the
+#: loop, and a set flag raises, so nothing ever needs it cleared again. The
+#: same verdict on the same words; no arithmetic.
+#: `-D MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF` (or `MOJOLEARN_IDN_ALL_OFF`)
+#: restores the three launches.
+comptime SVM_IDN_NAN_SCAN_ONE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_SVM_IDN_NAN_SCAN_ONE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+
+
+def flag_nan2_f32_kernel(
+    flag: MutPointer[Int32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`flag_nan_f32_kernel` over two vectors of the same length: `flag[0] =
+    1` if any `a[i]` or `b[i]` is NaN. Plain stores of the same value."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var x = a.unsafe_load(i)
+        var y = b.unsafe_load(i)
+        if x != x or y != y:
+            flag.unsafe_store(0, Int32(1))
 
 
 def fold_order_rank_kernel(
@@ -418,7 +467,18 @@ def hash_i32_list(values: List[Int32]) -> UInt64:
     return h
 
 
-def fold_order_for(nz_idx: List[Int32]) -> List[Int32]:
+def tile_rows_f32_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin], src: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32, n_in: Int32,
+):
+    """dst[i] = src[i % n_rows] for i < n (the `InitPenalty` weighted arm:
+    row i's bound at i and, under EPSILON_SVR, again at i + n_rows)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(i, src.unsafe_load(i % Int(n_rows_in)))
+
+
+def fold_order_for_host(nz_idx: List[Int32]) -> List[Int32]:
     """DEVIATION 634's rank permutation: `order[r]` is the POSITION (in the
     nonzero list) of the r-th smallest training index. Indices are
     distinct within a working set, so the order is total."""
@@ -650,13 +710,16 @@ struct SmoSolver(Movable):
             # `InitPenalty` weighted arm: `C_vec[i] = C * sample_weight[i]`,
             # the product formed once on the host (the caller's bounds), row
             # i's bound at i and, under EPSILON_SVR, again at i + n_rows.
-            var host_c = ctx.enqueue_create_host_buffer[DType.float32](nt)
+            # (lane cpu3-core) the n_rows bounds go up once and a kernel
+            # tiles them over n_train, no host loop over the rows
+            var dc = ctx.enqueue_create_buffer[DType.float32](self.n_rows)
+            ctx.enqueue_copy(dst_buf=dc, src_ptr=self.c_rows.unsafe_ptr())
+            ctx.enqueue_function[tile_rows_f32_kernel](
+                self.C_vec.unsafe_ptr(), dc.unsafe_ptr(), Int32(self.n_rows), Int32(nt),
+                grid_dim=_grid(nt), block_dim=SEL_TPB,
+            )
             ctx.synchronize()
-            for i in range(nt):
-                host_c[i] = self.c_rows[i % self.n_rows]
-            ctx.enqueue_copy(dst_buf=self.C_vec, src_buf=host_c)
-            ctx.synchronize()
-            _ = host_c^
+            _ = dc^
         if self.svmType == C_SVC:
             ctx.enqueue_function[svc_init_kernel](
                 self.f.unsafe_ptr(), y.unsafe_ptr(), Int32(nt),
@@ -749,6 +812,14 @@ struct SmoSolver(Movable):
         var st = StageTimes()
         var t_fit = st.start()
         self.host_nan_flag.unsafe_ptr().unsafe_store(0, Int32(0))
+        comptime if SVM_IDN_NAN_SCAN_ONE:
+            ctx.enqueue_function[set_i32_kernel](
+                self.nan_flag.unsafe_ptr(), Int32(0), grid_dim=1, block_dim=1,
+            )
+        # SVM_IDN_FUSED_UPDATE_F serves one device; the multi-device kernel
+        # rows (`kernel_op`, MOJOLEARN_SVM_DEVICE_COUNT) keep the tile path.
+        var device_setting = String(getenv("MOJOLEARN_SVM_DEVICE_COUNT"))
+        var one_device = device_setting == "" or device_setting == "1"
         while keep_going:
             var t0 = st.start()
             ctx.enqueue_function[fill_f32_kernel](
@@ -827,6 +898,19 @@ struct SmoSolver(Movable):
                         )
                         if fused_f:
                             cache.cache_state = CACHE_READY
+                comptime if SVM_IDN_FUSED_UPDATE_F:
+                    if one_device and (
+                        cache.kp.kernel == KERNEL_RBF or cache.kp.kernel == KERNEL_LINEAR
+                    ):
+                        fused_f = idn_update_f(
+                            ctx, self.f, x, cache.matrix_l2, cache.x_ws_dense,
+                            cache.matrix_l2_ws, self.nz_da, self.fold_order,
+                            nnz_da, n_rows, n_cols, Float32(cache.kp.gamma),
+                            cache.kp.kernel == KERNEL_RBF,
+                            self.svmType == EPSILON_SVR,
+                        )
+                        if fused_f:
+                            cache.cache_state = CACHE_READY
                 while not fused_f and cache.get_next_batch_kernel(ctx, x, bd):
                     st.stop(ctx, "smo.full_tile_kernel", t0)
                     t0 = st.start()
@@ -852,17 +936,26 @@ struct SmoSolver(Movable):
                 st.stop(ctx, "smo.full_tile_kernel", t0)
             t0 = st.start()
             # DEVIATION 637: the NaN scan of alpha and f, read back with diff.
-            ctx.enqueue_function[set_i32_kernel](
-                self.nan_flag.unsafe_ptr(), Int32(0), grid_dim=1, block_dim=1,
-            )
-            ctx.enqueue_function[flag_nan_f32_kernel](
-                self.nan_flag.unsafe_ptr(), self.alpha.unsafe_ptr(), Int32(self.n_train),
-                grid_dim=_grid(self.n_train), block_dim=SEL_TPB,
-            )
-            ctx.enqueue_function[flag_nan_f32_kernel](
-                self.nan_flag.unsafe_ptr(), self.f.unsafe_ptr(), Int32(self.n_train),
-                grid_dim=_grid(self.n_train), block_dim=SEL_TPB,
-            )
+            comptime if SVM_IDN_NAN_SCAN_ONE:
+                # one launch: the flag was cleared before the loop and a set
+                # flag raises, so it never needs clearing again
+                ctx.enqueue_function[flag_nan2_f32_kernel](
+                    self.nan_flag.unsafe_ptr(), self.alpha.unsafe_ptr(),
+                    self.f.unsafe_ptr(), Int32(self.n_train),
+                    grid_dim=_grid(self.n_train), block_dim=SEL_TPB,
+                )
+            else:
+                ctx.enqueue_function[set_i32_kernel](
+                    self.nan_flag.unsafe_ptr(), Int32(0), grid_dim=1, block_dim=1,
+                )
+                ctx.enqueue_function[flag_nan_f32_kernel](
+                    self.nan_flag.unsafe_ptr(), self.alpha.unsafe_ptr(), Int32(self.n_train),
+                    grid_dim=_grid(self.n_train), block_dim=SEL_TPB,
+                )
+                ctx.enqueue_function[flag_nan_f32_kernel](
+                    self.nan_flag.unsafe_ptr(), self.f.unsafe_ptr(), Int32(self.n_train),
+                    grid_dim=_grid(self.n_train), block_dim=SEL_TPB,
+                )
             ctx.enqueue_copy(
                 dst_ptr=self.host_nan_flag.unsafe_ptr(), src_buf=self.nan_flag
             )

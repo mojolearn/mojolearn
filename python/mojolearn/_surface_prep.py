@@ -99,6 +99,7 @@ FAMILIES = (
             "x_prep_run", "x_prep_numeric_mode", "x_prep_vendor",
             "x_prep_ii_rows", "x_prep_ii_gather", "x_prep_ii_scatter", "x_prep_ii_conv",
             "x_prep_strat_folds", "x_prep_kfold_folds", "x_prep_py2mojo",
+            "x_prep_label_present", "x_prep_idn_int",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the prep lane's CPU route (preprocessing additions, naive Bayes, discriminant analysis).",

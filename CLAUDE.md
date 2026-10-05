@@ -4,11 +4,15 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
 
 ## Logs and output
 
+- These context rules also apply to Codex and all delegated lanes; see `AGENTS.md`.
+- Include the log/context reminder from `AGENTS.md` in every lane brief, spawn prompt and resumed assignment, and propagate it to nested subagents.
+- Prefer targeted `rg` searches with bounded context and line lengths (`-m 20 -C 3 --max-columns 240 --max-columns-preview`); use `grep` when `rg` is unavailable. Narrow to relevant files first, and parse large JSON reports for selected fields instead of dumping them.
 - Never print a whole log, race output or build output. Use `tail -n 20`, `grep -m 20`, or `grep -E 'error|FAIL|DISAGREE|status='`.
 - For a build, read only its exit code and the first error: `... > build.log 2>&1; echo rc=$?; grep -m 5 -B 2 -A 8 'error' build.log`.
 - For a race directory, read the one-line summary (`ALGOS lane=... status=... median_ms=...`), not the race log.
 - Never read a subagent transcript or a `tasks/*.output` file.
 - Put long results in a file under `~/mojolearn-evidence/` and report the path plus a few lines.
+- Keep the original exit status and expected coverage. Filtered output is not proof of success; report failures, skipped/incomplete work, and expand the relevant diagnostic block when necessary.
 
 ## Lane subagents
 
@@ -56,3 +60,20 @@ The orchestrator saves every lane brief as `~/mojolearn-evidence/briefs-<date>/<
 - Never time a CPU or host route. The CPU is for verification digests, CPU-only installs and inference.
 - Never add, rent, extend or release an Apple machine.
 - Race and measure tools default to our GPU arm only; opponents are scored once, stored, and run only by an explicit opponent job.
+
+## Wait for Mojo and Modular
+
+If Mojo or Modular does not support something yet, do not build a workaround for it; wait for their support.
+Examples: an AMD portable kernel path needs Mojo to keep kernel IR (or bitcode) and to accept generic gfx targets;
+until Modular ships that, we do not pursue it (decided 2026-10-04; the parked prototype is on `lane/amd-portable`,
+with the evidence in `docs/AMD_PORTABLE_PATH.md` on that branch). Do not hand-rewrite compiler output, patch
+toolchain internals, or ship unsupported build modes. Record the ask for Modular instead and move on.
+
+## No dimension targeting, in any mode
+
+No dispatch, tile, threshold, cap or route rule may key on an exact benchmark dimension, a size chosen to sit just above or
+below a board row (rows, features, classes, k, vocabulary), or a board dataset name. This applies to FAST and to IDENTICAL on
+every vendor. A rule must come from size, hardware or cost reasoning that covers neighboring shapes, stated in a comment.
+In IDENTICAL, removing such a rule may change bits: that is allowed, because bits only have to match across NVIDIA, AMD,
+Apple and the host column within one version, never across versions. Change all columns together. Each removal gets an
+A/B with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.

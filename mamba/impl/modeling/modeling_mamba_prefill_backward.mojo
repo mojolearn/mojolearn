@@ -6,6 +6,7 @@ The certified launch/reduction order and post-sync convolution layout copy
 are retained unchanged. The driver and Python binding use this same pass.
 """
 from std.memory import bitcast
+from std.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -17,6 +18,7 @@ comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DE
 
 
 from core.identity_trace import IdentityTrace
+from mamba.impl.modules.mamba3_refusal import mamba_refuse_grad_output
 from mamba.checks.mamba_backward import (
     PROJ_OUT,
     PROJ_DT,
@@ -105,11 +107,32 @@ struct Mamba1PrefillGradients(Movable):
         self.stage_dC = List[Float32]()
 
 
-def _ones(n: Int) -> List[Float32]:
-    var out = List[Float32]()
-    for _ in range(n):
-        out.append(Float32(1.0))
-    return out^
+def m1_conv_w_interleave_kernel(
+    out_ptr: MutPointer[Float32, MutAnyOrigin],
+    t0_ptr: MutPointer[Float32, MutAnyOrigin],
+    t1_ptr: MutPointer[Float32, MutAnyOrigin],
+    t2_ptr: MutPointer[Float32, MutAnyOrigin],
+    t3_ptr: MutPointer[Float32, MutAnyOrigin],
+    p0: Int32,
+    p1: Int32,
+    p2: Int32,
+    p3: Int32,
+    di_in: Int32,
+):
+    """cpu3-seq (2026-10-04): the conv1d weight gradient's layout copy on
+    the device, one thread per channel `d`: the four tap gradients land at
+    `out[d * D_CONV + p_k]` (`p_k = mamba_reduction_tap(RED_CONV_W_TAPk)`),
+    every other cell keeps the zero fill. A copy, no arithmetic, so no bit
+    moves; it replaces the host loop that downloaded the four taps and
+    interleaved them."""
+    var d = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if d >= Int(di_in):
+        return
+    var base = d * D_CONV
+    out_ptr.unsafe_store(base + Int(p0), t0_ptr.unsafe_load(d))
+    out_ptr.unsafe_store(base + Int(p1), t1_ptr.unsafe_load(d))
+    out_ptr.unsafe_store(base + Int(p2), t2_ptr.unsafe_load(d))
+    out_ptr.unsafe_store(base + Int(p3), t3_ptr.unsafe_load(d))
 
 
 def mamba1_prefill_backward(
@@ -126,10 +149,6 @@ def mamba1_prefill_backward(
         raise Error("mamba1 backward: B and L must be positive")
     if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):
         raise Error("mamba1 backward: input and grad_output lengths must equal B*L*d_model")
-    for i in range(len(grad_output)):
-        var bits = bitcast[DType.uint32](grad_output[i])
-        if (bits & UInt32(0x7f800000)) == UInt32(0x7f800000):
-            raise Error("mamba1 backward: non-finite grad_output at flat index " + String(i))
     var dims = weights.dims.copy()
     var m = b * l
     # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
@@ -155,6 +174,10 @@ def mamba1_prefill_backward(
     )
 
     var dres = mamba_upload(ctx, grad_output)
+    # cpu3-seq: the grad_output finite refusal runs on the uploaded buffer
+    # (same predicate by bits, same first flat index and message), not as a
+    # host walk over the List.
+    mamba_refuse_grad_output(ctx, String("mamba1"), dres, grad_output)
     var workspace = mamba_zeros(
         ctx, mamba_backward_workspace_max_floats(dims, m)
     )
@@ -233,7 +256,12 @@ def mamba1_prefill_backward(
         ctx, dw_dt, ddtp, stages.dt_low, workspace, PROJ_DT, dims, m
     )
     var db_dt = mamba_zeros(ctx, dims.d_inner)
-    var ones = mamba_upload(ctx, _ones(m))
+    # cpu3-seq: the reduction's ones vector filled on the device (no host
+    # List of m ones uploaded); mamba_zeros' guard layout, body set to 1.
+    var ones = mamba_zeros(ctx, m)
+    var ones_body = ones.create_sub_buffer[DType.float32](0, m)
+    ones_body.enqueue_fill(Float32(1.0))
+    _ = ones_body^
     mamba_backward_reduce_into(
         ctx, db_dt, ddtp, ones, workspace, RED_DT_BIAS, dims, m
     )
@@ -340,26 +368,25 @@ def mamba1_prefill_backward(
     )
     ctx.synchronize()
 
-    var tg0 = mamba_download(ctx, tap_grad0, dims.d_inner)
-    var tg1 = mamba_download(ctx, tap_grad1, dims.d_inner)
-    var tg2 = mamba_download(ctx, tap_grad2, dims.d_inner)
-    var tg3 = mamba_download(ctx, tap_grad3, dims.d_inner)
-    var dconv_weight = List[Float32]()
-    for _ in range(dims.d_inner * D_CONV):
-        dconv_weight.append(Float32(0.0))
-    for d in range(dims.d_inner):
-        dconv_weight[
-            d * D_CONV + mamba_reduction_tap(RED_CONV_W_TAP0)
-        ] = tg0[d]
-        dconv_weight[
-            d * D_CONV + mamba_reduction_tap(RED_CONV_W_TAP1)
-        ] = tg1[d]
-        dconv_weight[
-            d * D_CONV + mamba_reduction_tap(RED_CONV_W_TAP2)
-        ] = tg2[d]
-        dconv_weight[
-            d * D_CONV + mamba_reduction_tap(RED_CONV_W_TAP3)
-        ] = tg3[d]
+    # cpu3-seq: the four tap gradients interleaved into the [d_inner,
+    # D_CONV] layout on the device, then ONE download (was four downloads
+    # and a host interleave loop). Same values in the same cells.
+    var dconv_w_dev = mamba_zeros(ctx, dims.d_inner * D_CONV)
+    ctx.enqueue_function[m1_conv_w_interleave_kernel](
+        dconv_w_dev.unsafe_ptr(),
+        tap_grad0.unsafe_ptr(),
+        tap_grad1.unsafe_ptr(),
+        tap_grad2.unsafe_ptr(),
+        tap_grad3.unsafe_ptr(),
+        Int32(mamba_reduction_tap(RED_CONV_W_TAP0)),
+        Int32(mamba_reduction_tap(RED_CONV_W_TAP1)),
+        Int32(mamba_reduction_tap(RED_CONV_W_TAP2)),
+        Int32(mamba_reduction_tap(RED_CONV_W_TAP3)),
+        Int32(dims.d_inner),
+        grid_dim=((dims.d_inner + 127) // 128, 1, 1),
+        block_dim=(128, 1, 1),
+    )
+    var dconv_weight = mamba_download(ctx, dconv_w_dev, dims.d_inner * D_CONV)
 
     var result = Mamba1PrefillGradients()
     result.out_proj_weight = mamba_download(ctx, dw_out, dims.d_model * dims.d_inner)
@@ -376,10 +403,7 @@ def mamba1_prefill_backward(
     result.stage_dB = mamba_download(ctx, dbm, m * D_STATE)
     result.stage_dC = mamba_download(ctx, dcm, m * D_STATE)
     _ = dconv_weight^
-    _ = tg3^
-    _ = tg2^
-    _ = tg1^
-    _ = tg0^
+    _ = dconv_w_dev^
     _ = dw_norm^
     _ = norm_product^
     _ = drstd^

@@ -21,6 +21,9 @@ from x_neighbors.kapprox_dev import kpca_resident_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
 from x_neighbors.nan_cells_device import nc_fit_lean_binding
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding
+from x_neighbors.ocsvm_dev import OCSVM_IDN_RES, ocsvm_alpha_init_binding
+from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
+from x_neighbors.ocsvm_dev import unit_ff_binding
 from x_neighbors.sort_items import purity_flags_binding
 from x_neighbors.kfeat_dev import (
     XN_FAST_SCHI2_LAZYW,
@@ -31,7 +34,10 @@ from x_neighbors.kfeat_dev import (
     kfeat_schi2_fit_binding,
     kfeat_schi2_transform_binding,
     kfeat_schi2_weights_binding,
+    kfeat_schi2_fit_idn_binding,
+    kfeat_pcs_draw_idn_binding,
 )
+from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -1281,6 +1287,15 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
         comptime if OCSVM_CLS2_RES:
             m.def_function[ocsvm_resident_binding]("x_neighbors_ocsvm_resident")
+        # lane/fam2-neighbors: the same resident solve in IDENTICAL on every
+        # vendor, and libsvm's alpha start on the device
+        comptime if OCSVM_IDN_RES:
+            m.def_function[ocsvm_resident_binding]("x_neighbors_ocsvm_resident_idn")
+        comptime if XN_OCSVM_DEV_INIT:
+            m.def_function[ocsvm_alpha_init_binding]("x_neighbors_ocsvm_alpha_init")
+        # lane/fam2-neighbors: PageRank's caller vectors normalized by the op
+        comptime if XN_UNIT_DEV:
+            m.def_function[unit_ff_binding]("x_neighbors_unit_ff")
         # lane apple-fast-w2-kfeat: the chi2 samplers' fit entries
         # (x_neighbors/kfeat_dev.mojo; FAST + Apple, opt-in defines)
         comptime if XN_KFEAT_ANY:
@@ -1292,6 +1307,10 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
             m.def_function[kfeat_schi2_draw_binding]("x_neighbors_kfeat_schi2_draw")
             m.def_function[kfeat_schi2_weights_binding]("x_neighbors_kfeat_schi2_weights")
             m.def_function[kfeat_schi2_transform_binding]("x_neighbors_kfeat_schi2_transform")
+        # lane fix-k1-neighbors: the samplers' counter-based draws (IDENTICAL)
+        comptime if XN_IDN_SKETCH_CTR:
+            m.def_function[kfeat_schi2_fit_idn_binding]("x_neighbors_kfeat_schi2_fit_idn")
+            m.def_function[kfeat_pcs_draw_idn_binding]("x_neighbors_kfeat_pcs_draw_idn")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))

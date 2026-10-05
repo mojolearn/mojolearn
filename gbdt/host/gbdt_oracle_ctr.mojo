@@ -37,7 +37,8 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT
      the Plain collapse to ONE permutation without them (`:1381-1434`);
      `permutation_count` (4 unset) and the estimation permutation (the last
      unless named); the target borders and the binarized target; one CTR
-     order per permutation, `ctrs_estimation_permutation(n, p).fill_order()`.
+     order per permutation, `ctr_estimation_order_host(n, p)` (the device's
+     keyed order, `gbdt/ctrs/ctr_order.mojo`).
   2. The column loop (`:1532-1676`): a raw column per non-categorical
      feature (one-hot when flagged), a dense-coded categorical column at or
      below `one_hot_max_size` becomes one one-hot column, one above it
@@ -101,7 +102,11 @@ from gbdt.ctrs.ctr_binarization import (
     build_binarized_target,
     build_target_borders,
     compute_ctr_borders,
+    IDN_CTR_BORDERS_DEVICE,
+    ctr_border_type_code,
 )
+from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
+from gbdt.ctrs.ctr_order import ctr_estimation_order_host
 from gbdt.data.permutation import (
     DEFAULT_PERMUTATION_COUNT,
     ctrs_estimation_permutation,
@@ -235,20 +240,24 @@ def _ctr_grid_for(config: TCtrConfig) -> TBinarizationOptions:
 def _feature_freq_column(
     codes: List[UInt32], unique_values: Int, config: TCtrConfig
 ) -> List[Float32]:
-    """`TWeightedBinFreqCalcer.trivial(n).visit_equal_up_to_prior_freq_ctrs`
-    (`ctr_calcers.mojo:196-276`): the per-category Float32 sum of unit
-    weights, then `(sum + prior) / (totalWeight + priorObservations)` with
-    `totalWeight = Float32(n)`."""
+    """`TWeightedBinFreqCalcerGpu.visit_equal_up_to_prior_freq_ctrs`
+    (`ctr_calcers.mojo`): the per-category INTEGER row count, converted to
+    Float32 once, then `(count + prior) / (totalWeight + priorObservations)`
+    with `totalWeight = Float32(n)` (lane cpu4-gbdt: the device counts the
+    segment length; below 2^24 rows this is the old Float32 running sum's
+    word, above it the count stays exact)."""
     var n = len(codes)
-    var bin_weights = List[Float32](length=unique_values, fill=Float32(0.0))
+    var bin_counts = List[Int](length=unique_values, fill=0)
     for r in range(n):
-        bin_weights[Int(codes[r])] += Float32(1.0)
+        bin_counts[Int(codes[r])] += 1
     var total = Float32(n)
     var prior = config.numerator_shift()
     var prior_obs = config.denumerator_shift()
     var out = List[Float32](length=n, fill=Float32(0.0))
     for r in range(n):
-        out[r] = (bin_weights[Int(codes[r])] + prior) / (total + prior_obs)
+        out[r] = (Float32(bin_counts[Int(codes[r])]) + prior) / (
+            total + prior_obs
+        )
     return out^
 
 
@@ -394,7 +403,11 @@ def gbdt_ctr_host_fit(
         target_classes_count = len(target_borders) + 1
         binarized_target = build_binarized_target(y, target_borders)
         for p in range(perm_count):
-            ctr_orders.append(ctrs_estimation_permutation(n_rows, p).fill_order())
+            # the device's order (`gbdt/ctrs/ctr_order.mojo`, lane
+            # cpu4-gbdt): identity for permutation 0, the keyed Feistel
+            # bijection for the others, the same words as
+            # `launch_ctr_estimation_order` writes
+            ctr_orders.append(ctr_estimation_order_host(n_rows, p))
 
     # ---- the column loop (`:1532-1676`) ----
     var columns = List[List[Float32]]()
@@ -512,13 +525,22 @@ def gbdt_ctr_host_fit(
         elif column_kind[c] == GBDT_COL_CTR:
             var grid_desc = _ctr_grid_for(configs[column_ctr_grid[c]])
             var bs: List[Float32]
-            if dep_ordinal_of_column[c] >= 0:
-                # PERMUTATION 0'S VALUES decide a dependent column's grid
-                bs = compute_ctr_borders(
-                    dep_by_perm[0][dep_ordinal_of_column[c]], grid_desc
-                )
+            comptime if IDN_CTR_BORDERS_DEVICE:
+                # lane/fam2-gbdt F6: the device build's host restatement
+                if dep_ordinal_of_column[c] >= 0:
+                    bs = _ctr_borders_host_grid(
+                        dep_by_perm[0][dep_ordinal_of_column[c]], grid_desc
+                    )
+                else:
+                    bs = _ctr_borders_host_grid(columns[c], grid_desc)
             else:
-                bs = compute_ctr_borders(columns[c], grid_desc)
+                if dep_ordinal_of_column[c] >= 0:
+                    # PERMUTATION 0'S VALUES decide a dependent column's grid
+                    bs = compute_ctr_borders(
+                        dep_by_perm[0][dep_ordinal_of_column[c]], grid_desc
+                    )
+                else:
+                    bs = compute_ctr_borders(columns[c], grid_desc)
             fold_counts[c] = len(bs)
             borders[c] = bs^
     var grid = GbdtHostGrid(borders^, fold_counts^, nan_treatment^)
@@ -651,3 +673,20 @@ def gbdt_ctr_host_model_text(r: GbdtCtrHostFit) raises -> String:
     for i in range(len(m.losses)):
         out += String("loss ") + String(i) + " " + gbdt_f64_token(m.losses[i]) + "\n"
     return out^
+
+
+def _ctr_borders_host_grid(
+    values: List[Float32], description: TBinarizationOptions
+) raises -> List[Float32]:
+    """`IDN_CTR_BORDERS_DEVICE`: `gbdt/train.mojo::_ctr_borders_device` on
+    host memory: `gbdt_host_grid` (the device border build's restatement)
+    over every row of the one column at NaN mode Forbidden, then the
+    constant-feature 0.5."""
+    var grid = gbdt_host_grid(
+        values, len(values), 1, description.border_count, 0, UInt64(0),
+        NAN_MODE_FORBIDDEN, ctr_border_type_code(description),
+    )
+    var bs = grid.borders[0].copy()
+    if len(bs) == 0:
+        bs.append(Float32(0.5))
+    return bs^

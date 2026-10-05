@@ -1,0 +1,52 @@
+{
+  "gmm": {
+    "status": "PASS",
+    "source_sha": "2191cd1ec57bcdf5749ed9a6d6411b8c8896779d",
+    "outputs": 24,
+    "words": 8258,
+    "all_columns_raw_bits_equal": true,
+    "inputs": {
+      "x-257x7": {
+        "shape": [
+          257,
+          7
+        ],
+        "dtype": "float32",
+        "sha256": "8db65af81b0f9798890a4796e219d8b58884855f2aab27801c67fa1f495aae6b"
+      },
+      "x-513x33": {
+        "shape": [
+          513,
+          33
+        ],
+        "dtype": "float32",
+        "sha256": "e5dd6962e8f6ea8ada4a71e6f350c19e8442b5c301482db7ca856924d78b7861"
+      }
+    }
+  },
+  "power": {
+    "status": "PASS",
+    "source_sha": "2191cd1ec57bcdf5749ed9a6d6411b8c8896779d",
+    "outputs": 20,
+    "words": 131204,
+    "all_columns_raw_bits_equal": true,
+    "inputs": {
+      "yeo-johnson": {
+        "shape": [
+          4099,
+          4
+        ],
+        "dtype": "float32",
+        "sha256": "a81fae8d3c03a63e75a91f1963360da36135da4f7cb52f955b27eb01fb7c6a50"
+      },
+      "box-cox": {
+        "shape": [
+          4099,
+          4
+        ],
+        "dtype": "float32",
+        "sha256": "8a46e97f69efacdec1e0313facbcc7b528c83e16a1658b7afc6e59dbac995a3c"
+      }
+    }
+  }
+}

@@ -17,7 +17,12 @@ The search, as the reference's:
 The information criterion is batched_arima.cu `information_criterion`'s:
 -2 loglike + 2N (aic), + 2N(N+1)/(n - N - 1) (aicc), log(n) N (bic), with
 n = n_obs - d - s D and N the model's parameter count, computed in float64 in
-Mojo (`ic_running_min_f64`) from the fit's float32 log-likelihood.
+Mojo (`ic_running_min_f64`) from the fit's float32 log-likelihood. Builds whose
+ARIMA binding reports `arima_order_caps() & 4` (IDENTICAL since lane
+fam2-timeseries) take the criterion in float32, one rounding of the same
+value, on the device with the order choice (`arima_order_search_device`) or,
+on the host column and for grids the grouped search declines, in Mojo
+(`ic_running_min_f32`).
 
 Layout: mojolearn's ARIMA layout, `(batch_size, n_obs)`, one series per row
 (cuML's AutoARIMA takes series in columns; transpose to call it the same way).
@@ -218,21 +223,52 @@ class AutoARIMA:
                       else _options("k", fit_intercept, 0, 1))
             orders, nb = [], len(ids)
             search_fit = None
-            best_ic = np.empty(nb, dtype=np.float64)
+            binding = ARIMA()._extension()
+            caps_fn = getattr(binding, "arima_order_caps", None)
+            caps = int(caps_fn()) if caps_fn is not None else 0
+            ic_dtype = np.float32 if caps & 4 else np.float64
+            ic_fold = _native("ic_running_min_f32" if caps & 4 else "ic_running_min_f64")
+            best_ic = np.empty(nb, dtype=ic_dtype)
             best = np.empty(nb, dtype=np.int64)
-            ic_k = np.empty(nb, dtype=np.float64)
+            ic_k = np.empty(nb, dtype=ic_dtype)
             # Metadata only: retain the exact itertools.product order. The
             # native experiment groups GPU work by state dimension but writes
             # likelihood rows back in this order, preserving first-min ties.
             grid = [o for o in itertools.product(p_opts, q_opts, P_opts, Q_opts, k_opts)  # glue: user order metadata
                     if o[0] + o[1] + o[2] + o[3] + o[4]]  # glue: user order options, no series data
             grouped_ll = None
+            chosen_on_device = False
+            plain = not s and D_ == 0 and 4 not in p_opts and 4 not in q_opts
+            enabled = getattr(binding, "arima_order_batch_enabled", None)
             if d_ in pre:
+                # MOJOLEARN_ARIMA_FAST_D_CONCURRENT: this d group's search ran
+                # in _search_d_concurrent's one native call
                 grouped_ll, search_fit = pre[d_]
-            elif grid and grouped_ok:
-                binding = ARIMA()._extension()
-                enabled = getattr(binding, "arima_order_batch_enabled", None)
-                if enabled is not None and enabled():
+            elif grid and self.n_obs > 2 and enabled is not None and enabled():
+                if caps & 1 and (plain or caps & 2):
+                    # lane fam2-timeseries: the grouped search on the device
+                    # end to end (seasonal grids with caps & 2); with
+                    # caps & 4 the criterion and the first-minimum choice
+                    # are device kernels and only the choice crosses back.
+                    # 0 written = a grid the build declines (its workspace
+                    # bound, or the period rule): the per-order fits below.
+                    want_ic = 1 if caps & 4 else 0
+                    packed_grid = [v for o in grid for v in o]  # glue: native order metadata arguments
+                    pens = [self._penalty_of(sum(o) + 1, ic, d_, D_, s if (o[2] + D_ + o[3]) else 0) for o in grid]  # glue: one penalty scalar per order
+                    best32 = np.empty(nb, dtype=np.int32)
+                    out = np.empty(nb if want_ic else len(grid) * nb, dtype=np.float32)
+                    written = int(binding.arima_order_search_device(
+                        sub.ctypes.data, out.ctypes.data, best32.ctypes.data, packed_grid, pens,
+                        [nb, self.n_obs, d_, D_, s, int(maxiter), want_ic]))
+                    if written and written != out.size:
+                        raise RuntimeError("AutoARIMA: incomplete grouped search output")
+                    if written and want_ic:
+                        chosen_on_device = True
+                        best = np.asarray(best32, dtype=np.int64)  # glue: widen the device's choice
+                        best_ic = out
+                    elif written:
+                        grouped_ll = out.reshape(len(grid), nb)
+                elif plain:
                     grouped_ll = np.empty((len(grid), nb), dtype=np.float32)
                     packed_grid = [v for p_, q_, _, _, k_ in grid for v in (p_, q_, k_)]  # glue: native order metadata arguments
                     reuse_on = getattr(binding, "arima_search_reuse_enabled", None)
@@ -247,30 +283,34 @@ class AutoARIMA:
                             off += nb * (3 * (p_ + q_ + k_ + 1) + 1)
                         fit_f32 = np.empty(max(off, 1), dtype=np.float32)
                         fit_i32 = np.empty(max(2 * nb * len(grid), 1), dtype=np.int32)
-                        written = binding.arima_order_search_fit(
+                        written = int(binding.arima_order_search_fit(
                             sub.ctypes.data, grouped_ll.ctypes.data, fit_f32.ctypes.data,
-                            fit_i32.ctypes.data, packed_grid, [nb, self.n_obs, d_, int(maxiter)])
+                            fit_i32.ctypes.data, packed_grid, [nb, self.n_obs, d_, int(maxiter)]))
                         search_fit = (fit_f32, fit_i32, f_offs, nb, grouped_ll)
                     else:
-                        written = binding.arima_order_search(sub.ctypes.data, grouped_ll.ctypes.data,
-                                                             packed_grid, [nb, self.n_obs, d_, int(maxiter)])
-                    if int(written) != grouped_ll.size:
+                        written = int(binding.arima_order_search(sub.ctypes.data, grouped_ll.ctypes.data,
+                                                                 packed_grid, [nb, self.n_obs, d_, int(maxiter)]))
+                    if written == 0:
+                        grouped_ll = None  # the build's workspace bound: per-order fits
+                        search_fit = None
+                    elif written != grouped_ll.size:
                         raise RuntimeError("AutoARIMA: incomplete grouped likelihood output")
             for trial, (p_, q_, P_, Q_, k_) in enumerate(grid):  # glue: user order grid, not series or observations
                 s_ = s if (P_ + D_ + Q_) else 0
+                orders.append((p_, q_, P_, Q_, s_, k_))
+                if chosen_on_device:
+                    continue
                 m = ARIMA(order=(p_, d_, q_), seasonal_order=(P_, D_, Q_, s_),
                           trend="c" if k_ else "n", maxiter=maxiter)
                 if grouped_ll is None:
                     m.fit(sub)
                     llf = np.ascontiguousarray(m.llf_, dtype=np.float32).reshape(-1)
                 else:
-                    llf = grouped_ll[trial]
+                    llf = np.ascontiguousarray(grouped_ll[trial])
                 # every series' criterion and the running first-minimum
                 # choice, in Mojo (lane cgr4-py-compute)
-                _native("ic_running_min_f64")(llf.ctypes.data, nb, self._penalty(m, ic, d_, D_, s_),
-                                              len(orders), ic_k.ctypes.data, best_ic.ctypes.data,
-                                              best.ctypes.data)
-                orders.append((p_, q_, P_, Q_, s_, k_))
+                ic_fold(llf.ctypes.data, nb, self._penalty(m, ic, d_, D_, s_),
+                        trial, ic_k.ctypes.data, best_ic.ctypes.data, best.ctypes.data)
             if not orders:
                 raise ValueError("AutoARIMA: no (p, q, P, Q, k) order to try")
             table = np.asarray([[p_, d_, q_, P_, D_, Q_, s_, k_] for (p_, q_, P_, Q_, s_, k_) in orders],  # glue: one table row per tried order
@@ -302,6 +342,9 @@ class AutoARIMA:
         batch = getattr(binding, "arima_order_batch_enabled", None)
         if on is None or not on() or batch is None or not batch():
             return {}
+        caps_fn = getattr(binding, "arima_order_caps", None)
+        if caps_fn is not None and int(caps_fn()) & 1:
+            return {}  # the device search entry (IDENTICAL builds) takes each d group
         ds = [d_ for d_ in range(3) if dcount[d_]]  # glue: the d groups present
         if len(ds) < 2:
             return {}
@@ -345,7 +388,11 @@ class AutoARIMA:
         """The criterion's parameter penalty (a scalar per order): 2N (aic),
         + 2N(N+1)/(n - N - 1) (aicc), log(n) N (bic); the criterion is
         -2 loglike + penalty, per series in `ic_running_min_f64`."""
-        N = float(m.complexity_)
+        return self._penalty_of(m.complexity_, ic, d_, D_, s_)
+
+    def _penalty_of(self, complexity, ic, d_, D_, s_):
+        """`_penalty` from the parameter count alone (no model object)."""
+        N = float(complexity)
         n = float(self.n_obs - d_ - s_ * D_)
         if ic == "aic":
             return 2.0 * N

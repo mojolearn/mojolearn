@@ -230,17 +230,10 @@ def execute(request):
         out_kind = args[3] if len(args) > 3 else 0
         ext = state._extension()
         if out_kind:
-            # a binary model's predict codes (1) or predict_proba pairs (2):
-            # from the binding when it computes them (lane
-            # apple-fast-py2mojo-cluster), the Python loops otherwise
-            from ._gp_impl import _gp_py2mojo
-            if _gp_py2mojo(ext):
-                return state._latent(ext, fit, q, want_proba, out_kind)[3]
-            from ._array import Array
-            mean, _, probability = state._latent(ext, fit, q, want_proba)
-            if out_kind == 1:
-                return Array.from_list([1 if v > 0.0 else 0 for v in mean.tolist()], '<i8')
-            return Array.from_list([[1.0 - v, v] for v in probability.tolist()], '<f8')
+            # a binary model's predict codes (1) or predict_proba pairs (2),
+            # from the binding on every build (the Python loops were removed
+            # by lane fam2-kernel-gp: no Python arithmetic on a GPU route)
+            return state._latent(ext, fit, q, want_proba, out_kind)[3]
         mean, _, probability = state._latent(ext, fit, q, want_proba)
         return probability if want_proba else mean
     if operation == 'forecast_predict':

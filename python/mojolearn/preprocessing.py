@@ -72,8 +72,9 @@ def _nan_scan_fill(mode, values, fill_row):
     max, maxabs over the non-NaN entries; an infinity refused) and X with
     every NaN replaced by the per-column value of col_stats row `fill_row`
     (3: the column's minimum, which leaves its min and max unchanged; None:
-    zero). Returns (filled X, counts). Data movement only: the filled X
-    feeds the binding's own fit or transform, so every finite entry takes
+    zero). Returns (filled X, counts, colnan): colnan the int32 words
+    count == 0 (c2_cnt0, lane cpu2-l3-prep). Data movement only: the filled
+    X feeds the binding's own fit or transform, so every finite entry takes
     the same arithmetic as a NaN-free call."""
     P = _prep()
     n, d = values.shape
@@ -85,37 +86,60 @@ def _nan_scan_fill(mode, values, fill_row):
     out = pr.alloc(n * d)
     pr.stage("col_stats", d, xo, n, d, st)
     pr.stage("fill", n * d, xo, n, d, stat, out, keep, d)
+    cn = pr.alloc(d)
+    pr.stage("c2_cnt0", d, st, cn)
     pr.run(mode)
     _refuse_inf(pr, st, d)
-    return pr.get(out, (n, d)), [int(v) for v in pr.values(st, d)]
+    return pr.get(out, (n, d)), pr.get(st, d), pr.get_i32(cn, d)
 
 
 def _nan_keep(mode, values, transformed, colnan):
     """The transform of X with NaN: NaN entries of X kept bit for bit, a
-    column never seen in fit (NaN statistics) all NaN, else the binding's
-    transform of the NaN-filled X (x_prep `nan_keep`)."""
+    column never seen in fit (NaN statistics; `colnan` int32 words, or None
+    for none) all NaN, else the binding's transform of the NaN-filled X
+    (x_prep `nan_keep`)."""
     P = _prep()
     n, d = values.shape
     pr = P._Prog()
     xo = pr.put(values)
     to = pr.put(transformed)
-    cn = pr.put_list([1.0 if c else 0.0 for c in colnan])
+    cn = pr.put_codes(colnan) if colnan is not None else pr.put(zeros((d,), "<f4"))
     out = pr.alloc(n * d)
     pr.stage("nan_keep", n * d, xo, d, to, cn, out)
     return pr.run(mode).get(out, (n, d))
 
 
+def _stat_sub(mode, a, b, use_a, use_b, fill_a, fill_b):
+    """Lane cpu2-l3-prep: a transform's two statistic vectors on the device
+    (x_prep c2_nan_sub): colnan = (use_a and a is NaN) or (use_b and b is
+    NaN); there a, b become fill_a, fill_b. Returns (a, b, colnan int32
+    words or None when no column is NaN, nonfinite count, nonpositive-b
+    count); the counts are c2_isum words (three read back)."""
+    P = _prep()
+    d = a.size
+    pr = P._Prog()
+    oa, ob, cn, nf, npos, sums = (pr.alloc(d), pr.alloc(d), pr.alloc(d), pr.alloc(d), pr.alloc(d),
+                                  pr.alloc(3))
+    pr.stage("c2_nan_sub", d, pr.put(a), pr.put(b), int(use_a), int(use_b), pr.put_scalar(fill_a),
+             pr.put_scalar(fill_b), oa, ob, cn, nf, npos)
+    pr.stage("c2_isum", 1, cn, d, sums)
+    pr.stage("c2_isum", 1, nf, d, sums + 1)
+    pr.stage("c2_isum", 1, npos, d, sums + 2)
+    pr.run(mode)
+    k = pr.get_i32(sums, 3).tolist()
+    return pr.get(oa, d), pr.get(ob, d), (pr.get_i32(cn, d) if k[0] else None), k[1], k[2]
+
+
 def _sample_weight(sample_weight, n):
     """The reference's `_check_sample_weight`: a scalar broadcasts, else a
-    one-dimensional float32 vector of n finite weights."""
+    one-dimensional float32 vector of n weights (their finiteness is checked
+    on the device by `_standard_stats`, lane cpu2-l3-prep)."""
     if isinstance(sample_weight, numbers.Real) and not is_bool(sample_weight):
         w = full((n,), float(sample_weight), "<f4")
     else:
         w = as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
     if w.ndim != 1 or w.shape[0] != n:
         raise ValueError(f"sample_weight must have shape ({n},), got {tuple(w.shape)}")
-    if not all_finite(w):
-        raise ValueError("sample_weight must be finite")
     return w
 
 
@@ -135,7 +159,17 @@ def _standard_stats(mode, values, weight):
     pr.stage("col_stats", d, xo, n, d, st)
     pr.stage("scaler_stats", d, xo, n, d, wo, out)
     pr.stage("std_scale", d, out + 2 * d, sc)
+    wbad = None
+    if weight is not None:
+        # the weights' nonfinite count by chunks (x_prep c2_nonfinite + c2_isum, lane cpu2-l3-prep)
+        ch = max(4096, -(-n // 4096))
+        nch = -(-n // ch)
+        wcnt, wbad = pr.alloc(nch), pr.alloc(1)
+        pr.stage("c2_nonfinite", nch, wo, n, ch, wcnt)
+        pr.stage("c2_isum", 1, wcnt, nch, wbad)
     pr.run(mode)
+    if wbad is not None and pr.get_i32(wbad, 1).tolist()[0]:
+        raise ValueError("sample_weight must be finite")
     _refuse_inf(pr, st, d)
     return pr.get(out, d), pr.get(out + d, d), pr.get(out + 2 * d, d), pr.get(sc, d)
 
@@ -183,10 +217,23 @@ def _direct_entry(binding, name):
         return None
 
 
-def _per_feature_int(seen, d):
+def _counts_i64(seen, d):
+    """n_samples_seen_ (an int or an int64 vector) as d int64 words."""
     if isinstance(seen, Array):
-        return [int(v) for v in seen.tolist()]
-    return [int(seen)] * d
+        return seen.astype("<i8") if seen.dtype != "<i8" else seen
+    return full((d,), int(seen), "<i8")
+
+
+def _add_counts(mode, a, b, d):
+    """Two n_samples_seen_ counts added per feature on the device
+    (x_prep c2_add_i64): an int64 Array."""
+    P = _prep()
+    pr = P._Prog()
+    out = pr.alloc(2 * d)
+    pr.stage("c2_add_i64", d, pr.put_words(P._label_buffer(_counts_i64(a, d)).words),
+             pr.put_words(P._label_buffer(_counts_i64(b, d)).words), out)
+    pr.run(mode)
+    return P._class_words(pr, out, d, True)
 
 
 class _ScalerProtocol:
@@ -314,28 +361,33 @@ class MinMaxScaler(_ScalerProtocol):
             raise ValueError('feature_range must have lower < upper after Float32 conversion')
         return lower, upper
 
-    def _fit_extrema(self, binding, values, lower, upper, colnan):
+    def _fit_extrema(self, binding, values, lower, upper, colnan, mode):
         """The binding's minmax_fit over `values` (finite), then NaN
-        statistics for the columns in `colnan` (none of their entries seen)."""
+        statistics for the `colnan` columns (int32 words, or None)."""
         n, d = values.shape
         output = empty((5, d), '<f4')
         binding.minmax_fit(_addr_ro(values), _addr(output),
                            [n, d, float(lower), float(upper)])
-        self._keep_extrema(output, colnan)
+        self._keep_extrema(output, colnan, mode)
 
-    def _keep_extrema(self, output, colnan):
-        """The five fitted rows from `output` (5, d), NaN for the columns in
-        `colnan`."""
-        if not all_finite(output) or output[3].min() <= 0:
+    def _keep_extrema(self, output, colnan, mode):
+        """The five fitted rows from `output` (5, d), NaN for the `colnan`
+        columns (int32 words, or None). Lane cpu2-l3-prep: the check (every
+        value finite, every scale positive) and the NaN rows on the device
+        (x_prep c2_mm_keep, one word read back)."""
+        P = _prep()
+        d = output.shape[1]
+        pr = P._Prog()
+        cn = pr.put_words(colnan) if colnan is not None else pr.put_words(full((d,), 0, "<i4"))
+        rows, bad, nbad = pr.alloc(5 * d), pr.alloc(d), pr.alloc(1)
+        pr.stage("c2_mm_keep", d, pr.put(output), d, cn, rows, bad)
+        pr.stage("c2_isum", 1, bad, d, nbad)
+        pr.run(mode)
+        if pr.get_i32(nbad, 1).tolist()[0]:
             raise ValueError('MinMaxScaler fitted statistics overflowed or scale is not positive in Float32')
-        rows = [output[i].tolist() for i in range(5)]
-        if any(colnan):
-            for r in rows:
-                for c, gone in enumerate(colnan):
-                    if gone:
-                        r[c] = float('nan')
+        got = pr.get(rows, (5, d))
         for i, name in enumerate(('data_min_', 'data_max_', 'data_range_', 'scale_', 'min_')):  # glue: sets five fitted attribute names
-            setattr(self, name, Array.from_list(rows[i], '<f4') if any(colnan) else output[i].copy())
+            setattr(self, name, got[i].copy())
 
     def fit(self, X, y=None, sample_weight=None):
         _require_training(self)
@@ -351,22 +403,21 @@ class MinMaxScaler(_ScalerProtocol):
         direct = _direct_entry(binding, "minmax_fit_direct")
         values, finite = self._input(X, allow_nan=True, scan=direct is None)
         n, d = values.shape
-        colnan = [False] * d
+        colnan = None
         if finite is None:
             output = empty((5, d), '<f4')
             if int(direct(_addr_ro(values), _addr(output), [n, d, float(lower), float(upper)])):
-                self._keep_extrema(output, colnan)
+                self._keep_extrema(output, colnan, mode)
                 finite = True
             else:
                 finite = False
         elif finite:
-            self._fit_extrema(binding, values, lower, upper, colnan)
+            self._fit_extrema(binding, values, lower, upper, colnan, mode)
         if not finite:
             # NaN -> the column's own minimum: min and max are those of its
             # non-NaN entries, and the binding's arithmetic is unchanged.
-            values, counts = _nan_scan_fill(mode, values, 3)
-            colnan = [c == 0 for c in counts]
-            self._fit_extrema(binding, values, lower, upper, colnan)
+            values, _counts, colnan = _nan_scan_fill(mode, values, 3)
+            self._fit_extrema(binding, values, lower, upper, colnan, mode)
         self.n_features_in_ = d
         self.n_samples_seen_ = n
         self.numeric_mode_ = mode
@@ -391,14 +442,17 @@ class MinMaxScaler(_ScalerProtocol):
         d = self.n_features_in_
         if batch.n_features_in_ != d:
             raise ValueError('MinMaxScaler input feature count differs from fit')
-        lo_old, hi_old = self.data_min_.tolist(), self.data_max_.tolist()
-        lo_new, hi_new = batch.data_min_.tolist(), batch.data_max_.tolist()
-        colnan = [lo_old[c] != lo_old[c] or lo_new[c] != lo_new[c] for c in range(d)]
-        rows = []
-        for r in (lo_old, hi_old, lo_new, hi_new):
-            rows.extend(0.0 if colnan[c] else r[c] for c in range(d))
-        extrema = Array.from_list(rows, '<f4').reshape((4, d))
-        self._fit_extrema(self._binding(self.numeric_mode_), extrema, lower, upper, colnan)
+        # lane cpu2-l3-prep: the merge rows on the device (x_prep c2_mm_merge: a column
+        # whose old or new minimum is NaN is colnan, its rows 0)
+        P = _prep()
+        pr = P._Prog()
+        rows, cn = pr.alloc(4 * d), pr.alloc(d)
+        pr.stage("c2_mm_merge", d, pr.put(self.data_min_), pr.put(self.data_max_), pr.put(batch.data_min_),
+                 pr.put(batch.data_max_), d, rows, cn)
+        pr.run(self.numeric_mode_)
+        extrema = pr.get(rows, (4, d))
+        self._fit_extrema(self._binding(self.numeric_mode_), extrema, lower, upper, pr.get_i32(cn, d),
+                          self.numeric_mode_)
         self.n_samples_seen_ = int(self.n_samples_seen_) + int(batch.n_samples_seen_)
         self.clip_ = bool(self.clip)
         return self
@@ -407,51 +461,47 @@ class MinMaxScaler(_ScalerProtocol):
         if not self.__sklearn_is_fitted__():
             raise NotFittedError('MinMaxScaler is not fitted')
         binding = self._binding(self.numeric_mode_)
-        # lane apple-fast-prep: the FAST Apple binding (default; built with
-        # -D MOJOLEARN_PREP_FAST_MINMAX_OFF it has none) has `minmax_transform_direct` (X up from
-        # its own buffer, the device scans the output); any other binding, the
-        # List route with the host scans, as before
+        # `minmax_transform_direct` (lane apple-fast-prep; lane cpu2-l3-prep: every GPU
+        # binding): X up from its own buffer, the device scans the output (and X when the
+        # output is not finite). The host binding (the host column) has none: its List
+        # route with the host scans
         direct = _direct_entry(binding, "minmax_transform_direct")
         values, finite, copied = self._input(X, allow_nan=True, with_copied=True, scan=direct is None)
         n, d = values.shape
         if d != self.n_features_in_:
             raise ValueError('MinMaxScaler input feature count differs from fit')
-        stats = {}
         for name in ("scale_", "min_"):  # glue: checks two fitted attribute names
             statistic = getattr(self, name)
             if (not isinstance(statistic, Array) or statistic.dtype != "<f4"
                     or statistic.shape != (d,) or not statistic.flags["C_CONTIGUOUS"]):
                 raise ValueError(f"MinMaxScaler {name} must remain a finite contiguous Float32 feature vector")
-            stats[name] = statistic.tolist()
-        colnan = [stats["scale_"][c] != stats["scale_"][c] or stats["min_"][c] != stats["min_"][c]
-                  for c in range(d)]
-        scale, offset = self.scale_, self.min_
-        if any(colnan):
-            scale = Array.from_list([1.0 if colnan[c] else stats["scale_"][c] for c in range(d)], '<f4')
-            offset = Array.from_list([0.0 if colnan[c] else stats["min_"][c] for c in range(d)], '<f4')
-        if not all_finite(scale) or not all_finite(offset):
+        # a column never seen (NaN statistics) transforms with scale 1, offset 0, then NaN
+        # (lane cpu2-l3-prep: substituted and checked on the device, `_stat_sub`)
+        offset, scale, colnan, nonfinite, nonpos = _stat_sub(self.numeric_mode_, self.min_, self.scale_, 1, 1,
+                                                             0.0, 1.0)
+        if nonfinite:
             raise ValueError("MinMaxScaler scale_ and min_ must remain finite (NaN: a column never seen)")
-        if scale.min() <= 0:
+        if nonpos:
             raise ValueError("MinMaxScaler scale_ must remain positive")
         params = [n, d, int(inverse), int(self.clip_),
                   float(self.feature_range_[0]), float(self.feature_range_[1])]
         output = empty(values.shape, '<f4')
-        done = False
-        if finite is None:
-            # 0: a nonfinite output word. A finite input overflowed (refused as
-            # the List route's output scan does); else the NaN route below.
-            if int(direct(_addr_ro(values), _addr_ro(scale), _addr_ro(offset), _addr(output), params)):
-                finite = done = True
-            else:
-                finite = all_finite(values)
-                if finite:
+        if direct is not None:
+            got = int(direct(_addr_ro(values), _addr_ro(scale), _addr_ro(offset), _addr(output), params))
+            if got == 0:
+                raise ValueError('MinMaxScaler transform overflowed in Float32')
+            finite = got == 1
+            if not finite:
+                # X holds NaN: the NaN-filled X through the same entry (an infinity is refused)
+                source = _nan_scan_fill(self.numeric_mode_, values, None)[0]
+                if int(direct(_addr_ro(source), _addr_ro(scale), _addr_ro(offset), _addr(output), params)) != 1:
                     raise ValueError('MinMaxScaler transform overflowed in Float32')
-        if not done:
+        else:
             source = values if finite else _nan_scan_fill(self.numeric_mode_, values, None)[0]
             binding.minmax_transform(_addr_ro(source), _addr_ro(scale), _addr_ro(offset), _addr(output), params)
             if not all_finite(output):
                 raise ValueError('MinMaxScaler transform overflowed in Float32')
-        if not finite or any(colnan):
+        if not finite or colnan is not None:
             output = _nan_keep(self.numeric_mode_, values, output, colnan)
         return _write_back(self.copy, copied, values, X, output)
 
@@ -631,8 +681,8 @@ class StandardScaler(_ScalerProtocol):
         if weighted:
             total = pr.values(cnt, d)
         else:
-            total = [int(a) + int(b) for a, b in zip(_per_feature_int(self.n_samples_seen_, d),
-                                                     _per_feature_int(batch.n_samples_seen_, d))]
+            # the int64 counts added on the device (x_prep c2_add_i64, lane cpu2-l3-prep)
+            total = _add_counts(self.numeric_mode_, self.n_samples_seen_, batch.n_samples_seen_, d).tolist()
         self.mean_ = pr.get(mean, d)
         if self.with_std_:
             self.var_ = pr.get(var, d)
@@ -646,7 +696,12 @@ class StandardScaler(_ScalerProtocol):
         copy = self.copy if copy is None else copy
         if not self.__sklearn_is_fitted__():
             raise NotFittedError('StandardScaler is not fitted')
-        values, finite, copied = self._input(X, allow_nan=True, with_copied=True)
+        binding = self._binding(self.numeric_mode_)
+        # `standard_transform_direct` (lane cpu2-l3-prep, every GPU binding): X up from
+        # its own buffer, the device scans the output (and X when the output is not
+        # finite). The host binding (the host column) has none: the List route
+        direct = _direct_entry(binding, "standard_transform_direct")
+        values, finite, copied = self._input(X, allow_nan=True, with_copied=True, scan=direct is None)
         n, d = values.shape
         if d != self.n_features_in_:
             raise ValueError('StandardScaler input feature count differs from fit')
@@ -660,24 +715,32 @@ class StandardScaler(_ScalerProtocol):
             if (not isinstance(statistic, Array) or statistic.dtype != "<f4"
                     or statistic.shape != (d,) or not statistic.flags["C_CONTIGUOUS"]):
                 raise ValueError(f'StandardScaler {name} must remain a finite contiguous Float32 feature vector')
-        mv, sv = mean.tolist(), scale.tolist()
-        colnan = [(self.with_mean_ and mv[c] != mv[c]) or (self.with_std_ and sv[c] != sv[c]) for c in range(d)]
-        if any(colnan):
-            mean = Array.from_list([0.0 if colnan[c] else mv[c] for c in range(d)], '<f4')
-            scale = Array.from_list([1.0 if colnan[c] else sv[c] for c in range(d)], '<f4')
-        for name, statistic in (('mean_', mean), ('scale_', scale)):  # glue: checks two fitted statistic names
-            if not all_finite(statistic):
-                raise ValueError(f'StandardScaler {name} must remain finite (NaN: a feature never seen)')
-        if scale.min() <= 0:
+        # a feature never seen (NaN statistics) transforms with mean 0, scale 1, then NaN
+        # (lane cpu2-l3-prep: substituted and checked on the device, `_stat_sub`)
+        mean, scale, colnan, nonfinite, nonpos = _stat_sub(self.numeric_mode_, mean, scale, self.with_mean_,
+                                                           self.with_std_, 0.0, 1.0)
+        if nonfinite:
+            raise ValueError('StandardScaler mean_ and scale_ must remain finite (NaN: a feature never seen)')
+        if nonpos:
             raise ValueError('StandardScaler scale_ must remain positive')
-        source = values if finite else _nan_scan_fill(self.numeric_mode_, values, None)[0]
+        params = [n, d, int(inverse), int(self.with_mean_), int(self.with_std_)]
         output = empty(values.shape, '<f4')
-        self._binding(self.numeric_mode_).standard_transform(
-            _addr_ro(source), _addr_ro(mean), _addr_ro(scale), _addr(output),
-            [n, d, int(inverse), int(self.with_mean_), int(self.with_std_)])
-        if not all_finite(output):
-            raise ValueError('StandardScaler transform overflowed in Float32')
-        if not finite or any(colnan):
+        if direct is not None:
+            got = int(direct(_addr_ro(values), _addr_ro(mean), _addr_ro(scale), _addr(output), params))
+            if got == 0:
+                raise ValueError('StandardScaler transform overflowed in Float32')
+            finite = got == 1
+            if not finite:
+                # X holds NaN: the NaN-filled X through the same entry (an infinity is refused)
+                source = _nan_scan_fill(self.numeric_mode_, values, None)[0]
+                if int(direct(_addr_ro(source), _addr_ro(mean), _addr_ro(scale), _addr(output), params)) != 1:
+                    raise ValueError('StandardScaler transform overflowed in Float32')
+        else:
+            source = values if finite else _nan_scan_fill(self.numeric_mode_, values, None)[0]
+            binding.standard_transform(_addr_ro(source), _addr_ro(mean), _addr_ro(scale), _addr(output), params)
+            if not all_finite(output):
+                raise ValueError('StandardScaler transform overflowed in Float32')
+        if not finite or colnan is not None:
             output = _nan_keep(self.numeric_mode_, values, output, colnan)
         return _write_back(copy, copied, values, X, output)
 

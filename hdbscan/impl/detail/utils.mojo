@@ -33,7 +33,7 @@ from hdbscan.impl.condensed_hierarchy import (
     CondensedHierarchy,
     pack_parent_child,
 )
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 from checks.numerics import identical_div
 
 
@@ -147,7 +147,7 @@ def select_parent_csr(tree: CondensedHierarchy) raises -> List[Int32]:
     for i in range(tree.n_edges):
         keys.append(pack_parent_child(tree.parents[i], tree.children[i]))
         idx.append(i)
-    merge_sort_u64_with_index(keys, idx)
+    merge_sort_u64_with_index_host(keys, idx)
     var rows = List[Int32](capacity=tree.n_edges)
     for k in range(tree.n_edges):
         rows.append(tree.parents[idx[k]])

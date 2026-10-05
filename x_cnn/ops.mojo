@@ -25,11 +25,33 @@ from std.math import fma  # only a sabotage arm (seam 5709) spells the fused for
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from core.philox import philox4x32_10
-from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
 comptime ElemFn = def(Int, FP, FP, FP, FP, IP, IP) thin -> None
+
+
+# lane fam-neural (2026-10-04): three backward gathers visited every window
+# (or every padded position) of the plane per pixel and kept the few that
+# read it. Each now visits only the candidates, in the same ascending order,
+# with the same membership test inside: the same terms folded in the same
+# order from +0.0, so no bit moves on any column (this file is every
+# column's element functions). IDENTICAL only; each has its own before arm.
+#: AvgPool2d backward, windows that tile the input (kernel == stride, no
+#: padding; global average pooling is this): the pixel's ONE window instead
+#: of a KH x KW scan. `-D MOJOLEARN_IDN_AVGPOOL_BWD_TILE_OFF` is the before arm.
+comptime IDN_AVGPOOL_BWD_TILE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_AVGPOOL_BWD_TILE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: pad backward: the pad margins and the pixel's own interior position
+#: instead of the whole Hp x Wp plane. `-D MOJOLEARN_IDN_PAD_BWD_BOUNDED_OFF`.
+comptime IDN_PAD_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_PAD_BWD_BOUNDED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: adaptive pool backward (avg and max): the output cells whose window can
+#: hold the pixel instead of all OH x OW. `-D MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF`.
+comptime IDN_ADAPT_BWD_BOUNDED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: nr-small D9 (2026-10-04): `softmax_xent_row_at` computes each exp once
+#: and parks it in the proba row (same words, every column and the host).
+#: -D MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+comptime XCNN_SOFTMAX_ONE_EXP = not (is_defined["MOJOLEARN_IDN_XCNN_SOFTMAX_ONE_EXP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 
 
 # ---------------------------------------------------------------- conv params
@@ -501,6 +523,19 @@ def avgpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
     var h = t % H
     var nc = t // H
     var acc = Float32(0)
+    comptime if IDN_AVGPOOL_BWD_TILE:
+        # lane fam-neural: tiling windows hold each pixel exactly once, in
+        # window (h // KH, w // KW) (the loop below reaches it at kh = h % KH,
+        # kw = w % KW and no other), so this is its one step on the same words.
+        if KH == SH and KW == SW and PH == 0 and PW == 0:
+            var oh1 = _ud(h, KH)
+            var ow1 = _ud(w, KW)
+            if oh1 < OH and ow1 < OW:
+                var o1 = (nc * OH + oh1) * OW + ow1
+                var g1 = ftz(identical_div(ftz(dout.unsafe_load(o1)), Float32(_avg_divisor(oh1, ow1, p))))
+                acc = ftz(acc + g1)
+            dx.unsafe_store(i, acc)
+            return
     for a in range(KH):
         var kh = KH - 1 - a if _g(p, PP_REV) != 0 else a
         var th = h + PH - kh
@@ -626,6 +661,26 @@ def softmax_xent_row_at(i: Int, logits: FP, grad: FP, proba: FP, rowloss: FP, la
             rowloss.unsafe_store(i, Float32(0) if ftz(logits.unsafe_load(base + y)) == inf else inf)
         return
     var s = Float32(0)
+    comptime if XCNN_SOFTMAX_ONE_EXP:
+        # nr-small D9: each exp once, parked in the proba row (the same word
+        # the second exp gave), the label's logit read first (proba may be
+        # the logits buffer)
+        var ly0 = Float32(0)
+        if y >= 0:
+            ly0 = ftz(ftz(logits.unsafe_load(base + y)) - mx)
+        for j in range(k):
+            var e = ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx)))
+            proba.unsafe_store(base + j, e)
+            s = ftz(s + e)
+        for j in range(k):
+            var pr = canon(ftz(identical_div(proba.unsafe_load(base + j), s)))
+            proba.unsafe_store(base + j, pr)
+            if y >= 0:
+                var t = ftz(pr - Float32(1)) if j == y else pr
+                grad.unsafe_store(base + j, canon(ftz(identical_div(t, Float32(n)))))
+        if y >= 0:
+            rowloss.unsafe_store(i, canon(ftz(ftz(identical_log(s)) - ly0)))
+        return
     for j in range(k):
         s = ftz(s + ftz(identical_exp(ftz(ftz(logits.unsafe_load(base + j)) - mx))))
     for j in range(k):
@@ -723,6 +778,8 @@ def adam_at(i: Int, w: FP, g: FP, mv: FP, hyper: FP, q: IP, p: IP):
 # every shape and every core count (IDENTITY_PATHS row 7's rule; DEVIATION
 # 5702). PyTorch's reference (aten/src/ATen/native/cuda/Normalization.cuh)
 # uses Welford partials across a block, a schedule of its own.
+# Under IDENTICAL the reductions are the BLOCKED folds below (BN_FOLD_BLOCK):
+# fixed blocks whose size depends on N * HW alone, on every column.
 comptime BN_MEAN = 0
 comptime BN_VAR = 1
 comptime BN_INVSTD = 2
@@ -827,6 +884,142 @@ def bn_bwd_red_at(c: Int, x: FP, g: FP, aux: FP, f3: FP, q: IP, p: IP):
     aux.unsafe_store(_bn(aux, BN_SUMGX, c, C), sgx)
 
 
+# lane idn-loss-norm-folds (2026-10-04): the BLOCKED per-channel folds,
+# IDENTICAL only, on every column (the device launches these one thread per
+# element, the host calls the same functions). A channel's count = N * HW
+# values, in the same (n, hw) order, are cut into consecutive blocks of
+# bn_fold_block(count) values; each block is one ascending chain from +0.0
+# (one thread per (channel, block)), and the channel's block partials are
+# then added ascending from +0.0 (one thread per channel). The block size is
+# a function of count alone, so the order is the same on every vendor, the
+# host and every core count. With one block the result is the single
+# chain's. It replaced one thread folding a whole channel.
+# `-D MOJOLEARN_BN_FOLD_BLOCK_OFF` restores the single chain.
+comptime BN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+
+
+@always_inline
+def bn_fold_block(count: Int) -> Int:
+    """Values per block: the smallest power of two B >= 64 with B * B >= count."""
+    var b = 64
+    while b * b < count:
+        b *= 2
+    return b
+
+
+@always_inline
+def bn_fold_blocks(count: Int) -> Int:
+    """Blocks per channel (at least 1)."""
+    var b = bn_fold_block(count)
+    var nb = (count + b - 1) // b
+    return nb if nb > 0 else 1
+
+
+@always_inline
+def _bn_blk_fold[MODE: Int](t: Int, x: FP, g: FP, aux: FP, p: IP) -> Tuple[Float32, Float32]:
+    """Block t = c * NB + b of channel c: the ascending chain over its
+    values. MODE 0: (sum x, 0), images through bn_mean_row. MODE 1:
+    (sum (x - mean)^2, 0). MODE 2: (sum g, sum g * xhat)."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var count = N * HW
+    var B = bn_fold_block(count)
+    var NB = bn_fold_blocks(count)
+    var c = t // NB
+    var j = (t - c * NB) * B
+    var j1 = min(j + B, count)
+    var a = j // HW
+    var k = j - a * HW
+    var mean = Float32(0)
+    var invstd = Float32(0)
+    comptime if MODE != 0:
+        mean = aux.unsafe_load(_bn(aux, BN_MEAN, c, C))
+    comptime if MODE == 2:
+        invstd = aux.unsafe_load(_bn(aux, BN_INVSTD, c, C))
+    var s0 = Float32(0)
+    var s1 = Float32(0)
+    while j < j1:
+        var n = a
+        comptime if MODE == 0:
+            n = bn_mean_row(a, N)
+        var base = (n * C + c) * HW
+        var kend = min(HW, k + (j1 - j))
+        var kk = k
+        while kk < kend:
+            comptime if MODE == 0:
+                s0 = ftz(s0 + ftz(x.unsafe_load(base + kk)))
+            elif MODE == 1:
+                var d = ftz(ftz(x.unsafe_load(base + kk)) - mean)
+                s0 = ftz(s0 + ftz(identical_mul(d, d)))
+            else:
+                var gv = ftz(g.unsafe_load(base + kk))
+                var xhat = ftz(identical_mul(ftz(ftz(x.unsafe_load(base + kk)) - mean), invstd))
+                s0 = ftz(s0 + gv)
+                s1 = ftz(s1 + ftz(identical_mul(gv, xhat)))
+            kk += 1
+        j += kend - k
+        k = 0
+        a += 1
+    return (s0, s1)
+
+
+@always_inline
+def _bn_blk_total(c: Int, part: FP, NB: Int) -> Float32:
+    """The NB block partials of channel c added ascending from +0.0."""
+    var acc = Float32(0)
+    for b in range(NB):
+        acc = ftz(acc + part.unsafe_load(c * NB + b))
+    return acc
+
+
+@always_inline
+def bn_blk_sum_at(t: Int, x: FP, part: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """part[t] = block t's sum of x (part holds C * NB words)."""
+    part.unsafe_store(t, _bn_blk_fold[0](t, x, x, x, p)[0])
+
+
+@always_inline
+def bn_blk_mean_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Channel c's mean from its block sums."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var acc = _bn_blk_total(c, part, bn_fold_blocks(N * HW))
+    aux.unsafe_store(_bn(aux, BN_MEAN, c, C), ftz(identical_div(acc, Float32(N * HW))))
+
+
+@always_inline
+def bn_blk_sq_at(t: Int, x: FP, part: FP, aux: FP, f3: FP, q: IP, p: IP):
+    """part[t] = block t's sum of (x - mean)^2."""
+    part.unsafe_store(t, _bn_blk_fold[1](t, x, x, aux, p)[0])
+
+
+@always_inline
+def bn_blk_var_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Channel c's biased variance and invstd from its block sums."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var sq = _bn_blk_total(c, part, bn_fold_blocks(N * HW))
+    var var_b = ftz(identical_div(sq, Float32(N * HW)))
+    aux.unsafe_store(_bn(aux, BN_VAR, c, C), var_b)
+    aux.unsafe_store(_bn(aux, BN_INVSTD, c, C), ftz(identical_rsqrt(ftz(var_b + aux.unsafe_load(0)))))
+
+
+@always_inline
+def bn_blk_red_at(t: Int, x: FP, g: FP, aux: FP, part: FP, q: IP, p: IP):
+    """part[t] = block t's sum of g, part[C * NB + t] = its sum of g * xhat
+    (part holds 2 * C * NB words)."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var r = _bn_blk_fold[2](t, x, g, aux, p)
+    part.unsafe_store(t, r[0])
+    part.unsafe_store(C * bn_fold_blocks(N * HW) + t, r[1])
+
+
+@always_inline
+def bn_blk_red_fin_at(c: Int, part: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """Channel c's sum_g and sum_gx from its block sums."""
+    var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
+    var NB = bn_fold_blocks(N * HW)
+    aux.unsafe_store(_bn(aux, BN_SUMG, c, C), _bn_blk_total(c, part, NB))
+    aux.unsafe_store(_bn(aux, BN_SUMGX, c, C), _bn_blk_total(C + c, part, NB))
+
+
 @always_inline
 def bn_bwd_dx_at(i: Int, x: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
     """Training-mode dx = (g - mean(g) - xhat * mean(g xhat)) * invstd * gamma
@@ -856,15 +1049,18 @@ def bn_bwd_eval_dx_at(i: Int, x: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
 # p = [N, C, HW, seed_lo, seed_hi, thresh_hi, thresh_lo]; hyper f[0] = drop p.
 
 
+# lane idn-loss-norm-folds (2026-10-04): the device draws a channel's mask
+# value ONCE (dropout2d_chan_at, one thread per (n, c)) and the element pass
+# reads it (dropout2d_apply_at), instead of ten Philox rounds and a division
+# per element. Same draw, same threshold, same product: no bit moves.
+# IDENTICAL only. `-D MOJOLEARN_DROPOUT2D_CH_MASK_OFF` restores the
+# per-element draw. The host column keeps dropout2d_at (the same words).
+comptime DROPOUT2D_CH_MASK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_DROPOUT2D_CH_MASK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+
+
 @always_inline
-def dropout2d_at(i: Int, x: FP, mask: FP, dst: FP, hyper: FP, q: IP, p: IP):
-    """PyTorch nn.Dropout2d (training): every (n, c) channel is zeroed with
-    probability p, the rest scaled by 1 / (1 - p). The draw is Philox4x32-10
-    at counter (n*C + c, 0, 0, 0) under the 64-bit seed, word 0 compared as
-    an INTEGER against thresh = round(p * 2^32): no float in the decision
-    (DEVIATION 5703; torch's own stream is its generator's, not ours)."""
-    var C = _g(p, 1); var HW = _g(p, 2)
-    var nc = i // HW
+def dropout2d_mask_val(nc: Int, hyper: FP, p: IP) -> Float32:
+    """Channel nc = n*C + c's mask value: 0 or 1 / (1 - p)."""
     var key = SIMD[DType.uint32, 2](UInt32(p.unsafe_load(3)), UInt32(p.unsafe_load(4)))
     var ctr = SIMD[DType.uint32, 4](UInt32(nc), 0, 0, 0)
     var u = philox4x32_10(ctr, key)[0]
@@ -872,6 +1068,32 @@ def dropout2d_at(i: Int, x: FP, mask: FP, dst: FP, hyper: FP, q: IP, p: IP):
     var m = Float32(0)
     if UInt64(u) >= thresh:
         m = ftz(identical_div(Float32(1), ftz(Float32(1) - hyper.unsafe_load(0))))
+    return m
+
+
+@always_inline
+def dropout2d_at(i: Int, x: FP, mask: FP, dst: FP, hyper: FP, q: IP, p: IP):
+    """PyTorch nn.Dropout2d (training): every (n, c) channel is zeroed with
+    probability p, the rest scaled by 1 / (1 - p). The draw is Philox4x32-10
+    at counter (n*C + c, 0, 0, 0) under the 64-bit seed, word 0 compared as
+    an INTEGER against thresh = round(p * 2^32): no float in the decision
+    (DEVIATION 5703; torch's own stream is its generator's, not ours)."""
+    var HW = _g(p, 2)
+    var m = dropout2d_mask_val(i // HW, hyper, p)
+    mask.unsafe_store(i, m)
+    dst.unsafe_store(i, ftz(identical_mul(ftz(x.unsafe_load(i)), m)))
+
+
+@always_inline
+def dropout2d_chan_at(nc: Int, tab: FP, hyper: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """tab[nc] = channel nc's mask value (tab holds N * C words)."""
+    tab.unsafe_store(nc, dropout2d_mask_val(nc, hyper, p))
+
+
+@always_inline
+def dropout2d_apply_at(i: Int, x: FP, mask: FP, dst: FP, tab: FP, q: IP, p: IP):
+    """dropout2d_at's two stores, the mask value read from tab."""
+    var m = tab.unsafe_load(_ud(i, _g(p, 2)))
     mask.unsafe_store(i, m)
     dst.unsafe_store(i, ftz(identical_mul(ftz(x.unsafe_load(i)), m)))
 
@@ -1007,6 +1229,27 @@ def pad_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
     var h = t % H
     var nc = t // H
     var acc = Float32(0)
+    comptime if IDN_PAD_BWD_BOUNDED:
+        # lane fam-neural: an interior padded position hp in [top, top + H)
+        # reads source hp - top, so only hp = h + top can read row h; every
+        # other reader is in a margin. Three ascending, disjoint ranges per
+        # axis (top margin, that one position, bottom margin) with the same
+        # test inside: the terms of the full scan in its order.
+        for sh in range(3):
+            var h0 = 0 if sh == 0 else (h + top if sh == 1 else top + H)
+            var h1 = top if sh == 0 else (h + top + 1 if sh == 1 else Hp)
+            for hp in range(h0, h1):
+                if _pad_src(hp, top, H, mode) != h:
+                    continue
+                for sw in range(3):
+                    var w0 = 0 if sw == 0 else (w + left if sw == 1 else left + W)
+                    var w1 = left if sw == 0 else (w + left + 1 if sw == 1 else Wp)
+                    for wp in range(w0, w1):
+                        if _pad_src(wp, left, W, mode) != w:
+                            continue
+                        acc = ftz(acc + ftz(g.unsafe_load((nc * Hp + hp) * Wp + wp)))
+        dx.unsafe_store(i, acc)
+        return
     for hp in range(Hp):
         if _pad_src(hp, top, H, mode) != h:
             continue
@@ -1015,6 +1258,36 @@ def pad_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
                 continue
             acc = ftz(acc + ftz(g.unsafe_load((nc * Hp + hp) * Wp + wp)))
     dx.unsafe_store(i, acc)
+
+
+
+# ---------------------------------------------------------------- channel groups
+# lane fam-neural (2026-10-04): a grouped convolution's channel slice and its
+# inverse as device word copies (the host path slices with NumPy and uploads
+# each group). p = [N, C, HW, cg, c0]: the group is channels [c0, c0 + cg) of
+# an (N, C, HW) tensor; the part is (N, cg, HW). Words are copied, never
+# converted, so no float value changes.
+
+
+@always_inline
+def chan_slice_at(i: Int, src: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """part[i] = full[n, c0 + c, s] for i = (n * cg + c) * HW + s."""
+    var C = _g(p, 1); var HW = _g(p, 2); var cg = _g(p, 3); var c0 = _g(p, 4)
+    var per = cg * HW
+    var n = _ud(i, per)
+    var rem = i - n * per
+    dst.unsafe_store(i, src.unsafe_load((n * C + c0) * HW + rem))
+
+
+@always_inline
+def chan_place_at(i: Int, src: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """full[n, c0 + c, s] = part[i]: each part word has its own full word,
+    so the launch's writes never collide."""
+    var C = _g(p, 1); var HW = _g(p, 2); var cg = _g(p, 3); var c0 = _g(p, 4)
+    var per = cg * HW
+    var n = _ud(i, per)
+    var rem = i - n * per
+    dst.unsafe_store((n * C + c0) * HW + rem, src.unsafe_load(i))
 
 
 
@@ -1035,6 +1308,24 @@ def _aend(a: Int, osize: Int, isize: Int) -> Int:
 
 
 @always_inline
+def _acell_lo(a: Int, osize: Int, isize: Int) -> Int:
+    """The first output cell whose window can hold input index `a`:
+    _aend(o) > a  <=>  (o + 1) * isize > a * osize  <=>  o >= floor(a * osize / isize)."""
+    comptime if IDN_ADAPT_BWD_BOUNDED:
+        return (a * osize) // isize
+    return 0
+
+
+@always_inline
+def _acell_hi(a: Int, osize: Int, isize: Int) -> Int:
+    """One past the last such cell: _astart(o) <= a  <=>  o * isize <
+    (a + 1) * osize  <=>  o < ceil((a + 1) * osize / isize) (at most osize)."""
+    comptime if IDN_ADAPT_BWD_BOUNDED:
+        return ((a + 1) * osize + isize - 1) // isize
+    return osize
+
+
+@always_inline
 def adapt_avg_fwd_at(i: Int, x: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
     """The window's sum in (h, w) order, then one division by its size."""
     var H = _g(p, 2); var W = _g(p, 3); var OH = _g(p, 4); var OW = _g(p, 5)
@@ -1051,6 +1342,88 @@ def adapt_avg_fwd_at(i: Int, x: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
     dst.unsafe_store(i, ftz(identical_div(acc, Float32((he - hs) * (we - ws)))))
 
 
+# lane fix-n1-lm-neural (2026-10-04, audit B9), IDENTICAL only, every column:
+# the adaptive average forward (global average pooling is its 1 x 1 case)
+# was one thread per output folding the whole window in (h, w) order. With
+# IDN_GAP_BLOCK_FOLD the window's values, in the same (h, w) order, are cut
+# into consecutive blocks of B = bn_fold_block(KH * KW) values (KH, KW the
+# largest window extents of the shape, so B depends on the shape alone):
+# one ascending chain from +0.0 per (output, block) (`adapt_avg_blk_at`),
+# then the output's block partials added ascending from +0.0 and one
+# division by the window size (`adapt_avg_fin_at`). A window of at most B
+# values (B >= 64, so every window up to 8 x 8) is one block: the old chain's
+# bits exactly; larger windows move bits on the devices and the host column
+# together. `-D MOJOLEARN_IDN_GAP_BLOCK_FOLD_OFF` restores the single chain.
+comptime IDN_GAP_BLOCK_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GAP_BLOCK_FOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+
+
+@always_inline
+def adapt_max_extent(isize: Int, osize: Int) -> Int:
+    """An upper bound of every adaptive window's extent along one axis."""
+    var k = (isize + osize - 1) // osize + 1
+    return k if k < isize else isize
+
+
+@always_inline
+def gap_fold_block(H: Int, W: Int, OH: Int, OW: Int) -> Int:
+    """Values per block of the blocked adaptive average fold."""
+    return bn_fold_block(adapt_max_extent(H, OH) * adapt_max_extent(W, OW))
+
+
+@always_inline
+def gap_fold_blocks(H: Int, W: Int, OH: Int, OW: Int) -> Int:
+    """Block slots per output (at least 1); 1 means the single chain runs."""
+    var c = adapt_max_extent(H, OH) * adapt_max_extent(W, OW)
+    var b = bn_fold_block(c)
+    var nb = (c + b - 1) // b
+    return nb if nb > 0 else 1
+
+
+@always_inline
+def adapt_avg_blk_at(t: Int, x: FP, f1: FP, part: FP, f3: FP, q: IP, p: IP):
+    """Slot t = i * NB + b: the ascending chain over block b of output i's
+    window values in (h, w) order (+0.0 for a block past the window)."""
+    var H = _g(p, 2); var W = _g(p, 3); var OH = _g(p, 4); var OW = _g(p, 5)
+    var B = gap_fold_block(H, W, OH, OW)
+    var NB = gap_fold_blocks(H, W, OH, OW)
+    var i = t // NB
+    var blk = t - i * NB
+    var ow = i % OW
+    var r = i // OW
+    var oh = r % OH
+    var nc = r // OH
+    var hs = _astart(oh, OH, H); var he = _aend(oh, OH, H)
+    var ws = _astart(ow, OW, W); var we = _aend(ow, OW, W)
+    var ww = we - ws
+    var cnt = (he - hs) * ww
+    var j1 = min((blk + 1) * B, cnt)
+    var acc = Float32(0)
+    for k in range(blk * B, j1):
+        var h = hs + k // ww
+        var w = ws + k % ww
+        acc = ftz(acc + ftz(x.unsafe_load((nc * H + h) * W + w)))
+    part.unsafe_store(t, acc)
+
+
+@always_inline
+def adapt_avg_fin_at(i: Int, part: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
+    """Output i: its block partials added ascending from +0.0, then one
+    division by the window size."""
+    var H = _g(p, 2); var W = _g(p, 3); var OH = _g(p, 4); var OW = _g(p, 5)
+    var B = gap_fold_block(H, W, OH, OW)
+    var NB = gap_fold_blocks(H, W, OH, OW)
+    var ow = i % OW
+    var oh = (i // OW) % OH
+    var hs = _astart(oh, OH, H); var he = _aend(oh, OH, H)
+    var ws = _astart(ow, OW, W); var we = _aend(ow, OW, W)
+    var cnt = (he - hs) * (we - ws)
+    var nb = (cnt + B - 1) // B
+    var acc = Float32(0)
+    for b in range(nb):
+        acc = ftz(acc + part.unsafe_load(i * NB + b))
+    dst.unsafe_store(i, ftz(identical_div(acc, Float32(cnt))))
+
+
 @always_inline
 def adapt_avg_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
     """dx[n, c, h, w] = the sum over the windows holding the pixel of
@@ -1061,11 +1434,13 @@ def adapt_avg_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
     var h = t % H
     var nc = t // H
     var acc = Float32(0)
-    for oh in range(OH):
+    # lane fam-neural (IDN_ADAPT_BWD_BOUNDED): only the cells that can hold
+    # the pixel, ascending, the membership test kept
+    for oh in range(_acell_lo(h, OH, H), _acell_hi(h, OH, H)):
         var hs = _astart(oh, OH, H); var he = _aend(oh, OH, H)
         if h < hs or h >= he:
             continue
-        for ow in range(OW):
+        for ow in range(_acell_lo(w, OW, W), _acell_hi(w, OW, W)):
             var ws = _astart(ow, OW, W); var we = _aend(ow, OW, W)
             if w < ws or w >= we:
                 continue
@@ -1103,10 +1478,10 @@ def adapt_max_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, idx: IP, p: IP):
     var nc = t // H
     var me = Int32(h * W + w)
     var acc = Float32(0)
-    for oh in range(OH):
+    for oh in range(_acell_lo(h, OH, H), _acell_hi(h, OH, H)):
         if h < _astart(oh, OH, H) or h >= _aend(oh, OH, H):
             continue
-        for ow in range(OW):
+        for ow in range(_acell_lo(w, OW, W), _acell_hi(w, OW, W)):
             if w < _astart(ow, OW, W) or w >= _aend(ow, OW, W):
                 continue
             var o = (nc * OH + oh) * OW + ow
@@ -1193,3 +1568,330 @@ def l2norm_bwd_at(r: Int, y: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
     for f in range(F):
         var t = ftz(ftz(g.unsafe_load(r * F + f)) - ftz(identical_mul(ftz(y.unsafe_load(r * F + f)), dot)))
         dst.unsafe_store(r * F + f, ftz(identical_div(t, den)))
+
+
+# ------------------------------------------------- lane fam2-neural (2026-10-04)
+# CNNClassifier.fit's last host steps, as element functions every column
+# runs (the device launches them; x_cnn/host/ops_host.mojo loops them):
+#
+# IDN_XENT_DEV_FOLD: the mean of the softmax row losses was n words read
+#   back and folded on the host in row order (`seq_mean`). It is now a
+#   BLOCKED fold on the device: blocks of LOSS_FOLD_BLOCK consecutive values
+#   folded ascending, the block sums folded the same way, level by level,
+#   and one division by n at the last level (`blk_fold_at`). The fold order
+#   depends on n alone; the host column runs the same function, so the bits
+#   move on all four columns together. `-D MOJOLEARN_IDN_XENT_DEV_FOLD_OFF`.
+# IDN_CNN_EPOCH_DEV: (a) the epoch's row order was a Fisher-Yates walk on the
+#   CPU (`epoch_order_i32`), uploaded per step. It is now a counter-based
+#   permutation each thread computes for its own position (`epoch_rows_at`:
+#   a six-round Feistel network over the smallest even-width domain holding
+#   n, cycle-walked into [0, n); 32-bit integers only). (b) Adam's step
+#   scalars were double arithmetic on the CPU (`adam_hyper_f64`). They are
+#   now computed on the device per step (`adam_hyper_at`) in double-float32
+#   arithmetic (error-free sums and Dekker products, every product pinned),
+#   about 2^-45 relative before the final rounding to float32. Both change
+#   bits, on every column together. `-D MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF`.
+comptime _FAM2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# cpu2-l11-neural (2026-10-04): FAST takes the same device forms on every
+# vendor (no host epoch order, Adam scalars, loss fold or GCN loops on a GPU
+# route). FAST promises quality, never bits, and has no `_OFF` arm here; the
+# `_OFF` defines keep their meaning for the IDENTICAL A/B only.
+comptime _FAM2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+comptime IDN_XENT_DEV_FOLD = _FAM2_FAST or (_FAM2_IDN and not is_defined["MOJOLEARN_IDN_XENT_DEV_FOLD_OFF"]())
+comptime IDN_CNN_EPOCH_DEV = _FAM2_FAST or (IDN_XENT_DEV_FOLD and not is_defined["MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF"]())
+# IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural, audit F7 `gcn_self_loops`):
+#   GCNConv's add_remaining_self_loops (drop every existing loop, append one
+#   loop per node carrying the LAST existing loop's weight, else the fill)
+#   was host NumPy over the edges (`_expansion_cnn.py` GCNConv._graph). It is
+#   now `x_cnn_gcn_loops`: a stable radix sort of the edges by key
+#   (0 for a non-loop, 1 + node for a loop) and two gather kernels on the
+#   device (`gcn_loops_device`), the host twin `gcn_loops_host` on a CPU-only
+#   install. Selection and copies only: no arithmetic, so no bit moves on any
+#   column. `-D MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF` restores the NumPy form.
+comptime IDN_GCN_LOOPS_DEV = _FAM2_FAST or (_FAM2_IDN and not is_defined["MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF"]())
+#: CANDIDATE ARM (default OFF): `-D MOJOLEARN_IDN_XENT_FOLD_BLOCK_256` folds
+#: blocks of 256 (one level up to 256 rows, two up to 65,536) instead of 32
+#: (one level up to 32 rows, two up to 1,024): fewer launches per loss, a
+#: longer one-thread chain per block. A different fold order, so different
+#: bits, on every column together (the host column reads the same constant).
+#: Dead under MOJOLEARN_IDN_ALL_OFF and reported as `x_cnn_idn2_flags` bit 3
+#: (lane/review-fixes), so the glue can see which fold a binding was built with.
+comptime IDN_XENT_FOLD_BLOCK_256 = is_defined["MOJOLEARN_IDN_XENT_FOLD_BLOCK_256"]() and not is_defined[
+    "MOJOLEARN_IDN_ALL_OFF"
+]()
+comptime LOSS_FOLD_BLOCK = 256 if IDN_XENT_FOLD_BLOCK_256 else 32
+
+
+@always_inline
+def blk_fold_at(t: Int, src: FP, dst: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """dst[p[2] + t] = src[t*B : min((t+1)*B, p[0])] added ascending from
+    +0.0 (B = LOSS_FOLD_BLOCK); when p[1] > 0 (the last level) the sum is
+    divided by p[1]."""
+    var count = _g(p, 0)
+    var div = _g(p, 1)
+    var lo = t * LOSS_FOLD_BLOCK
+    var hi = lo + LOSS_FOLD_BLOCK
+    if hi > count:
+        hi = count
+    var acc = Float32(0)
+    for i in range(lo, hi):
+        acc = ftz(acc + ftz(src.unsafe_load(i)))
+    if div > 0:
+        acc = ftz(identical_div(acc, Float32(div)))
+    dst.unsafe_store(_g(p, 2) + t, canon(acc))
+
+
+def fold_plan(count: Int, div: Int, index: Int) -> List[Int32]:
+    """`blk_fold_at`'s parameter triples, one per level, for `count` values:
+    [values at this level, 0, 0] until the level that leaves one block,
+    which is [values, div, index]."""
+    var prm = List[Int32]()
+    var c = count
+    while True:
+        var nb = (c + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK
+        var last = nb <= 1
+        prm.append(Int32(c))
+        prm.append(Int32(div if last else 0))
+        prm.append(Int32(index if last else 0))
+        if last:
+            break
+        c = nb
+    return prm^
+
+
+# ---- the epoch order
+comptime EP_N = 0  # rows
+comptime EP_POS = 1  # the position of element 0 in the epoch
+comptime EP_SHUFFLE = 2
+comptime EP_HALF = 3  # the Feistel half width in bits
+comptime EP_KEY = 4  # the 64-bit epoch key as four 16-bit words, low first
+comptime EP_LEN = 8
+
+
+@always_inline
+def _perm_mix(x: UInt32) -> UInt32:
+    """murmur3's 32-bit finalizer (a bijection of the 32-bit words)."""
+    var z = x
+    z = (z ^ (z >> 16)) * UInt32(0x85EBCA6B)
+    z = (z ^ (z >> 13)) * UInt32(0xC2B2AE35)
+    return z ^ (z >> 16)
+
+
+def epoch_key(seed: UInt64, epoch: Int) -> UInt64:
+    """Epoch `epoch`'s permutation key: splitmix64's output at state
+    seed + (epoch + 1) * golden (the counter is the epoch)."""
+    var z = seed + UInt64(epoch + 1) * UInt64(0x9E3779B97F4A7C15)
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    return z ^ (z >> 31)
+
+
+def epoch_rows_prm(n: Int, pos: Int, shuffle: Bool, key: UInt64) -> List[Int32]:
+    """`epoch_rows_at`'s parameter block for positions pos, pos + 1, ... of
+    an epoch over n rows (1 <= n < 2^31)."""
+    var bits = 1
+    while (1 << bits) < n:
+        bits += 1
+    var prm = List[Int32]()
+    prm.append(Int32(n))
+    prm.append(Int32(pos))
+    prm.append(Int32(1 if shuffle else 0))
+    prm.append(Int32((bits + 1) // 2))
+    for w in range(4):
+        prm.append(Int32(Int((key >> UInt64(16 * w)) & UInt64(0xFFFF))))
+    return prm^
+
+
+@always_inline
+def epoch_rows_at(i: Int, f0: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """q[i] = the row at position p[EP_POS] + i of the epoch's order: the
+    position itself without shuffle, else its image under the epoch's
+    permutation of [0, n): six Feistel rounds on the two EP_HALF-bit halves
+    (round function `_perm_mix` of the half plus the round key, masked),
+    repeated until the image is below n (cycle walking: the image of a
+    permutation of the 2^(2 half) words restricted to [0, n) is a
+    permutation of [0, n)). Integers only: the same row on every column."""
+    var n = UInt32(_g(p, EP_N))
+    var pos = _g(p, EP_POS) + i
+    if _g(p, EP_SHUFFLE) == 0:
+        q.unsafe_store(i, Int32(pos))
+        return
+    var h = UInt32(_g(p, EP_HALF))
+    var mask = (UInt32(1) << h) - UInt32(1)
+    var k0 = UInt32(_g(p, EP_KEY)) | (UInt32(_g(p, EP_KEY + 1)) << UInt32(16))
+    var k1 = UInt32(_g(p, EP_KEY + 2)) | (UInt32(_g(p, EP_KEY + 3)) << UInt32(16))
+    var x = UInt32(pos)
+    while True:
+        var l = (x >> h) & mask
+        var r = x & mask
+        for rd in range(6):
+            var rk = _perm_mix(k0 + UInt32(rd) * UInt32(0x9E3779B9)) ^ k1
+            var f = _perm_mix(r + rk) & mask
+            var t = l ^ f
+            l = r
+            r = t
+        x = (l << h) | r
+        if x < n:
+            break
+    q.unsafe_store(i, Int32(Int(x)))
+
+
+# ---- Adam's step scalars in double-float32
+@always_inline
+def _two_sum(a: Float32, b: Float32) -> Tuple[Float32, Float32]:
+    """(s, e) with s = fl(a + b) and s + e = a + b exactly (Knuth)."""
+    var s = ftz(a + b)
+    var bb = ftz(s - a)
+    var e = ftz(ftz(a - ftz(s - bb)) + ftz(b - bb))
+    return (s, e)
+
+
+@always_inline
+def _two_prod(a: Float32, b: Float32) -> Tuple[Float32, Float32]:
+    """(p, e) with p = fl(a b) and p + e = a b exactly (Dekker's split, no
+    fused operation; every product pinned)."""
+    var p = ftz(identical_mul(a, b))
+    var ca = ftz(identical_mul(Float32(4097), a))
+    var ah = ftz(ca - ftz(ca - a))
+    var al = ftz(a - ah)
+    var cb = ftz(identical_mul(Float32(4097), b))
+    var bh = ftz(cb - ftz(cb - b))
+    var bl = ftz(b - bh)
+    var e = ftz(ftz(identical_mul(ah, bh)) - p)
+    e = ftz(e + ftz(identical_mul(ah, bl)))
+    e = ftz(e + ftz(identical_mul(al, bh)))
+    e = ftz(e + ftz(identical_mul(al, bl)))
+    return (p, e)
+
+
+@always_inline
+def _dd_mul(ah: Float32, al: Float32, bh: Float32, bl: Float32) -> Tuple[Float32, Float32]:
+    """(ah + al)(bh + bl) as a normalized pair."""
+    var pe = _two_prod(ah, bh)
+    var e = ftz(pe[1] + ftz(ftz(identical_mul(ah, bl)) + ftz(identical_mul(al, bh))))
+    return _two_sum(pe[0], e)
+
+
+@always_inline
+def _dd_powi(bh: Float32, bl: Float32, e: Int) -> Tuple[Float32, Float32]:
+    """(bh + bl) ** e for e >= 0 by squaring, in one fixed order."""
+    var rh = Float32(1)
+    var rl = Float32(0)
+    var xh = bh
+    var xl = bl
+    var k = e
+    while k > 0:
+        if (k & 1) != 0:
+            var r = _dd_mul(rh, rl, xh, xl)
+            rh = r[0]
+            rl = r[1]
+        var x = _dd_mul(xh, xl, xh, xl)
+        xh = x[0]
+        xl = x[1]
+        k >>= 1
+    return (rh, rl)
+
+
+@always_inline
+def _dd_one_minus(h: Float32, l: Float32) -> Tuple[Float32, Float32]:
+    """1 - (h + l) as a normalized pair."""
+    var se = _two_sum(Float32(1), -h)
+    return _two_sum(se[0], ftz(se[1] - l))
+
+
+comptime AH_BASE = 10  # [lr hi, lr lo, b1 hi, b1 lo, b2 hi, b2 lo, eps, wd hi, wd lo, decoupled]
+comptime AH_ROW = 9
+
+
+@always_inline
+def adam_hyper_at(t: Int, base: FP, hy: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """hy[9 t : 9 t + 9] = `adam_at`'s hyper block of 1-based step p[0] + t:
+    [lr / bc1, 1 - b1, b2, 1 - b2, eps, sqrt(bc2), wd, decoupled, 1 - lr wd]
+    with bc = 1 - beta ** step, each value the float32 nearest a
+    double-float32 result (the pairs in `base` are the float32 nearest the
+    caller's double and the float32 nearest the remainder)."""
+    var step = _g(p, 0) + t
+    var lrh = base.unsafe_load(0)
+    var lrl = base.unsafe_load(1)
+    var b1h = base.unsafe_load(2)
+    var b1l = base.unsafe_load(3)
+    var b2h = base.unsafe_load(4)
+    var b2l = base.unsafe_load(5)
+    var wdh = base.unsafe_load(7)
+    var wdl = base.unsafe_load(8)
+    var p1 = _dd_powi(b1h, b1l, step)
+    var c1 = _dd_one_minus(p1[0], p1[1])
+    var p2 = _dd_powi(b2h, b2l, step)
+    var c2 = _dd_one_minus(p2[0], p2[1])
+    # lr / bc1: the float32 quotient plus its correction
+    var q0 = ftz(identical_div(lrh, c1[0]))
+    var step_size = q0
+    if c1[0] != Float32(0):
+        var pe = _two_prod(q0, c1[0])
+        var rem = ftz(ftz(ftz(lrh - pe[0]) - pe[1]) + lrl)
+        rem = ftz(rem - ftz(identical_mul(q0, c1[1])))
+        step_size = ftz(q0 + ftz(identical_div(rem, c1[0])))
+    # sqrt(bc2): the float32 root plus one Newton correction
+    var s0 = ftz(identical_sqrt(c2[0]))
+    var sq = s0
+    if s0 > Float32(0):
+        var ps = _two_prod(s0, s0)
+        var rs = ftz(ftz(ftz(c2[0] - ps[0]) - ps[1]) + c2[1])
+        sq = ftz(s0 + ftz(identical_div(rs, ftz(s0 + s0))))
+    var o1 = _dd_one_minus(b1h, b1l)
+    var o2 = _dd_one_minus(b2h, b2l)
+    var lw = _dd_mul(lrh, lrl, wdh, wdl)
+    var ow = _dd_one_minus(lw[0], lw[1])
+    var row = t * AH_ROW
+    hy.unsafe_store(row + 0, canon(step_size))
+    hy.unsafe_store(row + 1, canon(o1[0]))
+    hy.unsafe_store(row + 2, b2h)
+    hy.unsafe_store(row + 3, canon(o2[0]))
+    hy.unsafe_store(row + 4, base.unsafe_load(6))
+    hy.unsafe_store(row + 5, canon(sq))
+    hy.unsafe_store(row + 6, wdh)
+    hy.unsafe_store(row + 7, base.unsafe_load(9))
+    hy.unsafe_store(row + 8, canon(ow[0]))
+
+
+def adam_hyper_base(lr: Float64, b1: Float64, b2: Float64, eps: Float64, wd: Float64, dec: Float64) -> List[Float32]:
+    """`adam_hyper_at`'s base block: each double hyperparameter as the
+    float32 nearest it and the float32 nearest the remainder (two casts and
+    one exact subtraction; no step arithmetic)."""
+    var out = List[Float32]()
+    var lrh = Float32(lr)
+    out.append(lrh)
+    out.append(Float32(lr - Float64(lrh)))
+    var b1h = Float32(b1)
+    out.append(b1h)
+    out.append(Float32(b1 - Float64(b1h)))
+    var b2h = Float32(b2)
+    out.append(b2h)
+    out.append(Float32(b2 - Float64(b2h)))
+    out.append(Float32(eps))
+    var wdh = Float32(wd)
+    out.append(wdh)
+    out.append(Float32(wd - Float64(wdh)))
+    out.append(Float32(dec))
+    return out^
+
+
+def idn2_flags() -> Int:
+    """The lane fam2-neural switches this build has on (both bindings export
+    it as `x_cnn_idn2_flags`): bit 0 IDN_XENT_DEV_FOLD, bit 1 IDN_CNN_EPOCH_DEV,
+    bit 2 IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural); bit 3 the candidate
+    IDN_XENT_FOLD_BLOCK_256 and bit 4 a `-D MOJOLEARN_IDN_ALL_OFF` build
+    (lane/review-fixes: the glue reads the build's OFF arm from here, not
+    only from the environment)."""
+    var f = 0
+    comptime if IDN_XENT_DEV_FOLD:
+        f |= 1
+    comptime if IDN_CNN_EPOCH_DEV:
+        f |= 2
+    comptime if IDN_GCN_LOOPS_DEV:
+        f |= 4
+    comptime if IDN_XENT_FOLD_BLOCK_256:
+        f |= 8
+    comptime if is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        f |= 16
+    return f

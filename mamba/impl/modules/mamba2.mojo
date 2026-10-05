@@ -66,7 +66,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
-from gemm.checks.gemm_identical import identical_gemm
+from mamba.impl.modules.idn_gemm_ws import IDN_MAMBA_GEMM_WS, mamba_proj_gemm
 
 # ORIENTATION NUMBERING: gemm_oracle's OP_NT = 1 (OP_NN = 0, OP_TN = 2),
 # the numbering identical_gemm reads -- NOT bench/gemm_shapes.mojo's
@@ -101,7 +101,11 @@ from mamba.impl.modules.ssd_minimal import (
 #: lane afn-mamba (2026-10-03): Apple FAST experiment switches (arena views
 #: and the one-readback refusal); every use is a `comptime if` whose other
 #: arm is main's spelling unchanged.
-from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA, AFN_MAMBA_DEVICE_REFUSAL
+from mamba.impl.modules.afn_defines import (
+    AFN_MAMBA_ARENA,
+    AFN_MAMBA_DEVICE_REFUSAL,
+    IDN_MAMBA_CONV_CELL,
+)
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
 #: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
@@ -119,7 +123,7 @@ from mamba.impl.modeling.modeling_mamba import (
     mamba_rms_norm,
     mamba_upload,
     mamba_zeros,
-    _refuse_nonfinite_named,
+    _refuse_nonfinite_named_host,
     residual_add_kernel,
 )
 
@@ -555,6 +559,58 @@ def m2_conv_kernel(
         )
 
 
+def m2_conv_cell_kernel(
+    conv_out: MutPointer[Float32, MutAnyOrigin],  # [M, CD]
+    silu_out: MutPointer[Float32, MutAnyOrigin],  # [M, CD]
+    in_proj: MutPointer[Float32, MutAnyOrigin],  # [M, dip]
+    conv_w: MutPointer[Float32, MutAnyOrigin],  # [CD, 4]
+    conv_b: MutPointer[Float32, MutAnyOrigin],  # [CD]
+    win: MutPointer[Float32, MutAnyOrigin],  # [B, CD, 4]
+    b_in: Int32,
+    l_in: Int32,
+    di_in: Int32,
+    cd_in: Int32,
+    dip_in: Int32,
+):
+    """IDN_MAMBA_CONV_CELL (roadmap B2): `m2_conv_kernel`'s per-position
+    body, one thread per (batch, position, channel) cell of [M, CD]. The
+    same bias-seeded taps 0..3 ascending, so the same bits."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var dip = Int(dip_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * l * cd:
+        return
+    var row = cell // cd
+    var d = cell - row * cd
+    var bb = row // l
+    var li = row - bb * l
+    var acc = ftz(conv_b.unsafe_load(d))
+    comptime if SAB_S6_BIAS_LAST:
+        acc = Float32(0.0)
+    for kk in range(M2_D_CONV):
+        var k = kk
+        comptime if SAB_S6_TAPS_REVERSED:
+            k = M2_D_CONV - 1 - kk
+        var p = li - (M2_D_CONV - 1) + k
+        var xv: Float32
+        if p >= 0:
+            xv = in_proj.unsafe_load((bb * l + p) * dip + di + d)
+        else:
+            xv = win.unsafe_load((bb * cd + d) * M2_D_CONV + (M2_D_CONV + p))
+        acc = ftz(
+            identical_mul_add(
+                ftz(conv_w.unsafe_load(d * M2_D_CONV + k)), ftz(xv), acc
+            )
+        )
+    comptime if SAB_S6_BIAS_LAST:
+        acc = ftz(acc + ftz(conv_b.unsafe_load(d)))
+    conv_out.unsafe_store(cell, acc)
+    silu_out.unsafe_store(cell, ftz(identical_silu(acc)))
+
+
 def m2_conv_window_kernel(
     new_win: MutPointer[Float32, MutAnyOrigin],  # [B, CD, 4]
     in_proj: MutPointer[Float32, MutAnyOrigin],  # [M, dip]
@@ -932,45 +988,45 @@ def mamba2_refuse_bad_inputs(
         batch.add(ctx, String("state.buf_dtraw"), state.buf_dtraw, b * M2_CHUNK_SIZE * nh)
         batch.finish(ctx)
         return
-    _refuse_nonfinite_named("x", mamba_download(ctx, x, b * l * dm))
+    _refuse_nonfinite_named_host("x", mamba_download(ctx, x, b * l * dm))
     if not w.weights_checked:
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "norm.weight", mamba_download(ctx, w.norm_w, dm)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "in_proj.weight", mamba_download(ctx, w.w_in, dip * dm)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "conv1d.weight", mamba_download(ctx, w.conv_w, cd * M2_D_CONV)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "conv1d.bias", mamba_download(ctx, w.conv_b, cd)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "dt_bias", mamba_download(ctx, w.dt_bias, nh)
         )
-        _refuse_nonfinite_named("A_log", mamba_download(ctx, w.a_log, nh))
-        _refuse_nonfinite_named("D", mamba_download(ctx, w.d_skip, nh))
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host("A_log", mamba_download(ctx, w.a_log, nh))
+        _refuse_nonfinite_named_host("D", mamba_download(ctx, w.d_skip, nh))
+        _refuse_nonfinite_named_host(
             "norm_gated.weight", mamba_download(ctx, w.gnorm_w, di)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "out_proj.weight", mamba_download(ctx, w.w_out, dm * di)
         )
         w.weights_checked = True
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.conv_win",
         mamba_download(ctx, state.conv_win, b * cd * M2_D_CONV),
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.h",
         mamba_download(ctx, state.h, b * nh * M2_HEADDIM * M2_D_STATE),
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.buf_xbc",
         mamba_download(ctx, state.buf_xbc, b * M2_CHUNK_SIZE * cd),
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.buf_dtraw",
         mamba_download(ctx, state.buf_dtraw, b * M2_CHUNK_SIZE * nh),
     )
@@ -1095,11 +1151,11 @@ def mamba2_block_forward(
         if not afn_proj_gemm_into(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
         )
     trace.record_device[DType.float32](
@@ -1120,21 +1176,38 @@ def mamba2_block_forward(
     )
 
     # ---- S6/S7: conv + SiLU over xBC; window updated out of place.
-    ctx.enqueue_function[m2_conv_kernel](
-        stages.conv_out.unsafe_ptr(),
-        stages.silu_out.unsafe_ptr(),
-        stages.in_proj.unsafe_ptr(),
-        w.conv_w.unsafe_ptr(),
-        w.conv_b.unsafe_ptr(),
-        state.conv_win.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(di),
-        Int32(cd),
-        Int32(dip),
-        grid_dim=(_grid(b * cd), 1, 1),
-        block_dim=(MAMBA2_TPB, 1, 1),
-    )
+    comptime if IDN_MAMBA_CONV_CELL:
+        ctx.enqueue_function[m2_conv_cell_kernel](
+            stages.conv_out.unsafe_ptr(),
+            stages.silu_out.unsafe_ptr(),
+            stages.in_proj.unsafe_ptr(),
+            w.conv_w.unsafe_ptr(),
+            w.conv_b.unsafe_ptr(),
+            state.conv_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(di),
+            Int32(cd),
+            Int32(dip),
+            grid_dim=(_grid(b * l * cd), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[m2_conv_kernel](
+            stages.conv_out.unsafe_ptr(),
+            stages.silu_out.unsafe_ptr(),
+            stages.in_proj.unsafe_ptr(),
+            w.conv_w.unsafe_ptr(),
+            w.conv_b.unsafe_ptr(),
+            state.conv_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(di),
+            Int32(cd),
+            Int32(dip),
+            grid_dim=(_grid(b * cd), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
     ctx.enqueue_function[m2_conv_window_kernel](
         stages.conv_win.unsafe_ptr(),
         stages.in_proj.unsafe_ptr(),
@@ -1433,7 +1506,7 @@ def mamba2_block_forward(
         if trace.enabled or not afn_proj_gemm_resid_into(
             ctx, stages.residual_out, x, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
             )
             trace.record_device[DType.float32](
@@ -1448,7 +1521,7 @@ def mamba2_block_forward(
                 block_dim=(MAMBA2_TPB, 1, 1),
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
         )
         trace.record_device[DType.float32](
@@ -1463,6 +1536,12 @@ def mamba2_block_forward(
             block_dim=(MAMBA2_TPB, 1, 1),
         )
     _m2_stage_sync(ctx, trace)
+    comptime if IDN_MAMBA_GEMM_WS:
+        # lane fam-lm: the projection GEMMs no longer wait (idn_gemm_ws.mojo),
+        # so the forward completes here, once, before any caller can release
+        # an operand; main's out_proj GEMM wait stood two launches earlier.
+        if not trace.enabled:
+            ctx.synchronize()
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm
     )

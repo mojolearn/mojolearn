@@ -35,6 +35,7 @@ from checks.numerics import (
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.math import fma as _std_fma
+from std.memory import bitcast
 
 comptime FP = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -61,6 +62,13 @@ comptime SEQ_FAST_FMA = (
 #: host binding only): the GEMM reduction runs k DESCENDING, so every trained
 #: model this binary returns differs from the device's.
 comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+#: nr-small D9 (2026-10-04): softmax / cross-entropy rows compute each exp
+#: once and park it in the output row (the same flushed word the second exp
+#: produced, so the same bits on every column and the host).
+#: -D MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF (or MOJOLEARN_IDN_ALL_OFF).
+comptime SEQ_SOFTMAX_ONE_EXP = not (
+    is_defined["MOJOLEARN_IDN_SEQ_SOFTMAX_ONE_EXP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 #: Apple FAST switches of lane/apple-fast-tsa2. Default ON for FAST + Apple
 #: since the M3 A/B (n=1, quality same; STL taxi-hourly 359.0 -> 7.0 ms,
@@ -178,6 +186,23 @@ comptime OP_STL_MA = 76
 comptime OP_STL_LOESS = 77
 comptime OP_STL_DESEAS = 78
 comptime OP_STL_FINISH = 79
+#: cpu2-l11-neural (2026-10-04): MLPClassifier's target and binary
+#: probability layouts on the executor, not in host NumPy.
+comptime OP_ONE_HOT = 80
+comptime OP_PROBA2 = 81
+# nr-small (2026-10-04), sequence/mlp.mojo: the MLP fit's blocked L2 and
+# batch-loss folds, the device epoch order and the device epoch loss
+comptime OP_MLP_L2PART = 90
+comptime OP_MLP_L2FOLD = 91
+comptime OP_MLP_ROWPART = 92
+comptime OP_MLP_PERM = 93
+comptime OP_MLP_EPOCH_LOSS = 94
+#: lane cpu4-python: p0[t] = t (float32, exact below 2^24): the unshuffled
+#: epoch order of the RNN fit, built on the executor.
+comptime OP_SEQ_IOTA = 95
+#: lane cpu4-python: ProphetForecaster's scaled time and seasonal phases on the
+#: executor (soft binary64, `sequence/prophet.mojo` op_prophet_prep).
+comptime OP_PROPHET_PREP = 96
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
@@ -424,7 +449,9 @@ def op_gemm(t: Int, a: Args):
 
 
 def op_gemm_splitk(t: Int, a: Args):
-    """FAST only (apple2): op_gemm with K split into S = i9 blocks of i10.
+    """FAST (apple2) and, since nr-small D3, IDENTICAL's blocked recurrent
+    weight gradients (sequence/recurrent.mojo `wgrad_blocked`, the block
+    size a function of K alone): op_gemm with K split into S = i9 blocks of i10.
     i11 == 0: thread t = s MN + mn folds block s of cell mn from zero into
     p3[t]; i11 == 1: thread mn adds the S partials in order (onto C when
     i7) into C. A different order from op_gemm's one chain: FAST only, for
@@ -683,11 +710,26 @@ def op_ce(t: Int, a: Args):
         var v = ld(a.p0, base + c)
         if v > m:
             m = v
+    var y = Int(a.p1.unsafe_load(t))
     var s = Float32(0.0)
+    comptime if SEQ_SOFTMAX_ONE_EXP:
+        # each exp once: parked in the grad row, read back for the division
+        var zy = ld(a.p0, base + y)
+        for c in range(C):
+            var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
+            st(a.p2, base + c, e)
+            s = add(s, e)
+        var ls = ftz(identical_log(s))
+        st(a.p3, t, sub(ls, sub(zy, m)))
+        for c in range(C):
+            var p = ftz(identical_div(ld(a.p2, base + c), s))
+            if c == y:
+                p = sub(p, Float32(1.0))
+            st(a.p2, base + c, mul(p, a.f0))
+        return
     for c in range(C):
         s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
     var ls = ftz(identical_log(s))
-    var y = Int(a.p1.unsafe_load(t))
     st(a.p3, t, sub(ls, sub(ld(a.p0, base + y), m)))
     for c in range(C):
         var p = ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s))
@@ -865,8 +907,41 @@ def op_fill(t: Int, a: Args):
     a.p0.unsafe_store(t, a.f0)
 
 
+def op_seq_iota(t: Int, a: Args):
+    """p0[t] = t as float32 (t < 2^24: exact)."""
+    a.p0.unsafe_store(t, Float32(t))
+
+
 def op_copy(t: Int, a: Args):
     a.p1.unsafe_store(t, a.p0.unsafe_load(t))
+
+
+def op_one_hot(t: Int, a: Args):
+    """From int32 class codes (their bits in p0's words): with i1 = 0,
+    p1[r, c] = 1.0 if code[r] is c else 0.0 over an (N, i0) row-major
+    target; with i1 = 1 (i0 = 1), p1[r] = Float32(code[r]). Exact."""
+    var k = a.i0
+    var r = t // k
+    var code = Int(bitcast[DType.int32](a.p0.unsafe_load(r)))
+    if a.i1 == 1:
+        a.p1.unsafe_store(t, Float32(code))
+        return
+    var c = t - r * k
+    var v = Float32(0.0)
+    if code == c:
+        v = Float32(1.0)
+    a.p1.unsafe_store(t, v)
+
+
+def op_proba2(t: Int, a: Args):
+    """p1[r, 0] = 1 - p0[r], p1[r, 1] = p0[r]: a logistic output as the
+    two-column probability (one float32 subtraction, as NumPy's `1 - p`)."""
+    var r = t // 2
+    var p = a.p0.unsafe_load(r)
+    if t - r * 2 == 0:
+        a.p1.unsafe_store(t, Float32(1.0) - p)
+    else:
+        a.p1.unsafe_store(t, p)
 
 
 def op_seq_out(t: Int, a: Args):
@@ -892,6 +967,16 @@ def op_softmax(t: Int, a: Args):
         if v > m:
             m = v
     var s = Float32(0.0)
+    comptime if SEQ_SOFTMAX_ONE_EXP:
+        # each exp once: parked in the output row (p1 may be p0: element c
+        # is read before it is written), read back for the division
+        for c in range(C):
+            var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
+            st(a.p1, base + c, e)
+            s = add(s, e)
+        for c in range(C):
+            st(a.p1, base + c, ftz(identical_div(ld(a.p1, base + c), s)))
+        return
     for c in range(C):
         s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
     for c in range(C):

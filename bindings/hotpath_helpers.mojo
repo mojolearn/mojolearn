@@ -38,13 +38,14 @@ The per-element helpers (`cast_elements`, `equal_elements`, `gather_i32`)
 run one SIMD range on the calling thread (cpu-gpu-cleanup c-core: the host
 pool is not used from the GPU binding); no element depends on another.
 """
-from std.math import isfinite, sqrt
+from std.math import fma, isfinite, sqrt
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from sequence.schedule import fill_epoch_order, splitmix64
 from checks.numerics import portable_cosf, portable_log64
+from metrics.checks.pinned_sum import canonicalize_nan
 
 
 
@@ -463,7 +464,7 @@ def equal_elements_binding(
 # ---------------------------------------------------------------------------
 
 
-def _encode_labels[dt: DType](
+def _encode_labels_host[dt: DType](
     src: MutPointer[Scalar[dt], MutUntrackedOrigin], n: Int,
     classes: MutPointer[Scalar[dt], MutUntrackedOrigin], max_classes: Int,
     codes: MutPointer[Int32, MutUntrackedOrigin],
@@ -538,7 +539,7 @@ def _encode_labels_binding[dt: DType](
     var dp = _ptr[DType.int32](Int(py=codes_addr))
     var k: Int
     with GILReleased(Python()):
-        k = _encode_labels[dt](sp, count, cp, cap, dp)
+        k = _encode_labels_host[dt](sp, count, cp, cap, dp)
     if k == -2:
         raise Error("mojolearn: y contains a NaN label; NaN is not a class")
     return PythonObject(k)
@@ -984,7 +985,52 @@ def next_combination_i64_binding(addr: PythonObject, p: PythonObject, n: PythonO
     return PythonObject(1)
 
 
-def ic_running_min_f64_binding(
+def ic_running_min_f32_host_binding(
+    llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
+    ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
+) raises -> PythonObject:
+    """lane/fam2-timeseries: `ic_running_min_f64` with the criterion in
+    float32, the host column of the device order choice
+    (`arima/impl/fast_order_search.mojo::order_ic_argmin_kernel`):
+    ic[b] = -2 llf[b] + Float32(penalty), ONE rounding (the product is exact,
+    so contraction cannot change it), then the same running first minimum.
+    `ic` and `best_ic` are float32, `best_idx` int64. A NaN best criterion is
+    the kernel's canonical NaN once chosen."""
+    var count = Int(py=n)
+    var k = Int(py=order)
+    if count < 1 or k < 0:
+        raise Error("ic_running_min_f32: n must be positive and order non-negative")
+    var pen = Float32(Float64(py=penalty))
+    var lp = _ptr[DType.float32](Int(py=llf_addr))
+    var ip = _ptr[DType.float32](Int(py=ic_addr))
+    var bp = _ptr[DType.float32](Int(py=best_ic_addr))
+    var xp = _ptr[DType.int64](Int(py=best_idx_addr))
+    with GILReleased(Python()):
+        for b in range(count):
+            # lane/review-fixes: flushed as the device's
+            # `ftz(fma(-2, ftz(ll), pen))` (arima fast_order_search); -2 x is
+            # exact, so mul + add is the fma's word
+            var v = _ftz_bits(Float32(-2.0) * _ftz_bits(lp.unsafe_load(b)) + pen)
+            if v != v:
+                v = bitcast[DType.float32](UInt32(0x7FC00000))
+            ip.unsafe_store(b, v)
+            if k == 0:
+                bp.unsafe_store(b, v)
+                xp.unsafe_store(b, 0)
+            else:
+                var cur = bp.unsafe_load(b)
+                var take = False
+                if cur == cur:
+                    take = (v != v) or v < cur
+                comptime if HOTPATH_SABOTAGE:
+                    take = not take
+                if take:
+                    bp.unsafe_store(b, v)
+                    xp.unsafe_store(b, Int64(k))
+    return PythonObject(0)
+
+
+def ic_running_min_f64_host_binding(
     llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
     ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
 ) raises -> PythonObject:
@@ -1005,6 +1051,10 @@ def ic_running_min_f64_binding(
     with GILReleased(Python()):
         for b in range(count):
             var v = -2.0 * Float64(lp.unsafe_load(b)) + pen
+            # lane cpu4-python: a NaN criterion is the canonical quiet NaN,
+            # as the device form (core/ic_min_device.mojo, soft binary64)
+            if v != v:
+                v = bitcast[DType.float64](UInt64(0x7FF8000000000000))
             ip.unsafe_store(b, v)
             if k == 0:
                 bp.unsafe_store(b, v)
@@ -1044,7 +1094,8 @@ def fold_pair_f32_binding(dst_addr: PythonObject, src_addr: PythonObject, n: Pyt
     var sp = _ptr[DType.float32](Int(py=src_addr))
     with GILReleased(Python()):
         for i in range(count):
-            var s = _ftz_bits(_ftz_bits(dp.unsafe_load(i)) + _ftz_bits(sp.unsafe_load(i)))
+            # NaN -> the canonical word, as the device kernel (lane/review-fixes)
+            var s = canonicalize_nan(_ftz_bits(_ftz_bits(dp.unsafe_load(i)) + _ftz_bits(sp.unsafe_load(i))))
             comptime if HOTPATH_SABOTAGE:
                 s = -s
             dp.unsafe_store(i, s)
@@ -1333,7 +1384,7 @@ def split_table_i32_binding(
     return PythonObject(0)
 
 
-def scatter_rows_bytes_binding(
+def scatter_rows_bytes_host_binding(
     src_addr: PythonObject, rows_addr: PythonObject, m: PythonObject, row_bytes: PythonObject,
     dst_addr: PythonObject, dst_rows: PythonObject,
 ) raises -> PythonObject:
@@ -1389,7 +1440,10 @@ def uniform_init_f32_binding(
         for i in range(count):
             var s = seed + (off + UInt64(i)) * UInt64(0x9E3779B97F4A7C15)
             var u = Float64(splitmix64(s) >> 11) * 1.1102230246251565e-16
-            dp.unsafe_store(i, Float32(lo + (hi - lo) * u))
+            # lane fix-s1-shared: an explicit fma (Mojo's default fp-mode
+            # contracts `lo + (hi - lo) * u` anyway); the device twin
+            # (core/hotpath_device.mojo) is the same sf64_fma
+            dp.unsafe_store(i, Float32(fma(hi - lo, u, lo)))
     return PythonObject(0)
 
 
@@ -1424,7 +1478,9 @@ def normal_init_f32_binding(
             var u2 = Float64(splitmix64(s2) >> 11) * 1.1102230246251565e-16
             var r = sqrt(-2.0 * portable_log64(u1))
             var cz = portable_cosf(Float32(6.283185307179586 * u2))
-            dp.unsafe_store(i, Float32(mu + sd * (r * Float64(cz))))
+            # lane fix-s1-shared: an explicit fma, as the device twin's
+            # sf64_fma (core/hotpath_device.mojo::_normal_init_kernel)
+            dp.unsafe_store(i, Float32(fma(sd, r * Float64(cz), mu)))
     return PythonObject(0)
 
 
@@ -1772,6 +1828,97 @@ def strat_group_assign_i32_binding(addrs: PythonObject, dims: PythonObject) rais
     for f in range(K):
         sp.unsafe_store(f, Int64(fold_n[f]))
     return PythonObject(0)
+
+
+def strat_group_plan_i32_binding(addrs: PythonObject, dims: PythonObject) raises -> PythonObject:
+    """`strat_group_assign_i32` from the group x class table (lane
+    cpu4-python): the table is the device's (`bincount2_i32`, int64
+    dist[g * k + c]); this is the group-level plan only, the same statements
+    in the same order as `strat_group_assign_i32` after its row loop (the
+    same folds, the same sizes). Returns 1 when the largest class has fewer
+    rows than n_folds, else 0.
+    addrs = [dist, perm (0: none), dst, sizes]; dims = [k, m, n_folds]."""
+    if len(addrs) != 4 or len(dims) != 3:
+        raise Error("strat_group_plan_i32: addrs [dist, perm, dst, sizes], dims [k, m, n_folds]")
+    var kk = Int(py=dims[0])
+    var mm = Int(py=dims[1])
+    var K = Int(py=dims[2])
+    if kk < 1 or mm < 1 or K < 1:
+        raise Error("strat_group_plan_i32: bad sizes")
+    var tp = _ptr[DType.int64](Int(py=addrs[0]))
+    var pa = Int(py=addrs[1])
+    var dp = _ptr[DType.int32](Int(py=addrs[2]))
+    var sp = _ptr[DType.int64](Int(py=addrs[3]))
+    var counts = List[Int](length=kk, fill=0)
+    var dist = List[Int](length=mm * kk, fill=0)
+    for g in range(mm):
+        for c in range(kk):
+            var v = Int(tp.unsafe_load(g * kk + c))
+            dist[g * kk + c] = v
+            counts[c] += v
+    var most = 0
+    for c in range(kk):
+        most = max(most, counts[c])
+    if most < K:
+        return PythonObject(1)
+    var order = List[Int](capacity=mm)
+    if pa != 0:
+        var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pa)
+        for j in range(mm):
+            order.append(Int(pp.unsafe_load(j)))
+    else:
+        for j in range(mm):
+            order.append(j)
+    # -std per group in `order`'s positions, stably sorted ascending
+    var keys = List[Float64](capacity=mm)
+    for j in range(mm):
+        var g = order[j]
+        var tot = Float64(0)
+        for c in range(kk):
+            tot += Float64(dist[g * kk + c])
+        var mu = tot / Float64(kk)
+        var ss = Float64(0)
+        for c in range(kk):
+            var dv = Float64(dist[g * kk + c]) - mu
+            ss += dv * dv
+        keys.append(-sqrt(ss / Float64(kk)))
+    var pos = _stable_order_f64(keys)
+    var fold_dist = List[Int](length=K * kk, fill=0)
+    var fold_n = List[Int](length=K, fill=0)
+    var col = List[Float64](length=K, fill=0)
+    for t in range(mm):
+        var g = order[pos[t]]
+        var best = -1
+        var best_score = Float64(0)
+        var best_n = 0
+        for f in range(K):
+            var score = Float64(0)
+            for c in range(kk):
+                var mu = Float64(0)
+                for j in range(K):
+                    var v = fold_dist[j * kk + c] + (dist[g * kk + c] if j == f else 0)
+                    col[j] = Float64(v) / Float64(counts[c])
+                    mu += col[j]
+                mu = mu / Float64(K)
+                var ss = Float64(0)
+                for j in range(K):
+                    var dv = col[j] - mu
+                    ss += dv * dv
+                score += sqrt(ss / Float64(K))
+            score = score / Float64(kk)
+            if best < 0 or score < best_score or (score == best_score and fold_n[f] < best_n):
+                best = f
+                best_score = score
+                best_n = fold_n[f]
+        for c in range(kk):
+            fold_dist[best * kk + c] += dist[g * kk + c]
+            fold_n[best] += dist[g * kk + c]
+        dp.unsafe_store(g, Int32(best))
+    for f in range(K):
+        sp.unsafe_store(f, Int64(fold_n[f]))
+    return PythonObject(0)
+
+
 
 
 @always_inline

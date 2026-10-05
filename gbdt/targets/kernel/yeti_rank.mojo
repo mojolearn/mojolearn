@@ -102,7 +102,12 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
+from checks.kernel_matrix import (
+    COLUMN_AMD,
+    COLUMN_APPLE,
+    COLUMN_NVIDIA,
+    TARGET_COLUMN,
+)
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
@@ -152,6 +157,25 @@ def yeti_block_parallel_for[column: Int]() -> Bool:
     # threadgroup limit, and its barriers order threadgroup memory only.
     # `-D MOJOLEARN_3040_YETI_SEQUENTIAL` is the A/B arm.
     comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        return True
+    # lane/fam-gbdt (2026-10-04), IDN_YETI_BLOCK_AMD: IDENTICAL on the AMD
+    # column takes the block kernel too, default on. The AMD column ran each
+    # task (its permutations, its 1024-key sort, its pairs) on ONE GPU
+    # thread; the block kernel is the same bits (DEVIATION 3040: integer
+    # sort of distinct composites, each document's float sums in the one
+    # order the sequential kernel uses), needs 32 KiB of block shared memory
+    # (the MI300/MI325 give 64 KiB) and no warp primitive outside the
+    # Apple-only `YETI_FAST_SORT`. `-D MOJOLEARN_IDN_GBDT_YETI_BLOCK_AMD_OFF`
+    # (or the master `-D MOJOLEARN_IDN_ALL_OFF`, or the kill switch above)
+    # restores the sequential kernel on AMD.
+    comptime if (
+        column == COLUMN_AMD
+        and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not (
+            is_defined["MOJOLEARN_IDN_GBDT_YETI_BLOCK_AMD_OFF"]()
+            or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        )
+    ):
         return True
     return column == COLUMN_NVIDIA
 

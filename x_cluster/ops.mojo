@@ -107,15 +107,23 @@ trait ClusterOps(Movable):
         """dst[t * d + f] = src[idx[t] * d + f], t < m (lane/neural-pass108)."""
         ...
 
+    def center_cols(mut self, x: Int, n: Int, d: Int, mean: Int, dst: Int) raises:
+        """mean (d) = each column's float32 mean of x (n x d row-major), the
+        `post_bodies.ff_col_fold_host` float-float fold and `ff_mean_cell`;
+        dst (n x d) = `post_bodies.center_cell`(x, mean) (lane
+        fix-c1-cluster: BisectingKMeans' centering on the device)."""
+        ...
+
     def kmeans_rows(
         mut self, sub: Int, x: List[Float32], rows: List[Int], d: Int, k: Int, max_iter: Int,
         tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
         mut labels: List[Int32],
     ) raises -> Float64:
         """`kmeans` (unit weights) of the rows `rows` of the host matrix `x`
-        in that order, whose gathered copy is the slot `sub` (the device
-        fits it in place; the host gathers `x`). The same words as `kmeans`
-        on the gathered list (lane/neural-pass108)."""
+        in that order, whose gathered copy is the slot `sub` (both columns
+        fit that slot; `x` is only kept alive and may be a one-word
+        placeholder). The same words as `kmeans` on the gathered list
+        (lane/neural-pass108)."""
         ...
 
     def shrink(mut self, slot: Int) raises:
@@ -214,13 +222,14 @@ trait ClusterOps(Movable):
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
         ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
-        mut steps_done: Int,
+        mut steps_done: Int, tol: Float64, cum_w: List[Float64],
     ) raises -> Bool:
         """FAST on Apple (lane/apple-fast-cluster): `minibatch_fit`'s step
         loop resident on the device (x_cluster/minibatch_fast.mojo); `c`,
         `w` in and out. False when the column does not take it (the host,
         every IDENTICAL build, a shape past its caps): the caller runs the
-        step loop."""
+        step loop. `tol > 0` stops on the squared center shift; `cum_w`
+        (cumulative sample weights, empty: unit) draws the batch rows."""
         ...
 
     def set_i(mut self, slot: Int, v: List[Int32]) raises:
@@ -239,6 +248,29 @@ trait ClusterOps(Movable):
         """`gather_rows(src, d, idx, m, dst)` then `nearest(dst, m, c, k, d,
         labels, dist)`: the device fuses them into one launch (the same words;
         lane/neural-pass133)."""
+        ...
+
+    def mb_draw(mut self, idx: Int, m: Int, n: Int, state: UInt64) raises:
+        """idx[t] = draw t + 1 of the splitmix64 stream whose state is
+        `state`, `% n`, t < m: `SplitMix64.below(n)` m times, by counter
+        (fam2-cluster)."""
+        ...
+
+    def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
+        """`fold_into` of the one slot `a` (FM_VAL, FM_SQRT: the modes that
+        read `a` alone) left in dst[off], dst[off + 1]; `th`, `tl` float
+        slots of `minibatch.mb_fold_scratch(n)` words the device's levels
+        use (the host ignores them)."""
+        ...
+
+    def copy_at(mut self, src: Int, n: Int, dst: Int, off: Int) raises:
+        """dst[off + t] = src[t], t < n (float slots)."""
+        ...
+
+    def dist_sel(mut self, a: Int, n: Int, c: Int, d: Int, lab: Int, j: Int, dst: Int) raises:
+        """dst[t] = `bodies.sq_dist_rows` of row t of `a` to row lab[t] of
+        `c` where j < 0 or lab[t] == j, else 0 (t < n; `lab` an int slot):
+        each row's distance to its OWN center (fam2-cluster)."""
         ...
 
     def agglo_on_device(self) -> Bool:
@@ -403,6 +435,18 @@ trait ClusterOps(Movable):
         """The convergence window: e into column it % conv_iter of ring
         (n x conv_iter); True when it >= conv_iter, every row's window is
         all ones or all zeros, and some e is 1."""
+        ...
+
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, ring: Int, n: Int, damping: Float32, max_iter: Int,
+        conv_iter: Int,
+    ) raises -> Int:
+        """The whole message loop (`ap_r`, `ap_a`, `ap_e`, `ap_conv` per
+        iteration) with the convergence window decided where the data is
+        (fam2-cluster): returns the iteration it converged at (the `it` of
+        `affinity_fit`'s break), `max_iter` when it never did, or -1 when the
+        column does not take it (the host, FAST, the `_OFF` define): the
+        caller runs the loop."""
         ...
 
     def ap_exemplars(mut self, s: Int, e: Int, n: Int, centers: Int, labels: Int) raises -> Int:

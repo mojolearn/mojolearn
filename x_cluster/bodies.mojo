@@ -21,7 +21,10 @@ from std.memory import bitcast
 
 from std.bit import count_leading_zeros
 
-from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_pow, identical_sqrt
+from mixture.nk_order import gmm_nk_fold_levels
 
 comptime FPtr = MutPointer[Float32, MutAnyOrigin]
 comptime IPtr = MutPointer[Int32, MutAnyOrigin]
@@ -108,6 +111,74 @@ def kth_smallest_row(m: FPtr, n_cols: Int, k: Int, dst: FPtr, row: Int):
     dst[row] = bitcast[DType.float32](lo)
 
 
+# K6 (IDENTICAL, lane ml-cluster-nbrs 2026-10-04): MeanShift's per-shift sum
+# over the rows within the bandwidth is a BLOCKED fold: rows in chunks of
+# MSI_T, each chunk folded ascending from zero, the chunk partials folded
+# ascending from zero. That fixed shape lets the device run a (seed, row
+# chunk) grid (x_cluster/meanshift_idn.mojo) instead of one block per seed;
+# this body (the host column and the one-thread fallback) restates it add for
+# add. The count is an integer. Bits move from the one-chain fold on every
+# vendor and the host together (old bits do not matter); a blocked float sum
+# is at least as accurate as the n-long chain. Scratch is 2 * ns * d words
+# (meanshift_fit sizes it with MSI_SCRATCH_PER_SEED). `-D
+# MOJOLEARN_IDN_MEANSHIFT_GRID_OFF` (or MOJOLEARN_IDN_ALL_OFF) restores the
+# one-chain fold and the one-block-per-seed team kernel.
+comptime IDN_MEANSHIFT_GRID = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_MEANSHIFT_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime MSI_T = 256
+"""Rows per chunk of the K6 blocked fold (fixed: the bits depend on it)."""
+comptime MSI_SCRATCH_PER_SEED = 2 if IDN_MEANSHIFT_GRID else 1
+"""Scratch words per seed and feature that `meanshift_seed` uses."""
+
+
+@always_inline
+def meanshift_seed_blocked[REV: Bool = False](
+    x: FPtr, n: Int, d: Int, bw: Float32, stop: Float32, max_iter: Int,
+    centers: FPtr, scratch: FPtr, intensity: IPtr, iters: IPtr, s: Int,
+):
+    """K6: `meanshift_seed` with the blocked fold (see IDN_MEANSHIFT_GRID).
+    scratch[2sd .. 2sd+d) holds the sums, scratch[2sd+d .. 2sd+2d) one chunk's
+    partials. REV (host sabotage) walks each chunk's rows descending."""
+    var completed = 0
+    var within = 0
+    var sb = s * 2 * d
+    var pb = sb + d
+    while True:
+        within = 0
+        for f in range(d):
+            scratch[sb + f] = Float32(0)
+        var c0 = 0
+        while c0 < n:
+            var cn = min(MSI_T, n - c0)
+            for f in range(d):
+                scratch[pb + f] = Float32(0)
+            for rr in range(cn):
+                var p = c0 + (cn - 1 - rr if REV else rr)
+                var dd = identical_sqrt(sq_dist_rows(centers, s, x, p, d))
+                if dd <= bw:
+                    within += 1
+                    for f in range(d):
+                        scratch[pb + f] = ftz(scratch[pb + f] + ftz(x[p * d + f]))
+            for f in range(d):
+                scratch[sb + f] = ftz(scratch[sb + f] + scratch[pb + f])
+            c0 += cn
+        if within == 0:
+            break
+        var shift2 = Float32(0)
+        var cnt = Float32(within)
+        for f in range(d):
+            var m = ftz(identical_div(scratch[sb + f], cnt))
+            var t = ftz(m - centers[s * d + f])
+            shift2 = ftz(shift2 + ftz(identical_mul(t, t)))
+            centers[s * d + f] = m
+        if identical_sqrt(shift2) <= stop or completed == max_iter:
+            break
+        completed += 1
+    intensity[s] = Int32(within)
+    iters[s] = Int32(completed)
+
+
 # DEVIATION 5104 (the flat-kernel fold over the rows ascending, one quotient
 # per feature, the rooted shift test). Row 113; meanshift_check.
 @always_inline
@@ -119,7 +190,11 @@ def meanshift_seed[REV: Bool = False](
     `s`, whose start is already in `centers[s]`: the flat kernel (every point
     with `sqrt(d2) <= bw`), the mean by one ascending fold over the points and
     ONE quotient per feature, the shift `sqrt(sum (new - old)^2)`, stop at
-    `shift <= stop` or `completed == max_iter`. `scratch[s]` holds the sums."""
+    `shift <= stop` or `completed == max_iter`. `scratch[s]` holds the sums.
+    Under IDN_MEANSHIFT_GRID (K6) the blocked fold runs instead."""
+    comptime if IDN_MEANSHIFT_GRID:
+        meanshift_seed_blocked[REV](x, n, d, bw, stop, max_iter, centers, scratch, intensity, iters, s)
+        return
     var completed = 0
     var within = 0
     while True:
@@ -462,6 +537,35 @@ def nk_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
     for i in range(n):
         acc = nk_step(acc, resp[i * kc + k])
     dst[k] = nk_final(acc)
+
+
+# fam2-cluster (2026-10-04), IDENTICAL, default ON: the component mass of
+# the x_cluster mixtures (BayesianGaussianMixture, and GaussianMixture where
+# it runs through `bgmm_fit`) folds in `mixture/nk_order.mojo`'s chunked
+# levels (runs of GMM_NK_CHUNK rows ascending from zero, the partials the
+# same way, `+ 10 eps` last) instead of one rows-ascending chain: on the
+# device one thread a chunk a component (`mixture/checks/mstep.mojo`'s
+# `nk_level1_kernel`, `nk_level_kernel`, `nk_finish_kernel`) where
+# `_nk_kernel` kept kc threads walking all n rows. BITS MOVE, on every
+# column together: the device (`DeviceOps._moments_gemm`), the host column
+# (`HostOps.moments`) and the check oracle (`checks/oracles.oracle_moments`)
+# read this one constant. `-D MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF=1` (or the
+# master) restores the chain; the define must reach the host-column build.
+comptime IDN_BGMM_NK_LEVELS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+def nk_levels_cell(resp: FPtr, n: Int, kc: Int, dst: FPtr, k: Int):
+    """`nk_cell` in the chunked levels, on the host (the device's words)."""
+    var col = List[Float32](capacity=n)
+    for i in range(n):
+        col.append(resp[i * kc + k])
+    dst[k] = nk_final(gmm_nk_fold_levels(col))
 
 
 @always_inline

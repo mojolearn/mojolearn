@@ -108,6 +108,7 @@ validation, which is where a refusal is still right.
 from std.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import ftz, identical_div
+from std.memory import bitcast
 
 
 #: `weights` as a value. Their strings are `'uniform'` and `'distance'`
@@ -238,6 +239,51 @@ def host_distance_weights(
                 " not on a denormal-honoring one (DEVIATION 555)"
             )
     return w^
+
+
+def distance_weights_kernel(
+    dist: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    flag: MutPointer[Int32, MutAnyOrigin],
+    n_queries_in: Int32,
+    k_in: Int32,
+):
+    """`host_distance_weights` as a kernel, one thread per query row (its k
+    slots in slot order): the same statements, so the same words
+    (lane/fam2-neighbors, KNN_IDN_DEVICE_WEIGHTS in
+    neighbors/impl/selection/knn.mojo). The two refusals become flag[0]:
+    1 for a negative distance, 2 for a row whose normalizer is not positive
+    (DEVIATION 555); the caller zeroes it and raises on a nonzero value."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var k = Int(k_in)
+    if i >= Int(n_queries_in):
+        return
+    var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var base = i * k
+    var any_inf = False
+    for j in range(k):
+        var d = ftz(dist.unsafe_load(base + j))
+        var v = ftz(identical_div(Float32(1.0), d))
+        if v == pos_inf or v == neg_inf:
+            any_inf = True
+        w.unsafe_store(base + j, v)
+    if any_inf:
+        for j in range(k):
+            var v = w.unsafe_load(base + j)
+            if v == pos_inf:
+                w.unsafe_store(base + j, Float32(1.0))
+            elif v == neg_inf:
+                flag.unsafe_store(0, Int32(1))
+                w.unsafe_store(base + j, Float32(0.0))
+            else:
+                w.unsafe_store(base + j, Float32(0.0))
+        return
+    var s = Float32(0.0)
+    for j in range(k):
+        s = ftz(s + ftz(w.unsafe_load(base + j)))
+    if s <= Float32(0.0):
+        flag.unsafe_store(0, Int32(2))
 
 
 def weighted_class_probs_kernel(

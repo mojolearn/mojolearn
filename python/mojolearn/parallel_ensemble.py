@@ -72,11 +72,7 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
         pool.close()
     result = type(estimator)(**params)
     result.__dict__.update(parts[0].__dict__)
-    offsets = [0]
-    for part in parts:
-        base = offsets[-1]
-        offsets.extend(base + offset for offset in part._offsets.tolist()[1:])
-    result._offsets = Array.from_list(offsets, parts[0]._offsets.dtype)
+    result._offsets = _merge_offsets([part._offsets for part in parts])  # glue: one offset buffer per device shard
     for name in ('_colid', '_quesval', '_left_child', '_leaves'):  # glue: the four node arrays by name
         arrays = [getattr(part, name) for part in parts]  # glue: one buffer per device shard
         merged = empty((sum(a.size for a in arrays),), arrays[0].dtype)  # glue: total size over device shards
@@ -95,6 +91,32 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
     result._resident_forest = None
     estimator.__dict__ = result.__dict__.copy()
     return estimator
+
+
+def _merge_offsets(arrays):
+    """The shards' int32 tree offsets as one offset array: shard s's
+    offsets after its leading 0, each plus the sum of the earlier shards'
+    last offsets (lane cpu2-l4-modelsel). The shards' buffers are laid end to
+    end by byte copies and rebased in one launch of the base binding's
+    `msel_rebase_offsets_i32` (core/msel_device.mojo; the core host binding
+    on a CPU-only install), which refuses a merged offset past int32."""
+    from ._buffer import _native
+    parts = []
+    for a in arrays:  # glue: one offset buffer per device shard
+        a = a if a.dtype == '<i4' else a.astype('<i4')
+        parts.append(a._as_c())
+    lens = Array.from_list([a.size for a in parts], '<i8')  # glue: one length per device shard
+    n_raw = sum(a.size for a in parts)  # glue: total over device shards
+    n_out = 1 + n_raw - len(parts)
+    raw = empty((n_raw,), '<i4')
+    cursor = 0
+    for a in parts:  # glue: one memcopy per device shard
+        memcopy(addr(raw, name='offsets') + cursor, addr_ro(a, name='offsets'), a.nbytes)
+        cursor += a.nbytes
+    out = empty((n_out,), '<i4')
+    _native('msel_rebase_offsets_i32')(addr_ro(raw, name='offsets'), n_raw, addr_ro(lens, name='lens'),
+                                       len(parts), n_out, addr(out, name='offsets'))
+    return out
 
 
 def fit_isolation_forest(estimator, X, *, devices=(0,), sample_weight=None):

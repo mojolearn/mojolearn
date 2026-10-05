@@ -757,7 +757,11 @@ def view(rel, text, name):
 def edit_line(text, startswith, fn):
     """`text` with the one line that starts with `startswith` rewritten."""
     lines = text.split("\n")
-    hits = [i for i, line in enumerate(lines) if line.startswith(startswith)]
+    # Edit the base assignment, not a later self-referential append such as
+    # FAST_CLASSICAL_NAMES="$FAST_CLASSICAL_NAMES ...".
+    var = startswith.split("=", 1)[0]
+    hits = [i for i, line in enumerate(lines) if line.startswith(startswith)
+            and not line.startswith(startswith + "$" + var)]
     assert len(hits) == 1, (startswith, hits)
     lines[hits[0]] = fn(lines[hits[0]])
     return "\n".join(lines)

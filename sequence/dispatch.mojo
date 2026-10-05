@@ -38,6 +38,13 @@ from sequence.ops import (
     OP_MLP_ROWLOSS,
     OP_SUMSQ,
     OP_MLP_BLOSS,
+    OP_MLP_L2PART,
+    OP_MLP_L2FOLD,
+    OP_MLP_ROWPART,
+    OP_MLP_PERM,
+    OP_MLP_EPOCH_LOSS,
+    OP_SEQ_IOTA,
+    OP_PROPHET_PREP,
     OP_L2GRAD,
     OP_DIVS,
     OP_AF_ALPHA,
@@ -83,6 +90,10 @@ from sequence.ops import (
     OP_STL_LOESS,
     OP_STL_DESEAS,
     OP_STL_FINISH,
+    OP_ONE_HOT,
+    OP_PROBA2,
+    op_one_hot,
+    op_proba2,
     op_gemm,
     op_gemm_splitk,
     op_bias,
@@ -98,6 +109,7 @@ from sequence.ops import (
     op_sum,
     op_opt,
     op_fill,
+    op_seq_iota,
     op_copy,
     op_seq_out,
     op_softmax,
@@ -105,13 +117,14 @@ from sequence.ops import (
 from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, op_af_update_mat, op_af_vec, op_af_denom, op_af_apply, op_seg_sumsq, op_chunk_sumsq, op_af_blk_sumsq, op_lamb_upd, op_lamb_ratio, op_lamb_apply, op_lamb_blk, op_lamb_segfold, op_lamb_clip, op_lamb_trust, op_lamb_apply_all
 from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
 from sequence.mlp import op_act, op_act_bwd, op_colsum_div, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
+from sequence.mlp import op_mlp_epoch_loss, op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
 from sequence.stl import op_stl
 from sequence.theta import op_theta
 from sequence.croston import op_croston
 from sequence.ets import op_ets, op_ets_init, op_ets_lik
 from sequence.garch import op_garch
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
-from sequence.prophet import op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
+from sequence.prophet import op_prophet_prep, op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, op_cell_bwd_scan, op_cell_fwd_scan
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 from sequence.vecar import op_var_resid, op_var_sigma
@@ -192,6 +205,20 @@ def apply[OP: Int](t: Int, a: Args):
         op_sumsq(t, a)
     elif OP == OP_MLP_BLOSS:
         op_mlp_bloss(t, a)
+    elif OP == OP_MLP_L2PART:
+        op_mlp_l2part(t, a)
+    elif OP == OP_MLP_L2FOLD:
+        op_mlp_l2fold(t, a)
+    elif OP == OP_MLP_ROWPART:
+        op_mlp_rowpart(t, a)
+    elif OP == OP_MLP_PERM:
+        op_mlp_perm(t, a)
+    elif OP == OP_MLP_EPOCH_LOSS:
+        op_mlp_epoch_loss(t, a)
+    elif OP == OP_SEQ_IOTA:
+        op_seq_iota(t, a)
+    elif OP == OP_PROPHET_PREP:
+        op_prophet_prep(t, a)
     elif OP == OP_L2GRAD:
         op_l2grad(t, a)
     elif OP == OP_DIVS:
@@ -283,3 +310,7 @@ def apply[OP: Int](t: Int, a: Args):
         op_stl_deseas(t, a)
     elif OP == OP_STL_FINISH:
         op_stl_finish(t, a)
+    elif OP == OP_ONE_HOT:
+        op_one_hot(t, a)
+    elif OP == OP_PROBA2:
+        op_proba2(t, a)

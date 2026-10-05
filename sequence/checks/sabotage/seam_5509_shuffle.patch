@@ -1,8 +1,7 @@
 diff --git a/sequence/mlp.mojo b/sequence/mlp.mojo
-index dbc7e31ec..108f3328b 100644
 --- a/sequence/mlp.mojo
 +++ b/sequence/mlp.mojo
-@@ -165,10 +165,8 @@ struct SplitMix(Movable):
+@@ -267,13 +267,11 @@ struct SplitMix(Movable):
  
  def fisher_yates(mut rng: SplitMix, mut perm: List[Float32]):
      var n = len(perm)
@@ -14,3 +13,6 @@ index dbc7e31ec..108f3328b 100644
          perm[i] = perm[j]
          perm[j] = t
 -        i -= 1
+ 
+ 
+ # ------------------------------------------------------------------ nr-small blocked folds

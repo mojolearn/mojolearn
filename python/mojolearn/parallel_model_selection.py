@@ -11,7 +11,7 @@ from . import _backend
 from ._array import Array
 from ._parallel_pool import DevicePool
 from ._gpu_witness import require_distinct_processes, require_distinct_workers
-from .model_selection import _clone, _prepare_folds, _take_rows
+from .model_selection import _clone, _prepare_folds, _FoldRows
 
 __all__ = ['cross_val_score']
 
@@ -83,7 +83,11 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
     except Exception as exc:
         raise TypeError('parallel cross-validation requires pickleable estimators and scorers') from exc
     scores = []
+    # X, y and the fold indices resident on the driver's device; each
+    # worker's fold rows are one device gather (lane cpu2-l4-modelsel)
+    rows = None
     try:
+        rows = _FoldRows(X, y, folds)
         width = len(pool.devices)
         # ONE WITNESS PER ROUTE, EACH SAYING ONLY WHAT IT CAN. On CUDA/HIP
         # that is one visible physical GPU per worker at local ordinal zero,
@@ -101,14 +105,16 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
             require_distinct_workers(inventory, vendor, width)
         for start in range(0, len(folds), width):
             requests = []
-            for train, test in folds[start:start + width]:
+            for i in range(start, min(start + width, len(folds))):  # glue: one request per worker
+                Xtr, ytr, Xte, yte = rows.take(i)
                 requests.append(('cross_val_fold', _clone(prototype),
-                                 (_take_rows(X, train), _take_rows(y, train),
-                                  _take_rows(X, test), _take_rows(y, test), scoring)))
+                                 (Xtr, ytr, Xte, yte, scoring)))
             results = pool.map(requests)
             if len(results) != len(requests):
                 raise ValueError("cross-validation workers returned an incomplete fold batch")
             scores.extend(results)
     finally:
+        if rows is not None:
+            rows.close()
         pool.close()
     return Array.from_list(scores, '<f8')

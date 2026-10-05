@@ -134,6 +134,7 @@ from hdbscan.checks.hdbscan_sabotage import (
     mr_scale,
 )
 from hierarchy.impl.cluster.detail.connectivities import FLOAT32_MAX
+from hierarchy.checks.nan_guard import nan_distances_message
 
 
 comptime MR_TPB = 256
@@ -321,17 +322,115 @@ def refuse_nonfinite_device(
         return
     var n_bad = count_nonfinite_cells(ctx, data, n)
     if n_bad != 0:
+        raise Error(nonfinite_message(n_bad, n, where, what))
+
+
+def nonfinite_message(n_bad: Int, n: Int, where: String, what: String) -> String:
+    """DEVIATION 1607's refusal text."""
+    return (
+        where + ": " + String(n_bad) + " of " + String(n) + " " + what
+        + " are NaN or infinite; refused by name (DEVIATION 1607,"
+        " IDENTITY_PATHS row 39). A computed NaN's payload is the"
+        " vendor's (Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD"
+        " 0xffc00000) and this array is a recorded card stage, so its"
+        " bits cannot be allowed to name the vendor instead of the"
+        " arithmetic. To close this refusal, give the caller a finite"
+        " input; there is no canonicalization that would be honest"
+        " here, because a NaN of OUR choosing inside a dendrogram"
+        " distance is a number nobody computed"
+    )
+
+
+def mutual_reachability_dense_guard_kernel(
+    mr: MutPointer[Float32, MutAnyOrigin],
+    dists: MutPointer[Float32, MutAnyOrigin],
+    core: MutPointer[Float32, MutAnyOrigin],
+    counts: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    inv_alpha: Float32,
+    sabotage: Int32,
+):
+    """fam2-cluster, IDN_HDB_MR_FUSED_GUARD: `mutual_reachability_dense_
+    kernel` with the two guards' counts taken in the same pass.
+    `counts[0]` += 1 for a NaN distance cell (`count_nan_kernel`'s test on
+    the cell this thread loads anyway; the diagonal is FLT_MAX, never NaN)
+    and `counts[1]` += 1 for a NaN or infinite reachability
+    (`count_nonfinite_kernel`'s test on the value this thread stores).
+    Integer atomic adds: the totals are order-free. The stored cells are
+    the unfused kernel's, bit for bit."""
+    var m = Int(m_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= m * m:
+        return
+    var row = Int(UInt32(idx) // UInt32(m))
+    var col = idx - row * m
+    if row == col:
+        mr.unsafe_store(idx, FLOAT32_MAX)
+        return
+    var d = dists.unsafe_load(idx)
+    if d != d:
+        _ = Atomic.fetch_add(counts.unsafe_offset(0), Int32(1))
+    var scaled = mr_scale(inv_alpha, d)
+    var v = mr_max3(
+        core.unsafe_load(row), core.unsafe_load(col), scaled, sabotage
+    )
+    mr.unsafe_store(idx, v)
+    var bad = False
+    if v != v:
+        bad = True
+    elif v > FLOAT32_MAX:
+        bad = True
+    elif v < -FLOAT32_MAX:
+        bad = True
+    if bad:
+        _ = Atomic.fetch_add(counts.unsafe_offset(1), Int32(1))
+
+
+def mutual_reachability_dense_guarded(
+    ctx: DeviceContext,
+    mut mr: DeviceBuffer[DType.float32],
+    mut dists: DeviceBuffer[DType.float32],
+    mut core: DeviceBuffer[DType.float32],
+    m: Int,
+    inv_alpha: Float32,
+    where: String,
+    mr_tpb: Int = MR_TPB,
+    sabotage: Int32 = HDB_SAB_NONE,
+) raises:
+    """The transform and both refusals from one pass and one readback.
+    The caller ran `pairwise_distances(..., nan_guard=False)`. The distance
+    refusal (DEVIATION 623) comes first, as it does when `pairwise_
+    distances` raises it; then DEVIATION 1607 on the reachabilities, which
+    `HDB_SAB_SKIP_GUARDS` skips as it skips `refuse_nonfinite_device`."""
+    var nnz = m * m
+    var blocks = (nnz + mr_tpb - 1) // mr_tpb if nnz > 0 else 1
+    var counts = ctx.enqueue_create_buffer[DType.int32](2)
+    var h = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_memset(counts, Int32(0))
+    ctx.enqueue_function[mutual_reachability_dense_guard_kernel](
+        mr.unsafe_ptr(),
+        dists.unsafe_ptr(),
+        core.unsafe_ptr(),
+        counts.unsafe_ptr(),
+        Int32(m),
+        inv_alpha,
+        sabotage,
+        grid_dim=(blocks, 1, 1),
+        block_dim=(mr_tpb, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=counts)
+    ctx.synchronize()
+    var n_nan = Int(h.unsafe_ptr().unsafe_load(0))
+    var n_bad = Int(h.unsafe_ptr().unsafe_load(1))
+    _ = h^
+    _ = counts^
+    if n_nan != 0:
         raise Error(
-            where + ": " + String(n_bad) + " of " + String(n) + " " + what
-            + " are NaN or infinite; refused by name (DEVIATION 1607,"
-            " IDENTITY_PATHS row 39). A computed NaN's payload is the"
-            " vendor's (Apple 0x7fc00000, NVIDIA 0x7fffffff, AMD"
-            " 0xffc00000) and this array is a recorded card stage, so its"
-            " bits cannot be allowed to name the vendor instead of the"
-            " arithmetic. To close this refusal, give the caller a finite"
-            " input; there is no canonicalization that would be honest"
-            " here, because a NaN of OUR choosing inside a dendrogram"
-            " distance is a number nobody computed"
+            nan_distances_message(n_nan, nnz, "hierarchy.pairwise_distances")
+        )
+    if sabotage != HDB_SAB_SKIP_GUARDS and n_bad != 0:
+        raise Error(
+            nonfinite_message(n_bad, nnz, where, "mutual reachability cells")
         )
 
 

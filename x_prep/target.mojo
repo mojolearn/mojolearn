@@ -16,12 +16,177 @@ from std.memory import bitcast
 from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, RUN, run_block
 from checks.numerics import ftz
 from x_prep.prims import add, acc_add, sub, mul, div
+from x_prep.idn_fold import IDN_TE_GLOBAL_TREE, IDN_TE_ENC_TREE, TREE_W, LTLanes, lt_zero, lt_tree
+
+
+def te_global_lt(t: Int, f: FP, q: IP):
+    """`te_global_unit`'s q and t in the lane-tree order: lane r mod TREE_W
+    takes row r's target (rows of fold fi skipped) ascending, then the tree;
+    the count is exact; the squared deviations from the mean likewise.
+    x_prep/idn_tree.mojo `te_global_lt_kernel` is the device's spelling."""
+    var n = p(q, 1)
+    var T = p(q, 2)
+    var Y = p(q, 0)
+    var FO = p(q, 3)
+    var fi = t // T
+    var tt = t % T
+    var a = LTLanes(fill=Float32(0))
+    var cnt = 0
+    for i in range(n):
+        if Int(ld(f, FO + i)) == fi:
+            continue
+        var l = i % TREE_W
+        a[l] = add(a[l], ld(f, Y + i * T + tt))
+        cnt += 1
+    var s = lt_tree(a)
+    var mean = Float32(0)
+    var ss = Float32(0)
+    if cnt > 0:
+        mean = div(s, Float32(cnt))
+        lt_zero(a)
+        for i in range(n):
+            if Int(ld(f, FO + i)) == fi:
+                continue
+            var l = i % TREE_W
+            var e = sub(ld(f, Y + i * T + tt), mean)
+            a[l] = add(a[l], mul(e, e))
+        ss = div(lt_tree(a), Float32(cnt))
+    st(f, p(q, 4) + 2 * t, mean)
+    st(f, p(q, 4) + 2 * t + 1, ss)
+
+
+def te_enc_lt_fold(f: FP, rp: FP, BF: Int, BY: Int, R: Int, Y: Int, T: Int, tt: Int, FO: Int, lo: Int, hi: Int,
+                   fi: Int, smooth: Float32, mut s: Float32, mut cnt: Int, mut mean: Float32, mut ssd: Float32):
+    """One category's te_enc folds in the lane-tree order over its bucket
+    positions k in [lo, hi) (rank r = k - lo): BF >= 0 reads the gathered
+    folds BF[k] and targets BY[k] (`te_gather`), else row i = the int word
+    rp[R + k] (the unit: the arena's `te_bucket` ROWS; the host column: its
+    own bucket)'s FOLD[FO + i] and Y[Y + i*T + tt]. Rows of fold fi add
+    nothing. The sum
+    and count; with smooth < 0 and a count, the mean and the squared
+    deviations the same way (else they stay 0)."""
+    var a = LTLanes(fill=Float32(0))
+    var c = 0
+    for k in range(lo, hi):
+        var fo: Int
+        var y: Float32
+        if BF >= 0:
+            fo = Int(ld(f, BF + k))
+            y = ld(f, BY + k)
+        else:
+            var i = ldi(rp, R + k)
+            fo = Int(ld(f, FO + i))
+            y = ld(f, Y + i * T + tt)
+        if fo == fi:
+            continue
+        var l = (k - lo) % TREE_W
+        a[l] = add(a[l], y)
+        c += 1
+    s = lt_tree(a)
+    cnt = c
+    mean = Float32(0)
+    ssd = Float32(0)
+    if smooth < Float32(0) and c > 0:
+        mean = div(s, Float32(c))
+        lt_zero(a)
+        for k in range(lo, hi):
+            var fo: Int
+            var y: Float32
+            if BF >= 0:
+                fo = Int(ld(f, BF + k))
+                y = ld(f, BY + k)
+            else:
+                var i = ldi(rp, R + k)
+                fo = Int(ld(f, FO + i))
+                y = ld(f, Y + i * T + tt)
+            if fo == fi:
+                continue
+            var l = (k - lo) % TREE_W
+            var e = sub(y, mean)
+            a[l] = add(a[l], mul(e, e))
+        ssd = lt_tree(a)
+
+
+def te_enc_lt(t: Int, f: FP, q: IP):
+    """`te_enc_unit`'s q and t in the lane-tree order: rank r of a row among
+    its category's rows (all folds, ascending), lane r mod TREE_W. With BK > 0
+    the bucket gives the ranks (k - lo); else every row is scanned and the
+    rank counted. x_prep/idn_tree.mojo `te_enc_lt_kernel` is the device's
+    spelling, x_prep/host/target.mojo the host column's."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var T = p(q, 4)
+    var cmax = p(q, 6)
+    var tt = t % T
+    var r = t // T
+    var cat = r % cmax
+    var r2 = r // cmax
+    var j = r2 % d
+    var fi = r2 // d
+    if cat >= Int(ld(f, p(q, 7) + j)):
+        return
+    var ymean = ld(f, p(q, 8) + 2 * (fi * T + tt))
+    var yvar = ld(f, p(q, 8) + 2 * (fi * T + tt) + 1)
+    var smooth = ld(f, p(q, 9))
+    var s = Float32(0)
+    var cnt = 0
+    var mean = Float32(0)
+    var ssd = Float32(0)
+    var bk = p(q, 11)
+    if bk > 0:
+        var S = bk - 1 + j * (cmax + 1)
+        var lo = ldi(f, S + cat)
+        var hi = ldi(f, S + cat + 1)
+        var gb = p(q, 13)
+        var BF = -1
+        var BY = 0
+        if gb > 0:
+            BF = gb - 1 + j * n
+            BY = gb - 1 + d * n + (j * T + tt) * n
+        te_enc_lt_fold(f, f, BF, BY, p(q, 12) + j * n, p(q, 3), T, tt, p(q, 5), lo, hi, fi, smooth, s, cnt,
+                       mean, ssd)
+        st(f, p(q, 10) + t, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
+        return
+    # no buckets: every row, the rank counted over the category's rows
+    var a = LTLanes(fill=Float32(0))
+    var rank = 0
+    for i in range(n):
+        if Int(ld(f, p(q, 0) + i * d + j)) != cat:
+            continue
+        var rk = rank
+        rank += 1
+        if Int(ld(f, p(q, 5) + i)) == fi:
+            continue
+        var l = rk % TREE_W
+        a[l] = add(a[l], ld(f, p(q, 3) + i * T + tt))
+        cnt += 1
+    s = lt_tree(a)
+    if smooth < Float32(0) and cnt > 0:
+        mean = div(s, Float32(cnt))
+        lt_zero(a)
+        rank = 0
+        for i in range(n):
+            if Int(ld(f, p(q, 0) + i * d + j)) != cat:
+                continue
+            var rk = rank
+            rank += 1
+            if Int(ld(f, p(q, 5) + i)) == fi:
+                continue
+            var l = rk % TREE_W
+            var e = sub(ld(f, p(q, 3) + i * T + tt), mean)
+            a[l] = add(a[l], mul(e, e))
+        ssd = lt_tree(a)
+    st(f, p(q, 10) + t, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
 
 
 def te_global_unit(t: Int, f: FP, q: IP):
     """q = [Y, n, T, FOLD, META]; t = fi*T + tt. META[2t] = mean,
     META[2t+1] = population variance of target column tt over fold fi's rows
-    (rows loaded RUN at a time, folded ascending)."""
+    (rows loaded RUN at a time, folded ascending). IDN_TE_GLOBAL_TREE: both
+    folds in the lane-tree order (x_prep/idn_fold.mojo, `te_global_lt`)."""
+    comptime if IDN_TE_GLOBAL_TREE:
+        te_global_lt(t, f, q)
+        return
     var n = p(q, 1)
     var T = p(q, 2)
     var Y = p(q, 0)
@@ -251,7 +416,11 @@ def te_enc_unit(t: Int, f: FP, q: IP):
     t = ((fi*d + j)*CMAX + cat)*T + tt. SMOOTH < 0: the empirical Bayes
     ("auto") encoding; else (sum + s*mean) / (count + s). With BK > 0 the
     rows walked are category cat's bucket (`te_bucket`, ascending), else
-    every row; either way the rows of cat outside fold fi, in row order."""
+    every row; either way the rows of cat outside fold fi, in row order.
+    IDN_TE_ENC_TREE: the lane-tree order (`te_enc_lt`)."""
+    comptime if IDN_TE_ENC_TREE:
+        te_enc_lt(t, f, q)
+        return
     var n = p(q, 1)
     var d = p(q, 2)
     var T = p(q, 4)

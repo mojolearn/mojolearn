@@ -126,7 +126,7 @@ def _wheel_facts(wheel):
             return None
         dist = dists[0]
         read = {n: archive.read(n) for n in names if n.startswith(dist + '/')
-                and n.rsplit('/', 1)[-1] in ('METADATA', 'WHEEL', 'gpu_plugins.json', 'gpu_plugin.json')}
+                and n.rsplit('/', 1)[-1] in ('METADATA', 'WHEEL', 'gpu_plugins.json', 'gpu_plugin.json', 'gpu_payload.json')}
     metadata = BytesParser(policy=policy.compat32).parsebytes(read.get(dist + '/METADATA', b''))
     tags = BytesParser(policy=policy.compat32).parsebytes(read.get(dist + '/WHEEL', b'')).get_all('Tag', [])
     payload = sorted(n for n in names if not n.startswith(dist + '/'))
@@ -134,25 +134,19 @@ def _wheel_facts(wheel):
 
 
 def split_audit(wheels):
-    """THE SPLIT LINUX WHEELS (2026-09-25, python/mojolearn/gpu_plugins.py).
+    """Check core, vendor bundles and experimental payload ownership.
 
-    The core `mojolearn` holds no GPU set; each plugin holds exactly its own
-    vendor's sets (mojolearn/<vendor>/...) and nothing else, no Python and no
-    runtime; every plugin requires exactly `mojolearn==<its version>`; the
-    core requires EVERY plugin at its own version exactly and nothing else of
-    them (2026-09-26, `pip install mojolearn` works for everyone:
-    gpu_plugins.core_requirements); numpy and verify extras are optional; the .dist-info markers agree
-    with the payload; all wheels share one version and one tag; and no member
-    is in two wheels. File inspection only. Returns {'wheels': [...],
-    'problems': [...]}, and an empty `problems` is the pass."""
+    This is file inspection, not numerical qualification. Experimental payloads
+    may be inspected here; the publisher independently refuses them.
+    """
     from verify_linux_surface_qualification import load_gpu_plugins
     plugins = load_gpu_plugins()
-    by_distribution = {row['distribution']: vendor for vendor, row in plugins.PLUGINS.items()}
+    packages = {r['distribution']: r for r in plugins.distribution_rows(include_experimental=True)}
     problems, rows, owner, versions, tagsets = [], [], {}, set(), set()
     for wheel in map(Path, wheels):
         facts = _wheel_facts(wheel)
         if facts is None:
-            problems.append(f'{wheel.name}: not exactly one .dist-info directory')
+            problems.append(f'{wheel.name}: not exactly one dist-info directory')
             continue
         dist, metadata, tags, payload, read = facts
         name, version = metadata.get('Name', ''), metadata.get('Version', '')
@@ -163,67 +157,119 @@ def split_audit(wheels):
             if member in owner:
                 problems.append(f'{member} is in both {owner[member]} and {wheel.name}')
             owner[member] = wheel.name
-        row = dict(wheel=wheel.name, path=str(wheel), distribution=name, version=version, tags=sorted(tags),
-                   members=len(payload), binaries=sum(1 for m in payload if m.endswith('.so')))
+        row = dict(wheel=wheel.name, path=str(wheel), distribution=name, version=version,
+                   tags=sorted(tags), members=len(payload),
+                   binaries=sum(m.endswith('.so') for m in payload))
+        if wheel.stat().st_size > plugins.wheel_size_limit(name):
+            problems.append(f'{wheel.name}: exceeds the configured project upload budget')
         if name == plugins.CORE_DISTRIBUTION:
             row['role'] = plugins.CORE_PROFILE
             stray = [m for m in payload if plugins.member_vendor(m)]
             if stray:
-                problems.append(f'{wheel.name}: the core carries {len(stray)} GPU set member(s), e.g. {stray[0]}')
+                problems.append(f'{wheel.name}: the core carries GPU members, e.g. {stray[0]}')
             if 'mojolearn/__init__.py' not in payload:
                 problems.append(f'{wheel.name}: the core carries no mojolearn/__init__.py')
-            # `pip install mojolearn` WORKS FOR EVERYONE (since 2026-09-26):
-            # the core requires BOTH plugins at its own version exactly, no
-            # marker or GPU extra. NumPy remains optional for APIs and verification.
             extras = sorted(metadata.get_all('Provides-Extra', []))
             if set(extras) - {'verify', 'numpy'}:
                 problems.append(f'{wheel.name}: the core declares Provides-Extra {extras}; only numpy and verify are allowed')
-            on_plugin = [r for r in requires
-                         if re.split(r'[\s;=<>!~\[(]', r, maxsplit=1)[0].strip().lower().replace('_', '-') in by_distribution]
-            want = plugins.core_requirements(version)
-            if sorted(on_plugin) != sorted(want) or len(on_plugin) != len(set(on_plugin)):
-                problems.append(f'{wheel.name}: the core requires the GPU plugins as {on_plugin}; '
-                                f'it must require exactly {want}')
+            pins = [r for r in requires if re.split(r'[\s;=<>!~\[(]', r, maxsplit=1)[0]
+                    .strip().lower().replace('_', '-') in packages]
+            if sorted(pins) != sorted(plugins.core_requirements(version)):
+                problems.append(f'{wheel.name}: core GPU dependency pins disagree with the package registry')
+            marker_name, expected = plugins.CORE_MARKER, plugins.core_marker(version)
+        elif name in packages:
+            package = packages[name]
+            profile = package['profile']
+            row['role'] = profile
+            if not wheel.name.startswith(f"{package['wheel_name']}-{version}-"):
+                problems.append(f'{wheel.name}: filename differs from package metadata')
+            if requires != plugins.package_requirements(profile, version):
+                problems.append(f'{wheel.name}: Requires-Dist differs from exact package dependencies')
+            if metadata.get_all('Provides-Extra', []):
+                problems.append(f'{wheel.name}: GPU package must not declare extras')
+            marker_name = plugins.PLUGIN_MARKER if package['role'] == 'vendor' else plugins.PAYLOAD_MARKER
             try:
-                marker = json.loads(read[dist + '/' + plugins.CORE_MARKER])
-            except (KeyError, ValueError):
-                marker = None
-            if marker != plugins.core_marker(version):
-                problems.append(f'{wheel.name}: {plugins.CORE_MARKER} is missing or disagrees with gpu_plugins.py')
-        elif name in by_distribution:
-            vendor = by_distribution[name]
-            row['role'] = plugins.PLUGINS[vendor]['profile']
-            stray = [m for m in payload if plugins.member_vendor(m) != vendor]
+                actual_marker = json.loads(read[dist + '/' + marker_name])
+                bundle = actual_marker.get('bundled_ptx')
+            except (KeyError, ValueError, AttributeError):
+                bundle = None
+            if bundle is not None:
+                try:
+                    if profile != 'nvidia':
+                        raise ValueError('only NVIDIA can own bundled PTX')
+                    prefix = plugins.BUNDLED_PTX_ROOT + '/'
+                    manifest_member = prefix + plugins.BASELINE_MANIFEST
+                    admission_member = prefix + plugins.BASELINE_ADMISSION
+                    plugins.validate_bundle_descriptor(bundle)
+                    # A manifest-only bundle is the FAST/DETERMINISTIC fallback:
+                    # it carries no admission and none may ride along unbound.
+                    admitted = 'admission_sha256' in bundle
+                    origin = plugins.bundled_ptx_origin(bundle)
+                    with zipfile.ZipFile(wheel) as archive:
+                        files = {m[len(prefix):]: hashlib.sha256(archive.read(m)).hexdigest()
+                                 for m in payload if m.startswith(prefix) and m.endswith('.so')}
+                        manifest_bytes = archive.read(manifest_member)
+                        plugins.validate_bundled_ptx(bundle, manifest_bytes,
+                                                     archive.read(admission_member) if admitted else None, files)
+                        bundle_source = json.loads(manifest_bytes)['source_commit']
+                        inventory_member = dist + '/LINUX_PAYLOAD.json'
+                        if inventory_member in archive.namelist():
+                            inventory = json.loads(archive.read(inventory_member))
+                            if (inventory.get('source_commit') != bundle_source
+                                    or inventory.get('bundled_ptx') != dict(bundle, root=plugins.BUNDLED_PTX_ROOT,
+                                                                          source_commit=bundle_source)):
+                                raise ValueError('bundled PTX and release inventory source/descriptor differ')
+                            for name, digest in files.items():
+                                member = prefix + name
+                                if (inventory.get('extensions', {}).get(member) != digest
+                                        or inventory.get('binding_origin', {}).get(member) != dict(origin=origin, **bundle)):
+                                    raise ValueError('bundled PTX release inventory bytes/provenance differ')
+                    allowed = {prefix + name for name in files} | {manifest_member} | ({admission_member} if admitted else set())
+                    if {m for m in payload if m.startswith(prefix)} != allowed:
+                        raise ValueError('undeclared bundled PTX files')
+                    row['bundled_ptx'] = dict(bundle, source_commit=bundle_source, identical_admission=admitted)
+                except (ValueError, KeyError, TypeError) as exc:
+                    problems.append(f'{wheel.name}: invalid bundled PTX: {exc}')
+            arches = []
+            stray = []
+            for member in payload:
+                try:
+                    valid = plugins.owns_member(profile, member, bundled_ptx=bundle) and member == plugins.installed_member(member)
+                except ValueError:
+                    valid = False
+                if not valid:
+                    stray.append(member)
             if stray:
-                problems.append(f'{wheel.name}: carries {len(stray)} member(s) outside mojolearn/{vendor}/, '
-                                f'e.g. {stray[0]}')
-            if not row['binaries']:
-                problems.append(f'{wheel.name}: carries no binary')
-            if any(m.endswith('.py') for m in payload):
-                problems.append(f'{wheel.name}: a plugin must carry no Python module')
-            if requires != [f'{plugins.CORE_DISTRIBUTION}=={version}']:
-                problems.append(f'{wheel.name}: Requires-Dist {requires}, want exactly '
-                                f'[{plugins.CORE_DISTRIBUTION}=={version}]')
-            if not wheel.name.startswith(f'{plugins.PLUGINS[vendor]["wheel_name"]}-{version}-'):
-                problems.append(f'{wheel.name}: file name is not '
-                                f'{plugins.PLUGINS[vendor]["wheel_name"]}-{version}-...')
-            arches = sorted({m.split('/')[2] for m in payload if len(m.split('/')) > 3})
+                problems.append(f'{wheel.name}: members outside its architecture payload: {stray[0]}')
+            if not row['binaries'] or any(m.endswith('.py') for m in payload):
+                problems.append(f'{wheel.name}: payload must contain binaries and no Python')
+            arches = sorted({m.split('/')[2] for m in payload if m.endswith('.so')
+                             and m.split('/')[1] == package['directory']})
+            if not plugins.valid_arches(profile, arches):
+                problems.append(f'{wheel.name}: GPU wheel must contain one set per registered architecture slot')
+            marker_name = plugins.PLUGIN_MARKER if package['role'] == 'vendor' else plugins.PAYLOAD_MARKER
             row['arches'] = arches
             try:
-                marker = json.loads(read[dist + '/' + plugins.PLUGIN_MARKER])
-            except (KeyError, ValueError):
-                marker = None
-            if marker != plugins.plugin_marker(vendor, version, arches):
-                problems.append(f'{wheel.name}: {plugins.PLUGIN_MARKER} is missing or does not name '
-                                f'{vendor} {version} {arches}')
+                expected = plugins.package_marker(profile, version, arches, bundled_ptx=bundle)
+            except ValueError as exc:
+                problems.append(f'{wheel.name}: invalid bundled ownership: {exc}')
+                expected = None
         else:
-            problems.append(f'{wheel.name}: {name!r} is neither the core nor a plugin gpu_plugins.py names')
+            problems.append(f'{wheel.name}: unknown distribution {name!r}')
+            rows.append(row)
+            continue
+        try:
+            marker = json.loads(read[dist + '/' + marker_name])
+        except (KeyError, ValueError):
+            marker = None
+        if marker != expected:
+            problems.append(f'{wheel.name}: {marker_name} is missing or disagrees with package ownership')
         rows.append(row)
     if len(versions) > 1:
         problems.append(f'the split wheels carry different versions: {sorted(versions)}')
     if len(tagsets) > 1:
         problems.append(f'the split wheels carry different tags: {sorted(tagsets)}')
-    return dict(scope='Split Linux wheels: ownership, pins and markers; file inspection only.',
+    return dict(scope='Split wheel ownership, dependencies, size and metadata; no numerical qualification.',
                 wheels=rows, problems=problems)
 
 
@@ -265,10 +311,18 @@ def plugins_on_index(wheels, index, files=None, attempts=6, sleep=None):
         if facts is None:
             continue
         dist, metadata, _, _, read = facts
-        if metadata.get('Name', '') != plugins.CORE_DISTRIBUTION or dist + '/' + plugins.CORE_MARKER not in read:
-            continue
+        name = metadata.get('Name', '')
         version = metadata.get('Version', '')
-        for row in plugins.PLUGINS.values():
+        packages = {r['distribution']: r for r in plugins.distribution_rows()}
+        if name == plugins.CORE_DISTRIBUTION and dist + '/' + plugins.CORE_MARKER in read:
+            required = plugins.core_requirements(version)
+        else:
+            continue
+        for requirement in required:
+            dependency = requirement.split('==', 1)[0]
+            if dependency == plugins.CORE_DISTRIBUTION:
+                continue  # Payloads/aggregates precede the core that pins them.
+            row = packages[dependency]
             prefix = f'{row["wheel_name"]}-{version}-'
             for attempt in range(attempts):
                 if any(n.startswith(prefix) and n.endswith('.whl') for n in files(index, row['distribution'], version)):
@@ -276,8 +330,8 @@ def plugins_on_index(wheels, index, files=None, attempts=6, sleep=None):
                 if attempt + 1 < attempts:
                     sleep(30)
             else:
-                problems.append(f'{wheel.name}: {row["distribution"]}=={version} is not on {index}; the split core '
-                                f'requires it and publishes only after both plugins (publish the plugins first)')
+                problems.append(f'{wheel.name}: {row["distribution"]}=={version} is not on {index}; the package '
+                                f'requires it and publishes only after its GPU dependencies')
     return problems
 
 
@@ -288,18 +342,17 @@ def main():
     parser.add_argument('--require-complete', action='store_true',
                         help='fail for missing public exports or missing/stale source Python or reference payload')
     parser.add_argument('--split', action='store_true',
-                        help='the wheels are the split Linux set (mojolearn, mojolearn-nvidia, mojolearn-amd): '
+                        help='the wheels are split Linux core, vendor bundles, or experimental payloads: '
                              'run split_audit over all and the API audit over the core alone')
     parser.add_argument('--plugins-on-index', choices=sorted(INDEX_JSON),
-                        help='refuse a split Linux core among the wheels unless mojolearn-nvidia and mojolearn-amd '
-                             'of its version are already on this index (the core publishes last)')
+                        help='require each core exact vendor dependencies on the selected index')
     args = parser.parse_args()
     if args.plugins_on_index:
         problems = plugins_on_index(args.wheels, args.plugins_on_index)
         for problem in problems:
             print('::error::' + problem)
         if not problems:
-            print(f'every split core among the wheels has both plugins on {args.plugins_on_index} (or none is a split core)')
+            print(f'GPU dependencies of the core are available on {args.plugins_on_index}')
         return int(bool(problems))
     if args.split:
         split = split_audit(args.wheels)

@@ -147,6 +147,11 @@ from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
 from mamba.host.gen.identity_trace import IdentityTrace
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
+#: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA1_CHUNKSCAN`
+#: runs the scan as a chunked parallel scan (afn_selective_scan.mojo); every
+#: other build takes the kernel below unchanged.
+from mamba.host.gen.device_optimizations import AFN_MAMBA1_CHUNKSCAN
+from mamba.host.gen.device_optimizations import afn_selective_scan_chunked
 
 
 # ===========================================================================
@@ -266,7 +271,7 @@ def mamba_scan_sabotage_name() -> String:
 
 def selective_scan_fwd_kernel[
     DSTATE: Int
-](gid_: Int, 
+](gid_: Int,
     out_ptr: MutPointer[Float32, MutAnyOrigin],
     y_ptr: MutPointer[Float32, MutAnyOrigin],
     h_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -558,23 +563,28 @@ def selective_scan_fn(
 
     var total = batch * dim
     if total > 0:
-        comptime kern = selective_scan_fwd_kernel[MAX_DSTATE]
-        var grid = (total + block_size - 1) // block_size
-        var _l1_a0 = out.unsafe_ptr()
-        var _l1_a1 = y.unsafe_ptr()
-        var _l1_a2 = h_state.unsafe_ptr()
-        var _l1_a3 = u.unsafe_ptr()
-        var _l1_a4 = delta.unsafe_ptr()
-        var _l1_a5 = A.unsafe_ptr()
-        var _l1_a6 = B.unsafe_ptr()
-        var _l1_a7 = C.unsafe_ptr()
-        var _l1_a8 = D.unsafe_ptr()
-        var _l1_a9 = Int32(batch)
-        var _l1_a10 = Int32(seqlen)
-        var _l1_a11 = Int32(dim)
-        def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9, imm _l1_a10, imm _l1_a11}:
-            kern(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9, _l1_a10, _l1_a11)
-        host_launch(_launch_1, launch_count((grid, 1, 1), (block_size, 1, 1)))
+        comptime if AFN_MAMBA1_CHUNKSCAN:
+            afn_selective_scan_chunked[MAX_DSTATE](
+                ctx, out, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
+            )
+        else:
+            comptime kern = selective_scan_fwd_kernel[MAX_DSTATE]
+            var grid = (total + block_size - 1) // block_size
+            var _l1_a0 = out.unsafe_ptr()
+            var _l1_a1 = y.unsafe_ptr()
+            var _l1_a2 = h_state.unsafe_ptr()
+            var _l1_a3 = u.unsafe_ptr()
+            var _l1_a4 = delta.unsafe_ptr()
+            var _l1_a5 = A.unsafe_ptr()
+            var _l1_a6 = B.unsafe_ptr()
+            var _l1_a7 = C.unsafe_ptr()
+            var _l1_a8 = D.unsafe_ptr()
+            var _l1_a9 = Int32(batch)
+            var _l1_a10 = Int32(seqlen)
+            var _l1_a11 = Int32(dim)
+            def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9, imm _l1_a10, imm _l1_a11}:
+                kern(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9, _l1_a10, _l1_a11)
+            host_launch(_launch_1, launch_count((grid, 1, 1), (block_size, 1, 1)))
         ctx.synchronize()
 
     # CONTRACT SECTION 7's card order, exactly: scan.y, scan.h, skip.out.

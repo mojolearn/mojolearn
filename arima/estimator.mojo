@@ -97,8 +97,10 @@ comptime _DEVCTX_SLOT = "MojoArimaContextIdentical" if _DEVCTX_MODE == _DEVCTX_I
 
 
 from core.identity_trace import IdentityTrace
+from std.memory import bitcast
 
-from arima.impl.batched_arima import batched_diff, batched_loglike_x, predict_x
+from arima.impl.arima_ic import ARIMA_IC_TPB, arima_ic_kernel
+from arima.impl.batched_arima import LoglikeResult, batched_diff, batched_loglike_x, predict_x
 from arima.impl.batched_fit import batched_fit_x
 from bindings.arima_exog_layout import exog_filter_layout
 from tsa.impl.timeSeries.arima_helpers import prepare_data
@@ -259,8 +261,14 @@ def _loglike_at(
     n_obs: Int,
     order: ARIMAOrder,
     mut params: ARIMAParams,
+    ic_address: Int = 0,
+    pen_aic: Float64 = 0.0,
+    pen_bic: Float64 = 0.0,
 ) raises -> List[Float32]:
-    """The log-likelihood of `params` on `y`, one value per series.
+    """The log-likelihood of `params` on `y`, one value per series. With
+    `ic_address` (lane cpu3-seq, 2026-10-04) the AIC and BIC are written
+    there too, `2 * batch_size` float64, by `arima_ic_kernel` over the
+    resident log-likelihood (`arima/impl/arima_ic.mojo`).
 
     THE OPTIMIZER'S `fx` IS NOT THIS NUMBER. `eval_batch` minimizes
     `-loglike / (n_obs - 1)`, so recovering the log-likelihood from it costs
@@ -292,6 +300,8 @@ def _loglike_at(
             ctx, y_kf, x_kf, fut, batch_size, n_kf, order.without_diff(), params,
             False, 0, 32, False, True,
         )
+        if ic_address != 0:
+            _ic_into(ctx, lld, batch_size, ic_address, pen_aic, pen_bic)
         var got = lld.loglike.copy()
         _ = lld^
         _ = x_kf^
@@ -301,10 +311,39 @@ def _loglike_at(
     var ll = batched_loglike_x(
         ctx, y, exog, fut, batch_size, n_obs, order, params, False, 0, 32, False, True
     )
+    if ic_address != 0:
+        _ic_into(ctx, ll, batch_size, ic_address, pen_aic, pen_bic)
     var out = ll.loglike.copy()
     _ = ll^
     _ = fut^
     return out^
+
+
+def _ic_into(
+    ctx: DeviceContext,
+    mut r: LoglikeResult,
+    batch_size: Int,
+    ic_address: Int,
+    pen_aic: Float64,
+    pen_bic: Float64,
+) raises:
+    """AIC then BIC (`2 * batch_size` binary64) into the caller's memory at
+    `ic_address`, computed on the device from `r`'s resident log-likelihood
+    and refusal codes; one copy out, one wait."""
+    if batch_size <= 0:
+        return
+    var d_ic = ctx.enqueue_create_buffer[DType.uint64](2 * batch_size)
+    ctx.enqueue_function[arima_ic_kernel](
+        d_ic.unsafe_ptr(), r.ws.loglike.unsafe_ptr(), r.ws.info_init.unsafe_ptr(),
+        r.ws.info_loop.unsafe_ptr(), Int32(batch_size),
+        bitcast[DType.uint64](pen_aic), bitcast[DType.uint64](pen_bic),
+        grid_dim=((batch_size + ARIMA_IC_TPB - 1) // ARIMA_IC_TPB, 1, 1),
+        block_dim=(ARIMA_IC_TPB, 1, 1),
+    )
+    var dst = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=ic_address)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=d_ic)
+    ctx.synchronize()
+    _ = d_ic^
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +372,9 @@ def arima_fit_ptr_host(
     n_exog: Int,
     method: Int,
     max_iterations: Int,
+    ic_address: Int = 0,
+    pen_aic: Float64 = 0.0,
+    pen_bic: Float64 = 0.0,
 ) raises -> Int:
     """`ARIMA(order, seasonal_order, fit_intercept=k).fit(y)`, one shot.
     Returns `N * batch_size`, the number of float32 written to
@@ -390,13 +432,12 @@ def arima_fit_ptr_host(
         [0 * batch_size, 1 * batch_size)   n_iter
         [1 * batch_size, 2 * batch_size)   retcode  (0 is OPT_SUCCESS)
 
-    THERE IS NO AIC OR BIC HERE. `information_criterion`
-    (`batched_arima.cu:592-618`) and its AIC / AICc / BIC arms are NOT
-    IMPLEMENTED (`arima/NOT_IMPLEMENTED.tsv`). What that routine does beyond the
-    log-likelihood is one `raft::stats::information_criterion_batched`
-    unary op, `ic_base - 2 * loglike`, and the Python wrapper computes that
-    on the host in float64 and says so on the class (DEVIATION 991). A
-    device kernel here would be a kernel with no gate.
+    `ic_address` (lane cpu3-seq, 2026-10-04; 0 = not asked) is written
+    with `2 * batch_size` float64: AIC `-2 loglike + pen_aic`, then BIC
+    `-2 loglike + pen_bic`, computed on the device in binary64 by
+    `arima/impl/arima_ic.mojo` (the host column calls the same arithmetic).
+    The penalties are the wrapper's (2N; log(T) N with T after
+    differencing). It was the wrapper's native host helper (DEVIATION 991).
     """
     _refuse_method(method)
     var order = _order(p, d, q, P, D, Q, s, k, n_exog)
@@ -425,7 +466,9 @@ def arima_fit_ptr_host(
     var r = batched_fit_x(
         ctx, y, exog, batch_size, n_obs, order, params, trace, max_iterations
     )
-    var loglike = _loglike_at(ctx, y, exog, batch_size, n_obs, order, params)
+    var loglike = _loglike_at(
+        ctx, y, exog, batch_size, n_obs, order, params, ic_address, pen_aic, pen_bic
+    )
 
     _write_list_f32(params_ptr, r.t_x, 0)
     _write_list_f32(x_ptr, r.x, 0)

@@ -17,7 +17,6 @@ from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
-from sequence.schedule import epoch_schedule_py
 from sequence.sched_table import sched_exp_block_py
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
@@ -179,16 +178,13 @@ def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     return garch_team_py(ex, addrs, ip)
 
 
-def epoch_schedule_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    return epoch_schedule_py(addrs, ip)
-
-
 def prophet_days_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     return prophet_days_py(addrs, ip)
 
 
 def prophet_features_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    return prophet_features_py(addrs, ip, fp)
+    var ex = DeviceExec()
+    return prophet_features_py(ex, addrs, ip, fp)
 
 
 def prophet_changepoints_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -274,7 +270,6 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[croston_forecast_binding]("croston_forecast")
         m.def_function[ets_binding]("ets")
         m.def_function[garch_binding]("garch")
-        m.def_function[epoch_schedule_binding]("epoch_schedule")
         m.def_function[prophet_days_binding]("prophet_days")
         m.def_function[prophet_features_binding]("prophet_features")
         m.def_function[prophet_changepoints_binding]("prophet_changepoints")

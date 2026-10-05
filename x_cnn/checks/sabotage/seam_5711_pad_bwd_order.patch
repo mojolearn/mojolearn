@@ -1,9 +1,26 @@
---- a/x_cnn/ops.mojo	2026-09-27 12:42:54
-+++ b/x_cnn/ops.mojo	2026-09-27 12:42:54
-@@ -773,7 +773,8 @@
-     var h = t % H
-     var nc = t // H
-     var acc = Float32(0)
+diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
+index 64c9b4267..f505a6061 100644
+--- a/x_cnn/ops.mojo
++++ b/x_cnn/ops.mojo
+@@ -1235,10 +1235,12 @@ def pad_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
+         # other reader is in a margin. Three ascending, disjoint ranges per
+         # axis (top margin, that one position, bottom margin) with the same
+         # test inside: the terms of the full scan in its order.
+-        for sh in range(3):
++        for a_sh in range(3):
++            var sh = 2 - a_sh
+             var h0 = 0 if sh == 0 else (h + top if sh == 1 else top + H)
+             var h1 = top if sh == 0 else (h + top + 1 if sh == 1 else Hp)
+-            for hp in range(h0, h1):
++            for a_hp in range(h1 - h0):
++                var hp = h1 - 1 - a_hp
+                 if _pad_src(hp, top, H, mode) != h:
+                     continue
+                 for sw in range(3):
+@@ -1250,7 +1252,8 @@ def pad_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
+                         acc = ftz(acc + ftz(g.unsafe_load((nc * Hp + hp) * Wp + wp)))
+         dx.unsafe_store(i, acc)
+         return
 -    for hp in range(Hp):
 +    for a in range(Hp):
 +        var hp = Hp - 1 - a

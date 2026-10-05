@@ -70,7 +70,7 @@ anything:
 
 1. `condense()` SORTS the four output arrays on `(parent, child)`
    (DEVIATION 1611), so the order in which edges were APPENDED is erased.
-   `_collapse`'s leaf edges are a SET and survive any traversal
+   `_collapse_host`'s leaf edges are a SET and survive any traversal
    unchanged. The one channel from the traversal to the output is the
    VALUE in `relabel`, written only in their case 1.
 2. Breadth first and depth first therefore disagree only about the order

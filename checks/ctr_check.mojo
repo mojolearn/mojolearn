@@ -656,7 +656,7 @@ def _check_borders(mut failures: List[String]) raises:
             target.append(UInt8(1) if _hashed(r, 19) % 3 == 0 else UInt8(0))
 
         var builder = TCtrBinBuilder(n)
-        builder.add_cat_feature_bins(codes, k)
+        builder.add_cat_feature_bins_host(codes, k)
         var calcer = THistoryBasedCtrCalcer(builder)
         calcer.set_binarized_sample(target.copy())
 
@@ -664,7 +664,7 @@ def _check_borders(mut failures: List[String]) raises:
         for i in range(len(configs)):
             if configs[i].ctr_type == CTR_BORDERS:
                 borders_configs.append(configs[i])
-        var got = calcer.visit_cat_feature_ctr(borders_configs)
+        var got = calcer.visit_cat_feature_ctr_host(borders_configs)
 
         if len(got) != 3:
             failures.append(

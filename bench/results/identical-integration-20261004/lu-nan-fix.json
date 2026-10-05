@@ -1,0 +1,22 @@
+{
+  "commit": "301156228",
+  "numerical_build_base": "1ee5e3033ec4a467eeb11ae09156ac7031481399",
+  "patch_files": [
+    "x_decomp/cells.mojo",
+    "x_decomp/device.mojo",
+    "x_decomp/host.mojo"
+  ],
+  "original_diagnosis": "No finite or pivot differences. AMD solve NaNs+0x7fc00000 vs host-0xffc00000; NVIDIA factor/solve NaNs0x7fffffff. Diagnostic normalized hashes only used to isolate defect; gates still compare raw bytes.",
+  "fix": "IDENTICAL-only LU factor and triangular-solve boundary encodes every NaN as0x7fc00000 onGPU+host; all non-NaN words untouched; no global FMA changes; no CPU cleanup or added host wait in GPU path.",
+  "validation": {
+    "source_native_builds": "NVIDIA GPU+host PASS; AMD GPU+host PASS; deps copied only from own frozen1ee source builds with receipts",
+    "strict_raw_gate": "LU_NAN same5a153c5b824c9705 prefix acrossCUDA,HIP,bothhosts; nan_words4",
+    "overflow_parts": "6 raw factor/pivot/solve hashes matchGPUhost andNVAMD",
+    "finite_regression": "n33/129 six rawparts unchangedfrom1ee on eachcolumn, GPUhost andNVAMD match",
+    "word_contract": "16 Float32 bitpatterns: finite,infinity,signedzero,subnormal preserved andsigned/payloadNaN pinned; AMDhost gatePASS"
+  },
+  "performance_limitation": "One GPU finish launch and full pass per factor/triangularsolve underIDENTICAL; host factor finish pass. No timing run or performance benefit claimed.",
+  "remaining": "Final uniform-SHA full-wave rebuild/quality remains root-owned. Apple not accessed or verified.",
+  "evidence": "Both boxes /root/lq/lu-nan-debug; lu-validation-amd.json andlu-validation-nv.json local",
+  "failed_attempt": "Initial buildcommands failed127 because pixi absentPATH; logs retained, correctedPATH v2 buildlogs completed0"
+}

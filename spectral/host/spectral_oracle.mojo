@@ -10,8 +10,11 @@ is `spectral/impl/sparse/solver/detail/lanczos.mojo` re-spelled with
 every device launch replaced by a host loop that performs the SAME
 ARITHMETIC IN THE SAME ORDER:
 
-  device `spmv_kernel`          -> `host_spmv`: per row, ascending over the
-                                   sorted entries, `fma` from `+0.0`, flushed
+  device `spmv_enqueue`         -> `host_spmv`: per row, under
+                                   `IDN_SPMV_LANES` the lane order of
+                                   `spectral/spmv_order.mojo` (else ascending
+                                   over the sorted entries), `fma` from
+                                   `+0.0`, flushed
   `identical_gemm` (the dots,   -> `host_dot`: the contract's leaf partition
   the gemvs, the Ritz product)     (`contract_leaf_size(k)`) with the
                                    serial ascending leaf and the fixed
@@ -67,6 +70,7 @@ from spectral.host.spectral_predict_host import (
     spectral_keep_embedding_order,
 )
 from spectral.impl.sparse.coo import CooGraph
+from spectral.spmv_order import IDN_LAP_DEGREE_LANES, IDN_SPMV_LANES, SPMV_LANES
 from spectral.impl.sparse.op.coo_ops import (
     coo_remove_diagonal,
     coo_remove_scalar,
@@ -219,13 +223,34 @@ def host_laplacian[dt: DType](g: CooGraph, norm_laplacian: Bool) raises -> HostL
     var nnz = sorted_g.nnz()
     for i in range(nnz):
         out.vals.append(Scalar[dt](sorted_g.vals[i]))
-    # degrees: per row, ascending, flushed, seeded +0.0
+    # degrees: per row, flushed, seeded +0.0; under IDN_LAP_DEGREE_LANES the
+    # lane order of `spectral/spmv_order.mojo` (`degree_lanes_kernel`),
+    # otherwise the ascending chain (`degree_kernel`)
     var degrees = List[Scalar[dt]]()
-    for r in range(n):
-        var acc = Scalar[dt](0)
-        for j in range(Int(out.indptr[r]), Int(out.indptr[r + 1])):
-            acc = hflush[dt](acc + out.vals[j])
-        degrees.append(acc)
+    comptime if IDN_LAP_DEGREE_LANES:
+        for r in range(n):
+            var lo = Int(out.indptr[r])
+            var hi = Int(out.indptr[r + 1])
+            var part = List[Scalar[dt]](length=SPMV_LANES, fill=Scalar[dt](0))
+            for l in range(SPMV_LANES):
+                var acc = Scalar[dt](0)
+                var j = lo + l
+                while j < hi:
+                    acc = hflush[dt](acc + out.vals[j])
+                    j += SPMV_LANES
+                part[l] = acc
+            var w = SPMV_LANES // 2
+            while w >= 1:
+                for l in range(w):
+                    part[l] = hflush[dt](part[l] + part[l + w])
+                w = w // 2
+            degrees.append(part[0])
+    else:
+        for r in range(n):
+            var acc = Scalar[dt](0)
+            for j in range(Int(out.indptr[r]), Int(out.indptr[r + 1])):
+                acc = hflush[dt](acc + out.vals[j])
+            degrees.append(acc)
     # D - A
     for i in range(nnz):
         var r = out.rows[i]
@@ -265,13 +290,35 @@ def host_laplacian[dt: DType](g: CooGraph, norm_laplacian: Bool) raises -> HostL
 
 
 def host_spmv[dt: DType](L: HostLaplacian[dt], x: List[Scalar[dt]]) -> List[Scalar[dt]]:
-    """`spmv_kernel`: per row ascending, `fma` from `+0.0`, flushed."""
+    """`spmv_enqueue`'s row fold: under `IDN_SPMV_LANES` the lane order of
+    `spectral/spmv_order.mojo` (SPMV_LANES strided `fma` chains from `+0.0`,
+    then the fixed pairwise tree); otherwise `spmv_kernel`'s ascending
+    chain. Flushed either way."""
     var out = List[Scalar[dt]]()
-    for r in range(L.n):
-        var acc = Scalar[dt](0)
-        for j in range(Int(L.indptr[r]), Int(L.indptr[r + 1])):
-            acc = hflush[dt](hfma[dt](L.vals[j], x[Int(L.cols[j])], acc))
-        out.append(acc)
+    comptime if IDN_SPMV_LANES:
+        for r in range(L.n):
+            var lo = Int(L.indptr[r])
+            var hi = Int(L.indptr[r + 1])
+            var part = List[Scalar[dt]](length=SPMV_LANES, fill=Scalar[dt](0))
+            for l in range(SPMV_LANES):
+                var acc = Scalar[dt](0)
+                var j = lo + l
+                while j < hi:
+                    acc = hflush[dt](hfma[dt](L.vals[j], x[Int(L.cols[j])], acc))
+                    j += SPMV_LANES
+                part[l] = acc
+            var w = SPMV_LANES // 2
+            while w >= 1:
+                for l in range(w):
+                    part[l] = hflush[dt](part[l] + part[l + w])
+                w = w // 2
+            out.append(part[0])
+    else:
+        for r in range(L.n):
+            var acc = Scalar[dt](0)
+            for j in range(Int(L.indptr[r]), Int(L.indptr[r + 1])):
+                acc = hflush[dt](hfma[dt](L.vals[j], x[Int(L.cols[j])], acc))
+            out.append(acc)
     return out^
 
 

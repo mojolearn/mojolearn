@@ -445,16 +445,73 @@ def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k:
                             px, FP(unsafe_from_address=res), n, m, k, c, finite)
 
 
+from x_neighbors.items import XN_NC_IDN_CHUNKED, XN_NC_CHUNK_ROWS, _add as _nc_add, _sub as _nc_sub
+from checks.numerics import (
+    ftz as _nc_ftz, identical_div as _nc_div, identical_sqrt as _nc_sqrt, identical_mul_add as _nc_fma,
+)
+
+
+def _nc_stats_chunked(f: Int, x: FP, lab: IP, cent: FP, std: FP, dsc: FP, n: Int, d: Int, n_classes: Int):
+    """Feature f's statistics in the device's chunked order (lane/fam-neighbors,
+    XN_NC_IDN_CHUNKED; x_neighbors/iter_device.mojo `nc_means_part_kernel`,
+    `nc_means_red_kernel`, `nc_std_part_kernel`, `nc_std_red_kernel`): every
+    chain's rows ascending inside a chunk of XN_NC_CHUNK_ROWS, then the chunk
+    partials ascending."""
+    var nch = (n + XN_NC_CHUNK_ROWS - 1) // XN_NC_CHUNK_ROWS
+    for g in range(n_classes + 1):
+        var a = Float32(0)
+        var m = Float32(0)
+        for ch in range(nch):
+            var lo = ch * XN_NC_CHUNK_ROWS
+            var hi = min(n, lo + XN_NC_CHUNK_ROWS)
+            var pa = Float32(0)
+            var pc = 0
+            for i in range(lo, hi):
+                if g >= n_classes or Int(lab.unsafe_load(i)) == g:
+                    pa = _nc_add(pa, x.unsafe_load(i * d + f))
+                    pc += 1
+            a = _nc_add(a, pa)
+            m = _nc_add(m, Float32(pc))
+        if g < n_classes:
+            if m > 0:
+                cent.unsafe_store(g * d + f, _nc_ftz(_nc_div(a, m)))
+            else:
+                cent.unsafe_store(g * d + f, Float32(0))
+        else:
+            dsc.unsafe_store(f, _nc_ftz(_nc_div(a, Float32(n))))
+    var ss = Float32(0)
+    for ch in range(nch):
+        var lo = ch * XN_NC_CHUNK_ROWS
+        var hi = min(n, lo + XN_NC_CHUNK_ROWS)
+        var ps = Float32(0)
+        for i in range(lo, hi):
+            var df = _nc_sub(x.unsafe_load(i * d + f), cent.unsafe_load(Int(lab.unsafe_load(i)) * d + f))
+            ps = _nc_ftz(_nc_fma(df, df, ps))
+        ss = _nc_add(ss, ps)
+    var dof = n - n_classes
+    if dof > 0:
+        std.unsafe_store(f, _nc_ftz(_nc_sqrt(_nc_ftz(_nc_div(ss, Float32(dof))))))
+    else:
+        std.unsafe_store(f, Float32(0))
+
+
 def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
-    """nc_stats_item over the features (what the generated op ran)."""
+    """nc_stats_item over the features (what the generated op ran); the
+    device's chunked fold when XN_NC_IDN_CHUNKED and n > XN_NC_CHUNK_ROWS."""
     var xp = FP(unsafe_from_address=x)
     var lp = IP(unsafe_from_address=lab)
     var kp = FP(unsafe_from_address=nk)
     var cp = FP(unsafe_from_address=cent)
     var sp = FP(unsafe_from_address=std)
     var dp = FP(unsafe_from_address=dsc)
+    var chunked = False
+    comptime if XN_NC_IDN_CHUNKED:
+        chunked = n > XN_NC_CHUNK_ROWS
     for t in range(d):
-        nc_stats_item(t, xp, lp, kp, cp, sp, dp, n, d, n_classes)
+        if chunked:
+            _nc_stats_chunked(t, xp, lp, cp, sp, dp, n, d, n_classes)
+        else:
+            nc_stats_item(t, xp, lp, kp, cp, sp, dp, n, d, n_classes)
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n_classes * d) > 0:
             cp.unsafe_store(0, cp.unsafe_load(0) + Float32(1e-3))

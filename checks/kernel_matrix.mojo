@@ -938,11 +938,14 @@ def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
         # record) gather through the index too. Opt-out:
         # `-D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF`. Lane gap-trees-nv: `-D
         # MOJOLEARN_GBDT_ID_RIDX` takes the same schedule on NVIDIA and AMD
-        # IDENTICAL (opt-in until its A/B).
+        # IDENTICAL (opt-in until its A/B). fix-g1-gbdt: that opt-in arm
+        # also turns off under the master `-D MOJOLEARN_IDN_ALL_OFF`
+        # (Apple's schedule is its pre-existing default and stays).
         return (
             column == COLUMN_APPLE
             or (
                 is_defined["MOJOLEARN_GBDT_ID_RIDX"]()
+                and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
                 and (
                     column == COLUMN_NVIDIA
                     or column == COLUMN_AMD

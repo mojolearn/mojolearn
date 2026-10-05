@@ -56,6 +56,7 @@ comptime _DEVCTX_SLOT = "MojoResampleContextIdentical" if _DEVCTX_MODE == _DEVCT
 
 from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
+from resample.order_select import IDN_BOOT_SELECT, boot_quantile_select_kernel
 from metrics.checks.pinned_sum import (
     PINNED_SUM_TPB,
     PINNED_SUM_W,
@@ -250,8 +251,13 @@ comptime RESAMPLE_FAST_PERM_SELECT = (
 #: Array (a label list keeps the gather); the views are read-only so an
 #: estimator cannot write into the caller's X / y. Interacts with
 #: CV_FAST_TRUST_FOLDS only in that both read the same native folds.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab1d-cvslice): cross-val-score taxi 157.93 -> 126.18 ms (-20.1%), istella
+#: 3114.45 -> 2920.08 ms (-6.2%); mean_r2 and output digest identical. KEEP:
+#: the FAST + Apple default since then; rollback -D MOJOLEARN_CV_FAST_SLICE_OFF
+#: (the old -D name is harmless).
 comptime CV_FAST_SLICE = (
-    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_CV_FAST_SLICE"]()
+    RESAMPLE_FAST_APPLE and not is_defined["MOJOLEARN_CV_FAST_SLICE_OFF"]()
 )
 
 #: `-D MOJOLEARN_CV_FAST_TRUST_FOLDS` (model_selection.py _prepare_folds):
@@ -260,8 +266,14 @@ comptime CV_FAST_SLICE = (
 #: every fold's two int64 arrays. A splitter, groups, a bool cv or the
 #: sabotage control: as before. Source lane/apple-fast-resample@50b96e795.
 #: Known: never compiled, never measured.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab1d-cvtrust): cross-val-score taxi 161.86 -> 142.47 ms (-12.0%), istella
+#: 3099.08 -> 3089.22 ms (-0.3%); mean_r2 and output digest identical. KEEP:
+#: the FAST + Apple default since then; rollback
+#: -D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF (the old -D name is harmless).
 comptime CV_FAST_TRUST_FOLDS = (
-    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_CV_FAST_TRUST_FOLDS"]()
+    RESAMPLE_FAST_APPLE
+    and not is_defined["MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF"]()
 )
 
 
@@ -1059,6 +1071,40 @@ def _owner_offset(rank: Int) -> Int:
     return 0
 
 
+def _launch_boot_select_at[
+    tpb: Int
+](
+    ctx: DeviceContext,
+    mut theta: DeviceBuffer[DType.float32],
+    mut dx: DeviceBuffer[DType.float32],
+    key: UInt64,
+    r_first: Int,
+    n_resamples: Int,
+    n: Int,
+    n_features: Int,
+    q: Float32,
+) raises:
+    """K12: `boot_quantile_select_kernel`, one block per replicate."""
+    comptime kern = boot_quantile_select_kernel[tpb]
+    ctx.enqueue_function[kern](
+        theta.unsafe_ptr(),
+        dx.unsafe_ptr(),
+        key_lo(key),
+        key_hi(key),
+        Int32(r_first),
+        Int32(n_resamples),
+        Int32(n),
+        Int32(n),
+        Int32(n_features),
+        Int32(0),
+        q,
+        grid_dim=(n_resamples, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+    _ = theta.unsafe_ptr()
+    _ = dx.unsafe_ptr()
+
+
 def _bootstrap_theta(
     ctx: DeviceContext,
     mut theta: DeviceBuffer[DType.float32],
@@ -1076,6 +1122,24 @@ def _bootstrap_theta(
     """Replicates `[r_first, r_first + n_resamples)` into `theta`. Every
     replicate is a pure function of its global index and the sample
     (DEVIATION 1690(b), the r_first batch-invariance handle)."""
+    # K12 (IDENTICAL): the quantile by bisection on the draws' sorting keys,
+    # one block per replicate, nothing materialized or sorted
+    # (resample/order_select.mojo; the same words as the sort path)
+    comptime if IDN_BOOT_SELECT:
+        if statistic == STAT_QUANTILE:
+            if tpb == 256:
+                _launch_boot_select_at[256](ctx, theta, dx, key, r_first, n_resamples, n, n_features, q_or_prop)
+            elif tpb == 128:
+                _launch_boot_select_at[128](ctx, theta, dx, key, r_first, n_resamples, n, n_features, q_or_prop)
+            elif tpb == 64:
+                _launch_boot_select_at[64](ctx, theta, dx, key, r_first, n_resamples, n, n_features, q_or_prop)
+            else:
+                raise Error(
+                    "bootstrap: threads-per-block must be 64, 128 or 256; got "
+                    + String(tpb)
+                )
+            ctx.synchronize()
+            return
     if stat_needs_sort(statistic):
         var cells = n_resamples * n
         var vals = ctx.enqueue_create_buffer[DType.float32](cells)

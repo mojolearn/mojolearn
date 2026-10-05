@@ -701,7 +701,9 @@ def previous_release(root=ROOT):
                                                   or linux.get("qualification_reuse", {}).get("source_commit")))
     # "nvidia" and "amd": the split Linux plugins (python/mojolearn/gpu_plugins.py),
     # recorded beside the core's alpha-manifest-linux.json by a split release
-    for platform in ("linux", "macos", "nvidia", "amd"):
+    import runpy
+    registry = runpy.run_path(str(ROOT / "python/mojolearn/gpu_plugins.py"))
+    for platform in ("linux", "macos", *(row["profile"] for row in registry["distribution_rows"]())):
         try:
             doc = json.loads((d / f"alpha-manifest-{platform}.json").read_text())
         except (OSError, ValueError):
@@ -1226,6 +1228,14 @@ def assemble_macos(plan, whl, dest, say=print):
     return dest / "macos-plan.json"
 
 
+def legacy_archive_path(name):
+    """Canonical identity path across the file-ownership migration; bytes stay unchanged."""
+    parts = name.split("/")
+    if len(parts) > 2 and parts[0] == "mojolearn":
+        parts[1] = {"cuda_native": "cuda", "hip_native": "hip"}.get(parts[1], parts[1])
+    return "/".join(parts)
+
+
 def record_identities(plan, linux_wheel, macos_wheel, out):
     """binding-identities.json for the release record: every row's identity,
     decision and the sha256 it shipped with, so the next release can decide
@@ -1239,7 +1249,7 @@ def record_identities(plan, linux_wheel, macos_wheel, out):
         with zipfile.ZipFile(whl) as z:
             for n in z.namelist():
                 if n.endswith(".so") and n.startswith("mojolearn/"):
-                    shipped[n] = hashlib.sha256(z.read(n)).hexdigest()
+                    shipped[legacy_archive_path(n)] = hashlib.sha256(z.read(n)).hexdigest()
     rows = []
     for r in plan["rows"]:
         rows.append(dict(key=r["key"], target=r["target"], archive_path=r["archive_path"], decision=r["decision"],

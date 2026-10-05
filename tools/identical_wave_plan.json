@@ -1,0 +1,641 @@
+{
+  "schema": 1,
+  "description": "Runnable representative medium wave spanning all11 handed-off families; stored DART quality separately uses exact full-row fixtures. All gates fail closed. No opponent execution.",
+  "build_timeout": 3600,
+  "builders": [
+    "build.sh",
+    "build_core_host.sh",
+    "build_estimators.sh",
+    "build_estimators_host.sh",
+    "build_svm.sh",
+    "build_svm_host.sh",
+    "build_solver.sh",
+    "build_solver_host.sh",
+    "build_gp.sh",
+    "build_gp_host.sh",
+    "build_mixture.sh",
+    "build_mixture_host.sh",
+    "build_gbdt.sh",
+    "build_gbdt_host.sh",
+    "build_rf.sh",
+    "build_rf_host.sh",
+    "build_metrics.sh",
+    "build_metrics_host.sh",
+    "build_preprocessing.sh",
+    "build_preprocessing_host.sh",
+    "build_arima.sh",
+    "build_arima_host.sh",
+    "build_tsa.sh",
+    "build_tsa_host.sh",
+    "build_kernel_methods.sh",
+    "build_kernel_methods_host.sh",
+    "build_x_linear.sh",
+    "build_x_linear_host.sh",
+    "build_x_neighbors.sh",
+    "build_x_neighbors_host.sh",
+    "build_x_decomp.sh",
+    "build_x_decomp_host.sh",
+    "build_x_cluster.sh",
+    "build_x_cluster_host.sh",
+    "build_x_prep.sh",
+    "build_x_prep_host.sh",
+    "build_x_trees.sh",
+    "build_x_trees_host.sh",
+    "build_x_sequence.sh",
+    "build_x_sequence_host.sh",
+    "build_x_cnn.sh",
+    "build_x_cnn_host.sh",
+    "build_embedding.sh",
+    "build_embedding_host.sh",
+    "build_training.sh",
+    "build_training_host.sh",
+    "build_transformer.sh",
+    "build_transformer_host.sh",
+    "build_mamba.sh",
+    "build_mamba_host.sh",
+    "build_linalg.sh",
+    "build_linalg_host.sh"
+  ],
+  "required_quality_gates": [
+    "compiled_route_readback",
+    "dart_reference",
+    "block_eigh",
+    "gram_cd",
+    "pca_60_sweeps",
+    "gmm_fused_cholesky",
+    "prophet",
+    "mamba3_angle",
+    "iforest_lifetime",
+    "dbscan_edge_split",
+    "dbscan_edge_split_scale",
+    "kde_legacy_staged",
+    "kde_chunked_host",
+    "gbdt_depth_zero_mixed",
+    "small_eigh_guard",
+    "resident_qr_memory",
+    "lu_nan",
+    "sgd_nan",
+    "pca_bits",
+    "import_smoke",
+    "cnn_seams",
+    "cnn_epoch_adam_controls",
+    "eigh_block_expected_refusal",
+    "lu_result_word",
+    "rf_phase_upload_lifetime"
+  ],
+  "quality_gates": [
+    {
+      "id": "compiled_route_readback",
+      "kind": "mojo",
+      "path": "tools/identical_wave_route_gate.mojo",
+      "coverage": "Asserts shared GramCD/PCA60/GMM/four-tree switches exactly match ON/OFF; shared shape predicates reach4096x16 CD and16feature GMM."
+    },
+    {
+      "id": "dart_reference",
+      "kind": "python",
+      "path": "tools/identical_wave_dart_gate.py",
+      "args": [
+        "--data",
+        "{full_data}",
+        "--report",
+        "{report}"
+      ],
+      "timeout": 14400,
+      "coverage": "Exact immutable stored full taxi classifier+regressor input hashes/params; own200tree fit only, stored LightGBM metrics never executed."
+    },
+    {
+      "id": "block_eigh",
+      "kind": "python",
+      "path": "tools/identical_wave_quality.py",
+      "args": [
+        "eigh",
+        "--report",
+        "{report}"
+      ],
+      "timeout": 7200,
+      "coverage": "n=4096 and n=513, eigenvalue error/residual/orthogonality against analytic dense rank-one spectrum. Requires separate source review for branch reachability."
+    },
+    {
+      "id": "gram_cd",
+      "kind": "python",
+      "path": "tools/identical_wave_quality.py",
+      "args": [
+        "gram_cd",
+        "--report",
+        "{report}"
+      ],
+      "coverage": "Untraced public F-order4096x16 ElasticNet/Lasso; no residual. estimator forwards rm_grid=False and want_residual=False to cd_fit_traced; ON enters cd_idn_gram_shape, OFF row route; analytic orthogonal-design coefficients."
+    },
+    {
+      "id": "pca_60_sweeps",
+      "kind": "python",
+      "path": "tools/identical_wave_quality.py",
+      "args": [
+        "pca",
+        "--report",
+        "{report}"
+      ],
+      "timeout": 7200,
+      "coverage": "Public covariance_eigh fit enters PCA_RR_EIGH and PCA_RR_SWEEPS=RR_EIGH_SWEEPS=60 (compiled route gate asserts budget); residual/spectrum/orthogonality at220,33,7 columns."
+    },
+    {
+      "id": "gmm_fused_cholesky",
+      "kind": "mojo",
+      "path": "mixture/checks/gmm_check.mojo",
+      "timeout": 7200,
+      "coverage": "mixture/checks/mstep.mojo invokes fused kernel whenever sabotage==GMM_SAB_NONE and d<=256, INCLUDING trace-enabled checks. Existing gmm_check non-sabotage fit fixtures reach it and compare host oracle with identical shared chol_order."
+    },
+    {
+      "id": "prophet",
+      "kind": "python",
+      "path": "python/mojolearn/tests/test_x_sequence_prophet.py",
+      "coverage": "Known planted trend break, weekly seasonality, holiday, finite forecast, batch/single equality; no external Prophet run."
+    },
+    {
+      "id": "mamba3_angle",
+      "kind": "mojo",
+      "path": "mamba/checks/mamba3_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_M3_ANGLE_PARALLEL=1"
+      ],
+      "timeout": 7200,
+      "arms": [
+        "on"
+      ],
+      "coverage": "Explicit candidate enabled; 18-case stage/oracle/decode checks include seam-crossing fixtures. Requires recorded actual compile/run, not default-OFF run."
+    },
+    {
+      "id": "iforest_lifetime",
+      "kind": "python",
+      "path": "tools/identical_iforest_lifetime_gate.py",
+      "arms": [
+        "on"
+      ],
+      "coverage": "Resident token, restore/refit, cache eviction and bounded process teardown; needs svm native binding.",
+      "args": [
+        "--out",
+        "{report}"
+      ]
+    },
+    {
+      "id": "dbscan_edge_split",
+      "kind": "mojo",
+      "path": "dbscan/checks/dbscan_edge_split_check.mojo"
+    },
+    {
+      "id": "dbscan_edge_split_scale",
+      "kind": "mojo",
+      "path": "dbscan/checks/dbscan_edge_split_scale_check.mojo"
+    },
+    {
+      "id": "kde_legacy_staged",
+      "kind": "mojo",
+      "path": "kde/checks/kde_check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF=1"
+      ],
+      "timeout": 7200,
+      "coverage": "Explicit legacy staged trace arithmetic; does not qualify default chunked route."
+    },
+    {
+      "id": "kde_chunked_host",
+      "kind": "mojo",
+      "path": "kde/checks/kde_chunked_check.mojo",
+      "timeout": 7200,
+      "arms": [
+        "on"
+      ],
+      "coverage": "Default chunk vs matching host fold, explicit legacy routes vs staged oracle."
+    },
+    {
+      "id": "gbdt_depth_zero_mixed",
+      "kind": "mojo",
+      "path": "tools/identical_wave_gbdt_depth_gate.mojo",
+      "coverage": "Nine-tree all-depth0 and mixed0/1/2/3/4 models; two full groups plus zero-depth tail,257rows; direct pinned Float32 host walk reference."
+    },
+    {
+      "id": "small_eigh_guard",
+      "kind": "python",
+      "path": "tools/identical_wave_quality.py",
+      "args": [
+        "small_eigh",
+        "--report",
+        "{report}"
+      ],
+      "coverage": "Public n1,2,7,31,32,33; default n<=32 block route and just-outside boundary, spectrum/residual/orthogonality. No N64/N128 candidates."
+    },
+    {
+      "id": "resident_qr_memory",
+      "kind": "python",
+      "path": "tools/identical_wave_quality.py",
+      "args": [
+        "qr_memory",
+        "--report",
+        "{report}"
+      ],
+      "coverage": "Input immutability+QR residual,FA finite state; driver memory reading with exact counter scope. Records call-end memory, never claims transient allocation peak."
+    },
+    {
+      "id": "lu_nan",
+      "kind": "python",
+      "path": "tools/idn_all_checks.py",
+      "args": [
+        "lu-nan"
+      ]
+    },
+    {
+      "id": "sgd_nan",
+      "kind": "python",
+      "path": "tools/idn_all_checks.py",
+      "args": [
+        "sgd-nan"
+      ]
+    },
+    {
+      "id": "pca_bits",
+      "kind": "python",
+      "path": "tools/idn_all_checks.py",
+      "args": [
+        "pca-id"
+      ],
+      "timeout": 7200
+    },
+    {
+      "id": "import_smoke",
+      "kind": "python",
+      "path": "tools/idn_all_checks.py",
+      "args": [
+        "import-smoke"
+      ]
+    },
+    {
+      "id": "cnn_seams",
+      "kind": "mojo",
+      "path": "x_cnn/checks/seams_check.mojo",
+      "timeout": 7200
+    },
+    {
+      "id": "cnn_epoch_adam_controls",
+      "kind": "python",
+      "path": "tools/identical_wave_quality.py",
+      "args": [
+        "cnn_controls",
+        "--report",
+        "{report}"
+      ],
+      "arms": [
+        "on"
+      ],
+      "coverage": "Permutation n1,2,3,1000,65537 and Adam steps1..100000 at two beta pairs against source portable_float64, <=1ULP."
+    },
+    {
+      "id": "eigh_block_expected_refusal",
+      "kind": "mojo",
+      "path": "tools/identical_wave_eigh_block_refusal.mojo",
+      "coverage": "Exact captured32x32 unsafe block pivot must refuse60sweeps, default all-column block route disabled. This is a refusal regression, not a passed decomposition."
+    },
+    {
+      "id": "lu_result_word",
+      "kind": "mojo",
+      "path": "tools/identical_wave_lu_result_check.mojo",
+      "coverage": "LU production result word encoder preserves every tested non-NaN word and maps NaN signs/payloads to0x7fc00000. Full lu_nan gate still compares unmodified factor/pivot/solve bytes."
+    },
+    {
+      "id": "rf_phase_upload_lifetime",
+      "kind": "mojo",
+      "path": "tools/identical_wave_rf_phase_lifetime_check.mojo",
+      "coverage": "Delayed H2D must expose overwritten single-source sabotage and preserve both double-buffered phase payloads. Full forest/DART raw-bit identity remains independently required."
+    }
+  ],
+  "cases": [
+    {
+      "family": "gbdt",
+      "lane": "gbdt-reg",
+      "dataset": "taxi",
+      "driver": "estimator",
+      "block": "reg",
+      "class": "GradientBoostingRegressor",
+      "params": {
+        "n_estimators": 32,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "random_state": 7,
+        "numeric_mode": "identical"
+      }
+    },
+    {
+      "family": "gbdt",
+      "lane": "gbdt-clf",
+      "dataset": "taxi",
+      "driver": "estimator",
+      "block": "cls",
+      "class": "GradientBoostingClassifier",
+      "params": {
+        "n_estimators": 32,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "random_state": 7,
+        "numeric_mode": "identical"
+      }
+    },
+    {
+      "family": "forests",
+      "lane": "random-forest",
+      "dataset": "taxi",
+      "driver": "estimator",
+      "block": "reg",
+      "class": "RandomForestRegressor",
+      "params": {
+        "n_estimators": 32,
+        "max_depth": 12,
+        "random_state": 7
+      }
+    },
+    {
+      "family": "forests",
+      "lane": "decision-tree-clf",
+      "dataset": "taxi"
+    },
+    {
+      "family": "forests",
+      "lane": "dart",
+      "dataset": "taxi"
+    },
+    {
+      "family": "forests",
+      "lane": "dart-reg",
+      "dataset": "taxi"
+    },
+    {
+      "family": "linear",
+      "lane": "sgd-clf",
+      "dataset": "taxi"
+    },
+    {
+      "family": "linear",
+      "lane": "huber",
+      "dataset": "taxi"
+    },
+    {
+      "family": "linear",
+      "lane": "poisson",
+      "dataset": "taxi"
+    },
+    {
+      "family": "linear",
+      "lane": "lasso-cv",
+      "dataset": "taxi"
+    },
+    {
+      "family": "linear",
+      "lane": "elasticnet",
+      "dataset": "taxi",
+      "driver": "estimator",
+      "block": "reg",
+      "class": "ElasticNet",
+      "params": {
+        "alpha": 0.05,
+        "l1_ratio": 0.5,
+        "max_iter": 1000,
+        "tol": 1e-05
+      }
+    },
+    {
+      "family": "decomp",
+      "lane": "pca",
+      "dataset": "istella",
+      "driver": "classical",
+      "block": "reg"
+    },
+    {
+      "family": "decomp",
+      "lane": "ols",
+      "dataset": "taxi",
+      "driver": "classical",
+      "block": "reg"
+    },
+    {
+      "family": "cluster",
+      "lane": "kmeans",
+      "dataset": "taxi",
+      "driver": "classical",
+      "block": "reg"
+    },
+    {
+      "family": "decomp",
+      "lane": "factor-analysis",
+      "dataset": "istella"
+    },
+    {
+      "family": "decomp",
+      "lane": "qr",
+      "dataset": "istella"
+    },
+    {
+      "family": "decomp",
+      "lane": "svd",
+      "dataset": "istella"
+    },
+    {
+      "family": "decomp",
+      "lane": "eigh",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "cluster",
+      "lane": "minibatch-kmeans",
+      "dataset": "taxi"
+    },
+    {
+      "family": "cluster",
+      "lane": "bayesian-gmm",
+      "dataset": "taxi"
+    },
+    {
+      "family": "cluster",
+      "lane": "meanshift",
+      "dataset": "taxi"
+    },
+    {
+      "family": "cluster",
+      "lane": "gmm",
+      "dataset": "taxi",
+      "driver": "estimator",
+      "block": "reg",
+      "class": "GaussianMixture",
+      "params": {
+        "n_components": 4,
+        "max_iter": 20,
+        "random_state": 7
+      },
+      "fit_target": false,
+      "output_attribute": "means_"
+    },
+    {
+      "family": "neighbors",
+      "lane": "nearest-centroid",
+      "dataset": "taxi"
+    },
+    {
+      "family": "neighbors",
+      "lane": "knn-imputer",
+      "dataset": "taxi"
+    },
+    {
+      "family": "neighbors",
+      "lane": "ocsvm",
+      "dataset": "taxi"
+    },
+    {
+      "family": "prep-metrics",
+      "lane": "maxabs-scaler",
+      "dataset": "taxi"
+    },
+    {
+      "family": "prep-metrics",
+      "lane": "robust-scaler",
+      "dataset": "taxi"
+    },
+    {
+      "family": "prep-metrics",
+      "lane": "variance-threshold",
+      "dataset": "taxi"
+    },
+    {
+      "family": "prep-metrics",
+      "lane": "mean-squared-error",
+      "dataset": "taxi",
+      "driver": "metric",
+      "function": "mean_squared_error"
+    },
+    {
+      "family": "kernel-gp",
+      "lane": "svgp",
+      "dataset": "taxi"
+    },
+    {
+      "family": "kernel-gp",
+      "lane": "kernel-pca",
+      "dataset": "taxi"
+    },
+    {
+      "family": "kernel-gp",
+      "lane": "additive-chi2",
+      "dataset": "taxi"
+    },
+    {
+      "family": "kernel-gp",
+      "lane": "gaussian-rp",
+      "dataset": "taxi"
+    },
+    {
+      "family": "kernel-gp",
+      "lane": "sparse-rp",
+      "dataset": "taxi"
+    },
+    {
+      "family": "timeseries",
+      "lane": "var",
+      "dataset": "taxi-hourly"
+    },
+    {
+      "family": "timeseries",
+      "lane": "prophet",
+      "dataset": "taxi-hourly"
+    },
+    {
+      "family": "timeseries",
+      "lane": "autoarima",
+      "dataset": "taxi-hourly"
+    },
+    {
+      "family": "timeseries",
+      "lane": "kpss",
+      "dataset": "taxi-hourly"
+    },
+    {
+      "family": "neural",
+      "lane": "moe",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "embedding",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "layernorm",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "batchnorm1d",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "conv2d",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "adam",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "neural",
+      "lane": "cross-entropy",
+      "dataset": "synthetic"
+    },
+    {
+      "family": "lm",
+      "lane": "mamba3-forward",
+      "dataset": "canonical-small",
+      "driver": "neural",
+      "shape": "small",
+      "fixture": "mamba3-forward-small.npz",
+      "coverage": "Forward-only persistent block, canonical source fixture. No LM training claim."
+    },
+    {
+      "family": "lm",
+      "lane": "transformer-forward",
+      "dataset": "canonical-small",
+      "driver": "neural",
+      "shape": "small",
+      "fixture": "transformer-forward-small.npz",
+      "coverage": "Forward-only persistent block, canonical source fixture. No LM training claim."
+    }
+  ],
+  "owed_measurement_coverage": [
+    "Canonical neural inputs must be generated once with identical_wave_prepare_neural.py onNV, transferred viaR2 and hash verified onAMD before starting this plan.",
+    "Device-handle grouping and explicit persistent-buffer adapters require separate multi-call scenarios; generic single board calls do not prove those gains.",
+    "Cross-vendor aggregation must compare complete matching SHA/arm/plan/data output digests; localhost equality alone is insufficient.",
+    "Apple and Apple/host qualification are deferred by the user to exhaustive final verification at the end of main before the next PyPI release. No Apple access or checks during this NVIDIA/AMD wave.",
+    "Full neural training and other nonrepresentative workloads excluded from this bounded wave; no whole-catalog claim.",
+    "Stored opponent metrics only with exact fixture/params match; do not compare medium timings directly with full-row stored cells."
+  ],
+  "timing_contract": "board-warm-single-call",
+  "measurement_rationale": "Match existing board semantics: one untimed warmup fit/infer, then ONE reported GPU timing sample per ON/OFF arm. Same operation/fixture on both arms. Host ID has no timer and no warmup. Cold-single-call optional is a separate contract; grouped completion needs separate multi-call adapter and is not inferred from these single calls. Store warm/full results are not directly comparable to these medium workloads.",
+  "representative_families": [
+    "cluster",
+    "decomp",
+    "forests",
+    "gbdt",
+    "kernel-gp",
+    "linear",
+    "lm",
+    "neighbors",
+    "neural",
+    "prep-metrics",
+    "timeseries"
+  ],
+  "fixed_cost_rows": [
+    "var",
+    "knn-imputer",
+    "gaussian-rp",
+    "sparse-rp",
+    "additive-chi2",
+    "maxabs-scaler"
+  ]
+}

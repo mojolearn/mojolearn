@@ -316,6 +316,7 @@ def cd_oracle_fit(
     tol: Float32,
     profile: Bool = True,
     trace: Bool = True,
+    gram: Bool = False,
 ) -> CdOracleResult:
     """`cdFit` on the host, stage for stage. `coef` starts at zero (cuML's
     Python passes `cp.zeros`). `profile` selects the normative fold (True)
@@ -377,7 +378,54 @@ def cd_oracle_fit(
         coef.append(Float32(0.0))
 
     var n_iter = 0
-    while n_iter < epochs:
+    if gram:
+        # lane/fam-linear: the device's CD_IDN_GRAM sweeps
+        # (`solver/impl/cd.mojo::cd_idn_gram_sweep_kernel`), word for word.
+        # G = X^T X and q = X^T y are the profile GEMM's cells (always the
+        # contract fold; the cell (a, b) and (b, a) chains multiply the same
+        # operands in the same row order, so the mirror is the same word).
+        var gm = List[Float32](length=d * d, fill=Float32(0.0))
+        for ga in range(d):
+            for gb in range(ga, d):
+                var cell = _col_dot(x, ga, d, x, gb, d, n, True)
+                gm[ga * d + gb] = cell
+                gm[gb * d + ga] = cell
+        var gq = List[Float32]()
+        for ga in range(d):
+            gq.append(ftz(_col_dot(x, ga, d, y, 0, 1, n, True)))
+        while n_iter < epochs:
+            var g_coef_max = Float32(0.0)
+            var g_diff_max = Float32(0.0)
+            for j in range(d):
+                var old = ftz(coef[j])
+                var c = ftz(identical_mul_add(ftz(gm[j * d + j]), old, gq[j]))
+                var r: Float32
+                if c > l1_alpha:
+                    r = c - l1_alpha
+                elif c < -l1_alpha:
+                    r = c + l1_alpha
+                else:
+                    r = Float32(0.0)
+                var sq = ftz(squared[j])
+                if sq > ORACLE_SQUARED_GUARD:
+                    r = r / sq
+                else:
+                    r = Float32(0.0)
+                r = ftz(r)
+                var diff = ftz(abs(old - r))
+                if g_diff_max < diff:
+                    g_diff_max = diff
+                var absv = abs(r)
+                if g_coef_max < absv:
+                    g_coef_max = absv
+                coef[j] = r
+                var delta = ftz(old - r)
+                for k in range(d):
+                    gq[k] = ftz(identical_mul_add(delta, ftz(gm[k * d + j]), gq[k]))
+            n_iter += 1
+            if g_coef_max < tol or (g_diff_max / g_coef_max) < tol:
+                break
+    while (not gram) and n_iter < epochs:
         var conv_coef = Float32(0.0)
         var coef_max = Float32(0.0)
         var diff_max = Float32(0.0)

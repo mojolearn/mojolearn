@@ -71,7 +71,7 @@ from gbdt.models.model_text import (
 from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.models.tensor_ctr_value_table import (
     TTensorCtrRegistry,
-    build_feature_freq_tensor_table,
+    build_feature_freq_tensor_table_host,
 )
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
@@ -588,7 +588,7 @@ def check_tensor_registry_roundtrip() raises:
         4, 3, 2, 1,
     ]
     var sources: List[Int] = [0, 1]
-    var table = build_feature_freq_tensor_table(x, 4, 3, sources^)
+    var table = build_feature_freq_tensor_table_host(x, 4, 3, sources^)
     var column = tm.tensor_ctr_registry.register(table^)
     if column != len(tm.fold_counts):
         raise Error("tensor model registry did not assign the next column")

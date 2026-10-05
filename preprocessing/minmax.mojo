@@ -174,10 +174,11 @@ def minmax_transform_kernel(
         output.unsafe_store(i,value)
 
 
-def minmax_fit(
+def minmax_fit_dev(
     ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
     lower: Float32, upper: Float32,
-) raises -> List[Float32]:
+) raises -> DeviceBuffer[DType.float32]:
+    """`minmax_fit`'s five rows of d, left on the device."""
     var chunks = (n+255)//256
     var lows = ctx.enqueue_create_buffer[DType.uint32](chunks*d)
     var highs = ctx.enqueue_create_buffer[DType.uint32](chunks*d)
@@ -190,22 +191,31 @@ def minmax_fit(
         lows.unsafe_ptr(),highs.unsafe_ptr(),Int32(chunks),Int32(d),lower,upper,output.unsafe_ptr(),
         grid_dim=(d+255)//256,block_dim=256,
     )
-    var result = download_f32(ctx,output,5*d)
-    _ = output^
     _ = highs^
     _ = lows^
-    return result^
+    return output^
 
 
-def minmax_fit_fast(
+def minmax_fit(
     ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
     lower: Float32, upper: Float32,
 ) raises -> List[Float32]:
+    var output = minmax_fit_dev(ctx,x,n,d,lower,upper)
+    var result = download_f32(ctx,output,5*d)
+    _ = output^
+    return result^
+
+
+def minmax_fit_fast_dev(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
+    lower: Float32, upper: Float32,
+) raises -> DeviceBuffer[DType.float32]:
     """`minmax_fit` with the row-tiled `extrema_rows_fast_kernel` under
     `PREP_FAST_MINMAX` (lane apple-fast-prep): the same chunk count, the same
-    finalize. Any other build: `minmax_fit` itself (no new kernel)."""
+    finalize. Any other build: `minmax_fit` itself (no new kernel). The five
+    rows stay on the device (`minmax_fit_fast` downloads them)."""
     comptime if not PREP_FAST_MINMAX:
-        return minmax_fit(ctx,x,n,d,lower,upper)
+        return minmax_fit_dev(ctx,x,n,d,lower,upper)
     else:
         var chunks = (n + FAST_ROWS - 1) // FAST_ROWS
         var tpb = 256 if d >= 256 else ((d + 31) // 32) * 32
@@ -221,11 +231,19 @@ def minmax_fit_fast(
             lows.unsafe_ptr(),highs.unsafe_ptr(),Int32(chunks),Int32(d),lower,upper,output.unsafe_ptr(),
             grid_dim=(d+255)//256,block_dim=256,
         )
-        var result = download_f32(ctx,output,5*d)
-        _ = output^
         _ = highs^
         _ = lows^
-        return result^
+        return output^
+
+
+def minmax_fit_fast(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
+    lower: Float32, upper: Float32,
+) raises -> List[Float32]:
+    var output = minmax_fit_fast_dev(ctx,x,n,d,lower,upper)
+    var result = download_f32(ctx,output,5*d)
+    _ = output^
+    return result^
 
 
 def minmax_transform(
@@ -322,12 +340,12 @@ def extrema_finalize_flag_kernel(
         output.unsafe_store(5*d+column,Float32(1) if nf != UInt32(0) else Float32(0))
 
 
-def minmax_fit_flagged(
+def minmax_fit_flagged_dev(
     ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
     lower: Float32, upper: Float32,
-) raises -> List[Float32]:
+) raises -> DeviceBuffer[DType.float32]:
     """`minmax_fit_fast`'s five rows of d and a sixth row of nonfinite flags,
-    from ONE read of X and one synchronize (PREP_CLS2_MINMAX_FUSED only)."""
+    from ONE read of X (PREP_CLS2_MINMAX_FUSED only), left on the device."""
     comptime if not PREP_CLS2_MINMAX_FUSED:
         raise Error("MinMaxScaler: minmax_fit_flagged is a FAST Apple switch")
     else:
@@ -346,9 +364,18 @@ def minmax_fit_flagged(
             lows.unsafe_ptr(),highs.unsafe_ptr(),bad.unsafe_ptr(),Int32(chunks),Int32(d),lower,upper,output.unsafe_ptr(),
             grid_dim=(d+255)//256,block_dim=256,
         )
-        var result = download_f32(ctx,output,6*d)
-        _ = output^
         _ = bad^
         _ = highs^
         _ = lows^
-        return result^
+        return output^
+
+
+def minmax_fit_flagged(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
+    lower: Float32, upper: Float32,
+) raises -> List[Float32]:
+    """`minmax_fit_flagged_dev`, downloaded (one synchronize)."""
+    var output = minmax_fit_flagged_dev(ctx,x,n,d,lower,upper)
+    var result = download_f32(ctx,output,6*d)
+    _ = output^
+    return result^

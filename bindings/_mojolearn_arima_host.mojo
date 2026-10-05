@@ -39,6 +39,7 @@ The sabotage arm (`arima_host_sabotage`) is
 finite-difference step doubles, so every fitted model this binary returns
 differs.
 """
+from std.memory import bitcast
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -52,6 +53,8 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
+from arima.impl.arima_ic import arima_ic_bits
 from arima.host.arima_oracle import (
     ARIMA_ORACLE_HOST_SABOTAGE,
     arima_host_fit,
@@ -120,6 +123,31 @@ def arima_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
+#: lane/fam2-timeseries: the host column of ARIMA_ORDER_IC_DEVICE
+#: (`arima/impl/fast_order_search.mojo`), spelled from the same defines
+#: because this binding does not import the device modules: AutoARIMA's
+#: criterion is the float32 one (`ic_running_min_f32`) exactly when the
+#: device binding built from the same defines chooses orders on the device.
+comptime ARIMA_HOST_IC_F32 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ARIMA_LLONLY_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF"]()
+    or is_defined["MOJOLEARN_ARIMA_ORDER_BATCH_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF"]()
+    or is_defined["MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF"]()
+)
+
+
+def arima_order_caps_binding() raises -> PythonObject:
+    """The device binding's `arima_order_caps` for the host column: bit 2
+    (the float32 criterion) only; no grouped search runs here."""
+    var caps = 0
+    comptime if ARIMA_HOST_IC_F32:
+        caps = 4
+    return PythonObject(caps)
+
+
 def arima_numeric_mode_binding() raises -> PythonObject:
     """The build's tier as the `NUMERIC_*` code, which `_arima_impl.py`
     cross-checks against the mode the package asked for."""
@@ -166,10 +194,11 @@ def arima_fit_binding(
     host: the addresses are (y, exog, params, x, x0, stats, flags), `params`
     is (batch_size, n_obs, p, d, q, P, D, Q, s, k, n_exog, method,
     max_iterations); returns `N * batch_size`."""
-    if len(params) != 13:
+    if len(params) != 13 and len(params) != 16:
         raise Error(
             "arima_fit: params must contain 13 values (batch_size, n_obs, p,"
-            " d, q, P, D, Q, s, k, n_exog, method, max_iterations), got "
+            " d, q, P, D, Q, s, k, n_exog, method, max_iterations), or 16 with"
+            " (ic_addr, pen_aic, pen_bic), got "
             + String(len(params))
         )
     var y_address = Int(py=y_addr)
@@ -194,6 +223,15 @@ def arima_fit_binding(
     var n_exog = Int(py=params[10])
     var method = Int(py=params[11])
     var max_iterations = Int(py=params[12])
+    # lane cpu3-seq (2026-10-04): AIC then BIC, `2 * batch_size` float64 at
+    # `ic_addr`, written by the fit (0 = not asked)
+    var ic_address = 0
+    var pen_aic = Float64(0.0)
+    var pen_bic = Float64(0.0)
+    if len(params) == 16:
+        ic_address = Int(py=params[13])
+        pen_aic = Float64(py=params[14])
+        pen_bic = Float64(py=params[15])
     var written = 0
     with GILReleased(Python()):
         # `arima_fit_ptr_host` (`arima/estimator.mojo:361-369`), in its order.
@@ -232,6 +270,16 @@ def arima_fit_binding(
             sp.unsafe_store(batch_size + b, r.fx[b])
             fp.unsafe_store(b, r.n_iter[b])
             fp.unsafe_store(batch_size + b, r.retcode[b])
+        # lane cpu3-seq: AIC then BIC, the device kernel's arithmetic
+        # (`arima/impl/arima_ic.mojo::arima_ic_bits`) on the host column's
+        # log-likelihood (infeasible series already -inf)
+        if ic_address != 0:
+            var icp = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=ic_address)
+            var pa = bitcast[DType.uint64](pen_aic)
+            var pb = bitcast[DType.uint64](pen_bic)
+            for b in range(batch_size):
+                icp.unsafe_store(b, arima_ic_bits(r.loglike[b], pa))
+                icp.unsafe_store(batch_size + b, arima_ic_bits(r.loglike[b], pb))
         written = N * batch_size
     return PythonObject(written)
 
@@ -246,6 +294,7 @@ def PyInit__mojolearn_arima_host() abi("C") -> PythonObject:
         module.def_function[arima_host_sabotage_binding]("arima_host_sabotage")
         module.def_function[arima_vendor_binding]("arima_vendor")
         module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
+        module.def_function[arima_order_caps_binding]("arima_order_caps")
         module.def_function[arima_fit_binding]("arima_fit")
         module.def_function[arima_predict_binding]("arima_predict")
         module.def_function[arima_forecast_binding]("arima_forecast")

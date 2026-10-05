@@ -48,8 +48,8 @@ from hdbscan.host.hdbscan_host_oracle import (
     HDBH_PREDICT_SABOTAGE,
     hdbh_fit,
 )
-from hdbscan.impl.prediction_data import generate_prediction_data
-from hdbscan.impl.detail.extract import probabilities_from_labels
+from hdbscan.impl.prediction_data import generate_prediction_data_host
+from hdbscan.impl.detail.extract import probabilities_from_labels_host
 
 
 def hdbscan_host_numeric_mode_binding() raises -> PythonObject:
@@ -171,7 +171,7 @@ def hdbscan_fit_binding(
             for c in range(out.n_clusters):
                 invp.unsafe_store(c, out.inverse_label_map[c])
         if want_probs:
-            var probs = probabilities_from_labels(
+            var probs = probabilities_from_labels_host(
                 out.tree, out.labels, out.inverse_label_map, n
             )
             for i in range(n):
@@ -223,7 +223,7 @@ def hdbscan_generate_prediction_data_binding(
     var iicp = i32_ptr(Int(py=addrs[10]))
     var n_ex = 0
     with GILReleased(Python()):
-        var pd = generate_prediction_data(
+        var pd = generate_prediction_data_host(
             parents, children, lambdas, sizes, n_edges, n_leaves, n_clusters,
             labels, inv, n_selected,
         )

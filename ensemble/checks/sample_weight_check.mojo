@@ -67,10 +67,10 @@ from ensemble.randomforest import (
     RF_params,
     RandomForestMetaData,
     RowSampler,
-    apply_class_weight,
-    class_weight_balanced,
-    class_weight_explicit,
-    class_weight_uniform,
+    apply_class_weight_host,
+    class_weight_balanced_host,
+    class_weight_explicit_host,
+    class_weight_uniform_host,
     fit_forest,
 )
 
@@ -537,8 +537,8 @@ def arm_e_class_weight() raises -> Int:
     # sample_weight UNTOUCHED. Passing none must stay none: materialising
     # a vector of ones would move a default fit onto the weighted
     # bootstrap arm, which tests the POINTER (randomforest.cuh:214).
-    var uni = class_weight_uniform(n_classes)
-    var passthrough = apply_class_weight(uni, y)
+    var uni = class_weight_uniform_host(n_classes)
+    var passthrough = apply_class_weight_host(uni, y)
     print("    uniform -> sample_weight length", len(passthrough))
     if len(passthrough) != 0:
         print("      FAIL: uniform weights must leave sample_weight absent")
@@ -549,7 +549,7 @@ def arm_e_class_weight() raises -> Int:
     #   class 0: 8 / (3*4) = 0.6666667
     #   class 1: 8 / (3*3) = 0.8888889
     #   class 2: 8 / (3*1) = 2.6666667
-    var bal = class_weight_balanced(n_classes, y)
+    var bal = class_weight_balanced_host(n_classes, y)
     var want = [
         Float64(Float32(8.0 / 12.0)),
         Float64(Float32(8.0 / 9.0)),
@@ -565,7 +565,7 @@ def arm_e_class_weight() raises -> Int:
         wrong += 1
 
     # applied per row, `:97`
-    var sw = apply_class_weight(bal, y)
+    var sw = apply_class_weight_host(bal, y)
     if len(sw) != len(y):
         print("      FAIL: applied weights are the wrong length")
         wrong += 1
@@ -584,7 +584,7 @@ def arm_e_class_weight() raises -> Int:
     var caller = List[Float32]()
     for i in range(len(y)):
         caller.append(Float32(2.0) if Int(y[i]) == 0 else Float32(1.0))
-    var bal_w = class_weight_balanced(n_classes, y, caller)
+    var bal_w = class_weight_balanced_host(n_classes, y, caller)
     # counts = [8, 3, 1], sum 12: class 0 -> 12/(3*8) = 0.5
     var want0 = Float64(Float32(12.0 / 24.0))
     print("    balanced with sample_weight, class 0 =", bal_w[0], "want", want0)
@@ -599,7 +599,7 @@ def arm_e_class_weight() raises -> Int:
         wrong += 1
 
     # `:99` -- with a caller's weights, class weights MULTIPLY them
-    var sw2 = apply_class_weight(bal, y, caller)
+    var sw2 = apply_class_weight_host(bal, y, caller)
     var bad2 = 0
     for i in range(len(y)):
         if sw2[i] != caller[i] * Float32(bal[Int(y[i])]):
@@ -609,8 +609,8 @@ def arm_e_class_weight() raises -> Int:
         wrong += 1
 
     # `:81-91` -- the explicit arm, and the length it refuses
-    var explicit = class_weight_explicit(n_classes, [1.0, 5.0, 1.0])
-    var sw3 = apply_class_weight(explicit, y)
+    var explicit = class_weight_explicit_host(n_classes, [1.0, 5.0, 1.0])
+    var sw3 = apply_class_weight_host(explicit, y)
     var bad3 = 0
     for i in range(len(y)):
         var w = Float32(5.0) if Int(y[i]) == 1 else Float32(1.0)
@@ -621,7 +621,7 @@ def arm_e_class_weight() raises -> Int:
         wrong += 1
     var refused = False
     try:
-        var _e = class_weight_explicit(n_classes, [1.0, 5.0])
+        var _e = class_weight_explicit_host(n_classes, [1.0, 5.0])
     except:
         refused = True
     if not refused:

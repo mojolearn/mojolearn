@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "status": "FROZEN_BASELINE_ONLY_BEFORE_ON_INSPECTION",
+  "box": "amd 162.243.193.137",
+  "wave": "/root/lq/medium-wave-a4d-fb2",
+  "source_sha": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+  "tools_commit": "59143dbfb461e73f19e5b9e99d2092f4f08f497c",
+  "off_receipt": "/root/lq/dart-adjudication/off-receipt/receipt.json",
+  "policy": "moving_block primary 4096, sensitivities 1024/2048, 2000 resamples; accuracy and R2 must PASS all three; logloss diagnostic",
+  "note": "Recorded and pushed before any ON adapter run, ON prediction read or delta computation.",
+  "frozen": {
+    "4096": {
+      "path": "/root/lq/dart-adjudication/frozen/frozen-margin-block4096.json",
+      "sha256": "672bce1f084a114bc23ac7a98702d876d839d87e28a154d41f6021e9735c1ee2",
+      "status": "FROZEN_BASELINE_ONLY",
+      "comparison_inspected": false,
+      "metrics": {
+        "classification": {
+          "baseline_score": 0.76834,
+          "lower_bound": 0.76185925,
+          "margin": 0.006480750000000035,
+          "n": 100000,
+          "resample_indices_sha256": "8dac89de2c9257643d2258aa4ba5e0a196e1401a36543c5d3c28ad9c580930f5"
+        },
+        "regression": {
+          "baseline_score": 0.9254970149266408,
+          "lower_bound": 0.9079365917376006,
+          "margin": 0.017560423189040275,
+          "n": 100000,
+          "resample_indices_sha256": "c5f497c80ac0d5bab8f5d34a700105adc41df4574bc5680f999d3c549ecf11a6"
+        }
+      }
+    },
+    "1024": {
+      "path": "/root/lq/dart-adjudication/frozen/frozen-margin-block1024.json",
+      "sha256": "70f4bc62d9ab083df3827b6421cdde58633ae782a7289ce3a962a7128e82a6fb",
+      "status": "FROZEN_BASELINE_ONLY",
+      "comparison_inspected": false,
+      "metrics": {
+        "classification": {
+          "baseline_score": 0.76834,
+          "lower_bound": 0.76352,
+          "margin": 0.0048200000000000465,
+          "n": 100000,
+          "resample_indices_sha256": "153bd82d8188c0401f65dceb794dd3544071f9141c0d8dd814a8dc707cc54b30"
+        },
+        "regression": {
+          "baseline_score": 0.9254970149266408,
+          "lower_bound": 0.9132279857518341,
+          "margin": 0.012269029174806767,
+          "n": 100000,
+          "resample_indices_sha256": "80c4371806ecfa0ec07604a2658a04648478483fd5142720466b4cd469529ad9"
+        }
+      }
+    },
+    "2048": {
+      "path": "/root/lq/dart-adjudication/frozen/frozen-margin-block2048.json",
+      "sha256": "080a9b41f90a767408270fdcc65f77e5982f948a5ea303023d4a8992d88366d9",
+      "status": "FROZEN_BASELINE_ONLY",
+      "comparison_inspected": false,
+      "metrics": {
+        "classification": {
+          "baseline_score": 0.76834,
+          "lower_bound": 0.76248925,
+          "margin": 0.005850750000000016,
+          "n": 100000,
+          "resample_indices_sha256": "d16d761938a81f72828c679ac4b14808e16718d4c0c6bcf5a3561219f58cf721"
+        },
+        "regression": {
+          "baseline_score": 0.9254970149266408,
+          "lower_bound": 0.9113300253986047,
+          "margin": 0.014166989528036078,
+          "n": 100000,
+          "resample_indices_sha256": "c647ddb7f8c4ad9e92148a2eb43e57820c4953e6fe09d7a77e54549b921dcfe9"
+        }
+      }
+    }
+  }
+}

@@ -156,6 +156,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
 from core.classical_host_predict import host_gemm_nt_into
+from core.host_tile_fold import IDN_XTY_TILED, host_column_mean_tiled
 from core.host_predict_threads import (
     HostF32Ptr,
     host_list_ptr,
@@ -163,6 +164,9 @@ from core.host_predict_threads import (
     host_predict_task_count,
 )
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
+from decomposition.pca_rr_switch import PCA_RR_EIGH, PCA_RR_SWEEPS
+from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
+from x_decomp.rr import host_eigh_rr
 
 
 #: The gate's negative control (the CPU training lane, brief section 3.4):
@@ -227,6 +231,15 @@ def host_column_mean(x: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32
         var s0 = ftz(host_halving_sum(partials))
         mu[col] = ftz(s0 / Float32(n_rows))
     return mu^
+
+
+def host_column_mean_launch(x: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32]:
+    """`core/xtdz_coalesced.mojo::column_mean_launch`'s value: the tile
+    order under IDN_XTY_TILED (lane fam2-shared), else `host_column_mean`."""
+    comptime if IDN_XTY_TILED:
+        if n_rows >= 1 and n_cols >= 1:
+            return host_column_mean_tiled(x, n_rows, n_cols)
+    return host_column_mean(x, n_rows, n_cols)
 
 
 def host_gram_applies(m: Int) -> Bool:
@@ -632,7 +645,37 @@ def host_eig_and_truncate(
     mut cov: List[Float32], n_cols: Int, n_components: Int, singular_scale: Int,
 ) raises -> PCAHostResult:
     """`eig_and_truncate`: the Jacobi at the device's settings, the sign
-    flip, the convergence refusal in its words, the Float64 tail."""
+    flip, the convergence refusal in its words, the Float64 tail.
+    PCA_RR_EIGH (decomposition/pca_rr_switch.mojo, the IDENTICAL default):
+    the round-robin Jacobi's rounds (`host_eigh_rr`, the device driver's
+    order and tests) in place of the cyclic replay."""
+    comptime if PCA_RR_EIGH:
+        var rv = List[Float32](length=n_cols * n_cols, fill=Float32(0.0))
+        var got = host_eigh_rr(cov, rv, n_cols, PCA_RR_SWEEPS, Float32(JACOBI_TOL))
+        if not got[0]:
+            # the cyclic solver's refusal, in its words (the device column
+            # raises the same: decomposition/impl/linalg/detail/pca.mojo)
+            raise Error(
+                "the device Jacobi did not converge in "
+                + String(PCA_RR_SWEEPS)
+                + " sweeps at n_cols = "
+                + String(n_cols)
+                + " (round-robin order) against a tolerance of "
+                + String(JACOBI_TOL)
+                + ". cuSOLVER's syevj has the same failure mode and the same"
+                " remedy, which is more sweeps. A non-symmetric covariance"
+                " produces this too; see check_covariance_is_symmetric."
+            )
+        host_sign_flip(rv, n_cols)
+        var rdiag = List[Float64]()
+        for i in range(n_cols):
+            rdiag.append(Float64(cov[i * n_cols + i]))
+        var rvecs = List[Float64]()
+        for i in range(n_cols * n_cols):
+            rvecs.append(Float64(rv[i]))
+        return host_order_truncate_spectrum(
+            rdiag, rvecs, n_cols, n_components, singular_scale
+        )
     var jac = host_jacobi_eigh(cov, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
     var vecs32 = jac.vectors.copy()
     host_sign_flip(vecs32, n_cols)
@@ -674,7 +717,7 @@ def host_pca_fit(
 ) raises -> PCAHostFit:
     """`pca_fit_host` without the DeviceContext."""
     host_pca_validate(n_rows, n_cols, n_components)
-    var mu = host_column_mean(x, n_rows, n_cols)
+    var mu = host_column_mean_launch(x, n_rows, n_cols)
     var cov: List[Float32]
     if host_gram_applies(n_cols):
         cov = host_gram_splitk(x, mu, True, n_cols, n_rows)
@@ -712,12 +755,21 @@ def tsvd_explained_finish(
 
 
 def host_column_variance(m: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32]:
-    """`estimator.mojo::_column_variance` on the host: the column mean, the
-    centering, the pinned square, the column mean of the squares."""
-    var mu = host_column_mean(m, n_rows, n_cols)
+    """The device variance's selected mean fold, centering and pinned square.
+
+    The launch helper's tiled fold is a different association from the direct
+    one-block mean. Match the device switch for BOTH variance reductions.
+    """
+    var mu: List[Float32]
+    comptime if IDN_DECOMP_MEAN_LAUNCH:
+        mu = host_column_mean_launch(m, n_rows, n_cols)
+    else:
+        mu = host_column_mean(m, n_rows, n_cols)
     var c = host_shift_columns(m, mu, n_rows, n_cols, Float32(-1.0))
-    for i in range(len(c)):
+    for i in range(n_rows * n_cols):
         c[i] = ftz(identical_mul(c[i], c[i]))
+    comptime if IDN_DECOMP_MEAN_LAUNCH:
+        return host_column_mean_launch(c, n_rows, n_cols)
     return host_column_mean(c, n_rows, n_cols)
 
 

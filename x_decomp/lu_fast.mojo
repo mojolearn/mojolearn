@@ -38,7 +38,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceContext
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from x_decomp.cells import F32Ptr, I32Ptr, div0
 
 #: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
@@ -46,11 +46,22 @@ from x_decomp.cells import F32Ptr, I32Ptr, div0
 #: residual the same 3.256e-06; tags gl2-lu-step1-synthetic,
 #: gl2-lusolve-step1-synthetic). -D MOJOLEARN_LU_FAST_STEP1_OFF restores the
 #: five-launch panel step (the A/B arm).
+#: lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor;
+#: -D MOJOLEARN_IDN_GATES_OFF (or the _OFF above) restores the five-launch
+#: step in IDENTICAL.
 comptime LU_FAST_STEP1 = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    (
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
+    )
     and not is_defined["MOJOLEARN_LU_FAST_STEP1_OFF"]()
 )
+#: IDENTICAL: the pivot search skips a NaN exactly as `lu_pivot`'s strict
+#: compare does (x_decomp/cells.mojo: a NaN below the diagonal never wins, a
+#: NaN on the diagonal keeps row k). A NaN candidate is "none" in the
+#: reductions (in the tree a NaN in the kept slot would hide the candidate
+#: it is compared with), and a NaN diagonal pins p = k. FAST keeps its form.
+comptime LFS_NAN_SERIAL = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
 #: FAST Apple default: same directed pivot tree and tie/NaN comparator.
 #: M3 w2-lu-pivot-shuffle-q-20261004: 10 exact factor/pivot/solve fixtures;
 #: call+first-read factor715.628750 ->653.702416ms, solve792.222333 ->733.531042ms.
@@ -118,6 +129,10 @@ def lu_fast_load_kernel(
             pan.unsafe_store(c * ld + r - kk0, a.unsafe_load(r * nn + kk0 + c))
         cv = abs(ftz(a.unsafe_load(r * nn + kk0)))
         ci = Int32(r)
+        comptime if LFS_NAN_SERIAL:
+            if cv != cv:
+                cv = Float32(-1)
+                ci = Int32(-1)
     rv[tid] = cv
     ri[tid] = ci
     barrier()
@@ -208,6 +223,10 @@ def lu_fast_step_kernel(
     var p = Int(ri[0])
     if p < kk:
         p = kk
+    comptime if LFS_NAN_SERIAL:
+        var dg = pin.unsafe_load(ck * ld + kk - kk0)
+        if dg != dg:
+            p = kk
     barrier()
     var d = ftz(pin.unsafe_load(ck * ld + p - kk0))
     var on = d != Float32(0)
@@ -244,6 +263,10 @@ def lu_fast_step_kernel(
             if ck + 1 < w:
                 cv = abs(ftz(pout.unsafe_load((ck + 1) * ld + ro)))
                 ci = Int32(i)
+                comptime if LFS_NAN_SERIAL:
+                    if cv != cv:
+                        cv = Float32(-1)
+                        ci = Int32(-1)
     rv[tid] = cv
     ri[tid] = ci
     barrier()

@@ -6,7 +6,8 @@ linear algebra rows the board audit flagged
 these is compiled into an IDENTICAL binding, and no IDENTICAL kernel changes.
 Python reads which are on through `x_decomp_qfix_flags()`:
 
-  bit 1  SVD_QFIX   (`-D MOJOLEARN_SVD_QOLD` restores the old route)
+  bit 1  SVD_QFIX   (REVERTED 2026-10-04: OFF by default, opt-in
+         `-D MOJOLEARN_SVD_QFIX`; `-D MOJOLEARN_SVD_QOLD` is now harmless)
          `svd(full_matrices=False)` of a tall matrix (the TSQR route): U_R
          keeps every direction with s_j > 2^-40 s_0 (was 2^-20) and is
          orthonormalized by Householder QR. The 2^-20 cut replaced genuine
@@ -16,6 +17,11 @@ Python reads which are on through `x_decomp_qfix_flags()`:
          taxi 1.83e-06 (numpy 4.31e-08). Mechanism reproduced in float32
          numpy (~/mojolearn-evidence/q-linalg/sim_svd2.py: 2^-20 2.1e-06,
          2^-30 and below 3.2e-07 at 100k x 220).
+         OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04,
+         tag rab5-svd): no quality gain (istella and taxi
+         max_rel_singular_value_error and reconstruction unchanged), taxi
+         48.54 -> 54.96 ms (+13.2%), istella +0.3%. REVERT: the old route is
+         the default again.
   bit 2  TSVD_QFIX  (`-D MOJOLEARN_TSVD_QOLD`)
          TruncatedSVD 'covariance_eigh' / 'jacobi' on a tall matrix (n <= 512
          columns): the components are the top right singular vectors of the
@@ -23,6 +29,12 @@ Python reads which are on through `x_decomp_qfix_flags()`:
          float32 Gram X^T X, whose rounding (about eps lambda_0 per entry)
          swamps every direction under ~1e-5 lambda_0. Audit: tsvd istella
          relative_reconstruction_error 2.55e-03 (sklearn 1.22e-04).
+         OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04,
+         tag rab8-tsvd): istella relative_reconstruction_error 2.554e-3 ->
+         1.219e-4 (sklearn 1.22e-4), time 362.9 -> 864.1 ms; taxi
+         reconstruction unchanged 3.257e-3, 34.5 -> 42.2 ms. KEEP as the FAST
+         default for quality (the old route was worse than the opponent);
+         speed follow-up owed in lane apple-fast-s-linalg.
   bit 4  LU_QFIX    (`-D MOJOLEARN_LU_QOLD`)
          `solve` and `lu_solve(lu_factor(A), B)`: one step of iterative
          refinement, x += LU^-1 (B - A x), the residual folded in float-float
@@ -31,6 +43,11 @@ Python reads which are on through `x_decomp_qfix_flags()`:
          (numpy 3.26e-08, torch-gpu 8.23e-07). The float32 trailing updates
          of an 8192 x 8192 LU round each entry hundreds of times; a float32
          residual would carry the same ~3e-6 error, hence float-float.
+         OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04,
+         tag rab5-lu): relative_residual 2.59e-6 -> 3.26e-8 (numpy 3.26e-8)
+         on lu-factor and lu-solve synthetic, time 787.6 -> 906.6 ms (+15.1%)
+         and 788.6 -> 896.3 ms (+13.7%). KEEP as the FAST default for
+         quality.
 """
 from std.gpu import block_idx, thread_idx
 from std.math import fma
@@ -45,7 +62,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, pinned_mul_f32
 from x_decomp.cells import F32Ptr
 from x_decomp.device import _down, _p, _up, xd_ctx
 
-comptime SVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_SVD_QOLD"]()
+#: REVERTED 2026-10-04 (rab5-svd: no quality gain, taxi +13.2%): opt-in only.
+comptime SVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_SVD_QFIX"]()
 comptime TSVD_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_TSVD_QOLD"]()
 comptime LU_QFIX = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_LU_QOLD"]()
 

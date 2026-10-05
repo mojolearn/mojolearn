@@ -4,7 +4,7 @@
 from std.memory import bitcast
 from std.math import isfinite
 from max.gpu.host import DeviceContext
-from umap.optimizer import optimize_layout_identical
+from umap.optimizer import optimize_layout_identical_reference
 from umap.optimizer_fast import optimize_layout_fast
 
 
@@ -17,10 +17,10 @@ def main() raises:
         0.25, 1, 0, 1,
         1, 0.25, 1, 0,
     ]
-    var first = optimize_layout_identical(
+    var first = optimize_layout_identical_reference(
         initial, weights, 4, 2, 5, seed=UInt64(23)
     )
-    var second = optimize_layout_identical(
+    var second = optimize_layout_identical_reference(
         initial, weights, 4, 2, 5, seed=UInt64(23)
     )
     if len(first) != 8:

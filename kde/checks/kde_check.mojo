@@ -1571,14 +1571,14 @@ def _scores_by_path(
 
 
 def check_kde_tiled_equals_staged() raises:
-    """DEVIATIONS 2625 and 2690's gate: every IDENTICAL fast path returns the
-    staged pass's bits on every score, over 6 kernels x the 3 unexpanded
+    """DEVIATIONS 2625 and 2690's gate: legacy IDENTICAL tiled/fused paths return
+    the staged pass's bits on every score, over 6 kernels x the 3 unexpanded
     metrics x weighted and unweighted, on shapes that straddle the 64-row
     cell tile, the 64-feature tile and the chunk edge.
 
     FIVE arms against the staged reference, so neither the STRUCTURE, the
     SCHEDULE nor the LAYOUT may move a bit:
-      1. the entry's own dispatch (DEVIATION 2691's train-major matrix);
+      1. the entry's own dispatch against its current host-column fold;
       2. the QUERY-MAJOR matrix at q_tpb 32 with 100-row chunks, which is
          the layout before 2691 and cuML's own;
       3. the TRAIN-MAJOR matrix on that same schedule, so the layout is the
@@ -1624,6 +1624,10 @@ def check_kde_tiled_equals_staged() raises:
                     var hw = weighted == 1
                     var staged = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 0, 0, 0)
                     var entry = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 1, 0, 0)
+                    # The default chunked fold deliberately changes bits on
+                    # every column. Compare that dispatch with its host twin;
+                    # the four explicit legacy schedules still match staged.
+                    var host_entry = _oracle(train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric)
                     var alt = _scores_by_path(ctx, train, query, w if hw else none, hw, nt, nq, d, h, kernel, metric, 2, 32, 100)
                     # DEVIATION 2690's two arms: the fused pass on its default
                     # schedule and on a second one (k_cells 16, so 4 helpers
@@ -1636,7 +1640,7 @@ def check_kde_tiled_equals_staged() raises:
                         n_cells += 1
                         var sb = bitcast[DType.uint32](staged[q])
                         if (
-                            bitcast[DType.uint32](entry[q]) != sb
+                            bitcast[DType.uint32](entry[q]) != bitcast[DType.uint32](host_entry.scores[q])
                             or bitcast[DType.uint32](alt[q]) != sb
                             or bitcast[DType.uint32](trans_alt[q]) != sb
                             or bitcast[DType.uint32](fused[q]) != sb
@@ -1660,8 +1664,8 @@ def check_kde_tiled_equals_staged() raises:
             print("  report " + msg)
     print(
         "check_kde_tiled_equals_staged " + ("OK" if IDENTICAL else "REPORT") + " [" + _mode_name() + "]: "
-        + String(n_cells) + " scores, 6 kernels x 3 metrics x weighted/unweighted x 5 shapes, 5 arms vs staged"
-        " (entry dispatch, query-major matrix and train-major matrix both at q_tpb 32/chunk 100,"
+        + String(n_cells) + " scores, 6 kernels x 3 metrics x weighted/unweighted x 5 shapes, entry vs host and 4 arms vs staged"
+        " (query-major matrix and train-major matrix both at q_tpb 32/chunk 100,"
         " fused default, fused k_cells 16/sum_tpb 128), " + String(n_bad) + " differ"
     )
 

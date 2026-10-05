@@ -1,0 +1,21 @@
+{
+  "compile_rc": 0,
+  "kind": "correctness-only",
+  "source_sha": "58761102d",
+  "run_rc": 0,
+  "checks": {
+    "SCALERS": {
+      "status": "PASS",
+      "digest": 138198733663681093,
+      "expected_cross_vendor_digest": 138198733663681093
+    },
+    "PRIMITIVES": {
+      "status": "PASS",
+      "digest": 12251619760217914789,
+      "expected_cross_vendor_digest": 12251619760217914789
+    }
+  },
+  "status": "PASS",
+  "binary_sha256": "b674b29c7327b8bebf0ca629dbbc49c0d49d871dff6ffa9d721672c37e889eae",
+  "scope": "Small actual M4 CPU-column verification only; no host speed measurements."
+}

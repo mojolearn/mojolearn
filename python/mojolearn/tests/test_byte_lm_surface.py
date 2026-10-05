@@ -203,6 +203,11 @@ class FakeByteLM:
         assert len(params) == 12
         assert params[2] == 2
         assert params[8:] == [0., 0., 0, 0.]
+        # The native `byte_validate_tokens` admission, which refuses before
+        # any device work (cpu2-l11-neural: Python no longer pre-scans ids).
+        tokens = np.ctypeslib.as_array((ctypes.c_int32 * 66).from_address(addresses[4]))
+        if tokens.min() < 0 or tokens.max() >= 256:
+            raise Exception('byte LM: token ID outside configured vocabulary')
         self.calls.append((list(addresses), list(params)))
         # Copy all input state to fresh output buffers, then deliberately
         # write before injecting a failure. These are plumbing sentinels,
@@ -462,6 +467,8 @@ def test_tokens_require_exact_int32_shape_and_range_before_gpu(host):
     for value in candidates:
         with pytest.raises((TypeError, ValueError)):
             model.train_step(value)
+    # The range refusals come from the native admission (before any device
+    # work), mapped to ValueError; no call is recorded.
     assert host.calls == []
 
 

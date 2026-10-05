@@ -154,7 +154,7 @@ def neural_normal_at(
     return ftz(identical_mul_add(ftz(sd), z, ftz(mean)))
 
 
-def neural_rng_kernel(gid_: Int, 
+def neural_rng_kernel(gid_: Int,
     out_buf: MutPointer[Float32, MutAnyOrigin],
     in_buf: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,

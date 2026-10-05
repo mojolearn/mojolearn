@@ -84,7 +84,11 @@ from cluster.checks.reduce_by_key import (
     SUM_MODE_PLAIN,
     SUM_MODE_PRODUCT,
     SUM_MODE_SQDIFF,
+    copy_f32_gated_kernel,
     copy_f32_kernel,
+    kmeans_conv_step_kernel,
+    launch_accumulate_centroid_sums_blocked_gated,
+    launch_accumulate_weight_per_cluster_blocked_gated,
     finish_sum_kernel,
     finalize_centroids_kernel,
     launch_accumulate_centroid_sums,
@@ -94,6 +98,7 @@ from cluster.checks.reduce_by_key import (
 )
 from cluster.checks.scalable_init import (
     count_labels_kernel,
+    sample_flags_dev_kernel,
     sample_flags_kernel,
     select_scatter_kernel,
     set_flag_kernel,
@@ -109,7 +114,10 @@ from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 from cluster.impl.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
     min_cluster_and_distance_compute,
+    min_cluster_and_distance_compute_gated,
 )
+from cluster.multi_gpu import assignment_device_count
+from std.memory import bitcast
 from cluster.impl.kmeans_params import (
     INIT_ARRAY,
     INIT_KMEANS_PLUS_PLUS,
@@ -130,10 +138,103 @@ from cluster.impl.kmeans_params import (
 #: of 90 fitting cells); `-D MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1` forces
 #: it on any column for an A/B, `-D MOJOLEARN_KMEANS_BLOCK_ACC_OFF=1` forces
 #: it off. Apple and AMD are untimed and keep the atomic reductions.
+#: fam-cluster (2026-10-04), IDENTICAL: the row-block accumulator on the AMD
+#: column too. The kernels are vendor neutral (plain Int32 loads and stores,
+#: no shared memory, no atomics) and the Int32 totals are the atomic arms'
+#: totals by the associativity argument in `reduce_by_key.mojo`, so no bit
+#: moves. `-D MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF=1` restores the atomic
+#: reductions on AMD.
+comptime IDN_KMEANS_BLOCK_ACC_AMD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_AMD
+    and not (
+        is_defined["MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 comptime KMEANS_BLOCK_ACC = (
     not is_defined["MOJOLEARN_KMEANS_BLOCK_ACC_OFF"]()
-    and (is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"]() or TARGET_COLUMN == COLUMN_NVIDIA)
+    and (
+        is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"]()
+        or TARGET_COLUMN == COLUMN_NVIDIA
+        or IDN_KMEANS_BLOCK_ACC_AMD
+    )
 )
+#: fam-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: the
+#: fold of the block tables STORES each output cell instead of adding into a
+#: buffer zeroed by two extra launches per Lloyd iteration. `0 + total` is
+#: `total` in Int32, so no bit moves. `-D MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF=1`
+#: restores the two zero launches and the adding fold.
+comptime IDN_KMEANS_FOLD_STORE = (
+    KMEANS_BLOCK_ACC
+    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+#: fam2-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: THE
+#: STOPPING RULE ON THE DEVICE. The Lloyd loop no longer drains once per
+#: iteration to read the shift scalar. `kmeans_conv_step_kernel` compares the
+#: device shift with the tolerance and sets a device flag; the two heavy
+#: kernels of an iteration (the fused assignment, `n x k x d`, and the
+#: row-block accumulate, `n x d`) and the centroid copy-back return at once
+#: when the flag is set, so the host enqueues `KMEANS_CONV_CHUNK` iterations
+#: at a time and reads the flag once per chunk. Iterations enqueued past
+#: convergence cost a handful of empty or `k x d` launches and leave every
+#: buffer as the converging iteration left it: labels, centroids, inertia and
+#: `n_iter` are the per-iteration loop's, bit for bit. The loop keeps the
+#: per-iteration form when `inertia_check` is on, when the identity trace is
+#: recording, and when the assignment is split across devices.
+#: `-D MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF=1` restores the per-iteration
+#: drain everywhere.
+comptime IDN_KMEANS_DEVICE_CONV = (
+    KMEANS_BLOCK_ACC
+    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+#: Iterations enqueued per flag read. CANDIDATE ARMS (the default is 8):
+#: `-D MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1=1` (gating alone, one read per
+#: iteration), `_2`, `_4`, `_16`, `_32`. No bit depends on the chunk.
+comptime KMEANS_CONV_CHUNK = (
+    1 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1"]()
+    else (
+        2 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2"]()
+        else (
+            4 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_4"]()
+            else (
+                16 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_16"]()
+                else (
+                    32 if is_defined["MOJOLEARN_IDN_KMEANS_CONV_CHUNK_32"]()
+                    else 8
+                )
+            )
+        )
+    )
+)
+
+
+def kmeans_shift_threshold(tol: Float64) -> Float32:
+    """The Float32 `t` with `s < t` exactly when `Float64(s) < tol`, for
+    every Float32 `s` (the shift is a Float32 sum of squares; Apple has no
+    Float64 on the device, so the comparison is carried in Float32).
+
+    `t` is `tol` rounded UP to Float32. If `tol` is a Float32 value the two
+    tests are the same test. Otherwise `Float64(s) < tol` holds exactly for
+    the Float32 values at or below the Float32 just under `tol`, which are
+    the values strictly below the Float32 just above it. For `tol <= 0`
+    neither test passes for a non-negative `s`; NaN fails both."""
+    var t = Float32(tol)
+    if tol > 0.0 and Float64(t) < tol:
+        # Positive and finite here: the next Float32 up is the next bit
+        # pattern (zero steps to the smallest subnormal).
+        t = bitcast[DType.float32](bitcast[DType.uint32](t) + UInt32(1))
+    return t
+
+
 #: The reach control for 3080: the row-block arm with the first row of every
 #: block dropped. NEVER a shipping define.
 comptime KMEANS_BLOCK_ACC_SABOTAGE = is_defined[
@@ -723,14 +824,48 @@ def _assign_to_candidates(
 #: the launch), and the fold's strict `<` returns the full argmin's
 #: (value, lowest index). `-D MOJOLEARN_KMEANS_ID_INCR_INIT_OFF` reassigns in
 #: full there.
-comptime KMEANS_FAST_INCR_INIT = has_apple_gpu_accelerator() and (
-    (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
+#: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns takes
+#: it too. Same argument as Apple IDENTICAL above (per-pair distance bits do
+#: not depend on the launch's candidate set; strict `<` keeps the lowest
+#: index), so no bit moves; the eight rounds plus step 7 stop paying
+#: `n * |C so far| * d` each. `-D MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF=1`
+#: reassigns in full there.
+comptime IDN_KMEANS_INCR_INIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not (
+        is_defined["MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
-    or (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and not is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
+)
+comptime KMEANS_FAST_INCR_INIT = IDN_KMEANS_INCR_INIT or (
+    has_apple_gpu_accelerator() and (
+        (
+            GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+            and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
+        )
+        or (
+            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+            and not (
+                is_defined["MOJOLEARN_KMEANS_ID_INCR_INIT_OFF"]()
+                or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+            )
+        )
+    )
+)
+
+
+#: fam2-cluster (2026-10-04), IDENTICAL: each k-means|| round's cost `psi`
+#: stays on the device. `sample_flags_dev_kernel` reads it from the device
+#: scalar the reduction wrote, so the round drops its drain-and-read of psi
+#: (one of the round's drains; the selected COUNT still comes back, because
+#: it sizes the next allocation). Same Float32 psi, so the same flags.
+#: `-D MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF=1` restores the readback.
+comptime IDN_KMEANS_INIT_PSI_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
 
@@ -977,9 +1112,10 @@ def init_scalable_kmeans_plus_plus(
         _sum_device(
             ctx, min_dist, ones, partials, d_psi, n_samples, SUM_MODE_PLAIN
         )
-        ctx.enqueue_copy(dst_ptr=h_psi.unsafe_ptr(), src_buf=d_psi)
-        ctx.synchronize()
-        psi = Float64(h_psi.unsafe_ptr().unsafe_load(0))
+        comptime if not IDN_KMEANS_INIT_PSI_DEVICE:
+            ctx.enqueue_copy(dst_ptr=h_psi.unsafe_ptr(), src_buf=d_psi)
+            ctx.synchronize()
+            psi = Float64(h_psi.unsafe_ptr().unsafe_load(0))
 
         # <<< Step-4 >>> (`:689-707`): one 64-bit round seed from the host
         # (O(1), where theirs advances a device Philox state), hashed per
@@ -992,18 +1128,32 @@ def init_scalable_kmeans_plus_plus(
         ]().cast[DType.int32]()
         var lk = Float32(params.oversampling_factor * Float64(k))
 
-        ctx.enqueue_function[sample_flags_kernel](
-            flags.unsafe_ptr(),
-            min_dist.unsafe_ptr(),
-            is_centroid.unsafe_ptr(),
-            Int32(n_samples),
-            Float32(psi),
-            lk,
-            seed_lo,
-            seed_hi,
-            grid_dim=((n_samples + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
+        comptime if IDN_KMEANS_INIT_PSI_DEVICE:
+            ctx.enqueue_function[sample_flags_dev_kernel](
+                flags.unsafe_ptr(),
+                min_dist.unsafe_ptr(),
+                is_centroid.unsafe_ptr(),
+                d_psi.unsafe_ptr(),
+                Int32(n_samples),
+                lk,
+                seed_lo,
+                seed_hi,
+                grid_dim=((n_samples + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[sample_flags_kernel](
+                flags.unsafe_ptr(),
+                min_dist.unsafe_ptr(),
+                is_centroid.unsafe_ptr(),
+                Int32(n_samples),
+                Float32(psi),
+                lk,
+                seed_lo,
+                seed_hi,
+                grid_dim=((n_samples + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
         ctx.enqueue_function[chunk_sums_kernel](
             chunk_totals.unsafe_ptr(),
             flags.unsafe_ptr(),
@@ -1386,6 +1536,18 @@ def kmeans_fit_main_traced(
     var d_shift = ctx.enqueue_create_buffer[DType.float32](1)
     var h_shift = ctx.enqueue_create_host_buffer[DType.float32](1)
     var h_cost = ctx.enqueue_create_host_buffer[DType.float32](1)
+    # `IDN_KMEANS_DEVICE_CONV`: [0] the done flag, [1] the iteration that
+    # converged. Zeroed at the start of every restart.
+    var d_conv = ctx.enqueue_create_buffer[DType.int32](2)
+    var h_conv = ctx.enqueue_create_host_buffer[DType.int32](2)
+    var dev_conv = False
+    comptime if IDN_KMEANS_DEVICE_CONV:
+        dev_conv = (
+            (not params.inertia_check)
+            and (not trace.enabled)
+            and assignment_device_count() == 1
+        )
+    var conv_thresh = kmeans_shift_threshold(params.tol)
     ctx.synchronize()
 
     # X's norms, ONCE for the whole fit (`:394-399`). This is the single
@@ -1487,19 +1649,116 @@ def kmeans_fit_main_traced(
         var prior_cost = Float64(0.0)
         var n_current_iter = params.max_iter + 1
         var it = 1
-        while it <= params.max_iter:
-            ctx.enqueue_function[zero_i32_kernel](
-                sums_i32.unsafe_ptr(),
-                Int32(cd),
-                grid_dim=((cd + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
-            )
-            ctx.enqueue_function[zero_i32_kernel](
-                weight_i32.unsafe_ptr(),
-                Int32(n_clusters),
-                grid_dim=((n_clusters + 255) // 256, 1, 1),
-                block_dim=(256, 1, 1),
-            )
+        comptime if IDN_KMEANS_DEVICE_CONV:
+            if dev_conv:
+                ctx.enqueue_function[zero_i32_kernel](
+                    d_conv.unsafe_ptr(),
+                    Int32(2),
+                    grid_dim=(1, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
+                var conv_seen = False
+                while it <= params.max_iter and not conv_seen:
+                    var chunk_end = it + KMEANS_CONV_CHUNK - 1
+                    if chunk_end > params.max_iter:
+                        chunk_end = params.max_iter
+                    while it <= chunk_end:
+                        comptime if not IDN_KMEANS_FOLD_STORE:
+                            ctx.enqueue_function[zero_i32_kernel](
+                                sums_i32.unsafe_ptr(),
+                                Int32(cd),
+                                grid_dim=((cd + 255) // 256, 1, 1),
+                                block_dim=(256, 1, 1),
+                            )
+                            ctx.enqueue_function[zero_i32_kernel](
+                                weight_i32.unsafe_ptr(),
+                                Int32(n_clusters),
+                                grid_dim=((n_clusters + 255) // 256, 1, 1),
+                                block_dim=(256, 1, 1),
+                            )
+                        compute_centroid_norms(
+                            ctx, cur_centroids, centroid_norm, n_clusters,
+                            n_features, params.metric,
+                        )
+                        min_cluster_and_distance_compute_gated(
+                            ctx, d_conv, x, x_norm, cur_centroids,
+                            centroid_norm, labels, min_dist, n_samples,
+                            n_features, n_clusters, params.metric,
+                        )
+                        launch_accumulate_centroid_sums_blocked_gated[
+                            KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
+                        ](
+                            ctx, d_conv, sums_i32, acc_table, x, labels,
+                            weights, n_samples, n_features, n_clusters,
+                            sum_scale,
+                        )
+                        launch_accumulate_weight_per_cluster_blocked_gated[
+                            IDN_KMEANS_FOLD_STORE
+                        ](
+                            ctx, d_conv, weight_i32, acc_table_w, labels,
+                            weights, n_samples, n_clusters, weight_scale,
+                        )
+                        ctx.enqueue_function[finalize_centroids_kernel](
+                            new_centroids.unsafe_ptr(),
+                            cur_centroids.unsafe_ptr(),
+                            sums_i32.unsafe_ptr(),
+                            weight_i32.unsafe_ptr(),
+                            Int32(n_clusters),
+                            Int32(n_features),
+                            sum_scale,
+                            weight_scale,
+                            grid_dim=((cd + 255) // 256, 1, 1),
+                            block_dim=(256, 1, 1),
+                        )
+                        _sum_device(
+                            ctx, cur_centroids, new_centroids, partials,
+                            d_shift, cd, SUM_MODE_SQDIFF,
+                        )
+                        # The copy back reads the flag BEFORE this
+                        # iteration's test sets it, so the converging
+                        # iteration still copies, as the host loop does.
+                        ctx.enqueue_function[copy_f32_gated_kernel](
+                            d_conv.unsafe_ptr(),
+                            cur_centroids.unsafe_ptr(),
+                            new_centroids.unsafe_ptr(),
+                            Int32(cd),
+                            grid_dim=((cd + 255) // 256, 1, 1),
+                            block_dim=(256, 1, 1),
+                        )
+                        ctx.enqueue_function[kmeans_conv_step_kernel](
+                            d_conv.unsafe_ptr(),
+                            d_shift.unsafe_ptr(),
+                            conv_thresh,
+                            Int32(it),
+                            grid_dim=(1, 1, 1),
+                            block_dim=(1, 1, 1),
+                        )
+                        it += 1
+                    # ONE read per chunk.
+                    ctx.enqueue_copy(
+                        dst_ptr=h_conv.unsafe_ptr(), src_buf=d_conv
+                    )
+                    ctx.synchronize()
+                    if Int(h_conv.unsafe_ptr().unsafe_load(0)) != 0:
+                        conv_seen = True
+                        n_current_iter = Int(
+                            h_conv.unsafe_ptr().unsafe_load(1)
+                        )
+                        it = n_current_iter
+        while (not dev_conv) and it <= params.max_iter:
+            comptime if not IDN_KMEANS_FOLD_STORE:
+                ctx.enqueue_function[zero_i32_kernel](
+                    sums_i32.unsafe_ptr(),
+                    Int32(cd),
+                    grid_dim=((cd + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
+                ctx.enqueue_function[zero_i32_kernel](
+                    weight_i32.unsafe_ptr(),
+                    Int32(n_clusters),
+                    grid_dim=((n_clusters + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
 
             compute_centroid_norms(
                 ctx,
@@ -1547,12 +1806,14 @@ def kmeans_fit_main_traced(
                 # totals are the atomic arms' totals (associative adds of
                 # the same addends, bounded inside Int32 by `choose_scale`).
                 launch_accumulate_centroid_sums_blocked[
-                    KMEANS_BLOCK_ACC_SABOTAGE
+                    KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
                 ](
                     ctx, sums_i32, acc_table, x, labels, weights,
                     n_samples, n_features, n_clusters, sum_scale,
                 )
-                launch_accumulate_weight_per_cluster_blocked(
+                launch_accumulate_weight_per_cluster_blocked[
+                    IDN_KMEANS_FOLD_STORE
+                ](
                     ctx, weight_i32, acc_table_w, labels, weights,
                     n_samples, n_clusters, weight_scale,
                 )
@@ -1794,6 +2055,7 @@ def kmeans_fit_main_traced(
     # Launches hold raw pointers: keep the tables alive past the last sync.
     _ = acc_table^
     _ = acc_table_w^
+    _ = d_conv^
     if trace.enabled:
         trace.record_device(ctx, tag_prefix + "fit.centroids", centroids, cd)
         trace.record_device(ctx, tag_prefix + "fit.labels", labels, n_samples)

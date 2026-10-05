@@ -64,6 +64,109 @@ shift on the host after the walker; the host oracle
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.soft_f64 import (
+    SF64_ZERO,
+    sf64_add,
+    sf64_div,
+    sf64_fma,
+    sf64_from_f32,
+    sf64_from_int,
+    sf64_gt,
+    sf64_is_nan,
+    sf64_lt,
+    sf64_neg,
+    sf64_sqrt,
+    sf64_sub,
+    sf64_to_f32,
+)
+
+#: lane/fam2-gbdt F5 (IDENTICAL, every vendor; default ON): the ONE-STEP
+#: Newton estimation (`leaf_estimation_iterations == 1`, the default of
+#: Logloss and the other single-dimensional pointwise losses) is finished ON
+#: THE DEVICE. `_estimate_and_apply` (`gbdt/methods/doc_parallel_boosting.mojo`)
+#: used to drain after the evaluation, read the per-leaf sums back, take the
+#: walker's one step on the host (`descent_helpers.mojo`: Float64 divide,
+#: regularize), upload the leaf values and drain again. Now
+#: `newton_one_step_kernel` takes that step from the device sums in
+#: soft-float64 (`checks/soft_f64.mojo`, IEEE double in integer arithmetic,
+#: the same on every vendor), the cursor add reads its output, and the task
+#: drains ONCE. The values are the host walker's bit for bit (correctly
+#: rounded double add, divide and narrowing), so the host column is
+#: untouched. The regularizer's per-leaf weight is the leaf's row count on
+#: an unweighted fit (already on the device); on a weighted fit the host
+#: uploads its keep/zero decision per leaf (one float per leaf, from the
+#: weight sums the oracle's constructor already read).
+#: `-D MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF` (or the master
+#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
+comptime IDN_EST_ONE_STEP_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+#: lane fix-g1-gbdt (audit G1 / F7 "GBDT multiclass leaf solve"; IDENTICAL,
+#: every vendor; default ON): the ONE-STEP MultiClass Newton estimation
+#: (`leaf_estimation_iterations == 1`, Newton, the blocked Hessian) is
+#: finished ON THE DEVICE. The walker used to drain after the first
+#: evaluation (gradient readback), drain again after the `numClasses`
+#: Hessian rows, build the per-leaf `numClasses x numClasses` system on the
+#: host, solve it there (`descent_helpers._blocked_hessian_direction`,
+#: `gbdt/lapack/linear_system.mojo`'s Cholesky), then upload the leaf
+#: values and drain a third time. Now every row's per-leaf reduction is
+#: stashed on the device (`f32_stash_kernel`) and
+#: `multiclass_one_step_kernel` (one thread per leaf) does the gradient
+#: reconstruction, the lambda diagonal, the Cholesky factor and the two
+#: triangular solves, the not-PD fallback (gradient untouched, DEVIATION
+#: 74), the narrowing, the walker's fused move, Regularize and the gauge
+#: projection, in soft-float64 (`checks/soft_f64.mojo`: correctly rounded
+#: add/sub/fma/div/sqrt, the same integer code on every vendor). Each step
+#: is the host walker's operation for operation (the host `fma` is the
+#: soft `fma`, the host `sqrt` the soft correctly rounded `sqrt`), so the
+#: leaf values are the host walker's bit for bit and the host column
+#: (`gbdt/host/gbdt_oracle_multiclass.mojo::_estimate_multi`) is untouched.
+#: The task drains ONCE. Classes above `MC_ONE_STEP_MAX_CLASSES` (the
+#: per-thread system is a local array) keep the host walker.
+#: `-D MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF` (or the master
+#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host walker.
+comptime IDN_GBDT_MC_ONE_STEP_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+#: lane fix-g1-gbdt (audit G1, the original handoff's "symmetric-fit drain
+#: merge"; IDENTICAL, every vendor; default ON): on the SYMMETRIC estimation
+#: arm (`need_estimation`, one permutation, no eval set), a task that takes a
+#: one-step device path (F5 or `IDN_GBDT_MC_ONE_STEP_DEVICE`) no longer
+#: drains at its tail. Its cursor add, leaf-value copy and (MultiClass)
+#: fallback flags stay queued; the next tree's gradient pass and search are
+#: enqueued behind them on the same in-order queue, and that search's own
+#: drain settles the task (`doc_parallel_boosting.finish_deferred_estimation`
+#: reads the values and appends the previous tree's model right after the
+#: search returns, before the next estimation reuses the staging). Two
+#: drains per tree become one. Schedule only: the same kernels on the same
+#: queue in the same order, so no bit moves anywhere and the host column is
+#: untouched. `-D MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF` (or the master
+#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the drain per task.
+comptime IDN_GBDT_SYM_EST_DEFER_DRAIN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+#: the widest class count `multiclass_one_step_kernel` solves (its
+#: per-thread system is `MC_ONE_STEP_MAX_CLASSES^2` doubles of local memory)
+comptime MC_ONE_STEP_MAX_CLASSES = 16
 
 
 comptime LEAF_BLOCK = 256
@@ -182,3 +285,227 @@ def compute_leaf_values_kernel(
         v = Float32(0.0)
 
     out_values.unsafe_store(leaf, v)
+
+
+def newton_one_step_kernel(
+    part_stats: MutPointer[Float32, MutAnyOrigin],
+    leaf_sizes: MutPointer[UInt32, MutAnyOrigin],
+    lambda_bits: UInt64,
+    min_leaf_weight_bits: UInt64,
+    n_leaves_in: Int32,
+    out_values: MutPointer[Float32, MutAnyOrigin],
+    has_mask: Int32,
+):
+    """`IDN_EST_ONE_STEP_DEVICE`: `TNewtonLikeWalker::Estimate` at
+    `Iterations == 1` on the diagonal arm, one thread per leaf, from the
+    evaluation's per-leaf sums `part_stats[2 * leaf] = sum(der)`,
+    `part_stats[2 * leaf + 1] = sum(der2)`:
+
+        gradient = double(der);  hessian = double(der2) + lambda
+        direction = hessian > 0 ? float(gradient / (hessian + 1e-20f)) : 0
+        point = float(1.0 * direction + 0.0)       (the walker's fused move)
+        point = 0 when double(leaf row count) < MinLeafWeight  (Regularize)
+
+    With `has_mask` (a weighted fit) `out_values[leaf]` arrives holding the
+    host's Regularize decision for the leaf, 0.0 = zero it, and is
+    overwritten with the value (one buffer in and out, so no two launch
+    arguments alias).
+
+    The doubles are their bit patterns in `UInt64`; `lambda_bits` and
+    `min_leaf_weight_bits` are the host doubles' bits."""
+    var n_leaves = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n_leaves:
+        return
+    var g = sf64_from_f32(part_stats.unsafe_load(2 * leaf))
+    var h = sf64_add(
+        sf64_from_f32(part_stats.unsafe_load(2 * leaf + 1)), lambda_bits
+    )
+    var v = Float32(0.0)
+    if (not sf64_is_nan(h)) and sf64_gt(h, SF64_ZERO):
+        var eps = sf64_from_f32(Float32(1e-20))
+        v = sf64_to_f32(sf64_div(g, sf64_add(h, eps)))
+    # `fma(1.0, direction, +0.0)`: a zero of either sign lands on +0.0
+    if v == Float32(0.0):
+        v = Float32(0.0)
+    if has_mask != Int32(0):
+        if out_values.unsafe_load(leaf) == Float32(0.0):
+            v = Float32(0.0)
+    else:
+        var weight = sf64_from_int(Int(leaf_sizes.unsafe_load(leaf)))
+        if sf64_lt(weight, min_leaf_weight_bits):
+            v = Float32(0.0)
+    out_values.unsafe_store(leaf, v)
+
+
+def weight_keep_mask_kernel(
+    weight_stats: MutPointer[Float32, MutAnyOrigin],
+    min_leaf_weight_bits: UInt64,
+    n_leaves_in: Int32,
+    out_mask: MutPointer[Float32, MutAnyOrigin],
+):
+    """Lane ml-gbdt T4 (`IDN_ORD_ONE_STEP_DEVICE`): `Regularize`'s per-leaf
+    keep/zero decision for `newton_one_step_kernel`'s `has_mask` input, on
+    the device. `weight_stats[leaf]` is the deferred weight fold's per-leaf
+    float32 sum (`make_bin_optimized_oracle(defer_weights=True)`), the value
+    `settle_weights` widens on the host; the host test
+    `double(w) < MinLeafWeight` is restated in soft-float64, so the mask is
+    the host's bit for bit (a NaN sum compares false there: keep).
+    `out_mask[leaf]` = 0.0 (zero the leaf) or 1.0 (keep)."""
+    var n_leaves = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n_leaves:
+        return
+    var w = sf64_from_f32(weight_stats.unsafe_load(leaf))
+    var keep = Float32(1.0)
+    if (not sf64_is_nan(w)) and sf64_lt(w, min_leaf_weight_bits):
+        keep = Float32(0.0)
+    out_mask.unsafe_store(leaf, keep)
+
+
+def f32_stash_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    dst_offset_in: Int32,
+    n_in: Int32,
+):
+    """`IDN_GBDT_MC_ONE_STEP_DEVICE`: copy `n` floats of a per-leaf reduction
+    (the oracle's reused `d_multi_stats`) into their slot of a stash, so the
+    next row's reduction can overwrite the source while the stash keeps the
+    row for `multiclass_one_step_kernel`. A byte copy: no value changes."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    dst.unsafe_store(Int(dst_offset_in) + i, src.unsafe_load(i))
+
+
+def multiclass_one_step_kernel(
+    grad_stats: MutPointer[Float32, MutAnyOrigin],
+    hess_stats: MutPointer[Float32, MutAnyOrigin],
+    leaf_sizes: MutPointer[UInt32, MutAnyOrigin],
+    lambda_bits: UInt64,
+    min_leaf_weight_bits: UInt64,
+    n_leaves_in: Int32,
+    cursor_dim_in: Int32,
+    out_values: MutPointer[Float32, MutAnyOrigin],
+    not_pd: MutPointer[UInt32, MutAnyOrigin],
+    has_mask: Int32,
+):
+    """`IDN_GBDT_MC_ONE_STEP_DEVICE`: `TNewtonLikeWalker::Estimate` at
+    `Iterations == 1` on the BLOCKED arm (MultiClass, Newton), one thread
+    per leaf. `k = cursor_dim + 1` (`SingleBinDim()`).
+
+    Inputs, the oracle's per-leaf float32 reductions at the zero point:
+      `grad_stats[leaf * cursor_dim + d]`: `sum(der)` of class plane `d`;
+      `hess_stats`: Hessian row `r` (columns `0..r`) at offset
+      `n_leaves * r (r + 1) / 2`, `[leaf * (r + 1) + c]`.
+
+    The host walker, step for step (doubles are `UInt64` bit patterns):
+      gradient[d] = double(der[d]);  gradient[k-1] = -(0 + der[0] + ...)
+                    (`_write_multi_dim_value_and_first_derivatives`)
+      sigma[r][c] = double(h[r][c]), + lambda on the diagonal
+                    (`_write_blocked_second_derivatives`; only the lower
+                    triangle is read by the solve)
+      Cholesky + two triangular solves with every `x -= a * b` one `fma`
+                    (`solve_linear_system_cholesky`); a leading minor with
+                    `s <= 0` stops it and leaves the GRADIENT as the
+                    solution (DEVIATION 74), counted in `not_pd[leaf]`
+      direction = float(solution);  point = float(fma(1.0, dir, +0.0))
+                    (`_move`: a zero of either sign lands on +0.0)
+      Regularize: every component 0 when the leaf weight < MinLeafWeight
+      out[leaf * cursor_dim + d] = point[d] - point[k-1]  (float32,
+                    `make_estimation_result`; computed as the double
+                    difference narrowed once, which is the correctly
+                    rounded float difference)
+
+    With `has_mask` (a weighted fit) `out_values[leaf * cursor_dim]` arrives
+    holding the host's Regularize decision, 0.0 = zero the leaf; each thread
+    reads only its own leaf's slot before writing it."""
+    var n_leaves = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n_leaves:
+        return
+    var cd = Int(cursor_dim_in)
+    var k = cd + 1
+    var keep = True
+    if has_mask != Int32(0):
+        if out_values.unsafe_load(leaf * cd) == Float32(0.0):
+            keep = False
+    else:
+        var weight = sf64_from_int(Int(leaf_sizes.unsafe_load(leaf)))
+        if sf64_lt(weight, min_leaf_weight_bits):
+            keep = False
+
+    var sol = InlineArray[UInt64, MC_ONE_STEP_MAX_CLASSES](fill=UInt64(0))
+    var sigma = InlineArray[
+        UInt64, MC_ONE_STEP_MAX_CLASSES * MC_ONE_STEP_MAX_CLASSES
+    ](fill=UInt64(0))
+
+    # the gradient, with MultiClass's reconstructed pinned component
+    var total = SF64_ZERO
+    for d in range(cd):
+        var v = sf64_from_f32(grad_stats.unsafe_load(leaf * cd + d))
+        sol[d] = v
+        total = sf64_add(total, v)
+    sol[cd] = sf64_neg(total)
+
+    # the lower triangle of the blocked Hessian, lambda on the diagonal
+    for r in range(k):
+        var row_base = n_leaves * ((r * (r + 1)) // 2) + leaf * (r + 1)
+        for c in range(r + 1):
+            var hv = sf64_from_f32(hess_stats.unsafe_load(row_base + c))
+            if c == r:
+                hv = sf64_add(hv, lambda_bits)
+            sigma[r * k + c] = hv
+
+    var info = 0
+    if k == 1:
+        # `if (target->size() == 1) { (*target)[0] /= (*matrix)[0]; }`
+        sol[0] = sf64_div(sol[0], sigma[0])
+    else:
+        # dpotrf, lower triangle in place
+        for j in range(k):
+            var s = sigma[j * k + j]
+            for kk in range(j):
+                var ljk = sigma[j * k + kk]
+                s = sf64_fma(sf64_neg(ljk), ljk, s)
+            # the host's `s <= 0.0` (false for NaN)
+            if (not sf64_is_nan(s)) and (not sf64_gt(s, SF64_ZERO)):
+                info = j + 1
+                break
+            var ljj = sf64_sqrt(s)
+            sigma[j * k + j] = ljj
+            for i in range(j + 1, k):
+                var t = sigma[i * k + j]
+                for kk in range(j):
+                    t = sf64_fma(sf64_neg(sigma[i * k + kk]), sigma[j * k + kk], t)
+                sigma[i * k + j] = sf64_div(t, ljj)
+        if info == 0:
+            # dpotrs: L y = b, then L^T x = y
+            for i in range(k):
+                var t = sol[i]
+                for kk in range(i):
+                    t = sf64_fma(sf64_neg(sigma[i * k + kk]), sol[kk], t)
+                sol[i] = sf64_div(t, sigma[i * k + i])
+            for ii in range(k):
+                var i = k - 1 - ii
+                var t = sol[i]
+                for kk in range(i + 1, k):
+                    t = sf64_fma(sf64_neg(sigma[kk * k + i]), sol[kk], t)
+                sol[i] = sf64_div(t, sigma[i * k + i])
+    not_pd.unsafe_store(leaf, UInt32(1) if info != 0 else UInt32(0))
+
+    # the pinned component's point (`_move`'s +0.0 normalisation, Regularize)
+    var p_last = sf64_to_f32(sol[cd])
+    if p_last == Float32(0.0) or not keep:
+        p_last = Float32(0.0)
+    var p_last_bits = sf64_from_f32(p_last)
+    for d in range(cd):
+        var p = sf64_to_f32(sol[d])
+        if p == Float32(0.0) or not keep:
+            p = Float32(0.0)
+        out_values.unsafe_store(
+            leaf * cd + d,
+            sf64_to_f32(sf64_sub(sf64_from_f32(p), p_last_bits)),
+        )

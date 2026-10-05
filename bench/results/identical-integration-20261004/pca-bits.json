@@ -1,0 +1,18 @@
+{
+  "source_sha": "221787de7b44616396fd7cefb28344ec1cfb617d",
+  "status": "PASS",
+  "granular_outputs": 33,
+  "cross_vendor_all_outputs": true,
+  "original_pca_id_digest": "d0d30327c605f80f51a050ff1ba7612ade7bdc32743e80a64af448371c1c1504",
+  "variance_on_digest": 17779765601009178110,
+  "variance_off_digest": 7871034136272966177,
+  "direct_variance_cases": 4,
+  "direct_variance_words": 263,
+  "negative_control": "negative-control/comparison.json",
+  "runner_failures_preserved": [
+    "initial short-SHA guard rejection before build",
+    "original wrapper absent fixture before runtime; retry passed"
+  ],
+  "timing": false,
+  "apple_runtime": "unverified"
+}

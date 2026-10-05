@@ -102,7 +102,7 @@ from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace, first_divergence, read_trace_lines
 from isolation_forest.estimator import (
     IsolationForestEstimator,
-    percentile_linear,
+    percentile_linear_host,
 )
 from isolation_forest.checks.if_fixture import (
     bits_value,
@@ -136,7 +136,7 @@ from isolation_forest.impl.isolation_forest import (
     IFLaunchKnobs,
     IsolationForestModel,
     ceil_log2_int,
-    check_finite_by_name,
+    check_finite_by_name_host,
     compute_global_max_nodes_per_tree,
     fit,
     path_lengths,
@@ -874,7 +874,7 @@ def check_if_refusals() raises:
     var raised = False
     var msg = String("")
     try:
-        check_finite_by_name("X", x_nan, n, d)
+        check_finite_by_name_host("X", x_nan, n, d)
     except e:
         raised = True
         msg = String(e)
@@ -885,7 +885,7 @@ def check_if_refusals() raises:
     x_inf[7 * d + 1] = bitcast[DType.float32](UInt32(0xFF800000))
     raised = False
     try:
-        check_finite_by_name("X_query", x_inf, n, d)
+        check_finite_by_name_host("X_query", x_inf, n, d)
     except e:
         raised = True
         msg = String(e)
@@ -1399,14 +1399,14 @@ def check_if_predict_thresholds() raises:
             n_out_flag += 1
     if n_out_flag != 16:
         raise Error("contamination=0.05 flagged only " + String(n_out_flag) + " of 16 planted outliers")
-    # percentile_linear against a hand case
+    # percentile_linear_host against a hand case
     var v: List[Float32] = [1.0, 2.0, 3.0, 4.0]
-    if percentile_linear(v, 50.0) != 2.5 or percentile_linear(v, 0.0) != 1.0 or percentile_linear(v, 100.0) != 4.0 or percentile_linear(v, 25.0) != 1.75:
-        raise Error("percentile_linear hand case failed")
+    if percentile_linear_host(v, 50.0) != 2.5 or percentile_linear_host(v, 0.0) != 1.0 or percentile_linear_host(v, 100.0) != 4.0 or percentile_linear_host(v, 25.0) != 1.75:
+        raise Error("percentile_linear_host hand case failed")
     print(
         "check_if_predict_thresholds OK" + _tag() + ": " + String(n) + " labels == (score > 0.5 ? 1 : -1), "
         + String(n_anom) + " anomalies at 0.5; contamination=0.05 flags " + String(n_flag) + " (expected ~" + String(expect)
-        + ") including all 16 planted outliers; percentile_linear hand case"
+        + ") including all 16 planted outliers; percentile_linear_host hand case"
     )
 
 
