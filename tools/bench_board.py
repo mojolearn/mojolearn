@@ -3488,8 +3488,9 @@ def main(argv=None):
     except (OSError, ValueError) as exc:
         raise SystemExit("bench_board: artifact guard: " + str(exc))
     guarded_smoke_override = validate_guarded_smoke_override(args, artifact_identity)
-    if artifact_identity and (vendor != "nvidia" or modes != ["identical"]):
-        raise SystemExit("bench_board: guarded path comparison requires NVIDIA IDENTICAL only")
+    if artifact_identity and (modes != ["identical"] or
+            {"nvidia": "cuda", "amd": "hip"}.get(vendor) != artifact_identity.get("vendor", "cuda")):
+        raise SystemExit("bench_board: guarded board vendor/mode must match its explicit IDENTICAL artifact identity")
     gate = None
     if full:
         gate = "overridden (--no-smoke-gate)" if args.no_smoke_gate else None

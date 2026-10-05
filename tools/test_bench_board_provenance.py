@@ -65,6 +65,12 @@ class Provenance(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError):P.hardware_receipt('hip')
 
+    def test_rocm_receipt_rejects_product_or_driver_sentinel(self):
+        for product,driver in [('N/A','6.12'),('MI325X','N/A')]:
+            data={'card0':{'Unique ID':'abc','Card Series':product},'system':{'Driver version':driver}}
+            with patch.object(P.subprocess,'check_output',return_value=json.dumps(data)):
+                with self.assertRaisesRegex(ValueError,'product/driver'):P.hardware_receipt('hip')
+
     def test_overlay_requires_actual_replacement_load(self):
         d=self.overlay_manifest(); name=next(iter(d['files']))
         with self.assertRaisesRegex(ValueError,'not actually loaded'): P.require_overlay_loads(d, [])
