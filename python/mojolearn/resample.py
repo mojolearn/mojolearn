@@ -364,10 +364,45 @@ def _gpu_gather(arrays, n, count, seed, numeric_mode):
     return None
 
 
+def _narrow_gather(arrays, n, count, seed, numeric_mode):
+    """`-D MOJOLEARN_RESAMPLE_FAST_GATHER_NARROW` (resample/estimator.mojo
+    `resample_gather_narrow`): the indices drawn once on the device, the
+    float32 C-contiguous arrays whose row is at most the binding's byte
+    bound gathered there, the rest by `_take` with the same indices. None
+    when the build lacks the define (main's route then runs)."""
+    if count <= 0 or n <= 0 or not fast_defines(numeric_mode) & FAST_DEFINE_GATHER_NARROW:
+        return None
+    mod = _extension(numeric_mode)
+    fn = getattr(mod, "resample_gather_narrow", None)
+    if fn is None:
+        return None
+    from ._optional_numpy import require_numpy
+    try:
+        np = require_numpy("resample")
+    except ImportError:
+        return None
+    bound = int(mod.resample_gather_narrow_bytes())
+    idx = empty((count,), "<i4")
+    outs, addresses, widths = [], [addr(idx, name="indices")], []
+    for x in arrays:  # glue: one native span per argument (dtype, rank and stride checks)
+        w = (1 if x.ndim == 1 else x.shape[1]) if isinstance(x, np.ndarray) and x.ndim in (1, 2) else 0
+        if not (w > 0 and 4 * w <= bound and x.dtype == np.float32 and x.flags.c_contiguous):
+            w = 0
+        out = np.empty((count,) + x.shape[1:], dtype=np.float32) if w else None
+        outs.append(out)
+        addresses.extend((addr_ro(x, name="array"), addr(out, name="resampled")) if w else (0, 0))
+        widths.append(w)
+    done = int(fn(addresses, [n, count, seed] + widths))
+    if done < 0:
+        return None
+    return [outs[a] if (done >> a) & 1 else _take(x, idx) for a, x in enumerate(arrays)]  # glue: one result per argument
+
+
 #: Bits of the resample binding's `resample_fast_defines()` mask
 #: (resample/estimator.mojo): FAST + Apple candidate defines, default OFF.
 FAST_DEFINE_CV_SLICE = 32
 FAST_DEFINE_CV_TRUST_FOLDS = 64
+FAST_DEFINE_GATHER_NARROW = 128
 
 
 def fast_defines(numeric_mode=None):
@@ -408,6 +443,9 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
     if replace:
         count = n if n_samples is None else _int(n_samples, "n_samples", where)
         gathered = _gpu_gather(arrays, n, count, _int(random_state, "random_state", where), numeric_mode)
+        if gathered is not None:
+            return gathered[0] if len(gathered) == 1 else gathered
+        gathered = _narrow_gather(arrays, n, count, _int(random_state, "random_state", where), numeric_mode)
         if gathered is not None:
             return gathered[0] if len(gathered) == 1 else gathered
     idx = resample_indices(n, n_samples, replace, random_state, numeric_mode)
