@@ -1380,32 +1380,11 @@ class GroupShuffleSplit(ShuffleSplit):
             yield gc.only(words, 0, sums[0]), gc.only(words, 1, sums[1])
 
 
-def _approximate_mode(class_counts, n_draws, rng):
-    """scikit-learn's `_approximate_mode` in exact integers: floor of the
-    proportional share, the remainder handed out by descending fractional
-    part, ties among equal fractions chosen by the counter RNG."""
-    total = sum(class_counts)
-    floored = [c * n_draws // total for c in class_counts]
-    rem = [c * n_draws % total for c in class_counts]
-    need = n_draws - sum(floored)
-    for value in sorted(set(rem), reverse=True):
-        if need <= 0:
-            break
-        inds = [i for i, r in enumerate(rem) if r == value]
-        take = min(len(inds), need)
-        if take < len(inds):
-            perm = rng.permutation(len(inds))
-            inds = [inds[j] for j in perm[:take]]
-        for i in inds:
-            floored[i] += 1
-        need -= take
-    return floored
-
-
 class StratifiedShuffleSplit(ShuffleSplit):
     """scikit-learn 1.9 `StratifiedShuffleSplit`: per class, a counter-RNG
     permutation of its rows (in row order) gives n_i train and t_i test
-    rows, n_i and t_i from the exact-integer approximate mode; train and
+    rows, n_i and t_i from the exact-integer approximate mode
+    (`CounterRng.approximate_modes`, x_metrics/split.mojo); train and
     test are then permuted."""
 
     def split(self, X, y, groups=None):
@@ -1438,8 +1417,9 @@ class StratifiedShuffleSplit(ShuffleSplit):
 
         def gen():
             for _ in range(self.n_splits):  # glue: one split per iteration (n_splits sized)
-                n_i = _approximate_mode(counts, n_train, rng)
-                t_i = _approximate_mode([c - a for c, a in zip(counts, n_i)], n_test, rng)
+                # scikit-learn's _approximate_mode for train then test, in
+                # one device program (x_metrics approx_mode; lane py-runtime-b)
+                n_i, t_i = rng.approximate_modes(counts, n_train, n_test)
                 tr_len, te_len = sum(n_i), sum(t_i)  # glue: train and test sizes summed over k classes
                 train = empty((tr_len,), '<i8')
                 test = empty((te_len,), '<i8')

@@ -13,7 +13,7 @@ caller's `random_state` and the draw's position in the splitter's sequence.
 A heapsort gives the same answer as any correct sort of a strict order.
 """
 from x_metrics.common import FP, IP, p, ldi, sti
-from checks.fixture_rng import splitmix_pair
+from checks.fixture_rng import splitmix_pair, splitmix64_finalizer, GOLDEN64
 
 
 @always_inline
@@ -163,3 +163,87 @@ def strat_codes_unit(t: Int, f: FP, q: IP):
     while fo < K - 1 and ldi(f, base + fo + 1) <= pos:
         fo += 1
     sti(f, p(q, 6) + r, fo)
+
+
+@always_inline
+def _am_count(f: FP, CNT: Int, SUB: Int, j: Int) -> Int:
+    """Class j's count: CNT[j], less SUB[j] when SUB >= 0."""
+    var c = ldi(f, CNT + j)
+    if SUB >= 0:
+        c -= ldi(f, SUB + j)
+    return c
+
+
+def approx_mode_unit(t: Int, f: FP, q: IP):
+    """q = [k, CNT, SUB, n_draws, OUT, PRIOR, USED, seed_lo, seed_hi,
+    base_lo, base_hi]; t = class (lane py-runtime-b; it was Python's
+    `model_selection._approximate_mode`). scikit-learn's `_approximate_mode`
+    in exact integers over the k class counts c_j = CNT[j] (- SUB[j] when
+    SUB >= 0): OUT[t] = floor(c_t * n_draws / total), plus one when class t
+    is handed a remainder draw. The remainders are handed out by descending
+    r_j = c_j * n_draws mod total; a group of equal remainders is taken
+    whole while it fits, and the one group it cuts takes the classes whose
+    positions (j ascending within the group) come first in the counter-RNG
+    permutation of the group (`permute_unit`'s order: ascending
+    splitmix_pair(position, salt), ties by position). The salt is the
+    splitters' draw number base + PRIOR[0] (0 when PRIOR < 0) of the seed,
+    `_mix64(seed * GOLDEN + draw + 1)` (CounterRng._salt); the class at
+    position 0 of a cut group sets USED[0] = 1 (one draw consumed; USED is a
+    zeroed slot). One unit per class, each reading the k counts: no class
+    waits for another, so the words are the same on every column."""
+    var k = p(q, 0)
+    if t >= k:
+        return
+    var CNT = p(q, 1)
+    var SUB = p(q, 2)
+    var n_draws = p(q, 3)
+    var total = 0
+    var fl_sum = 0
+    var ct = _am_count(f, CNT, SUB, t)
+    for j in range(k):
+        total += _am_count(f, CNT, SUB, j)
+    if total <= 0:
+        sti(f, p(q, 4) + t, 0)
+        return
+    for j in range(k):
+        fl_sum += (_am_count(f, CNT, SUB, j) * n_draws) // total
+    var need = n_draws - fl_sum
+    var rem_t = (ct * n_draws) % total
+    var greater = 0
+    var equal = 0
+    var pos = 0
+    for j in range(k):
+        var r = (_am_count(f, CNT, SUB, j) * n_draws) % total
+        if r > rem_t:
+            greater += 1
+        elif r == rem_t:
+            equal += 1
+            if j < t:
+                pos += 1
+    var plus = 0
+    if need > greater:
+        if need >= greater + equal:
+            plus = 1
+        else:
+            var take = need - greater
+            var lo = UInt64(UInt32(p(q, 7)))
+            var hi = UInt64(UInt32(p(q, 8)))
+            var seed = (hi << 32) | lo
+            var blo = UInt64(UInt32(p(q, 9)))
+            var bhi = UInt64(UInt32(p(q, 10)))
+            var draw = (bhi << 32) | blo
+            var PRIOR = p(q, 5)
+            if PRIOR >= 0:
+                draw += UInt64(ldi(f, PRIOR))
+            var salt = Int(splitmix64_finalizer(seed * GOLDEN64 + draw + 1))
+            var key = splitmix_pair(pos, salt)
+            var rank = 0
+            for g in range(equal):
+                var kg = splitmix_pair(g, salt)
+                if kg < key or (kg == key and g < pos):
+                    rank += 1
+            if rank < take:
+                plus = 1
+            if pos == 0:
+                sti(f, p(q, 6), 1)
+    sti(f, p(q, 4) + t, (ct * n_draws) // total + plus)

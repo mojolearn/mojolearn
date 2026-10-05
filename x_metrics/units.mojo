@@ -7,7 +7,7 @@ from x_metrics.group import group_sort_unit, group_sum_unit, pair_key_unit
 from x_metrics.ranking import bin_curve_unit, row_metric_unit
 from x_metrics.cluster import row_centroid_dist_unit
 from x_metrics.onehot import onehot_unit, rep_rows_unit, pair_cols_unit
-from x_metrics.split import permute_unit, fold_rows_unit, rows64_unit, strat_codes_unit
+from x_metrics.split import permute_unit, fold_rows_unit, rows64_unit, strat_codes_unit, approx_mode_unit
 from x_metrics.regression import reg_term_unit, col_sort_unit, wpercentile_unit, col_max_unit, wpct_select
 from x_metrics.par import (
     cs_hist_unit, cs_scan_rows_unit, cs_scan_groups_unit, cs_place_unit,
@@ -47,7 +47,9 @@ from x_metrics.contingency import (
 #: 67 (auc_xy, the public auc's trapezoid sum) is the caller's; 68, 69 (ax_chunk, ax_final) its schedule.
 #: 70 (cont_stats, x_metrics/contingency.mojo) is the caller's; 71..80 its schedule: the
 #: contingency counts, sums, pair confusion, entropies, MI and expected MI on the device.
-comptime N_OPS = 81
+#: 81 (approx_mode, x_metrics/split.mojo; lane py-runtime-b) is the caller's: StratifiedShuffleSplit's
+#: per-class draw counts with the counter-RNG tie draw.
+comptime N_OPS = 82
 
 
 @always_inline
@@ -210,3 +212,5 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         mi_cell_unit(t, f, q)
     comptime if OP == 80:
         emi_cell_unit(t, f, q)
+    comptime if OP == 81:
+        approx_mode_unit(t, f, q)
