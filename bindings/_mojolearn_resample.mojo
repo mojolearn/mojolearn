@@ -450,7 +450,7 @@ def resample_gather_narrow_binding(addrs: PythonObject, params: PythonObject) ra
     var srcs = List[Int]()
     var dsts = List[Int]()
     var widths = List[Int]()
-    for a in range(k):
+    for a in range(k):  # small-loop(k: the arrays passed to resample, a handful): addresses and widths, no row data
         srcs.append(Int(py=addrs[1 + 2 * a]))
         dsts.append(Int(py=addrs[2 + 2 * a]))
         widths.append(Int(py=params[3 + a]))
