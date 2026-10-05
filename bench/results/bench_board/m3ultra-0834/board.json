@@ -42605,6 +42605,11 @@
    "ident_sweep": "/Users/andrewhendel/mojolearn-evidence/m3-ident/idn5-res/race-idn5-*",
    "head": "af93ebe0a",
    "updated_cells": 313
+  },
+  {
+   "ident_sweep": "/Users/andrewhendel/mojolearn-evidence/m3-ident/idn5r-res/race-idn5r-*",
+   "head": "391afe03a",
+   "updated_cells": 26
   }
  ],
  "config": {
@@ -42678,14 +42683,14 @@
      "device": "gpu",
      "device_name": "Apple M3 Ultra",
      "family": "algos",
-     "hash": "5f1ee15af73da422",
+     "hash": "22f6a548ad5a5512",
      "hash_stable": null,
      "installed_wheel": "wheel",
      "lane": "adaboost-clf",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 11087.687999999616,
-     "median_ms": 11087.687999999616,
+     "max_ms": 7236.732541001402,
+     "median_ms": 7236.732541001402,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -42696,7 +42701,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 46846.1
      },
-     "min_ms": 11087.687999999616,
+     "min_ms": 7236.732541001402,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -42714,7 +42719,7 @@
      "peak_host_mb": 51146.3,
      "quality": {
       "accuracy": 0.93499,
-      "logloss": 0.4387124846269125
+      "logloss": 0.4387124846269132
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -42764,11 +42769,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 14963.67199998349,
      "source": {
-      "sweep": "race-ident-adaboost-clf-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:03:32Z",
-      "previous_median_ms": 14882.636458001798,
-      "previous_hash": "5f1ee15af73da422"
+      "sweep": "race-idn5r-adaboost-clf-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:31:21Z",
+      "previous_median_ms": 11087.687999999616,
+      "previous_hash": "5f1ee15af73da422",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.93499, logloss=0.438712"
     },
@@ -42918,7 +42924,7 @@
       "display_rounded": true,
       "replaced_status": "REFUSED(timeout: null)"
      },
-     "ratio_ours_identical_over": 0.01801534467014746,
+     "ratio_ours_identical_over": 0.011758288203259038,
      "ratio_ours_fast_over": 0.007738952129958503
     }
    ],
@@ -43331,14 +43337,14 @@
      "device": "gpu",
      "device_name": "Apple M3 Ultra",
      "family": "algos",
-     "hash": "f1fc3d46578ee58b",
+     "hash": "405166df02e73afc",
      "hash_stable": null,
      "installed_wheel": "wheel",
      "lane": "adaboost-clf",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 2398.6546249943785,
-     "median_ms": 2398.6546249943785,
+     "max_ms": 2576.6687500290573,
+     "median_ms": 2576.6687500290573,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -43349,7 +43355,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 3248.6
      },
-     "min_ms": 2398.6546249943785,
+     "min_ms": 2576.6687500290573,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -43367,7 +43373,7 @@
      "peak_host_mb": 3575.4,
      "quality": {
       "accuracy": 0.76523,
-      "logloss": 0.5432272659105947
+      "logloss": 0.5432272659085684
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -43417,11 +43423,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 2496.5726250084117,
      "source": {
-      "sweep": "race-ident-adaboost-clf-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:03:38Z",
-      "previous_median_ms": 3037.231583002722,
-      "previous_hash": "f1fc3d46578ee58b"
+      "sweep": "race-idn5r-adaboost-clf-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:31:28Z",
+      "previous_median_ms": 2398.6546249943785,
+      "previous_hash": "f1fc3d46578ee58b",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.76523, logloss=0.543227"
     },
@@ -43595,7 +43602,7 @@
       "logloss": 0.5405649617680138
      },
      "ratio_ours_fast_over": 0.05918623730681527,
-     "ratio_ours_identical_over": 0.08785107787871738,
+     "ratio_ours_identical_over": 0.09437087134917999,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -44068,8 +44075,8 @@
      "lane": "adaboost-reg",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 12598.88508397853,
-     "median_ms": 12598.88508397853,
+     "max_ms": 2346.8589169788174,
+     "median_ms": 2346.8589169788174,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -44080,7 +44087,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 17341.0
      },
-     "min_ms": 12598.88508397853,
+     "min_ms": 2346.8589169788174,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -44149,11 +44156,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 7614.333749981597,
      "source": {
-      "sweep": "race-ident-adaboost-reg-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:04:05Z",
-      "previous_median_ms": 7516.903915995499,
-      "previous_hash": "56875453c6009fd6"
+      "sweep": "race-idn5r-adaboost-reg-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:31:35Z",
+      "previous_median_ms": 12598.88508397853,
+      "previous_hash": "d90ae2216fd59906",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.229908, rmse=0.733047"
     },
@@ -44329,7 +44337,7 @@
       "rmse": 0.7621153659098937
      },
      "ratio_ours_fast_over": 0.00989212494840619,
-     "ratio_ours_identical_over": 0.06847788212160805,
+     "ratio_ours_identical_over": 0.01275572617749214,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -44796,14 +44804,14 @@
      "device": "gpu",
      "device_name": "Apple M3 Ultra",
      "family": "algos",
-     "hash": "ed3f9269ebc8fa42",
+     "hash": "8d9046353c5e5dd8",
      "hash_stable": null,
      "installed_wheel": "wheel",
      "lane": "adaboost-reg",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 2089.6453749737702,
-     "median_ms": 2089.6453749737702,
+     "max_ms": 1319.9256249936298,
+     "median_ms": 1319.9256249936298,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -44814,7 +44822,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 2554.5
      },
-     "min_ms": 2089.6453749737702,
+     "min_ms": 1319.9256249936298,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -44832,8 +44840,8 @@
      "peak_host_mb": 2797.8,
      "quality": {
       "finite": true,
-      "r2": 0.6793953284563174,
-      "rmse": 9.018238445222892
+      "r2": 0.6750812806108737,
+      "rmse": 9.07871028521681
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -44883,11 +44891,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 2840.342249983223,
      "source": {
-      "sweep": "race-ident-adaboost-reg-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:04:10Z",
-      "previous_median_ms": 3143.7402079754975,
-      "previous_hash": "f701c4762aaa0976"
+      "sweep": "race-idn5r-adaboost-reg-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:31:39Z",
+      "previous_median_ms": 2089.6453749737702,
+      "previous_hash": "ed3f9269ebc8fa42",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.679395, rmse=9.01824"
     },
@@ -45063,7 +45072,7 @@
       "rmse": 10.517589289404441
      },
      "ratio_ours_fast_over": 0.09896087595706399,
-     "ratio_ours_identical_over": 0.17132819945901553,
+     "ratio_ours_identical_over": 0.10821954933516549,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -57769,8 +57778,8 @@
      "lane": "bagging-clf",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 1134.0370829566382,
-     "median_ms": 1134.0370829566382,
+     "max_ms": 1488.0534580443054,
+     "median_ms": 1488.0534580443054,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -57781,7 +57790,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 5098.5
      },
-     "min_ms": 1134.0370829566382,
+     "min_ms": 1488.0534580443054,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -57853,11 +57862,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 4184.883749985602,
      "source": {
-      "sweep": "race-ident-bagging-clf-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:14:00Z",
-      "previous_median_ms": 4303.21174999699,
-      "previous_hash": "32874c94a79624de"
+      "sweep": "race-idn5r-bagging-clf-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:31:43Z",
+      "previous_median_ms": 1134.0370829566382,
+      "previous_hash": "f73d5a7e8ea570b5",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.9417, logloss=0.149948"
     },
@@ -58019,7 +58029,7 @@
       "logloss": 0.15206867603850435
      },
      "ratio_ours_fast_over": 0.12233442637308461,
-     "ratio_ours_identical_over": 0.030081513672163423,
+     "ratio_ours_identical_over": 0.039472166400736135,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -58512,8 +58522,8 @@
      "lane": "bagging-clf",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 189.2767499666661,
-     "median_ms": 189.2767499666661,
+     "max_ms": 265.3020420111716,
+     "median_ms": 265.3020420111716,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -58524,7 +58534,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 763.3
      },
-     "min_ms": 189.2767499666661,
+     "min_ms": 265.3020420111716,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -58596,11 +58606,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 532.6118750090245,
      "source": {
-      "sweep": "race-ident-bagging-clf-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:14:02Z",
-      "previous_median_ms": 559.9954159988556,
-      "previous_hash": "d6cbc87ceae9c3d0"
+      "sweep": "race-idn5r-bagging-clf-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:31:45Z",
+      "previous_median_ms": 189.2767499666661,
+      "previous_hash": "3fd6e6339fed9f49",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.76749, logloss=0.531007"
     },
@@ -58762,7 +58773,7 @@
       "logloss": 0.5300784359625159
      },
      "ratio_ours_fast_over": 0.24682963780502534,
-     "ratio_ours_identical_over": 0.08578601752412762,
+     "ratio_ours_identical_over": 0.12024300728518095,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -59255,8 +59266,8 @@
      "lane": "bagging-reg",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 1106.7571669700556,
-     "median_ms": 1106.7571669700556,
+     "max_ms": 1591.5843750117347,
+     "median_ms": 1591.5843750117347,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -59267,7 +59278,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 5100.3
      },
-     "min_ms": 1106.7571669700556,
+     "min_ms": 1591.5843750117347,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -59340,11 +59351,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 4069.1721249895636,
      "source": {
-      "sweep": "race-ident-bagging-reg-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:14:05Z",
-      "previous_median_ms": 4216.266375005944,
-      "previous_hash": "8f05099c67c001ff"
+      "sweep": "race-idn5r-bagging-reg-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:31:49Z",
+      "previous_median_ms": 1106.7571669700556,
+      "previous_hash": "f2073cb437b2d570",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.523619, rmse=0.576551"
     },
@@ -59508,7 +59520,7 @@
       "rmse": 0.5796555484121111
      },
      "ratio_ours_fast_over": 0.12662236205407293,
-     "ratio_ours_identical_over": 0.030709727896587276,
+     "ratio_ours_identical_over": 0.04416246358257621,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -60001,8 +60013,8 @@
      "lane": "bagging-reg",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 166.9657920137979,
-     "median_ms": 166.9657920137979,
+     "max_ms": 259.9043329828419,
+     "median_ms": 259.9043329828419,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -60013,7 +60025,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 755.3
      },
-     "min_ms": 166.9657920137979,
+     "min_ms": 259.9043329828419,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -60086,11 +60098,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 488.3527920173947,
      "source": {
-      "sweep": "race-ident-bagging-reg-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:14:06Z",
-      "previous_median_ms": 510.4361670091748,
-      "previous_hash": "9357e4764d4442e3"
+      "sweep": "race-idn5r-bagging-reg-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:31:51Z",
+      "previous_median_ms": 166.9657920137979,
+      "previous_hash": "8a1fd3a5f386018b",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.916956, rmse=4.58978"
     },
@@ -60271,7 +60284,7 @@
       "rmse": 3.9399933360338606
      },
      "ratio_ours_fast_over": 0.08493420976807727,
-     "ratio_ours_identical_over": 0.07583480001600573,
+     "ratio_ours_identical_over": 0.11804689378180158,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -92475,14 +92488,14 @@
      "device": "gpu",
      "device_name": "Apple M3 Ultra",
      "family": "algos",
-     "hash": "e3430c101ae03645",
+     "hash": "4e5537c98ab355d1",
      "hash_stable": null,
      "installed_wheel": "wheel",
      "lane": "dart-reg",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 39167.723959020805,
-     "median_ms": 39167.723959020805,
+     "max_ms": 31757.191582990345,
+     "median_ms": 31757.191582990345,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -92493,7 +92506,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 5227.4
      },
-     "min_ms": 39167.723959020805,
+     "min_ms": 31757.191582990345,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -92518,8 +92531,8 @@
      "peak_host_mb": 4676.9,
      "quality": {
       "finite": true,
-      "r2": 0.550732584597318,
-      "rmse": 0.5599031208591381
+      "r2": 0.5509164287915356,
+      "rmse": 0.559788550486136
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -92586,11 +92599,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 61122.03224998666,
      "source": {
-      "sweep": "race-ident-dart-reg-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:29:00Z",
-      "previous_median_ms": 61244.17445799918,
-      "previous_hash": "e3430c101ae03645"
+      "sweep": "race-idn5r-dart-reg-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:34:01Z",
+      "previous_median_ms": 39167.723959020805,
+      "previous_hash": "e3430c101ae03645",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.550733, rmse=0.559903"
     },
@@ -92801,7 +92815,7 @@
       "rmse": 0.5511541644276927
      },
      "ratio_ours_fast_over": 0.7131721753015515,
-     "ratio_ours_identical_over": 1.2092874538926173,
+     "ratio_ours_identical_over": 0.9804902983986038,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -93639,14 +93653,14 @@
      "device": "gpu",
      "device_name": "Apple M3 Ultra",
      "family": "algos",
-     "hash": "59048be2126093f3",
+     "hash": "e4d932008bcc0653",
      "hash_stable": null,
      "installed_wheel": "wheel",
      "lane": "dart-reg",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 6880.407167016529,
-     "median_ms": 6880.407167016529,
+     "max_ms": 4969.93704198394,
+     "median_ms": 4969.93704198394,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -93657,7 +93671,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 1512.5
      },
-     "min_ms": 6880.407167016529,
+     "min_ms": 4969.93704198394,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -93682,8 +93696,8 @@
      "peak_host_mb": 1513.8,
      "quality": {
       "finite": true,
-      "r2": 0.9254970149266405,
-      "rmse": 4.347340206723702
+      "r2": 0.9254969787725071,
+      "rmse": 4.347341261542502
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -93750,11 +93764,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 9776.6486670007,
      "source": {
-      "sweep": "race-ident-dart-reg-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:29:15Z",
-      "previous_median_ms": 9783.348791999742,
-      "previous_hash": "59048be2126093f3"
+      "sweep": "race-idn5r-dart-reg-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:34:12Z",
+      "previous_median_ms": 6880.407167016529,
+      "previous_hash": "59048be2126093f3",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.925497, rmse=4.34734"
     },
@@ -93965,7 +93980,7 @@
       "rmse": 4.3253578926772835
      },
      "ratio_ours_fast_over": 0.18802949893517798,
-     "ratio_ours_identical_over": 0.248840067721509,
+     "ratio_ours_identical_over": 0.17974509939288724,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -94102,7 +94117,7 @@
       "rmse": 4.331202919709673
      },
      "ratio_ours_fast_over": 0.10597261176170532,
-     "ratio_ours_identical_over": 0.14024518512650458,
+     "ratio_ours_identical_over": 0.10130356003659977,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -94817,14 +94832,14 @@
      "device": "gpu",
      "device_name": "Apple M3 Ultra",
      "family": "algos",
-     "hash": "61760444d08919aa",
+     "hash": "a13a01ca4b572290",
      "hash_stable": null,
      "installed_wheel": "wheel",
      "lane": "dart",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 39524.86199996201,
-     "median_ms": 39524.86199996201,
+     "max_ms": 31832.88000000175,
+     "median_ms": 31832.88000000175,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -94835,7 +94850,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 5235.9
      },
-     "min_ms": 39524.86199996201,
+     "min_ms": 31832.88000000175,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -94859,8 +94874,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 4637.5,
      "quality": {
-      "accuracy": 0.94872,
-      "logloss": 0.13412640686736715
+      "accuracy": 0.94883,
+      "logloss": 0.13441912827533592
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -94927,11 +94942,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 61296.67358397273,
      "source": {
-      "sweep": "race-ident-dart-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:27:19Z",
-      "previous_median_ms": 61577.52999998047,
-      "previous_hash": "61760444d08919aa"
+      "sweep": "race-idn5r-dart-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:32:56Z",
+      "previous_median_ms": 39524.86199996201,
+      "previous_hash": "61760444d08919aa",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.94872, logloss=0.134126"
     },
@@ -95140,7 +95156,7 @@
       "logloss": 0.12374030107456849
      },
      "ratio_ours_fast_over": 0.6496569261773635,
-     "ratio_ours_identical_over": 1.1157382616876597,
+     "ratio_ours_identical_over": 0.8986030664888333,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -95978,14 +95994,14 @@
      "device": "gpu",
      "device_name": "Apple M3 Ultra",
      "family": "algos",
-     "hash": "3bd03059b318df94",
+     "hash": "60081b7a2d1de0ce",
      "hash_stable": null,
      "installed_wheel": "wheel",
      "lane": "dart",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 7367.179374967236,
-     "median_ms": 7367.179374967236,
+     "max_ms": 5011.152166989632,
+     "median_ms": 5011.152166989632,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -95996,7 +96012,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 1526.5
      },
-     "min_ms": 7367.179374967236,
+     "min_ms": 5011.152166989632,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -96020,8 +96036,8 @@
      "peak_gpu_mb": null,
      "peak_host_mb": 1297.1,
      "quality": {
-      "accuracy": 0.76834,
-      "logloss": 0.5290595561630321
+      "accuracy": 0.76824,
+      "logloss": 0.5290970868182553
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -96088,11 +96104,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 10493.35245799739,
      "source": {
-      "sweep": "race-ident-dart-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:27:36Z",
-      "previous_median_ms": 10481.890333001502,
-      "previous_hash": "3bd03059b318df94"
+      "sweep": "race-idn5r-dart-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:34:24Z",
+      "previous_median_ms": 7367.179374967236,
+      "previous_hash": "3bd03059b318df94",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.76834, logloss=0.52906"
     },
@@ -96301,7 +96318,7 @@
       "logloss": 0.5291082375284661
      },
      "ratio_ours_fast_over": 0.20295978970221282,
-     "ratio_ours_identical_over": 0.2780292258538174,
+     "ratio_ours_identical_over": 0.18911535700595086,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -96437,7 +96454,7 @@
       "logloss": 0.5295396740198022
      },
      "ratio_ours_fast_over": 0.10914357781343083,
-     "ratio_ours_identical_over": 0.14951288869044985,
+     "ratio_ours_identical_over": 0.10169860105481135,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -97157,8 +97174,8 @@
      "lane": "decision-tree-clf",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 448.8969999947585,
-     "median_ms": 448.8969999947585,
+     "max_ms": 618.3973329607397,
+     "median_ms": 618.3973329607397,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -97169,7 +97186,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 3481.3
      },
-     "min_ms": 448.8969999947585,
+     "min_ms": 618.3973329607397,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -97248,11 +97265,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 468.98033301113173,
      "source": {
-      "sweep": "race-ident-decision-tree-clf-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:29:17Z",
-      "previous_median_ms": 457.04466602182947,
-      "previous_hash": "587d7e1827830e22"
+      "sweep": "race-idn5r-decision-tree-clf-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:34:26Z",
+      "previous_median_ms": 448.8969999947585,
+      "previous_hash": "587d7e1827830e22",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.935, logloss=0.758303"
     },
@@ -97424,7 +97442,7 @@
       "logloss": 0.7917064180556026
      },
      "ratio_ours_fast_over": 0.00846281809503687,
-     "ratio_ours_identical_over": 0.008191567550129673,
+     "ratio_ours_identical_over": 0.01128464553299995,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -97990,8 +98008,8 @@
      "lane": "decision-tree-clf",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 62.207666982430965,
-     "median_ms": 62.207666982430965,
+     "max_ms": 73.267208004836,
+     "median_ms": 73.267208004836,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -98002,7 +98020,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 605.7
      },
-     "min_ms": 62.207666982430965,
+     "min_ms": 73.267208004836,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -98081,11 +98099,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 94.37008399982005,
      "source": {
-      "sweep": "race-ident-decision-tree-clf-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:29:18Z",
-      "previous_median_ms": 65.71066699689254,
-      "previous_hash": "87e5eea287566449"
+      "sweep": "race-idn5r-decision-tree-clf-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:34:28Z",
+      "previous_median_ms": 62.207666982430965,
+      "previous_hash": "87e5eea287566449",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.7563, logloss=1.20224"
     },
@@ -98257,7 +98276,7 @@
       "logloss": 1.1495502704090286
      },
      "ratio_ours_fast_over": 0.029092788029864782,
-     "ratio_ours_identical_over": 0.028041982049915787,
+     "ratio_ours_identical_over": 0.033027403716961716,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -98823,8 +98842,8 @@
      "lane": "decision-tree-reg",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 438.34666698239744,
-     "median_ms": 438.34666698239744,
+     "max_ms": 598.957915965002,
+     "median_ms": 598.957915965002,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -98835,7 +98854,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 3482.9
      },
-     "min_ms": 438.34666698239744,
+     "min_ms": 598.957915965002,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -98914,11 +98933,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 477.2913329943549,
      "source": {
-      "sweep": "race-ident-decision-tree-reg-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:29:20Z",
-      "previous_median_ms": 476.2708339840174,
-      "previous_hash": "f5fe7cb875f1e691"
+      "sweep": "race-idn5r-decision-tree-reg-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:34:30Z",
+      "previous_median_ms": 438.34666698239744,
+      "previous_hash": "f5fe7cb875f1e691",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.379438, rmse=0.658041"
     },
@@ -99090,7 +99110,7 @@
       "rmse": 0.6613523582964851
      },
      "ratio_ours_fast_over": 0.0090942244606601,
-     "ratio_ours_identical_over": 0.008407740545598194,
+     "ratio_ours_identical_over": 0.011488356441337257,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -99640,8 +99660,8 @@
      "lane": "decision-tree-reg",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 55.91400002595037,
-     "median_ms": 55.91400002595037,
+     "max_ms": 69.63679200271145,
+     "median_ms": 69.63679200271145,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -99652,7 +99672,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 603.0
      },
-     "min_ms": 55.91400002595037,
+     "min_ms": 69.63679200271145,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -99731,11 +99751,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 78.31020900630392,
      "source": {
-      "sweep": "race-ident-decision-tree-reg-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T15:29:21Z",
-      "previous_median_ms": 60.574375005671754,
-      "previous_hash": "2f466fa2b92aaa27"
+      "sweep": "race-idn5r-decision-tree-reg-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:34:31Z",
+      "previous_median_ms": 55.91400002595037,
+      "previous_hash": "2f466fa2b92aaa27",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.862608, rmse=5.90362"
     },
@@ -99924,7 +99945,7 @@
       "rmse": 5.246104335742559
      },
      "ratio_ours_fast_over": 0.02522614313782272,
-     "ratio_ours_identical_over": 0.0264137559562331,
+     "ratio_ours_identical_over": 0.032896398552793776,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -274241,8 +274262,8 @@
      "lane": "stacking-clf",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 9355.053541949019,
-     "median_ms": 9355.053541949019,
+     "max_ms": 9880.67833398236,
+     "median_ms": 9880.67833398236,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -274253,7 +274274,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 4361.5
      },
-     "min_ms": 9355.053541949019,
+     "min_ms": 9880.67833398236,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -274328,11 +274349,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 4930.299291008851,
      "source": {
-      "sweep": "race-ident-stacking-clf-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:38:36Z",
-      "previous_median_ms": 4997.270791995106,
-      "previous_hash": "c00593817b1d3af4"
+      "sweep": "race-idn5r-stacking-clf-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:34:53Z",
+      "previous_median_ms": 9355.053541949019,
+      "previous_hash": "7b2917450923374e",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.92997, logloss=0.193693"
     },
@@ -274511,7 +274533,7 @@
       "logloss": 0.1939305607209296
      },
      "ratio_ours_fast_over": 0.06283746557816415,
-     "ratio_ours_identical_over": 0.06245063793945651,
+     "ratio_ours_identical_over": 0.06595950118990002,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -275014,8 +275036,8 @@
      "lane": "stacking-clf",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 692.8185420110822,
-     "median_ms": 692.8185420110822,
+     "max_ms": 777.2958329878747,
+     "median_ms": 777.2958329878747,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -275026,7 +275048,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 685.6
      },
-     "min_ms": 692.8185420110822,
+     "min_ms": 777.2958329878747,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -275101,11 +275123,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 2425.010334001854,
      "source": {
-      "sweep": "race-ident-stacking-clf-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:38:39Z",
-      "previous_median_ms": 2420.342958008405,
-      "previous_hash": "6bbe4cbdcb84d667"
+      "sweep": "race-idn5r-stacking-clf-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:34:55Z",
+      "previous_median_ms": 692.8185420110822,
+      "previous_hash": "e8758643c9526dc6",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.76792, logloss=0.536364"
     },
@@ -275284,7 +275307,7 @@
       "logloss": 0.547755990012282
      },
      "ratio_ours_fast_over": 0.09893996525991092,
-     "ratio_ours_identical_over": 0.09764592945583847,
+     "ratio_ours_identical_over": 0.10955216910611659,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -275781,19 +275804,19 @@
      "device": "gpu",
      "device_name": null,
      "family": "algos",
-     "hash": "075db10f2a14c2a7",
+     "hash": "70dcf9537936373c",
      "hash_stable": null,
      "installed_wheel": "UNKNOWN(no binding path)",
      "lane": "stacking-reg",
      "library": "mojolearn",
      "library_version": null,
-     "max_ms": 31639.85199999297,
-     "median_ms": 31639.85199999297,
+     "max_ms": 11554.437583021354,
+     "median_ms": 11554.437583021354,
      "memory": {
       "gpu_method": "not sampled",
       "host_method": "not sampled"
      },
-     "min_ms": 31639.85199999297,
+     "min_ms": 11554.437583021354,
      "mode": "identical",
      "mode_witness": null,
      "neural_shape": null,
@@ -275801,8 +275824,8 @@
      "peak_host_mb": null,
      "quality": {
       "finite": true,
-      "r2": 0.44839534194732944,
-      "rmse": 0.6204037156108351
+      "r2": 0.4483953474730423,
+      "rmse": 0.6204037125033806
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -275856,12 +275879,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": null,
      "source": {
-      "sweep": "race-ident-stacking-reg-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:40:05Z",
-      "previous_median_ms": null,
-      "previous_hash": null,
-      "previous_status": "REFUSED(not_ready: {\"error\": \"NotImplementedError(\\\"mojolearn ElasticNet: random_state is refused. It selects nothing here -- the only randomness in cdFit is the coordinate shuffle, and selection='random' is refused by )"
+      "sweep": "race-idn5r-stacking-reg-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:35:44Z",
+      "previous_median_ms": 31639.85199999297,
+      "previous_hash": "075db10f2a14c2a7",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.448395, rmse=0.620404"
     },
@@ -276021,7 +276044,7 @@
       "rmse": 0.6208260345977717
      },
      "ratio_ours_fast_over": 0.06717482903260476,
-     "ratio_ours_identical_over": 0.20622954091950763,
+     "ratio_ours_identical_over": 0.07531218408765403,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -276471,19 +276494,19 @@
      "device": "gpu",
      "device_name": null,
      "family": "algos",
-     "hash": "6d32e556c07d0a81",
+     "hash": "6dce256e5268e141",
      "hash_stable": null,
      "installed_wheel": "UNKNOWN(no binding path)",
      "lane": "stacking-reg",
      "library": "mojolearn",
      "library_version": null,
-     "max_ms": 794.0785419777967,
-     "median_ms": 794.0785419777967,
+     "max_ms": 713.3049999829382,
+     "median_ms": 713.3049999829382,
      "memory": {
       "gpu_method": "not sampled",
       "host_method": "not sampled"
      },
-     "min_ms": 794.0785419777967,
+     "min_ms": 713.3049999829382,
      "mode": "identical",
      "mode_witness": null,
      "neural_shape": null,
@@ -276491,8 +276514,8 @@
      "peak_host_mb": null,
      "quality": {
       "finite": true,
-      "r2": 0.9197175607876173,
-      "rmse": 4.512810222474718
+      "r2": 0.9197175657370047,
+      "rmse": 4.512810083368044
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -276546,12 +276569,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": null,
      "source": {
-      "sweep": "race-ident-stacking-reg-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:40:08Z",
-      "previous_median_ms": null,
-      "previous_hash": null,
-      "previous_status": "REFUSED(not_ready: {\"error\": \"NotImplementedError(\\\"mojolearn ElasticNet: random_state is refused. It selects nothing here -- the only randomness in cdFit is the coordinate shuffle, and selection='random' is refused by )"
+      "sweep": "race-idn5r-stacking-reg-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:35:47Z",
+      "previous_median_ms": 794.0785419777967,
+      "previous_hash": "6d32e556c07d0a81",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.919718, rmse=4.51281"
     },
@@ -276711,7 +276734,7 @@
       "rmse": 4.137015156132079
      },
      "ratio_ours_fast_over": 0.1205163701991263,
-     "ratio_ours_identical_over": 0.1321815794643351,
+     "ratio_ours_identical_over": 0.11873609039065132,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -285062,8 +285085,8 @@
      "lane": "tree-shap",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 81.90512500004843,
-     "median_ms": 81.90512500004843,
+     "max_ms": 24.065124976914376,
+     "median_ms": 24.065124976914376,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -285074,7 +285097,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 1498.2
      },
-     "min_ms": 81.90512500004843,
+     "min_ms": 24.065124976914376,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -285143,11 +285166,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 836.0928340116516,
      "source": {
-      "sweep": "race-ident-tree-shap-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:41:19Z",
-      "previous_median_ms": 846.4172919921111,
-      "previous_hash": "9c42e3fbec797f77"
+      "sweep": "race-idn5r-tree-shap-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:35:50Z",
+      "previous_median_ms": 81.90512500004843,
+      "previous_hash": "d63adb94f9e1e3b7",
+      "previous_status": "ok"
      },
      "quality_text": "max_additivity_error=1.17498e-06"
     },
@@ -285320,7 +285344,7 @@
       "max_additivity_error": 4.440892098500626e-15
      },
      "ratio_ours_fast_over": 0.1321441109493493,
-     "ratio_ours_identical_over": 0.552208159455445,
+     "ratio_ours_identical_over": 0.1622481910693536,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -285429,7 +285453,7 @@
       "max_additivity_error": 1.8622458242134599e-06
      },
      "ratio_ours_fast_over": 0.08665388362520486,
-     "ratio_ours_identical_over": 0.36211210051337006,
+     "ratio_ours_identical_over": 0.1063947213865076,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -285538,7 +285562,7 @@
       "max_additivity_error": 1.8622458242134599e-06
      },
      "ratio_ours_fast_over": 0.08850804659199216,
-     "ratio_ours_identical_over": 0.36986033773608307,
+     "ratio_ours_identical_over": 0.10867128585198223,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -285770,8 +285794,8 @@
      "lane": "tree-shap",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 23.180833959486336,
-     "median_ms": 23.180833959486336,
+     "max_ms": 9.689792001154274,
+     "median_ms": 9.689792001154274,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -285782,7 +285806,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 477.8
      },
-     "min_ms": 23.180833959486336,
+     "min_ms": 9.689792001154274,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -285851,11 +285875,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 342.7467499859631,
      "source": {
-      "sweep": "race-ident-tree-shap-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:41:21Z",
-      "previous_median_ms": 345.25820799171925,
-      "previous_hash": "8fd935518dd93613"
+      "sweep": "race-idn5r-tree-shap-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:35:52Z",
+      "previous_median_ms": 23.180833959486336,
+      "previous_hash": "4f5444bb5235486e",
+      "previous_status": "ok"
      },
      "quality_text": "max_additivity_error=3.85772e-05"
     },
@@ -286028,7 +286053,7 @@
       "max_additivity_error": 5.684341886080801e-13
      },
      "ratio_ours_fast_over": 0.13334937192085405,
-     "ratio_ours_identical_over": 0.31867522155660905,
+     "ratio_ours_identical_over": 0.133209038906973,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -286137,7 +286162,7 @@
       "max_additivity_error": 0.00011985749006271362
      },
      "ratio_ours_fast_over": 0.06575231051502538,
-     "ratio_ours_identical_over": 0.15713333943313307,
+     "ratio_ours_identical_over": 0.06568311468926856,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -286246,7 +286271,7 @@
       "max_additivity_error": 0.00011985749006271362
      },
      "ratio_ours_fast_over": 0.06831829887357256,
-     "ratio_ours_identical_over": 0.16326547861678845,
+     "ratio_ours_identical_over": 0.06824640267604232,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -289736,8 +289761,8 @@
      "lane": "voting-clf",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 1191.8689999729395,
-     "median_ms": 1191.8689999729395,
+     "max_ms": 1364.7917499765754,
+     "median_ms": 1364.7917499765754,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -289748,7 +289773,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 3805.6
      },
-     "min_ms": 1191.8689999729395,
+     "min_ms": 1364.7917499765754,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -289825,11 +289850,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 1759.1993330279365,
      "source": {
-      "sweep": "race-ident-voting-clf-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:43:36Z",
-      "previous_median_ms": 1756.3972079951782,
-      "previous_hash": "a92170b2919635aa"
+      "sweep": "race-idn5r-voting-clf-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:35:56Z",
+      "previous_median_ms": 1191.8689999729395,
+      "previous_hash": "6e2b41a2a31318b6",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.91835, logloss=0.1877"
     },
@@ -289993,7 +290019,7 @@
       "logloss": 0.18754081899161196
      },
      "ratio_ours_fast_over": 0.03259084156868755,
-     "ratio_ours_identical_over": 0.025123726742440233,
+     "ratio_ours_identical_over": 0.02876881183043337,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -290510,8 +290536,8 @@
      "lane": "voting-clf",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 83.41737498994917,
-     "median_ms": 83.41737498994917,
+     "max_ms": 93.38020795257762,
+     "median_ms": 93.38020795257762,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -290522,7 +290548,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 595.1
      },
-     "min_ms": 83.41737498994917,
+     "min_ms": 93.38020795257762,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -290599,11 +290625,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 506.9181659782771,
      "source": {
-      "sweep": "race-ident-voting-clf-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:43:37Z",
-      "previous_median_ms": 455.44037502259016,
-      "previous_hash": "f3f3a1bbe0384b54"
+      "sweep": "race-idn5r-voting-clf-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:35:58Z",
+      "previous_median_ms": 83.41737498994917,
+      "previous_hash": "2d74966baa3438ba",
+      "previous_status": "ok"
      },
      "quality_text": "accuracy=0.74229, logloss=0.554797"
     },
@@ -290767,7 +290794,7 @@
       "logloss": 0.5546502726579716
      },
      "ratio_ours_fast_over": 0.1075100987490342,
-     "ratio_ours_identical_over": 0.052232847866958226,
+     "ratio_ours_identical_over": 0.05847120214894791,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -291278,19 +291305,19 @@
      "device": "gpu",
      "device_name": null,
      "family": "algos",
-     "hash": "d12f11362b27dc3e",
+     "hash": "3ba96e4884ef93a1",
      "hash_stable": null,
      "installed_wheel": "UNKNOWN(no binding path)",
      "lane": "voting-reg",
      "library": "mojolearn",
      "library_version": null,
-     "max_ms": 6096.1794999893755,
-     "median_ms": 6096.1794999893755,
+     "max_ms": 2154.4098330195993,
+     "median_ms": 2154.4098330195993,
      "memory": {
       "gpu_method": "not sampled",
       "host_method": "not sampled"
      },
-     "min_ms": 6096.1794999893755,
+     "min_ms": 2154.4098330195993,
      "mode": "identical",
      "mode_witness": null,
      "neural_shape": null,
@@ -291298,8 +291325,8 @@
      "peak_host_mb": null,
      "quality": {
       "finite": true,
-      "r2": 0.40656802864666486,
-      "rmse": 0.6434960684718962
+      "r2": 0.4065679956773458,
+      "rmse": 0.6434960863472619
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -291354,12 +291381,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": null,
      "source": {
-      "sweep": "race-ident-voting-reg-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:43:50Z",
-      "previous_median_ms": null,
-      "previous_hash": null,
-      "previous_status": "REFUSED(not_ready: {\"error\": \"NotImplementedError(\\\"mojolearn ElasticNet: random_state is refused. It selects nothing here -- the only randomness in cdFit is the coordinate shuffle, and selection='random' is refused by )"
+      "sweep": "race-idn5r-voting-reg-istella",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:36:04Z",
+      "previous_median_ms": 6096.1794999893755,
+      "previous_hash": "d12f11362b27dc3e",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.406568, rmse=0.643496"
     },
@@ -291520,7 +291547,7 @@
       "rmse": 0.6434232023574803
      },
      "ratio_ours_fast_over": 0.024679176280368493,
-     "ratio_ours_identical_over": 0.16142563145601552,
+     "ratio_ours_identical_over": 0.05704834769232826,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -291975,19 +292002,19 @@
      "device": "gpu",
      "device_name": null,
      "family": "algos",
-     "hash": "7390c23b17f20b1f",
+     "hash": "0739b78e73026329",
      "hash_stable": null,
      "installed_wheel": "UNKNOWN(no binding path)",
      "lane": "voting-reg",
      "library": "mojolearn",
      "library_version": null,
-     "max_ms": 131.640708015766,
-     "median_ms": 131.640708015766,
+     "max_ms": 96.47275001043454,
+     "median_ms": 96.47275001043454,
      "memory": {
       "gpu_method": "not sampled",
       "host_method": "not sampled"
      },
-     "min_ms": 131.640708015766,
+     "min_ms": 96.47275001043454,
      "mode": "identical",
      "mode_witness": null,
      "neural_shape": null,
@@ -291995,8 +292022,8 @@
      "peak_host_mb": null,
      "quality": {
       "finite": true,
-      "r2": 0.9191812657302112,
-      "rmse": 4.527858155069585
+      "r2": 0.9191812634978622,
+      "rmse": 4.527858217603102
      },
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
@@ -292051,12 +292078,12 @@
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": null,
      "source": {
-      "sweep": "race-ident-voting-reg-taxi",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:43:52Z",
-      "previous_median_ms": null,
-      "previous_hash": null,
-      "previous_status": "REFUSED(not_ready: {\"error\": \"NotImplementedError(\\\"mojolearn ElasticNet: random_state is refused. It selects nothing here -- the only randomness in cdFit is the coordinate shuffle, and selection='random' is refused by )"
+      "sweep": "race-idn5r-voting-reg-taxi",
+      "head": "391afe03a",
+      "finished": "2026-10-05T08:36:05Z",
+      "previous_median_ms": 131.640708015766,
+      "previous_hash": "7390c23b17f20b1f",
+      "previous_status": "ok"
      },
      "quality_text": "finite=1, r2=0.919181, rmse=4.52786"
     },
@@ -292217,7 +292244,7 @@
       "rmse": 4.372420712561193
      },
      "ratio_ours_fast_over": 0.05180590889991985,
-     "ratio_ours_identical_over": 0.103486593732712,
+     "ratio_ours_identical_over": 0.0758400379114615,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -337749,7 +337776,7 @@
   }
  },
  "schema": "mojolearn-bench-board/1",
- "updated": "2026-10-05T08:23:58Z",
+ "updated": "2026-10-05T08:38:43Z",
  "extra_races": {
   "trees/gbdt-depthwise/taxi/page": {
    "id": "trees/gbdt-depthwise/taxi/page",
