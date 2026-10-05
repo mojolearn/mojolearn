@@ -2,7 +2,8 @@
 # It only shrinks. A fix deletes its rows (no_host_routes.py --prune-baseline).
 # state debt = on main; inflight = pre-authorized lines of an open PR; owed = debt of a rule
 # newer than the installed hooks (they skip it); owed-py = the same for the Python
-# glue-only rules (py-data-loop, py-np-compute, py-reduce, py-array-method).
+# glue-only rules (py-data-loop, py-np-compute, py-reduce, py-array-method, py-fsum,
+# py-map-arith).
 # A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).
 rule	class	owner	state	path	occ	text
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
@@ -43,62 +44,6 @@ py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	return ma
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	return min(self._reduce_values("min"))
 # why: min/max/sum fallbacks behind reduce_stat: only for dtypes without a helper code (f2, u2, i1) and the test reference arm that plants a missing helper; owed with the f2/u2/i1 helper codes
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	return sum(values)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	fh.write("".join(l + "\n" for l in lines))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for _ in range(4):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for _ in range(n_words):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for a, b in zip(bounds, bounds[1:]):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for b in range(256):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for ch in s:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for doc in as_documents(corpus):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	1	for doc in as_documents(corpus):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for i, t in enumerate(tokens):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for ids, c in seqs:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for k in range(len(ids) - 1):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for k, (x, y, _new) in enumerate(merges):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for k, text in enumerate(fixed):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for name, _c, vocab_size, min_frequency in FIXTURES:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for pair in sorted(counts):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for w in words:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	index = {t: i for i, t in enumerate(tokens)}
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	n_at_top = sum(1 for p, c in counts.items() if c == best_count and c >= min_frequency)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	return "".join(_B2C[b] for b in token)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	return "".join(f"{i}\t{t.hex()}\n" for i, t in enumerate(tokens))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	return [bytes(d) for d in corpus]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	seqs = [(_apply(ids, a, b, new), c) for ids, c in seqs]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	seqs = [(list(piece), c) for piece, c in pretoken_groups(corpus)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	tokens = [bytes([b]) for b in range(256)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n_syllables))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	for pair in sorted(counts):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	n_at_top = sum(1 for p, c in counts.items() if c == best_count and c >= min_frequency)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_bpe_trainer.py	0	return sorted(counts.items())
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
 py-array-method	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	first = min(first, int(mask.argmax()))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
@@ -1513,58 +1458,6 @@ py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	0	keys
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	0	out = empty((max(sum(p.size for p in parts), 0),), "<f4")
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_svm_impl.py	0	total = sum(pm[4 * q + 2] for q in range(n_pairs))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for _ in range(900):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for a, b in zip(bounds, bounds[1:]):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for a, b in zip(s, s[1:]):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for i, t in enumerate(tokens):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for k in range(len(bounds) - 1):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for k in range(len(bounds) - 2):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for k, seg in enumerate(segments):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for name, text, allow in cases():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for p in corpus_pieces():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for pair, c in counts.items():
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for s, _ in seqs:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for s, c in seqs:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for text, count in fixed:
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for v in (0.0, 1.0, -1.0, 0.5, 2.0):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	for which in ("L", "N", "O"):
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	index = {t: i for i, t in enumerate(tokens)}
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	1	index = {t: i for i, t in enumerate(tokens)}
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	merges = sum(1 for t in tokens if len(t) > 1)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	return any(lo <= cp <= hi for lo, hi in WHITE_SPACE)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	return b"".join(eot if i == len(tokens) else tokens[i] for i in ids)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	seqs = [(list(p), c) for p, c in sorted(grouped.items())]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	tokens = [bytes([b]) for b in range(256)]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n_syllables))
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	words = [p.decode("utf-8") for p in corpus_pieces()[:40]]
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	merges = sum(1 for t in tokens if len(t) > 1)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-reduce	py-compute	pyglue-text-io	owed-py	python/mojolearn/_tokenizer_synthetic.py	0	seqs = [(list(p), c) for p, c in sorted(grouped.items())]
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	errs = [2.0 ** -43 + k * 2.0 ** -45 for k in range(count)]
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
