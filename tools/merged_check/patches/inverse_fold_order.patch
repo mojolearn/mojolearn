@@ -1,0 +1,26 @@
+diff --git a/core/classical_host_predict.mojo b/core/classical_host_predict.mojo
+index 96b5248ff..6d641eee5 100644
+--- a/core/classical_host_predict.mojo
++++ b/core/classical_host_predict.mojo
+@@ -655,10 +655,17 @@ def host_inverse_transform_into(
+     for c in range(n_components):
+         for f in range(n_cols):
+             components_t[f * n_components + c] = components[c * n_cols + f]
+-    host_gemm_nt_into(
+-        scores, host_list_ptr(components_t), dst, n_rows, n_cols,
+-        n_components, tasks,
+-    )
++    # SABOTAGE (fold order): the pinned cell walked DESCENDING in k.
++    for i in range(n_rows):
++        for f in range(n_cols):
++            var acc = Float32(0.0)
++            for q in range(n_components):
++                var p = n_components - 1 - q
++                acc = ftz(identical_mul_add(
++                    ftz(scores.unsafe_load(i * n_components + p)),
++                    ftz(components_t[f * n_components + p]), acc,
++                ))
++            dst.unsafe_store(i * n_cols + f, ftz(Float32(0.0) + ftz(acc)))
+     if add_mean:
+         for i in range(n_rows):
+             for f in range(n_cols):

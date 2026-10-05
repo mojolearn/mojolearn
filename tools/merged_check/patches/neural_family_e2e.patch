@@ -1,0 +1,114 @@
+diff --git a/embedding/checks/embedding_identical.mojo b/embedding/checks/embedding_identical.mojo
+index ae2ac3c5e..c02552a1c 100644
+--- a/embedding/checks/embedding_identical.mojo
++++ b/embedding/checks/embedding_identical.mojo
+@@ -488,7 +488,7 @@ def emb_backward_kernel(
+         comptime if SAB_NO_FLUSH_ACC:
+             acc = acc + contribution
+         else:
+-            acc = ftz(ftz(acc) + ftz(contribution))
++            acc = ftz(ftz(acc) + ftz(contribution * Float32(1.00000012)))  # SABOTAGE (neural e2e): every contribution scaled by 1 + 2^-23, carry-consistent
+     dw.unsafe_store(cell, ftz(acc))
+ 
+ 
+diff --git a/mamba/impl/modeling/modeling_mamba.mojo b/mamba/impl/modeling/modeling_mamba.mojo
+index be64f4d00..bf9096599 100644
+--- a/mamba/impl/modeling/modeling_mamba.mojo
++++ b/mamba/impl/modeling/modeling_mamba.mojo
+@@ -740,7 +740,7 @@ def mamba_rms_norm_kernel(
+     # +0.0 seed is contract section 6's clause -- an all-zero row sums to
+     # +0.0 on every vendor because IEEE says (+0) + (-0) = +0.
+     var acc = Float32(0.0)
+-    comptime if SAB_S1_FOLD_DESCENDING:
++    comptime if True:  # SABOTAGE (neural seam arm): SAB_S1_FOLD_DESCENDING at its use site
+         for jj in range(dm):
+             var jd = dm - 1 - jj
+             var xd = ftz(x.unsafe_load(t * dm + jd))
+diff --git a/mamba/impl/modules/ssd_minimal.mojo b/mamba/impl/modules/ssd_minimal.mojo
+index 75f4b70a4..9789c6bf2 100644
+--- a/mamba/impl/modules/ssd_minimal.mojo
++++ b/mamba/impl/modules/ssd_minimal.mojo
+@@ -244,7 +244,7 @@ def m2_chunk_cumsum_kernel(
+     for i in range(qv):
+         if i < real:
+             var v = ftz(da.unsafe_load(((bb * t_work) + (c0 + i)) * nh + hh))
+-            comptime if SAB_SEGSUM_DESCENDING:
++            comptime if True:  # SABOTAGE (neural seam arm): SAB_SEGSUM_DESCENDING at its use site
+                 # SABOTAGE: rebuild THIS prefix by a descending fold --
+                 # the fold order clause undone, one variable.
+                 var acc = Float32(0.0)
+@@ -311,7 +311,7 @@ def m2_seg_l_kernel(
+     seg_l.unsafe_store(lbase + j * qv + j, ftz(identical_exp(acc)))
+     for i in range(j + 1, qv):
+         if i < real:
+-            comptime if SAB_SEGSUM_DESCENDING:
++            comptime if True:  # SABOTAGE (neural seam arm): SAB_SEGSUM_DESCENDING at its use site
+                 var a2 = Float32(0.0)
+                 var k = i
+                 while k > j:
+diff --git a/mamba/impl/ops/mamba3_siso.mojo b/mamba/impl/ops/mamba3_siso.mojo
+index 2904a19a0..58e3d3ef8 100644
+--- a/mamba/impl/ops/mamba3_siso.mojo
++++ b/mamba/impl/ops/mamba3_siso.mojo
+@@ -697,7 +697,7 @@ def m3_dacs_kernel(
+             var v = ftz(
+                 adt_work.unsafe_load((bb * t_work + c0 + i) * nh + hh)
+             )
+-            comptime if SAB3_SEGSUM_DESCENDING:
++            comptime if True:  # SABOTAGE (neural seam arm): SAB3_SEGSUM_DESCENDING at its use site
+                 # SABOTAGE: rebuild THIS prefix by a descending fold.
+                 var acc = Float32(0.0)
+                 var k = i
+@@ -763,7 +763,7 @@ def m3_seg_l_kernel(
+     var acc = Float32(0.0)
+     for i in range(j + 1, qv):
+         if i < real:
+-            comptime if SAB3_SEGSUM_DESCENDING:
++            comptime if True:  # SABOTAGE (neural seam arm): SAB3_SEGSUM_DESCENDING at its use site
+                 var a2 = Float32(0.0)
+                 var k = i
+                 while k > j:
+diff --git a/training/checks/optimizer.mojo b/training/checks/optimizer.mojo
+index 3dff4557b..d948a9e55 100644
+--- a/training/checks/optimizer.mojo
++++ b/training/checks/optimizer.mojo
+@@ -577,7 +577,7 @@ def adam_update_kernel(
+ 
+     # O5 and O6, a PRODUCT then an FMA. Contract 7.2a.
+     var m = Float32(0.0)
+-    comptime if SAB_MOMENT_LERP:
++    comptime if True:  # SABOTAGE (neural seam arm): SAB_MOMENT_LERP at its use site
+         # SABOTAGE: the `lerp_` spelling, `m + c1*(g - m)`.
+         var d = ftz(g - mp)
+         m = ftz(identical_mul_add(c1, d, mp))
+@@ -818,7 +818,7 @@ def sgd_update_kernel(
+             b = ftz(identical_mul_add(c_damp, g, bs))
+         buf.unsafe_store(i, ftz(b))
+         if nesterov_in != Int32(0):
+-            comptime if SAB_NESTEROV_ORDER:
++            comptime if True:  # SABOTAGE (neural seam arm): SAB_NESTEROV_ORDER at its use site
+                 # SABOTAGE: the transposed reading. Contract 7.3c.
+                 # INERT at t = 1, where b == g.
+                 g = ftz(identical_mul_add(momentum, g, b))
+@@ -1120,7 +1120,7 @@ def identical_clip_grad_norm(
+         # backwards and changes nothing else, so what it moves is the
+         # cross-tensor fold's order and only that.
+         var slot = j
+-        comptime if SAB_CLIP_PARAM_ORDER:
++        comptime if True:  # SABOTAGE (neural seam arm): SAB_CLIP_PARAM_ORDER at its use site
+             slot = j_count - 1 - j
+ 
+         comptime if SAB_CLIP_SERIAL_FOLD or SAB_CLIP_BLOCK_PARTITION:
+diff --git a/transformer/impl/llama/modeling_llama.mojo b/transformer/impl/llama/modeling_llama.mojo
+index eb7cd922f..beffc189d 100644
+--- a/transformer/impl/llama/modeling_llama.mojo
++++ b/transformer/impl/llama/modeling_llama.mojo
+@@ -1793,7 +1793,7 @@ def llama_rms_norm_kernel(
+     # +0.0 seed is contract section 8's clause -- an all-zero row sums to
+     # +0.0 on every vendor because IEEE says (+0) + (-0) = +0.
+     var acc = Float32(0.0)
+-    comptime if SAB_S1_FOLD_DESCENDING:
++    comptime if True:  # SABOTAGE (neural seam arm): SAB_S1_FOLD_DESCENDING at its use site
+         for jj in range(dm):
+             var jd = dm - 1 - jj
+             var xd = ftz(x.unsafe_load(t * dm + jd))
