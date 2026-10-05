@@ -840,6 +840,9 @@ def all_finite(arr):
 
 _NATIVE = {}
 _NATIVE_MISSING = set()
+#: True only inside tests/test_hotpath_native.py's reference arm (lane py-runtime
+#: round 2): Array's Python helper definitions answer there and nowhere else.
+_REFERENCE = False
 
 def hotpath_enabled():
     """Always True: the compiled helpers are the one route. The

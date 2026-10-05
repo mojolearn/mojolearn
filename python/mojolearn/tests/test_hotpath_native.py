@@ -126,9 +126,11 @@ def _python_arm():
         _buffer._NATIVE_MISSING.add(key)
     for name in _LABEL_SEAMS:
         setattr(_labels, name, lambda *args, **kwargs: None)
+    _buffer._REFERENCE = True
     try:
         yield
     finally:
+        _buffer._REFERENCE = False
         for name, real in saved_seams.items():
             setattr(_labels, name, real)
         _buffer._NATIVE.clear()

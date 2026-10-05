@@ -77,7 +77,23 @@ for _ts, _c in _CODE.items():
 # as the helpers' definitions: `_native_optional` answers None only for a
 # binary that lacks the helper, the state the differential test's reference
 # arm (`tests/test_hotpath_native.py`) plants.
-_NATIVE_CODE = {"<f4": 0, "<f8": 1, "<i4": 2, "<i8": 3, "<u4": 4, "<u1": 5}
+_NATIVE_CODE = {"<f4": 0, "<f8": 1, "<i4": 2, "<i8": 3, "<u4": 4, "<u1": 5,
+                # lane py-runtime round 2: bf16 bits, int8 and float16 too
+                "<u2": 6, "<i1": 7, "<f2": 8}
+
+
+def _reference():
+    """True only inside the differential test's reference arm
+    (`tests/test_hotpath_native.py::_python_arm` sets `_buffer._REFERENCE`):
+    the Python definitions of the core helpers then answer. A production
+    binary that lacks a helper is a build to redo, never a Python pass over
+    the elements (lane py-runtime round 2)."""
+    from . import _buffer
+    return _buffer._REFERENCE
+
+
+def _rebuild(key):
+    return RuntimeError(f"mojolearn: this binary has no `{key}` helper (an older build); rebuild it")
 _NATIVE_MIN = 256
 _REDUCE_MIN, _REDUCE_MAX, _REDUCE_SUM, _REDUCE_ARGMAX, _REDUCE_INTEGRAL, _REDUCE_ISUM = range(6)
 _SCALAR_TYPES = frozenset((float, int, bool))
@@ -96,7 +112,7 @@ def _helper(key, size):
 
 
 _INT_BOUNDS = {"<i4": (-(1 << 31), (1 << 31) - 1), "<i8": (-(1 << 63), (1 << 63) - 1),
-               "<u4": (0, (1 << 32) - 1), "<u1": (0, 255)}
+               "<u4": (0, (1 << 32) - 1), "<u1": (0, 255), "<u2": (0, 65535), "<i1": (-128, 127)}
 
 
 def _exact_in(value, dtype):
@@ -123,9 +139,10 @@ def _exact_in(value, dtype):
         value = f
     if value != value:
         return None  # NaN equals nothing
-    if dtype == "<f4":
+    if dtype in ("<f4", "<f2"):
+        f = "<f" if dtype == "<f4" else "<e"
         try:
-            g = struct.unpack("<f", struct.pack("<f", value))[0]
+            g = struct.unpack(f, struct.pack(f, value))[0]
         except OverflowError:
             return None
         if g != value:
@@ -579,13 +596,31 @@ class Array:
             return self.copy()
         src = self.dtype
         code = _CODE[dtype]
+        if self.size == 0:
+            return Array._owned(_new_store(code, 0), self.shape, dtype, self.order)
         fast = self._native_astype(dtype)
         if fast is not None:
             return fast
+        if _reference():
+            return self._astype_reference(dtype)
+        if _helper("cast_elements", self.size) is None:
+            raise _rebuild("cast_elements")
+        # the helper refused an element (lane py-runtime round 2: raised
+        # here, without a second walk): a NaN or a value outside the target
+        if dtype == "<f2":
+            raise OverflowError("mojolearn: float too large to pack with e format")
+        if src in _FLOAT and (self != self).max():
+            raise ValueError("mojolearn: cannot convert float NaN to integer")
+        raise OverflowError(f"mojolearn: value does not fit {dtype}")
+
+    def _astype_reference(self, dtype):
+        """`astype`'s Python definition (the differential test's reference)."""
+        src = self.dtype
+        code = _CODE[dtype]
         if src == "<f2" or dtype == "<f2":
             values = self._values()
             if dtype in _INT:
-                values = [int(v) for v in values]
+                values = [int(v) for v in values]  # cpu-route: the differential test's reference arm only
             out = Array._from_flat(values, self.shape, dtype)
         elif dtype in _FLOAT:
             # C-level loop: array.array's item setter converts each element
@@ -602,7 +637,7 @@ class Array:
                 ) from None
             out = Array._owned(store, self.shape, dtype, "C")
         else:
-            values = [int(v) for v in self._mv]
+            values = [int(v) for v in self._mv]  # cpu-route: the differential test's reference arm only
             out = Array._from_flat(values, self.shape, dtype)
         out.order = self.order
         out._set_meta(self.shape, dtype, self.order)
@@ -760,9 +795,25 @@ class Array:
             if fast is not None:
                 return fast
         elif isinstance(other, (int, float, bool)):
+            if self.size == 0:
+                return Array._owned(array.array("B"), self.shape, "<u1", "C")
             fast = self._native_eq_scalar(other)
             if fast is not None:
                 return fast
+            if not _reference():
+                raise _rebuild("equal_elements")
+        if isinstance(other, Array) and other.shape == self.shape and not _reference():
+            if self.size == 0:
+                return Array._owned(array.array("B"), self.shape, "<u1", "C")
+            if other.dtype == self.dtype:
+                raise _rebuild("equal_elements")
+            # two dtypes (lane py-runtime round 2): both widened EXACTLY to one
+            # dtype by the cast helper, then one native comparison. int64
+            # against a float is the one pair no exact widening covers.
+            a_int, b_int = self.dtype in _INT, other.dtype in _INT
+            wide = "<i8" if (a_int and b_int) else ("<f8" if "<i8" not in (self.dtype, other.dtype) else None)
+            if wide is not None:
+                return self.astype(wide).__eq__(other.astype(wide))
         mine = self._as_c()._values()
         if isinstance(other, Array):
             if other.shape != self.shape:
@@ -772,7 +823,7 @@ class Array:
             theirs = other._as_c()._values()
             bits = [1 if x == y else 0 for x, y in zip(mine, theirs)]
         elif isinstance(other, (int, float, bool)):
-            bits = [1 if x == other else 0 for x in mine]
+            bits = [1 if x == other else 0 for x in mine]  # cpu-route: the differential test's reference arm only
         else:
             return NotImplemented
         return Array._owned(array.array("B", bits), self.shape, "<u1", "C")
@@ -847,22 +898,34 @@ class Array:
             return None
         return fn(self._addr, code, self.size, what)
 
+    def _no_reduce(self, what):
+        """An empty Array refuses `what`; else the helper is missing: the
+        reference arm answers in Python, a production binary is rebuilt."""
+        if self.size == 0:
+            raise ValueError(f"mojolearn: {what} of an empty Array")
+        if not _reference():
+            raise _rebuild("reduce_stat")
+
     def min(self):
         fast = self._native_reduce(_REDUCE_MIN)
         if fast is not None:
             return fast
-        return min(self._reduce_values("min"))
+        self._no_reduce("min")
+        return min(self._reduce_values("min"))  # cpu-route: the differential test's reference arm only
 
     def max(self):
         fast = self._native_reduce(_REDUCE_MAX)
         if fast is not None:
             return fast
-        return max(self._reduce_values("max"))
+        self._no_reduce("max")
+        return max(self._reduce_values("max"))  # cpu-route: the differential test's reference arm only
 
     def sum(self):
         """Sequential accumulation: exact `int` for int dtypes, a Python
         float summed left to right in storage order for float dtypes."""
-        if self.dtype in ("<f4", "<f8"):
+        if self.size == 0:
+            return 0 if self.dtype in _INT else 0.0
+        if self.dtype in ("<f4", "<f8", "<f2"):
             fast = self._native_reduce(_REDUCE_SUM)
             if fast is not None:
                 return fast
@@ -873,11 +936,13 @@ class Array:
             if parts is not None:
                 hi, mid, low = (int(v) for v in parts)  # glue: three words of a 128-bit sum
                 return (hi << 64) + (mid << 32) + low
+        if not _reference():
+            raise _rebuild("reduce_stat")
         values = self._values()
         if self.dtype in _INT:
-            return sum(values)
+            return sum(values)  # cpu-route: the differential test's reference arm only
         acc = 0.0
-        for v in values:
+        for v in values:  # cpu-route: the differential test's reference arm only
             acc += v
         return acc
 
@@ -887,10 +952,11 @@ class Array:
         fast = self._as_c()._native_reduce(_REDUCE_ARGMAX)
         if fast is not None:
             return fast
+        self._no_reduce("argmax")
         values = self._as_c()._reduce_values("argmax")
         best = 0
         best_v = values[0]
-        for i in range(1, len(values)):
+        for i in range(1, len(values)):  # cpu-route: the differential test's reference arm only
             v = values[i]
             if v > best_v:
                 best = i

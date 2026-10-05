@@ -4282,24 +4282,46 @@ def _multilabel_indicator(y):
     if shape is not None:
         if len(shape) != 2:
             return None
-        rows = y.tolist()
+        return _multilabel_buffer(y, shape)
     elif isinstance(y, (list, tuple)) and y and all(isinstance(r, (list, tuple)) for r in y):  # cpu-route: Python list-of-lists y, the explicit label input step
         rows = [list(r) for r in y]  # cpu-route: Python list-of-lists y, the explicit label input step
     else:
         return None
     if not rows or len(rows[0]) < 2:
         return None
-    if any(len(r) != len(rows[0]) for r in rows):
+    if any(len(r) != len(rows[0]) for r in rows):  # cpu-route: Python list-of-lists y, the explicit label input step
         raise ValueError("mojolearn: y rows have different lengths")
     distinct = set()
-    for r in rows:
-        for v in r:
+    for r in rows:  # cpu-route: Python list-of-lists y, the explicit label input step
+        for v in r:  # cpu-route: Python list-of-lists y, the explicit label input step
             if isinstance(v, bool) or not isinstance(v, numbers.Real) or v != v or float(v) != int(float(v)):
                 raise ValueError("mojolearn: Multioutput target data is not supported with label binarization")
             distinct.add(float(v))
     if len(distinct) > 2:
         raise ValueError("mojolearn: Multioutput target data is not supported with label binarization")
-    return _x2d(Array.from_list([[float(v) for v in r] for r in rows], "<f4"), "y")
+    return _x2d(Array.from_list([[float(v) for v in r] for r in rows], "<f4"), "y")  # cpu-route: Python list-of-lists y, the explicit label input step
+
+
+def _multilabel_buffer(y, shape):
+    """`_multilabel_indicator` of a 2-D buffer (lane py-runtime round 2: no
+    `tolist` walk): every value finite and integral (the core helper's
+    integral test), at most two distinct values (native min, max and two
+    equality counts), then float32 as the list route's `float(v)` made it."""
+    if not shape[0] or shape[1] < 2:
+        return None
+    if "bool" in str(getattr(y, "dtype", "")):
+        raise ValueError("mojolearn: Multioutput target data is not supported with label binarization")
+    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
+    from ._buffer import as_f64_c
+    Y, _ = as_f64_c(y, ndim=2, name="y")
+    refuse = ValueError("mojolearn: Multioutput target data is not supported with label binarization")
+    if not int(Y._native_reduce(_REDUCE_INTEGRAL)):
+        raise refuse
+    lo, hi = Y.min(), Y.max()
+    hits = (Y == lo).sum() + ((Y == hi).sum() if hi != lo else 0)
+    if hits != Y.size:
+        raise refuse
+    return _x2d(Y.astype("<f4"), "y")
 
 
 # lane neural-pass137: a numeric label BUFFER (an ndarray, an Array) takes the
@@ -4885,7 +4907,7 @@ class MultiLabelBinarizer(_PrepBase):
     def inverse_transform(self, yt):
         self._check_fitted()
         rows = yt.tolist() if hasattr(yt, "tolist") else list(yt)
-        return [tuple(self._classes[j] for j, v in enumerate(r) if v) for r in rows]
+        return [tuple(self._classes[j] for j, v in enumerate(r) if v) for r in rows]  # cpu-route: builds the user list of Python label tuples (object output)
 
 
 # ---------------------------------------------------------------- iterative imputer

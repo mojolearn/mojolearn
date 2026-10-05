@@ -74,6 +74,11 @@ comptime HP_I32 = 2
 comptime HP_I64 = 3
 comptime HP_U32 = 4
 comptime HP_U8 = 5
+#: lane py-runtime round 2: bf16 bits (uint16), int8 codes and float16, the
+#: dtypes whose Python routines were the last ones left in `_array.py`
+comptime HP_U16 = 6
+comptime HP_I8 = 7
+comptime HP_F16 = 8
 
 comptime HP_W = 8
 
@@ -99,7 +104,14 @@ def _tasks(n: Int) -> Int:
 @always_inline
 def _refused[src: DType, dst: DType, W: Int](v: SIMD[src, W]) -> Bool:
     """True when any lane is a value the Python conversion refuses."""
-    comptime if dst.is_floating_point():
+    comptime if dst == DType.float16:
+        # struct's 'e' packing refuses a finite value that rounds past
+        # 65504 (|v| >= 65520); infinities and NaN pack
+        var d = v.cast[DType.float64]()
+        var big = abs(d).ge(SIMD[DType.float64, W](65520.0)) & abs(d).lt(
+            SIMD[DType.float64, W](Float64.MAX))
+        return big.reduce_or()
+    elif dst.is_floating_point():
         return False
     elif src.is_floating_point():
         var d = v.cast[DType.float64]()
@@ -114,6 +126,14 @@ def _refused[src: DType, dst: DType, W: Int](v: SIMD[src, W]) -> Bool:
         elif dst == DType.uint32:
             var ok = d.gt(SIMD[DType.float64, W](-1.0)) & d.lt(
                 SIMD[DType.float64, W](4294967296.0))
+            return not ok.reduce_and()
+        elif dst == DType.uint16:
+            var ok = d.gt(SIMD[DType.float64, W](-1.0)) & d.lt(
+                SIMD[DType.float64, W](65536.0))
+            return not ok.reduce_and()
+        elif dst == DType.int8:
+            var ok = d.gt(SIMD[DType.float64, W](-129.0)) & d.lt(
+                SIMD[DType.float64, W](128.0))
             return not ok.reduce_and()
         else:
             var ok = d.gt(SIMD[DType.float64, W](-1.0)) & d.lt(
@@ -132,6 +152,14 @@ def _refused[src: DType, dst: DType, W: Int](v: SIMD[src, W]) -> Bool:
                 var ok = w.ge(SIMD[DType.int64, W](0)) & w.le(
                     SIMD[DType.int64, W](4294967295))
                 return not ok.reduce_and()
+            elif dst == DType.uint16:
+                var ok = w.ge(SIMD[DType.int64, W](0)) & w.le(
+                    SIMD[DType.int64, W](65535))
+                return not ok.reduce_and()
+            elif dst == DType.int8:
+                var ok = w.ge(SIMD[DType.int64, W](-128)) & w.le(
+                    SIMD[DType.int64, W](127))
+                return not ok.reduce_and()
             else:
                 var ok = w.ge(SIMD[DType.int64, W](0)) & w.le(
                     SIMD[DType.int64, W](255))
@@ -140,8 +168,9 @@ def _refused[src: DType, dst: DType, W: Int](v: SIMD[src, W]) -> Bool:
 
 @always_inline
 def _convert[src: DType, dst: DType, W: Int](v: SIMD[src, W]) -> SIMD[dst, W]:
-    comptime if dst == DType.float32 and not src.is_floating_point():
-        # The C item setter's route: integer -> double -> float.
+    comptime if (dst == DType.float32 or dst == DType.float16) and not src.is_floating_point():
+        # The C item setter's route: integer -> double -> float (struct's
+        # 'e' packing of a Python int goes through the double too).
         return v.cast[DType.float64]().cast[dst]()
     elif dst == DType.float32 and src == DType.float32:
         # `array.array('f', <float32 memoryview>)` widens each element to a
@@ -212,6 +241,12 @@ def _cast_from[src: DType](src_addr: Int, dst_code: Int, dst_addr: Int, n: Int) 
         return _cast_run[src, DType.uint32](src_addr, dst_addr, n)
     if dst_code == HP_U8:
         return _cast_run[src, DType.uint8](src_addr, dst_addr, n)
+    if dst_code == HP_U16:
+        return _cast_run[src, DType.uint16](src_addr, dst_addr, n)
+    if dst_code == HP_I8:
+        return _cast_run[src, DType.int8](src_addr, dst_addr, n)
+    if dst_code == HP_F16:
+        return _cast_run[src, DType.float16](src_addr, dst_addr, n)
     raise Error("cast_elements: unknown destination dtype code " + String(dst_code))
 
 
@@ -245,6 +280,12 @@ def cast_elements_binding(
         status = _cast_from[DType.uint32](sa, dc, da, count)
     elif sc == HP_U8:
         status = _cast_from[DType.uint8](sa, dc, da, count)
+    elif sc == HP_U16:
+        status = _cast_from[DType.uint16](sa, dc, da, count)
+    elif sc == HP_I8:
+        status = _cast_from[DType.int8](sa, dc, da, count)
+    elif sc == HP_F16:
+        status = _cast_from[DType.float16](sa, dc, da, count)
     else:
         raise Error("cast_elements: unknown source dtype code " + String(sc))
     return PythonObject(status)
@@ -377,8 +418,12 @@ def reduce_stat_binding(
             return _isum[DType.uint32](a, count)
         if c == HP_U8:
             return _isum[DType.uint8](a, count)
+        if c == HP_U16:
+            return _isum[DType.uint16](a, count)
+        if c == HP_I8:
+            return _isum[DType.int8](a, count)
         raise Error("reduce_stat: the integer sum takes an integer buffer")
-    if w == HP_SUM and c != HP_F32 and c != HP_F64:
+    if w == HP_SUM and c != HP_F32 and c != HP_F64 and c != HP_F16:
         raise Error("reduce_stat: the float sum takes a float buffer")
     if c == HP_F32:
         return _reduce[DType.float32](a, count, w)
@@ -392,6 +437,12 @@ def reduce_stat_binding(
         return _reduce[DType.uint32](a, count, w)
     if c == HP_U8:
         return _reduce[DType.uint8](a, count, w)
+    if c == HP_U16:
+        return _reduce[DType.uint16](a, count, w)
+    if c == HP_I8:
+        return _reduce[DType.int8](a, count, w)
+    if c == HP_F16:
+        return _reduce[DType.float16](a, count, w)
     raise Error("reduce_stat: unknown dtype code " + String(c))
 
 
@@ -453,6 +504,12 @@ def equal_elements_binding(
         _equal[DType.uint32](a, b, count, d)
     elif c == HP_U8:
         _equal[DType.uint8](a, b, count, d)
+    elif c == HP_U16:
+        _equal[DType.uint16](a, b, count, d)
+    elif c == HP_I8:
+        _equal[DType.int8](a, b, count, d)
+    elif c == HP_F16:
+        _equal[DType.float16](a, b, count, d)
     else:
         raise Error("equal_elements: unknown dtype code " + String(c))
     return PythonObject(0)
