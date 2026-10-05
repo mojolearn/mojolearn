@@ -43,8 +43,18 @@ def validate(c):
     for key in ('pod_id', 'owner_id'):
         if not re.fullmatch(r'[A-Za-z0-9_-]{4,100}', c.get(key, '')):
             raise ValueError('invalid ' + key)
-    if not c.get('pod_name', '').startswith('mojolearn-cpu-'):
-        raise ValueError('explicit mojolearn-cpu pod_name required')
+    kind = c.get('pod_kind', 'cpu')
+    name = c.get('pod_name', '')
+    if kind == 'cpu':
+        if not name.startswith('mojolearn-cpu-'):
+            raise ValueError('explicit mojolearn-cpu pod_name required')
+    elif kind == 'campaign-gpu':
+        if not re.fullmatch(r'mojolearn-campaign-nvidia-[a-z0-9-]{8,80}', name):
+            raise ValueError('explicit dedicated NVIDIA campaign pod_name required')
+        if c.get('gpu_count') != 1 or c.get('shared_queue') is not False:
+            raise ValueError('campaign GPU must be single GPU and not a shared queue pod')
+    else:
+        raise ValueError('unsupported pod_kind')
     for key in ('remote_out', 'local_out', 'remote_state', 'remote_curlrc'):
         if not isinstance(c.get(key), str) or not c[key].startswith('/'):
             raise ValueError('absolute ' + key + ' required')
@@ -171,6 +181,8 @@ def verify_pod(c, call=api):
     code, value = call(c, 'GET', '/pods/'+c['pod_id'])
     if code != 200 or not isinstance(value, dict) or value.get('id') != c['pod_id'] or value.get('name') != c['pod_name']:
         raise ValueError('provider pod ID/name verification failed')
+    if c.get('pod_kind') == 'campaign-gpu' and value.get('gpuCount') != 1:
+        raise ValueError('provider must confirm exactly one campaign GPU')
 
 
 def delete_verify(c, call=api):

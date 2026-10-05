@@ -62,6 +62,31 @@ class Policy(unittest.TestCase):
             with self.assertRaises(ValueError):u.validate(dict(self.c,**delta))
 
 
+class CampaignGPU(unittest.TestCase):
+    def config(self):
+        return dict(config(), pod_kind='campaign-gpu', gpu_count=1, shared_queue=False,
+                    pod_name='mojolearn-campaign-nvidia-full-20261005')
+    def test_dedicated_explicit_identity_only(self):
+        c=self.config();u.validate(c)
+        for delta in ({'pod_name':'mojolearn-dev-nvc1-1005'}, {'pod_kind':'gpu'},
+                      {'gpu_count':2}, {'shared_queue':True}, {'pod_kind':'cpu'}):
+            with self.assertRaises(ValueError):u.validate(dict(c,**delta))
+        s=u.new_state(c,0)
+        with self.assertRaises(ValueError):u.renew(dict(c,pod_name=c['pod_name']+'-other'),s,1)
+    def test_gpu_provider_mismatch_never_deletes(self):
+        c=self.config(); calls=[]
+        def api(conf,method,path):
+            calls.append(method)
+            return 200,dict(id=c['pod_id'],name=c['pod_name'],gpuCount=2)
+        with self.assertRaisesRegex(ValueError,'exactly one'):u.delete_verify(c,api)
+        self.assertEqual(calls,['GET','GET'])
+    def test_gpu_rollback_uses_exact_identity_and_verifies_gone(self):
+        c=self.config();calls=[]
+        replies=iter([(200,dict(id=c['pod_id'],name=c['pod_name'],gpuCount=1))]*2+[(204,None),(404,None),(200,[])])
+        def api(conf,method,path):calls.append(method);return next(replies)
+        self.assertTrue(u.delete_verify(c,api));self.assertEqual(calls.count('DELETE'),1)
+
+
 class Capture(unittest.TestCase):
     def test_hash_proof_and_tamper(self):
         with tempfile.TemporaryDirectory() as tmp:
