@@ -199,20 +199,20 @@ per-query path's (`ivf_query_device.mojo`, the same chain) and the host
 column's. `-D MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF` (and
 `MOJOLEARN_IDN_ALL_OFF`) restore the cap (A/B arm B). The FAST kernel keeps
 FIVF_MAX_DIM (FAST is out of this lane's scope)."""
-"""lane/neural-net-experiment (2026-09-30, the classical pass): EVERY
-vendor, not Apple alone. The Apple gate left NVIDIA and AMD on the host
-round trip per query: 526 s on an L40S and 265 s on an MI325X for
-`classical2/ivf` on istella (4,000 queries), against 4.9 s on an M3 Ultra
-running this kernel (bench_board 0.8.25). The kernel is written on
-WARP_SIZE (its launch below and its lane merge follow it), and its
-arithmetic is the pinned path's term for term; the identity gate on each
-vendor is the check, as it was on Apple. `MOJOLEARN_IVF_IDENTICAL_SCAN_OFF`
-restores the per-query path.
-
-IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): steps 3-5
-for every query in one launch (`identical_ivf_scan.mojo`), the pinned
-distance arithmetic and the `(distance, original index)` key, instead of a
-host round trip per query. Same neighbours, same order, same bits."""
+# lane/neural-net-experiment (2026-09-30, the classical pass): EVERY
+# vendor, not Apple alone. The Apple gate left NVIDIA and AMD on the host
+# round trip per query: 526 s on an L40S and 265 s on an MI325X for
+# `classical2/ivf` on istella (4,000 queries), against 4.9 s on an M3 Ultra
+# running this kernel (bench_board 0.8.25). The kernel is written on
+# WARP_SIZE (its launch below and its lane merge follow it), and its
+# arithmetic is the pinned path's term for term; the identity gate on each
+# vendor is the check, as it was on Apple. `MOJOLEARN_IVF_IDENTICAL_SCAN_OFF`
+# restores the per-query path.
+#
+# IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): steps 3-5
+# for every query in one launch (`identical_ivf_scan.mojo`), the pinned
+# distance arithmetic and the `(distance, original index)` key, instead of a
+# host round trip per query. Same neighbours, same order, same bits.
 
 #: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
 #: the L2SqrtExpanded root over the n_queries x k selected distances runs in
