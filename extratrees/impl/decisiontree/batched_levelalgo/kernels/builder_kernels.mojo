@@ -12,6 +12,15 @@ struct InstanceRange(ImplicitlyCopyable, Movable):
     var begin: Int32
     var count: Int32
 
+    @always_inline
+    def __init__(out self, *, copy: Self):
+        """Metal: an inlined field-by-field copy. The synthesized copy
+        constructor is an out-of-line call taking the source by reference,
+        and a device pointer crossing it crashes Apple's Metal compiler
+        ("failed to compile metallib") on any whole-record load."""
+        self.begin = copy.begin
+        self.count = copy.count
+
 
 @fieldwise_init
 struct NodeWorkItem(ImplicitlyCopyable, Movable):
@@ -22,6 +31,16 @@ struct NodeWorkItem(ImplicitlyCopyable, Movable):
 
     var depth: Int32
     var instances: InstanceRange
+
+    @always_inline
+    def __init__(out self, *, copy: Self):
+        """Metal: an inlined field-by-field copy. The synthesized copy
+        constructor is an out-of-line call taking the source by reference,
+        and a device pointer crossing it crashes Apple's Metal compiler
+        ("failed to compile metallib") on any whole-record load."""
+        self.idx = copy.idx
+        self.depth = copy.depth
+        self.instances = copy.instances
 
 
 @fieldwise_init
@@ -39,6 +58,17 @@ struct WorkloadInfo(ImplicitlyCopyable, Movable):
 
     var num_blocks: Int32
     """Total blocks working on this node."""
+
+    @always_inline
+    def __init__(out self, *, copy: Self):
+        """Metal: an inlined field-by-field copy. The synthesized copy
+        constructor is an out-of-line call taking the source by reference,
+        and a device pointer crossing it crashes Apple's Metal compiler
+        ("failed to compile metallib") on any whole-record load."""
+        self.nodeid = copy.nodeid
+        self.large_nodeid = copy.large_nodeid
+        self.offset_blockid = copy.offset_blockid
+        self.num_blocks = copy.num_blocks
 
 
 def split_not_valid(
@@ -295,6 +325,25 @@ def excess_sample_with_replacement(
     max_samples_per_thread: Int = SAMPLER_MAX_SAMPLES_PER_THREAD,
     block_threads: Int = SAMPLER_BLOCK_THREADS,
 ) raises:
+    """cpu4-forest: the HOST COLUMN body lives in `excess_sample_with_replacement_host` (the checker's
+    host-column naming); this name is kept for its callers."""
+    excess_sample_with_replacement_host(
+        colids, work_items, tree_ids, seed, n, k, n_parallel_samples,
+        max_samples_per_thread, block_threads,
+    )
+
+
+def excess_sample_with_replacement_host(
+    mut colids: List[Int32],
+    work_items: List[NodeWorkItem],
+    tree_ids: List[Int32],
+    seed: UInt64,
+    n: Int,
+    k: Int,
+    n_parallel_samples: Int,
+    max_samples_per_thread: Int = SAMPLER_MAX_SAMPLES_PER_THREAD,
+    block_threads: Int = SAMPLER_BLOCK_THREADS,
+) raises:
     """`excess_sample_with_replacement_kernel`, `builder_kernels.cuh:152-248`. `colids` is `[len(work_items), k]` row-major, their `:259`."""
     var n_slots = block_threads * max_samples_per_thread
     var items = List[Int32](length=n_slots, fill=0)
@@ -408,6 +457,19 @@ def algo_l_sample(
     n: Int,
     k: Int,
 ):
+    """cpu4-forest: the HOST COLUMN body lives in `algo_l_sample_host` (the checker's
+    host-column naming); this name is kept for its callers."""
+    algo_l_sample_host(colids, work_items, tree_ids, seed, n, k)
+
+
+def algo_l_sample_host(
+    mut colids: List[Int32],
+    work_items: List[NodeWorkItem],
+    tree_ids: List[Int32],
+    seed: UInt64,
+    n: Int,
+    k: Int,
+):
     """`algo_L_sample_kernel`, `builder_kernels.cuh:268-316`, ON THE HOST. `colids` is `[work_items_size, k]` row-major, their `:259`. This is the arm the identical path runs on a device without float64 (`builder.mojo`'s dispatch), so its `logf`/`expf`/`log` are the library's own since DEVIATION 2264 -- see the block above the wrappers."""
     for tid in range(len(work_items)):
         var node_id = UInt32(work_items[tid].idx)  # `:279`
@@ -458,6 +520,19 @@ def sample_features(
 
 
 def sample_features_pertree(
+    mut colids: List[Int32],
+    work_items: List[NodeWorkItem],
+    tree_ids: List[Int32],
+    seed: UInt64,
+    n: Int,
+    k: Int,
+) raises -> FeatureSamplerPlan:
+    """cpu4-forest: the HOST COLUMN body lives in `sample_features_pertree_host` (the checker's
+    host-column naming); this name is kept for its callers."""
+    return sample_features_pertree_host(colids, work_items, tree_ids, seed, n, k)
+
+
+def sample_features_pertree_host(
     mut colids: List[Int32],
     work_items: List[NodeWorkItem],
     tree_ids: List[Int32],

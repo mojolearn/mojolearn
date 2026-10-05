@@ -85,9 +85,17 @@ comptime IDN_SL_SPARSE_MIN_ROWS = get_defined_int[
     "MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS", 4096
 ]()
 
-comptime SL_FAST_BORUVKA_MIN_ROWS = 4096
-"""Up to here the dense route is as fast (5,000 rows: 0.16 s either way)
-and keeps the reference's arithmetic, NaN refusal counts included."""
+comptime SL_FAST_BORUVKA_MIN_ROWS = 4096 if is_defined[
+    "MOJOLEARN_LEGACY_NARROW_SL_BORUVKA"
+]() else 1
+"""Rows the FAST Boruvka route needs (it takes m > this). Was 4096, just
+below the board's 5,000-row tiny shape ("dense as fast at 5,000 rows");
+removed as benchmark-tuned on 2026-10-04, replacement UNMEASURED: every
+m >= 2 takes the matrix-free route (its buffers are all m-sized; no tile
+needs a minimum m). `-D MOJOLEARN_LEGACY_NARROW_SL_BORUVKA` restores 4096.
+The `n <= 64` guard at the call sites is the kernel's: the query point is a
+register list `InlineArray[Float32, PPT * DMAX]` with DMAX tiers 8..64
+(`fast_boruvka.mojo`), so it stays."""
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 
 

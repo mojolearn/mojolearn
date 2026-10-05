@@ -397,15 +397,19 @@ def dart_step(
 ) raises:
     """One round's first half: the drop flags of iterations 0 .. t (draws on
     the device, coef[t * k] and thr[t] from the host), the dropped trees off
-    the score, the gradients. Writes the fit target of each class to
-    targets[c] (float32 n each), the flags (int32 t) and the bad word
-    (int32 1), then waits: the round's one sync."""
+    the score, the gradients. Leaves the fit target of each class in the
+    session's `target` plane (read there by the member fits,
+    `rf_regressor_fit_dart_export`), writes the flags (int32 t) and the bad
+    word (int32 1), then waits: the round's one sync."""
     comptime if DART_DEVICE:
         var reg = DART_SESSIONS.get_or_create_ptr()
         var idx = reg[].find(id)
         var n = reg[].sessions[idx].n
         var k = reg[].sessions[idx].k
-        if t < 0 or t > reg[].sessions[idx].cap_iters or len(targets) != k:
+        # cpu4-forest: the member fits read the `target` plane on the
+        # device (`rf_regressor_fit_dart_export`); no target crosses to the
+        # host, so `targets` must be empty (kept in the signature only)
+        if t < 0 or t > reg[].sessions[idx].cap_iters or len(targets) != 0:
             raise Error("x_trees dart_step: iteration count or targets out of range")
         var ctx = process_ctx[_DART_CTX]()
         if t > 0:
@@ -426,9 +430,6 @@ def dart_step(
             _f(reg[].sessions[idx].h),
             grid_dim=(_blocks(n), 1, 1), block_dim=(TPB, 1, 1),
         )
-        for c in range(k):
-            var sub = reg[].sessions[idx].target.create_sub_buffer[DType.float32](c * n, n)
-            ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=targets[c]), src_buf=sub)
         if t > 0:
             var fsub = reg[].sessions[idx].flags.create_sub_buffer[DType.int32](0, t)
             ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=flags_out), src_buf=fsub)

@@ -74,6 +74,10 @@ from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
+from checks.soft_f64 import SF64_ZERO, sf64_add, sf64_from_f32
+from std.memory import bitcast, stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from gbdt.data.group_layout import device_group_layout
 from gbdt.data.pairs import MAX_PAIR_COUNT_ON_GPU, prepare_pairs
 from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
@@ -283,23 +287,37 @@ def make_pairwise_group_buffers(
             ctx, n_groups, targets, weights, d_off, d_grades, d_rw, d_acc,
             d_gp, d_gw,
         )
-        var h_gp = ctx.enqueue_create_host_buffer[DType.float32](n_groups)
-        var h_gw = ctx.enqueue_create_host_buffer[DType.float32](n_groups)
-        ctx.enqueue_copy(dst_ptr=h_gp.unsafe_ptr(), src_buf=d_gp)
-        ctx.enqueue_copy(dst_ptr=h_gw.unsafe_ptr(), src_buf=d_gw)
+        # lane cpu4-gbdt: the per-group refusal and the two totals reduced
+        # on the device (two levels; FAST path, so the double sums' order may
+        # move), three words home: the largest group's pair count, the pair
+        # count and `PairsTotalWeight`
+        var gparts = (n_groups + GROUP_TOTALS_BLOCK - 1) // GROUP_TOTALS_BLOCK
+        var d_gpart = ctx.enqueue_create_buffer[DType.uint64](3 * gparts)
+        var d_gtot = ctx.enqueue_create_buffer[DType.uint64](3)
+        ctx.enqueue_function[group_totals_partials_kernel](
+            d_gp.unsafe_ptr(), d_gw.unsafe_ptr(), Int32(n_groups),
+            d_gpart.unsafe_ptr(),
+            grid_dim=(gparts, 1, 1), block_dim=(GROUP_TOTALS_BLOCK, 1, 1),
+        )
+        ctx.enqueue_function[group_totals_final_kernel](
+            d_gpart.unsafe_ptr(), Int32(gparts), d_gtot.unsafe_ptr(),
+            grid_dim=(1, 1, 1), block_dim=(GROUP_TOTALS_BLOCK, 1, 1),
+        )
+        var h_gtot = ctx.enqueue_create_host_buffer[DType.uint64](3)
+        ctx.enqueue_copy(dst_ptr=h_gtot.unsafe_ptr(), src_buf=d_gtot)
         ctx.synchronize()
-        var total = Float64(0.0)
-        var pair_count = Float64(0.0)
-        for q in range(n_groups):
-            var pairs_q = h_gp.unsafe_ptr().unsafe_load(q)
-            if pairs_q > Float32(MAX_PAIR_COUNT_ON_GPU):
-                raise Error(
-                    "Too many pairs should be generated for group: "
-                    + String(Int(pairs_q))
-                    + " , use max_pairs option to limit generated pair count"
-                )
-            pair_count += Float64(pairs_q)
-            total += Float64(h_gw.unsafe_ptr().unsafe_load(q))
+        var max_pairs = bitcast[DType.float64](h_gtot.unsafe_ptr().unsafe_load(0))
+        var pair_count = bitcast[DType.float64](h_gtot.unsafe_ptr().unsafe_load(1))
+        var total = bitcast[DType.float64](h_gtot.unsafe_ptr().unsafe_load(2))
+        _ = h_gtot^
+        _ = d_gpart^
+        _ = d_gtot^
+        if max_pairs > Float64(Float32(MAX_PAIR_COUNT_ON_GPU)):
+            raise Error(
+                "Too many pairs should be generated for group: "
+                + String(Int(max_pairs))
+                + " , use max_pairs option to limit generated pair count"
+            )
         if pair_count < 1.0:
             # every group holds one grade: `GeneratePairs`' constant check
             raise Error("Target data is constant. Cannot generate pairs.")
@@ -308,8 +326,6 @@ def make_pairwise_group_buffers(
                 "Observation weights should be greater or equal zero. Total"
                 " weight should be greater, than zero"
             )
-        _ = h_gp^  # past the drain (step-33 race class)
-        _ = h_gw^
         _ = d_gp^
         _ = d_gw^
         return PairwiseTargetBuffers(
@@ -319,6 +335,112 @@ def make_pairwise_group_buffers(
         )
     else:
         raise Error("make_pairwise_group_buffers is a FAST + Apple path")
+
+
+comptime GROUP_TOTALS_BLOCK = 256
+
+
+def group_totals_partials_kernel(
+    group_pairs: MutPointer[Float32, MutAnyOrigin],
+    group_weights: MutPointer[Float32, MutAnyOrigin],
+    n_groups_in: Int32,
+    partials: MutPointer[UInt64, MutAnyOrigin],
+):
+    """Level 1 of `make_pairwise_group_buffers`' totals (lane cpu4-gbdt):
+    block `b` over groups `[256 b, 256 b + 256)` writes the largest pair
+    count (a float, widened; max is order-free), and the pair-count and
+    weight sums as doubles (soft-float64 halving trees), at
+    `partials[3 b + 0, 1, 2]`."""
+    var tid = Int(thread_idx.x)
+    var g = Int(block_idx.x) * GROUP_TOTALS_BLOCK + tid
+    var n = Int(n_groups_in)
+    var mx = Float32(0.0)
+    var sp = SF64_ZERO
+    var sw = SF64_ZERO
+    if g < n:
+        mx = group_pairs.unsafe_load(g)
+        sp = sf64_from_f32(mx)
+        sw = sf64_from_f32(group_weights.unsafe_load(g))
+    var r_mx = stack_allocation[
+        GROUP_TOTALS_BLOCK, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var r_sp = stack_allocation[
+        GROUP_TOTALS_BLOCK, Scalar[DType.uint64], address_space = AddressSpace.SHARED
+    ]()
+    var r_sw = stack_allocation[
+        GROUP_TOTALS_BLOCK, Scalar[DType.uint64], address_space = AddressSpace.SHARED
+    ]()
+    r_mx[tid] = mx
+    r_sp[tid] = sp
+    r_sw[tid] = sw
+    barrier()
+    var step = GROUP_TOTALS_BLOCK // 2
+    while step > 0:
+        if tid < step:
+            var other = r_mx[tid + step]
+            if other > r_mx[tid]:
+                r_mx[tid] = other
+            r_sp[tid] = sf64_add(r_sp[tid], r_sp[tid + step])
+            r_sw[tid] = sf64_add(r_sw[tid], r_sw[tid + step])
+        barrier()
+        step //= 2
+    if tid == 0:
+        var base = 3 * Int(block_idx.x)
+        partials.unsafe_store(base, sf64_from_f32(r_mx[0]))
+        partials.unsafe_store(base + 1, r_sp[0])
+        partials.unsafe_store(base + 2, r_sw[0])
+
+
+def group_totals_final_kernel(
+    partials: MutPointer[UInt64, MutAnyOrigin],
+    part_count_in: Int32,
+    dst: MutPointer[UInt64, MutAnyOrigin],
+):
+    """Level 2, ONE block over the `ceil(groups / 256)` level-1 partials:
+    `dst[0]` the largest pair count (double bits; the counts are
+    non-negative, so the larger bit pattern is the larger value), `dst[1]`
+    the pair count, `dst[2]` the total weight (thread `t` adds partials
+    `t, t + 256, ...` ascending from +0.0, then the halving tree)."""
+    var tid = Int(thread_idx.x)
+    var parts = Int(part_count_in)
+    var mx = SF64_ZERO
+    var sp = SF64_ZERO
+    var sw = SF64_ZERO
+    var i = tid
+    while i < parts:
+        var m = partials.unsafe_load(3 * i)
+        if m > mx:
+            mx = m
+        sp = sf64_add(sp, partials.unsafe_load(3 * i + 1))
+        sw = sf64_add(sw, partials.unsafe_load(3 * i + 2))
+        i += GROUP_TOTALS_BLOCK
+    var r_mx = stack_allocation[
+        GROUP_TOTALS_BLOCK, Scalar[DType.uint64], address_space = AddressSpace.SHARED
+    ]()
+    var r_sp = stack_allocation[
+        GROUP_TOTALS_BLOCK, Scalar[DType.uint64], address_space = AddressSpace.SHARED
+    ]()
+    var r_sw = stack_allocation[
+        GROUP_TOTALS_BLOCK, Scalar[DType.uint64], address_space = AddressSpace.SHARED
+    ]()
+    r_mx[tid] = mx
+    r_sp[tid] = sp
+    r_sw[tid] = sw
+    barrier()
+    var step = GROUP_TOTALS_BLOCK // 2
+    while step > 0:
+        if tid < step:
+            var other = r_mx[tid + step]
+            if other > r_mx[tid]:
+                r_mx[tid] = other
+            r_sp[tid] = sf64_add(r_sp[tid], r_sp[tid + step])
+            r_sw[tid] = sf64_add(r_sw[tid], r_sw[tid + step])
+        barrier()
+        step //= 2
+    if tid == 0:
+        dst.unsafe_store(0, r_mx[0])
+        dst.unsafe_store(1, r_sp[0])
+        dst.unsafe_store(2, r_sw[0])
 
 
 def _launch_pair_logit_group_layout[estimation: Bool, second_order: Bool](

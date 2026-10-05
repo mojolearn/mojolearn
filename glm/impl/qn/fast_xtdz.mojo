@@ -13,6 +13,7 @@ layout; FAST arithmetic (a different summation order).
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -25,8 +26,28 @@ comptime FX_MAX_CELLS = FX_TPB * FX_CELLS_PER_THREAD
 comptime FX_MAX_C = 64
 
 
+#: lane apple-fast-no-narrow-2 (2026-10-04): `d <= FX_MAX_D` (256, which
+#: admitted istella's 220) is no longer a gate; removed as benchmark-tuned,
+#: replacement UNMEASURED. FX_MAX_D now only sizes the X staging tile
+#: (FX_ROWS * FX_MAX_D floats, 16 KB); a wider row stages fewer rows per
+#: pass (`_fx_stage_rows`), same per-cell order. The remaining limits are
+#: the kernel's: `d * c <= FX_MAX_CELLS` (FX_CELLS_PER_THREAD register cells
+#: per thread) and c <= FX_MAX_C (the dz tile). `-D
+#: MOJOLEARN_LEGACY_NARROW_FX_D` restores the d <= 256 gate.
+comptime LEGACY_NARROW_FX_D = is_defined["MOJOLEARN_LEGACY_NARROW_FX_D"]()
+
+
+@always_inline
+def _fx_stage_rows(d: Int) -> Int:
+    """Rows staged per pass: FX_ROWS, fewer when a row is wider than
+    FX_MAX_D so the tile stays FX_ROWS * FX_MAX_D floats."""
+    return max(1, min(FX_ROWS, (FX_ROWS * FX_MAX_D) // max(d, 1)))
+
+
 def fast_xtdz_applies(d: Int, c: Int) -> Bool:
-    return d <= FX_MAX_D and c <= FX_MAX_C and d * c <= FX_MAX_CELLS
+    comptime if LEGACY_NARROW_FX_D:
+        return d <= FX_MAX_D and c <= FX_MAX_C and d * c <= FX_MAX_CELLS
+    return d >= 1 and c <= FX_MAX_C and d * c <= FX_MAX_CELLS
 
 
 def fx_partial_kernel(
@@ -59,9 +80,10 @@ def fx_partial_kernel(
         var cell = t + k * FX_TPB
         jj[k] = cell // C
         cc[k] = cell % C
+    var stage = _fx_stage_rows(D)
     var r0 = r_begin
     while r0 < r_end:
-        var rows = min(FX_ROWS, r_end - r0)
+        var rows = min(stage, r_end - r0)
         var e = t
         while e < rows * D:
             xs[e] = x[r0 * D + e]

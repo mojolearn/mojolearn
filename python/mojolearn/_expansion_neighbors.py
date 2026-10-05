@@ -1221,7 +1221,8 @@ class AdditiveChi2Sampler(_XNeighbors):
             # XN_FAST_ACHI2_DEVSCAN (default, rollback _OFF): one pooled upload and device
             # scan (x_neighbors_kfeat_first_negative), not a host X.min();
             # -2 = below the binding's size gate (XN_ACHI2_DEVSCAN_MIN,
-            # x_neighbors/kfeat_dev.mojo): main's check below
+            # x_neighbors/kfeat_dev.mojo; 1 since 2026-10-04, the old 2^22
+            # only under -D MOJOLEARN_LEGACY_NARROW_ACHI2_DEVSCAN): main's check below
             first = int(self._bind().x_neighbors_kfeat_first_negative(addr_ro(X, name="X"), X.size))
         if first != -2:
             neg = first >= 0

@@ -3,18 +3,18 @@
 """Focused gate for the first executable combination-CTR vertical slice."""
 
 from gbdt.models.tensor_ctr_value_table import (
-    build_feature_freq_tensor_table,
-    build_borders_split_tensor_table,
-    build_split_feature_freq_tensor_table,
+    build_feature_freq_tensor_table_host,
+    build_borders_split_tensor_table_host,
+    build_split_feature_freq_tensor_table_host,
     join_tensor_hash,
     insert_staged_tensor_candidate_device,
-    materialize_tensor_candidate,
+    materialize_tensor_candidate_host,
     materialize_staged_tensor_cindex_device,
     parse_feature_freq_tensor_table,
     persist_ranked_tensor_winners,
     persist_synchronized_tensor_path,
     persist_winning_tensor_candidate,
-    regenerate_feature_freq_after_winner,
+    regenerate_feature_freq_after_winner_host,
     split_tensor_hash,
     stage_next_feature_freq_after_winner,
     stage_tensor_candidate_host,
@@ -74,7 +74,7 @@ def main() raises:
         9, 8, 7, 6, 5, 4,
     ]
     var sources: List[Int] = [0, 1]
-    var table = build_feature_freq_tensor_table(x, 6, 3, sources.copy())
+    var table = build_feature_freq_tensor_table_host(x, 6, 3, sources.copy())
     # keys (0,0),(0,1),(1,0),(1,1) have counts 2,1,1,2
     var want: List[Float32] = [
         Float32(2.0 / 7.0), Float32(1.0 / 7.0),
@@ -100,7 +100,7 @@ def main() raises:
     var same_column = registry.register(loaded.copy())
     if tensor_column != 3 or same_column != tensor_column:
         raise Error("tensor registry did not deduplicate to a stable column")
-    var expanded = registry.expand_for_apply(x, 6, 3)
+    var expanded = registry.expand_for_apply_host(x, 6, 3)
     if len(expanded) != 24:
         raise Error("tensor apply plan emitted the wrong model shape")
     for r in range(6):
@@ -134,7 +134,7 @@ def main() raises:
     var history: List[TBinarySplit] = [
         TBinarySplit(Int32(0), Int32(0), Int32(BIN_SPLIT_TAKE_GREATER))
     ]
-    var split_table = build_split_feature_freq_tensor_table(
+    var split_table = build_split_feature_freq_tensor_table_host(
         x, cindex, 6, 3, sources.copy(), history^
     )
     var split_text = split_table.to_text()
@@ -148,7 +148,7 @@ def main() raises:
             raise Error("split-history FeatureFreq mismatch at row " + String(r))
     var split_registry = TTensorCtrRegistry(3)
     _ = split_registry.register(split_loaded^)
-    var split_expanded = split_registry.expand_for_apply_with_bins(
+    var split_expanded = split_registry.expand_for_apply_with_bins_host(
         x, cindex, 6, 3
     )
     var apply_borders = List[List[Float32]]()
@@ -175,7 +175,7 @@ def main() raises:
     var history2: List[TBinarySplit] = [
         TBinarySplit(Int32(0), Int32(0), Int32(BIN_SPLIT_TAKE_GREATER))
     ]
-    var borders_fit = build_borders_split_tensor_table(
+    var borders_fit = build_borders_split_tensor_table_host(
         x, cindex, target, order, 6, 3, sources.copy(), history2^,
         2, 0, Float32(0.5), Float32(1.0),
     )
@@ -202,7 +202,7 @@ def main() raises:
     # learn values, the CTR's own grid, and its quantized bins stay bound
     # to the same tensor/model table.
     var grid = TBinarizationOptions(BORDER_SELECTION_UNIFORM, 3)
-    var candidate = materialize_tensor_candidate(
+    var candidate = materialize_tensor_candidate_host(
         borders_fit.table.copy(), borders_fit.learn_values.copy(), grid
     )
     if candidate.tensor_hash != borders_fit.table.tensor_hash or (
@@ -260,7 +260,7 @@ def main() raises:
     # two candidates at the same next id, persist only the selected Borders
     # candidate, and prove the losing FeatureFreq table never enters model
     # apply state.
-    var freq_candidate = materialize_tensor_candidate(
+    var freq_candidate = materialize_tensor_candidate_host(
         loaded.copy(), want.copy(), grid
     )
     var base_columns = List[List[UInt32]]()
@@ -510,7 +510,7 @@ def main() raises:
     # values; a zero-weight leaf must stay finite even without regularization.
     # The earlier ordered Borders fixture intentionally has distinct learn
     # and apply values. Use full-pool FeatureFreq for this leaf oracle.
-    var oracle_candidate = materialize_tensor_candidate(
+    var oracle_candidate = materialize_tensor_candidate_host(
         loaded.copy(), want.copy(), grid
     )
     var oracle_initial = stage_tensor_candidate_host(
@@ -653,7 +653,7 @@ def main() raises:
     var extended_cindex = cindex.copy()
     for r in range(6):
         extended_cindex.append(dynamic_stage.candidate.bins[r])
-    var regenerated = regenerate_feature_freq_after_winner(
+    var regenerated = regenerate_feature_freq_after_winner_host(
         dynamic_stage, splits[0], x, extended_cindex, 6, 3, grid
     )
     if regenerated.tensor_hash != next_tensor.get_hash() or (

@@ -21,10 +21,22 @@ from std.gpu.primitives.warp import shuffle_xor, shuffle_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.sys.compile import is_defined
 
 comptime FIVF_QPB = 4
 """Queries (SIMD groups) per block."""
-comptime FIVF_MAX_DIM = 256
+comptime FIVF_DIM_TILE = 256
+"""The query tile of the default instantiation: FIVF_QPB * 256 floats = 4 KB
+of threadgroup memory, so small dims keep their occupancy."""
+comptime FIVF_MAX_DIM = FIVF_DIM_TILE if is_defined[
+    "MOJOLEARN_LEGACY_NARROW_FIVF_DIM"
+]() else (32 * 1024) // (FIVF_QPB * 4)
+"""Widest query the batched FAST scan takes: the query tiles of FIVF_QPB
+SIMD groups filling 32 KB of threadgroup memory (Apple's limit, under
+NVIDIA's and AMD's), 2048 floats. Was 256 (admitted istella's 220);
+removed as benchmark-tuned on 2026-10-04, replacement UNMEASURED. A dim
+above FIVF_DIM_TILE launches the 32 KB instantiation. `-D
+MOJOLEARN_LEGACY_NARROW_FIVF_DIM` restores the 256 cap."""
 
 
 @always_inline
@@ -32,7 +44,7 @@ def _less(a: Float32, ai: UInt32, b: Float32, bi: UInt32) -> Bool:
     return a < b or (a == b and ai < bi)
 
 
-def fast_ivf_scan_kernel[KM: Int](
+def fast_ivf_scan_kernel[KM: Int, DM: Int = FIVF_DIM_TILE](
     queries: MutPointer[Float32, MutAnyOrigin],
     list_data: MutPointer[Float32, MutAnyOrigin],
     list_offsets: MutPointer[Int32, MutAnyOrigin],
@@ -58,9 +70,9 @@ def fast_ivf_scan_kernel[KM: Int](
     var q = Int(block_idx.x) * FIVF_QPB + warp
     var dim = Int(dim_in)
     var s_q = stack_allocation[
-        FIVF_QPB * FIVF_MAX_DIM, Float32, address_space=AddressSpace.SHARED
+        FIVF_QPB * DM, Float32, address_space=AddressSpace.SHARED
     ]()
-    var qv = s_q + warp * FIVF_MAX_DIM
+    var qv = s_q + warp * DM
     var active = q < Int(n_queries)
     if active:
         var j = lane

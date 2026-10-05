@@ -112,6 +112,12 @@ comptime _SYM_CTR_FAST_APPLE = (
 #: unchanged); rollback -D MOJOLEARN_SYM_CTR_ALL_OFF, after which the single
 #: defines select flags one by one again. Per-flag rab7 rows:
 #: CTR_INDEX_FUSED -6.4%, CTR_SORT_ONCE -4.7% (covered by this umbrella).
+#: SUPERSEDED PART (merge 2026-10-05): CTR_INDEX_FUSED's train arm (the
+#: `_build_cindex_fused` walk) was replaced by main's device CTR column build
+#: (lane cpu4-gbdt: resident CTR columns into `_build_cindex_from_columns`);
+#: the flag now only selects the device CTR output (`device_out`). The
+#: -8.0% above was measured with the old arm: gbdt-categorical taxi needs a
+#: re-measure of SYM_CTR_ALL on current main.
 comptime SYM_CTR_ALL = not is_defined["MOJOLEARN_SYM_CTR_ALL_OFF"]()
 
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source

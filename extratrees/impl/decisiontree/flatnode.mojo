@@ -135,6 +135,17 @@ struct SparseTreeNode[dtype: DType](
     var instance_count: Int32
     """`IdxT instance_count = 0` (`flatnode.h:40`). Rows that reached here."""
 
+    @always_inline
+    def __init__(out self, *, copy: Self):
+        """Metal: an inlined field-by-field copy (see `InstanceRange` in
+        `kernels/builder_kernels.mojo`): the synthesized out-of-line copy
+        crashes Apple's Metal compiler on a whole-record device load."""
+        self.colid = copy.colid
+        self.quesval = copy.quesval
+        self.best_metric_val = copy.best_metric_val
+        self.left_child_id = copy.left_child_id
+        self.instance_count = copy.instance_count
+
     # ---- accessors, `flatnode.h:52-57` and `:69` ----------------------
     # The reference names, not Mojo's naming convention. These are the reference
     # API and the call sites in `decisiontree.cuh` and `randomforest.cuh`

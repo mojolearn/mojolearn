@@ -56,7 +56,11 @@ comptime LFS_TPD = 32
 comptime LFS_DPB = 4
 comptime LFS_TPB = LFS_TPD * LFS_DPB
 #: Largest n_components (one lane per topic of the document's SIMD group).
-comptime LFS_K_CAP = 32
+#: Basis (lane apple-fast-no-narrow-2, 2026-10-04, reviewed as a possible
+#: fit to the board's k = 16 and kept): the kernel maps topic t to lane t of
+#: the document's LFS_TPD-wide SIMD group, so k is bounded by the SIMD width,
+#: not by the board.
+comptime LFS_K_CAP = LFS_TPD
 #: lane/no-bench-tuning-2 (2026-10-04): the vocabulary cap was 320, set just
 #: above the taxi-zones vocabulary (~265). It is now derived from the
 #: threadgroup page: `lfs_page_bytes(v)` is the kernel's shared allocations
@@ -111,16 +115,32 @@ comptime LFS_V_CAP = 320 if (
     lfs_v_cap_rule() if is_defined["MOJOLEARN_LDA_V_CAP_HALF_PAGE"]()
     else (LFS_SMEM_BYTES - LFS_SMEM_FIXED) // (LFS_DPB * 8) // 32 * 32
 )
+#: The threadgroup row a launch reserves is sized from the runtime v, not from
+#: LFS_V_CAP (lane apple-fast-general-speed, 2026-10-04). M3 A/B with one
+#: kernel sized at the 928 cap: LDA taxi-zones (v = 259) A 3,119 ms vs
+#: B (-D MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V, 320) 1,514 ms, perplexity same:
+#: a 30 KB block leaves one resident threadgroup per core where 12 KB left two.
+#: The kernel is compiled at occupancy tiers: tier b is the largest multiple
+#: of 32 words for which b blocks share LFS_SMEM_BYTES (b = 8, 6, 4, 3, 2, 1:
+#: 32, 96, 160, 256, 416, 928 words), and a launch takes the smallest tier
+#: holding v. Hardware-derived (the threadgroup limit divided by the resident
+#: block count), no vocabulary window. Same bits at every tier (the row
+#: stride only moves where a word sits in threadgroup memory).
+def _lfs_tier_v(blocks_per_core: Int) -> Int:
+    return (LFS_SMEM_BYTES // blocks_per_core - LFS_SMEM_FIXED) // (LFS_DPB * 8) // 32 * 32
+
+
 #: Persistent blocks (each owns one k x v partial of the statistics).
 comptime LFS_BLOCKS = 2048
 
 
-def lda_fused_kernel(
+def lda_fused_kernel[VC: Int](
     x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, part: F32Ptr, n: Int32, k: Int32, v: Int32,
     prior: Float32, max_iter: Int32, tol: Float32, groups: Int32,
 ):
     """Block b: documents of groups b, b + groups, ... (LFS_DPB per group,
-    LFS_TPD lanes each): `lda_doc_row`'s iterations, Dt and Et written back,
+    LFS_TPD lanes each; VC >= v words of threadgroup row per document):
+    `lda_doc_row`'s iterations, Dt and Et written back,
     and part[b * k * v + t * v + w] += Et_final[i, t] * x[i, w] / (norm_phi[i, w]
     + eps) over the block's documents ascending (zero words add exactly 0)."""
     var b = Int(block_idx.x)
@@ -132,8 +152,8 @@ def lda_fused_kernel(
     var nn = Int(n)
     var kv = kk * vv
     var eps = Float32(2.220446049250313e-16)
-    var idx = stack_allocation[LFS_DPB * LFS_V_CAP, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var sw = stack_allocation[LFS_DPB * LFS_V_CAP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var idx = stack_allocation[LFS_DPB * VC, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var sw = stack_allocation[LFS_DPB * VC, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var ds = stack_allocation[LFS_DPB * LFS_K_CAP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var es = stack_allocation[LFS_DPB * LFS_K_CAP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var dif = stack_allocation[LFS_DPB * LFS_K_CAP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
@@ -145,7 +165,7 @@ def lda_fused_kernel(
     while q0 < kv:
         part.unsafe_store(pb + q0, Float32(0))
         q0 += LFS_TPB
-    var io = dp * LFS_V_CAP
+    var io = dp * VC
     var ko = dp * LFS_K_CAP
     var co = dp * (LFS_TPD + 1)
     var seg = (vv + LFS_TPD - 1) // LFS_TPD
@@ -274,7 +294,7 @@ def lda_fused_kernel(
             var acc = part.unsafe_load(pb + q)
             for s in range(LFS_DPB):
                 if g * LFS_DPB + s < nn:
-                    acc = add(acc, mul(es[s * LFS_K_CAP + t], sw[s * LFS_V_CAP + w]))
+                    acc = add(acc, mul(es[s * LFS_K_CAP + t], sw[s * VC + w]))
             part.unsafe_store(pb + q, acc)
             q += LFS_TPB
         barrier()
@@ -294,15 +314,37 @@ def lda_ss_fold_kernel(part: F32Ptr, ew: F32Ptr, ss: F32Ptr, kv: Int32, groups: 
     ss.unsafe_store(q, mul(s, ew.unsafe_load(q)))
 
 
+def _launch_fused[VC: Int](
+    ctx: DeviceContext, x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, part: F32Ptr, n: Int, k: Int,
+    v: Int, prior: Float32, max_iter: Int, tol: Float32, groups: Int,
+) raises:
+    ctx.enqueue_function[lda_fused_kernel[VC]](
+        x, ew, d, e, part, Int32(n), Int32(k), Int32(v), prior, Int32(max_iter), tol, Int32(groups),
+        grid_dim=groups, block_dim=LFS_TPB,
+    )
+
+
 def launch_lda_fused_ss(
     ctx: DeviceContext, x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, part: F32Ptr, ss: F32Ptr, n: Int, k: Int,
     v: Int, prior: Float32, max_iter: Int, tol: Float32, groups: Int,
 ) raises:
-    """The two launches: part holds groups * k * v floats of scratch."""
-    ctx.enqueue_function[lda_fused_kernel](
-        x, ew, d, e, part, Int32(n), Int32(k), Int32(v), prior, Int32(max_iter), tol, Int32(groups),
-        grid_dim=groups, block_dim=LFS_TPB,
-    )
+    """The two launches: part holds groups * k * v floats of scratch. The
+    fused kernel is the smallest occupancy tier whose row holds v."""
+    comptime if is_defined["MOJOLEARN_LEGACY_NARROW_LDA_FUSED_V"]():
+        _launch_fused[LFS_V_CAP](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+    else:
+        if v <= _lfs_tier_v(8):
+            _launch_fused[_lfs_tier_v(8)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+        elif v <= _lfs_tier_v(6):
+            _launch_fused[_lfs_tier_v(6)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+        elif v <= _lfs_tier_v(4):
+            _launch_fused[_lfs_tier_v(4)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+        elif v <= _lfs_tier_v(3):
+            _launch_fused[_lfs_tier_v(3)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+        elif v <= _lfs_tier_v(2):
+            _launch_fused[_lfs_tier_v(2)](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
+        else:
+            _launch_fused[LFS_V_CAP](ctx, x, ew, d, e, part, n, k, v, prior, max_iter, tol, groups)
     ctx.enqueue_function[lda_ss_fold_kernel](
         part, ew, ss, Int32(k * v), Int32(groups), grid_dim=_blocks(k * v), block_dim=TPB,
     )

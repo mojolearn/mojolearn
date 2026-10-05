@@ -32,6 +32,7 @@ multiply-add per (pair, feature), 3.5e13 of them.
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -420,8 +421,19 @@ def cg_ivfg_enqueue[
     """IVFG: the approximate k-NN graph into dnd / dni. False (nothing
     written) when n is under IVFG_MIN_N or a probe pool is too small: the
     caller then builds the exact graph."""
-    if n < IVFG_MIN_N:
-        return False
+    # lane apple-fast-no-narrow-2 (2026-10-04): IVFG_MIN_N (65536) is
+    # removed as benchmark-tuned (a row count picked between board sizes),
+    # replacement UNMEASURED. The rule is now total work: IVFG scores about
+    # n * PROBES * IVFG_ROWS candidate pairs against the exact graph's n^2,
+    # so it is taken only when it scores at most half of them
+    # (n >= 2 * PROBES * IVFG_ROWS). `-D MOJOLEARN_LEGACY_NARROW_IVFG_MIN_N`
+    # restores the 65536-row gate.
+    comptime if is_defined["MOJOLEARN_LEGACY_NARROW_IVFG_MIN_N"]():
+        if n < IVFG_MIN_N:
+            return False
+    else:
+        if n < 2 * PROBES * IVFG_ROWS:
+            return False
     var nlist = n // IVFG_ROWS
     if nlist > IVFG_MAX_LISTS:
         nlist = IVFG_MAX_LISTS

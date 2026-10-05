@@ -176,7 +176,7 @@ comptime SAB_ZERO_FOLD_MAX_SWAPPED = is_defined[
 comptime CD_SQUARED_GUARD = Float32(1.0e-5)
 
 #: FAST on Apple: coordinate descent in GRAM form when the data is tall
-#: (n_rows >= 4 * n_cols, n_cols <= CD_GRAM_MAX_COLS). One product
+#: (n_rows >= 4 * n_cols, n_cols <= CD_GRAM_MAX_COLS, see below). One product
 #: [X ; y] [X ; y]^T gives G = X^T X and c = X^T y; every sweep then runs on
 #: the host in float64 over p-sized vectors -- rho = c_j + G_jj w_j, the
 #: same soft-threshold / (G_jj + l2) update and guard, c -= G[:, j] dw --
@@ -188,7 +188,18 @@ comptime CD_FAST_GRAM = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_CD_FAST_GRAM_OFF"]()
 )
-comptime CD_GRAM_MAX_COLS = 256
+#: Widest design the Gram path takes. Was 256 (just above istella's 220
+#: features); removed as benchmark-tuned on 2026-10-04, replacement
+#: UNMEASURED. The limit now comes from the grid kernel's scratch: the
+#: per-chunk tile partials are nch * npairs * CD_GG_TS^2 floats, about
+#: n p^2 / (2 CD_GG_CH), which stays no larger than X itself (n p floats)
+#: while p <= 2 CD_GG_CH = 16384. The host Gram (p^2 float64) is at most a
+#: quarter of X's bytes under the tall rule n >= 4 p, and the per-epoch host
+#: sweep (p^2) at most a quarter of one row sweep (n p). `-D
+#: MOJOLEARN_LEGACY_NARROW_CD_GRAM` restores the old 256 cap.
+comptime CD_GRAM_MAX_COLS = 256 if is_defined[
+    "MOJOLEARN_LEGACY_NARROW_CD_GRAM"
+]() else 2 * 8192
 comptime CD_GRAM_ROWS = 256
 comptime CD_GRAM_CELLS = 1024
 
@@ -1306,7 +1317,8 @@ def cd_fit_traced(
         ):
             raise Error(
                 "cd_fit: a row-major design needs the Gram path: no trace, no"
-                " residual, n_cols <= 256 and n_rows >= 4 n_cols"
+                " residual, n_cols <= " + String(CD_GRAM_MAX_COLS)
+                + " and n_rows >= 4 n_cols"
             )
     if n_cols <= 0:
         raise Error(

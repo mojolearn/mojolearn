@@ -67,7 +67,13 @@ comptime MQ_T = 128
 comptime MQ_MAX_D = 32
 comptime MQ_MAX_K = 32
 comptime MQ_K64_MAX = 64
-"""The widest `k` the `MOJOLEARN_KNN_FAST_MMA_K64=1` arm admits."""
+"""The widest `k` the K64 arm admits. Basis (lane apple-fast-no-narrow-2,
+2026-10-04, reviewed as a possible board fit to k = 64): the limit is the
+kernel's register list, not the board. Each thread keeps its sorted list as
+`SIMD[float32, K * A]` distances plus `SIMD[uint32, K * A]` indices; at K = 64
+that is 128 32-bit registers, the whole per-thread register budget of an
+Apple GPU thread before spilling, so a K = 128 instantiation would spill
+the list. Kept unchanged."""
 comptime MQ_BIG = Float32(3.0e38)
 """Empty list slot and starting threshold (finite: FAST may fold
 infinities away)."""

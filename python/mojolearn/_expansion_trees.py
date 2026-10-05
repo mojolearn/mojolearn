@@ -1700,17 +1700,15 @@ class _DARTBase(_TreesEnsembleBase):
                             rate = min(rate, int(self.max_drop) / t)
                         thr = [self._dart_thr(rate)] * t
                 # glue: the t-sized coefficient and threshold words are scalars per
-                # tree. The K n-sized targets come back from `x_trees_dart_step`
-                # only because a member tree's fit takes host labels (its own
-                # binding stages them); the score, gradients and leaf sums stay
-                # on the device
+                # tree. The K n-sized targets stay in the DART session's target
+                # plane (cpu4-forest): each member tree fits there
+                # (`_fit_in_dart`), as do the score, gradients and leaf sums
                 coef32 = Array.from_list([float(v) for v in self.tree_coefs_] or [0.0], "<f4")
                 thr64 = Array.from_list(thr or [0], "<i8")
                 flags = empty((max(t, 1),), "<i4")
-                targets = [empty((n,), "<f4") for _ in range(K)]
                 b.x_trees_dart_step(handle, addr_ro(coef32, name="coef"), addr_ro(thr64, name="thr"),
                                     addr(flags, name="flags"), addr(bad, name="bad"),
-                                    [addr(tg, name="target") for tg in targets], [t, drop_seed, it, skip_thr])
+                                    [], [t, drop_seed, it, skip_thr])
                 if bad.tolist()[0]:
                     raise RuntimeError("x_trees dart: a tree walk left its tree (child or column out of range)")
                 fl = flags.tolist()
@@ -1737,24 +1735,15 @@ class _DARTBase(_TreesEnsembleBase):
                         max_leaves=int(self.num_leaves), min_samples_leaf=int(self.min_child_samples),
                         n_bins=int(self.max_bin), random_state=_trees_sub_seed(seed, j), n_streams=1,
                         numeric_mode=self.numeric_mode)
-                    if rows is None and cols is None:
-                        if session is not None:
-                            tree._fit_in_session(session, targets[c])
-                        else:
-                            tree.fit(Xa, targets[c])
-                    else:
-                        # main's member: X gathered at the bag rows and the
-                        # tree's columns, the target at the bag rows (device
-                        # gathers); the colid back in X's columns (device remap)
-                        Xf = self._gather(Xa, rows if rows is not None else self._arange(n),
-                                          cols if cols is not None else all_cols)
-                        yf = targets[c] if rows is None else self._gather_vec(targets[c], rows)
-                        tree.fit(Xf, yf)
-                        if cols is not None:
-                            cid = tree._colid.copy()
-                            b.x_trees_remap_cols(addr(cid, name="colid"), addr_ro(cols, name="cols"),
-                                                 [len(cid), len(cols)])
-                            tree._colid = cid
+                    # the member on the DART session's X and class-c target,
+                    # at the bag rows and the tree's columns (device gathers);
+                    # the colid back in X's columns (device remap)
+                    tree._fit_in_dart(handle, c, n, d, rows=rows, cols=cols)
+                    if cols is not None:
+                        cid = tree._colid.copy()
+                        b.x_trees_remap_cols(addr(cid, name="colid"), addr_ro(cols, name="cols"),
+                                             [len(cid), len(cols)])
+                        tree._colid = cid
                     offs = tree._offsets.tolist()
                     lo, n_nodes = int(offs[0]), int(offs[1]) - int(offs[0])
                     values = empty((n_nodes,), "<f4")

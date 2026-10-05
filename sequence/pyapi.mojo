@@ -11,7 +11,7 @@ from std.math import sqrt
 from std.memory import bitcast, memcpy
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec_trait import Exec
-from sequence.ops import SEQ_FAST_VAR_ONECOPY, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
+from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_COOP, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.layernorm import LN_FOLD_BLOCK, ln_fold_rows
@@ -31,12 +31,19 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 #: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
-#: default OFF, FAST + Apple only. Skipped fills, no bit moves:
+#: FAST + Apple only. Skipped fills, no bit moves:
 #:  MOJOLEARN_AF_FAST_NOFILL: Adafactor's P, G and variance buffers are bound
 #:    by their upload (`Exec.bind`), not zero filled first.
 #:  MOJOLEARN_LN_FAST_NOFILL: LayerNorm's x and dy likewise.
 comptime _PY_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime AF_NOFILL = _PY_APPLE_FAST and is_defined["MOJOLEARN_AF_FAST_NOFILL"]()
+#: AF_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, rab10-afnofill): adafactor 393.2 -> 380.1 ms, digest identical
+#: A == B. KEEP: the FAST + Apple default since then; rollback
+#: -D MOJOLEARN_AF_FAST_NOFILL_OFF. No conflict with AF_FAST_RESIDENT (also a
+#: default): the resident step does not go through `adafactor_step_py`, so
+#: with RESIDENT on the Adafactor class no longer reaches this path; NOFILL
+#: covers the direct `adafactor_step` binding and the RESIDENT_OFF rollback.
+comptime AF_NOFILL = _PY_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_NOFILL_OFF"]()
 #: LN_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 48.2 -> 45.5 ms,
 #: output digest identical A == B. KEEP: the FAST + Apple default since then;
@@ -501,6 +508,29 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     return PythonObject(0)
 
 
+def _var_gemm_coop[E: Exec](
+    mut ex: E, A: FP, B: FP, C: FP, M: Int, N: Int, K: Int,
+    sam: Int, sak: Int, sbk: Int, sbn: Int, ldc: Int,
+) raises:
+    """`gemm` (no accumulate) as one OP_GEMM launch flagged i11 = 1 for the
+    coop route (SEQ_FAST_VAR_COOP); op_gemm itself never reads i11."""
+    var a = Args()
+    a.p0 = A
+    a.p1 = B
+    a.p2 = C
+    a.i0 = M
+    a.i1 = N
+    a.i2 = K
+    a.i3 = sam
+    a.i4 = sak
+    a.i5 = sbk
+    a.i6 = sbn
+    a.i7 = 0
+    a.i8 = ldc
+    a.i11 = 1
+    ex.launch[OP_GEMM](a, M * N)
+
+
 def _var_fit_queued[E: Exec](
     mut ex: E, addrs: PythonObject, n: Int, K: Int, p: Int, kt: Int, R: Int, m: Int,
 ) raises -> PythonObject:
@@ -539,8 +569,20 @@ def _var_fit_queued[E: Exec](
     b.i0 = R
     b.i1 = m
     ex.launch[OP_COLSCALE](b, m)
-    gemm(ex, Z, Z, G, m, m, R, 1, m, m, 1, False, m)
-    gemm(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, False, K)
+    comptime if SEQ_FAST_VAR_COOP:
+        # MOJOLEARN_SEQ_FAST_VAR_COOP (sequence/ops.mojo): the two R-long
+        # normal-equation products as coop cells (Args.i11 = 1 asks
+        # DeviceExec.launch for coop_kernel[OP_GEMM]; the same chain). A K
+        # long enough for gemm's FAST split keeps the split.
+        if R < 32768:
+            _var_gemm_coop(ex, Z, Z, G, m, m, R, 1, m, m, 1, m)
+            _var_gemm_coop(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, K)
+        else:
+            gemm(ex, Z, Z, G, m, m, R, 1, m, m, 1, False, m)
+            gemm(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, False, K)
+    else:
+        gemm(ex, Z, Z, G, m, m, R, 1, m, m, 1, False, m)
+        gemm(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, False, K)
     var c = Args()
     c.p0 = G
     c.p1 = Bm

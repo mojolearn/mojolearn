@@ -36,7 +36,7 @@ from extratrees.impl.randomforest.randomforest import (
     Forest,
     error_checking,
     resolve_n_sampled_rows,
-    row_sample_for,
+    row_sample_for_host,
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -76,7 +76,7 @@ def fit_classification(
         # `:169` -- each tree gets its OWN row list, because `train_*`
         # partitions it in place. `:59-67` -- the bootstrap arm is keyed by
         # `(seed, tree_id)` (DEVIATION 460).
-        var row_ids = row_sample_for(
+        var row_ids = row_sample_for_host(
             n_rows, bootstrap, n_sampled, seed, Int32(tree_id)
         )
         var dataset = Dataset(
@@ -125,7 +125,7 @@ def fit_regression(
     var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
     var forest = Forest(1)
     for tree_id in range(Int(n_trees)):
-        var row_ids = row_sample_for(
+        var row_ids = row_sample_for_host(
             n_rows, bootstrap, n_sampled, seed, Int32(tree_id)
         )
         var dataset = Dataset(
@@ -172,7 +172,7 @@ def fit_forest_exact(
     `train_tree_exact`, the HOST RESTATEMENT OF THE DEVICE TRAINER (the CPU
     training lane, 2026-09-14; the block comment above `train_tree_exact`
     in `builder.mojo`). `labels_q` is the device's label plane: the class
-    ids `class_ids_for` derives for a classifier (`num_outputs = n_classes`,
+    ids `class_ids_for_host` derives for a classifier (`num_outputs = n_classes`,
     `inv_scale = 1`), `quantize_labels_host`'s fixed point for a regressor
     (`num_outputs = 1`, `inv_scale = Float32(1 / scale)`). `labels` is the
     float plane the `Dataset` carries beside it; the exact search never
@@ -242,7 +242,7 @@ def fit_forest_exact(
         var hi = min(lo + chunk, n)
         try:
             for tree_id in range(lo, hi):
-                var row_ids = row_sample_for(
+                var row_ids = row_sample_for_host(
                     n_rows, bootstrap, n_sampled, seed, Int32(tree_start + tree_id)
                 )
                 var dataset = Dataset(

@@ -53,6 +53,11 @@ _F32_MAX_EXP = 127
 #:    (narrower ints; a wider interval only sends more steps to the
 #:    fallback).
 _SCHED_INLINE = _os.environ.get("MOJOLEARN_SCHED_FAST_INLINE", "0") == "1"
+#: MOJOLEARN_SCHED_FAST_TABLE (a -D of the FAST + Apple sequence binding,
+#: sequence/sched_table.mojo; default off, READY-AB): ExponentialLR fills
+#: blocks of _TAB_BLOCK values natively (the contract's bits, an undecided
+#: entry decided here on the exact path) and lr_at is one list index.
+_TAB_BLOCK = 8192
 #: working width of the fast enclosures, in bits
 _P = 64 if _os.environ.get("MOJOLEARN_SCHED_FAST_P64", "0") == "1" else 128
 #: fixed-point fraction bits of OneCycleLR's cosine
@@ -190,6 +195,16 @@ def _cos_fx(x):
 
 
 # ------------------------------------------------------------------ schedules
+def _sched_block_fn():
+    """The FAST sequence binding's `sched_exp_block` when it was compiled
+    with -D MOJOLEARN_SCHED_FAST_TABLE, else None."""
+    try:
+        from . import _backend
+        return getattr(_backend.binding("_mojolearn_x_sequence"), "sched_exp_block", None)  # cpu-route: a learning-rate schedule is one host scalar per optimizer step (CPU-ONLY ROUTE, sequence/sched_table.mojo)
+    except Exception:  # noqa: BLE001  (no GPU binding: the Python path)
+        return None
+
+
 class _Sched:
     def _t(self, t):
         t = int(t)
@@ -264,14 +279,40 @@ class ExponentialLR(_PowSched):
     def __init__(self, base_lr, gamma):
         self.base_lr, self.gamma = float(base_lr), float(gamma)
         self._init_pow()
+        self._tab, self._tab0, self._tab_fn = (), 1, None
+        b, g = self.base_lr, self.gamma
+        if _math.isfinite(b) and _math.isfinite(g) and b > 0.0 and g > 0.0:
+            self._tab_fn = _sched_block_fn()
 
     def lr_at(self, t):
+        tab = self._tab
+        if tab:
+            i = t - self._tab0
+            if type(i) is int and 0 <= i < len(tab):
+                return tab[i]
+        if self._tab_fn is not None and type(t) is int and t >= 1:
+            return self._tab_fill(t)
         if self._walk:
             e = int(t) - 1
             pw = self._pow
             if e == pw.e + 1 and e > 0:
                 return self._walk_value(e, pw)
         return self._pow_value(self._t(t))
+
+    def _tab_fill(self, t):
+        """MOJOLEARN_SCHED_FAST_TABLE: lr_at(t .. t + _TAB_BLOCK - 1) from the
+        native block; a NaN (undecided) entry is `_pow_value`'s exact answer."""
+        from array import array
+        buf = array("d", bytes(8 * _TAB_BLOCK))
+        addr = buf.buffer_info()[0]
+        undecided = int(self._tab_fn([addr], [self.base_lr, self.gamma], [t - 1, _TAB_BLOCK]))
+        tab = buf.tolist()
+        if undecided:
+            for i, v in enumerate(tab):  # glue: the rare undecided entries go to the exact path
+                if v != v:
+                    tab[i] = self._pow_value(t - 1 + i)
+        self._tab, self._tab0 = tab, t
+        return tab[0]
 
     def _walk_value(self, e, pw):
         """MOJOLEARN_SCHED_FAST_INLINE: `_pow_value(e)` for e = the carried

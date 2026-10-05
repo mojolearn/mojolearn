@@ -75,7 +75,7 @@ from ensemble.decisiontree.batched_levelalgo.builder import (
     max_sampling_rounds_for,
     n_sampled_cols_for,
     sampled_cols_in_round,
-    update_workload_info,
+    update_workload_info_host,
     workspace_layout,
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
@@ -187,7 +187,7 @@ def _build_ragged[
     var b1 = q.pop()
     var s1 = List[SplitSummary[DT]]()
     s1.append(_split(True, 3, 1.5, 30))
-    q.push(b1, s1)
+    q.push_replay(b1, s1)
 
     # batch 2 -- both children; the 30-row one gets an invalid split
     var b2 = q.pop()
@@ -197,14 +197,14 @@ def _build_ragged[
             s2.append(_split(False, -1, 0.0, 0))
         else:
             s2.append(_split(True, 7, 2.5, 25))
-    q.push(b2, s2)
+    q.push_replay(b2, s2)
 
     # batch 3 -- only the 45-row grandchild is expandable
     var b3 = q.pop()
     var s3 = List[SplitSummary[DT]]()
     for _ in range(len(b3)):
         s3.append(_split(True, 1, 3.5, 20))
-    q.push(b3, s3)
+    q.push_replay(b3, s3)
 
     return q^
 
@@ -287,7 +287,7 @@ def arm_c_max_leaves_break() raises -> Int:
     var b1 = q.pop()
     var s1 = List[SplitSummary[DT]]()
     s1.append(_split(True, 0, 1.0, 40))
-    q.push(b1, s1)
+    q.push_replay(b1, s1)
 
     var b2 = q.pop()
     if len(b2) != 2:
@@ -296,7 +296,7 @@ def arm_c_max_leaves_break() raises -> Int:
     var s2 = List[SplitSummary[DT]]()
     s2.append(_split(True, 1, 2.0, 10))
     s2.append(_split(True, 2, 3.0, 20))
-    q.push(b2, s2)
+    q.push_replay(b2, s2)
 
     if len(q.tree.sparsetree) != 5:
         print(
@@ -510,7 +510,7 @@ def arm_e_workload() raises -> Int:
     for i in range(len(counts)):
         items.append(NodeWorkItem(i, Int32(2), InstanceRange(0, counts[i])))
 
-    # `update_workload_info` now writes INTO an array in place, as
+    # `update_workload_info_host` now writes INTO an array in place, as
     # the reference fills its pinned `h_workload_info` (`builder.cuh:401`).
     # The array is poisoned first, so "wrote exactly n entries" is
     # checked as "entry n is still poison" -- stronger than the old
@@ -520,7 +520,7 @@ def arm_e_workload() raises -> Int:
     var wl = List[WorkloadInfo]()
     for _ in range(want_total + 1):
         wl.append(WorkloadInfo(Int32(-1), Int32(-1), Int32(-1)))
-    var n = update_workload_info(items, wl.unsafe_ptr())
+    var n = update_workload_info_host(items, wl.unsafe_ptr())
 
     var fails = 0
     if n != want_total:
@@ -583,14 +583,14 @@ def _build_order_fixture[
     var b1 = q.pop()
     var s1 = List[SplitSummary[DT]]()
     s1.append(_split(True, 0, 1.0, 40))
-    q.push(b1, s1)
+    q.push_replay(b1, s1)
 
     var b2 = q.pop()
     var s2 = List[SplitSummary[DT]]()
     for i in range(len(b2)):
         # left count keyed to the node's own size, so the two differ
         s2.append(_split(True, i + 1, Float32(i) + 2.0, 7 + i * 11))
-    q.push(b2, s2)
+    q.push_replay(b2, s2)
     return q^
 
 
@@ -689,7 +689,7 @@ def arm_f_sabotage() raises -> Int:
     var wl4 = List[WorkloadInfo]()
     for _ in range(16):
         wl4.append(WorkloadInfo(Int32(-1), Int32(-1), Int32(-1)))
-    var n4 = update_workload_info[4](items, wl4.unsafe_ptr())
+    var n4 = update_workload_info_host[4](items, wl4.unsafe_ptr())
     _ = wl4^
     if n4 != 8:
         fails += 1

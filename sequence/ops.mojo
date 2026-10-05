@@ -92,6 +92,16 @@ comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"
 #: 5.9 -> 5.1 ms, synthetic 6.2 -> 5.0 ms); -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF
 #: restores the four copies; the old -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY is harmless.
 comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF"]()
+#: MOJOLEARN_SEQ_FAST_VAR_COOP (FAST + Apple, default off, READY-AB): VAR's
+#: R-long one-thread folds (sequence/pyapi.mojo `_var_fit_queued`: the
+#: column scale's two passes over R rows, Z^T Z and Z^T Ys, the sigma_u
+#: product) ran one thread per cell, each a ~R-step chain of strided loads
+#: (R = n_obs - p) that waits on memory at every step, a few dozen to a
+#: thousand threads on the whole GPU. Under this switch they run one
+#: simdgroup per cell (sequence/coop.mojo): coalesced loads, the same fma
+#: chain (coop_dot) or the same maximum, so the same words. The VAR GEMMs ask
+#: for it with Args.i11 = 1 (op_gemm reads i0..i8 only); no other GEMM moves.
+comptime SEQ_FAST_VAR_COOP = TSA2_VAR and is_defined["MOJOLEARN_SEQ_FAST_VAR_COOP"]()
 
 # ------------------------------------------------------------------ op codes
 comptime OP_GEMM = 1

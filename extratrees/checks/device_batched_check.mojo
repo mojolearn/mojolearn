@@ -55,7 +55,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     upload_dataset,
 )
 from extratrees.impl.randomforest.randomforest import (
-    class_ids_for,
+    class_ids_for_host,
     fit_classification_device,
     fit_regression_device,
 )
@@ -136,7 +136,7 @@ def serial_classification(
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     """The serial arm: one-tree batches, a fresh device row buffer each."""
     var x = column_major(fixture)
-    var class_ids = class_ids_for(
+    var class_ids = class_ids_for_host(
         fixture.y, Int32(fixture.n_rows), Int32(fixture.n_classes)
     )
     var dev = upload_dataset(
@@ -168,7 +168,7 @@ def merged_classification(
     row_slot_cap: Int,
 ) raises -> List[TreeMetaDataNode[DType.float32]]:
     var x = column_major(fixture)
-    var class_ids = class_ids_for(
+    var class_ids = class_ids_for_host(
         fixture.y, Int32(fixture.n_rows), Int32(fixture.n_classes)
     )
     var dev = upload_dataset(

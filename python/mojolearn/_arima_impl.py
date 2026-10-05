@@ -642,7 +642,19 @@ class ARIMA(NumericModeMixin):
                 f"batch_size * N is {batch_size * N}; this side and "
                 "arima/estimator.mojo disagree about ARIMAOrder.complexity()"
             )
+        return self._adopt_fit(arr, copied, y_ndim, batch_size, n_obs, ex, n_exog,
+                               params, x, x0, stats, flags)
 
+    def _adopt_fit(self, arr, copied, y_ndim, batch_size, n_obs, ex, n_exog,
+                   params, x, x0, stats, flags):
+        """The fitted state from the fit's output buffers (`arima_fit`'s
+        layout: params / x / x0 `(batch_size * N,)` f32, stats [llf, fx] f32,
+        flags [n_iter, retcode] i32). `fit` calls it after the native fit;
+        AutoARIMA.fit calls it with the search's own optimum under
+        MOJOLEARN_ARIMA_FAST_SEARCH_REUSE (`_x_sequence_autoarima.py`)."""
+        p, d, q = self.order
+        P, D, Q, s = self.seasonal_order
+        N = p + q + P + Q + self.k_ + n_exog + 1
         self.input_copied_ = copied
         self.batch_size_ = batch_size
         self.n_obs_ = n_obs

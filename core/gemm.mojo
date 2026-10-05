@@ -634,7 +634,16 @@ def gemm_tn_via_transpose(
 from linalg.gemv import gemv_gpu
 
 
-comptime GEMV_FAST_PINNED_MAX_K = 64
+comptime GEMV_FAST_PINNED_MAX_K = 64 if is_defined[
+    "MOJOLEARN_LEGACY_NARROW_GEMV_PINNED"
+]() else 32
+"""FAST Apple: widest k the one-thread-per-row gemv takes. Was 64 (it split
+taxi's 11 features from istella's 220 with nothing measured between);
+removed as benchmark-tuned on 2026-10-04, replacement UNMEASURED. The rule
+is now the SIMD width (32 on Apple): a SIMD-group-per-row gemv puts at most
+one element on a lane below it, idling lanes, so a thread per row wins
+there; from the SIMD width up every lane of the vendor kernel has work.
+`-D MOJOLEARN_LEGACY_NARROW_GEMV_PINNED` restores 64."""
 
 
 def gemv_n(

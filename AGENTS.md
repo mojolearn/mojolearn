@@ -36,3 +36,12 @@ Examples: an AMD portable kernel path needs Mojo to keep kernel IR (or bitcode) 
 until Modular ships that, we do not pursue it (decided 2026-10-04; the parked prototype is on `lane/amd-portable`,
 with the evidence in `docs/AMD_PORTABLE_PATH.md` on that branch). Do not hand-rewrite compiler output, patch
 toolchain internals, or ship unsupported build modes. Record the ask for Modular instead and move on.
+
+## No dimension targeting, in any mode
+
+No dispatch, tile, threshold, cap or route rule may key on an exact benchmark dimension, a size chosen to sit just above or
+below a board row (rows, features, classes, k, vocabulary), or a board dataset name. This applies to FAST and to IDENTICAL on
+every vendor. A rule must come from size, hardware or cost reasoning that covers neighboring shapes, stated in a comment.
+In IDENTICAL, removing such a rule may change bits: that is allowed, because bits only have to match across NVIDIA, AMD,
+Apple and the host column within one version, never across versions. Change all columns together. Each removal gets an
+A/B with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.

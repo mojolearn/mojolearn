@@ -26,7 +26,7 @@ from extratrees.estimator import (
     ExtraTreesConfig, MAX_FEATURES_ALL, fit_extra_trees_classifier_device,
 )
 
-from extratrees.impl.randomforest.randomforest import forest_vote
+from extratrees.impl.randomforest.randomforest import forest_vote_host
 from extratrees.impl.decisiontree.decisiontree import CRITERION_ENTROPY
 
 
@@ -67,7 +67,7 @@ def run_case(
             var row = List[Float32]()
             for c in range(13):
                 row.append(x[c * rows + r])
-            var probabilities = forest_vote(fit.forest, row, 0)
+            var probabilities = forest_vote_host(fit.forest, row, 0)
             for probability in probabilities:
                 got = mix64(got, UInt64(probability.to_bits[DType.uint32]()))
         assert_equal(len(fit.forest.trees), trees)

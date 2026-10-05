@@ -123,7 +123,17 @@ def kfeat_flags_binding() raises -> PythonObject:
 # 0.7 board vs 0.9 A arm), so one noisy fixed cost cannot put a small X on
 # the slower route. Taxi keeps main's route and time; istella keeps the
 # device scan.
-comptime XN_ACHI2_DEVSCAN_MIN = 1 << 22
+#
+# lane apple-fast-no-narrow-2 (2026-10-04): the gate is REMOVED as
+# benchmark-tuned (it was placed between taxi's 1.1M and istella's 22M
+# entries so that each kept its faster route) and because below it the scan
+# ran as a host minimum inside a FAST GPU fit (GPU path is GPU only). Every
+# size now takes the device scan; replacement UNMEASURED (the old M3 point
+# says taxi 0.9 -> 1.9 ms). `-D MOJOLEARN_LEGACY_NARROW_ACHI2_DEVSCAN`
+# restores the 2^22-entry gate.
+comptime XN_ACHI2_DEVSCAN_MIN = (1 << 22) if is_defined[
+    "MOJOLEARN_LEGACY_NARROW_ACHI2_DEVSCAN"
+]() else 1
 
 
 def kfeat_first_negative_binding(xaddr: PythonObject, n: PythonObject) raises -> PythonObject:

@@ -32,8 +32,9 @@ from sequence.ops import (
     ld,
     st,
 )
-from sequence.ops import OP_THETA
+from sequence.ops import OP_THETA, OP_COLSCALE, OP_VAR_SIGMA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, add, mul, sub
+from sequence.vecar import pow2_scale
 from sequence.layernorm import div as ln_div
 from checks.numerics import ftz, identical_rsqrt
 from sequence.theta_spec import THETA_SPEC, op_theta_spec
@@ -265,6 +266,42 @@ def apply_coop[OP: Int](cell: Int, lane: Int, a: Args):
         # lane/apple-fast-gap-tsa: theta with the Nelder-Mead candidates on
         # the simdgroup's lanes (sequence/theta_spec.mojo)
         op_theta_spec(cell, lane, a)
+    elif OP == OP_COLSCALE:
+        # MOJOLEARN_SEQ_FAST_VAR_COOP: op_colscale's column on the simdgroup.
+        # Each lane takes the largest |v| over its strided rows with the
+        # one-thread op's `v > mx` test, the 32 partial maxima are combined by
+        # the same test (a maximum: the order cannot change it), then the
+        # lanes scale their strided rows: the same words as op_colscale.
+        var R = a.i0
+        var m = a.i1
+        var mx = Float32(0.0)
+        var r = lane
+        while r < R:
+            var v = abs(ld(a.p0, r * m + cell))
+            if v > mx:
+                mx = v
+            r += COOP_W
+        comptime for sh in range(5):
+            var o = shuffle_idx(mx, UInt32(lane ^ (1 << sh)))
+            if o > mx:
+                mx = o
+        var sc = pow2_scale(mx)
+        r = lane
+        while r < R:
+            st(a.p0, r * m + cell, mul(ld(a.p0, r * m + cell), sc))
+            r += COOP_W
+        if lane == 0:
+            st(a.p1, cell, sc)
+    elif OP == OP_VAR_SIGMA:
+        # MOJOLEARN_SEQ_FAST_VAR_COOP: op_var_sigma's cell, its R-long
+        # gemm_dot chain on the simdgroup (coop_dot: the same chain)
+        var K = a.i0
+        var R = a.i1
+        var i = cell // K
+        var j = cell - i * K
+        var s = coop_dot(a.p0, i, K, a.p0, j, K, R, Float32(0.0), lane)
+        if lane == 0:
+            st(a.p1, cell, mul(ftz(s), a.f0))
     elif OP == OP_AF_ROW:
         # nr-small D11: op_af_row's row chain on the simdgroup
         var ss = coop_sumsq(a.p0, cell * a.i0, a.i0, lane)

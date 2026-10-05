@@ -35,7 +35,7 @@ THE ARMS
       the fine table gave 6). Per cell == host tally, and == G0.
       Runs the SHARED and the GLOBAL arm both; an opt-in path is an
       unchecked path.
-  G2. `update_workload_info(granularity=512)` on the host: block counts
+  G2. `update_workload_info_host(granularity=512)` on the host: block counts
       and offsets equal a hand-derived map -- the builder-side reach for
       2011 (the flag's only effect is this table).
   H1. DEVIATION 2012: binned shared with SMEM_COPIES=4 == host tally
@@ -66,7 +66,7 @@ from ensemble.decisiontree.batched_levelalgo.objectives import (
 from ensemble.decisiontree.batched_levelalgo.quantiles import Quantiles
 from ensemble.decisiontree.batched_levelalgo.builder import (
     TPB_DEFAULT,
-    update_workload_info,
+    update_workload_info_host,
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
@@ -129,7 +129,7 @@ def node_begins(counts: List[Int]) -> List[Int]:
 
 def build_workload(counts: List[Int], granularity: Int) -> List[WorkloadInfo]:
     """The host map at a given granularity -- the check's OWN spelling
-    (a two-pass append), against `update_workload_info`'s in-place
+    (a two-pass append), against `update_workload_info_host`'s in-place
     write."""
     var out = List[WorkloadInfo]()
     for i in range(len(counts)):
@@ -554,7 +554,7 @@ def main() raises:
     var wl_got = List[WorkloadInfo]()
     for _ in range(fx.n_coarse + 8):
         wl_got.append(WorkloadInfo(Int32(0), Int32(0), Int32(0)))
-    var n_got = update_workload_info(
+    var n_got = update_workload_info_host(
         items, wl_got.unsafe_ptr(), TPB_DEFAULT * 4
     )
     var wl_want = build_workload(fx.counts, COARSE)
@@ -571,7 +571,7 @@ def main() raises:
                 g2_bad += 1
     if g2_bad == 0:
         print(
-            "  arm G2-table(2011) OK: update_workload_info(granularity=512)"
+            "  arm G2-table(2011) OK: update_workload_info_host(granularity=512)"
             " ==", n_got, "hand-derived entries"
         )
     else:
