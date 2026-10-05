@@ -86,6 +86,27 @@ def installed_check(manifest, package):
             raise ValueError('Installed artifact bytes differ: ' + rel)
 
 
+def loaded_bindings():
+    """Inventory the worker's actual extensions, including lazy/nested hosts.
+
+    Module aliases are retained; role derives from the loaded file, not the
+    alias. This observes sys.modules and never imports a benchmark binding.
+    """
+    rows = []
+    for name, module in sorted(list(sys.modules.items())):
+        if not name.startswith('mojolearn.'):
+            continue
+        filename = vars(module).get('__file__') if module is not None else None
+        if not filename:
+            continue
+        path = Path(filename).resolve()
+        if path.suffix != '.so' or not path.name.startswith('_mojolearn_'):
+            continue
+        rows.append(dict(module=name, file=str(path), sha256=sha(path),
+                         role='host' if path.stem.endswith('_host') else 'gpu'))
+    return rows
+
+
 def collect(manifest):
     # This must be the worker's already imported package. Importing a fresh
     # package in the parent would say nothing about the timed child.
@@ -93,7 +114,6 @@ def collect(manifest):
     backend = sys.modules.get('mojolearn._backend')
     if ml is None or backend is None:
         raise ValueError('Timed worker did not import mojolearn')
-    from mojolearn._verify import binding_artifacts
     package = Path(ml.__file__).resolve().parent
     # The parent verifies the whole inventory once before any race. Hash
     # only actually loaded extensions here, after timings, so a large full
@@ -106,13 +126,13 @@ def collect(manifest):
     if ml.numeric_mode() != manifest['numeric_mode']:
         raise ValueError('Worker numeric mode differs')
     loaded = []
-    for row in binding_artifacts():
+    for row in loaded_bindings():
         path = Path(row['file']).resolve()
         rel = path.relative_to(package).as_posix()
         if manifest['files'].get(rel) != row['sha256']:
             raise ValueError('Loaded extension outside pinned inventory: ' + rel)
-        loaded.append(dict(module=row['module'], file=rel, sha256=row['sha256']))
-    gpu = [r for r in loaded if not r['module'].endswith('_host')]
+        loaded.append(dict(module=row['module'], file=rel, sha256=row['sha256'], role=row['role']))
+    gpu = [r for r in loaded if r['role'] == 'gpu']
     if not gpu:
         raise ValueError('No actual GPU binding loads witnessed')
     runtime = backend.baseline_selection_receipt()

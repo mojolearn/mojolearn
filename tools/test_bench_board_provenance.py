@@ -30,6 +30,23 @@ class Provenance(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_nested_and_aliased_extensions_are_pinned_by_actual_file(self):
+        import types
+        gpu = self.root/'_mojolearn_linalg.so'; gpu.write_bytes(b'gpu')
+        host = self.root/'_mojolearn_training_host.so'; host.write_bytes(b'host')
+        modules = {
+            'mojolearn._sets.identical._mojolearn_linalg': types.SimpleNamespace(__file__=str(gpu)),
+            'mojolearn._host.training_alias': types.SimpleNamespace(__file__=str(host)),
+            'mojolearn.missing': types.SimpleNamespace(),
+            'other._mojolearn_fake': types.SimpleNamespace(__file__=str(gpu)),
+        }
+        with patch.dict(P.sys.modules, modules, clear=True):
+            rows = P.loaded_bindings()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({r['role'] for r in rows}, {'host', 'gpu'})
+        self.assertEqual(next(r for r in rows if r['role']=='host')['sha256'], P.sha(host))
+        self.assertTrue(all(r['module'].startswith('mojolearn.') for r in rows))
+
     def test_forced_path_requires_manifest_and_opt_in(self):
         f = self.root/'manifest.json'; f.write_text(json.dumps(self.native))
         with patch.dict(os.environ, {'MOJOLEARN_CUDA_PATH':'ptx-baseline'}, clear=True):
@@ -78,17 +95,17 @@ class Provenance(unittest.TestCase):
         import types
         package = self.root / 'mojolearn'; package.mkdir()
         (package/'identity_columns').mkdir(); (package/'identity_columns/COMMIT').write_text('a'*40)
-        (package/'a.so').write_bytes(b'kernel')
-        digest=P.sha(package/'a.so')
-        manifest=dict(self.native,files={'a.so':digest})
+        (package/'_mojolearn_x.so').write_bytes(b'kernel')
+        digest=P.sha(package/'_mojolearn_x.so')
+        manifest=dict(self.native,files={'_mojolearn_x.so':digest})
         ml=types.ModuleType('mojolearn');ml.__file__=str(package/'__init__.py')
         ml.vendor=lambda:'cuda';ml.numeric_mode=lambda:'identical'
         backend=types.ModuleType('mojolearn._backend')
         backend.gpu_plugin=lambda:{'code_format':'native'}
         backend.baseline_selection_receipt=lambda:None
-        verify=types.ModuleType('mojolearn._verify')
-        verify.binding_artifacts=lambda:[dict(module='mojolearn._mojolearn_x',file=str(package/'a.so'),sha256=digest)]
-        with patch.dict(P.sys.modules,{'mojolearn':ml,'mojolearn._backend':backend,'mojolearn._verify':verify}), patch.object(P.subprocess,'check_output',return_value='GPU-123, RTX 4090, 8.9, 580.1'):
+        extension=types.ModuleType('mojolearn._sets.identical._mojolearn_x')
+        extension.__file__=str(package/'_mojolearn_x.so')
+        with patch.dict(P.sys.modules,{'mojolearn':ml,'mojolearn._backend':backend,'mojolearn._sets.identical._mojolearn_x':extension}), patch.object(P.subprocess,'check_output',return_value='GPU-123, RTX 4090, 8.9, 580.1'):
             receipt=P.collect(manifest)
             self.assertEqual(receipt['loaded_files'][0]['sha256'],digest)
             self.assertFalse(receipt['identical_qualified'])
@@ -97,9 +114,9 @@ class Provenance(unittest.TestCase):
             manifest=dict(manifest,code_path='ptx-baseline')
             with self.assertRaisesRegex(ValueError,'Missing forced'):P.collect(manifest)
             backend._BASELINE_ROOT=str(package)
-            backend.baseline_selection_receipt=lambda:dict(requested='ptx-baseline',selected='ptx-baseline',native_fallback=False,source_commit='a'*40,loaded_files=[{'file':'a.so','sha256':digest}])
+            backend.baseline_selection_receipt=lambda:dict(requested='ptx-baseline',selected='ptx-baseline',native_fallback=False,source_commit='a'*40,loaded_files=[{'file':'_mojolearn_x.so','sha256':digest}])
             self.assertEqual(P.collect(manifest)['status'],'verified')
-            changed=dict(manifest,files={'a.so':'d'*64})
+            changed=dict(manifest,files={'_mojolearn_x.so':'d'*64})
             with self.assertRaisesRegex(ValueError,'outside pinned'):P.collect(changed)
 
     def test_no_opponent_smoke_only_omits_explicitly_skipped_opponents(self):
