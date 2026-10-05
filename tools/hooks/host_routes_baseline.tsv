@@ -46,6 +46,8 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for r, Y0 in enumerate(starts):
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	for step in range(n_steps):
+# why: apple-fast-purity2 left it: scikit-learn estimator tag classes (metadata for sklearn's checks); no data is touched
+py-sklearn	py-numpy	apple-fast-purity2	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_training_impl.py	0	for i, f in enumerate(vals):
 # why: LR schedule tables (_LrTable, _cos_pi_run, _cos_taylor, _decide_f32): scalar per-optimizer-step learning rates in exact rationals and bounded binary64, independent of data size; owed to a Mojo schedule routine (host column + device) with the same exact-rational decision

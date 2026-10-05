@@ -127,7 +127,7 @@ class ParamsMixin:
         so importing it here needs no dependency: `_estimator_type` says
         classifier or regressor, which picks stratified folds and the
         default scorer in scikit-learn's own `cross_val_score`."""
-        from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags  # glue: sklearn tag protocol, imported only when sklearn asks
+        from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
         kind = getattr(self, "_estimator_type", None)
         return Tags(estimator_type=kind,
                     target_tags=TargetTags(required=kind in ("classifier", "regressor")),
