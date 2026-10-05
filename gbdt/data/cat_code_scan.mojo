@@ -238,6 +238,22 @@ def cat_column_codes(
     return _scan_column(ctx, src, n_rows, feature, True, codes_out)
 
 
+def cat_column_codes_device(
+    ctx: DeviceContext,
+    src: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    feature: Int,
+    mut d_codes: DeviceBuffer[DType.uint32],
+) raises -> CatColumnScan:
+    """`cat_column_codes` with the codes left ONLY on the device, in the
+    caller's `d_codes` (`n_rows` words), nothing read back but the three
+    scan words (lane cpu4-gbdt, the tensor CTR fit)."""
+    var unused = List[UInt32]()
+    return _scan_column_into(
+        ctx, src, n_rows, feature, True, False, unused, d_codes
+    )
+
+
 def cat_column_codes_resident(
     ctx: DeviceContext,
     src: MutPointer[Float32, MutUntrackedOrigin],

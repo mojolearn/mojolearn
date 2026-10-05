@@ -183,12 +183,23 @@ def uniform_borders(
         if values[i] > max_value:
             max_value = values[i]
 
+    return uniform_borders_from_range(min_value, max_value, max_borders_count)
+
+
+def uniform_borders_from_range(
+    min_value: Float32, max_value: Float32, max_borders_count: Int
+) -> List[Float32]:
+    """`uniform_borders` after its min/max scan: the grid reads nothing of
+    the column but its two extremes, so a caller that reduced them on the
+    device (lane cpu4-gbdt, the two-level FeatureFreq fit) gets the same
+    borders from the same arithmetic."""
+    var out = List[Float32]()
     if min_value == max_value:
         return out^
 
     var lo = Float64(min_value)
     var hi = Float64(max_value)
-    for i in range(max_borders_count):
+    for i in range(max_borders_count):  # small-loop(max_borders_count: grid borders, the CTR description's count): border arithmetic, model parameters
         var current_value = lo + Float64(i + 1) * (hi - lo) / Float64(
             max_borders_count + 1
         )
