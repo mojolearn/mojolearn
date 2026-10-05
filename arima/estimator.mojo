@@ -346,6 +346,50 @@ def _ic_into(
     _ = d_ic^
 
 
+def arima_ic_from_loglike_ptr_host(
+    ll_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ic_address: Int,
+    batch_size: Int,
+    pen_aic: Float64,
+    pen_bic: Float64,
+) raises -> Int:
+    """AIC then BIC (`2 * batch_size` binary64 at `ic_address`) for a fit
+    the AutoARIMA order search produced (MOJOLEARN_ARIMA_FAST_SEARCH_REUSE,
+    _CSS_SEARCH, _STEPWISE: `ARIMA._adopt_fit` of the search's fit block,
+    lane arima-ics, 2026-10-05). The SAME device kernel the plain fit runs
+    (`arima_ic_kernel`, `_ic_into`) over the search's log-likelihood row
+    `ll_ptr`. The refusal codes are zero: the search's row already carries
+    the -inf of an infeasible series (`order_ll_kernel`'s rule, the kernel's
+    own), so the criterion is the plain fit's rule on the same value.
+    Returns `batch_size`."""
+    if batch_size <= 0:
+        return 0
+    if ic_address == 0:
+        raise Error("arima_ic_from_loglike: a null ic address")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var d_ll = _upload_f32(ctx, ll_ptr, batch_size)
+    var d_info0 = ctx.enqueue_create_buffer[DType.int32](batch_size)
+    var d_info1 = ctx.enqueue_create_buffer[DType.int32](batch_size)
+    ctx.enqueue_memset(d_info0, Int32(0))
+    ctx.enqueue_memset(d_info1, Int32(0))
+    var d_ic = ctx.enqueue_create_buffer[DType.uint64](2 * batch_size)
+    ctx.enqueue_function[arima_ic_kernel](
+        d_ic.unsafe_ptr(), d_ll.unsafe_ptr(), d_info0.unsafe_ptr(),
+        d_info1.unsafe_ptr(), Int32(batch_size),
+        bitcast[DType.uint64](pen_aic), bitcast[DType.uint64](pen_bic),
+        grid_dim=((batch_size + ARIMA_IC_TPB - 1) // ARIMA_IC_TPB, 1, 1),
+        block_dim=(ARIMA_IC_TPB, 1, 1),
+    )
+    var dst = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=ic_address)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=d_ic)
+    ctx.synchronize()
+    _ = d_ic^
+    _ = d_info1^
+    _ = d_info0^
+    _ = d_ll^
+    return batch_size
+
+
 # ---------------------------------------------------------------------------
 # fit
 # ---------------------------------------------------------------------------

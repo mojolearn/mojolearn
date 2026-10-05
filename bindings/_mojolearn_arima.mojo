@@ -90,6 +90,7 @@ from checks.vendor import COMPILED_VENDOR
 
 from arima.estimator import (
     arima_fit_ptr_host,
+    arima_ic_from_loglike_ptr_host,
     arima_forecast_ptr_host,
     arima_predict_ptr_host,
 )
@@ -201,7 +202,7 @@ def arima_order_search_fit_binding(y_addr: PythonObject, out_addr: PythonObject,
     var d = Int(py=config[2])
     var maxiter = Int(py=config[3])
     var orders = List[ARIMAOrder]()
-    for i in range(len(grid) // 3):
+    for i in range(len(grid) // 3):  # small-loop(grid: candidate p, q, k orders of the search plan): plan entries, not series data
         orders.append(ARIMAOrder(Int(py=grid[3*i]), d, Int(py=grid[3*i+1]),
                                  0, 0, 0, 0, Int(py=grid[3*i+2]), 0))
     var yp = f32_ptr(Int(py=y_addr))
@@ -387,6 +388,28 @@ def arima_vendor_binding() raises -> PythonObject:
     `python/mojolearn/_backend.py` refuses at import when this disagrees
     with the vendor directory the set was loaded from."""
     return PythonObject(String(COMPILED_VENDOR))
+
+
+def arima_ic_from_loglike_binding(
+    ll_addr: PythonObject, ic_addr: PythonObject, config: PythonObject,
+) raises -> PythonObject:
+    """lane arima-ics: AIC then BIC, `2 * batch` float64 at `ic_addr`, from
+    `batch` float32 log-likelihoods at `ll_addr`, by the plain fit's device
+    kernel (`arima/estimator.mojo::arima_ic_from_loglike_ptr_host`).
+    `config` is [batch, pen_aic, pen_bic], the penalties `arima_fit` takes
+    as params[14:16]. For `ARIMA._adopt_fit` of an AutoARIMA search's fit
+    block. Returns `batch`."""
+    if len(config) != 3:
+        raise Error("arima_ic_from_loglike: expected [batch, pen_aic, pen_bic]")
+    var bs = Int(py=config[0])
+    var pen_aic = Float64(py=config[1])
+    var pen_bic = Float64(py=config[2])
+    var lp = _f32_ptr(Int(py=ll_addr))
+    var ic_address = Int(py=ic_addr)
+    var written = 0
+    with GILReleased(Python()):
+        written = arima_ic_from_loglike_ptr_host(lp, ic_address, bs, pen_aic, pen_bic)
+    return PythonObject(written)
 
 
 def arima_fit_binding(
@@ -683,6 +706,7 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
         m.def_function[arima_vendor_binding]("arima_vendor")
         m.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
         m.def_function[arima_fit_binding]("arima_fit")
+        m.def_function[arima_ic_from_loglike_binding]("arima_ic_from_loglike")
         m.def_function[arima_order_batch_enabled_binding]("arima_order_batch_enabled")
         m.def_function[arima_order_search_binding]("arima_order_search")
         m.def_function[arima_order_caps_binding]("arima_order_caps")
