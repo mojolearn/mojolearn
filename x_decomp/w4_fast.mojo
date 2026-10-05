@@ -63,6 +63,29 @@ comptime LLE_FAST_DEV_LU = (
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_LLE_FAST_DEV_LU"]()
 )
+#: lane/apple-fast-s-shap (2026-10-04), READY-AB, opt-in
+#: (`-D MOJOLEARN_LLE_FAST_NULL_CANON`, FAST + Apple): a canonical answer when
+#: LLE's null space is wider than n_components. Why LLE_FAST_DEV_LU moved
+#: trustworthiness: taxi's kNN graph has several components (near-duplicate
+#: rows), so F^'s numerical null space N has more than nc dimensions and ANY
+#: nc of them is a correct answer (`_LLE_NULL_FLOOR`). Inside N the
+#: shift-invert operator's values are 1 / sigma^2 of float32 rounding noise,
+#: so WHICH nc directions the iteration settles on is decided by the LU's
+#: last-bit rounding: a rounding-level LU change (LU_FAST_MMA's sum order,
+#: the device LU's words, the trisolve order) re-draws the embedding. That
+#: is how FAST main itself went 0.826 (scalar LU, digest 68a3bf15) -> 0.866
+#: (MMA LU, 75f6322f) and DEV_LU 0.841 (45185107): three draws, not three
+#: precisions (w4q-v1 on non-degenerate 3,000-row fixtures: trust |A - B|
+#: 1.3e-5, angle 2.9e-5 rad). With this on, once the wanted Ritz values are
+#: under the floor, `_lle_smallest` takes ALL of N (every Ritz value under
+#: the floor, p widened when every column is null) and returns the nc
+#: directions of N along which the input data varies most (top left singular
+#: vectors of V_N^T X): a function of N and X only, the same on any LU.
+comptime LLE_FAST_NULL_CANON = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_LLE_FAST_NULL_CANON"]()
+)
 #: FAST Apple default, measured source e9d72edb5 (2026-10-04).
 #: M3 afc_ab_def, full board size, 1 run per arm: randomized-svd istella
 #: 517.3 -> 501.3 ms, taxi 200.8 -> 198.5 ms; relative_reconstruction_error
@@ -78,12 +101,14 @@ comptime RSVD_FAST_DIRECT_IN = (
 
 def w4_flags_py() raises -> PythonObject:
     """Which w4 candidates this build compiled in (bit 1 LLE_FAST_DEV_LU,
-    bit 2 RSVD_FAST_DIRECT_IN)."""
+    bit 2 RSVD_FAST_DIRECT_IN, bit 4 LLE_FAST_NULL_CANON)."""
     var f = 0
     comptime if LLE_FAST_DEV_LU:
         f |= 1
     comptime if RSVD_FAST_DIRECT_IN:
         f |= 2
+    comptime if LLE_FAST_NULL_CANON:
+        f |= 4
     return PythonObject(f)
 
 
