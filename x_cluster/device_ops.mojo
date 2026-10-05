@@ -1240,10 +1240,12 @@ def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32,
 
 
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only.
-# BGMM_FAST_MOMENTS_GEMM stays OPT-IN (`-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM`,
-# its M3 repeat pending); OPTICS_FAST_DEVICE_ORDER is the default (below).
+#: BGMM_FAST_MOMENTS_GEMM is the FAST + Apple default since 2026-10-05 (Andrew's call): M3 A/B rab21-bgmmgemm
+#: (afc_ab_def, full board size, 1 run per arm) bayesian-gmm istella 51968.5 -> 19600.4 ms (-62.3%), mean_log_likelihood
+#: 175.576 -> 175.322 (-0.14%, accepted); taxi 478.5 -> 479.2 ms, identical. `-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM_OFF` turns it off.
+# OPTICS_FAST_DEVICE_ORDER is the default (below).
 comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
-comptime BGMM_FAST_MOMENTS_GEMM = XC2_FAST and is_defined["MOJOLEARN_BGMM_FAST_MOMENTS_GEMM"]()
+comptime BGMM_FAST_MOMENTS_GEMM = XC2_FAST and not is_defined["MOJOLEARN_BGMM_FAST_MOMENTS_GEMM_OFF"]()
 comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and not is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF"]()
 
 
