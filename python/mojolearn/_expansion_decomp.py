@@ -2324,8 +2324,10 @@ class FactorAnalysis(_Base):
         mean = k.ew("add", mean, k.colmean(k.ew("sub", M, mean)))
         llconst = d * _LOG_2PI + nc
         # FAST on Apple (lane/apple-fast-fa, recovered 2026-10-04): taken only
-        # when the binding was built with -D MOJOLEARN_FA_GRAM_ONCE or
-        # MOJOLEARN_FA_ITER_DEVICE (x_decomp/fa_fast.mojo); an IDENTICAL
+        # when the binding reports MOJOLEARN_FA_GRAM_ONCE or
+        # MOJOLEARN_FA_ITER_DEVICE (x_decomp/fa_fast.mojo; ITER_DEVICE is the
+        # FAST + Apple default since 2026-10-04, rollback
+        # -D MOJOLEARN_FA_ITER_DEVICE_OFF); an IDENTICAL
         # binding registers no FA entry, so this never runs there
         fdefs = _fa_fast_defines(k)
         if (("MOJOLEARN_FA_GRAM_ONCE" in fdefs or "MOJOLEARN_FA_ITER_DEVICE" in fdefs)

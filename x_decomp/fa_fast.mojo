@@ -24,7 +24,9 @@ defines (docs/apple-fast/ab/fa.md):
   host copy, no QR of the n x d data. EM's per-iteration SVD of R D / sqrt(n)
   becomes the eigh of D G D / n (same spectrum: R^T R = G), the route main
   already takes when n < d. The Python loop stays Python.
-- MOJOLEARN_FA_ITER_DEVICE: `fa_em_py`, the whole EM loop as one call on the
+- MOJOLEARN_FA_ITER_DEVICE (the FAST + Apple default since 2026-10-04,
+  rab7-faiterfix; rollback MOJOLEARN_FA_ITER_DEVICE_OFF): `fa_em_py`, the
+  whole EM loop as one call on the
   resident G: per iteration `fa_scale_kernel` (D G D / n and sqrt(psi) +
   1e-12), the round-robin eigh (main's kernels and sweeps, no sign-flip and
   ordering launches: `fa_finish_kernel` orders and signs the nc columns it
@@ -109,6 +111,11 @@ comptime FA_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_a
 #: mean_log_likelihood 99.487 -> 92.898 (worse); taxi -14.82365 -> -14.82371
 #: (noise) at 358 -> 30.4 ms (ALL), 192 ms (ITER), 325 ms (GRAM).
 #: HOLD-quality: all stay off; a fix lane is working on the istella loss.
+#: OUTCOME 2 (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab6-faqfix, with the FA_GRAM_DF fix): FA_ALL istella 10300.9 -> 20530.8 ms
+#: (+99.3%, slower; mean_log_likelihood 99.487208 -> 99.487246), taxi 345.1 ->
+#: 34.2 ms. DROPPED-slower on istella: FA_ALL stays OFF. FA_ITER_DEVICE alone
+#: (with FA_GRAM_DF) is the FAST + Apple default, below.
 comptime FA_ALL = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_ALL"]()
 #: (FAST + Apple, default OFF) FactorAnalysis.fit forms the centred Gram G
 #: (d x d) in ONE tiled pass over the resident X (`fa_gram_tile_kernel` +
@@ -123,7 +130,7 @@ comptime FA_ALL = FA_FAST_APPLE and is_defined["MOJOLEARN_FA_ALL"]()
 #: held-out log-likelihood. Quality risk: G squares the condition number the
 #: QR route sees; the A/B's quality check decides.
 comptime FA_GRAM_ONCE = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_GRAM_ONCE"]() or FA_ALL)
-#: (FAST + Apple, default OFF; implies GRAM_ONCE's pass) the whole EM loop as
+#: (FAST + Apple, default ON since 2026-10-04; implies GRAM_ONCE's pass) the whole EM loop as
 #: ONE binding call on the resident G (`fa_em_py`): per iteration
 #: `fa_scale_kernel`, main's round-robin eigh, `fa_finish_kernel` (order, sign,
 #: W, psi update, the 2 d log terms) and one readback of 2 d + 4 floats; the
@@ -134,8 +141,17 @@ comptime FA_GRAM_ONCE = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_GRAM_ONCE"](
 #: `fa_finish_kernel` is main's cancellation-free form (see GRAM_ONCE).
 #: EIG_SMALL, LIVEBUF and LL_DEVICE act only inside this loop, so each of
 #: them turns it on (a lone define never builds a no-op arm).
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab7-faiterfix, with the double-float Gram FA_GRAM_DF of lane/apple-fast-
+#: fa-quality): factor-analysis istella 10299.65 -> 5636.55 ms (-45.3%),
+#: mean_log_likelihood 99.487208 -> 99.487138 (noise; the float32 Gram's
+#: 92.898 loss is gone); taxi 317.85 -> 157.98 ms (-50.3%), -14.823653 ->
+#: -14.823710 (noise). KEEP: the FAST + Apple default since then (FA_GRAM_DF
+#: with it, since FA_GRAM_DF follows FA_ITER_DEVICE); rollback
+#: -D MOJOLEARN_FA_ITER_DEVICE_OFF (the old -D name is harmless; the
+#: EIG_SMALL, LIVEBUF, LL_DEVICE and FA_ALL arms still turn it on).
 comptime FA_ITER_DEVICE = FA_FAST_APPLE and (
-    is_defined["MOJOLEARN_FA_ITER_DEVICE"]()
+    not is_defined["MOJOLEARN_FA_ITER_DEVICE_OFF"]()
     or is_defined["MOJOLEARN_FA_EIG_SMALL"]()
     or is_defined["MOJOLEARN_FA_LIVEBUF"]()
     or is_defined["MOJOLEARN_FA_LL_DEVICE"]()
@@ -164,7 +180,9 @@ comptime FA_LIVEBUF = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_LIVEBUF"]() or
 #: The test may stop one iteration away from the float64 host test when a
 #: step sits within double-float error of tol; the quality check decides.
 comptime FA_LL_DEVICE = FA_FAST_APPLE and (is_defined["MOJOLEARN_FA_LL_DEVICE"]() or FA_ALL)
-#: (FAST + Apple, default OFF) FactorAnalysis.transform as one launch over
+#: (FAST + Apple, default OFF; RECORD rab7-fatransform 2026-10-04: istella
+#: 10313.84 -> 10524.26 ms (+2.0%), taxi +0.3%, quality identical: stays off)
+#: FactorAnalysis.transform as one launch over
 #: rows (`fa_transform_kernel`): P = (W / psi)^T cov_z (d x nc) and the mean
 #: in threadgroup memory, one row per thread, in place of a sub, two GEMMs
 #: and their n x d / n x nc intermediates. Limits from the kernel: nc <=
