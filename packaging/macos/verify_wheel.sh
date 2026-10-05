@@ -86,6 +86,25 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     fi
     # Release profile by default, like build_release_wheel.sh (2026-09-22).
     if [ "${MOJOLEARN_PACKAGE_BYTE_LM:-1}" = 1 ]; then
+        # FAST is an Apple release-profile binding; verify its installed route
+        # separately so an IDENTICAL import cannot mask a missing FAST binary.
+        case " $MODES " in *' fast '*)
+            if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=fast \
+                    "$tmp/venv/bin/python" - <<'PYBYTEFAST'
+import pathlib, sys
+import mojolearn
+from mojolearn import _mojolearn_byte_lm as native
+package = pathlib.Path(mojolearn.__file__).resolve().parent
+assert package.is_relative_to(pathlib.Path(sys.prefix).resolve())
+assert pathlib.Path(native.__file__).resolve() == package / '_mojolearn_byte_lm.so'
+assert native.byte_lm_numeric_mode() == 0 and native.byte_lm_vendor() == 'metal'
+assert native.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
+print('Byte LM FAST native available; numerical training qualification separate')
+PYBYTEFAST
+            ); then :; else
+                echo "FAIL $py: installed FAST byte LM native availability"; okmode=0
+            fi ;;
+        esac
         # Availability plus bounded generalized/resident native execution.
         if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=identical \
                 "$tmp/venv/bin/python" - <<'PYBYTE'
@@ -95,7 +114,6 @@ from mojolearn import _mojolearn_byte_lm as native
 package = pathlib.Path(mojolearn.__file__).resolve().parent
 assert package.is_relative_to(pathlib.Path(sys.prefix).resolve())
 assert pathlib.Path(native.__file__).resolve() == package / 'identical/_mojolearn_byte_lm.so'
-assert not (package / '_mojolearn_byte_lm.so').exists()
 assert not (package / 'deterministic/_mojolearn_byte_lm.so').exists()
 assert native.byte_lm_numeric_mode() == 1 and native.byte_lm_vendor() == 'metal'
 assert native.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
@@ -145,7 +163,7 @@ from mojolearn import _verify
 _verify.load_differ()
 assert pathlib.Path(_verify.reference_dir()).is_dir(), 'installed wheel has no reference_cards/'
 print('PASS installed identity payload')
-print('Byte LM IDENTICAL-only native available; numerical training qualification separate')
+print('Byte LM IDENTICAL native available; numerical training qualification separate')
 PYBYTE
         ); then :; else
             echo "FAIL $py: installed byte LM native availability"; okmode=0
