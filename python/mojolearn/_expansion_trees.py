@@ -382,14 +382,19 @@ class DecisionTreeRegressor(RandomForestRegressor):
 
 def _trees_shape_native(est):
     """[depth, leaf count] of the (first) fitted tree from the x_trees binding
-    (lane fam2-forests, `x_trees_tree_shape`), or None when the binary does
-    not register it (-D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF)."""
+    (lane fam2-forests, `x_trees_tree_shape`). A binary without the export
+    (-D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF) refuses get_depth/get_n_leaves:
+    lane py-runtime-b deleted the Python node walk it fell back to."""
+    if not hasattr(est, "_offsets"):
+        raise RuntimeError("this estimator is not fitted yet")
     try:
         entry = getattr(_trees_x_bind(est), "x_trees_tree_shape", None)  # cpu-route: get_depth/get_n_leaves introspection of the fitted host model arrays, outside fit and predict
     except ImportError:    # a host facade refuses an absent export with ImportError
         entry = None
     if not callable(entry):
-        return None
+        raise NotImplementedError(
+            "mojolearn: get_depth/get_n_leaves need the x_trees binding's x_trees_tree_shape "
+            "(rebuild without -D MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF)")
     lo, hi = int(est._offsets[0]), int(est._offsets[1])
     left = as_i32_c(est._left_child, ndim=1, name="left")[0]
     res = empty((2,), "<i4")
@@ -398,35 +403,13 @@ def _trees_shape_native(est):
 
 
 def _trees_depth(est):
-    """Depth of the (first) fitted tree, from its flat nodes: children of a
-    node sit at left and left + 1, a leaf has left == -1."""
-    if not hasattr(est, "_offsets"):
-        raise RuntimeError("this estimator is not fitted yet")
-    shape = _trees_shape_native(est)
-    if shape is not None:
-        return int(shape[0])
-    offsets = est._offsets.tolist()
-    left = est._left_child.tolist()
-    lo, hi = offsets[0], offsets[1]
-    depth = [0] * (hi - lo)
-    best = 0
-    for i in range(hi - lo):
-        c = left[lo + i]
-        if c != -1:
-            depth[c] = depth[c + 1] = depth[i] + 1
-            best = max(best, depth[i] + 1)
-    return best
+    """Depth of the (first) fitted tree."""
+    return int(_trees_shape_native(est)[0])
 
 
 def _trees_n_leaves(est):
-    if not hasattr(est, "_offsets"):
-        raise RuntimeError("this estimator is not fitted yet")
-    shape = _trees_shape_native(est)
-    if shape is not None:
-        return int(shape[1])
-    offsets = est._offsets.tolist()
-    left = est._left_child.tolist()
-    return sum(1 for i in range(offsets[0], offsets[1]) if left[i] == -1)
+    """Leaf count of the (first) fitted tree."""
+    return int(_trees_shape_native(est)[1])
 
 
 # ------------------------------------------------------------- shared glue
@@ -2688,13 +2671,9 @@ class OneVsRestClassifier(_TreesWrapperBase):
         k = len(self.classes_)
         if k < 2:
             raise ValueError("y has fewer than 2 classes")
-        if _trees_native_glue(self) is not None:
-            # the 0/1 targets natively (x_trees_indicator_codes), the int32
-            # words the list comprehension below builds
-            targets = [codes] if k == 2 else [self._indicator(codes, j) for j in range(k)]  # glue: one native indicator per class (k classes)
-        else:
-            cl = codes.tolist()
-            targets = [codes] if k == 2 else [Array.from_list([1 if c == j else 0 for c in cl], "<i4") for j in range(k)]
+        # the 0/1 targets natively (x_trees_indicator_codes); lane py-runtime-b
+        # deleted the never-taken Python list route
+        targets = [codes] if k == 2 else [self._indicator(codes, j) for j in range(k)]  # glue: one native indicator per class (k classes)
         self.estimators_ = []
         for t in targets:  # glue: one member fit per estimator
             e = _trees_clone(self.estimator)
