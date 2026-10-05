@@ -37,7 +37,8 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT
      the Plain collapse to ONE permutation without them (`:1381-1434`);
      `permutation_count` (4 unset) and the estimation permutation (the last
      unless named); the target borders and the binarized target; one CTR
-     order per permutation, `ctrs_estimation_permutation(n, p).fill_order()`.
+     order per permutation, `ctr_estimation_order_host(n, p)` (the device's
+     keyed order, `gbdt/ctrs/ctr_order.mojo`).
   2. The column loop (`:1532-1676`): a raw column per non-categorical
      feature (one-hot when flagged), a dense-coded categorical column at or
      below `one_hot_max_size` becomes one one-hot column, one above it
@@ -105,6 +106,7 @@ from gbdt.ctrs.ctr_binarization import (
     ctr_border_type_code,
 )
 from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
+from gbdt.ctrs.ctr_order import ctr_estimation_order_host
 from gbdt.data.permutation import (
     DEFAULT_PERMUTATION_COUNT,
     ctrs_estimation_permutation,
@@ -238,20 +240,24 @@ def _ctr_grid_for(config: TCtrConfig) -> TBinarizationOptions:
 def _feature_freq_column(
     codes: List[UInt32], unique_values: Int, config: TCtrConfig
 ) -> List[Float32]:
-    """`TWeightedBinFreqCalcer.trivial(n).visit_equal_up_to_prior_freq_ctrs`
-    (`ctr_calcers.mojo:196-276`): the per-category Float32 sum of unit
-    weights, then `(sum + prior) / (totalWeight + priorObservations)` with
-    `totalWeight = Float32(n)`."""
+    """`TWeightedBinFreqCalcerGpu.visit_equal_up_to_prior_freq_ctrs`
+    (`ctr_calcers.mojo`): the per-category INTEGER row count, converted to
+    Float32 once, then `(count + prior) / (totalWeight + priorObservations)`
+    with `totalWeight = Float32(n)` (lane cpu4-gbdt: the device counts the
+    segment length; below 2^24 rows this is the old Float32 running sum's
+    word, above it the count stays exact)."""
     var n = len(codes)
-    var bin_weights = List[Float32](length=unique_values, fill=Float32(0.0))
+    var bin_counts = List[Int](length=unique_values, fill=0)
     for r in range(n):
-        bin_weights[Int(codes[r])] += Float32(1.0)
+        bin_counts[Int(codes[r])] += 1
     var total = Float32(n)
     var prior = config.numerator_shift()
     var prior_obs = config.denumerator_shift()
     var out = List[Float32](length=n, fill=Float32(0.0))
     for r in range(n):
-        out[r] = (bin_weights[Int(codes[r])] + prior) / (total + prior_obs)
+        out[r] = (Float32(bin_counts[Int(codes[r])]) + prior) / (
+            total + prior_obs
+        )
     return out^
 
 
@@ -397,7 +403,11 @@ def gbdt_ctr_host_fit(
         target_classes_count = len(target_borders) + 1
         binarized_target = build_binarized_target(y, target_borders)
         for p in range(perm_count):
-            ctr_orders.append(ctrs_estimation_permutation(n_rows, p).fill_order())
+            # the device's order (`gbdt/ctrs/ctr_order.mojo`, lane
+            # cpu4-gbdt): identity for permutation 0, the keyed Feistel
+            # bijection for the others, the same words as
+            # `launch_ctr_estimation_order` writes
+            ctr_orders.append(ctr_estimation_order_host(n_rows, p))
 
     # ---- the column loop (`:1532-1676`) ----
     var columns = List[List[Float32]]()

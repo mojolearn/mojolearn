@@ -602,6 +602,45 @@ struct TCtrBinBuilderGpu(Movable):
         enqueue_fill(ctx, self.bins, UInt32(0))
         enqueue_fill(ctx, self.current_bins, UInt32(0))
 
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        *,
+        device_order: DeviceBuffer[DType.uint32],
+        n_rows: Int,
+    ) raises:
+        """`SetIndices` over an order ALREADY ON THE DEVICE (lane cpu4-gbdt):
+        `train` writes each permutation's CTR estimation order once per fit
+        with `launch_ctr_estimation_order` (`gbdt/ctrs/kernel/ctr_order.mojo`)
+        and every categorical feature's builder copies it device to device.
+        No host order, no upload, no readback: the generator is a bijection
+        on `[0, n_rows)` by construction, so the order constructor's flag-bit
+        check (an index below 2^30 with the flag bits clear) cannot fail and
+        is not run. Same buffers as the other constructors."""
+        var n = n_rows
+        if n <= 0:
+            raise Error("TCtrBinBuilderGpu: empty order")
+        self.size = n
+        self.learn_size = n
+        self.indices = ctx.enqueue_create_buffer[DType.uint32](n)
+        self.bins = ctx.enqueue_create_buffer[DType.uint32](n)
+        self.current_bins = ctx.enqueue_create_buffer[DType.uint32](n)
+        self.decompressed_temp_bins = ctx.enqueue_create_buffer[
+            DType.uint32
+        ](n)
+        self.tmp = ctx.enqueue_create_buffer[DType.uint32](n)
+        self.scan_block_sums = ctx.enqueue_create_buffer[DType.uint32](
+            (n + SCAN_BLOCK - 1) // SCAN_BLOCK
+        )
+        # 512 is `REORDER_BLOCK`, as in the order constructor
+        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](n)
+        self.sort_block_sums = ctx.enqueue_create_buffer[DType.int32](
+            (n + 512 - 1) // 512
+        )
+        ctx.enqueue_copy(dst_buf=self.indices, src_buf=device_order)
+        enqueue_fill(ctx, self.bins, UInt32(0))
+        enqueue_fill(ctx, self.current_bins, UInt32(0))
+
     def compute_current_bins(mut self, ctx: DeviceContext) raises:
         """Their static `ComputeCurrentBins` (`:134-146`), launch for launch.
 
@@ -724,6 +763,51 @@ struct TCtrBinBuilderGpu(Movable):
             self.sort_block_sums,
         )
 
+        launch_update_borders_mask(
+            ctx, self.bins, self.current_bins, self.indices, self.size
+        )
+
+    def add_cat_feature_bins_device(
+        mut self,
+        ctx: DeviceContext,
+        cat_bins: DeviceBuffer[DType.uint32],
+        unique_values: Int,
+    ) raises:
+        """`add_cat_feature_bins` over codes ALREADY ON THE DEVICE (lane
+        cpu4-gbdt): `train` keeps each categorical column's codes resident
+        from `cat_column_codes_resident`, which validated them (every code
+        dense, below `unique_values`) on the device, so the code range check
+        and its one-word readback are not repeated per permutation. The
+        codes are copied device to device into `DecompressedTempBins`
+        (which the radix sort then reuses as scratch, as theirs does); every
+        launch after that is `add_cat_feature_bins`' own, in its order."""
+        if unique_values <= 1:
+            raise Error("Error: useless catFeature found")
+        # `cat_bins` holds exactly `self.size` codes (the caller allocates
+        # it at `n_rows`; `cat_column_codes_resident` writes all of them)
+        self.compute_current_bins(ctx)
+        ctx.enqueue_copy(dst_buf=self.decompressed_temp_bins, src_buf=cat_bins)
+        launch_gather_with_mask_u32(
+            ctx,
+            self.bins,
+            self.decompressed_temp_bins,
+            self.indices,
+            self.size,
+            CTR_INDEX_MASK,
+        )
+        var new_bits = int_log2(unique_values)
+        launch_radix_sort_bins(
+            ctx,
+            self.size,
+            0,
+            new_bits,
+            self.bins,
+            self.indices,
+            self.tmp,
+            self.decompressed_temp_bins,
+            self.sort_offsets,
+            self.sort_block_sums,
+        )
         launch_update_borders_mask(
             ctx, self.bins, self.current_bins, self.indices, self.size
         )

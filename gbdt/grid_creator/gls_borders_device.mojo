@@ -52,8 +52,16 @@ def device_float_borders(
     nan_mode_option: Int,
     sample_key: UInt64,
     border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
+    dev_cols: List[DeviceBuffer[DType.float32]] = List[
+        DeviceBuffer[DType.float32]
+    ](),
 ) raises -> Tuple[List[List[Float32]], List[Int]]:
-    var n_float = len(cols)
+    """`dev_cols` (lane cpu4-gbdt): when non-empty, the columns are already
+    on the device (each `n_rows` long) and `cols` is ignored; each chunk
+    copies them device to device instead of uploading from host memory.
+    Same kernels after the copy, so the same borders."""
+    var resident = len(dev_cols) > 0
+    var n_float = len(dev_cols) if resident else len(cols)
     var borders = List[List[Float32]]()
     var modes = List[Int]()
     if n_float == 0 or n_rows <= 0:
@@ -144,12 +152,15 @@ def device_float_borders(
             var view = d_cols.create_sub_buffer[DType.float32](
                 c * n_rows, n_rows
             )
-            ctx.enqueue_copy(
-                dst_buf=view,
-                src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](
-                    cols[base + c]
-                ),
-            )
+            if resident:
+                ctx.enqueue_copy(dst_buf=view, src_buf=dev_cols[base + c])
+            else:
+                ctx.enqueue_copy(
+                    dst_buf=view,
+                    src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](
+                        cols[base + c]
+                    ),
+                )
         enqueue_fill(ctx, d_nan_s, Int32(0))
         enqueue_fill(ctx, d_nan_c, Int32(0))
         var key_span = n_rows if sampled else sn
