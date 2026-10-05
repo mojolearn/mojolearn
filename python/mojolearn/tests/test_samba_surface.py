@@ -132,10 +132,12 @@ def arm_provenance(rep):
 
 
 def arm_schedule(rep):
+    from fractions import Fraction
+    from mojolearn.tests import _lr_reference
     arm = "SCHEDULE"
     c = T.ConstantLR(1e-3, warmup_steps=4)
     rep.check(arm, c.lr_at(4) == float(np.float32(1e-3)), "constant reaches peak at warmup end")
-    rep.check(arm, c.lr_at(1) == T._f32_round(T.Fraction(c.peak_lr) / 4),
+    rep.check(arm, c.lr_at(1) == _lr_reference._f32_round(Fraction(c.peak_lr) / 4),
               "constant warmup step 1 is peak/4 (exact rational, rounded once)")
     rep.check(arm, c.lr_at(100) == c.lr_at(4), "constant after warmup is flat")
     rep.raises(arm, ValueError, "ONE-BASED", "step 0 is refused by name", c.lr_at, 0)
@@ -143,7 +145,7 @@ def arm_schedule(rep):
     rep.check(arm, lin.lr_at(10) == float(np.float32(1e-4)) and lin.lr_at(11) == lin.lr_at(10),
               "linear reaches min_lr at total_steps and holds")
     cos = T.WarmupCosineLR(1e-3, 2, 10, 1e-4)
-    mid_exact = T._f32_round(T.Fraction(cos.peak_lr) / 2 + T.Fraction(cos.min_lr) / 2)
+    mid_exact = _lr_reference._f32_round(Fraction(cos.peak_lr) / 2 + Fraction(cos.min_lr) / 2)
     rep.check(arm, cos.lr_at(6) == mid_exact, "cosine at p = 1/2 rounds the exact midpoint")
     # Float64 sanity against math.cos, a REPORT: the exact value differs from
     # the libm spelling by at most one float32 ulp, never asserted bitwise.

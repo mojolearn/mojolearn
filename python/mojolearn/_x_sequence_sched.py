@@ -36,35 +36,14 @@ from . import _portable_math as _math
 import os as _os
 from fractions import Fraction
 
-from ._training_impl import (_F64_EPS, _LrTable, _PI_HI, _PI_LO, _cos_pi_interval, _decide_f32,
-                             _f32_round, _lr_buffers, _lr_native)
+import array as _array
+
+from ._training_impl import _F64_EPS, _LrTable, _lr_buffers, _lr_native, _lr_status
 
 _F32_MIN_NORMAL_EXP = -126
 _F32_MAX_EXP = 127
-#: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
-#: default OFF, read once at import; the same bits by construction (an
-#: enclosure decides only when both its ends round alike, else the exact
-#: fallback decides):
-#:  MOJOLEARN_SCHED_FAST_INLINE=1: ExponentialLR's forward walk (t = the
-#:    last t + 1, base_lr > 0, gamma > 0) in one function body: one
-#:    enclosure product, both ends rounded inline, one ldexp; every other
-#:    call takes the path below.
-#:  MOJOLEARN_SCHED_FAST_P64=1: the enclosures 64 bits wide instead of 128
-#:    (narrower ints; a wider interval only sends more steps to the
-#:    fallback).
-_SCHED_INLINE = _os.environ.get("MOJOLEARN_SCHED_FAST_INLINE", "0") == "1"
-#: MOJOLEARN_SCHED_FAST_TABLE (a -D of the FAST + Apple sequence binding,
-#: sequence/sched_table.mojo; FAST + Apple default, rollback _OFF): ExponentialLR fills
-#: blocks of _TAB_BLOCK values natively (the contract's bits, an undecided
-#: entry decided here on the exact path) and lr_at is one list index.
+#: steps of one StepLR / ExponentialLR block filled natively per lr_at miss
 _TAB_BLOCK = 8192
-#: working width of the fast enclosures, in bits
-_P = 64 if _os.environ.get("MOJOLEARN_SCHED_FAST_P64", "0") == "1" else 128
-#: fixed-point fraction bits of OneCycleLR's cosine
-_F = 160
-_PI_LO_FX = (_PI_LO.numerator << _F) // _PI_LO.denominator            # <= pi 2^F
-_PI_HI_FX = -((-(_PI_HI.numerator << _F)) // _PI_HI.denominator)      # >= pi 2^F
-_EXACT_COS_POINTS = (Fraction(1, 3), Fraction(1, 2), Fraction(2, 3))
 
 
 def _q(x, name):
@@ -74,137 +53,7 @@ def _q(x, name):
     return Fraction(x)
 
 
-# ------------------------------------------------------------ fixed-width enclosures
-def _dy_f32(M, E):
-    """The float32 nearest to M 2^E (M > 0 an int), ties to even, flushed to
-    0.0 below the smallest normal: `_training_impl._f32_round`'s rounding of
-    that exact dyadic. None where `_f32_round` would raise (overflow)."""
-    sh = M.bit_length() - 24
-    if sh > 0:
-        m = M >> sh
-        rem = M & ((1 << sh) - 1)
-        half = 1 << (sh - 1)
-        if rem > half or (rem == half and (m & 1) == 1):
-            m += 1
-    else:
-        m = M << (-sh)
-    e = E + sh
-    if m == (1 << 24):
-        m = 1 << 23
-        e += 1
-    if e + 23 < _F32_MIN_NORMAL_EXP:
-        return 0.0
-    if e + 23 > _F32_MAX_EXP:
-        return None
-    return _math.ldexp(float(m), e)
-
-
-def _iv_f32(lo, hi, E):
-    """The float32 every value of [lo, hi] 2^E rounds to (lo <= hi ints of one
-    sign, possibly negative), or None when the ends round apart or the
-    interval touches zero."""
-    if lo > 0:
-        a, b = _dy_f32(lo, E), _dy_f32(hi, E)
-        sign = 1.0
-    elif hi < 0:
-        a, b = _dy_f32(-hi, E), _dy_f32(-lo, E)
-        sign = -1.0
-    else:
-        return None
-    if a is None or a != b:
-        return None
-    return sign * a if a != 0.0 else 0.0
-
-
-def _trim(lo, hi, X, P):
-    """[lo, hi] 2^X narrowed to P bits: lo rounded down, hi up."""
-    s = hi.bit_length() - P
-    if s > 0:
-        lo >>= s
-        hi = -((-hi) >> s)
-        X += s
-    return lo, hi, X
-
-
-def _mag(x):
-    """(M, E) with |x| = M 2^E exactly, x a finite nonzero float."""
-    m, e = _math.frexp(abs(x))
-    return int(m * 9007199254740992.0), e - 53
-
-
-def _pow_iv(M, e, P):
-    """[lo, hi] 2^X enclosing M^e (M > 0, e >= 0), P-bit ends."""
-    lo = hi = 1
-    X = 0
-    blo = bhi = M
-    bX = 0
-    while True:
-        if e & 1:
-            lo, hi, X = _trim(lo * blo, hi * bhi, X + bX, P)
-        e >>= 1
-        if not e:
-            return lo, hi, X
-        blo, bhi, bX = _trim(blo * blo, bhi * bhi, 2 * bX, P)
-
-
-class _GammaPow:
-    """gamma^e enclosures, carried from the last exponent asked for (one
-    product per step on a forward walk; square-and-multiply otherwise)."""
-
-    def __init__(self, gamma):
-        self.M, self.Eg = _mag(gamma)
-        self.e, self.lo, self.hi, self.X = 0, 1, 1, 0
-
-    def at(self, e):
-        d = e - self.e
-        if 0 <= d <= 64:
-            lo, hi, X, M = self.lo, self.hi, self.X, self.M
-            for _ in range(d):  # glue: one exponent step product, d at most 64, for one scalar lr
-                lo, hi, X = _trim(lo * M, hi * M, X, _P)
-        else:
-            lo, hi, X = _pow_iv(self.M, e, _P)
-        self.e, self.lo, self.hi, self.X = e, lo, hi, X
-        return lo, hi, X + self.Eg * e
-
-
-def _fx(q, F):
-    """floor and ceil of the rational q times 2^F."""
-    n, d = q.numerator << F, q.denominator
-    return n // d, -((-n) // d)
-
-
-def _cos_fx(x):
-    """[lo, hi] 2^-_F enclosing cos(x 2^-_F), x >= 0 an int: the Taylor
-    series with directed rounding and the Lagrange remainder x^(2k)/(2k)!."""
-    F = _F
-    xx = x * x
-    x2lo, x2hi = xx >> F, -((-xx) >> F)
-    lo = hi = tlo = thi = 1 << F
-    k = 0
-    while True:
-        k += 1
-        dd = ((2 * k - 1) * (2 * k)) << F
-        tlo = (tlo * x2lo) // dd
-        thi = -((-(thi * x2hi)) // dd)
-        if thi <= 16:
-            return lo - thi, hi + thi
-        if k & 1:
-            lo, hi = lo - thi, hi - tlo
-        else:
-            lo, hi = lo + tlo, hi + thi
-
-
 # ------------------------------------------------------------------ schedules
-def _sched_block_fn():
-    """The FAST sequence binding's `sched_exp_block` when it was compiled in
-    (the FAST + Apple default; not under -D MOJOLEARN_SCHED_FAST_TABLE_OFF), else None."""
-    try:
-        from . import _backend
-        return getattr(_backend.binding("_mojolearn_x_sequence"), "sched_exp_block", None)  # cpu-route: a learning-rate schedule is one host scalar per optimizer step (CPU-ONLY ROUTE, sequence/sched_table.mojo)
-    except Exception:  # noqa: BLE001  (no GPU binding: the Python path)
-        return None
-
-
 class _Sched:
     def _t(self, t):
         t = int(t)
@@ -217,48 +66,53 @@ class _Sched:
         return struct.unpack("<I", struct.pack("<f", self.lr_at(t)))[0]
 
     def lrs(self, n):
-        """lr_at(1) .. lr_at(n) as a list: a table schedule's blocks from
-        Mojo (`_LrTable.lr_values`), else one `lr_at` per step."""
-        table = getattr(self, "lr_values", None)
-        got = table(n) if table is not None else None
-        if got is not None:
-            return got.tolist()
-        return [self.lr_at(t) for t in range(1, int(n) + 1)]
+        """lr_at(1) .. lr_at(n) as a list, from the schedule's native blocks
+        (`lr_values`: every schedule here has one)."""
+        return self.lr_values(n).tolist()
 
 
 class _PowSched(_Sched):
-    """base_lr gamma^E(t), E(t) the schedule's exponent."""
+    """base_lr gamma^E(t), E(t) the schedule's exponent: the float32 nearest
+    the exact value, in Mojo (`lr_pow_values`, sequence/lr_exact.mojo: a
+    P-bit enclosure widened until both ends round alike, then the exact
+    power; lane py-runtime round 3, it was Python integer enclosures and a
+    Fraction power), served from blocks of _TAB_BLOCK steps."""
+
+    _step = 1
 
     def _init_pow(self):
-        self._pow = None
-        self._last = (None, None)
-        b, g = self.base_lr, self.gamma
-        self._walk = False
-        if _math.isfinite(b) and _math.isfinite(g) and b != 0.0 and g != 0.0:
-            self._pow = _GammaPow(g)
-            self._Mb, self._Eb = _mag(b)
-            self._walk = _SCHED_INLINE and b > 0.0 and g > 0.0
+        self._tab, self._tab0 = [], 1
 
-    def _pow_value(self, e):
-        if self._last[0] == e:
-            return self._last[1]
-        v = None
-        if self._pow is not None and e > 0:
-            neg = (self.base_lr < 0) != (self.gamma < 0 and (e & 1) == 1)
-            lo, hi, X = self._pow.at(e)
-            if neg:
-                lo, hi = -hi, -lo
-            v = _iv_f32(self._Mb * lo, self._Mb * hi, self._Eb + X)
-            if v is None:
-                lo, hi, X = _pow_iv(self._pow.M, e, 4 * _P)
-                X += self._pow.Eg * e
-                if neg:
-                    lo, hi = -hi, -lo
-                v = _iv_f32(self._Mb * lo, self._Mb * hi, self._Eb + X)
-        if v is None:
-            v = _f32_round(_q(self.base_lr, "base_lr") * _q(self.gamma, "gamma") ** e)
-        self._last = (e, v)
-        return v
+    def _block(self, t0, n):
+        """(float32 values of steps t0 .. t0 + n - 1, index of the first
+        overflowing step or None)."""
+        _q(self.base_lr, "base_lr")
+        _q(self.gamma, "gamma")
+        out = _array.array("f", bytes(4 * n))
+        st, at = _lr_native("lr_pow_values")([self.base_lr, self.gamma], [t0 - 1, n, self._step],
+                                             out.buffer_info()[0])
+        st, at = int(st), int(at)
+        if st:
+            del out[at:]
+            return out, at
+        return out, None
+
+    def lr_at(self, t):
+        t = self._t(t) + 1                 # validates the ONE-BASED step
+        i = t - self._tab0
+        if not 0 <= i < len(self._tab):
+            out, _ = self._block(t, _TAB_BLOCK)
+            self._tab, self._tab0, i = out.tolist(), t, 0
+            if not self._tab:
+                _lr_status(1)              # this step's value overflows float32
+        return self._tab[i]
+
+    def lr_values(self, n):
+        """lr_at(1) .. lr_at(n) as an array('f'), natively."""
+        out, bad = self._block(1, int(n))
+        if bad is not None:
+            _lr_status(1)
+        return out
 
 
 class StepLR(_PowSched):
@@ -268,14 +122,8 @@ class StepLR(_PowSched):
         if int(step_size) < 1:
             raise ValueError("StepLR: step_size must be >= 1")
         self.base_lr, self.step_size, self.gamma = float(base_lr), int(step_size), float(gamma)
+        self._step = self.step_size
         self._init_pow()
-
-    def lr_at(self, t):
-        return self._pow_value(self._t(t) // self.step_size)
-
-    def _exact_lr_at(self, t):
-        e = self._t(t)
-        return _f32_round(_q(self.base_lr, "base_lr") * _q(self.gamma, "gamma") ** (e // self.step_size))
 
 
 class ExponentialLR(_PowSched):
@@ -284,99 +132,6 @@ class ExponentialLR(_PowSched):
     def __init__(self, base_lr, gamma):
         self.base_lr, self.gamma = float(base_lr), float(gamma)
         self._init_pow()
-        self._tab, self._tab0, self._tab_fn = (), 1, None
-        b, g = self.base_lr, self.gamma
-        if _math.isfinite(b) and _math.isfinite(g) and b > 0.0 and g > 0.0:
-            self._tab_fn = _sched_block_fn()
-
-    def lr_at(self, t):
-        tab = self._tab
-        if tab:
-            i = t - self._tab0
-            if type(i) is int and 0 <= i < len(tab):
-                return tab[i]
-        if self._tab_fn is not None and type(t) is int and t >= 1:
-            return self._tab_fill(t)
-        if self._walk:
-            e = int(t) - 1
-            pw = self._pow
-            if e == pw.e + 1 and e > 0:
-                return self._walk_value(e, pw)
-        return self._pow_value(self._t(t))
-
-    def _tab_fill(self, t):
-        """MOJOLEARN_SCHED_FAST_TABLE: lr_at(t .. t + _TAB_BLOCK - 1) from the
-        native block; a NaN (undecided) entry is `_pow_value`'s exact answer."""
-        from array import array
-        buf = array("d", bytes(8 * _TAB_BLOCK))
-        addr = buf.buffer_info()[0]
-        undecided = int(self._tab_fn([addr], [self.base_lr, self.gamma], [t - 1, _TAB_BLOCK]))
-        tab = buf.tolist()
-        if undecided:
-            for i, v in enumerate(tab):  # glue: the rare undecided entries go to the exact path
-                if v != v:
-                    tab[i] = self._pow_value(t - 1 + i)
-        self._tab, self._tab0 = tab, t
-        return tab[0]
-
-    def _walk_value(self, e, pw):
-        """MOJOLEARN_SCHED_FAST_INLINE: `_pow_value(e)` for e = the carried
-        exponent + 1, base_lr and gamma > 0: `_GammaPow.at`'s one product and
-        `_iv_f32` / `_dy_f32` of both ends written out; an undecided or
-        out-of-range end hands over to `_pow_value` (whose `at(e)` is then a
-        no-op on the state carried here)."""
-        M = pw.M
-        lo = pw.lo * M
-        hi = pw.hi * M
-        X = pw.X
-        sh = hi.bit_length() - _P
-        if sh > 0:
-            lo >>= sh
-            hi = -((-hi) >> sh)
-            X += sh
-        pw.e, pw.lo, pw.hi, pw.X = e, lo, hi, X
-        E = self._Eb + X + pw.Eg * e
-        a = self._Mb * lo
-        b = self._Mb * hi
-        if a <= 0:
-            return self._pow_value(e)
-        # the low end, rounded to 24 bits, ties to even
-        s = a.bit_length() - 24
-        if s > 0:
-            ma = a >> s
-            r = a & ((1 << s) - 1)
-            h = 1 << (s - 1)
-            if r > h or (r == h and (ma & 1) == 1):
-                ma += 1
-        else:
-            ma = a << (-s)
-        ea = E + s
-        if ma == 16777216:
-            ma = 8388608
-            ea += 1
-        # the high end
-        s = b.bit_length() - 24
-        if s > 0:
-            mb = b >> s
-            r = b & ((1 << s) - 1)
-            h = 1 << (s - 1)
-            if r > h or (r == h and (mb & 1) == 1):
-                mb += 1
-        else:
-            mb = b << (-s)
-        eb = E + s
-        if mb == 16777216:
-            mb = 8388608
-            eb += 1
-        if ma != mb or ea != eb or ea + 23 < _F32_MIN_NORMAL_EXP or ea + 23 > _F32_MAX_EXP:
-            # apart, flushed or overflowing: the general path decides
-            return self._pow_value(e)
-        v = _math.ldexp(float(ma), ea)
-        self._last = (e, v)
-        return v
-
-    def _exact_lr_at(self, t):
-        return _f32_round(_q(self.base_lr, "base_lr") * _q(self.gamma, "gamma") ** self._t(t))
 
 
 class OneCycleLR(_LrTable, _Sched):
@@ -406,7 +161,9 @@ class OneCycleLR(_LrTable, _Sched):
             self._phases = [(p1, init, mx), (p2, mx, init), (Fraction(self.total_steps - 1), init, low)]
         else:
             self._phases = [(p1, init, mx), (Fraction(self.total_steps - 1), mx, low)]
-        self._fixed = {}
+        # the phase ends as torch builds them in float64, for the exact route
+        self._e1f = float(self.pct_start * self.total_steps) - 1
+        self._e2f = float(2 * self.pct_start * self.total_steps) - 2
         # lane gap-train-utils: the block table of `_training_impl._LrTable`
         # over steps 1 .. total_steps + 1 (no constant tail; beyond it the
         # exact route refuses, as torch does)
@@ -447,109 +204,20 @@ class OneCycleLR(_LrTable, _Sched):
              float(start_f), float(end_f), float(af), float(bf)],
             vs.buffer_info()[0], es.buffer_info()[0])
 
-    def _phase_fx(self, i, a, b):
-        """Per phase fixed-point constants: F2 and the floor/ceil of b and of
-        (a - b) / 2 (cos) or b - a (linear) times 2^F2; None when a or b is 0
-        (the exact path decides those)."""
-        if i not in self._fixed:
-            fx = None
-            if a != 0 and b != 0:
-                m = min(abs(a), abs(b))
-                F2 = 160 - (m.numerator.bit_length() - m.denominator.bit_length())
-                if F2 > 0:
-                    d = (a - b) / 2 if self.anneal_strategy == "cos" else b - a
-                    fx = (F2, _fx(b, F2), _fx(a, F2), _fx(d, F2))
-            self._fixed[i] = fx
-        return self._fixed[i]
+    def _exact_params(self):
+        return ([1 if self.anneal_strategy == "linear" else 0, 1 if self.three_phase else 0, self.total_steps],
+                [self.max_lr, self.div_factor, self.final_div_factor, self._e1f, self._e2f],
+                "lr_onecycle_exact_block")
 
     def _lr_at_slow(self, t):
+        """The exact route of one step in Mojo big rationals
+        (`lr_onecycle_exact`, sequence/lr_exact.mojo; lane py-runtime round
+        3, it was Fraction arithmetic and a fixed-point cosine here)."""
         step = self._t(t)
         if step > self.total_steps:
             raise ValueError(f"OneCycleLR: step {t} is beyond total_steps {self.total_steps} + 1 (torch refuses it too)")
-        start = Fraction(0)
-        for i, (end, a, b) in enumerate(self._phases):  # glue: the at most three OneCycle phases
-            if step <= end or i == len(self._phases) - 1:
-                if end == start:
-                    return _f32_round(b)
-                pct = (Fraction(step) - start) / (end - start)
-                fx = self._phase_fx(i, a, b)
-                if self.anneal_strategy == "linear":
-                    if fx is not None and pct >= 0:
-                        F2, _, (alo, ahi), (dlo, dhi) = fx
-                        pn, pd = pct.numerator, pct.denominator
-                        v = _iv_f32(alo + (dlo * pn) // pd, ahi - ((-(dhi * pn)) // pd), -F2)
-                        if v is not None:
-                            return v
-                    return _f32_round((b - a) * pct + a)
-                if pct <= 0:
-                    return _f32_round(a)
-                if pct == 1:
-                    return _f32_round(b)
-                if pct > 1:
-                    # torch's one extra step past the last phase end: cos is
-                    # even about pi, cos(pi p) = cos(pi (2 - p))
-                    pct = 2 - pct
-                if fx is not None and pct < 1 and pct not in _EXACT_COS_POINTS:
-                    v = self._cos_fast(fx, pct)
-                    if v is not None:
-                        return v
+        ip, fp, _ = self._exact_params()
+        st, v = _lr_native("lr_onecycle_exact")(ip + [step], fp)
+        _lr_status(st)
+        return float(v)
 
-                def interval(terms, a=a, b=b, pct=pct):
-                    c_lo, c_hi = _cos_pi_interval(pct, terms)
-                    x = b + (a - b) / 2 * (c_lo + 1)
-                    y = b + (a - b) / 2 * (c_hi + 1)
-                    return (x, y) if x <= y else (y, x)
-                return _decide_f32(interval)
-            start = end
-
-    @staticmethod
-    def _cos_fast(fx, p):
-        """b + (a - b)/2 (cos(pi p) + 1) for p in (0, 1), enclosed in fixed
-        point; None when the ends round apart."""
-        F2, (blo, bhi), _, (dlo, dhi) = fx
-        flip = p > Fraction(1, 2)
-        if flip:
-            p = 1 - p
-        pn, pd = p.numerator, p.denominator
-        x_lo = (_PI_LO_FX * pn) // pd
-        x_hi = -((-(_PI_HI_FX * pn)) // pd)
-        c_lo, c_hi = _cos_fx(x_lo)            # encloses cos(x_lo)
-        c_lo -= x_hi - x_lo                   # |cos'| <= 1 over [x_lo, x_hi]
-        if flip:
-            c_lo, c_hi = -c_hi, -c_lo
-        one = 1 << _F
-        c_lo += one
-        c_hi += one
-        prods = (dlo * c_lo, dlo * c_hi, dhi * c_lo, dhi * c_hi)
-        lo = blo + (min(prods) >> _F)  # glue: the four interval end products
-        hi = bhi - ((-max(prods)) >> _F)  # glue: the four interval end products
-        return _iv_f32(lo, hi, -F2)
-
-    def _exact_lr_at(self, t):
-        """The previous, all-Fraction evaluation: the reference the fast path
-        is checked against."""
-        step = self._t(t)
-        if step > self.total_steps:
-            raise ValueError(f"OneCycleLR: step {t} is beyond total_steps {self.total_steps} + 1 (torch refuses it too)")
-        start = Fraction(0)
-        for i, (end, a, b) in enumerate(self._phases):  # glue: the at most three OneCycle phases
-            if step <= end or i == len(self._phases) - 1:
-                if end == start:
-                    return _f32_round(b)
-                pct = (Fraction(step) - start) / (end - start)
-                if self.anneal_strategy == "linear":
-                    return _f32_round((b - a) * pct + a)
-                if pct <= 0:
-                    return _f32_round(a)
-                if pct == 1:
-                    return _f32_round(b)
-                if pct > 1:
-                    pct = 2 - pct
-
-                def interval(terms, a=a, b=b, pct=pct):
-                    c_lo, c_hi = _cos_pi_interval(pct, terms)
-                    x = b + (a - b) / 2 * (c_lo + 1)
-                    y = b + (a - b) / 2 * (c_hi + 1)
-                    return (x, y) if x <= y else (y, x)
-                return _decide_f32(interval)
-            start = end

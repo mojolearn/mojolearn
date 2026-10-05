@@ -159,7 +159,11 @@ from bindings.hotpath_helpers import (
     strat_group_assign_i32_binding,
 )
 from bindings.normal_dist_helpers import truncnorm_draws_binding
-from bindings.lr_table_helpers import lr_decide_binding, lr_onecycle_fill_binding, lr_schedule_values_binding
+from bindings.lr_table_helpers import (
+    lr_decide_binding, lr_onecycle_fill_binding, lr_schedule_values_binding, lr_schedule_exact_binding,
+    lr_onecycle_exact_binding, lr_pow_values_binding, lr_schedule_exact_block_binding,
+    lr_onecycle_exact_block_binding,
+)
 from bindings.array_helpers import (
     strided_copy_bytes_binding,
     check_lengths_i64_binding,
@@ -1548,6 +1552,11 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[lr_schedule_values_binding]("lr_schedule_values")
         module.def_function[lr_onecycle_fill_binding]("lr_onecycle_fill")
         module.def_function[lr_decide_binding]("lr_decide")
+        module.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
+        module.def_function[lr_onecycle_exact_binding]("lr_onecycle_exact")
+        module.def_function[lr_pow_values_binding]("lr_pow_values")
+        module.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
+        module.def_function[lr_onecycle_exact_block_binding]("lr_onecycle_exact_block")
         module.def_function[class_ratio_f64_host_binding]("class_ratio_f64")
         module.def_function[shard_topk_merge_f32_host_binding]("shard_topk_merge_f32")
         return module.finalize()

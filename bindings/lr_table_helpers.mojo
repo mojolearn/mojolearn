@@ -27,6 +27,8 @@ from std.math import isfinite
 from std.python import PythonObject
 
 from checks.numerics import pinned_mul_f64
+from std.python import Python
+from sequence.lr_exact import LrOut, onecycle_exact, pow_exact, schedule_exact
 
 comptime _PI: Float64 = 3.141592653589793
 comptime _COS_F64_TERMS = 26
@@ -207,3 +209,109 @@ def lr_decide_binding(vs_addr: PythonObject, es_addr: PythonObject, n: PythonObj
         if not keep:
             undecided += 1
     return PythonObject(undecided)
+
+
+# ----------------------------------------------------------- the exact route
+# (lane py-runtime round 3, sequence/lr_exact.mojo): the steps the table
+# cannot decide, and the schedules without a table, answered on the big
+# rationals. Each returns [status, value]: status 0 ok, 1 overflow (Python's
+# OverflowError), 2 a 64-term straddle (ArithmeticError), 3 a bad progress.
+
+
+def _pair(r: LrOut) raises -> PythonObject:
+    var out = Python.list()
+    out.append(PythonObject(r.status))
+    out.append(PythonObject(Float64(r.value)))
+    return out
+
+
+def lr_schedule_exact_binding(ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """`_Schedule._lr_at_slow`: ip = [kind (0 constant, 1 linear, 2 cosine),
+    warmup, total (-1: none), t >= 1]; fp = [peak, min_lr]."""
+    return _pair(schedule_exact(Int(py=ip[0]), Float64(py=fp[0]), Float64(py=fp[1]), Int(py=ip[1]),
+                                Int(py=ip[2]), Int(py=ip[3])))
+
+
+def lr_onecycle_exact_binding(ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """`OneCycleLR._lr_at_slow`: ip = [linear, three_phase, total_steps,
+    torch step]; fp = [max_lr, div_factor, final_div_factor, phase-1 end,
+    phase-2 end]."""
+    return _pair(onecycle_exact(Int(py=ip[0]) != 0, Int(py=ip[1]) != 0, Float64(py=fp[0]), Float64(py=fp[1]),
+                                Float64(py=fp[2]), Float64(py=fp[3]), Float64(py=fp[4]), Int(py=ip[2]),
+                                Int(py=ip[3])))
+
+
+def lr_pow_values_binding(fp: PythonObject, ip: PythonObject, out_addr: PythonObject) raises -> PythonObject:
+    """StepLR / ExponentialLR: out[i] (float32 words) = the float32 nearest
+    base gamma^((e0 + i) // step) for i < n (`_PowSched._pow_value`).
+    fp = [base, gamma]; ip = [e0 >= 0, n, step >= 1]. Returns [0, n], or
+    [1, i] at the first overflowing step i (Python's OverflowError)."""
+    var base = Float64(py=fp[0])
+    var gamma = Float64(py=fp[1])
+    var e0 = Int(py=ip[0])
+    var n = Int(py=ip[1])
+    var step = Int(py=ip[2])
+    var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
+    var last_e = -1
+    var last_v = Float32(0)
+    for i in range(n):  # small-loop(n: optimizer steps of one schedule block): one learning rate per step
+        var e = (e0 + i) // step
+        if e != last_e:
+            var r = pow_exact(base, gamma, e)
+            if r.status != 0:
+                var bad = Python.list()
+                bad.append(PythonObject(r.status))
+                bad.append(PythonObject(i))
+                return bad
+            last_e = e
+            last_v = r.value
+        out[i] = last_v
+    var res = Python.list()
+    res.append(PythonObject(0))
+    res.append(PythonObject(n))
+    return res
+
+
+def _exact_block(kind: Int, ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
+                 ok_addr: PythonObject) raises -> PythonObject:
+    """The exact route over a block: out[i] (float32 words) for every i < n
+    whose ok[i] is 0 (ok_addr 0: every i). kind 0: `_Schedule`, ip = [kind,
+    warmup, total, t0, n], fp = [peak, min_lr]; kind 1: OneCycleLR, ip =
+    [linear, three_phase, total_steps, t0, n], fp as lr_onecycle_exact.
+    Returns [status, index]: status 0, or the first failing step's status
+    and its index."""
+    var t0 = Int(py=ip[3])
+    var n = Int(py=ip[4])
+    var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
+    var oka = Int(py=ok_addr)
+    var ok = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=oka)
+    var res = Python.list()
+    for i in range(n):  # small-loop(n: steps of one table block): the steps the binary64 table left undecided
+        if oka != 0 and ok[i] != 0:
+            continue
+        var r: LrOut
+        if kind == 0:
+            r = schedule_exact(Int(py=ip[0]), Float64(py=fp[0]), Float64(py=fp[1]), Int(py=ip[1]),
+                               Int(py=ip[2]), t0 + i)
+        else:
+            # OneCycleLR's torch step is t - 1
+            r = onecycle_exact(Int(py=ip[0]) != 0, Int(py=ip[1]) != 0, Float64(py=fp[0]), Float64(py=fp[1]),
+                               Float64(py=fp[2]), Float64(py=fp[3]), Float64(py=fp[4]), Int(py=ip[2]), t0 + i - 1)
+        if r.status != 0:
+            res.append(PythonObject(r.status))
+            res.append(PythonObject(i))
+            return res
+        out[i] = r.value
+    res.append(PythonObject(0))
+    res.append(PythonObject(0))
+    return res
+
+
+def lr_schedule_exact_block_binding(ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
+                                    ok_addr: PythonObject) raises -> PythonObject:
+    return _exact_block(0, ip, fp, out_addr, ok_addr)
+
+
+def lr_onecycle_exact_block_binding(ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
+                                    ok_addr: PythonObject) raises -> PythonObject:
+    return _exact_block(1, ip, fp, out_addr, ok_addr)

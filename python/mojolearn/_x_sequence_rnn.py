@@ -191,7 +191,7 @@ class _RecurrentBase:
             got = table(n_steps) if table is not None else None
             if got is not None:
                 return np.frombuffer(got, dtype=np.float32).copy()
-            return np.asarray([self.lr_schedule.lr_at(t) for t in range(1, n_steps + 1)], dtype=np.float32)
+            return np.asarray([self.lr_schedule.lr_at(t) for t in range(1, n_steps + 1)], dtype=np.float32)  # cpu-route: a user schedule object's own lr_at, the explicit input step
         return np.full(n_steps, self.learning_rate, dtype=np.float32)
 
     def _fit(self, X, target):
