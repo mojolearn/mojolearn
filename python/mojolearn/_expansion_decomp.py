@@ -2621,7 +2621,8 @@ class _LUPair(tuple):
     step of iterative refinement, x += LU^-1 (B - A x), the residual in
     float-float on the device. #: audit 2026-10-04: lu-solve / lu-factor
     synthetic relative_residual 3.26e-06 vs numpy 3.26e-08, torch-gpu
-    8.23e-07; -D MOJOLEARN_LU_QOLD restores the unrefined solve."""
+    8.23e-07; -D MOJOLEARN_LU_QOLD restores the unrefined solve. KEPT for
+    quality 2026-10-04 (rab5-lu: 2.59e-6 -> 3.26e-8, +14-15% time)."""
 
     def __new__(cls, pair, a_m):
         obj = super().__new__(cls, pair)

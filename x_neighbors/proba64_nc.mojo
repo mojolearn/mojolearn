@@ -9,7 +9,10 @@ proba[:, 1] loses the winner's confidence. Audit (board-quality-audit-
 4.118, accuracy the same. Row t of the decision matrix: the winner's
 complement c kept apart and 1 - c written exactly from c's bits, every other
 class the exact widening of its float32 probability (checks/f64_words.mojo);
-res holds 2 * n * c float32 words, (low, high) per value."""
+res holds 2 * n * c float32 words, (low, high) per value.
+OUTCOME (M3 afc_ab_def, 1 run per arm, 2026-10-04, tag rab5-proba64):
+nearest-centroid istella log loss 4.299 -> 4.118, accuracy identical, 143.96
+-> 142.92 ms. KEEP."""
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_exp, identical_div
 from checks.f64_words import widen_bits, one_minus_bits, put64

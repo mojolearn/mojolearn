@@ -1437,6 +1437,10 @@ def rf_device_finite_scan_binding() raises -> PythonObject:
 #: thresholds; ours on n_bins quantile bins, 128 by default, which caps a
 #: deep tree's resolution on taxi's continuous columns. 256 is the largest
 #: count the binned (uint8) path takes, so the kernels stay the same.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab5-dtbins, taxi): decision-tree-reg r2 0.8626 -> 0.8792 at 52.79 -> 53.38
+#: ms (+1.1%); bagging-reg r2 0.9170 -> 0.9233 at 202.06 -> 187.32 ms (-7.3%);
+#: voting/stacking/adaboost-reg errored in both arms (not measured). KEEP.
 comptime RF_DT_DEFAULT_BINS = (
     256 if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_DT_BINS_QOLD"]() else 128
 )
