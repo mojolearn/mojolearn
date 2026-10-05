@@ -1,0 +1,64 @@
+RunPod CPU usage lease (no rentals, no changes to legacy controllers)
+
+1. Create a private CONFIG JSON with pod_id, exact pod_name, unique owner_id,
+   ssh argument array (last item is host), absolute remote_out/local_out,
+   remote_state OUTSIDE remote_out, and existing remote_curlrc OUTSIDE remote_out.
+   Optional notify_thread/codex connect actionable events to the Codex queue.
+   idle_seconds is fixed2700. orphan_seconds defaults5400; poll_seconds30.
+   capture_timeout defaults1800 and cannot exceed1800 (less than orphan lease).
+   max_failed_polls defaults3. exclude_relative explicitly lists regenerable
+   caches/temp directories relative to remote_out; exclusions enter capture proof.
+
+2. python3 tools/runpod_usage_lease.py plan CONFIG
+   No network calls. Tests: python3 -m unittest discover -s tools -p test_runpod_usage_lease.py
+   Unit tests use fake provider replies; they never delete a real pod.
+
+3. python3 tools/runpod_usage_lease.py adopt CONFIG
+   Requires local rsync and remote python3/rsync/curl. Reuses existing remote
+   mode0600 curl credential without reading it into argv/logs. Provider ID/name
+   must match. Installs a detached guardian with explicit owner/config binding.
+   Waits for live guardian PID readback. Refuses expired or terminal old state.
+   DOES NOT TOUCH existing EXIT traps, on-pod fixed timer or local dead-man.
+
+4. Start manage CONFIG detached, keeping stdout/stderr outside artifact roots.
+   First run --once to inspect a successful MANAGING receipt, captured files,
+   renewed deadline, and live guardian. Only then may the coordinator retire
+   ALL legacy deletion paths. TERM/INT of old CPU runner triggers its EXIT DELETE;
+   sleeping dead-man children also need coordinated retirement. This tool does
+   not automate that risky process takeover. Keep existing protection until
+   new guard AND owner AND collector are proven alive.
+
+5. manage atomically updates local_out/manager-status.json, rsyncs logs,
+   manifests and binaries to local_out/artifacts, and reports job failure or
+   progress stalls through durable local events plus Codex queue. Failed queue
+   delivery is retried after60seconds. Job timeouts remain separate; a long
+   healthy active job has no fixed2h/3h termination cutoff.
+
+6. DONE alone cannot arm idle deletion. After DONE, every retained file must
+   match a remote SHA256 inventory locally; remote hashes are checked again
+   when acknowledging capture. An unchanged captured set starts45 idle minutes.
+   New/changed artifacts or removed DONE reset that idle clock. Hash proof
+   records explicit exclusions and never includes credentials. Symlinks refuse
+   capture unless materialized. Capture errors notify and block idle deletion.
+
+7. BEFORE queueing future work on the same pod:
+     python3 tools/runpod_usage_lease.py hold CONFIG --reason 'PTX queued'
+   Keep all new job results under remote_out (a separate subdirectory is fine).
+   Remove the old DONE before starting new work. After all queued jobs finish
+   and the outer DONE is restored:
+     python3 tools/runpod_usage_lease.py release-hold CONFIG
+   A hold blocks idle deletion but never defeats an orphan deadline. Newly
+   captured job manifests get distinct completion notifications.
+
+8. Missing owner heartbeats for90minutes trigger independent on-pod deletion,
+   even if artifacts are unreadable or work was active. After3 consecutive
+   failed manager/capture polls, heartbeat renewal is suspended and an urgent
+   event requests repair before that retained orphan deadline. A successful
+   poll resumes renewal. Bounded capture operations stay below the orphan TTL.
+   This is the unhealthy-controller backstop, not an elapsed-job cutoff.
+
+9. Guardian DELETE uses bounded calls, v2 fallback and verifies GET/list state
+   when possible. If pod shutdown interrupts that verification, local manager
+   makes READ-ONLY provider checks using the existing mode0600 local key file;
+   it only records TERMINATED_VERIFIED after both GET and listing prove gone.
+   No EXIT trap deletes a pod. Manager death is handled by remote orphan lease.
