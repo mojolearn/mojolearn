@@ -39,3 +39,17 @@ Recreate the watcher cron (it is session-only): every 20 min run apple_watch.sh 
   rab11), lane/apple-fast-s-small (RBF_PIPE, off), lane/apple-fast-s-ts (6 time-series candidates, off), compiling in M2 bq 98-merge.
 - Running speed lanes: apple-fast-s-linalg (incl. TSVD speed), apple-fast-s-shap (incl. LLE quality).
 - M3 queue: rab10 rest, rab11 (LDA/SVC/ARD fixes), rab12 (rbf pipe), rab13 (time series); opponent job last.
+
+## Update 2026-10-05 late (main 2aa413135+)
+- Landed: verdicts-5 (adafactor resident/nofill, rbf pipe, LDA tiers, time-series candidates off), main Apple build fixes (out->dst, ptr casts,
+  sf64 import, ivf stray docstring), trees Metal fix (inlined copy constructors for ET records). Board 356/377 faster, geomean 0.220.
+- PENDING:
+  1. verdicts-6 (subagent writing on lane/apple-fast-verdicts-6; brief briefs-2026-10-04/apple-fast-verdicts-6.md): LU_FAST_RESIDENT, CHOL_FAST_POOLIO,
+     MBK_FAST_DEVSCAN, RSVD_FAST_DEVSCAN+ORTH_WS, TSVD_FAST_POOL/COLVAR, ARIMA_FAST_SEARCH_REUSE, SCHED_FAST_TABLE, SEQ_FAST_VAR_COOP, HUBER_FAST_BLOCK512,
+     SVGP_FAST_BSPLIT, PCA_FAST_COLMEAN -> M2 compile -> main -> board rows.
+  2. lane/apple-fast-no-narrow-2 @ 1af808461: M2 compile (bq 004-nn2) -> land -> requeue rab17 A/Bs (general rule vs LEGACY_NARROW_*).
+  3. M3 requeues: rab21 (CTR re-measure on current main, bgmm, nb-cat atomic, FA livebuf, dbscan CC batch) and ripple checks (rab20).
+  4. Shape sweeps: SGD_PS_SIMD and QN_ALL general rules confirmed; KDE/SVC sweeps blocked (classical_two_datasets.py rejects s-* datasets: fix the driver).
+  5. Decisions for Andrew: gap-cls2 NOSCAN/LAZY; optimizer/layernorm lanes need device-resident API or protocol change; LLE DEV_LU (istella -2% trust).
+  6. Open quality gaps vs opponent: gbdt-categorical AUC, pairlogit MAP (quality lane), svgp r2 negative on both arms.
+- Tools: ab_extract.py now matches rab* and ssl-* tags. Sweep: tools/afc_shape_sweep.py (strip 'lq add apple' prefix for the M3 queue).
