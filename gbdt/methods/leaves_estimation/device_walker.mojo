@@ -106,11 +106,11 @@ def walker_move_kernel(
     n_leaves_in: Int32,
     oracle_point: MutPointer[Float32, MutAnyOrigin],
     shift: MutPointer[Float32, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     apply_move: Int32,
 ):
     """`_move` + `regularize` (+ `MoveTo`'s shift when `apply_move`), one
-    thread per leaf. `out` is never `cur` (no two arguments alias)."""
+    thread per leaf. `dst` is never `cur` (no two arguments alias)."""
     var n_leaves = Int(n_leaves_in)
     var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if leaf >= n_leaves:
@@ -131,7 +131,7 @@ def walker_move_kernel(
         w = sf64_from_int(Int(leaf_sizes.unsafe_load(leaf)))
     if (not sf64_is_nan(w)) and sf64_lt(w, min_leaf_weight_bits):
         p = Float32(0.0)
-    out.unsafe_store(leaf, p)
+    dst.unsafe_store(leaf, p)
     if apply_move != Int32(0):
         var o = oracle_point.unsafe_load(leaf)
         shift.unsafe_store(

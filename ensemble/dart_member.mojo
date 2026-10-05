@@ -28,14 +28,14 @@ def dart_member_x_kernel(
     x: MutPointer[Float32, MutAnyOrigin],
     rows: MutPointer[Int32, MutAnyOrigin],
     cols: MutPointer[Int32, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     d: Int32,
     m: Int32,
     dc: Int32,
     use_rows: Int32,
     use_cols: Int32,
 ):
-    """`out` (column-major `m x dc`) `[j * m + i] = x[rows[i] * d +
+    """`dst` (column-major `m x dc`) `[j * m + i] = x[rows[i] * d +
     cols[j]]` from the row-major `n x d` session X; identity rows / columns
     when the round has none. One thread per output element."""
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -50,20 +50,20 @@ def dart_member_x_kernel(
     var c = j
     if use_cols != Int32(0):
         c = Int(cols[unsafe_offset=j])
-    out[unsafe_offset=t] = x[unsafe_offset = r * Int(d) + c]
+    dst[unsafe_offset=t] = x[unsafe_offset = r * Int(d) + c]
 
 
 def dart_member_y_kernel(
     target: MutPointer[Float32, MutAnyOrigin],
     rows: MutPointer[Int32, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     m: Int32,
 ):
-    """The class target at the bag rows: `out[i] = target[rows[i]]`."""
+    """The class target at the bag rows: `dst[i] = target[rows[i]]`."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(m):
         return
-    out[unsafe_offset=i] = target[unsafe_offset = Int(rows[unsafe_offset=i])]
+    dst[unsafe_offset=i] = target[unsafe_offset = Int(rows[unsafe_offset=i])]
 
 
 def launch_dart_member_x(

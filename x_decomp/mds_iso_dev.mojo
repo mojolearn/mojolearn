@@ -71,21 +71,21 @@ def bitonic_kernel(keys: F32Ptr, idx: I32Ptr, kk: Int32, jj: Int32, total: Int32
                 idx.unsafe_store(l, Int32(ai))
 
 
-def mds_count_kernel(keys: F32Ptr, out: I32Ptr, total: Int32):
-    """out[0] = the count of valid (non-NaN) keys, which come first."""
+def mds_count_kernel(keys: F32Ptr, dst: I32Ptr, total: Int32):
+    """dst[0] = the count of valid (non-NaN) keys, which come first."""
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var tot = Int(total)
     if t < tot:
         var v = keys.unsafe_load(t)
         if t == 0 and not (v == v):
-            out.unsafe_store(0, Int32(0))
+            dst.unsafe_store(0, Int32(0))
         if v == v:
             var nxt_bad = True
             if t + 1 < tot:
                 var w = keys.unsafe_load(t + 1)
                 nxt_bad = not (w == w)
             if nxt_bad:
-                out.unsafe_store(0, Int32(t + 1))
+                dst.unsafe_store(0, Int32(t + 1))
 
 
 def mds_start_kernel(keys: F32Ptr, flags: I32Ptr, m: Int32):
@@ -115,7 +115,7 @@ def scan_max_kernel(src: I32Ptr, dst: I32Ptr, off: Int32, m: Int32):
         dst.unsafe_store(t, v)
 
 
-def mds_gst_kernel(keys: F32Ptr, gid: I32Ptr, gst: I32Ptr, m: Int32, out: I32Ptr):
+def mds_gst_kernel(keys: F32Ptr, gid: I32Ptr, gst: I32Ptr, m: Int32, dst: I32Ptr):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var mm = Int(m)
     if t < mm:
@@ -124,7 +124,7 @@ def mds_gst_kernel(keys: F32Ptr, gid: I32Ptr, gst: I32Ptr, m: Int32, out: I32Ptr
         if t == mm - 1:
             var g = Int(gid.unsafe_load(t))
             gst.unsafe_store(g, Int32(mm))
-            out.unsafe_store(0, Int32(g))
+            dst.unsafe_store(0, Int32(g))
 
 
 def zero_kernel(dst: F32Ptr, count: Int32):
@@ -133,10 +133,10 @@ def zero_kernel(dst: F32Ptr, count: Int32):
         dst.unsafe_store(t, Float32(0))
 
 
-def scatter_keys_kernel(keys: F32Ptr, idx: I32Ptr, out: F32Ptr, m: Int32):
+def scatter_keys_kernel(keys: F32Ptr, idx: I32Ptr, dst: F32Ptr, m: Int32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(m):
-        out.unsafe_store(Int(idx.unsafe_load(t)), keys.unsafe_load(t))
+        dst.unsafe_store(Int(idx.unsafe_load(t)), keys.unsafe_load(t))
 
 
 def group_sum_kernel(d: F32Ptr, idx: I32Ptr, gst: I32Ptr, sm: F32Ptr, wt: I32Ptr, G: Int32):
@@ -180,10 +180,10 @@ def value_kernel(sm: F32Ptr, wt: I32Ptr, hd: I32Ptr, gv: F32Ptr, G: Int32):
         gv.unsafe_store(g, iso_mean(sm, wt, Int(hd.unsafe_load(g))))
 
 
-def scatter_disp_kernel(gv: F32Ptr, gid: I32Ptr, idx: I32Ptr, out: F32Ptr, m: Int32):
+def scatter_disp_kernel(gv: F32Ptr, gid: I32Ptr, idx: I32Ptr, dst: F32Ptr, m: Int32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(m):
-        out.unsafe_store(Int(idx.unsafe_load(t)), gv.unsafe_load(Int(gid.unsafe_load(t)) - 1))
+        dst.unsafe_store(Int(idx.unsafe_load(t)), gv.unsafe_load(Int(gid.unsafe_load(t)) - 1))
 
 
 def _read_i32(id: Int) raises -> Int:
