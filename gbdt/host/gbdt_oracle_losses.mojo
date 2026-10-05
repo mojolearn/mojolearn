@@ -1186,7 +1186,7 @@ def gbdt_losses_host_fit(
         )
         if loss.objective == GBDT_OBJ_PAIR_LOGIT or loss.objective == GBDT_OBJ_YETI_RANK:
             # `MakeZeroAverage` (`doc_parallel_leaves_estimator.cpp:25-37`),
-            # restated from `device_walker.walker_zero_average_kernel`: minus
+            # restated from `device_walker.enqueue_zero_average`: minus
             # the unweighted mean over all `n_live` leaves, the double sum in
             # the kernel's order (lane cpu4-gbdt; was an ascending chain).
             _zero_average_host(estimated)
@@ -1230,20 +1230,35 @@ def gbdt_losses_host_fit(
 
 
 def _zero_average_host(mut estimated: List[Float32]):
-    """`walker_zero_average_kernel` (`gbdt/methods/leaves_estimation/
-    device_walker.mojo`) on the host: lane `t` of 256 adds leaves
-    `t, t + 256, ...` ascending in double from +0.0, then the 256-lane
-    halving tree; `bias = -sum / count`; `leaf = float(double(leaf) +
-    bias)`."""
+    """`device_walker.enqueue_zero_average` (`gbdt/methods/leaves_estimation/
+    device_walker.mojo`) on the host. Level 1: block `b` puts leaves
+    `[256 b, 256 b + 256)` as doubles (absent ones +0.0) through the 256-lane
+    halving tree. Level 2: lane `t` of 256 adds partials `t, t + 256, ...`
+    ascending from +0.0, then the halving tree. `bias = -sum / count`;
+    `leaf = float(double(leaf) + bias)`."""
     var n = len(estimated)
     if n == 0:
         return
+    var parts = (n + 255) // 256
+    var partials = List[Float64](length=parts, fill=Float64(0.0))
+    for b in range(parts):
+        var slab = List[Float64](length=256, fill=Float64(0.0))
+        for t in range(256):
+            var i = b * 256 + t
+            if i < n:
+                slab[t] = Float64(estimated[i])
+        var step = 128
+        while step > 0:
+            for t in range(step):
+                slab[t] = slab[t] + slab[t + step]
+            step //= 2
+        partials[b] = slab[0]
     var red = List[Float64](length=256, fill=Float64(0.0))
     for t in range(256):
         var acc = Float64(0.0)
         var i = t
-        while i < n:
-            acc = acc + Float64(estimated[i])
+        while i < parts:
+            acc = acc + partials[i]
             i += 256
         red[t] = acc
     var step = 128

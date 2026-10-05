@@ -31,6 +31,10 @@ hardware double unit, on every vendor):
              difference narrowed once = the correctly rounded float
              difference); CurrentPoint = next; the cursor add is the
              oracle's own `add_bin_model_value_kernel`
+  zero avg   PairLogit / YetiRank: the double sum of the leaves in two
+             levels (256-leaf halving trees, the lanes fold of their
+             partials; CHANGED from an ascending chain with the host column
+             `gbdt_oracle_losses._zero_average_host`), `bias = -sum / n`
   value      the evaluation's per-block value partials folded in
              `deterministic_sum_lanes_kernel`'s fixed order (CHANGED from
              the host's ascending Float32 chain, with every host column:
@@ -228,22 +232,52 @@ def walker_accept_kernel(
     direction.unsafe_store(leaf, v)
 
 
-def walker_zero_average_kernel(
+def zero_average_partials_kernel(
     values: MutPointer[Float32, MutAnyOrigin],
     n_leaves_in: Int32,
+    partials: MutPointer[UInt64, MutAnyOrigin],
 ):
-    """`MakeZeroAverage` (`doc_parallel_leaves_estimator.cpp:25-37`, PairLogit
-    and YetiRank) on the device, ONE block of `WALK_FOLD_BLOCK`: the double
-    sum of the leaves (thread `t` adds leaves `t, t + 256, ...` ascending,
-    then the halving tree; CHANGED from the host's ascending chain, with the
-    host column `gbdt_oracle_losses.mojo`), `bias = -sum / count`, then
-    `leaf = float(double(leaf) + bias)` per leaf."""
+    """`MakeZeroAverage`'s sum, level 1: block `b` folds leaves
+    `[256 b, 256 b + 256)` (absent leaves +0.0) as doubles in the halving
+    tree into `partials[b]`."""
     var tid = Int(thread_idx.x)
     var n = Int(n_leaves_in)
+    var i = Int(block_idx.x) * WALK_FOLD_BLOCK + tid
+    var red = stack_allocation[
+        WALK_FOLD_BLOCK,
+        Scalar[DType.uint64],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var v = SF64_ZERO
+    if i < n:
+        v = sf64_from_f32(values.unsafe_load(i))
+    red[tid] = v
+    barrier()
+    var step = WALK_FOLD_BLOCK // 2
+    while step > 0:
+        if tid < step:
+            red[tid] = sf64_add(red[tid], red[tid + step])
+        barrier()
+        step //= 2
+    if tid == 0:
+        partials.unsafe_store(Int(block_idx.x), red[0])
+
+
+def zero_average_bias_kernel(
+    partials: MutPointer[UInt64, MutAnyOrigin],
+    part_count_in: Int32,
+    n_leaves_in: Int32,
+    bias_out: MutPointer[UInt64, MutAnyOrigin],
+):
+    """Level 2, ONE block over the `ceil(n / 256)` level-1 partials (thread
+    `t` adds partials `t, t + 256, ...` ascending from +0.0, then the
+    halving tree), and `bias = -sum / n` into `bias_out[0]`."""
+    var tid = Int(thread_idx.x)
+    var parts = Int(part_count_in)
     var acc = SF64_ZERO
     var i = tid
-    while i < n:
-        acc = sf64_add(acc, sf64_from_f32(values.unsafe_load(i)))
+    while i < parts:
+        acc = sf64_add(acc, partials.unsafe_load(i))
         i += WALK_FOLD_BLOCK
     var red = stack_allocation[
         WALK_FOLD_BLOCK,
@@ -258,15 +292,30 @@ def walker_zero_average_kernel(
             red[tid] = sf64_add(red[tid], red[tid + step])
         barrier()
         step //= 2
-    if n <= 0:
+    if tid == 0:
+        var leaves = Int(n_leaves_in)
+        var bias = SF64_ZERO
+        if leaves > 0:
+            bias = sf64_div(sf64_neg(red[0]), sf64_from_int(leaves))
+        bias_out.unsafe_store(0, bias)
+
+
+def zero_average_apply_kernel(
+    values: MutPointer[Float32, MutAnyOrigin],
+    n_leaves_in: Int32,
+    bias_in: MutPointer[UInt64, MutAnyOrigin],
+):
+    """`leaf = float(double(leaf) + bias)`, one thread per leaf."""
+    var n = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= n:
         return
-    var bias = sf64_div(sf64_neg(red[0]), sf64_from_int(n))
-    i = tid
-    while i < n:
-        values.unsafe_store(
-            i, sf64_to_f32(sf64_add(sf64_from_f32(values.unsafe_load(i)), bias))
-        )
-        i += WALK_FOLD_BLOCK
+    values.unsafe_store(
+        leaf,
+        sf64_to_f32(
+            sf64_add(sf64_from_f32(values.unsafe_load(leaf)), bias_in.unsafe_load(0))
+        ),
+    )
 
 
 def weight_keep_mask_strided_kernel(
@@ -369,6 +418,9 @@ struct WalkBuffers(Movable):
     var d_vals: DeviceBuffer[DType.float32]
     var d_flag: DeviceBuffer[DType.uint32]
     var h_flag: HostBuffer[DType.uint32]
+    #: `MakeZeroAverage`'s level-1 partials (`ceil(cap / 256)`) and bias
+    var d_zpart: DeviceBuffer[DType.uint64]
+    var d_zbias: DeviceBuffer[DType.uint64]
     #: True when the walk's result is in `d_next` (the one-step walk), else
     #: it is in `d_cur`
     var result_next: Bool
@@ -384,6 +436,10 @@ struct WalkBuffers(Movable):
         self.d_vals = ctx.enqueue_create_buffer[DType.float32](2)
         self.d_flag = ctx.enqueue_create_buffer[DType.uint32](1)
         self.h_flag = ctx.enqueue_create_host_buffer[DType.uint32](1)
+        self.d_zpart = ctx.enqueue_create_buffer[DType.uint64](
+            (n + WALK_FOLD_BLOCK - 1) // WALK_FOLD_BLOCK
+        )
+        self.d_zbias = ctx.enqueue_create_buffer[DType.uint64](1)
         self.result_next = False
 
     def __init__(
@@ -399,6 +455,10 @@ struct WalkBuffers(Movable):
         self.d_vals = arena.device[DType.float32](ctx, 2)
         self.d_flag = arena.device[DType.uint32](ctx, 1)
         self.h_flag = arena.host_buffer[DType.uint32](ctx, 1)
+        self.d_zpart = arena.device[DType.uint64](
+            ctx, (n + WALK_FOLD_BLOCK - 1) // WALK_FOLD_BLOCK
+        )
+        self.d_zbias = arena.device[DType.uint64](ctx, 1)
         self.result_next = False
 
     def __init__(out self, *, handles_of: WalkBuffers):
@@ -412,6 +472,8 @@ struct WalkBuffers(Movable):
         self.d_vals = handles_of.d_vals.copy()
         self.d_flag = handles_of.d_flag.copy()
         self.h_flag = handles_of.h_flag.copy()
+        self.d_zpart = handles_of.d_zpart.copy()
+        self.d_zbias = handles_of.d_zbias.copy()
         self.result_next = handles_of.result_next
 
     def handles(self) -> WalkBuffers:
@@ -616,14 +678,39 @@ def device_walk_estimate(
 
 
 def enqueue_zero_average(
-    ctx: DeviceContext, mut values: DeviceBuffer[DType.float32], n: Int
+    ctx: DeviceContext,
+    mut w: WalkBuffers,
+    mut values: DeviceBuffer[DType.float32],
+    leaf_count: Int,
 ) raises:
-    """`MakeZeroAverage` over `values[0, n)` in place (one block)."""
-    ctx.enqueue_function[walker_zero_average_kernel](
+    """`MakeZeroAverage` over `values[0, leaf_count)` in place: the double
+    sum in two levels (256-leaf halving trees, then the lanes fold of their
+    partials), the bias, the shift; `leaf_count <= w.cap`. The host column
+    is `gbdt_oracle_losses._zero_average_host`, the same order."""
+    var parts = (leaf_count + WALK_FOLD_BLOCK - 1) // WALK_FOLD_BLOCK
+    if parts < 1:
+        return
+    ctx.enqueue_function[zero_average_partials_kernel](
         values.unsafe_ptr(),
-        Int32(n),
+        Int32(leaf_count),
+        w.d_zpart.unsafe_ptr(),
+        grid_dim=(parts, 1, 1),
+        block_dim=(WALK_FOLD_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[zero_average_bias_kernel](
+        w.d_zpart.unsafe_ptr(),
+        Int32(parts),
+        Int32(leaf_count),
+        w.d_zbias.unsafe_ptr(),
         grid_dim=(1, 1, 1),
         block_dim=(WALK_FOLD_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[zero_average_apply_kernel](
+        values.unsafe_ptr(),
+        Int32(leaf_count),
+        w.d_zbias.unsafe_ptr(),
+        grid_dim=(_leaf_grid(leaf_count), 1, 1),
+        block_dim=(WALK_BLOCK, 1, 1),
     )
 
 

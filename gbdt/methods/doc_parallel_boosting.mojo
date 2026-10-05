@@ -1292,7 +1292,7 @@ def _estimate_and_apply(
         if objective == OBJECTIVE_PAIR_LOGIT or objective == OBJECTIVE_YETI_RANK:
             # `LeavesEstimationConfig.MakeZeroAverage`
             # (`doc_parallel_leaves_estimator.cpp:25-37`, `NeedZeroAverage`)
-            enqueue_zero_average(ctx, est_buf, n_leaves)
+            enqueue_zero_average(ctx, walk, est_buf, n_leaves)
         enqueue_copy_values(ctx, est_buf, n_leaves, d_est)
         var walk_gx = 2 * oracle.sm_count
         if walk_gx < 1:
