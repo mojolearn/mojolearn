@@ -14,6 +14,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python
 from std.memory import bitcast
+from std.math import ceil
 from xtrees.folds_device import device_folds, leaf_numbering
 from xtrees.glue_device import (
     binary_proba_device, indicator_codes_device, stack_w64_device, class_counts_device, remap_cols_device,
@@ -1588,6 +1589,151 @@ def pshap_dvalues_binding(x: PythonObject, bg: PythonObject, yout: PythonObject,
     return PythonObject(p[0])
 
 
+# ---- lane py-runtime-b: DART's per-tree bookkeeping and the class priors,
+# moved out of Python (`_expansion_trees._boost` / `_boost_loop_device`).
+# t-, k- and t*k-sized binary64 scalar words on the host: the same IEEE
+# operations in the same order as the Python they replace, so the same bits
+# on every column (the device round reads the thresholds and float32
+# coefficients these write).
+comptime _TWO53 = Float64(9007199254740992.0)
+
+
+@always_inline
+def _dart_thr(v: Float64) -> Int64:
+    """ceil(v * 2^53): `u < v` for a counter draw u = m / 2^53 is exactly
+    `m < ceil(v * 2^53)` (0 for v <= 0 or NaN, 2^53 for v >= 1)."""
+    if not v > 0.0:
+        return 0
+    if v >= 1.0:
+        return Int64(1) << 53
+    return Int64(Int(ceil(v * _TWO53)))
+
+
+def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("mojolearn: null int64 buffer address")
+    return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def class_priors_binding(counts: PythonObject, out: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k]: out (float64, k) = log(max(1e-15, counts[c] / n)),
+    the pinned binary64 log (`identical_log64`) of each class's share (DART's
+    multiclass start; it was a Python list over the k counts)."""
+    _need(params, 2, "x_trees_class_priors")
+    var n = _count(_i(params, 0), "x_trees_class_priors")
+    var k = _i(params, 1)
+    if k < 1 or n < 1:
+        raise Error("x_trees_class_priors: needs n >= 1 and k >= 1")
+    var cp = i32_ptr(Int(py=counts))
+    var op = f64_ptr(Int(py=out))
+    for c in range(k):  # small-loop(k: class count): one prior per class
+        var q = Float64(Int(cp[c])) / Float64(n)
+        op[c] = identical_log64(q if q > 1e-15 else 1e-15)
+    return PythonObject(k)
+
+
+def dart_thresholds_binding(weights: PythonObject, coefs: PythonObject, coef32: PythonObject, thr: PythonObject,
+                            state: PythonObject, params: PythonObject, rate: PythonObject) raises -> PythonObject:
+    """One DART round's drop thresholds and float32 coefficients from the
+    t tree weights (float64), the t * k coefficients (float64) and state[0] =
+    the weight sum. params = [t, k, uniform_drop, max_drop]; rate = drop_rate.
+    thr (int64, t) = ceil(p_i * 2^53), p_i = rate * w_i * (t / sum_w) (rate
+    capped by max_drop * inv_avg / sum_w), or the capped uniform rate;
+    coef32 (float32, t * k) = the coefficients rounded once. Returns t."""
+    _need(params, 4, "x_trees_dart_thresholds")
+    var t = _count(_i(params, 0), "x_trees_dart_thresholds")
+    var k = _i(params, 1)
+    var uniform = _i(params, 2) != 0
+    var max_drop = _i(params, 3)
+    if t == 0:
+        return PythonObject(0)
+    var wp = f64_ptr(Int(py=weights))
+    var cp = f64_ptr(Int(py=coefs))
+    var c32 = f32_ptr(Int(py=coef32))
+    var tp = _i64_ptr(Int(py=thr))
+    var sum_w = f64_ptr(Int(py=state))[0]
+    var r = Float64(py=rate)
+    if not uniform:
+        var inv_avg = Float64(t) / sum_w if sum_w > 0 else 0.0
+        if max_drop > 0 and sum_w > 0:
+            var cap = Float64(max_drop) * inv_avg / sum_w
+            if cap < r:
+                r = cap
+        for i in range(t):  # small-loop(t: trees so far): one drop threshold per tree
+            tp[i] = _dart_thr(r * wp[i] * inv_avg)
+    else:
+        if max_drop > 0:
+            var cap = Float64(max_drop) / Float64(t)
+            if cap < r:
+                r = cap
+        var u = _dart_thr(r)
+        for i in range(t):  # small-loop(t: trees so far): one drop threshold per tree
+            tp[i] = u
+    for j in range(t * k):  # small-loop(t: trees so far, times k classes): one float32 coefficient per member
+        c32[j] = Float32(cp[j])
+    return PythonObject(t)
+
+
+def dart_rescale_binding(weights: PythonObject, coefs: PythonObject, flags: PythonObject, state: PythonObject,
+                         params: PythonObject, lr: PythonObject) raises -> PythonObject:
+    """The round's drop count k_d from the step's flags (int32, t), then the
+    shrink, the dropped trees' coefficient and weight rescale (ascending
+    tree order, the weight sum state[0] updated per dropped tree) and the
+    new round's weight w[t] = shrink, coefficients t * k .. t * k + k - 1 =
+    shrink and sum_w += shrink. params = [t, k, uniform_drop,
+    xgboost_dart_mode]; lr = learning_rate. Returns [k_d, shrink, factor]."""
+    _need(params, 4, "x_trees_dart_rescale")
+    var t = _count(_i(params, 0), "x_trees_dart_rescale")
+    var k = _i(params, 1)
+    if k < 1:
+        raise Error("x_trees_dart_rescale: needs k >= 1")
+    var uniform = _i(params, 2) != 0
+    var xgb = _i(params, 3) != 0
+    var l = Float64(py=lr)
+    var wp = f64_ptr(Int(py=weights))
+    var cp = f64_ptr(Int(py=coefs))
+    var sp = f64_ptr(Int(py=state))
+    var nd = 0
+    if t > 0:
+        var fp = i32_ptr(Int(py=flags))
+        for i in range(t):  # small-loop(t: trees so far): counts the dropped trees
+            if fp[i] != 0:
+                nd += 1
+    var kd = Float64(nd)
+    var shrink: Float64
+    var factor: Float64
+    var wdiv: Float64
+    if not xgb:
+        shrink = l / (1.0 + kd)
+        factor = kd / (kd + 1.0)
+        wdiv = 1.0 / (kd + 1.0)
+    else:
+        shrink = l if nd == 0 else l / (l + kd)
+        factor = kd / (kd + l)
+        wdiv = 1.0 / (kd + l)
+    var sum_w = sp[0]
+    if nd > 0:
+        var fp = i32_ptr(Int(py=flags))
+        for i in range(t):  # small-loop(t: trees so far): rescales each dropped tree in ascending order
+            if fp[i] == 0:
+                continue
+            for c in range(k):  # small-loop(k: class count): one member per class
+                cp[i * k + c] *= factor
+            if not uniform:
+                sum_w -= wp[i] * wdiv
+                wp[i] *= factor
+    wp[t] = shrink
+    for c in range(k):  # small-loop(k: class count): the new round's member coefficients
+        cp[t * k + c] = shrink
+    sum_w += shrink
+    sp[0] = sum_w
+    var res = Python.list()
+    res.append(PythonObject(nd))
+    res.append(PythonObject(shrink))
+    res.append(PythonObject(factor))
+    return res
+
+
 def register(mut m: PythonModuleBuilder) raises:
     """The shared export list; both bindings call this."""
     m.def_function[sample_indices_binding]("x_trees_sample_indices")
@@ -1645,6 +1791,9 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[count_equal_binding]("x_trees_count_equal")
     m.def_function[oob_r2_binding]("x_trees_oob_r2")
     m.def_function[class_counts_binding]("x_trees_class_counts")
+    m.def_function[class_priors_binding]("x_trees_class_priors")
+    m.def_function[dart_thresholds_binding]("x_trees_dart_thresholds")
+    m.def_function[dart_rescale_binding]("x_trees_dart_rescale")
     m.def_function[code_counts_binding]("x_trees_code_counts")
     m.def_function[class_rows_binding]("x_trees_class_rows")
     m.def_function[remap_cols_binding]("x_trees_remap_cols")

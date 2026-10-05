@@ -1436,19 +1436,6 @@ class _DARTBase(_TreesEnsembleBase):
         for sd in (random_state, drop_seed, feature_fraction_seed, bagging_seed):  # glue: validates the four seed arguments
             _trees_seed(sd)
 
-    def _tree_nodes(self, tree, Xa):
-        n, d = Xa.shape
-        out = empty((n,), "<i4")
-        self._bind().x_trees_apply(addr_ro(tree._offsets, name="offsets"), addr_ro(tree._colid, name="colid"),
-                                   addr_ro(tree._quesval, name="quesval"), addr_ro(tree._left_child, name="left"),
-                                   addr_ro(Xa, name="X"), addr(out, name="nodes"), [n, d, 0, 1])
-        return out
-
-    def _add(self, score, nodes, values, weight, c=0):
-        n = len(nodes)
-        self._bind().x_trees_tree_score_add(addr_ro(nodes, name="nodes"), addr_ro(values, name="values"),
-                                            addr(score, name="score") + 8 * c * n, [n, float(weight)])
-
     def _bag(self, n, it):
         """The bagged rows of iteration `it` (row order), or None for all."""
         freq, frac = int(self.subsample_freq), float(self.subsample)
@@ -1490,19 +1477,19 @@ class _DARTBase(_TreesEnsembleBase):
                 raise ValueError("y must hold both classes")
             inits = [float(b.x_trees_log64(p / (1.0 - p)))]
         else:
-            # the class counts in the binding; glue: K log calls (K-sized
-            # scalar setup of the class priors, not data work)
+            # the class counts and the K priors log(max(1e-15, count / n))
+            # in the binding (lane py-runtime-b: `x_trees_class_priors`)
             cnt = empty((K,), "<i4")
             b.x_trees_class_counts(addr_ro(y32, name="y"), addr(cnt, name="counts"), [n, K])
-            inits = [float(b.x_trees_log64(max(1e-15, c / n))) for c in cnt.tolist()]
+            priors = empty((K,), "<f8")
+            b.x_trees_class_priors(addr_ro(cnt, name="counts"), addr(priors, name="priors"), [n, K])
+            inits = priors.tolist()
         self.init_score_ = inits[0] if K == 1 else inits
         lr = float(self.learning_rate)
         l1, mds, lam = float(self.reg_alpha), float(self.max_delta_step), float(self.reg_lambda)
         self.n_classes_ = K
         self.trees_, self.tree_values_, self.tree_coefs_, self.tree_weights_ = [], [], [], []
         self._bag_at = None
-        train_nodes = []
-        sum_w = 0.0
         max_depth = None if self.max_depth is None or int(self.max_depth) <= 0 else int(self.max_depth)
         # trees-apple3: members that fit every row and column of X share ONE
         # staged copy of it (a bagged or column-sampled member gathers its
@@ -1520,23 +1507,10 @@ class _DARTBase(_TreesEnsembleBase):
                 RandomForestRegressor(n_estimators=1, numeric_mode=self.numeric_mode), Xa, True,
                 default="1")
         try:
-            if self._dart_device(b, session, K):
-                # lane/apple-fast-dart: the round on the device (FAST binaries on
-                # every GPU vendor since lane cpu2-l5-trees, IDENTICAL GPU and host
-                # binaries since fam2-forests, expose the x_trees_dart_* entries;
-                # a binary without them takes main's loop)
-                self._boost_loop_device(Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth,
-                                        session)
-            else:
-                # lane cpu2-l5-trees: the host K x n score and gradient buffers
-                # exist only for main's loop; the device round's score starts
-                # on the device from the k class starts (`x_trees_dart_open`'s
-                # dart_init_kernel), so nothing n-sized is built for it here
-                score = self._class_major(inits, n)
-                all_cols = self._arange(d)
-                g, h, target = empty((K * n,), "<f8"), empty((K * n,), "<f8"), empty((K * n,), "<f4")
-                self._boost_loop(Xa, y32, K, b, seed, drop_seed, score, g, h, target, lr, l1, mds, lam,
-                                 max_depth, all_cols, session)
+            # lane py-runtime-b: the round is the binding's (`x_trees_dart_*`)
+            # on every build; main's host loop over Python lists is deleted
+            self._dart_device(b, session, K)
+            self._boost_loop_device(Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth, session)
         finally:
             if session is not None:
                 session.close()
@@ -1544,131 +1518,33 @@ class _DARTBase(_TreesEnsembleBase):
         self.n_features_in_ = d
         return self
 
-    def _boost_loop(self, Xa, y32, K, b, seed, drop_seed, score, g, h, target, lr, l1, mds, lam,
-                    max_depth, all_cols, session):
-        n, d = Xa.shape
-        train_nodes = []
-        sum_w = 0.0
-        for it in range(int(self.n_estimators)):
-            t = len(self.tree_weights_)
-            u = empty((1 + t,), "<f8")
-            b.x_trees_uniform(addr(u, name="u"), [1 + t, drop_seed, it])
-            uv = u.tolist()
-            drop = []
-            if t and not uv[0] < float(self.skip_drop):
-                rate = float(self.drop_rate)
-                if not self.uniform_drop:
-                    inv_avg = t / sum_w if sum_w > 0 else 0.0
-                    if int(self.max_drop) > 0 and sum_w > 0:
-                        rate = min(rate, int(self.max_drop) * inv_avg / sum_w)
-                    drop = [i for i in range(t) if uv[1 + i] < rate * self.tree_weights_[i] * inv_avg]
-                else:
-                    if int(self.max_drop) > 0:
-                        rate = min(rate, int(self.max_drop) / t)
-                    drop = [i for i in range(t) if uv[1 + i] < rate]
-            for i in drop:
-                for c in range(K):
-                    j = i * K + c
-                    self._add(score, train_nodes[j], self.tree_values_[j], -self.tree_coefs_[j], c)
-            k = len(drop)
-            if not self.xgboost_dart_mode:
-                shrink = lr / (1.0 + k)
-            else:
-                shrink = lr if k == 0 else lr / (lr + k)
-            if K == 1:
-                b.x_trees_gradients(addr_ro(score, name="score"), addr_ro(y32, name="y"), addr(g, name="g"),
-                                    addr(h, name="h"), addr(target, name="target"), [n, self._KIND])
-            else:
-                b.x_trees_gradients(addr_ro(score, name="score"), addr_ro(y32, name="y"), addr(g, name="g"),
-                                    addr(h, name="h"), addr(target, name="target"), [n, 2, K])
-            rows = self._bag(n, it)
-            for c in range(K):
-                j = it * K + c
-                cols = self._cols(d, j)
-                tgt = target if K == 1 else target[c * n:(c + 1) * n]
-                Xf, yf = Xa, tgt
-                if rows is not None or cols is not None:
-                    Xf = self._gather(Xa, rows if rows is not None else self._arange(n),
-                                      cols if cols is not None else all_cols)
-                    if rows is not None:
-                        yf = self._gather_vec(tgt, rows)
-                tree = RandomForestRegressor(
-                    n_estimators=1, bootstrap=False, max_features=1.0, max_depth=max_depth,
-                    max_leaves=int(self.num_leaves), min_samples_leaf=int(self.min_child_samples),
-                    n_bins=int(self.max_bin), random_state=_trees_sub_seed(seed, j), n_streams=1,
-                    numeric_mode=self.numeric_mode)
-                if session is not None and Xf is Xa:
-                    tree._fit_in_session(session, yf)
-                else:
-                    tree.fit(Xf, yf)
-                if cols is not None:
-                    cid = tree._colid.copy()
-                    b.x_trees_remap_cols(addr(cid, name="colid"), addr_ro(cols, name="cols"), [len(cid), len(cols)])
-                    tree._colid = cid
-                nodes = self._tree_nodes(tree, Xa)
-                n_nodes = int(tree._offsets.tolist()[1])
-                values = empty((n_nodes,), "<f4")
-                ga, ha = addr_ro(g, name="g") + 8 * c * n, addr_ro(h, name="h") + 8 * c * n
-                if rows is None:
-                    params = [n, n_nodes, lam] if l1 == 0.0 and mds == 0.0 else [n, n_nodes, lam, l1, mds]
-                    b.x_trees_leaf_newton(addr_ro(nodes, name="nodes"), ga, ha, addr(values, name="values"), params)
-                else:
-                    b.x_trees_leaf_newton_rows(addr_ro(nodes, name="nodes"), addr_ro(rows, name="rows"), ga, ha,
-                                               addr(values, name="values"), [n, len(rows), n_nodes, lam, l1, mds])
-                self._add(score, nodes, values, shrink, c)
-                self.trees_.append(tree)
-                self.tree_values_.append(values)
-                self.tree_coefs_.append(shrink)
-                train_nodes.append(nodes)
-            for i in drop:
-                if not self.xgboost_dart_mode:
-                    factor, wdiv = k / (k + 1.0), 1.0 / (k + 1.0)
-                else:
-                    factor, wdiv = k / (k + lr), 1.0 / (k + lr)
-                for c in range(K):
-                    j = i * K + c
-                    self.tree_coefs_[j] *= factor
-                    self._add(score, train_nodes[j], self.tree_values_[j], self.tree_coefs_[j], c)
-                if not self.uniform_drop:
-                    sum_w -= self.tree_weights_[i] * wdiv
-                    self.tree_weights_[i] *= factor
-            self.tree_weights_.append(shrink)
-            sum_w += shrink
-
     # -------------------------------------------- lane/apple-fast-dart
     # The boosting round on the device (xtrees/dart_device.mojo): FAST on
     # every GPU vendor (Apple since lane/apple-fast-dart, NVIDIA and AMD since
     # lane cpu2-l5-trees; default unless -D MOJOLEARN_DART_DEVICE_OFF) and, since lane
     # fam2-forests, every IDENTICAL build (GPU kernels and the host twin
     # xtrees/dart_host.mojo, default unless -D MOJOLEARN_IDN_DART_DEVICE_OFF);
-    # the only builds that register x_trees_dart_open. Same drop set, shrink factors and
-    # tree fits as `_boost_loop`; the score, gradients and leaf values are
+    # the only builds that register x_trees_dart_open; lane py-runtime-b deleted
+    # main's host loop `_boost_loop`, so the round is required). The score, gradients and leaf values are
     # float32 on the device and the dropped trees come off and go back as
     # one gathered sum per row (the docstring of dart_device.mojo).
     _DART_VALUES_CAP = 1 << 26
 
     def _dart_device(self, b, session, K):
-        # lane cpu2-l5-trees: every binary with the entries takes the round,
-        # with or without a forest data session, bagged and column-sampled
-        # fits included (a bagged member fits its gathered rows and the leaf
-        # sums take the bag only; a column-sampled member's colid is remapped
-        # to X's columns before `x_trees_dart_add`). `_boost_loop` is left to
-        # binaries without the entries (a FAST CPU-only install, the _OFF
-        # defines) and to trees past the node cap below.
+        """Refuses a binary without the round's entries (a FAST CPU-only
+        install, the _OFF defines) and a fit past the node or leaf-value cap
+        below (lane py-runtime-b deleted main's host loop over Python lists
+        that took them). Every other fit, with or without a forest data
+        session, bagged and column-sampled included, takes the round."""
         if not callable(getattr(b, "x_trees_dart_open", None)):
-            return False
+            raise NotImplementedError(
+                "mojolearn DART: this binary has no x_trees_dart_* round (a FAST CPU-only install or a "
+                "MOJOLEARN_*DART_DEVICE_OFF build); the host loop is removed, so the fit is refused by name")
         node_cap = 2 * int(self.num_leaves) - 1
-        return 1 <= node_cap <= 65535 and int(self.n_estimators) * K * node_cap <= self._DART_VALUES_CAP
-
-    @staticmethod
-    def _dart_thr(v):
-        """ceil(v * 2^53) as an int: `u < v` for a counter draw u = m / 2^53
-        (m the top 53 bits) is exactly `m < ceil(v * 2^53)`."""
-        if not v > 0.0:
-            return 0
-        if v >= 1.0:
-            return 1 << 53
-        return int(math.ceil(v * 9007199254740992.0))
+        if not (1 <= node_cap <= 65535 and int(self.n_estimators) * K * node_cap <= self._DART_VALUES_CAP):
+            raise NotImplementedError(
+                f"mojolearn DART: n_estimators * classes * (2 * num_leaves - 1) must be at most "
+                f"{self._DART_VALUES_CAP} and num_leaves at most 32768 (the round's leaf-value store); refused by name")
 
     def _boost_loop_device(self, Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth, session):
         n, d = Xa.shape
@@ -1678,47 +1554,38 @@ class _DARTBase(_TreesEnsembleBase):
         inits32 = Array.from_list([float(v) for v in inits], "<f4")  # glue: class starts as float32 words
         skip_thr = self._dart_thr(float(self.skip_drop))
         bad = empty((1,), "<i4")
+        # lane py-runtime-b: the tree weights, the coefficients and the weight
+        # sum live in binary64 buffers the binding updates
+        # (`x_trees_dart_thresholds` before the step, `x_trees_dart_rescale`
+        # after it), the same words main's Python lists held
+        weights64 = empty((n_iters,), "<f8")
+        coefs64 = empty((n_iters * K,), "<f8")
+        coef32 = empty((n_iters * K,), "<f4")
+        thr64 = empty((n_iters,), "<i8")
+        flags = empty((n_iters,), "<i4")
+        state = Array.from_list([0.0], "<f8")
+        book = [int(K), 1 if self.uniform_drop else 0]
         handle = b.x_trees_dart_open(addr_ro(Xa, name="X"), addr_ro(y32, name="y"), addr_ro(inits32, name="inits"),
                                      [n, d, K, self._KIND, n_iters, node_cap])
         try:
-            sum_w = 0.0
             for it in range(n_iters):  # glue: one boosting round per estimator
-                t = len(self.tree_weights_)
-                thr = [0] * t
-                if t:
-                    rate = float(self.drop_rate)
-                    if not self.uniform_drop:
-                        inv_avg = t / sum_w if sum_w > 0 else 0.0
-                        if int(self.max_drop) > 0 and sum_w > 0:
-                            rate = min(rate, int(self.max_drop) * inv_avg / sum_w)
-                        thr = [self._dart_thr(rate * self.tree_weights_[i] * inv_avg) for i in range(t)]
-                    else:
-                        if int(self.max_drop) > 0:
-                            rate = min(rate, int(self.max_drop) / t)
-                        thr = [self._dart_thr(rate)] * t
-                # glue: the t-sized coefficient and threshold words are scalars per
-                # tree. The K n-sized targets stay in the DART session's target
+                t = it
+                b.x_trees_dart_thresholds(addr(weights64, name="weights"), addr(coefs64, name="coefs"),
+                                          addr(coef32, name="coef32"), addr(thr64, name="thr"),
+                                          addr(state, name="state"), [t] + book + [int(self.max_drop)],
+                                          float(self.drop_rate))
+                # The K n-sized targets stay in the DART session's target
                 # plane (cpu4-forest): each member tree fits there
                 # (`_fit_in_dart`), as do the score, gradients and leaf sums
-                coef32 = Array.from_list([float(v) for v in self.tree_coefs_] or [0.0], "<f4")  # glue: tree coefficients as float32 words
-                thr64 = Array.from_list(thr or [0], "<i8")
-                flags = empty((max(t, 1),), "<i4")
                 b.x_trees_dart_step(handle, addr_ro(coef32, name="coef"), addr_ro(thr64, name="thr"),
                                     addr(flags, name="flags"), addr(bad, name="bad"),
                                     [], [t, drop_seed, it, skip_thr])
                 if bad.tolist()[0]:
                     raise RuntimeError("x_trees dart: a tree walk left its tree (child or column out of range)")
-                fl = flags.tolist()
-                drop = [i for i in range(t) if fl[i]]  # glue: dropped tree indices from device flags
-                k = len(drop)
-                if not self.xgboost_dart_mode:
-                    shrink = lr / (1.0 + k)
-                    factor = k / (k + 1.0)
-                    wdiv = 1.0 / (k + 1.0)
-                else:
-                    shrink = lr if k == 0 else lr / (lr + k)
-                    factor = k / (k + lr)
-                    wdiv = 1.0 / (k + lr)
+                _, shrink, factor = b.x_trees_dart_rescale(addr(weights64, name="weights"),
+                                                           addr(coefs64, name="coefs"), addr_ro(flags, name="flags"),
+                                                           addr(state, name="state"),
+                                                           [t] + book + [1 if self.xgboost_dart_mode else 0], lr)
                 # the round's bag rows (device-drawn `x_trees_bag_rows`; None:
                 # every row), drawn after the step so the last round's list
                 # (its copies landed at the step's sync) may be replaced
@@ -1751,19 +1618,12 @@ class _DARTBase(_TreesEnsembleBase):
                                        [j, c, lo, n_nodes, float(shrink), float(factor), lam, l1, mds, m])
                     self.trees_.append(tree)
                     self.tree_values_.append(values)
-                    self.tree_coefs_.append(shrink)
-                for i in drop:
-                    for c in range(K):
-                        self.tree_coefs_[i * K + c] *= factor
-                    if not self.uniform_drop:
-                        sum_w -= self.tree_weights_[i] * wdiv
-                        self.tree_weights_[i] *= factor
-                self.tree_weights_.append(shrink)
-                sum_w += shrink
         finally:
             b.x_trees_dart_close(handle, addr(bad, name="bad"))
         if bad.tolist()[0]:
             raise RuntimeError("x_trees dart: a tree walk left its tree (child or column out of range)")
+        self.tree_coefs_ = coefs64.tolist()
+        self.tree_weights_ = weights64.tolist()
 
     def _raw(self, X):
         """Class-major raw scores (K * n) float64; K = 1 is (n,)."""
