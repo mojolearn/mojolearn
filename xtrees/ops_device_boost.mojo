@@ -40,7 +40,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import identical_exp64, identical_log64, identical_mul64
 from checks.soft_f64 import (
-    SF64_ONE, SF64_SIGN, SF64_ZERO, sf64_add, sf64_div, sf64_exp, sf64_from_f32, sf64_is_nan, sf64_log, sf64_lt,
+    SF64_ONE, SF64_SIGN, SF64_ZERO, sf64_add, sf64_div, sf64_exp, sf64_from_f32, sf64_from_int, sf64_is_nan, sf64_log, sf64_lt,
     sf64_mul, sf64_neg, sf64_sub, sf64_to_f32,
 )
 from xtrees.fold_order import FOLD_CHUNK, fold_chunk_size, fold_chunks, fold_tree_device
@@ -1061,7 +1061,7 @@ def _seg_scan(ctx: DeviceContext, mut v: DeviceBuffer[DType.uint64], mut tmp: De
     var s = 1
     while s < n:
         ctx.enqueue_function[iso_seg_pass_kernel](
-            v.unsafe_ptr(), tmp.unsafe_ptr(), seg.unsafe_ptr(), Int64(n), Int64(s),
+            v.unsafe_ptr(), tmp.unsafe_ptr(), seg.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), Int64(n), Int64(s),
             grid_dim=_blocks(n), block_dim=OPS_TPB,
         )
         _copy_head_u64(ctx, v, tmp, n)
