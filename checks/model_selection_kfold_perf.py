@@ -7,7 +7,7 @@ import time
 
 from mojolearn import _portable_math as math
 from mojolearn._labels import flatten_labels
-from mojolearn.model_selection import _default_folds
+from mojolearn.tests._fold_reference import default_folds as _default_folds
 
 
 def _previous(labels, splits):

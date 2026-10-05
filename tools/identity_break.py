@@ -5946,7 +5946,10 @@ def _(ml, X, yc, yr, Xh=None):
     for tag, labels, clf in (("strat", np.ascontiguousarray(yc[:n]).tolist(), True),
                              ("kfold", np.ascontiguousarray(yr[:n]).tolist(), False)):
         for splits in (3, 5):
-            folds = list(ms._default_folds(labels, splits, clf))
+            # the runtime route (the core helpers, the sabotage control
+            # included; lane py-runtime-b moved the Python definition to
+            # mojolearn/tests/_fold_reference.py)
+            folds = [(a.tolist(), b.tolist()) for a, b in ms._default_fold_arrays(labels, splits, clf)]
             train = [np.asarray(a, dtype=np.int64) for a, _ in folds]
             test = [np.asarray(b, dtype=np.int64) for _, b in folds]
             parts[f"{tag}{splits}"] = _h(*(train + test))

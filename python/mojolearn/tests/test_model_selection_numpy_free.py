@@ -7,7 +7,8 @@ import textwrap
 
 import pytest
 
-from mojolearn.model_selection import _clone, _default_folds
+from mojolearn.model_selection import _clone
+from mojolearn.tests._fold_reference import default_folds as _default_folds
 
 
 @pytest.mark.parametrize('labels', [
