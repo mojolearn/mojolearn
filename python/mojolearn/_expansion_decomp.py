@@ -3342,77 +3342,6 @@ def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None
                           n_nonzero_coefs, init_m, max_iter, positive).out()
 
 
-def _resample_atom(k, Y, seed, counter):
-    """sklearn `_update_dict`'s unused-atom branch on the Philox stream: a
-    row of Y chosen uniformly, plus N(0, 0.01 * std(row) or 0.01) noise."""
-    u = k.rand(1, 1, seed, 40 + 2 * counter, 0).s[0]
-    idx = min(int(u * Y.r), Y.r - 1)
-    row = Y.rows(idx, idx + 1)
-    mean = k.ew("scale", k.total(row), s=1.0 / row.c)
-    std = k.ew("sqrt", k.ew("scale", k.total(k.ew("sqdiff", row, mean)), s=1.0 / row.c)).s[0]
-    noise = k.ew("scale", k.rand(1, row.c, seed, 41 + 2 * counter, 1), s=0.01 * (std or 1.0))
-    return k.ew("add", row, noise)
-
-
-def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=None):
-    """sklearn `_dict_learning.py::_update_dict`: block coordinate descent over
-    the atoms in order, each projected onto the unit ball. Returns (D, code)."""
-    if A is None:
-        A = k.mm(code, code, ta=True)
-    if B is None:
-        B = k.mm(Y, code, ta=True)
-    # lane/apple-fast-gap-clus3: the atom loop in one fused device entry when
-    # the build exports it (FAST on every vendor since lane cpu2-l8-decomp;
-    # off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF, x_decomp/dict_fast.mojo); an
-    # unused atom (the Philox resample) or positive_dict keep the loop below
-    nc = D.r
-    dg = k.diag(A)                       # A's diagonal, 1 x nc, where A lives
-    used = k.count_gt(dg, 1e-6)          # one word: every atom used?
-    fn = k._dict_dev() if not positive and D.r * D.c else None
-    if fn is not None and used == nc:
-        Dn = k._dout(D.r, D.c)
-        fn(k._did(D), k._did(A), k._did(B), Dn._d.id, [D.r, D.c])
-        return Dn, code
-    # lane cpu2-l8-decomp (re-audit L8, `_update_dict`): the loop keeps the
-    # dictionary as ONE matrix where the kit keeps it (on the device for a
-    # GPU kit) and writes atom j's new row into it in place: the same values
-    # the per-atom host stack of the rows gave (rows before j updated), with
-    # no download of an atom, of A or of B. A[j, j] is a 1 x 1 operand of the
-    # division (the same cell as the old host constant); the per-atom
-    # used/unused decision is one word, read only when some atom is unused.
-    Dm = k.copy(D)
-    # an unused atom's code column is zeroed as the atom is resampled (lane
-    # py-runtime-b: inside the atom loop, one FILL0 move each, on the one
-    # copy of code; the loop never reads code, so the same values as the
-    # separate pass over the zeroed columns after it)
-    code_out = None
-    for j in range(nc):  # glue: sklearn's atom order, each atom a chain of kit cells on the resident D
-        ajj = dg.cols(j, j + 1)
-        if used == nc or k.word(ajj) > 1e-6:
-            upd = k.ew("sub", B.cols(j, j + 1).T, k.mm(A.rows(j, j + 1), Dm))
-            row = k.ew("add", Dm.rows(j, j + 1), k.ew("div", upd, ajj))
-        else:
-            c = counter[0] if counter is not None else 0
-            row = _resample_atom(k, Y, seed, c)
-            if counter is not None:
-                counter[0] += 1
-            if code_out is None:
-                code_out = k.copy(code)
-            k.fill0(code_out, j, code_out.c, code_out.r)
-        if positive:
-            row = k.ew("maxs", row, s=0.0)
-        nrm = k.ew("sqrt", k.total(k.ew("sq", row)))
-        row = k.ew("div", row, k.ew("maxs", nrm, s=1.0))
-        k.place_rows(Dm, row, j)
-    return Dm, (code if code_out is None else code_out)
-
-
-def _cost(k, X, code, D, alpha):
-    r = k.total(k.ew("sqdiff", X, k.mm(code, D))).s[0]
-    l1 = k.total(k.ew("abs", code)).s[0]
-    return 0.5 * r + alpha * l1
-
-
 def _dict_learning(k, X, nc, alpha, max_iter, tol, method, seed, code_init=None, dict_init=None,
                    positive_dict=False, positive_code=False, method_max_iter=1000):
     """sklearn `_dict_learning.py::_dict_learning`: returns (code, D, errors, n_iter)."""
@@ -3428,18 +3357,19 @@ def _dict_learning(k, X, nc, alpha, max_iter, tol, method, seed, code_init=None,
     else:
         code = k.hstack([code, _M.zeros(code.r, nc - r)])
         D = k.vstack([D, _M.zeros(nc - r, D.c)])
-    errors = []
-    ii = 0
-    counter = [0]
-    for ii in range(1, max_iter + 1):
-        code = _sparse_encode(k, X, D, method, alpha=alpha, init=code, max_iter=method_max_iter,
-                              positive=positive_code)
-        D, code = _update_dict(k, D, X, code, positive=positive_dict, seed=seed, counter=counter)
-        errors.append(_cost(k, X, code, D, alpha))
-        if len(errors) > 1:
-            if errors[-2] - errors[-1] < tol * errors[-1]:
-                break
-    return code, D, errors, ii
+    if method not in _SPARSE_ALGOS:
+        raise ValueError(f"algorithm={method!r} is not carried; one of {_SPARSE_ALGOS}")
+    # the loop (encode, atom update, cost, stopping test) in ONE binding call
+    # (lane py-runtime-b: x_decomp/dictl.mojo on the host column, dictl_dev.mojo
+    # on resident device matrices), the same cells, solvers and draws
+    code, D = code.copy(), D.copy()
+    ea = array.array("d", [0.0]) * max(int(max_iter), 1)
+    ii, ne = k.b.x_decomp_dict_learning(
+        X.addr, code.addr, D.addr, ea.buffer_info()[0],
+        [X.r, X.c, nc, _SPARSE_ALGOS.index(method), int(max_iter), int(method_max_iter), int(bool(positive_dict)),
+         int(bool(positive_code)), int(seed) & 0xFFFFFFFF, -1, -1], [float(alpha), float(tol)])
+    errors = ea.tolist()[:int(ne)]
+    return code, D, errors, int(ii)
 
 
 class _SparseCoding(_Base):
@@ -3577,50 +3507,18 @@ class MiniBatchDictionaryLearning(_SparseCoding):
             Xt = k.take_rows(M, k.order(k.rand(1, n, seed, 50, 0)))
         else:
             Xt = M
-        A, B = _M.zeros(nc, nc), _M.zeros(m, nc)
         steps_per_iter = -(-n // bs)
         n_steps = self.max_iter * steps_per_iter
-        batches = []
-        start = 0
-        for _ in range(n // bs):
-            batches.append((start, start + bs))
-            start += bs
-        if start < n:
-            batches.append((start, n))
-        ewa, ewa_min, no_imp = None, None, 0
-        counter = [0]
-        step = -1
-        for step in range(n_steps):
-            a, b = batches[step % len(batches)]
-            Xb = Xt.rows(a, b)
-            b_n = Xb.r
-            code = _sparse_encode(k, Xb, D, "lasso_" + self.fit_algorithm, alpha=float(self.alpha),
-                                  max_iter=self.transform_max_iter, positive=self.positive_code)
-            cost = _cost(k, Xb, code, D, float(self.alpha)) / b_n
-            theta = (step + 1) * b_n if step < b_n - 1 else b_n ** 2 + step + 1 - b_n
-            beta = (theta + 1 - b_n) / (theta + 1)
-            A = k.ew("add", k.ew("scale", A, s=beta), k.ew("scale", k.mm(code, code, ta=True), s=1.0 / b_n))
-            B = k.ew("add", k.ew("scale", B, s=beta), k.ew("scale", k.mm(Xb, code, ta=True), s=1.0 / b_n))
-            old = D
-            D, code = _update_dict(k, D, Xb, code, A, B, self.positive_dict, seed, counter)
-            # _check_convergence
-            s1 = step + 1
-            if s1 <= min(100, n / b_n):
-                continue
-            if ewa is None:
-                ewa = cost
-            else:
-                al = min(b_n / (n + 1), 1)
-                ewa = ewa * (1 - al) + cost * al
-            diff = math.sqrt(k.total(k.ew("sqdiff", D, old)).s[0]) / nc
-            if self.tol > 0 and diff <= self.tol:
-                break
-            if ewa_min is None or ewa < ewa_min:
-                no_imp, ewa_min = 0, ewa
-            else:
-                no_imp += 1
-            if self.max_no_improvement is not None and no_imp >= self.max_no_improvement:
-                break
+        # the step loop (encode, the running A and B, atom update, the
+        # convergence tests) in ONE binding call (lane py-runtime-b:
+        # x_decomp/dictl.mojo, dictl_dev.mojo), the same cells and float64 tests
+        D = D.copy()
+        mni = self.max_no_improvement
+        step = int(k.b.x_decomp_dict_minibatch(
+            Xt.addr, D.addr,
+            [n, m, nc, _SPARSE_ALGOS.index("lasso_" + self.fit_algorithm), 0, int(self.transform_max_iter),
+             int(bool(self.positive_dict)), int(bool(self.positive_code)), seed & 0xFFFFFFFF, -1,
+             -1 if mni is None else int(mni), bs, n_steps], [float(self.alpha), float(self.tol)])) - 1
         self.n_steps_ = step + 1
         self.n_iter_ = -(-self.n_steps_ // steps_per_iter)
         self.components_m_ = D
@@ -3868,19 +3766,25 @@ class LatentDirichletAllocation(_Base):
         M = self._check_X(X, "LatentDirichletAllocation.fit")
         n, d = M.r, M.c
         self._init(k, d)
-        last_bound = None
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            if self.learning_method == "online":
-                self._online_pass(k, M, n)
-            else:
-                self._em_step(k, M, n, True)
-            if self.evaluate_every > 0 and it % self.evaluate_every == 0:
-                Dt, _ = self._e_step(k, M, False, False)
-                bound = self._perplexity(k, M, Dt)
-                if last_bound is not None and abs(last_bound - bound) < self.perp_tol:
-                    break
-                last_bound = bound
+        if self.learning_method == "online":
+            bs = self.batch_size
+            if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
+                raise ValueError("batch_size must be a positive integer")
+        # the fit loop (batch EM steps or online epochs, the perplexity
+        # checks) in ONE binding call (lane py-runtime-b: x_decomp/lda_fit.mojo
+        # on the host column, lda_fit_dev.mojo on resident device matrices):
+        # the same cells, draws and float64 bound arithmetic
+        C, E = self.components_m_.copy(), self._exp_dir.copy()
+        nc, v = C.r, C.c
+        it, self._draw, self.n_batch_iter_ = k.b.x_decomp_lda_fit(
+            M.addr, C.addr, E.addr,
+            [n, v, nc, int(self.max_iter), int(self.learning_method == "online"),
+             int(self.batch_size) if self.learning_method == "online" else 1, int(self.max_doc_update_iter),
+             int(self._seed) & 0xFFFFFFFF, self._draw, self.n_batch_iter_, int(self.evaluate_every)],
+            [float(self.doc_topic_prior_), float(self.topic_word_prior_), float(self.learning_offset),
+             float(self.learning_decay), float(self.mean_change_tol), float(n), float(self.perp_tol)])
+        self.components_m_, self._exp_dir = C, E
+        it = int(it)
         self.n_iter_ = it
         Dt, _ = self._e_step(k, M, False, False)
         self.bound_ = self._perplexity(k, M, Dt)

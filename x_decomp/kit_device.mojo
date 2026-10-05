@@ -50,6 +50,10 @@ from x_decomp.device import (
     launch_rowsum,
     launch_sqdist,
     launch_trisolve,
+    lasso_rows_kernel,
+    lars_rows_kernel,
+    omp_rows_kernel,
+    launch_lda_bound,
     absmax_scratch,
     launch_absmax,
     cd_rows_kernel,
@@ -70,7 +74,9 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
-from x_decomp.moves import MOVE_TAKE_COLS, MOVE_TRANSPOSE
+from x_decomp.moves import MOVE_FILL0, MOVE_TAKE_COLS, MOVE_TRANSPOSE
+from x_decomp.cells import LARS_ROW_EXTRA
+from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dict_update_dev
 from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.moves_device import launch_move
 from x_decomp.select_dev import enqueue_sel_reduce, order_small_kernel
@@ -582,6 +588,91 @@ struct DKit(Movable):
         svd_order(s, v, sh, vh)
         S = self.upload(sh)
         Vt = self.upload(vh)
+
+    def lda_bound(self, X: DMat, ddt: DMat, dcomp: DMat, floor: Float64) raises -> DMat:
+        """The `_approx_bound` term matrix (`lda_bound_kernel`)."""
+        var P = DMat(X.r, X.c)
+        if X.n() > 0:
+            launch_lda_bound(self.ctx, X.p(), ddt.p(), dcomp.p(), P.p(), X.r, ddt.c, X.c, Float32(floor))
+        return P^
+
+    def diag(mut self, A: DMat) raises -> DMat:
+        """`_Kit.diag` (the strided TAKE_COLS move)."""
+        var n = A.r
+        var out = DMat(1, n)
+        if n > 0:
+            var idx = self.const(0.0, 1, 1)
+            launch_move(self.ctx, MOVE_TAKE_COLS, A.p(), idx.p(), out.p(), n, 1, n + 1, 0, 0, 0)
+            self.sync()
+        return out^
+
+    def fill0(self, A: DMat, start: Int, stride: Int, count: Int) raises:
+        """`_Kit.fill0` (the FILL0 move), in place."""
+        if count > 0:
+            launch_move(self.ctx, MOVE_FILL0, A.p(), self.one.p(), A.p(), count, start, stride, 0, 0, 0)
+
+    def _code_rows(self, kind: Int, G: DMat, Q: DMat, W: DMat, a: Int, b: Int, alpha: Float64, tol: Float64) raises:
+        """`dev_code_rows_py`'s launches (DevExec's): kind 0 lasso (W the
+        warm start), 1 lars, 2 omp (W zeroed first)."""
+        var n = Q.r
+        var k = Q.c
+        if n == 0 or k == 0:
+            return
+        if n * (k * k + LARS_ROW_EXTRA * k) > 2147483647:
+            raise Error("x_decomp: code rows exceed the Int32 index bound")
+        var per = n * k
+        if kind == 1:
+            per = n * (k * k + LARS_ROW_EXTRA * k)
+        elif kind == 2:
+            per = n * (k * k + 3 * k)
+        var dn = self.ctx.enqueue_create_buffer[DType.float32](n)
+        var ds = self.ctx.enqueue_create_buffer[DType.float32](per)
+        if kind == 0:
+            self.ctx.enqueue_function[lasso_rows_kernel](
+                G.p(), Q.p(), W.p(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k), Float32(alpha), Int32(a),
+                Float32(tol), Int32(1 if b != 0 else 0), grid_dim=_blocks(n), block_dim=TPB,
+            )
+        else:
+            var wsub = self._sub(W)
+            enqueue_fill(self.ctx, wsub, Float32(0.0))
+            if kind == 1:
+                self.ctx.enqueue_function[lars_rows_kernel](
+                    G.p(), Q.p(), W.p(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k), Int32(a), Int32(b),
+                    grid_dim=_blocks(n), block_dim=TPB,
+                )
+            else:
+                self.ctx.enqueue_function[omp_rows_kernel](
+                    G.p(), Q.p(), W.p(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k), Int32(a),
+                    grid_dim=_blocks(n), block_dim=TPB,
+                )
+        self.ctx.synchronize()
+        _ = dn^
+        _ = ds^
+
+    def lasso_rows(self, G: DMat, Q: DMat, mut W: DMat, alpha: Float64, max_iter: Int, tol: Float64,
+                   positive: Bool) raises:
+        self._code_rows(0, G, Q, W, max_iter, 1 if positive else 0, alpha, tol)
+
+    def lars_rows(self, G: DMat, Q: DMat, m: Int, nnz: Int) raises -> DMat:
+        var W = DMat(Q.r, Q.c)
+        self._code_rows(1, G, Q, W, m, nnz, 0.0, 0.0)
+        return W^
+
+    def omp_rows(self, G: DMat, Q: DMat, nnz: Int) raises -> DMat:
+        var W = DMat(Q.r, Q.c)
+        self._code_rows(2, G, Q, W, nnz, 0, 0.0, 0.0)
+        return W^
+
+    def dict_fused(self, D: DMat, A: DMat, B: DMat, mut Dn: DMat) raises -> Bool:
+        """`_Kit._dict_dev`'s fused atom update (FAST builds), else False."""
+        comptime if DECOMP_FAST_DICT_DEV:
+            if D.n() == 0:
+                return False
+            Dn = DMat(D.r, D.c)
+            _ = dict_update_dev(D.id, A.id, B.id, Dn.id, D.r, D.c)
+            return True
+        else:
+            return False
 
     def word(mut self, A: DMat) raises -> Float64:
         """`A.s[0]` as Python reads it: one word home (a sync)."""
