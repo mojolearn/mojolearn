@@ -64,7 +64,7 @@ class _LogitsPool:
         self.free = []
 
     def take(self, size):
-        for i in range(len(self.free)):
+        for i in range(len(self.free)):  # glue: walks the small free logits pool
             if len(self.free[i]) == size:
                 return self.free.pop(i)
         return None
@@ -72,7 +72,7 @@ class _LogitsPool:
     def give(self, store):
         if store is None:
             return
-        if any(st is store for st in self.free):
+        if any(st is store for st in self.free):  # glue: walks the small free logits pool
             return
         if len(self.free) >= self.keep:
             self.free.pop(0)
@@ -168,14 +168,14 @@ def _schedule(value):
         if budget[0] < 0 or depth > 8:
             raise ValueError('Byte-LM schedule is too complex')
         if type(item) is dict:
-            if len(item) > 128 or any(type(key) is not str or len(key) > 2048 for key in item):
+            if len(item) > 128 or any(type(key) is not str or len(key) > 2048 for key in item):  # glue: validates the schedule argument keys
                 raise ValueError('Byte-LM schedule keys/count exceed their bounds')
-            for child in item.values():
+            for child in item.values():  # glue: validates the schedule argument values
                 check(child, depth + 1)
         elif type(item) is list:
             if len(item) > 128:
                 raise ValueError('Byte-LM schedule list exceeds its bound')
-            for child in item:
+            for child in item:  # glue: validates the schedule argument items
                 check(child, depth + 1)
         elif type(item) is str:
             if len(item) > 2048:
@@ -224,7 +224,7 @@ def _configuration(lr, betas, eps, weight_decay):
         beta1, beta2 = betas
     except (ValueError, TypeError) as exc:
         raise ValueError('Byte-LM betas must contain two scalars') from exc
-    values = {name: _float32(value, name) for name, value in
+    values = {name: _float32(value, name) for name, value in  # glue: converts the configuration arguments
               (('lr', lr), ('beta1', beta1), ('beta2', beta2),
                ('eps', eps), ('weight_decay', weight_decay))}
     if values['lr'] <= 0 or values['eps'] <= 0 or values['weight_decay'] < 0:
@@ -267,10 +267,10 @@ def _parameters(value, shape=None):
     if isinstance(value, dict):
         if set(value) != set(shape.parameter_names):
             raise ValueError('Byte-LM named parameters must contain the exact configured tensor registry')
-        arrays = [_array(value[name], shape, name) for name, shape in zip(shape.parameter_names, shape.parameter_shapes)]
+        arrays = [_array(value[name], shape, name) for name, shape in zip(shape.parameter_names, shape.parameter_shapes)]  # glue: one array per named model parameter
         flat = empty((shape.n_total,), '<f4')
         at = 0
-        for value in arrays:
+        for value in arrays:  # glue: walks the named model parameter arrays
             memcopy(addr(flat, name='parameters') + at, addr_ro(value, name='tensor'), value.nbytes)
             at += value.nbytes
         return flat
@@ -361,11 +361,11 @@ def _snapshot(state, copy=True):
     state = dict(state)
     if 'model_shape' in state:
         state['model_shape'] = shape.to_dict()
-    arrays = {key: (state[key].copy() if copy else state[key]) for key in ('parameters', 'm', 'v', 'flags')}
+    arrays = {key: (state[key].copy() if copy else state[key]) for key in ('parameters', 'm', 'v', 'flags')}  # glue: four named state arrays of a snapshot
     return dict(state, config=dict(state['config']), **arrays,
                 data_schedule=_schedule(state['data_schedule']),
                 parameter_names=list(shape.parameter_names),
-                parameter_shapes=[list(shape) for shape in shape.parameter_shapes],
+                parameter_shapes=[list(shape) for shape in shape.parameter_shapes],  # glue: lists the model parameter shapes
                 parameter_offsets=list(shape.offsets))
 
 
@@ -380,7 +380,7 @@ def _validate_state(value):
     shape = state_shape(value)
     if (value['schema'] != _SCHEMA or value['profile'] != shape.profile or value['numeric_mode'] not in _NATIVE_MODE_CODE
             or value['parameter_names'] != list(shape.parameter_names)
-            or value['parameter_shapes'] != [list(shape) for shape in shape.parameter_shapes]
+            or value['parameter_shapes'] != [list(shape) for shape in shape.parameter_shapes]  # glue: compares the model parameter shapes
             or value['parameter_offsets'] != list(shape.offsets)):
         raise ValueError('Byte-LM state profile/registry/mode mismatch')
     cfg = value['config']
@@ -388,7 +388,7 @@ def _validate_state(value):
         raise ValueError('Byte-LM state optimizer configuration mismatch')
     config = _configuration(cfg['lr'], (cfg['beta1'], cfg['beta2']), cfg['eps'], cfg['weight_decay'])
     if (type(cfg['kind']) is not int or cfg['kind'] != 2 or type(cfg['nesterov']) is not bool
-            or cfg['nesterov'] or any(_float32(cfg[key], key) != 0 for key in ('momentum', 'dampening', 'max_norm'))):
+            or cfg['nesterov'] or any(_float32(cfg[key], key) != 0 for key in ('momentum', 'dampening', 'max_norm'))):  # glue: validates three optimizer config keys
         raise ValueError('Byte-LM first profile supports AdamW without clipping or SGD options')
     completed = _step(value['completed_steps'])
     if _step(value['next_batch_index']) != completed:
@@ -409,7 +409,7 @@ def _validate_state(value):
                 completed_steps=completed, next_batch_index=completed, config=config,
                 data_schedule=_schedule(value['data_schedule']),
                 parameter_names=list(shape.parameter_names),
-                parameter_shapes=[list(shape) for shape in shape.parameter_shapes], parameter_offsets=list(shape.offsets))
+                parameter_shapes=[list(shape) for shape in shape.parameter_shapes], parameter_offsets=list(shape.offsets))  # glue: lists the model parameter shapes
 
 
 def _sha(path):
@@ -484,10 +484,10 @@ def _logits_ids(ids, shape):
     from ._labels import threshold_codes
     flat = tokens.reshape((batch * length,))
     first = batch * length
-    for mask in (threshold_codes(flat, -0.5, strict=True, below=1, above=0),
+    for mask in (threshold_codes(flat, -0.5, strict=True, below=1, above=0),  # glue: two native masks on the refusal path only
                  threshold_codes(flat, vocab - 0.5, strict=True, below=0, above=1)):
         if mask.max() == 1:
-            first = min(first, int(mask.argmax()))
+            first = min(first, int(mask.argmax()))  # glue: native argmax on the refusal path only
     r, c = divmod(first, length)
     raise ValueError(f'ids must be byte values in [0, {vocab}); got {int(flat[first])} at row {r}, position {c}')
 
@@ -656,7 +656,7 @@ class SmallByteLanguageModelTrainer:
         self._runtime_binding = None
         self._state = dict(schema=_SCHEMA, profile=shape.profile, numeric_mode=mode,
                            parameter_names=list(shape.parameter_names),
-                           parameter_shapes=[list(shape) for shape in shape.parameter_shapes],
+                           parameter_shapes=[list(shape) for shape in shape.parameter_shapes],  # glue: lists the model parameter shapes
                            parameter_offsets=list(shape.offsets), parameters=flat,
                            m=_buffers.zeros(shape.n_total, '<f4'), v=_buffers.zeros(shape.n_total, '<f4'),
                            flags=_buffers.zeros(shape.n_tensors, '<i4'), completed_steps=0, next_batch_index=0,
@@ -676,7 +676,7 @@ class SmallByteLanguageModelTrainer:
         shape = require_shape(shape)
         return [{'name': name, 'shape': tensor_shape, 'offset': shape.offsets[index],
                  'size': shape.offsets[index + 1] - shape.offsets[index]}
-                for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))]
+                for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))]  # glue: one registry entry per named parameter
 
     @property
     def step_(self):
@@ -807,13 +807,13 @@ class SmallByteLanguageModelTrainer:
             if len(info) >= 12 + 3 * n_layers:
                 names = {-1: 'NOT_ATTEMPTED', 0: 'FUSED_RAN',
                          1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER', 3: 'FUSED_SKIPPED_STICKY'}
-                for offset, key in ((0, 'forward_status'), (1, 'backward_status')):
-                    values = [int(info[12 + 3 * layer + offset]) for layer in range(n_layers)]
+                for offset, key in ((0, 'forward_status'), (1, 'backward_status')):  # glue: two status keys of the stage report
+                    values = [int(info[12 + 3 * layer + offset]) for layer in range(n_layers)]  # glue: reads per-layer status codes from the binding (n_layers-sized: model layers)
                     report[key] = values
                     report[key + '_counts'] = {name: values.count(code)
-                                              for code, name in names.items()}
+                                              for code, name in names.items()}  # glue: maps status code names
                 report['attn_materialized'] = [bool(info[14 + 3 * layer])
-                                             for layer in range(n_layers)]
+                                             for layer in range(n_layers)]  # glue: per-layer status names (n_layers-sized: model layers)
             if len(info) > 12 + 3 * n_layers:
                 report['exact_tail_guard'] = bool(info[12 + 3 * n_layers])
             if len(info) > 14 + 3 * n_layers:
@@ -822,11 +822,11 @@ class SmallByteLanguageModelTrainer:
             if len(info) >= 16 + 4 * n_layers:
                 report['sticky_eager'] = bool(info[15 + 3 * n_layers])
                 report['layers_prefer_eager'] = [bool(info[16 + 3 * n_layers + layer])
-                                               for layer in range(n_layers)]
+                                               for layer in range(n_layers)]  # glue: per-layer status names (n_layers-sized: model layers)
             if len(info) >= 17 + 5 * n_layers:
                 report['repair_masked_tail'] = bool(info[16 + 4 * n_layers])
                 report['backward_repair_sites'] = [int(info[17 + 4 * n_layers + layer])
-                                                  for layer in range(n_layers)]
+                                                  for layer in range(n_layers)]  # glue: per-layer status names (n_layers-sized: model layers)
             return report
 
     def _export_state_impl(self):
@@ -870,7 +870,7 @@ class SmallByteLanguageModelTrainer:
         if named:
             result['gradients'] = {
                 name: gradients[shape.offsets[index]:shape.offsets[index + 1]].reshape(tensor_shape).copy()
-                for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))}
+                for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))}  # glue: one gradient view per named parameter
         return result
 
     def close(self):
@@ -910,7 +910,7 @@ class SmallByteLanguageModelTrainer:
         working = _validate_state(self._state)
         cfg = working['config']
         inputs = [working['parameters'], working['m'], working['v'], working['flags']]
-        addresses = [addr_ro(value, name='state') for value in inputs]
+        addresses = [addr_ro(value, name='state') for value in inputs]  # glue: addresses of the session input buffers
         parameters = [0, working['completed_steps'], cfg['kind'], cfg['lr'],
                       cfg['beta1'], cfg['beta2'], cfg['eps'], cfg['weight_decay'],
                       cfg['momentum'], cfg['dampening'], int(cfg['nesterov']), cfg['max_norm']]
@@ -1045,7 +1045,7 @@ class SmallByteLanguageModelTrainer:
         out_grad = _buffers.full(shape.n_total, float("nan"), '<f4') if train else None
         _tick(ton, clock, 'step.py_alloc_outputs', (3 + int(train)) * n4)
         cfg = working['config']
-        addresses = [*(addr_ro(value, name='input') for value in inputs),
+        addresses = [*(addr_ro(value, name='input') for value in inputs),  # glue: addresses of the step input buffers
                      addr(out_p, name='out_p'), addr(out_m, name='out_m'),
                      addr(out_v, name='out_v'),
                      addr(out_grad, name='out_grad') if train else 0,
@@ -1078,7 +1078,7 @@ class SmallByteLanguageModelTrainer:
         _tick(ton, clock, 'step.py_candidate_state', 3 * n4)
         if not train:
             if any(candidate[key].tobytes() != working[key].tobytes()
-                   for key in ('parameters', 'm', 'v', 'flags')):
+                   for key in ('parameters', 'm', 'v', 'flags')):  # glue: four named state arrays
                 raise RuntimeError('Byte-LM evaluation changed full training state')
             _tick(ton, clock, 'step.py_eval_unchanged', 3 * n4)
             return float(out_loss[0])
@@ -1088,7 +1088,7 @@ class SmallByteLanguageModelTrainer:
         result = dict(loss=float(out_loss[0]), step=expected, completed_steps=expected,
                       next_batch_index=expected, flat_gradients=gradients,
                       gradients={name: gradients[shape.offsets[index]:shape.offsets[index + 1]].reshape(tensor_shape).copy()
-                                 for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))})
+                                 for index, (name, tensor_shape) in enumerate(zip(shape.parameter_names, shape.parameter_shapes))})  # glue: one view per named parameter
         self._state = candidate
         # The per-tensor gradient dict: one more n-float copy in slices.
         _tick(ton, clock, 'step.py_gradients_dict', n4)
@@ -1103,7 +1103,7 @@ class SmallByteLanguageModelTrainer:
         reaches `_run`'s rollback with nothing committed."""
         self._require_not_lost()
         binding = self._binding()
-        missing = [name for name in _SESSION_ENTRIES if not callable(getattr(binding, name, None))]
+        missing = [name for name in _SESSION_ENTRIES if not callable(getattr(binding, name, None))]  # glue: checks the session binding entries
         if missing:
             raise ImportError('Byte-LM binding lacks owned sessions (%s); rebuild bindings/build_byte_lm.sh'
                               % ', '.join(missing))
@@ -1289,7 +1289,7 @@ class SmallByteLanguageModelTrainer:
     def _logits_resident(self, tokens, batch, length, shape):
         self._require_not_lost()
         binding = self._binding()
-        missing = [name for name in _SESSION_ENTRIES + (_SESSION_LOGITS_ENTRY,)
+        missing = [name for name in _SESSION_ENTRIES + (_SESSION_LOGITS_ENTRY,)  # glue: checks the session binding entries
                    if not callable(getattr(binding, name, None))]
         if missing:
             raise ImportError('Byte-LM binding lacks resident GPU logits (%s); rebuild bindings/build_byte_lm.sh'
@@ -1360,7 +1360,7 @@ class SmallByteLanguageModelTrainer:
             if state_shape(self._state).n_total * 24 + state_shape(self._state).n_tensors * 8 > _CHECKPOINT_LIMIT:
                 raise ValueError('Byte-LM checkpoint exceeds 2 MiB; export state_dict arrays')
             payload = self.export_state()
-        for key in ('parameters', 'm', 'v', 'flags'):
+        for key in ('parameters', 'm', 'v', 'flags'):  # glue: four named checkpoint arrays
             value = payload[key]
             integer = key == 'flags'
             dtype = '<i4' if integer else '<f4'
@@ -1483,7 +1483,7 @@ def _decode_checkpoint(encoded):
     if not isinstance(payload, dict):
         raise ValueError('Byte-LM checkpoint payload must be an object')
     shape = state_shape(payload)
-    for key in ('parameters', 'm', 'v', 'flags'):
+    for key in ('parameters', 'm', 'v', 'flags'):  # glue: four named checkpoint arrays
         value = payload.get(key)
         cells, dtype = (shape.n_tensors, '<i4') if key == 'flags' else (shape.n_total, '<f4')
         if (not isinstance(value, dict) or set(value) != {'dtype', 'shape', 'hex'}
@@ -1505,7 +1505,7 @@ def _decode_checkpoint(encoded):
 
 def _unique_object(pairs):
     result = {}
-    for key, value in pairs:
+    for key, value in pairs:  # glue: walks the checkpoint key value pairs
         if key in result:
             raise ValueError('Duplicate byte-LM checkpoint key')
         result[key] = value

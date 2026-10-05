@@ -43,7 +43,7 @@ def _f32(x, name):
 def _pair(v, name):
     if isinstance(v, int):
         v = (v, v)
-    v = tuple(int(t) for t in v)
+    v = tuple(int(t) for t in v)  # glue: converts a kernel size argument pair
     if len(v) != 2:
         raise ValueError(f"mojolearn: {name} must be an int or a pair")
     return v
@@ -179,7 +179,7 @@ class _Dev:
 
     def free(self):
         h, self.h = self.h, {}
-        for k, (a, _) in h.items():
+        for k, (a, _) in h.items():  # glue: frees the device handle table
             try:
                 self.b.x_cnn_res_free(a)
             except Exception:  # noqa: BLE001  (interpreter shutdown)
@@ -646,7 +646,7 @@ class Conv2d(_Layer):
         prm = self._params(xp.shape)
         out = np.empty(self._out_shape(x.shape), np.float32)
         cg, og = self.in_channels // self.groups, self.out_channels // self.groups
-        for g in range(self.groups):
+        for g in range(self.groups):  # glue: one conv launch per channel group (groups-sized: convolution groups)
             xg = self._group(xp, g, cg)
             wg = np.ascontiguousarray(self.weight_[g * og:(g + 1) * og])
             bg = np.ascontiguousarray(self.bias_[g * og:(g + 1) * og])
@@ -706,7 +706,7 @@ class Conv2d(_Layer):
         dxp = np.empty(xp.shape, np.float32)
         dw = np.empty(self.weight_.shape, np.float32)
         db = np.empty(self.out_channels, np.float32)
-        for k in range(self.groups):
+        for k in range(self.groups):  # glue: one conv backward launch per channel group (groups-sized: convolution groups)
             xg = self._group(xp, k, cg)
             gg = self._group(g, k, og)
             wg = np.ascontiguousarray(self.weight_[k * og:(k + 1) * og])
@@ -742,7 +742,7 @@ class Conv2d(_Layer):
     def fit(self, X, y=None):
         """Layers carry their weights from construction; fit only records the input shape."""
         X = self._rows(X)
-        self.n_features_in_ = int(_np().prod(X.shape[1:]))
+        self.n_features_in_ = int(_np().prod(X.shape[1:]))  # glue: product of the input shape entries
         return self
 
 
@@ -763,7 +763,7 @@ class Conv1d(Conv2d):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1,
                  bias=True, padding_mode="zeros", random_state=0, input_shape=None, numeric_mode=None):
-        k, s, d = (int(v if isinstance(v, int) else v[0]) for v in (kernel_size, stride, dilation))
+        k, s, d = (int(v if isinstance(v, int) else v[0]) for v in (kernel_size, stride, dilation))  # glue: unpacks three layer size arguments
         pad = padding if isinstance(padding, str) else (0, int(padding if isinstance(padding, int) else padding[0]))
         super().__init__(in_channels, out_channels, (1, k), (1, s), pad, (1, d), groups, bias, padding_mode,
                          random_state, None, numeric_mode)
@@ -888,7 +888,7 @@ class MaxPool2d(_Pool2d):
         b = self._binding()
         if _mixed(b):
             dev = _dev_of(self, b)
-            h = dev.get("idx", int(np.prod(shape)))
+            h = dev.get("idx", int(np.prod(shape)))  # glue: product of the output shape entries
             b.x_cnn_maxpool2d_forward_m([x.ctypes.data, out.ctypes.data, h], 0b100, self._params(x.shape))
             self._xshape = x.shape
             self.__dict__.update(_idx_host=None, _idx_dev=h, _idx_shape=shape)
@@ -1159,7 +1159,7 @@ class _Res:
         return self
 
     def __exit__(self, *exc):
-        for h in self.handles:
+        for h in self.handles:  # glue: releases the resident buffer handles
             self.b.x_cnn_res_free(h)
         self.handles = []
 
@@ -1220,8 +1220,8 @@ class CNNClassifier(_Layer):
         self.nesterov = bool(nesterov)
         self.betas = (float(betas[0]), float(betas[1]))
         self.eps = float(eps)
-        self.input_shape = tuple(int(v) for v in input_shape)
-        self.conv_channels = tuple(int(c) for c in conv_channels)
+        self.input_shape = tuple(int(v) for v in input_shape)  # glue: converts the input_shape argument
+        self.conv_channels = tuple(int(c) for c in conv_channels)  # glue: converts the conv_channels argument
         self.kernel_size = int(kernel_size)
         self.pool_size = int(pool_size)
         self.learning_rate = float(learning_rate)
@@ -1245,7 +1245,7 @@ class CNNClassifier(_Layer):
         seed = 0 if self.random_state is None else int(self.random_state)
         c, h, w = self.input_shape
         layers = []
-        for i, oc in enumerate(self.conv_channels):
+        for i, oc in enumerate(self.conv_channels):  # glue: builds one layer per conv_channels entry
             layers.append(Conv2d(c, oc, self.kernel_size, padding=self.kernel_size // 2, random_state=seed + 101 * i,
                                  numeric_mode=self.numeric_mode))
             h = h + 2 * (self.kernel_size // 2) - self.kernel_size + 1
@@ -1263,14 +1263,14 @@ class CNNClassifier(_Layer):
         # the same values as the three layer calls, on resident arrays
         # (DEVIATION 5718).
         self._blocks = []
-        for i, layer in enumerate(layers):
+        for i, layer in enumerate(layers):  # glue: walks the built layer list
             if isinstance(layer, Conv2d):
                 nxt = layers[i + 2] if i + 2 < len(layers) else None
                 self._blocks.append((layer, nxt if isinstance(nxt, MaxPool2d) else None))
 
     def _params(self):
         out = []
-        for layer in self.layers_ + [self.head_]:
+        for layer in self.layers_ + [self.head_]:  # glue: walks the layer parameter list
             if hasattr(layer, "weight_"):
                 out.append((layer, "weight_", "grad_weight_"))
                 out.append((layer, "bias_", "grad_bias_"))
@@ -1281,13 +1281,13 @@ class CNNClassifier(_Layer):
         im2col size, conv output size) at batch size n, and the final shape."""
         plans = []
         shape = (n,) + self.input_shape
-        for conv, pool in self._blocks:
+        for conv, pool in self._blocks:  # glue: plans one launch per conv block
             prm = conv._params(shape)
             cshape = conv._out_shape(shape)
             pprm = pool._params(cshape) if pool is not None else []
             oshape = pool._out_shape(cshape) if pool is not None else cshape
-            ny = int(_np().prod(cshape))
-            plans.append((prm, pprm, int(_np().prod(shape)), int(_np().prod(oshape)),
+            ny = int(_np().prod(cshape))  # glue: product of the output shape entries
+            plans.append((prm, pprm, int(_np().prod(shape)), int(_np().prod(oshape)),  # glue: products of the plan shape entries
                           ny // conv.out_channels * conv.weight_[0].size, ny))
             shape = oshape
         return plans, shape
@@ -1300,10 +1300,10 @@ class CNNClassifier(_Layer):
         k = len(self.classes_)
         a = dict(x=R.new(plans[0][2] if plans else n * self._flat), y=R.new(n),
                  logits=R.new(n * k), glog=R.new(n * k), proba=R.new(n * k))
-        a["out"] = [R.new(p[3]) for p in plans]
-        a["idx"] = [R.new(p[3]) for p in plans]
-        a["gout"] = [R.new(p[3]) for p in plans] if (train or _LEGACY_STEP) else []
-        a["saved"] = [[R.new(p[4]), R.new(p[5])] if save else [] for p in plans]
+        a["out"] = [R.new(p[3]) for p in plans]  # glue: allocates one buffer per conv block
+        a["idx"] = [R.new(p[3]) for p in plans]  # glue: allocates one buffer per conv block
+        a["gout"] = [R.new(p[3]) for p in plans] if (train or _LEGACY_STEP) else []  # glue: allocates one buffer per conv block
+        a["saved"] = [[R.new(p[4]), R.new(p[5])] if save else [] for p in plans]  # glue: allocates one buffer per conv block
         if not plans:  # the head's input gradient, never read, kept apart from glog
             a["ghead"] = R.new(n * self._flat)
         return a
@@ -1312,7 +1312,7 @@ class CNNClassifier(_Layer):
         """Logits of the n rows in a["x"], every array on the binding's side."""
         plans, _ = self._plan(n)
         src = a["x"]
-        for (conv, pool), p, out, idx, sv in zip(self._blocks, plans, a["out"], a["idx"], a["saved"]):
+        for (conv, pool), p, out, idx, sv in zip(self._blocks, plans, a["out"], a["idx"], a["saved"]):  # glue: drives one device launch per conv block
             b.x_cnn_conv_block_forward_r(src, self._rw[id(conv)][0], self._rw[id(conv)][1], out, idx, p[0], p[1], sv)
             src = out
         hw, hb = self._rw[id(self.head_)][:2]
@@ -1348,17 +1348,17 @@ class CNNClassifier(_Layer):
         with _Res(b) as R:
             self._rw = {}
             hp, hg, hbuf = [], [], []
-            for layer, attr, _ in params:
+            for layer, attr, _ in params:  # glue: walks the layer parameter list
                 arr = getattr(layer, attr)
                 hp.append(R.new(arr.size))
                 R.put(hp[-1], arr)
                 hg.append(R.new(arr.size))
                 hbuf.append(R.new(per * arr.size))
-            for i, (layer, attr, _) in enumerate(params):
+            for i, (layer, attr, _) in enumerate(params):  # glue: walks the layer parameter list
                 if attr == "weight_":
                     self._rw[id(layer)] = (hp[i], hp[i + 1], hg[i], hg[i + 1])
             a = self._resident(R, cap, save=True)
-            sizes = [int(getattr(layer, attr).size) for layer, attr, _ in params]
+            sizes = [int(getattr(layer, attr).size) for layer, attr, _ in params]  # glue: sizes of the layer parameter arrays
             # the list forms (one optimizer call, one gather per step) on the
             # GPU binding only: the host twin's list forms are unmeasured
             lists = (not _LEGACY_STEP) and str(b.x_cnn_vendor()) != "cpu"
@@ -1367,7 +1367,7 @@ class CNNClassifier(_Layer):
             # the host with `gather_rows_bytes` and uploaded them is gone; GPU
             # path, GPU only): each step gathers its rows on the binding's side
             # (a word copy) instead of uploading them
-            row = int(np.prod(self.input_shape))
+            row = int(np.prod(self.input_shape))  # glue: product of the input shape entries
             xall, yall = R.new(x.size), R.new(n)
             R.put(xall, x)
             R.put(yall, yi)
@@ -1379,14 +1379,14 @@ class CNNClassifier(_Layer):
                 m_last = n - (nsteps - 1) * bs
                 hw_, hb_, hgw_, hgb_ = self._rw[id(self.head_)]
                 blocks = []
-                for j, (conv, _) in enumerate(self._blocks):
+                for j, (conv, _) in enumerate(self._blocks):  # glue: walks the conv block list
                     w_, b_, gw_, gb_ = self._rw[id(conv)]
                     blocks.append([w_, b_, gw_, gb_, a["out"][j], a["idx"][j], a["gout"][j]] + a["saved"][j])
                 spec = dict(blocks=blocks, head=[hw_, hb_, hgw_, hgb_],
                             a=[a["x"], a["y"], a["logits"], a["glog"], a["proba"], a.get("ghead", 0)],
                             opt=[hp, hg, hbuf, sizes], data=[xall, yall, row], dims=[self._flat, k],
-                            plan_full=[[list(p[0]), list(p[1])] for p in self._plan(cap)[0]],
-                            plan_last=[[list(p[0]), list(p[1])] for p in self._plan(m_last)[0]])
+                            plan_full=[[list(p[0]), list(p[1])] for p in self._plan(cap)[0]],  # glue: launch plan of every conv block
+                            plan_last=[[list(p[0]), list(p[1])] for p in self._plan(m_last)[0]])  # glue: launch plan of every conv block
                 sgd_row = [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
                            1.0 if self.nesterov else 0.0, 0.0]
             # lane fam2-neural: the order, Adam's scalars and the losses on the
@@ -1398,7 +1398,7 @@ class CNNClassifier(_Layer):
             seed64 = int(order_state[0])
             seed_lo, seed_hi = seed64 & 0xFFFFFFFF, seed64 >> 32
             ep = -1
-            for _ in range(self.max_iter):
+            for _ in range(self.max_iter):  # glue: drives the device epochs (max_iter-sized: epochs)
                 ep += 1
                 if epoch_entry and dev_epoch:
                     losses = np.empty(nsteps, dtype=np.float64)
@@ -1422,7 +1422,7 @@ class CNNClassifier(_Layer):
                 if epoch_entry:
                     rows = np.ascontiguousarray(order, dtype=np.int32)
                     if self.optimizer == "sgd":
-                        hyper = np.tile(np.asarray(sgd_row, dtype=np.float64), (nsteps, 1))
+                        hyper = np.tile(np.asarray(sgd_row, dtype=np.float64), (nsteps, 1))  # glue: builds the per-step hyperparameter table (nsteps-sized: optimizer steps)
                         if step == 0:
                             hyper[0, 5] = 1.0
                     else:
@@ -1439,7 +1439,7 @@ class CNNClassifier(_Layer):
                     self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
                     continue
                 epoch = []
-                for s in range(0, n, self.batch_size):
+                for s in range(0, n, self.batch_size):  # glue: drives the device minibatch steps (batch_size-sized: minibatches)
                     idx = order[s:s + self.batch_size]
                     m = len(idx)
                     rows = np.ascontiguousarray(idx, dtype=np.int32)
@@ -1454,7 +1454,7 @@ class CNNClassifier(_Layer):
                     last = a["out"][-1] if plans else a["x"]
                     glast = a["gout"][-1] if plans else a["ghead"]
                     b.x_cnn_linear_backward_r(last, hw, a["glog"], glast, hgw, hgb, [m, self._flat, k])
-                    for j in range(len(self._blocks) - 1, -1, -1):
+                    for j in range(len(self._blocks) - 1, -1, -1):  # glue: drives the backward launch per conv block
                         conv = self._blocks[j][0]
                         prm, pprm = plans[j][:2]
                         w_, b_, gw_, gb_ = self._rw[id(conv)]
@@ -1473,7 +1473,7 @@ class CNNClassifier(_Layer):
                             b.x_cnn_adam_r(hp, hg, hbuf, sizes, _adam_hyper(step, self.learning_rate, self.betas,
                                                                             self.eps, self.weight_decay,
                                                                             self.optimizer == "adamw", b))
-                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if not lists else ():
+                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if not lists else ():  # glue: one optimizer launch per parameter array
                         size = getattr(layer, attr).size
                         if self.optimizer == "sgd":
                             b.x_cnn_sgd_r(p_, g_, buf, [size],
@@ -1487,13 +1487,13 @@ class CNNClassifier(_Layer):
                 self.losses_.extend(epoch)
                 # CPython 3.12+'s sum spelled out: the same bits on every Python (DEVIATION 6901)
                 self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
-            for (layer, attr, gattr), p_, g_, buf in zip(params, hp, hg, hbuf):
+            for (layer, attr, gattr), p_, g_, buf in zip(params, hp, hg, hbuf):  # glue: reads back each parameter array handle
                 arr = getattr(layer, attr)
                 setattr(layer, attr, R.get(p_, arr.shape))
                 setattr(layer, gattr, R.get(g_, arr.shape))
-            self._bufs = [R.get(buf, (per * getattr(l, at).size,)) for (l, at, _), buf in zip(params, hbuf)]
+            self._bufs = [R.get(buf, (per * getattr(l, at).size,)) for (l, at, _), buf in zip(params, hbuf)]  # glue: reads back each optimizer buffer handle
             self._rw = {}
-        self.n_features_in_ = int(np.prod(self.input_shape))
+        self.n_features_in_ = int(np.prod(self.input_shape))  # glue: product of the input shape entries
         return self
 
     def predict_proba(self, X):
@@ -1515,14 +1515,14 @@ class CNNClassifier(_Layer):
         lab = np.empty(n, np.int32) if codes else None
         with _Res(b) as R:
             self._rw = {}
-            for layer in [c for c, _ in self._blocks] + [self.head_]:
+            for layer in [c for c, _ in self._blocks] + [self.head_]:  # glue: walks the layer list for device copies
                 hw, hb = R.new(layer.weight_.size), R.new(layer.bias_.size)
                 R.put(hw, layer.weight_)
                 R.put(hb, layer.bias_)
                 self._rw[id(layer)] = (hw, hb)
             a = self._resident(R, cap, train=False)
             R.put(a["y"], np.full(cap, -1, np.int32))
-            for s in range(0, n, cap):
+            for s in range(0, n, cap):  # glue: drives the device prediction batches (cap-sized: prediction batches)
                 m = min(cap, n - s)
                 R.put(a["x"], np.ascontiguousarray(x[s:s + m]))
                 self._forward_r(b, a, m)
@@ -1552,7 +1552,7 @@ class CNNClassifier(_Layer):
 
     def weights(self):
         """Every trained array, in layer order: [w0, b0, w1, b1, ...]."""
-        return [getattr(l, a) for l, a, _ in self._params()]
+        return [getattr(l, a) for l, a, _ in self._params()]  # glue: walks the layer parameter list
 
 
 def np_reshape(X, shape):
@@ -1617,9 +1617,9 @@ class BatchNorm2d(_Layer):
         aux[2 + 5 * C:2 + 6 * C] = self.weight_
         aux[2 + 6 * C:2 + 7 * C] = self.bias_
         if self.track_running_stats:
-            running = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)
+            running = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)  # glue: packs fitted running statistics for the binding (running_mean_-sized: BatchNorm channels)
         else:
-            running = np.concatenate([np.zeros(C, np.float32), np.ones(C, np.float32)])
+            running = np.concatenate([np.zeros(C, np.float32), np.ones(C, np.float32)])  # glue: packs initial running statistics for the binding (C-sized: BatchNorm channels)
         return aux, running, batch_stats
 
     def _finish(self, running):
@@ -1831,7 +1831,7 @@ class Dropout2d(_Layer):
             raise ValueError("mojolearn: Dropout2d.forward takes (N, C, H, W) or (C, H, W)")
         x4 = x[None] if x.ndim == 3 else x
         n, c = x4.shape[:2]
-        hw = int(np.prod(x4.shape[2:]))
+        hw = int(np.prod(x4.shape[2:]))  # glue: product of the spatial shape entries
         thresh = min(int(round(self.p * 2 ** 32)), 2 ** 32)
         seed_lo = self.random_state & 0x7FFFFFFF
         seed_hi = ((self.random_state >> 31) * 1000003 + self.calls_) & 0x7FFFFFFF
@@ -1873,7 +1873,7 @@ class Dropout2d(_Layer):
         b = self._binding()
         h = d.get("_mask_dev")
         if h is not None and _mixed(b) and self._dev.b is b:
-            if g.size != int(np.prod(d["_mask_shape"])):
+            if g.size != int(np.prod(d["_mask_shape"])):  # glue: product of the saved mask shape
                 raise ValueError("mojolearn: grad_out does not match the forward's input")
             b.x_cnn_map2_m([g.ctypes.data, h, dx.ctypes.data], 0b010, [3, g.size])
             return dx
@@ -2066,7 +2066,7 @@ class BasicBlock(_Layer):
 
     def train(self, mode=True):
         self.training = bool(mode)
-        for bn in self._bns():
+        for bn in self._bns():  # glue: walks the block BatchNorm layers
             bn.train(mode)
         return self
 
@@ -2086,11 +2086,11 @@ class BasicBlock(_Layer):
 
     def _chain_ok(self, b):
         convs = [self.conv1, self.conv2] + ([self.downsample[0]] if self.downsample else [])
-        return _mixed(b) and all(c.groups == 1 and not c._explicit for c in convs)
+        return _mixed(b) and all(c.groups == 1 and not c._explicit for c in convs)  # glue: checks the block conv layer flags
 
     def _conv_dev(self, b, conv, xh, xshape, name, dev):
         oshape = conv._out_shape(xshape)
-        yh = dev.get(name, int(_np().prod(oshape)))
+        yh = dev.get(name, int(_np().prod(oshape)))  # glue: product of the output shape entries
         w = _np().ascontiguousarray(conv.weight_)
         bias = _np().ascontiguousarray(conv.bias_)
         b.x_cnn_conv2d_forward_m([xh, w.ctypes.data, bias.ctypes.data, yh], 0b1001, conv._params(xshape))
@@ -2098,7 +2098,7 @@ class BasicBlock(_Layer):
 
     def _bn_dev(self, b, bn, xh, shape, name, dev):
         n, c = shape[:2]
-        hw = int(_np().prod(shape[2:]))
+        hw = int(_np().prod(shape[2:]))  # glue: product of the spatial shape entries
         if c != bn.num_features:
             raise ValueError(f"mojolearn: input has {c} channels, the layer {bn.num_features}")
         yh = dev.get(name, n * c * hw)
@@ -2118,12 +2118,12 @@ class BasicBlock(_Layer):
         xh = x.h if xt else dev.upload("x", x)
         c1, s1 = self._conv_dev(b, self.conv1, xh, x.shape, "c1", dev)
         b1 = self._bn_dev(b, self.bn1, c1, s1, "b1", dev)
-        n1 = int(np.prod(s1))
+        n1 = int(np.prod(s1))  # glue: product of the output shape entries
         r1 = dev.get("r1", n1)
         b.x_cnn_map2_m([b1, b1, r1], 0b111, [0, n1])
         c2, s2 = self._conv_dev(b, self.conv2, r1, s1, "c2", dev)
         b2 = self._bn_dev(b, self.bn2, c2, s2, "b2", dev)
-        n2 = int(np.prod(s2))
+        n2 = int(np.prod(s2))  # glue: product of the output shape entries
         idh = xh
         if self.downsample:
             d1, sd = self._conv_dev(b, self.downsample[0], xh, x.shape, "d1", dev)
@@ -2147,7 +2147,7 @@ class BasicBlock(_Layer):
         """conv's backward from resident g into resident dx `name`; sets its
         weight gradients (the same words `Conv2d.backward` sets)."""
         np = _np()
-        dxh = dev.get(name, int(np.prod(xshape)))
+        dxh = dev.get(name, int(np.prod(xshape)))  # glue: product of the input shape entries
         w = np.ascontiguousarray(conv.weight_)
         dw = np.empty(conv.weight_.shape, np.float32)
         db = np.empty(conv.out_channels, np.float32)
@@ -2173,7 +2173,7 @@ class BasicBlock(_Layer):
         gb2 = dev.get("gb2", n2)
         self.bn2._backward_dev(b, k["c2"], gs, gb2)
         gr1 = self._conv_back_dev(b, self.conv2, k["r1"], k["s1"], gb2, k["s2"], "gr1", dev)
-        n1 = int(np.prod(k["s1"]))
+        n1 = int(np.prod(k["s1"]))  # glue: product of the saved shape entries
         gb1 = dev.get("gb1", n1)
         b.x_cnn_map2_m([k["b1"], gr1, gb1], 0b111, [1, n1])           # relu1
         gc1 = dev.get("gc1", n1)
@@ -2225,7 +2225,7 @@ class BasicBlock(_Layer):
     def parameters(self):
         out = []
         layers = [self.conv1, self.bn1, self.conv2, self.bn2] + (self.downsample or [])
-        for layer in layers:
+        for layer in layers:  # glue: walks the block layer list
             out.append((layer, "weight_", "grad_weight_"))
             if isinstance(layer, BatchNorm2d):
                 out.append((layer, "bias_", "grad_bias_"))
@@ -2323,11 +2323,11 @@ class _GraphKey:
         self.n = int(n)
         self.refs = arrays
         self.sig = tuple(None if a is None else (tuple(getattr(a, "shape", ())), str(getattr(a, "dtype", "")),
-                                                 _data_addr(a)) for a in arrays)
+                                                 _data_addr(a)) for a in arrays)  # glue: address key of the graph input arrays
 
     def __eq__(self, other):
         return (isinstance(other, _GraphKey) and self.n == other.n and len(self.refs) == len(other.refs)
-                and all(a is b for a, b in zip(self.refs, other.refs)) and self.sig == other.sig)
+                and all(a is b for a, b in zip(self.refs, other.refs)) and self.sig == other.sig)  # glue: compares the graph key references
 
     __hash__ = None
 
@@ -2381,7 +2381,7 @@ class GCNConv(_Layer):
         self.bias = bool(bias)
         self.numeric_mode = numeric_mode
         rng = _rng(random_state)
-        bound = np.sqrt(6.0 / (self.in_channels + self.out_channels))  # glorot, PyG's Linear(weight_initializer='glorot')
+        bound = np.sqrt(6.0 / (self.in_channels + self.out_channels))  # glorot, PyG's Linear(weight_initializer='glorot')  # glue: scalar glorot bound of two sizes
         self.weight_ = _uniform(rng, bound, (self.out_channels, self.in_channels))
         self.bias_ = np.zeros(self.out_channels, np.float32)
 
