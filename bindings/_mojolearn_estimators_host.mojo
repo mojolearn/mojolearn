@@ -54,6 +54,7 @@ deliberately absent, so those surfaces refuse BY NAME through
 """
 from glm.host.center_host import col_sums_on_cpu, center_on_cpu, scale_rows_on_cpu
 from glm.impl.lm_finish import lm_intercept, lm_means_finish
+from decomposition.impl.pca_rank import pca_rank_finish
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
@@ -475,6 +476,28 @@ def lm_intercept_binding(
     if nc <= 0:
         return PythonObject(ym - 0.0)
     return PythonObject(lm_intercept(f32_ptr(Int(py=xmean_addr)), f32_ptr(Int(py=coef_addr)), nc, ym))
+
+
+def pca_rank_finish_binding(
+    ratio_addr: PythonObject, ev_addr: PythonObject, params: PythonObject, frac: PythonObject,
+) raises -> PythonObject:
+    """Lane py-runtime: PCA's kept component count for a float n_components
+    (or the given MLE rank) and the dropped tail's noise variance
+    (decomposition/impl/pca_rank.mojo; it was Python in PCA.fit). params:
+    nc, keep (-1: choose by frac). Returns [keep, noise_variance]."""
+    if len(params) != 2:
+        raise Error("pca_rank_finish: params must contain nc, keep")
+    var nc = Int(py=params[0])
+    var keep_in = Int(py=params[1])
+    var noise: Float64 = 0.0
+    var keep = 0
+    if nc > 0:
+        keep = pca_rank_finish(f32_ptr(Int(py=ratio_addr)), f32_ptr(Int(py=ev_addr)), nc, keep_in,
+                               Float64(py=frac), noise)
+    var out = Python.list()
+    out.append(PythonObject(keep))
+    out.append(PythonObject(noise))
+    return out
 
 
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1446,6 +1469,7 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[lm_col_sums_binding]("lm_col_sums")
         module.def_function[lm_means_finish_binding]("lm_means_finish")
         module.def_function[lm_intercept_binding]("lm_intercept")
+        module.def_function[pca_rank_finish_binding]("pca_rank_finish")
         module.def_function[lm_center_binding]("lm_center")
         module.def_function[lm_scale_rows_binding]("lm_scale_rows")
         module.def_function[ridge_fit_binding]("ridge_fit")

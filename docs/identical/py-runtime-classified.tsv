@@ -532,9 +532,9 @@ python/mojolearn/_x_sequence_rnn.py	190	runtime	LR per optimizer step in Python;
 python/mojolearn/_x_sequence_sched.py	221	runtime	LR per optimizer step in Python; owed to a Mojo schedule routine
 python/mojolearn/_x_sequence_sched.py	442	runtime	OneCycle LR fill in Python exact rationals; owed to a Mojo schedule routine
 python/mojolearn/_x_sequence_sched.py	452	runtime	OneCycle LR fill in Python exact rationals; owed to a Mojo schedule routine
-python/mojolearn/decomposition.py	400	runtime	PCA float n_components: cumulative explained-variance ratio fold in Python; owed to the estimators binding PCA finish
-python/mojolearn/decomposition.py	406	runtime	PCA float n_components: explained variance tail sum in Python; owed to the PCA finish
-python/mojolearn/decomposition.py	409	runtime	PCA float n_components: explained variance tail sum in Python; owed to the PCA finish
+python/mojolearn/decomposition.py	400	runtime-fixed	PCA rank and noise variance now pca_rank_finish (decomposition/impl/pca_rank.mojo, host Mojo in both bindings)
+python/mojolearn/decomposition.py	406	runtime-fixed	PCA rank and noise variance now pca_rank_finish (decomposition/impl/pca_rank.mojo, host Mojo in both bindings)
+python/mojolearn/decomposition.py	409	runtime-fixed	PCA rank and noise variance now pca_rank_finish (decomposition/impl/pca_rank.mojo, host Mojo in both bindings)
 python/mojolearn/language_model.py	53	glue	module attribute names for dir
 python/mojolearn/linear_model.py	170	cpu-input	flattens a user Python list y, the explicit input step
 python/mojolearn/linear_model.py	201	cpu-input	kind test of a user Python list y, the explicit input step

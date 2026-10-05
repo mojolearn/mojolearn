@@ -391,26 +391,20 @@ class PCA(NumericModeMixin):
             addr(self.singular_values_, name="singular_values_"), [x.shape[0], x.shape[1], nc],
         ))
         if frac is not None or mle:
+            keep_in = -1
             if mle:
                 from ._expansion_decomp import _pca_mle_rank
-                keep = _pca_mle_rank(list(self.explained_variance_), x.shape[0], self.numeric_mode_used())
-            else:
-                ratios = list(self.explained_variance_ratio_)
-                cum, keep = 0.0, len(ratios)
-                for i, r in enumerate(ratios):
-                    cum += float(r)
-                    if cum > frac:
-                        keep = i + 1
-                        break
-            keep = min(keep, nc)
-            ev = [float(v) for v in self.explained_variance_]
-            rest = ev[keep:]
-            tail = 0.0
-            for v in rest:
-                tail += v
+                keep_in = _pca_mle_rank(list(self.explained_variance_), x.shape[0], self.numeric_mode_used())
+            # the rank for a float n_components and the dropped tail's noise
+            # variance, in Mojo (decomposition/impl/pca_rank.mojo)
+            keep, noise = binding.pca_rank_finish(
+                addr_ro(self.explained_variance_ratio_, name="explained_variance_ratio_"),
+                addr_ro(self.explained_variance_, name="explained_variance_"),
+                [nc, int(keep_in)], float(frac) if frac is not None else 0.0)
+            keep = int(keep)
+            self.noise_variance_ = float(noise)
             import array as _arr
             from ._buffer import frombytes
-            self.noise_variance_ = float(_arr.array("f", [tail / len(rest)])[0]) if rest else 0.0
             d = x.shape[1]
             comp = _arr.array("f")
             comp.frombytes(self.components_.tobytes()[:4 * keep * d])
