@@ -794,7 +794,8 @@ def _t_ard_sigma_eq(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: In
 
 
 #: ONE FACTOR PER ITERATION (lane apple-fast-general-speed, 2026-10-04),
-#: the default under ARD_FAST_EQ; `-D MOJOLEARN_ARD_EQ_ONEPASS_OFF` restores
+#: FAST + Apple default under ARD_FAST_EQ (other vendors keep the retry);
+#: `-D MOJOLEARN_ARD_EQ_ONEPASS_OFF` restores
 #: the ridge retry and the full inverse above. M3 board (FAST, 1 run per
 #: arm): the ARD_FAST_EQ fix took ard istella from 67 ms (quality wrong,
 #: r2 -0.1387) to 1,348 ms (r2 0.327, scikit-learn 0.3274). Each iteration
@@ -814,7 +815,9 @@ def _t_ard_sigma_eq(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: In
 #:     are alpha S inv(L)' (inv(L) (S X'y)), two parallel triangular
 #:     matvecs (rows, then columns, each its own chain ascending).
 #: Same team, same launches, no host step; the bits change (FAST).
-comptime ARD_EQ_ONEPASS = ARD_FAST_EQ and not is_defined["MOJOLEARN_ARD_EQ_ONEPASS_OFF"]()
+comptime ARD_EQ_ONEPASS = (
+    ARD_FAST_EQ and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_ARD_EQ_ONEPASS_OFF"]()
+)
 
 
 @always_inline
