@@ -887,6 +887,21 @@ _LITTLE_ENDIAN = __import__('sys').byteorder == 'little'
 _FLIP = bytes([1, 0]) + bytes(254)
 
 
+def _row_means(rows):
+    """`fsum(row) / len(row)` of each equal-length row of float scores, by
+    the core helper `row_means_f64` (lane py-runtime-b: the search results'
+    mean test and train scores and the permutation test's mean score; the
+    same exact sum, rounded once, then one division)."""
+    m = len(rows)
+    k = len(rows[0]) if m else 0
+    flat = array.array('d', itertools.chain.from_iterable(rows))  # glue: score rows packed as one float64 table
+    out = array.array('d', bytes(8 * max(m, 1)))
+    if m and k:
+        if int(_native('row_means_f64')(flat.buffer_info()[0], m, k, out.buffer_info()[0])):
+            raise ValueError('-inf + inf in fsum')
+    return out.tolist()[:m]
+
+
 def _rng(random_state):
     rng = CounterRng(random_state)
     assert rng.binding == _SPLIT_BINDING
@@ -1547,7 +1562,7 @@ def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None
             stratify = (all(isinstance(v, str) for v in labels) or  # cpu-route: stratify test over label objects (str/mixed) after the native route declines [py-data-loop]
                         all(isinstance(v, numbers.Integral) or
                             (isinstance(v, numbers.Real) and math.isfinite(v) and float(v).is_integer())
-                            for v in labels))
+                            for v in labels))  # cpu-route: stratify test over label objects (str/mixed) after the native route declines [py-data-loop]
         kind = StratifiedKFold if stratify else KFold
         return kind(cv, shuffle=shuffle, random_state=random_state if shuffle else None)
     if callable(getattr(cv, 'split', None)):
@@ -2235,14 +2250,14 @@ class _BaseSearch:
             for i in range(n_splits):  # glue: one score column per split index
                 results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')  # glue: one score column per split index
             # glue: explicit scalar tail over the candidates x folds scores (Python floats, not data)
-            means = [math.fsum(s) / len(s) for s in per[nm]]  # glue: one mean per candidate
+            means = _row_means(per[nm])
             stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s))  # glue: one std per candidate
                     for s, m in zip(per[nm], means)]  # glue: one std per candidate
             results[f'mean_test_score{suffix}'] = Array.from_list(means, '<f8')
             results[f'std_test_score{suffix}'] = Array.from_list(stds, '<f8')
             results[f'rank_test_score{suffix}'] = Array.from_list(_rank(means), '<i4')
             if self.return_train_score:
-                tm = [math.fsum(s) / len(s) for s in trains[nm]]
+                tm = _row_means(trains[nm])
                 results[f'mean_train_score{suffix}'] = Array.from_list(tm, '<f8')
         self.cv_results_ = results
         self.n_splits_ = n_splits
@@ -2447,7 +2462,7 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
     def mean_score(yv):
         yarr = _materialize(Array.from_list(yv, '<f4' if isinstance(yv[0], float) else '<i4'), 'y')[0]
         r = cross_validate(estimator, Xa, yarr, groups=groups, cv=cv, scoring=sc)
-        return math.fsum(r['test_score'].tolist()) / len(r['test_score'].tolist())
+        return _row_means([r['test_score'].tolist()])[0]
     score = mean_score(yl)
     rng = _rng(random_state)
     perm_scores = []
@@ -2464,7 +2479,7 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
                 for i, j in zip(rows, perm):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
                     yp[i] = yl[rows[j]]
         perm_scores.append(mean_score(yp))
-    pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)
+    pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)  # cpu-route: definition route for label objects (str/mixed), one score per permutation [py-data-loop,py-reduce]
     return score, Array.from_list(perm_scores, '<f8'), pvalue
 
 
@@ -2572,7 +2587,7 @@ class _NativePermutation:
             folds = folds0 if reuse or yarr is base else self._folds(estimator, yarr, groups, cv)
             r = _cross_validate_folds(estimator, self.X, yarr, folds, sc,
                                       rows=rows0 if folds is folds0 else None)
-            return math.fsum(r['test_score'].tolist()) / len(r['test_score'].tolist())
+            return _row_means([r['test_score'].tolist()])[0]
         score = mean_score(base)
         rng = _rng(random_state)
         order = None if groups is None else self._group_order(groups)
