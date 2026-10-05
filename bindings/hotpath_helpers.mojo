@@ -985,7 +985,7 @@ def next_combination_i64_binding(addr: PythonObject, p: PythonObject, n: PythonO
     return PythonObject(1)
 
 
-def ic_running_min_f32_binding(
+def ic_running_min_f32_host_binding(
     llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
     ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
 ) raises -> PythonObject:
@@ -1030,7 +1030,7 @@ def ic_running_min_f32_binding(
     return PythonObject(0)
 
 
-def ic_running_min_f64_binding(
+def ic_running_min_f64_host_binding(
     llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
     ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
 ) raises -> PythonObject:
@@ -1384,7 +1384,7 @@ def split_table_i32_binding(
     return PythonObject(0)
 
 
-def scatter_rows_bytes_binding(
+def scatter_rows_bytes_host_binding(
     src_addr: PythonObject, rows_addr: PythonObject, m: PythonObject, row_bytes: PythonObject,
     dst_addr: PythonObject, dst_rows: PythonObject,
 ) raises -> PythonObject:
