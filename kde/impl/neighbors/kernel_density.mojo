@@ -2141,6 +2141,63 @@ def kde_score_samples_tiled_identical(
         grid_dim=((n_query + q_tpb - 1) // q_tpb, n_chunks, 1),
         block_dim=(q_tpb, 1, 1),
     )
+    # box-run-2-kde (2026-10-05): under the chunked log-sum-exp (IDENTICAL
+    # default, KDE_IDN_CHUNK_LSE) these three metrics fold in
+    # `kde_chunk_rows_for(n_train)` chunks on every route: the entry, the
+    # staged/trace pass and the host column. This pass then folds its
+    # stored matrix in those same chunks (the staged pass's two kernels,
+    # layout-aware), so a q_tpb / chunk_rows_in schedule or the layout
+    # never moves a bit and the pass agrees with the entry and the host.
+    # `chunk_rows_in` stays the max-pass grid only. With
+    # MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF (or MOJOLEARN_IDN_ALL_OFF) the serial
+    # fold below runs, the staged pass's and the host's serial fold.
+    if kde_chunk_lse_metric_applies(metric):
+        var lse_rows = kde_chunk_rows_for(n_train)
+        var lse_chunks = (n_train + lse_rows - 1) // lse_rows
+        var cpart = ctx.enqueue_create_buffer[DType.float32](n_query * lse_chunks)
+        var cpsum = ctx.enqueue_create_buffer[DType.float32](n_query * lse_chunks)
+        ctx.enqueue_function[kde_chunk_lse_matrix_kernel](
+            cpart.unsafe_ptr(),
+            cpsum.unsafe_ptr(),
+            logk.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_train),
+            Int32(lse_chunks),
+            Int32(lse_rows),
+            Int32(1 if transposed else 0),
+            grid_dim=((n_query + lse_tpb - 1) // lse_tpb, lse_chunks, 1),
+            block_dim=(lse_tpb, 1, 1),
+        )
+        ctx.enqueue_function[kde_chunk_lse_reduce_rowmax_kernel](
+            lse.unsafe_ptr(),
+            rowmax.unsafe_ptr(),
+            cpart.unsafe_ptr(),
+            cpsum.unsafe_ptr(),
+            Int32(n_query),
+            Int32(lse_chunks),
+            grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
+            block_dim=(lse_tpb, 1, 1),
+        )
+        var c_log_sw = ftz(identical_log(sum_weights))
+        var c_norm = log_kernel_norm(kernel, bandwidth, n_features)
+        ctx.enqueue_function[normalize_scores_kernel](
+            scores.unsafe_ptr(),
+            lse.unsafe_ptr(),
+            Int32(n_query),
+            c_log_sw,
+            c_norm,
+            grid_dim=((n_query + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+        ctx.synchronize()
+        _ = cpart^
+        _ = cpsum^
+        _ = logk^
+        _ = part^
+        _ = rowmax^
+        _ = lse^
+        _ = logw^
+        return
     ctx.enqueue_function[kde_rowmax_reduce_kernel](
         rowmax.unsafe_ptr(),
         part.unsafe_ptr(),
@@ -2534,6 +2591,23 @@ def kde_score_samples_fused_identical(
             " shared term tile holds " + String(KDE_FUSED_ID_MAXQ)
         )
     validate_metric_arg(metric, Float32(2.0))
+    # box-run-2-kde (2026-10-05): under the chunked log-sum-exp (IDENTICAL
+    # default, KDE_IDN_CHUNK_LSE) the owner thread's serial chain below is
+    # not the version's fold. The matrix-free pass for the chunked fold IS
+    # `kde_score_samples_chunk_lse_identical` (the entry's own route), so
+    # this opt-in arm takes it: one parallel pass over (query, chunk), no
+    # serial per-query chain, and the entry's, the staged pass's and the
+    # host column's bits. `k_cells` / `sum_tpb` / `chunk_rows_in` schedule
+    # only the serial-fold arm and are validated above either way. With
+    # MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF (or MOJOLEARN_IDN_ALL_OFF) the fused
+    # serial fold below runs.
+    if kde_chunk_lse_metric_applies(metric):
+        kde_score_samples_chunk_lse_identical(
+            ctx, train, query, weights, has_weights, sum_weights,
+            n_train, n_query, n_features, bandwidth, kernel, metric, scores,
+            elem_tpb, lse_tpb, q_tpb,
+        )
+        return
     # Grid y stays inside every vendor's 65,535 limit.
     var chunk_rows = chunk_rows_in
     var min_rows = (n_train + 32767) // 32768
@@ -3439,7 +3513,10 @@ def kde2_score_samples_fast_apple_to_host(
 # scores on NVIDIA, AMD, Apple and the host column together. The staged
 # path keeps its serial fold for the other metrics; for these three it
 # folds the stored matrix in the same chunks (`kde_chunk_lse_matrix_kernel`,
-# lane/review-fixes), so a trace recording never changes the bits. `-D MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF` (or MOJOLEARN_IDN_ALL_OFF)
+# lane/review-fixes), so a trace recording never changes the bits. The
+# explicit tiled matrix pass folds its matrix in the same chunks and the
+# opt-in fused pass (`fused_only`) takes this chunked pass (box-run-2-kde),
+# so every route gives one set of bits. `-D MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF` (or MOJOLEARN_IDN_ALL_OFF)
 # restores the tiled matrix pass and the host's serial row fold.
 # ===========================================================================
 comptime KDE_IDN_CHUNK_LSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
@@ -3640,13 +3717,18 @@ def kde_chunk_lse_matrix_kernel(
     n_train_in: Int32,
     n_chunks_in: Int32,
     chunk_rows_in: Int32,
+    trans_in: Int32,
 ):
-    """Step 1 over a stored row-major log-kernel matrix: grid (query
-    blocks, chunks), one thread per (query, chunk)."""
+    """Step 1 over a stored log-kernel matrix: grid (query blocks, chunks),
+    one thread per (query, chunk). `trans_in` 0 reads the query-major cell
+    `q * n_train + j` (the staged matrix, the tiled default), 1 the
+    train-major cell `j * n_query + q` (DEVIATION 2691's layout); the fold
+    is the same either way."""
     var n_query = Int(n_query_in)
     var n_train = Int(n_train_in)
     var n_chunks = Int(n_chunks_in)
     var chunk_rows = Int(chunk_rows_in)
+    var trans = Int(trans_in) != 0
     var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var chunk = Int(block_idx.y)
     if q >= n_query or chunk >= n_chunks:
@@ -3660,7 +3742,7 @@ def kde_chunk_lse_matrix_kernel(
     var s = Float32(0.0)
     var row = q * n_train
     for j in range(j_begin, j_end):
-        var v = logk.unsafe_load(row + j)
+        var v = logk.unsafe_load(j * n_query + q) if trans else logk.unsafe_load(row + j)
         if v > m:
             if m == neg_inf:
                 s = Float32(1.0)
@@ -3959,6 +4041,7 @@ def kde_score_samples_device(
             Int32(n_train),
             Int32(n_chunks),
             Int32(chunk_rows),
+            Int32(0),
             grid_dim=((n_query + lse_tpb - 1) // lse_tpb, n_chunks, 1),
             block_dim=(lse_tpb, 1, 1),
         )
