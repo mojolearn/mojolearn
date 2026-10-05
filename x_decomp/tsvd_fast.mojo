@@ -203,7 +203,7 @@ def tsvd_cholqr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -
             var dst = dq if ps % 2 == 0 else dy
             launch_gemm(ctx, _p(src), _p(src), _p(dg), _p(dscr), n, m, n, True, False)
             var c = CQ3_SHIFT if ps < CQ3_SHIFTED else Float32(0)
-            ctx.enqueue_function[cq3_diag_kernel](  # small-launch(n: Gram columns)
+            ctx.enqueue_function[cq3_diag_kernel](  # small-launch(n: Gram columns): the n x n diagonal, n <= 512 matrix columns
                 _p(dg), _p(dd), Int32(n), c, grid_dim=1, block_dim=CQ3_TPB
             )
             ctx.enqueue_function[lu_info_init_kernel](_p(dinfo) + ps, grid_dim=1, block_dim=1)
@@ -224,7 +224,7 @@ def tsvd_cholqr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -
             ctx.synchronize()
             _ = src^
             _ = dst^
-        ctx.enqueue_function[cq3_guard_kernel](  # small-launch(n: Gram columns)
+        ctx.enqueue_function[cq3_guard_kernel](  # small-launch(n: Gram columns): the n x n diagonal, n <= 512 matrix columns
             _p(dd), _p(dinfo), _p(dflag), Int32(n), Int32(CQ3_PASSES), grid_dim=1, block_dim=CQ3_TPB
         )
         var hflag = ctx.enqueue_create_host_buffer[DType.float32](1)
