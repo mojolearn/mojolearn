@@ -1267,3 +1267,14 @@ M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05.
 | `MOJOLEARN_SEQ_FAST_VAR_COOP` | var / synthetic, taxi-hourly | lane/apple-fast-s-ts @ b8afe92fc | - | - | READY-AB | sequence/pyapi.mojo `_var_fit_queued`: column scale (2 passes over R), Z^T Z, Z^T Ys and sigma_u were one thread per cell, each an R ~ 1,390-step chain of strided loads. Now one simdgroup per cell (sequence/coop.mojo: coop_dot = same fma chain; column max = same maximum): same words |
 | `MOJOLEARN_SEQ_FAST_VAR_NODRAIN` | var / synthetic, taxi-hourly | lane/apple-fast-s-ts @ b8afe92fc | - | - | READY-AB | DeviceExec.__deinit__ synchronized again after var_fit / var_forecast had already ended on their own wait; both bindings now mark the executor drained: one empty Metal wait fewer per call (two per board fit+forecast). Same words |
 | `MOJOLEARN_SCHED_FAST_TABLE` | lr-exponential / synthetic | lane/apple-fast-s-ts @ b8afe92fc | - | - | READY-AB | 100,000 Python lr_at calls at ~2.25 us (exact enclosure per call). The FAST sequence binding fills 8,192-value blocks (sequence/sched_table.mojo: float64 pow within a 1e-12 enclosure, kept only when both ends round to one normal float32, else NaN -> the exact Python path), lr_at is one list index. Contract bits (DEVIATION 5540) by construction. CPU-only route by nature (a scalar per step; opponent is CPU torch) |
+
+## Verdicts applied on lane/apple-fast-verdicts-5 (2026-10-05)
+
+M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `AF_FAST_RESIDENT` (rollback `AF_FAST_RESIDENT_OFF`) | adafactor / board | lane/apple-fast-verdicts-5 | rab10-afresident | 392.8 -> 205.2 | KEEP (FAST+Apple default, `_OFF`) | digest identical (sequence/opt_resident.mojo `AF_RESIDENT`) |
+| `AF_FAST_NOFILL` (rollback `AF_FAST_NOFILL_OFF`) | adafactor / board | lane/apple-fast-verdicts-5 | rab10-afnofill | 393.2 -> 380.1 | KEEP (FAST+Apple default, `_OFF`) | digest identical. No code conflict with RESIDENT: the resident step skips `adafactor_step_py`, so with RESIDENT on the Adafactor class no longer reaches NOFILL's path; it covers the direct `adafactor_step` binding and the RESIDENT_OFF rollback (sequence/pyapi.mojo `AF_NOFILL`) |
+| `KM_FAST_RBF_PIPE` (rollback `KM_FAST_RBF_PIPE_OFF`) | rbf-sampler / istella, taxi | lane/apple-fast-verdicts-5 (from lane/apple-fast-s-small) | rab12-rbfpipe | istella 56.7 -> 43.0; taxi 35.6 -> 31.1 | KEEP (FAST+Apple default, `_OFF`) | kernel_rel_error identical (kernel_methods/rbf_resident.mojo) |
+| `MOE_FAST_MMA_KB32 + _WIDE + _PF` (bundle, on top of the default `MOE_FAST_MMA`) | moe / synthetic | main @ 13246c64f | rab10-moemmaall | 71.3 -> 146.8 | DROPPED-slower (bundle), toggles stay opt-in off | 2x slower as a bundle; no single-variant A/B, so no per-variant verdict. Base `MOE_FAST_MMA` stays the default (sequence/moe_mma.mojo) |
