@@ -6,6 +6,7 @@ native handle can be released while another call is using it.
 """
 from std.python import PythonObject
 from std.sys.compile import is_defined
+from hostptr import list_f32, list_i32
 from core.forest_inference import vector_groves_for, FOREST_PACKED_NODES
 from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into, resident_predict_labels, FOREST_ORDERED_RESIDENT
 
@@ -61,19 +62,12 @@ def forest_prepare_gpu_binding[RF_INPUT: Bool](
     var nodes = Int(op[trees])
     if nodes < 1 or nodes > 2147483647 // outputs:
         raise Error("invalid resident forest node count")
-    var offsets = List[Int32](capacity=trees + 1)
-    var columns = List[Int32](capacity=nodes)
-    var thresholds = List[Float32](capacity=nodes)
-    var left = List[Int32](capacity=nodes)
-    var leaves = List[Float32](capacity=nodes * outputs)
-    for i in range(trees + 1):
-        offsets.append(op[i])
-    for i in range(nodes):
-        columns.append(cp[i])
-        thresholds.append(tp[i])
-        left.append(lp[i])
-    for i in range(nodes * outputs):
-        leaves.append(vp[i])
+    # one memcpy per array (no per-node host loop); the snapshot uploads once
+    var offsets = list_i32(op, trees + 1)
+    var columns = list_i32(cp, nodes)
+    var thresholds = list_f32(tp, nodes)
+    var left = list_i32(lp, nodes)
+    var leaves = list_f32(vp, nodes * outputs)
     return PythonObject(resident_prepare[RF_INPUT](
         offsets, columns, thresholds, left, leaves, features, outputs, ordered))
 
@@ -91,12 +85,12 @@ def forest_predict_resident_gpu_binding[RF_INPUT: Bool](handle: PythonObject, x_
         raise Error("resident prediction dimensions exceed Int32")
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
-    var x = List[Float32](capacity=rows * features)
-    for i in range(rows * features):
-        x.append(xp[i])
-    var result = resident_predict[RF_INPUT](Int(py=handle), x, rows, features, outputs)
-    for i in range(rows * outputs):
-        op[i] = result[i]
+    # borrowed rows go straight to the device and the result straight back
+    # into the borrowed output (no host List copies of X or of the result);
+    # same kernel and fold as the List route, fresh per-call buffers
+    resident_predict_into[RF_INPUT](Int(py=handle),
+        xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
+        rows, features, outputs, False)
     return PythonObject(rows)
 
 

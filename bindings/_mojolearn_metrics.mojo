@@ -60,6 +60,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 comptime _DEVCTX_SLOT = "MojoMetricsContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoMetricsContextFast"
 
 from std.math import isfinite
+from std.memory import memcpy
+from core.input_device import device_all_finite, IND_MAX_N
 from umap.estimator import fit_transform as umap_fit_transform
 from umap.sparse_estimator import sparse_fit_transform
 from umap.transform import transform as umap_transform
@@ -118,6 +120,31 @@ def _load_i32(addr: Int, n: Int) raises -> List[Int32]:
 
 def _load_f32(addr: Int, n: Int) raises -> List[Float32]:
     return read_f32(addr, max(0, n))
+
+
+def _device_finite_f32(values: List[Float32]) raises -> Bool:
+    """cpu3-bindings: the finiteness refusal of an embedding (or a caller's
+    initial embedding) as one device scan (`core/input_device`), one status
+    word back, instead of a host walk over every value."""
+    var n = len(values)
+    if n == 0:
+        return True
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var ok = True
+    var off = 0
+    while off < n and ok:
+        var m = min(IND_MAX_N, n - off)
+        ok = device_all_finite(ctx, Int(values.unsafe_ptr()) + off * 4, m, False)
+        off += m
+    _ = len(values)
+    return ok
+
+
+def _store_f32_list(output: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32]):
+    """One memcpy of `values` into the caller's output (no per-value loop)."""
+    if len(values) > 0:
+        memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
+    _ = len(values)
 
 
 def _want(name: String, params: PythonObject, k: Int) raises:
@@ -1236,11 +1263,9 @@ def umap_fit_transform_binding(
         ctx.synchronize()
     if len(embedding) != n * config.n_components:
         raise Error("UMAP returned an unexpected embedding shape")
-    for value in embedding:
-        if not isfinite(value):
-            raise Error("UMAP returned a non-finite embedding")
-    for i in range(len(embedding)):
-        output.unsafe_store(i, embedding[i])
+    if not _device_finite_f32(embedding):
+        raise Error("UMAP returned a non-finite embedding")
+    _store_f32_list(output, embedding)
     return PythonObject(config.n_components)
 
 
@@ -1293,9 +1318,8 @@ def umap_fit_transform_ex_binding(addrs: PythonObject, params: PythonObject) rai
     var init = List[Float32]()
     if init_addr != 0:
         init = _load_f32(init_addr, n * config.n_components)
-        for value in init:
-            if not isfinite(value):
-                raise Error("UMAP initial embedding must be finite")
+        if not _device_finite_f32(init):
+            raise Error("UMAP initial embedding must be finite")
     var target = List[Float32]()
     if tkind != 0:
         target = _load_f32(target_addr, n * tdims)
@@ -1306,11 +1330,9 @@ def umap_fit_transform_ex_binding(addrs: PythonObject, params: PythonObject) rai
             embedding = sparse_fit_transform(ctx, x, n, d, config, init, target, tkind, tdims, tk, tw)
     if len(embedding) != n * config.n_components:
         raise Error("UMAP returned an unexpected embedding shape")
-    for value in embedding:
-        if not isfinite(value):
-            raise Error("UMAP returned a non-finite embedding")
-    for i in range(len(embedding)):
-        output.unsafe_store(i, embedding[i])
+    if not _device_finite_f32(embedding):
+        raise Error("UMAP returned a non-finite embedding")
+    _store_f32_list(output, embedding)
     return PythonObject(config.n_components)
 
 
@@ -1360,11 +1382,9 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
             embedding = umap_transform(ctx, training, fitted, queries, n, rows, d, config)
     if len(embedding) != rows * config.n_components:
         raise Error("UMAP transform returned an unexpected shape")
-    for value in embedding:
-        if not isfinite(value):
-            raise Error("UMAP transform returned a non-finite embedding")
-    for i in range(len(embedding)):
-        output.unsafe_store(i, embedding[i])
+    if not _device_finite_f32(embedding):
+        raise Error("UMAP transform returned a non-finite embedding")
+    _store_f32_list(output, embedding)
     return PythonObject(config.n_components)
 
 

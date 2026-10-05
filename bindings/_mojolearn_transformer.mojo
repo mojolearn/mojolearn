@@ -278,7 +278,7 @@ def _read_params(params: PythonObject, base: Int, what: String) raises -> List[I
             + String(n)
         )
     var p = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(n: block scalar params, base plus the 17 option tail): validated count of launch parameters, not data
         p.append(Int(py=params[i]))
     return p^
 
@@ -304,7 +304,7 @@ def _read_addrs_tail(
             + String(n)
         )
     var a = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(n: block buffer addresses, base plus the 11 option tail): validated count of tensor addresses, not data
         a.append(Int(py=addrs[i]))
     while len(a) < base + BLOCK_OPTION_ADDRS:
         a.append(0)
@@ -474,7 +474,7 @@ def _load_transformer_weights[wait: Bool = True](
     var it = dims.intermediate
     var hd = dims.head_dim
     var extended = not opts.is_default()
-    for i in range(len(tail)):
+    for i in range(len(tail)):  # small-loop(tail: the 11 optional block addresses): checks address presence, not data
         if tail[i] != 0:
             extended = True
     if not extended:
@@ -566,7 +566,7 @@ def _tail_of(a: List[Int], base: Int) -> List[Int]:
 def _check_base_addrs(a: List[Int], slots: List[Int], what: String) raises:
     """Null refusals for the base slots a caller must fill (the gate slot is
     checked by `_load_transformer_weights` against the MLP form)."""
-    for i in range(len(slots)):
+    for i in range(len(slots)):  # small-loop(slots: a handful of base address slots): null checks on addresses, not data
         if a[slots[i]] == 0:
             raise Error(what + ": null buffer address at slot " + String(slots[i]))
 
@@ -599,7 +599,7 @@ def _workspace_key(
     var key: List[Int] = [b, l, dims.d_model, dims.n_heads, dims.n_kv,
                           dims.head_dim, dims.intermediate, smax, window, Int(lean)]
     var tail = opts.to_params()
-    for i in range(len(tail)):
+    for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
         key.append(tail[i])
     return key^
 
@@ -684,7 +684,7 @@ struct TransformerWorkspace(Movable):
     def matches(self, key: List[Int]) -> Bool:
         if len(key) != len(self.key):
             return False
-        for i in range(len(key)):
+        for i in range(len(key)):  # small-loop(key: shape and option entries of the workspace key): compares cache keys, not data
             if key[i] != self.key[i]:
                 return False
         return True
@@ -709,7 +709,7 @@ struct TransformerBackwardWorkspace(Movable):
     def matches(self, key: List[Int]) -> Bool:
         if len(key) != len(self.key):
             return False
-        for i in range(len(key)):
+        for i in range(len(key)):  # small-loop(key: nine shape entries of the backward key): compares cache keys, not data
             if key[i] != self.key[i]:
                 return False
         return True
@@ -810,7 +810,7 @@ def _weights_key(dims: LlamaDims, opts: BlockOptions) -> List[Int]:
     var key: List[Int] = [dims.d_model, dims.n_heads, dims.n_kv, dims.head_dim,
                           dims.intermediate]
     var tail = opts.to_params()
-    for i in range(len(tail)):
+    for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
         key.append(tail[i])
     return key^
 
@@ -921,7 +921,7 @@ def _session_weights(
     per-call upload as before; nothing is retained for them."""
     ref ctx = session.ctx.value()
     var extended = not opts.is_default()
-    for i in range(len(tail)):
+    for i in range(len(tail)):  # small-loop(tail: the 11 optional block addresses): checks address presence, not data
         if tail[i] != 0:
             extended = True
     # MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS=0: the per-call upload for every
@@ -942,7 +942,7 @@ def _session_weights(
     if session.weights:
         same_key = len(session.weights_key) == len(key)
         if same_key:
-            for i in range(len(key)):
+            for i in range(len(key)):  # small-loop(key: shape and option entries of the weights key): compares cache keys, not data
                 if key[i] != session.weights_key[i]:
                     same_key = False
     if same_key:
@@ -1415,7 +1415,7 @@ def _transformer_run_session_int15(
         pkey.append(a[pbase + i])
     var same = Bool(session.planes) and len(session.planes_key) == len(pkey)
     if same:
-        for i in range(len(pkey)):
+        for i in range(len(pkey)):  # small-loop(pkey: six shapes plus 21 plane addresses): compares cache keys, not data
             if pkey[i] != session.planes_key[i]:
                 same = False
     if not same:
@@ -1490,7 +1490,7 @@ def transformer_session_forward_int15_binding(
     if len(params) != INT15_ENTRY_PARAMS:
         raise Error(what + ": params must contain " + String(INT15_ENTRY_PARAMS) + " values, got " + String(len(params)))
     var a = List[Int]()
-    for i in range(len(addrs)):
+    for i in range(len(addrs)):  # small-loop(addrs: INT15_ENTRY_ADDRS validated tensor addresses): reads pointer list, not data
         a.append(Int(py=addrs[i]))
     _check_base_addrs(a, [0, 1, 2, 10, 11, 12], what)
     var p = _read_params(params, 10, what)
@@ -2233,7 +2233,7 @@ def transformer_decode_session_open_int15_binding(
     if owner[].is_open():
         raise Error("transformer decode session: already open; close it first")
     var raw = List[Int]()
-    for i in range(len(addrs)):
+    for i in range(len(addrs)):  # small-loop(addrs: validated decode tensor addresses, 11 plus 11 plus 21): reads pointer list, not data
         raw.append(Int(py=addrs[i]))
     # into `transformer_forward`'s 13 + 11 layout, then the 21 planes
     var a = List[Int]()
@@ -2241,7 +2241,7 @@ def transformer_decode_session_open_int15_binding(
     for i in range(11):
         a.append(raw[i])
     a.append(0)
-    for i in range(BLOCK_OPTION_ADDRS + 21):
+    for i in range(BLOCK_OPTION_ADDRS + 21):  # small-loop(BLOCK_OPTION_ADDRS: 11 option addresses plus 21 planes): reorders pointer list, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [1, 2, 10, 11], what)
     var p = _read_params(params, 9, what)
@@ -2506,17 +2506,10 @@ struct CausalLMSession(Movable, Writable):
         self.release()
 
 
-def _lm_refuse_nonfinite(name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
-    """`training/samba_ops.mojo::_refuse_nonfinite`, in its words."""
-    for i in range(n):
-        if not isfinite(p.unsafe_load(i)):
-            raise Error("mojolearn samba ops: non-finite " + name + " at flat index " + String(i))
-
-
 def _lm_refuse_nonfinite_device(
     ctx: DeviceContext, name: String, mut buf: DeviceBuffer[DType.float32], n: Int,
 ) raises:
-    """`_lm_refuse_nonfinite` on the device copy (cpu2-l11-neural): one
+    """The non-finite refusal on the device copy (cpu2-l11-neural): one
     `device_first_nonfinite` scan, one integer read back, the same message."""
     var bad = device_first_nonfinite(ctx, buf, n)
     if bad >= 0:
@@ -2876,7 +2869,7 @@ def causal_lm_session_run_binding(
     var n_layers = Int(py=len(layers))
     if n_layers < 1:
         raise Error("causal_lm_session_run: no layers")
-    for i in range(n_layers):
+    for i in range(n_layers):  # small-loop(n_layers: decoder layers of the model): one session pointer per layer, not data
         var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
         _require_session_open(sp[])
         if sp[].b != owner[].b or sp[].dm != owner[].d:

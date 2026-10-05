@@ -27,6 +27,7 @@ from x_linear.finite_device import XLIN_IDN_DEV_FINITE
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM
 from x_linear.cls1_fast import cls1_flags
 from x_linear.class_prep_device import class_prep_device
+from core.input_device import device_all_finite, IND_MAX_N
 
 
 def _fp(addr: Int) raises -> FP:
@@ -36,32 +37,20 @@ def _fp(addr: Int) raises -> FP:
 
 
 def _finite(p: FP, count: Int, name: String) raises:
-    """The input check both columns run before a fit: NaN or infinity is refused by name."""
-    comptime if has_apple_gpu_accelerator() and is_defined["MOJOLEARN_X_LINEAR_FINITE_SIMD"]():
-        # lane/linear-apple3 (WIP, opt-in): sixteen values at a time. v - v is 0 for a
-        # finite v and NaN for an infinity or a NaN, so the running sum of
-        # v - v is NaN exactly when some value is not finite: the scalar
-        # test's verdict (the scalar walk was 16M branches on the host
-        # before a fit of 1M x 16 could start).
-        comptime W = 16
-        var acc = SIMD[DType.float32, W](0)
-        var i = 0
-        while i + W <= count:
-            var v = p.unsafe_load[width=W](i)
-            acc = acc + (v - v)
-            i += W
-        var s = acc.reduce_add()
-        while i < count:
-            var v = p.unsafe_load(i)
-            s = s + (v - v)
-            i += 1
-        if not (s == s):
-            raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
+    """The input check both columns run before a fit: NaN or infinity is
+    refused by name. cpu3-bindings: the routes whose grids do not test the
+    uploaded words themselves (FAST, or the IDENTICAL defines off) test the
+    caller's words with one device scan (`core/input_device`, one status
+    word back per launch) instead of a host walk over every value."""
+    if count <= 0:
         return
-    for i in range(count):
-        var v = p.unsafe_load(i)
-        if not (v == v) or v > Float32(3.4028234e38) or v < Float32(-3.4028234e38):
+    var ctx = _p2m_ctx()
+    var off = 0
+    while off < count:
+        var m = min(IND_MAX_N, count - off)
+        if not device_all_finite(ctx, Int(p) + off * 4, m, False):
             raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
+        off += m
 
 
 def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, dims: PythonObject,
@@ -79,10 +68,10 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
         raise Error("x_linear: positive dimensions required")
     isotonic_abi_check(Int(py=algo), n, n_y, n_out, n_fw, n_iw, n_ip)
     var ipl = List[Int32](capacity=n_ip)
-    for i in range(n_ip):
+    for i in range(n_ip):  # small-loop(n_ip: integer hyperparameters of the route): Python parameter list, not data
         ipl.append(Int32(Int(py=ip[i])))
     var fpl = List[Float32](capacity=n_fp)
-    for i in range(n_fp):
+    for i in range(n_fp):  # small-loop(n_fp: float hyperparameters of the route): Python parameter list, not data
         fpl.append(Float32(Float64(py=fp[i])))
     var a = Int(py=algo)
     var x = _fp(Int(py=x_addr))

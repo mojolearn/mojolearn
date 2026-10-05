@@ -36,7 +36,7 @@ def _shap_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
     if len(params) != n:
         raise Error(who + ": params must hold " + String(n) + " values")
     var out = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(n: five or seven shape parameters): Python parameter list, not data
         var v = Int(py=params[i])
         if v < 0:
             raise Error(who + ": negative count")
@@ -84,7 +84,7 @@ def _dart_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
     if len(params) != n:
         raise Error(who + ": params must hold " + String(n) + " values")
     var out = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(n: three to six DART parameters): Python parameter list, not data
         out.append(Int(py=params[i]))
     return out^
 
@@ -103,7 +103,7 @@ def dart_step_binding(handle: PythonObject, coef: PythonObject, thr: PythonObjec
     iteration, skip_thr]."""
     var p = _dart_ints(params, 4, "x_trees_dart_step")
     var outs = List[Int]()
-    for i in range(len(targets)):
+    for i in range(len(targets)):  # small-loop(targets: one output address per class): pointer list, not data
         outs.append(Int(py=targets[i]))
     dart_step(Int(py=handle), Int(py=coef), Int(py=thr), Int(py=flags), Int(py=bad), outs, p[0], p[1], p[2], p[3])
     return PythonObject(p[0])
@@ -143,7 +143,7 @@ def _dart_addr_list(v: PythonObject, nt: Int, who: String) raises -> List[Int]:
     if len(v) != nt:
         raise Error(who + ": one address per tree")
     var out = List[Int]()
-    for j in range(nt):  # glue: T tree addresses
+    for j in range(nt):  # small-loop(nt: one address per tree of the ensemble): pointer list glue, not data
         out.append(Int(py=v[j]))
     return out^
 
@@ -165,11 +165,11 @@ def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObj
         raise Error("x_trees_dart_predict: one coefficient per tree")
     var sz = List[Int]()
     var cf = List[Float64]()
-    for j in range(nt):  # glue: T tree sizes and coefficients
+    for j in range(nt):  # small-loop(nt: one size and coefficient per tree): Python parameter glue, no compute
         sz.append(Int(py=sizes[j]))
         cf.append(Float64(py=coefs[j]))
     var iv = List[Float64]()
-    for c in range(len(inits)):  # glue: k class starts
+    for c in range(len(inits)):  # small-loop(inits: one start per class): Python parameter glue, no compute
         iv.append(Float64(py=inits[c]))
     dart_predict(Int(py=x), _dart_addr_list(forest[0], nt, "x_trees_dart_predict"),
                  _dart_addr_list(forest[1], nt, "x_trees_dart_predict"),

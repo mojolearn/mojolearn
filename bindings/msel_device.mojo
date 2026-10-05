@@ -182,7 +182,7 @@ def msel_rebase_offsets_i32_binding(
     var lens = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=la)
     var total = 0
     var outs = 1
-    for s in range(p):
+    for s in range(p):  # small-loop(p: one length per device shard): shard bookkeeping, not data
         var l = Int(lens.unsafe_load(s))
         if l < 1:
             raise Error("msel_rebase_offsets_i32: every part holds its leading offset")

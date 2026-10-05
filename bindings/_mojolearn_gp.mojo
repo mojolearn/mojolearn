@@ -1223,7 +1223,7 @@ def gpc_ovr_combine_binding(
     var out_addr = Int(py=addrs[0])
     var codes_addr = Int(py=addrs[1])
     var cols = List[Int]()
-    for c in range(2, len(addrs)):
+    for c in range(2, len(addrs)):  # small-loop(addrs: one column address per class): pointer list, not data
         cols.append(Int(py=addrs[c]))
     with GILReleased(Python()):
         gpc_ovr_combine_host(cols, out_addr, codes_addr, n)
@@ -1405,7 +1405,7 @@ def gpc_fit_all_binding(addrs: PythonObject, params: PythonObject) raises -> Pyt
     var pi_addrs = List[Int]()
     var wsr_addrs = List[Int]()
     var scalar_addrs = List[Int]()
-    for j in range(n_fits):
+    for j in range(n_fits):  # small-loop(n_fits: one fit per one-vs-rest class): address and size lists, not data
         ks.append(Int(py=params[6 + j]))
         y_addrs.append(Int(py=addrs[6 + 5 * j]))
         l_addrs.append(Int(py=addrs[7 + 5 * j]))
@@ -1479,7 +1479,7 @@ def gpc_predict_all_binding(addrs: PythonObject, params: PythonObject) raises ->
     var pi_addrs = List[Int]()
     var wsr_addrs = List[Int]()
     var l_addrs = List[Int]()
-    for c in range(k):
+    for c in range(k):  # small-loop(k: one entry per class): address lists, not data
         y_addrs.append(Int(py=addrs[7 + 4 * c]))
         pi_addrs.append(Int(py=addrs[8 + 4 * c]))
         wsr_addrs.append(Int(py=addrs[9 + 4 * c]))
@@ -1580,7 +1580,7 @@ def gpr_optimize_binding(
     )
     var free = read_i32(Int(py=addrs[6]), max(0, n_nodes))
     var n_theta = 0
-    for t in range(n_nodes):
+    for t in range(n_nodes):  # small-loop(n_nodes: nodes of the kernel expression tree): hyperparameter count, not data
         if Int(free[t]) != 0:
             var k = Int(spec.kinds[t])
             n_theta += Int(spec.ls_len[t]) if (k == GP_K_RBF or k == GP_K_MATERN) else 1

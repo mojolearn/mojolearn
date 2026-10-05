@@ -183,7 +183,7 @@ def _pool_f32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     the pooled one of that size, else a new one."""
     var nb = n if n > 0 else 1
     var pool = _EMB_POOL.get_or_create_ptr()
-    for k in range(len(pool[].f_n)):
+    for k in range(len(pool[].f_n)):  # small-loop(f_n: pooled buffer sizes, at most EMB_POOL_F32_KEEP): buffer pool lookup, not data
         if pool[].f_n[k] == nb:
             _ = pool[].f_n.pop(k)
             return pool[].f.pop(k)
@@ -203,7 +203,7 @@ def _pool_i32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.int32]:
     """`_pool_f32` for int32."""
     var nb = n if n > 0 else 1
     var pool = _EMB_POOL.get_or_create_ptr()
-    for k in range(len(pool[].i_n)):
+    for k in range(len(pool[].i_n)):  # small-loop(i_n: pooled buffer sizes, at most EMB_POOL_I32_KEEP): buffer pool lookup, not data
         if pool[].i_n[k] == nb:
             _ = pool[].i_n.pop(k)
             return pool[].i.pop(k)

@@ -28,7 +28,7 @@ sampler's first Python caller.
 """
 
 from std.memory import memcpy
-from hostptr import copy_f32
+from hostptr import copy_f32, list_f32, list_i32, store_f32
 from ensemble.device_layout import device_has_nan_f32, upload_forest_x
 from ensemble.nan_refusal import RF_NAN_REFUSAL
 
@@ -74,6 +74,7 @@ from core.abs_sum_blocked import (
     device_abs_sum_blocked,
     device_any_index_out_of_range,
 )
+from core.weight_scan_device import device_scan_weights
 from ensemble.decisiontree.batched_levelalgo.objectives import (
     ClassificationObjectiveFunction,
     RegressionObjectiveFunction,
@@ -193,11 +194,11 @@ def _check_criterion(
     who: String, criterion: Int, allowed: List[Int]
 ) raises:
     """DEVIATION 407: refuse an enumerator the objective has no arm for."""
-    for i in range(len(allowed)):
+    for i in range(len(allowed)):  # small-loop(allowed: at most four criterion enumerators): parameter validation, not data
         if allowed[i] == criterion:
             return
     var names = String("")
-    for i in range(len(allowed)):
+    for i in range(len(allowed)):  # small-loop(allowed: at most four criterion enumerators): error message names, not data
         if i > 0:
             names += "/"
         names += criterion_name(allowed[i])
@@ -350,9 +351,11 @@ def _retain_rf_export(var trees: RFExportTrees) raises -> PythonObject:
         raise Error("cannot export an empty fitted RF")
     var nodes = 0
     var outputs = Int(trees[0].num_outputs)
-    for tree in trees:
-        nodes += len(tree.sparsetree)
-        if Int(tree.num_outputs) != outputs or len(tree.vector_leaf) != len(tree.sparsetree) * outputs:
+    var n_fitted = len(trees)
+    for t in range(n_fitted):  # small-loop(n_fitted: fitted trees, one node count each): export shape bookkeeping, no row or node data
+        var tree_nodes = len(trees[t].sparsetree)
+        nodes += tree_nodes
+        if Int(trees[t].num_outputs) != outputs or len(trees[t].vector_leaf) != tree_nodes * outputs:
             raise Error("fitted RF leaf storage differs from export dimensions")
     var count = len(trees)
     var meta: List[Int64] = [Int64(count), Int64(outputs)]
@@ -434,24 +437,14 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     _check_criterion("rf_classifier_fit", crit, _cls_criteria())
     var rf_params = _rf_params_from(params, crit)
 
+    # cpu3-bindings: the weights are one memcpy here; their refusals, the
+    # all-ones test and the total run on the device after the upload
+    # (`core/weight_scan_device`), not as a host walk over every row.
     var weights = List[Float32]()
     var weight_total = Float64(0)
-    if weights_addr != 0:
-        var wp = _f32_ptr(weights_addr)
-        var total = Float64(0)
-        var all_unit = True
-        for i in range(n_rows):
-            var w = wp[i]
-            if not (w >= 0 and w <= Float32(3.4028234663852886e38)):
-                raise Error("class weights must be finite and nonnegative")
-            weights.append(w)
-            total += Float64(w)
-            all_unit = all_unit and w == Float32(1)
-        weight_total = total
-        if total <= 0:
-            raise Error("class weights must have positive total")
-        if all_unit:
-            weights = List[Float32]()
+    var weighted = weights_addr != 0
+    if weighted:
+        weights = list_f32(_f32_ptr(weights_addr), n_rows)
     var forest: RandomForestMetaData[DT, CLT]
     # DEVIATION 2510 -- the binding's own stage table (MOJOLEARN_STAGE_TIMES=1
     # only): what this entry point spends OUTSIDE `fit_forest`'s fit_total,
@@ -499,8 +492,16 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         else:
             ctx.synchronize()
         bt.stop_host("bind_h2d", t_s)
-        if len(weights) > 0:
+        if weighted:
             ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
+            var wscan = device_scan_weights(ctx, dsw, n_rows)
+            if wscan.bad:
+                raise Error("class weights must be finite and nonnegative")
+            if wscan.total <= 0:
+                raise Error("class weights must have positive total")
+            weight_total = wscan.total
+            if wscan.all_unit:
+                weights = List[Float32]()
         # cuML randomforest.cuh dispatches weighted objectives only when
         # bootstrap is disabled: sampling already applies bootstrap weights.
         if len(weights) > 0 and not rf_params.bootstrap:
@@ -636,7 +637,7 @@ struct RfSessionRegistry(Defaultable, Movable):
         self.next_id = 1
 
     def find(self, id: Int) raises -> Int:
-        for i in range(len(self.sessions)):
+        for i in range(len(self.sessions)):  # small-loop(sessions: open data sessions of this process): handle lookup, not data
             if self.sessions[i].id == id:
                 return i
         raise Error("unknown or closed forest data session handle")
@@ -912,23 +913,10 @@ def rf_classifier_fit_weighted_session_binding(
     if weights_address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
 
-    var weights = List[Float32]()
+    # cpu3-bindings: one memcpy; the refusals, all-ones test and total run
+    # on the device after the upload (`core/weight_scan_device`).
+    var weights = list_f32(_f32_ptr(weights_address), n_rows)
     var weight_total = Float64(0)
-    var wp = _f32_ptr(weights_address)
-    var total = Float64(0)
-    var all_unit = True
-    for i in range(n_rows):
-        var w = wp[i]
-        if not (w >= 0 and w <= Float32(3.4028234663852886e38)):
-            raise Error("class weights must be finite and nonnegative")
-        weights.append(w)
-        total += Float64(w)
-        all_unit = all_unit and w == Float32(1)
-    weight_total = total
-    if total <= 0:
-        raise Error("class weights must have positive total")
-    if all_unit:
-        weights = List[Float32]()
 
     var session_id = Int(py=handle)
     var reg = RF_SESSIONS.get_or_create_ptr()
@@ -955,8 +943,15 @@ def rf_classifier_fit_weighted_session_binding(
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
         ctx.synchronize()
-        if len(weights) > 0:
-            ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
+        var wscan = device_scan_weights(ctx, dsw, n_rows)
+        if wscan.bad:
+            raise Error("class weights must be finite and nonnegative")
+        if wscan.total <= 0:
+            raise Error("class weights must have positive total")
+        weight_total = wscan.total
+        if wscan.all_unit:
+            weights = List[Float32]()
         if len(weights) > 0 and not rf_params.bootstrap:
             var scale = choose_scale(weight_total, n_rows)
             if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
@@ -1114,42 +1109,6 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         return out
 
 
-def _rebuild_trees(
-    offsets_p: MutPointer[Int32, MutUntrackedOrigin],
-    colid_p: MutPointer[Int32, MutUntrackedOrigin],
-    quesval_p: MutPointer[Float32, MutUntrackedOrigin],
-    left_p: MutPointer[Int32, MutUntrackedOrigin],
-    leaves_p: MutPointer[Float32, MutUntrackedOrigin],
-    n_trees: Int,
-    num_outputs: Int,
-) raises -> List[TreeMetaDataNode[DT]]:
-    """The flat arrays back into `TreeMetaDataNode`'s own layout, so the
-    traversal that runs is the implementation's. `instance_count` and
-    `best_metric_val` are zero: the traversal reads neither."""
-    var trees = List[TreeMetaDataNode[DT]](capacity=n_trees)
-    for t in range(n_trees):
-        var lo = Int(offsets_p[t])
-        var hi = Int(offsets_p[t + 1])
-        if lo < 0 or hi < lo:
-            raise Error("rf_predict: tree_offsets are not a prefix scan")
-        var nodes = List[SparseTreeNode[DT]](capacity=hi - lo)
-        var vleaf = List[Float32](capacity=(hi - lo) * num_outputs)
-        for i in range(lo, hi):
-            nodes.append(
-                SparseTreeNode[DT](
-                    colid_p[i], quesval_p[i], 0.0, Int64(left_p[i]), 0
-                )
-            )
-            for k in range(num_outputs):
-                vleaf.append(leaves_p[i * num_outputs + k])
-        trees.append(
-            TreeMetaDataNode[DT](
-                Int32(t), 0, 0, 0.0, vleaf^, nodes^, Int32(num_outputs)
-            )
-        )
-    return trees^
-
-
 def _default_rf_params(n_trees: Int) raises -> RF_params:
     """A benign `RF_params` for the predict-side metadata: predict reads the
     forest's trees, not these knobs, but the structs require one."""
@@ -1251,19 +1210,12 @@ def _rf_predict_ordered(
         raise Error(name + ": tree_offsets must start at 0 and hold at least one node per tree")
     if n_nodes > 2147483647 // num_outputs:
         raise Error(name + ": node/output count exceeds Int32")
-    var offsets = List[Int32](capacity=n_trees + 1)
-    var columns = List[Int32](capacity=n_nodes)
-    var thresholds = List[Float32](capacity=n_nodes)
-    var left = List[Int32](capacity=n_nodes)
-    var leaves = List[Float32](capacity=n_nodes * num_outputs)
-    for i in range(n_trees + 1):
-        offsets.append(offsets_p[i])
-    for i in range(n_nodes):
-        columns.append(colid_p[i])
-        thresholds.append(quesval_p[i])
-        left.append(left_p[i])
-    for i in range(n_nodes * num_outputs):
-        leaves.append(leaves_p[i])
+    # one memcpy per array (no per-node host loop); the snapshot uploads once
+    var offsets = list_i32(offsets_p, n_trees + 1)
+    var columns = list_i32(colid_p, n_nodes)
+    var thresholds = list_f32(quesval_p, n_nodes)
+    var left = list_i32(left_p, n_nodes)
+    var leaves = list_f32(leaves_p, n_nodes * num_outputs)
     var handle = resident_prepare[True](
         offsets, columns, thresholds, left, leaves, n_cols, num_outputs, True
     )
@@ -1361,29 +1313,19 @@ def _rf_predict_gpu_parallel(
     if nodes < 1 or nodes > 2147483647 // outputs:
         raise Error("GPU parallel prediction node/output count is invalid")
     with GILReleased(Python()):
-        var offsets = List[Int32](capacity=trees + 1)
-        var columns = List[Int32](capacity=nodes)
-        var thresholds = List[Float32](capacity=nodes)
-        var left = List[Int32](capacity=nodes)
-        var leaves = List[Float32](capacity=nodes * outputs)
-        var x = List[Float32](capacity=rows * features)
-        for i in range(trees + 1):
-            offsets.append(offsets_p[i])
-        for i in range(nodes):
-            columns.append(columns_p[i])
-            thresholds.append(thresholds_p[i])
-            left.append(left_p[i])
-        for i in range(nodes * outputs):
-            leaves.append(leaves_p[i])
-        for i in range(rows * features):
-            x.append(x_p[i])
+        # one memcpy per array (no per-element host loop) feeding one upload each
+        var offsets = list_i32(offsets_p, trees + 1)
+        var columns = list_i32(columns_p, nodes)
+        var thresholds = list_f32(thresholds_p, nodes)
+        var left = list_i32(left_p, nodes)
+        var leaves = list_f32(leaves_p, nodes * outputs)
+        var x = list_f32(x_p, rows * features)
         var ctx = process_ctx[_DEVCTX_SLOT]()
         var result = forest_predict_gpu[True, True](
             ctx, offsets, columns, thresholds, left, leaves, x,
             rows, features, outputs,
         )
-        for i in range(rows * outputs):
-            out_p[i] = result[i]
+        store_f32(out_p, result, rows * outputs)
         _ = result^
         _ = ctx^
     return PythonObject(rows)

@@ -120,6 +120,7 @@ from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
 
 from checks.fixed_point import choose_scale
+from core.abs_sum_blocked_host import host_abs_sum_blocked
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_log, identical_mul_add
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from ensemble.host_layout import has_nan_f32_threaded
@@ -1704,11 +1705,13 @@ def rf_host_fit(
             if p.bootstrap:
                 weight_qcdf = host_weight_qcdf(weights, n_rows)
     if weighted_obj:
-        # `bindings/_mojolearn_rf.mojo:375-389, 439-443`: the Float64 total in
-        # row order, `choose_scale(total, n_rows)`, its Float32 range check.
-        var total = Float64(0)
-        for i in range(n_rows):
-            total += Float64(weights[i])
+        # `bindings/_mojolearn_rf.mojo` (cpu3-bindings): the total in the
+        # blocked binary64 order the device scan uses
+        # (`core/weight_scan_device` -> `core/abs_sum_blocked`; weights are
+        # nonnegative, so |w| = w), `choose_scale(total, n_rows)`, its
+        # Float32 range check.
+        var total = host_abs_sum_blocked(Int(weights.unsafe_ptr()), n_rows)
+        _ = len(weights)
         var scale = choose_scale(total, n_rows)
         if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
             raise Error("class weights exceed Float32 fixed-point scale range")

@@ -469,7 +469,7 @@ def knn_classify_binding(
             + String(len(params))
         )
     var n_classes = List[Int]()
-    for i in range(no):
+    for i in range(no):  # small-loop(no: model outputs, one class count each): parameter list, not data
         n_classes.append(Int(py=params[7 + i]))
     var ip = _f32_ptr(Int(py=index_addr))
     var qp = _f32_ptr(Int(py=queries_addr))
@@ -579,7 +579,7 @@ def knn_classify_resident_binding(
             + String(len(params))
         )
     var n_classes = List[Int]()
-    for i in range(no):
+    for i in range(no):  # small-loop(no: model outputs, one class count each): parameter list, not data
         n_classes.append(Int(py=params[8 + i]))
     var ip = _f32_ptr(Int(py=index_addr))
     var qp = _f32_ptr(Int(py=queries_addr))
@@ -1264,6 +1264,23 @@ def nonzero_f64_fill_binding(
 # ===========================================================================
 
 
+def _all_finite_host_f32(p: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Int:
+    """Host replay of the device finiteness scan: reached only from a
+    HOTPATH_SABOTAGE build (the tests' sabotage switch) or `n == 0`."""
+    for i in range(count):
+        if not isfinite(p.unsafe_load(i)):
+            return 0
+    return 1
+
+
+def _all_finite_host_f64(p: MutPointer[Float64, MutUntrackedOrigin], count: Int) -> Int:
+    """`_all_finite_host_f32` over float64 values."""
+    for i in range(count):
+        if not isfinite(p.unsafe_load(i)):
+            return 0
+    return 1
+
+
 def all_finite_f32_binding(
     addr: PythonObject, n: PythonObject
 ) raises -> PythonObject:
@@ -1288,12 +1305,10 @@ def all_finite_f32_binding(
     var dev = hpdev_try_all_finite(Int(py=addr), count, False)
     if dev >= 0:
         return PythonObject(dev)
+    # only a HOTPATH_SABOTAGE build (or n == 0) reaches the host replay
     var ok: Int = 1
     with GILReleased(Python()):
-        for i in range(count):
-            if not isfinite(p.unsafe_load(i)):
-                ok = 0
-                break
+        ok = _all_finite_host_f32(p, count)
     return PythonObject(ok)
 
 
@@ -1311,12 +1326,10 @@ def all_finite_f64_binding(
     var dev = hpdev_try_all_finite(Int(py=addr), count, True)
     if dev >= 0:
         return PythonObject(dev)
+    # only a HOTPATH_SABOTAGE build (or n == 0) reaches the host replay
     var ok: Int = 1
     with GILReleased(Python()):
-        for i in range(count):
-            if not isfinite(p.unsafe_load(i)):
-                ok = 0
-                break
+        ok = _all_finite_host_f64(p, count)
     return PythonObject(ok)
 
 
@@ -1870,7 +1883,7 @@ def knn_classify_neighbors_binding(
             + String(len(params))
         )
     var n_classes = List[Int]()
-    for i in range(no):
+    for i in range(no):  # small-loop(no: model outputs, one class count each): parameter list, not data
         n_classes.append(Int(py=params[7 + i]))
     var dp = _f32_ptr(Int(py=dist_addr))
     var xp = _u32_ptr(Int(py=idx_addr))

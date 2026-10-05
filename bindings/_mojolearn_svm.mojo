@@ -45,7 +45,7 @@ there.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -590,8 +590,8 @@ def iforest_run_binding(
     comptime if IDN_IF_QUERY_DEVICE:
         q_addr = Int(qp)
     else:
-        for i in range(n_query * n_features):
-            query.append(qp.unsafe_load(i))
+        # the define's off arm: one memcpy (no per-cell host loop)
+        query = list_f32(qp, n_query * n_features)
     var res = IFRunOutputs()
     comptime if IDN_IF_RESIDENT:
         if resident:

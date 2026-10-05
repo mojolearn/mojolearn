@@ -377,7 +377,7 @@ def fold_ids_binding(
                 with GILReleased(Python()):
                     device_kfold_ids(ctx, rows, splits, fa)
                 var fcp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=fca)
-                for fold in range(splits):
+                for fold in range(splits):  # small-loop(splits: KFold n_splits fold sizes): control data, not rows
                     var size = rows // splits
                     if fold < rows % splits:
                         size += 1
@@ -805,12 +805,19 @@ def hpdev_try_all_finite(addr: Int, n: Int, is_f64: Bool) raises -> Int:
     status word comes back; NaN, +inf and -inf fail and subnormals pass, by
     bits, as `isfinite` decides on the host."""
     comptime if _HPDEV_INPUT:
-        if n < 1 or n > IND_MAX_N or addr == 0:
+        if n < 1 or addr == 0:
             return -1
         var ctx = process_ctx[_HPDEV_SLOT]()
-        var ok = False
+        var ok = True
+        var width = 8 if is_f64 else 4
         with GILReleased(Python()):
-            ok = device_all_finite(ctx, addr, n, is_f64)
+            # cpu3-bindings: spans past the twin's Int32 range go through
+            # in IND_MAX_N-element launches instead of the host loop
+            var off = 0
+            while off < n and ok:
+                var m = min(IND_MAX_N, n - off)
+                ok = device_all_finite(ctx, addr + off * width, m, is_f64)
+                off += m
         return 1 if ok else 0
     return -1
 
@@ -851,7 +858,7 @@ def strided_copy_bytes_binding(
             var dp = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=dims)
             var total = 1
             var valid = True
-            for k in range(nd):
+            for k in range(nd):  # small-loop(nd: at most 64 array dimensions): shape product, not data
                 var e = Int(dp[k])
                 if e < 1 or total > IND_MAX_N // e:
                     valid = False
