@@ -1703,10 +1703,8 @@ def quality(lane, D, outs):
             q[arm] = ent
     elif lane == "ivf":
         ctd = _load("classical_two_datasets")
-        if IVF_K != ctd.KNN_K:
-            raise RuntimeError("the recall function is the knn lane's, at k=%d" % ctd.KNN_K)
         kq = ctd.quality("knn", {"index": D["index"], "queries": D["queries"]},
-                         {a: {"ind": o["ind"]} for a, o in outs.items()}, {})
+                         {a: {"ind": o["ind"]} for a, o in outs.items()}, {}, knn_k=IVF_K)
         for arm, ent in kq.items():
             q[arm] = {k: v for k, v in ent.items() if k != "reference"}
     return q
