@@ -45,7 +45,10 @@ from x_decomp.lanczos_dev import dev_lanczos_py, ipca_dev_on_py, kpca_lanczos_de
 from x_decomp.w4_fast import LLE_FAST_DEV_LU, dev_lu_aux_py, w4_flags_py
 from x_decomp.qfix import LU_QFIX, lu_resid_py, qfix_flags_py
 from x_decomp.tsvd_fast import TSVD_FAST_CHOLQR3, tsvd_cholqr_r_py
-from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, RSVD_FAST_DEVSCAN, dev_orth_ws_py, dev_upload_scan_py, s_flags_py
+from x_decomp.s_linalg_fast import (
+    DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT, RSVD_FAST_DEVSCAN, dev_lu_factor_py, dev_lu_solve_py, dev_orth_ws_py,
+    dev_upload_scan_py, s_flags_py,
+)
 
 
 @export
@@ -148,6 +151,9 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
             m.def_function[dev_upload_scan_py]("x_decomp_dev_upload_scan")
         comptime if DECOMP_FAST_ORTH_WS:
             m.def_function[dev_orth_ws_py]("x_decomp_dev_orth_ws")
+        comptime if LU_FAST_RESIDENT:
+            m.def_function[dev_lu_factor_py]("x_decomp_dev_lu_factor")
+            m.def_function[dev_lu_solve_py]("x_decomp_dev_lu_solve")
         comptime if LLE_FAST_DEV_LU:
             m.def_function[dev_lu_aux_py]("x_decomp_dev_lu_aux")
         m.def_function[dev_knn_select_py]("x_decomp_dev_knn_select")

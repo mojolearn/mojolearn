@@ -27,6 +27,7 @@ from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
+from ._buffer import addr as _addr, empty as _empty
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
@@ -2612,6 +2613,9 @@ def lu_factor(a, *, numeric_mode=None):
     ties broken by the LOWEST row index. A zero pivot is kept (getrf's
     info > 0) and warned about, as scipy warns."""
     k = _Kit(_mode(numeric_mode))
+    if k.s_flags() & 4 and k.qfix_flags() & 4 and not _is_sparse(a):
+        # LU_FAST_RESIDENT (default off, FAST + Apple; x_decomp/s_linalg_fast.mojo)
+        return _lu_factor_resident(k, a)
     A = _M.from_input(a, "a")
     if A.r != A.c:
         raise ValueError(f"expected a square matrix, got {A.r} x {A.c}")
@@ -2627,6 +2631,51 @@ def lu_factor(a, *, numeric_mode=None):
     return pair
 
 
+def _lu_factor_resident(k, a):
+    """lane/apple-fast-s-linalg LU_FAST_RESIDENT: `lu_factor` with A uploaded
+    once from the caller's buffer, the NaN/inf refusal and the factor on the
+    device, LU and piv downloaded once into the returned arrays; A, LU and
+    piv stay on the device in the returned pair for `lu_solve`."""
+    a_arr = as_f32_c(a, ndim=2, name="a")[0]
+    if a_arr.ndim != 2 or min(a_arr.shape) == 0:  # glue: smaller of two shape dims
+        raise ValueError("a: a nonempty two-dimensional input is required")
+    n, c = a_arr.shape
+    if n != c:
+        raise ValueError(f"expected a square matrix, got {n} x {c}")
+    raw = k._raw()
+    dA, dLU, dP = _DevBuf(raw, n * n), _DevBuf(raw, n * n), _DevBuf(raw, n)
+    lu, piv, info = _empty((n, n), "<f4"), _empty((n,), "<i4"), _empty((1,), "<f4")
+    rc = int(k.b.x_decomp_dev_lu_factor(addr_ro(a_arr, name="a"), _addr(lu, name="lu"), _addr(piv, name="piv"),
+                                        _addr(info, name="info"), dA.id, dLU.id, dP.id, [n]))
+    if rc < 0:
+        raise ValueError("a: input must be finite; NaN/inf are unsupported")
+    inf = int(array.array("f", info.tobytes())[0])
+    if inf:
+        import warnings
+        warnings.warn(f"Diagonal number {inf} is exactly zero. Singular matrix.", RuntimeWarning, stacklevel=3)
+        return (lu, piv)
+    return _LUPair((lu, piv), None, dev=(dA, dLU, dP, lu, piv))
+
+
+def _lu_solve_resident(k, dev, b):
+    """LU_FAST_RESIDENT's `lu_solve` (trans 0) on the pair's device A, LU and
+    piv: B up, the solve, LU_QFIX's refinement step and X down."""
+    dA, dLU, dP, lu, _ = dev
+    n = lu.shape[0]
+    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
+    bb = as_f32_c(b, ndim=1 if vec else 2, name="b")[0]
+    if bb.shape[0] != n:
+        raise ValueError(f"b has {bb.shape[0]} rows, the factorization has {n}")
+    nrhs = 1 if vec else bb.shape[1]
+    if not n or not nrhs:
+        return None
+    if _host_all_finite(bb) is False:
+        raise ValueError("b: input must be finite; NaN/inf are unsupported")
+    out = _empty((n,) if vec else (n, nrhs), "<f4")
+    k.b.x_decomp_dev_lu_solve(dLU.id, dP.id, dA.id, addr_ro(bb, name="b"), _addr(out, name="x"), [n, nrhs, 1])
+    return out
+
+
 class _LUPair(tuple):
     """`lu_factor`'s (lu, piv), unpacked and indexed as the plain tuple
     scipy returns, plus `_qfix_a`: the float32 copy of A the factor came
@@ -2636,9 +2685,12 @@ class _LUPair(tuple):
     synthetic relative_residual 3.26e-06 vs numpy 3.26e-08, torch-gpu
     8.23e-07; -D MOJOLEARN_LU_QOLD restores the unrefined solve."""
 
-    def __new__(cls, pair, a_m):
+    def __new__(cls, pair, a_m, dev=None):
         obj = super().__new__(cls, pair)
         obj._qfix_a = a_m
+        # LU_FAST_RESIDENT: (device A, device LU, device piv, the lu and piv
+        # arrays returned); `lu_solve` uses them only for this same lu / piv
+        obj._dev = dev
         return obj
 
 
@@ -2651,6 +2703,12 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
         raise ValueError("trans must be 0, 1 or 2")
     lu, piv = lu_and_piv
     k = _Kit(_mode(numeric_mode))
+    dev = getattr(lu_and_piv, "_dev", None)
+    if dev is not None and not trans and lu is dev[3] and piv is dev[4] and k.s_flags() & 4:
+        # LU_FAST_RESIDENT (default off, FAST + Apple): the pair's device factor
+        X = _lu_solve_resident(k, dev, b)
+        if X is not None:
+            return X
     L = _M.from_input(lu, "lu")
     n = L.r
     pa = as_i32_c(piv, ndim=1, name="piv")[0]
