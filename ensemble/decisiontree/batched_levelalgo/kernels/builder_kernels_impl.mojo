@@ -721,6 +721,12 @@ struct ScanBin[B: Bin](BlockScanElement):
 # ===========================================================================
 
 
+#: lane idn-regress: staging slots per by-value argument buffer. A changed
+#: upload writes the next slot and the queue is drained once per ARGS_RING
+#: changed uploads (box-run-2's async-source fix drained on every one).
+comptime ARGS_RING = 16
+
+
 struct DeviceArgs[F: Copyable & Deinitable](Movable):
     """`core/scan_by_key.upload_device_functor`'s mechanism, widened from
     `TrivialRegisterPassable` to `Copyable & Movable`.
@@ -744,20 +750,28 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
     var cmp: HostBuffer[DType.uint8]
     var staged: Bool
     var dev: DeviceBuffer[DType.uint8]
+    # lane idn-regress: `host` is a ring of ARGS_RING staging slots; `cur`
+    # holds the last-sent bytes, `used` counts the slots written since the
+    # last drain (see `upload`).
+    var cur: Int
+    var used: Int
 
     def __init__(out self, ctx: DeviceContext) raises:
         var nbytes = size_of[Self.F]()
-        self.host = ctx.enqueue_create_host_buffer[DType.uint8](nbytes)
+        self.host = ctx.enqueue_create_host_buffer[DType.uint8](nbytes * ARGS_RING)
         self.cmp = ctx.enqueue_create_host_buffer[DType.uint8](nbytes)
         self.staged = False
         self.dev = ctx.enqueue_create_buffer[DType.uint8](nbytes)
+        self.cur = 0
+        self.used = 0
         # Pinned host memory arrives with arbitrary contents; the compare
         # below must never read an uninitialized byte. Host-side stores;
         # nothing on the device reads either buffer.
         var hp = self.host.unsafe_ptr()
         var cp = self.cmp.unsafe_ptr()
-        for i in range(nbytes):
+        for i in range(nbytes * ARGS_RING):  # small-loop(nbytes * ARGS_RING: launch-argument bytes): zero-fills the staging ring once
             hp.unsafe_store(i, UInt8(0))
+        for i in range(nbytes):
             cp.unsafe_store(i, UInt8(0))
 
     def upload(
@@ -777,7 +791,7 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
         self.cmp.unsafe_ptr().unsafe_bitcast[Self.F]()[
             unsafe_offset=0
         ] = args.copy()
-        var hp = self.host.unsafe_ptr()
+        var hp = self.host.unsafe_ptr().unsafe_offset(self.cur * nbytes)
         var cp = self.cmp.unsafe_ptr()
         if self.staged:
             var same = True
@@ -797,14 +811,23 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
         # gone under AMD_SERIALIZE_KERNEL=3 / RF_LAUNCH_CLOCK=1). Drain the
         # queue before reusing the staging bytes; unchanged uploads (the
         # common case, DEVIATION 1917) still skip both the copy and the wait.
-        if self.staged:
+        # lane idn-regress: the drain box-run-2 added here (every changed
+        # upload waited for the whole queue; the device level loop changes
+        # its args every batch) is now one drain per ARGS_RING changed
+        # uploads: each upload stages into the NEXT ring slot, so no queued
+        # copy's source is overwritten, and a slot is reused only after the
+        # drain that retires every copy reading it.
+        var nxt = (self.cur + 1) % ARGS_RING if self.staged else 0
+        if self.used >= ARGS_RING:
             ctx.synchronize()
-        # Byte copy rather than a second fieldwise store, so `host`'s
-        # padding stays the stable bytes `cmp` carries.
+            self.used = 0
+        var np_ = self.host.unsafe_ptr().unsafe_offset(nxt * nbytes)
         for i in range(nbytes):
-            hp.unsafe_store(i, cp.unsafe_load(i))
+            np_.unsafe_store(i, cp.unsafe_load(i))
         log_launch_ctx(ctx, "xfer_args_upload")
-        ctx.enqueue_copy(dst_buf=self.dev, src_ptr=self.host.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.dev, src_ptr=np_)
+        self.cur = nxt
+        self.used += 1
         self.staged = True
         return self.device_ptr()
 
@@ -1571,6 +1594,11 @@ struct NodeSplitScratch[
     # skips a change).
     var ops_cmp: HostBuffer[DType.uint8]
     var ops_staged: Bool
+    # lane idn-regress: `ops_host` is a ring of ARGS_RING slots of
+    # `ops_bytes` (see `stage_ops`)
+    var ops_bytes: Int
+    var ops_cur: Int
+    var ops_used: Int
     var ops_dev: DeviceBuffer[DType.uint8]
     # DEVIATION 2001 -- `partition_row_ids`' label/weight twins, present
     # only under `sampled_labels` (None otherwise, zero allocation).
@@ -1605,8 +1633,11 @@ struct NodeSplitScratch[
             n_blocks + 1
         )
         self.ops_host = ctx.enqueue_create_host_buffer[DType.uint8](
-            OPS_BYTES
+            OPS_BYTES * ARGS_RING
         )
+        self.ops_bytes = OPS_BYTES
+        self.ops_cur = 0
+        self.ops_used = 0
         self.ops_cmp = ctx.enqueue_create_host_buffer[DType.uint8](
             OPS_BYTES
         )
@@ -1632,9 +1663,39 @@ struct NodeSplitScratch[
             ]()
         var hp = self.ops_host.unsafe_ptr()
         var cp = self.ops_cmp.unsafe_ptr()
-        for i in range(OPS_BYTES):
+        for i in range(OPS_BYTES * ARGS_RING):  # small-loop(OPS_BYTES * ARGS_RING: launch-argument bytes): zero-fills the staging ring once
             hp.unsafe_store(i, UInt8(0))
+        for i in range(OPS_BYTES):
             cp.unsafe_store(i, UInt8(0))
+
+    def stage_ops(mut self, ctx: DeviceContext, nbytes: Int) raises:
+        """DEVIATION 1917's stage, byte-compare, skip for the node-split
+        ops (`ops_cmp` holds the candidate), through the staging ring
+        (lane idn-regress): a changed value goes to the NEXT slot, so no
+        queued copy's source is overwritten, and the queue is drained only
+        when a slot comes round again (box-run-2 drained on every change)."""
+        var cp = self.ops_cmp.unsafe_ptr()
+        var hp = self.ops_host.unsafe_ptr().unsafe_offset(self.ops_cur * self.ops_bytes)
+        if self.ops_staged:
+            var same = True
+            for i in range(nbytes):  # small-loop(nbytes: launch-argument bytes): compares one staged ops struct
+                if hp.unsafe_load(i) != cp.unsafe_load(i):
+                    same = False
+                    break
+            if same:
+                return
+        var nxt = (self.ops_cur + 1) % ARGS_RING if self.ops_staged else 0
+        if self.ops_used >= ARGS_RING:
+            ctx.synchronize()
+            self.ops_used = 0
+        var np_ = self.ops_host.unsafe_ptr().unsafe_offset(nxt * self.ops_bytes)
+        for i in range(nbytes):  # small-loop(nbytes: launch-argument bytes): stages one ops struct
+            np_.unsafe_store(i, cp.unsafe_load(i))
+        log_launch_ctx(ctx, "xfer_nodesplit_ops")
+        ctx.enqueue_copy(dst_buf=self.ops_dev, src_ptr=np_)
+        self.ops_cur = nxt
+        self.ops_used += 1
+        self.ops_staged = True
 
     @always_inline
     def partition_labels_ptr(
@@ -1787,27 +1848,7 @@ def launch_node_split_kernel[
         scratch.ops_cmp.unsafe_ptr().unsafe_bitcast[OpsST]()[
             unsafe_offset=0
         ] = ops
-        var ops_hp = scratch.ops_host.unsafe_ptr()
-        var ops_cp = scratch.ops_cmp.unsafe_ptr()
-        var ops_same = scratch.ops_staged
-        if ops_same:
-            for i in range(size_of[OpsST]()):
-                if ops_hp.unsafe_load(i) != ops_cp.unsafe_load(i):
-                    ops_same = False
-                    break
-        if not ops_same:
-            # box-run-2: ops_host is the source of the previous queued async
-            # copy; drain before overwriting it (see DeviceArgs.upload).
-            if scratch.ops_staged:
-                ctx.synchronize()
-            for i in range(size_of[OpsST]()):
-                ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
-            log_launch_ctx(ctx, "xfer_nodesplit_ops")
-            ctx.enqueue_copy(
-                dst_buf=scratch.ops_dev,
-                src_ptr=scratch.ops_host.unsafe_ptr(),
-            )
-            scratch.ops_staged = True
+        scratch.stage_ops(ctx, size_of[OpsST]())
         var ops_ptr = (
             scratch.ops_dev.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin]()
@@ -1853,26 +1894,7 @@ def launch_node_split_kernel[
         scratch.ops_cmp.unsafe_ptr().unsafe_bitcast[OpsT]()[
             unsafe_offset=0
         ] = ops
-        var ops_hp = scratch.ops_host.unsafe_ptr()
-        var ops_cp = scratch.ops_cmp.unsafe_ptr()
-        var ops_same = scratch.ops_staged
-        if ops_same:
-            for i in range(size_of[OpsT]()):
-                if ops_hp.unsafe_load(i) != ops_cp.unsafe_load(i):
-                    ops_same = False
-                    break
-        if not ops_same:
-            # box-run-2: drain the queued copy that reads ops_host first.
-            if scratch.ops_staged:
-                ctx.synchronize()
-            for i in range(size_of[OpsT]()):
-                ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
-            log_launch_ctx(ctx, "xfer_nodesplit_ops")
-            ctx.enqueue_copy(
-                dst_buf=scratch.ops_dev,
-                src_ptr=scratch.ops_host.unsafe_ptr(),
-            )
-            scratch.ops_staged = True
+        scratch.stage_ops(ctx, size_of[OpsT]())
         var ops_ptr = (
             scratch.ops_dev.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin]()

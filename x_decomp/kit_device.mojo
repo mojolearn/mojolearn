@@ -275,12 +275,20 @@ struct DKit(Movable):
     var one: DMat
     var hold_f: List[List[Float32]]
     var hold_i: List[List[Int32]]
+    # `smallest_dev`'s NaN refusal word, resident for the kit's life and
+    # read at the next `sync` (lane idn-regress: was a sync a selection)
+    var nan_word: DMat
+    var nan_host: List[Int32]
+    var nan_pending: Bool
 
     def __init__(out self) raises:
         self.ctx = xd_ctx()
         self.one = DMat(1, 1)
         self.hold_f = List[List[Float32]]()
         self.hold_i = List[List[Int32]]()
+        self.nan_word = DMat(1, 1)
+        self.nan_host = List[Int32](length=1, fill=Int32(0))
+        self.nan_pending = False
         # the unused broadcast operand: Kit's `one`, a 0
         var z = List[Float32](length=1, fill=Float32(0))
         var pool = X_DECOMP_POOL.get_or_create_ptr()
@@ -289,6 +297,9 @@ struct DKit(Movable):
             src_ptr=F32Ptr(unsafe_from_address=Int(z.unsafe_ptr())),
         )
         self.hold_f.append(z^)
+        var nv = pool[].bufs[self.nan_word.id].create_sub_buffer[DType.float32](0, 1)
+        enqueue_fill(self.ctx, nv, Float32(0))
+        _ = nv^
 
     # ---- movement
     def _sub(self, D: DMat) raises -> DeviceBuffer[DType.float32]:
@@ -319,9 +330,22 @@ struct DKit(Movable):
         return out^
 
     def sync(mut self) raises:
+        var check = self.nan_pending
+        if check:
+            var pool = X_DECOMP_POOL.get_or_create_ptr()
+            self.ctx.enqueue_copy(
+                dst_ptr=F32Ptr(unsafe_from_address=Int(self.nan_host.unsafe_ptr())),
+                src_buf=pool[].bufs[self.nan_word.id].create_sub_buffer[DType.float32](0, 1),
+            )
         self.ctx.synchronize()
         self.hold_f.clear()
         self.hold_i.clear()
+        if check:
+            self.nan_pending = False
+            if self.nan_host[0] != Int32(0):
+                # `_key`'s refusal, as the host sort raised it; every fit
+                # ends in a sync (`_write_dev`), so none goes unread
+                raise Error("x_decomp MinCovDet: a NaN distance or draw has no order (refused)")
 
     def copy(self, A: DMat) raises -> DMat:
         var out = DMat(A.r, A.c)
@@ -329,8 +353,15 @@ struct DKit(Movable):
             self.ctx.enqueue_copy(dst_buf=self._sub(out), src_buf=self._sub(A))
         return out^
 
+    def put(self, dst: DMat, src: DMat) raises:
+        """src's words into dst (same shape; either may be a row view)."""
+        if dst.r != src.r or dst.c != src.c:
+            raise Error("x_decomp: put needs equal shapes")
+        if src.n() > 0:
+            self.ctx.enqueue_copy(dst_buf=self._sub(dst), src_buf=self._sub(src))
+
     # ---- selections on the device (lane cpu3-core)
-    def _sorted_order(mut self, v: DMat, bad: DMat) raises -> DeviceBuffer[DType.uint32]:
+    def _sorted_order(self, v: DMat, bad: DMat) raises -> DeviceBuffer[DType.uint32]:
         """v's indices in (value, index) order, resident (a stable radix
         sort of the monotone images); a NaN sets bad's word."""
         var n = v.n()
@@ -393,8 +424,7 @@ struct DKit(Movable):
         if h <= 0:
             return DMat(0, 1)
         var take = min(h, n)
-        var bad = self._bad_flag()
-        var order = self._sorted_order(v, bad)
+        var order = self._sorted_order(v, self.nan_word)
         var flag = self.ctx.enqueue_create_buffer[DType.int32](max(n, 1))
         var scan = self.ctx.enqueue_create_buffer[DType.int32](n + 1)
         enqueue_fill(self.ctx, flag, Int32(0))
@@ -408,7 +438,10 @@ struct DKit(Movable):
                 flag.unsafe_ptr(), scan.unsafe_ptr(), Int32(n), out.p().bitcast[Int32](),
                 grid_dim=_blocks(n), block_dim=TPB,
             )
-        self._refuse_nan(bad)
+        # the NaN word is read at the next sync (the C-step's log
+        # determinant): the order is a permutation either way, so every
+        # gather before it stays in range
+        self.nan_pending = True
         _ = order^
         _ = flag^
         _ = scan^
@@ -994,22 +1027,99 @@ struct DMcd:
         return DEst(loc^, cov^, det, sel^, final^)
 
     def select_random(
-        mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, want_dist: Bool
-    ) raises -> List[Optional[DEst]]:
-        var est = List[Optional[DEst]]()
+        mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, mut out: DCands
+    ) raises:
+        """`select_candidates` from random subsets: every trial's location
+        and covariance packed into one trial arena, then the `keep` best (in
+        `_order_by_det`'s order) appended to `out`. The later stages read
+        only a kept candidate's location and covariance."""
+        var tr = DCands(trials, X.c)
         var none = DMat(0, 0)
         for _t in range(trials):  # small-loop(trials: C-step candidates): one enqueued C-step a candidate, the plan's trial count
-            est.append(Optional(self.c_step(X, h, n_iter, False, none, none, want_dist)))
-        return _top(est, keep)
+            var e = self.c_step(X, h, n_iter, False, none, none, False)
+            tr.push(self.k, e.loc, e.cov, e.det)
+        var top = _top_of(tr.det, keep)
+        for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
+            var j = top[a]
+            out.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
 
     def select_init(
-        mut self, X: DMat, h: Int, mut inits: List[Optional[DEst]], keep: Int, n_iter: Int, want_dist: Bool
-    ) raises -> List[Optional[DEst]]:
-        var est = List[Optional[DEst]]()
-        for t in range(len(inits)):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
-            ref e = inits[t].value()
-            est.append(Optional(self.c_step(X, h, n_iter, True, e.loc, e.cov, want_dist)))
-        return _top(est, keep)
+        mut self, X: DMat, h: Int, inits: DCands, keep: Int, n_iter: Int, mut out: DCands
+    ) raises:
+        """`select_candidates` from initial estimates, the `keep` best
+        locations and covariances appended to `out` (packed, as above)."""
+        var tr = DCands(inits.count(), X.c)
+        for t in range(inits.count()):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
+            var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t), False)
+            tr.push(self.k, e.loc, e.cov, e.det)
+        var top = _top_of(tr.det, keep)
+        for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
+            var j = top[a]
+            out.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
+
+    def select_init_best(
+        mut self, X: DMat, h: Int, inits: DCands, n_iter: Int, want_dist: Bool
+    ) raises -> DEst:
+        """`select_candidates(...)[0]` from initial estimates: the best
+        (det, j) candidate kept whole (support rows and distances), every
+        other one released as soon as it loses. A NaN determinant is
+        refused after every C-step ran, as `_order_by_det` refused it."""
+        var best = Optional[DEst]()
+        var best_key = UInt64(0)
+        var nan_seen = False
+        for t in range(inits.count()):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
+            var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t), want_dist)
+            var f = Float32(e.det)
+            if f != f:
+                nan_seen = True
+                continue
+            var key = _key(f, t)
+            if not best or key < best_key:
+                best_key = key
+                best = Optional(e^)
+        if nan_seen:
+            raise Error("x_decomp MinCovDet: a NaN distance or draw has no order (refused)")
+        if not best:
+            raise Error("x_decomp MinCovDet: no candidate to select from")
+        return best.take()
+
+
+struct DCands(Movable):
+    """Candidate locations (1 x d) and covariances (d x d) packed in two
+    pooled buffers, with their log determinants (lane idn-regress). The
+    search used to keep every candidate as its own four device buffers
+    (location, covariance, support rows, distances): 333 subsets x 10 kept
+    at 100k rows is 13k+ live Metal allocations, and every Metal launch pays
+    ~0.25 us per live allocation (MTLResourceList residency), so each
+    C-step launch cost milliseconds. Views of one allocation cost nothing.
+    The values are copied word for word: no bit changes."""
+    var L: DMat
+    var C: DMat
+    var det: List[Float64]
+    var d: Int
+
+    def __init__(out self, cap: Int, d: Int) raises:
+        self.L = DMat(max(cap, 1), d)
+        self.C = DMat(max(cap, 1) * d, d)
+        self.det = List[Float64]()
+        self.d = d
+
+    def count(self) -> Int:
+        return len(self.det)
+
+    def loc(self, j: Int) raises -> DMat:
+        return DMat(rows_of=self.L, row0=j, rows=1)
+
+    def cov(self, j: Int) raises -> DMat:
+        return DMat(rows_of=self.C, row0=j * self.d, rows=self.d)
+
+    def push(mut self, k: DKit, loc: DMat, cov: DMat, det: Float64) raises:
+        var j = len(self.det)
+        if j >= self.L.r:
+            raise Error("x_decomp MinCovDet: candidate arena full")
+        k.put(self.loc(j), loc)
+        k.put(self.cov(j), cov)
+        self.det.append(det)
 
 
 struct DEst(Movable):
@@ -1029,15 +1139,15 @@ struct DEst(Movable):
         self.dist = dist^
 
 
-def _top(mut est: List[Optional[DEst]], keep: Int) raises -> List[Optional[DEst]]:
-    """`_order_by_det`'s order: `sorted(range(len(est)), key=(det, j))[:keep]`."""
-    var keys = List[UInt64](capacity=len(est))
-    for j in range(len(est)):  # small-loop(est: C-step candidates): one log determinant per candidate
-        keys.append(_key(Float32(est[j].value().det), j))
+def _top_of(dets: List[Float64], keep: Int) raises -> List[Int]:
+    """`_order_by_det`'s order: `sorted(range(len(dets)), key=(det, j))[:keep]`."""
+    var keys = List[UInt64](capacity=len(dets))
+    for j in range(len(dets)):  # small-loop(dets: C-step candidates): one log determinant per candidate
+        keys.append(_key(Float32(dets[j]), j))
     sort(keys)
-    var out = List[Optional[DEst]]()
-    for a in range(min(keep, len(keys))):  # small-loop(keep: kept candidates): moves the kept candidates
-        out.append(est[Int(keys[a] & UInt64(0xFFFFFFFF))].take())
+    var out = List[Int]()
+    for a in range(min(keep, len(keys))):  # small-loop(keep: kept candidates): the kept candidates' slots
+        out.append(Int(keys[a] & UInt64(0xFFFFFFFF)))
     return out^
 
 
@@ -1093,20 +1203,18 @@ def fast_mcd_dev(
         var n_best_m = p[10]
         var shuf = run.k.argsort_dev(run.k.rand(1, n, run.seed, 1000 + run.draws + 1, 0))
         run.draws += 1
-        var cands = List[Optional[DEst]]()
+        var cands = DCands(n_sub * min(10, n_trials), d)
         for i in range(n_sub):  # small-loop(n_sub: row subsets): one gather and its C-steps a subset, the plan's subset count
             var rows = DMat(rows_of=shuf, row0=i * n_ss, rows=n_ss)
             var cur = run.k.gather_dev(Xd, rows)
-            var got = run.select_random(cur, h_sub, n_trials, 10, 2, False)
-            for e in range(len(got)):  # small-loop(got: kept candidates): moves at most ten candidates
-                cands.append(Optional(got[e].take()))
+            run.select_random(cur, h_sub, n_trials, 10, 2, cands)
         var selection_all = run.k.argsort_dev(run.k.rand(1, n, run.seed, 1000 + run.draws + 1, 0))
         run.draws += 1
         var selection = DMat(rows_of=selection_all, row0=0, rows=n_m)
         var Xm = run.k.gather_dev(Xd, selection)
-        var merged = run.select_init(Xm, h_m, cands, n_best_m, 30, n < 1500)
         if n < 1500:
-            ref m0 = merged[0].value()
+            # merged[0]: the best merged candidate, kept whole
+            var m0 = run.select_init_best(Xm, h_m, cands, 30, True)
             var sp = sup.p().bitcast[Int32]()
             var selp = selection.p().bitcast[Int32]()
             if n_m > 0:
@@ -1122,12 +1230,14 @@ def fast_mcd_dev(
             _write_dev(run.k, m0.loc, m0.cov, sup, dist, n, d, loc_out, cov_out, sup_out, dist_out)
             _ = Xd^
             return
-        var full = run.select_init(Xd, h, merged, 1, 30, True)
-        best = full[0].take()
+        var merged = DCands(n_best_m, d)
+        run.select_init(Xm, h_m, cands, n_best_m, 30, merged)
+        _ = cands^
+        best = run.select_init_best(Xd, h, merged, 30, True)
     else:
-        var first = run.select_random(Xd, h, 30, 10, 2, False)
-        var full = run.select_init(Xd, h, first, 1, 30, True)
-        best = full[0].take()
+        var first = DCands(10, d)
+        run.select_random(Xd, h, 30, 10, 2, first)
+        best = run.select_init_best(Xd, h, first, 30, True)
     var bs = best.sel.n()
     if bs > 0:
         run.k.ctx.enqueue_function[mark_rows_kernel](

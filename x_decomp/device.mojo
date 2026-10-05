@@ -263,6 +263,36 @@ def xd_first_where_kernel(v: F32Ptr, count: Int32, stride: Int32, mode: Int32, f
             _ = Atomic.min(first, Int32(t))
 
 
+def xd_first_where2_kernel(v: F32Ptr, count: Int32, stride: Int32, first: I32Ptr):
+    """`xd_first_where_kernel`'s modes 0 (< 0) and 1 (== 0) on the same words
+    in one pass: first[0] and first[1] (lane idn-regress)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(count):
+        var x = v.unsafe_load(t * Int(stride))
+        if x < Float32(0.0):
+            _ = Atomic.min(first, Int32(t))
+        if x == Float32(0.0):
+            _ = Atomic.min(first.unsafe_offset(1), Int32(t))
+
+
+def xd_first_where2_enq(
+    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], count: Int, stride: Int,
+    mut out: HostBuffer[DType.int32],
+) raises:
+    """`xd_first_where` modes 0 and 1 together, ENQUEUED: out[0], out[1] are
+    the first t (XD_NO_FLAG for none) after the caller's next sync. One
+    launch and no wait of its own."""
+    var dfirst = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill(ctx, dfirst, XD_NO_FLAG)
+    if count > 0:
+        ctx.enqueue_function[xd_first_where2_kernel](
+            _p(buf), Int32(count), Int32(stride), dfirst.unsafe_ptr(),
+            grid_dim=_blocks(count), block_dim=TPB,
+        )
+    ctx.enqueue_copy(dst_buf=out, src_buf=dfirst)
+    _ = dfirst^
+
+
 def xd_first_where(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], count: Int, stride: Int, mode: Int) raises -> Int:
     """`xd_first_where_kernel` on the device; one word home (-1 for none)."""
     if count <= 0:
@@ -2756,15 +2786,18 @@ struct DevExec(Exec):
         comptime if IDN_EIGH_SMALL:
             if n >= 1 and n <= IDN_EIGH_SMALL_N:
                 # one launch (see IDN_EIGH_SMALL); an unconverged solve or a
-                # block that did not run raises inside `_rr_batch_on`
+                # block that did not run raises in `_rr_batch_check`, after
+                # the ONE sync that also brings w and v home (lane
+                # idn-regress: was three syncs)
                 var bw = ctx.enqueue_create_buffer[DType.float32](n)
                 var bv = ctx.enqueue_create_buffer[DType.float32](n * n)
-                DevExec._rr_batch_on(ctx, da, 1, n, bw, bv)
+                var marks = DevExec._rr_batch_enq(ctx, da, 1, n, bw, bv)
                 _down(ctx, bw, w, n)
                 _down(ctx, bv, v, n * n)
                 ctx.synchronize()
                 _ = bw^
                 _ = bv^
+                DevExec._rr_batch_check(marks, 1, n)
                 return 0
         # lane idn-cov-overflow: the power-of-two range scale
         # (x_decomp/eigh_scale.mojo; the host's `host_eigh_rr_sorted` takes
@@ -3015,14 +3048,13 @@ struct DevExec(Exec):
         return executed
 
     @staticmethod
-    def _rr_batch_on(
+    def _rr_batch_enq(
         ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], batch: Int, n: Int,
         mut dw: DeviceBuffer[DType.float32], mut dvo: DeviceBuffer[DType.float32],
-    ) raises:
-        """x_decomp/rr_batch.mojo on `batch` n x n problems already on the
-        device in `da` (consumed): dw (batch x n ascending) and dvo (batch x
-        n x n, vectors in columns). One sync to read the convergence marks;
-        an unconverged problem raises."""
+    ) raises -> HostBuffer[DType.int32]:
+        """`_rr_batch_on`'s launches, ENQUEUED: the two convergence marks
+        land in the returned host words; read them with `_rr_batch_check`
+        after the caller's next sync."""
         # lane idn-cov-overflow: each problem's power-of-two range scale
         # (x_decomp/eigh_scale.mojo; `host_eigh_rr_sorted` takes the same)
         var dfac = _eigh_scale_on(ctx, _p(da), batch, n)
@@ -3038,15 +3070,40 @@ struct DevExec(Exec):
         )
         _eigh_unscale_on(ctx, _p(dw), dfac, batch, n)
         # the convergence marks are read on the device (lane cpu3-core):
-        # the first problem whose block never ran, and the first unconverged
-        var b_neg = xd_first_where(ctx, dinfo, batch, 2, 0)
-        var b_zero = xd_first_where(ctx, dinfo, batch, 2, 1)
+        # the first problem whose block never ran, and the first unconverged,
+        # both in one launch and one word pair home (lane idn-regress: was a
+        # sync each)
+        var marks = ctx.enqueue_create_host_buffer[DType.int32](2)
+        xd_first_where2_enq(ctx, dinfo, batch, 2, marks)
         _ = dv^
         _ = dcs^
         _ = dpart^
         _ = ddg^
         _ = dinfo^
         _ = dfac^
+        return marks^
+
+    @staticmethod
+    def _rr_batch_on(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], batch: Int, n: Int,
+        mut dw: DeviceBuffer[DType.float32], mut dvo: DeviceBuffer[DType.float32],
+    ) raises:
+        """x_decomp/rr_batch.mojo on `batch` n x n problems already on the
+        device in `da` (consumed): dw (batch x n ascending) and dvo (batch x
+        n x n, vectors in columns). One sync to read the convergence marks;
+        an unconverged problem raises."""
+        var marks = DevExec._rr_batch_enq(ctx, da, batch, n, dw, dvo)
+        ctx.synchronize()
+        DevExec._rr_batch_check(marks, batch, n)
+
+    @staticmethod
+    def _rr_batch_check(marks: HostBuffer[DType.int32], batch: Int, n: Int) raises:
+        """`_rr_batch_enq`'s two marks, read after the caller's sync: raise
+        for a block that never ran or an unconverged problem."""
+        var fn_ = marks.unsafe_ptr().unsafe_load(0)
+        var fz = marks.unsafe_ptr().unsafe_load(1)
+        var b_neg = -1 if fn_ == XD_NO_FLAG else Int(fn_)
+        var b_zero = -1 if fz == XD_NO_FLAG else Int(fz)
         if b_neg >= 0 or b_zero >= 0:
             var b = b_neg if (b_zero < 0 or (b_neg >= 0 and b_neg < b_zero)) else b_zero
             if b == b_neg:
