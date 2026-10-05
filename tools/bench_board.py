@@ -2654,6 +2654,20 @@ def render_board(result):
     L.append("")
     L.append("Generated %s from `board.json` (schema `%s`)." % (result.get("updated") or now_utc(), SCHEMA))
     L.append("")
+    overlay = result.get("repair_overlay")
+    if overlay:
+        L.extend(["> SCOPED REPAIR OVERLAY: mixed source and potentially different hardware. "
+                  "Not a uniform frozen run or IDENTICAL qualification. Original failures remain in board.json.", "",
+                  "| repaired race | numerical source / artifacts | measured hardware | capture |",
+                  "|---|---|---|---|"])
+        for repair in overlay["repairs"]:
+            clean = lambda value: str(value).replace("|", "/").replace("\n", " ")
+            L.append("| %s | %s | %s | `%s` |" % (
+                clean(repair["race"]), clean(repair["source_description"]),
+                clean(repair["hardware_description"]), repair["capture"]["sha256"]))
+        L.extend(["", "The Box section describes the original run. Per-row replacement board, audit, "
+                  "capture and artifact identities are pinned in overlay-manifest.json and board.json. "
+                  "Original inference cells are retained; this overlay admits fit cells only.", ""])
     if cfg.get("smoke"):
         why = []
         if cfg.get("rows"):
