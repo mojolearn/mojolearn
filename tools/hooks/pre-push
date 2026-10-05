@@ -28,7 +28,9 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     [ -z "$local_sha" ] && continue
     [ "$local_sha" = "$zero" ] && continue
     [ -f "$here/no_host_routes.py" ] || continue
-    case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+    # salvage/* refs are archives of old worktrees (owner, 2026-10-05): never merged as is, so no host-route
+    # check; the size fence below still applies.
+    case "$remote_ref" in refs/heads/salvage/*) continue ;; refs/heads/*) ;; *) continue ;; esac
     python3 "$here/no_host_routes.py" --tree "$local_sha" || exit 4
 done
 [ $? -eq 4 ] && bad=1
