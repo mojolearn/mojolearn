@@ -97,7 +97,7 @@ comptime _RBF_STAGE_POOL = "MojoKmRbfDownloadStagesFast"
 
 
 #: MOJOLEARN_KM_FAST_RBF_PIPE (lane apple-fast-s-small, 2026-10-05), FAST +
-#: Apple, default OFF (A/B candidate; needs KM_FAST_RBF_STAGED).
+#: Apple default (needs KM_FAST_RBF_STAGED); rollback -D MOJOLEARN_KM_FAST_RBF_PIPE_OFF.
 #: What: fit_transform as a pipeline over row blocks of ~8 MiB of output
 #: (`_rbf_pipe_rows`): block k's X rows go up, its GEMM and epilogue run, its
 #: projection goes into a pinned stage; while the GPU does block k + 1 the one
@@ -112,7 +112,11 @@ comptime _RBF_STAGE_POOL = "MojoKmRbfDownloadStagesFast"
 #: GEMM hide under the copy-out of the previous block.
 #: Bits: the GEMM runs per row block (m = block rows, same n and k, same
 #: operands); FAST needs no same bits, quality is the A/B's check.
-comptime KM_FAST_RBF_PIPE = KM_FAST_RBF_STAGED and is_defined["MOJOLEARN_KM_FAST_RBF_PIPE"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
+#: rab12-rbfpipe): rbf-sampler istella 56.7 -> 43.0 ms, taxi 35.6 -> 31.1 ms,
+#: kernel_rel_error identical. KEEP: the FAST + Apple default since then
+#: (the old -D name is harmless).
+comptime KM_FAST_RBF_PIPE = KM_FAST_RBF_STAGED and not is_defined["MOJOLEARN_KM_FAST_RBF_PIPE_OFF"]()
 
 
 def _rbf_pipe_rows(m: Int, q: Int) -> Int:
