@@ -36,6 +36,14 @@ Measured, verdict owed (2 rows, OPEN): `DECOMP_FAST_OMP_BLOCK` (lane/apple-fast-
 
 FAST never needs identical results: not bits, digests or arm-A equality, and not across vendors or runs. A FAST A/B is judged on speed, and on quality not going down. The board quality metric must show no material drop against FAST main (arm A), and must be at least as good as the best opponent's. A noise-level difference, a new fold order or new bits is never a reason to hold. Any real quality loss is. Strict "B <= A on every metric, zero allowance" gates are retired for FAST verdicts; they may still be reported as information.
 
+## TODO run later: AutoARIMA vs statsforecast (2026-10-05)
+
+Andrew asked to match statsforecast's AutoARIMA speed. FAST now: taxi-hourly 9.9 s (forecast_rmse 75.71), synthetic 13.7 s (2.465); statsforecast-cpu
+2.84 s (68.21) and 2.88 s (17.55). Work is on branch lane/apple-fast-arima-sf (stepwise Hyndman-Khandakar search with parallel candidates on the GPU, CSS
+scoring during the search, exact fit only for the chosen order), all behind default-off defines (ARIMA_FAST_STEPWISE, ARIMA_FAST_CSS_SEARCH).
+Brief: ~/mojolearn-evidence/briefs-2026-10-04/apple-fast-arima-sf.md. To finish: compile on M2 (binding arima), merge to main, then A/B autoarima taxi-hourly
+and synthetic on M3 (A = main, B = each define and the pair). Flip on only if faster with forecast_rmse no worse.
+
 ## How to use it
 
 - **Before you write a new experiment, search this file for the define** (and for the algorithm). If it was dropped, read the reason first. Do not re-run a dropped idea unless the code it touched has changed since.
