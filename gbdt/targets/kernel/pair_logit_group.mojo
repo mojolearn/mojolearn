@@ -130,8 +130,9 @@ def pl_pairs_once_for[column: Int]() -> Bool:
 
 
 def pl_group_narrow_for[column: Int]() -> Bool:
-    """Lane af-sym-multi, `-D MOJOLEARN_PL_GROUP_NARROW` (or
-    `-D MOJOLEARN_SYM_MULTI_ALL`), FAST + Apple: the group kernel runs on
+    """Lane af-sym-multi, FAST + Apple default since 2026-10-04 (rollback
+    `-D MOJOLEARN_PL_GROUP_NARROW_OFF`; the old `-D MOJOLEARN_PL_GROUP_NARROW`
+    and `-D MOJOLEARN_SYM_MULTI_ALL` change nothing): the group kernel runs on
     128-thread blocks instead of 256. Istella's queries hold ~103 documents,
     so a 256-thread block leaves four of its eight SIMD groups idle through
     every tile loop and barrier; at 128 the idle half is gone and twice the
@@ -140,10 +141,7 @@ def pl_group_narrow_for[column: Int]() -> Bool:
     the 256-thread kernel (the order is the `j` order, not the thread
     count), so the bits do not move; the setup kernel and the reuse scatter
     keep their width."""
-    comptime if (
-        is_defined["MOJOLEARN_PL_GROUP_NARROW"]()
-        or is_defined["MOJOLEARN_SYM_MULTI_ALL"]()
-    ):
+    comptime if not is_defined["MOJOLEARN_PL_GROUP_NARROW_OFF"]():
         return pairlogit_group_fused_for[column]()
     return False
 
@@ -156,8 +154,14 @@ def pl_group_narrow_for[column: Int]() -> Bool:
 comptime PL_PAIRS_ONCE = pl_pairs_once_for[TARGET_COLUMN]()
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
-#: unchecked), never timed. `-D MOJOLEARN_PL_GROUP_NARROW` (or
-#: SYM_MULTI_ALL).
+#: unchecked). `-D MOJOLEARN_PL_GROUP_NARROW` (or SYM_MULTI_ALL) until
+#: 2026-10-04.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04):
+#: gbdt-rank-pairlogit istella 3095.83 -> 3040.78 ms (-1.8%, tag
+#: rab4-symmulti) and 3095.91 -> 3038.19 ms (-1.9%, tag rab7-plgroupnarrow);
+#: map 0.854545, ndcg10 0.719953 and output digest identical. KEEP: the FAST
+#: + Apple default; rollback -D MOJOLEARN_PL_GROUP_NARROW_OFF. SYM_MULTI_ALL
+#: (yetirank +0.1%) stays a NEUTRAL record and no longer selects anything.
 comptime PL_GROUP_NARROW = pl_group_narrow_for[TARGET_COLUMN]()
 #: the group kernel's block: 128 under `PL_GROUP_NARROW`, else `PLG_THREADS`
 #: (`MSE_BLOCK_SIZE`, 256)

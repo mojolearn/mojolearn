@@ -1952,7 +1952,8 @@ def train(
 
     # lane/apple-fast-sym-ctr (FAST + Apple only; gbdt/ctrs/fast_prep.mojo,
     # docs/apple-fast/ab/sym-ctr.md). Under any of `-D MOJOLEARN_CTR_PREP_SHARED`,
-    # `_SORT_ONCE`, `_INDEX_FUSED`, `_ONEHOT_DEVICE` (or `_SYM_CTR_ALL`) the
+    # `_SORT_ONCE`, `_INDEX_FUSED`, `_ONEHOT_DEVICE` (or SYM_CTR_ALL, default
+    # since 2026-10-04, rollback `-D MOJOLEARN_SYM_CTR_ALL_OFF`) the
     # categorical walk below runs here instead and main's walk runs zero
     # times. Off, `symctr_walk_main` is the constant True and every list
     # stays empty.
