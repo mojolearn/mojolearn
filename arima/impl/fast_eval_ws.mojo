@@ -50,7 +50,9 @@ from arima.impl.lbfgs_device import (
 )
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul_add
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_log, identical_mul_add,
+)
 
 comptime EW_TPB = 128
 # FAST + Apple default after M3 gap26-arima-tail-{synthetic,taxi-hourly}:
@@ -198,6 +200,91 @@ def ew_obs_intercept_kernel(
     d_obs.unsafe_store(bid * n + t, acc)
 
 
+#: lane/apple-fast-arima-sf (2026-10-04): the conditional-sum-of-squares
+#: objective for MOJOLEARN_ARIMA_FAST_CSS_SEARCH (`fast_order_search.mojo`).
+#: The widest AR / MA order the CSS recursion holds in registers (the grouped
+#: search's nonseasonal grids have p, q <= 4).
+comptime CSS_PQ_MAX = 8
+comptime CSS_LOG_2PI = Float32(1.8378770664093453)
+
+
+def css_ll_kernel(
+    ll: MutPointer[Float32, MutAnyOrigin],
+    info0: MutPointer[Int32, MutAnyOrigin],
+    info1: MutPointer[Int32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    mu: MutPointer[Float32, MutAnyOrigin],
+    ar: MutPointer[Float32, MutAnyOrigin],
+    ma: MutPointer[Float32, MutAnyOrigin],
+    mask: MutPointer[Int32, MutAnyOrigin],
+    nb_in: Int32, eb_in: Int32, n_in: Int32, p_in: Int32, q_in: Int32, k_in: Int32,
+    has_mask_in: Int32,
+):
+    """ARIMA_FAST_CSS_SEARCH: one thread per stacked member (member m of
+    series b at m * nb + b, `ew_stack_kernel`'s layout). The conditional sum
+    of squares of R's `arima(method = "CSS")` (`ARIMA_CSS`, the objective
+    statsforecast's `auto_arima_f` scores candidates with when
+    `approximation` is on): on the differenced series w (`y`, nb x n),
+    e_t = w_t - c - sum_i phi_i w_{t-i} - sum_j theta_j e_{t-j} for t >= p,
+    e_t = 0 before (ncond = p after differencing), ssq = sum e_t^2 over the
+    nu = n - p summed steps, sigma2 = ssq / nu. c is this ARIMA's intercept
+    (the Kalman filter's state constant), the reparametrization of R's mean
+    form, so the minimizing ARMA coefficients are the same.
+
+    Written as a log-likelihood on the criterion's scale:
+    ll = -0.5 n (log(2 pi) + 1 + log(ssq / nu)), n = the differenced length
+    (statsforecast's `nstar`), so -2 ll + penalty is statsforecast's CSS
+    criterion `offset + nstar log(sigma2) + penalty` up to a per-series
+    constant (the offset), which no order choice reads. A non-finite or
+    non-positive ssq is refused through `info1` (the evaluation's
+    infeasible mark). `mask` (with `has_mask_in`): series whose word is 0
+    are skipped (ll 0, the optimizer has retired them)."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var eb = Int(eb_in)
+    if j >= eb:
+        return
+    var nb = Int(nb_in)
+    var n = Int(n_in)
+    var p = Int(p_in)
+    var q = Int(q_in)
+    var b = j % nb
+    info0.unsafe_store(j, Int32(0))
+    info1.unsafe_store(j, Int32(0))
+    if has_mask_in != 0 and mask.unsafe_load(b) == Int32(0):
+        ll.unsafe_store(j, Float32(0.0))
+        return
+    var c = mu.unsafe_load(j) if k_in != 0 else Float32(0.0)
+    var phi = InlineArray[Float32, CSS_PQ_MAX](fill=Float32(0.0))
+    var theta = InlineArray[Float32, CSS_PQ_MAX](fill=Float32(0.0))
+    var e = InlineArray[Float32, CSS_PQ_MAX](fill=Float32(0.0))
+    for i in range(p):
+        phi[i] = ar.unsafe_load(p * j + i)
+    for i in range(q):
+        theta[i] = ma.unsafe_load(q * j + i)
+    var yb = b * n
+    var ssq = Float32(0.0)
+    for t in range(p, n):
+        var v = y.unsafe_load(yb + t) - c
+        for i in range(p):
+            v -= phi[i] * y.unsafe_load(yb + t - 1 - i)
+        for i in range(q):
+            v -= theta[i] * e[i]
+        # e[i] holds e_{t-1-i}: shift, newest first
+        var i2 = q - 1
+        while i2 > 0:
+            e[i2] = e[i2 - 1]
+            i2 -= 1
+        e[0] = v
+        ssq += v * v
+    var nu = n - p
+    if nu < 1 or not (ssq > Float32(0.0)) or isinf(ssq):
+        info1.unsafe_store(j, Int32(1))
+        ll.unsafe_store(j, -inf[DType.float32]())
+        return
+    var s2 = ssq / Float32(nu)
+    ll.unsafe_store(j, Float32(-0.5) * Float32(n) * (CSS_LOG_2PI + Float32(1.0) + identical_log(s2)))
+
+
 struct FastEvalWS(Movable):
     """Every buffer of one stacked evaluation, sized for `nb` series. The
     optimizer holds one in an `Optional` that is `None` when the switch is
@@ -220,6 +307,15 @@ struct FastEvalWS(Movable):
     var p_ext: ARIMAParams
     var t_params: ARIMAParams
     var ws: KalmanWorkspace
+    var css: Bool
+    """ARIMA_FAST_CSS_SEARCH: the evaluation is the conditional sum of
+    squares (`css_ll_kernel`) on `y_ext` (the `nb` differenced series, NOT
+    replicated) instead of the Kalman filter; set only by the CSS
+    constructor."""
+    var css_mask: DeviceBuffer[DType.int32]
+    """The CSS evaluation's per-series skip words (`set_css_mask`); one
+    word when no mask is set."""
+    var has_css_mask: Bool
 
     def __init__(
         out self,
@@ -257,6 +353,9 @@ struct FastEvalWS(Movable):
         self.p_ext = p_ext^
         self.t_params = t_params^
         self.ws = ws^
+        self.css = False
+        self.css_mask = ctx.enqueue_create_buffer[DType.int32](1)
+        self.has_css_mask = False
 
     def __init__(
         out self,
@@ -299,6 +398,77 @@ struct FastEvalWS(Movable):
         self.p_ext = p_ext^
         self.t_params = t_params^
         self.ws = ws^
+        self.css = False
+        self.css_mask = ctx.enqueue_create_buffer[DType.int32](1)
+        self.has_css_mask = False
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        nb: Int,
+        n_obs: Int,
+        order: ARIMAOrder,
+        mut d_ykf: DeviceBuffer[DType.float32],
+    ) raises:
+        """ARIMA_FAST_CSS_SEARCH: the CSS evaluation's buffers. `d_ykf` holds
+        the `nb` DIFFERENCED series (`nb * n_obs`, `n_obs` the differenced
+        length); `order` is the order without differencing. The CSS kernel
+        reads each series once per member, so nothing is replicated and the
+        Kalman workspace is a one-step placeholder (only `loglike` and the
+        two refusal words are written)."""
+        var N = order.complexity()
+        var eb = (N + 1) * nb
+        var x_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * N))
+        var p_ext = ARIMAParams(ctx, order, eb)
+        var t_params = ARIMAParams(ctx, order, eb)
+        var ws = KalmanWorkspace(ctx, order, eb, 1, 0)
+        ctx.synchronize()
+        self.nb = nb
+        self.n_obs = n_obs
+        self.N = N
+        self.eb = eb
+        self.n_exog = 0
+        self.exog = ctx.enqueue_create_buffer[DType.float32](1)
+        self.y_ext = d_ykf.create_sub_buffer[DType.float32](0, max(1, nb * n_obs))
+        self.x_ext = x_ext^
+        self.p_ext = p_ext^
+        self.t_params = t_params^
+        self.ws = ws^
+        self.css = True
+        self.css_mask = ctx.enqueue_create_buffer[DType.int32](1)
+        self.has_css_mask = False
+
+    def set_css_mask(mut self, mask: DeviceBuffer[DType.int32], offset: Int) raises:
+        """ARIMA_FAST_STEPWISE over CSS: series whose word in `mask[offset :
+        offset + nb]` is 0 are skipped by the CSS kernel."""
+        self.css_mask = mask.create_sub_buffer[DType.int32](offset, self.nb)
+        self.has_css_mask = True
+
+    def css_into(mut self, ctx: DeviceContext, order: ARIMAOrder) raises:
+        """The CSS objective of every stacked member into `ws.loglike` (and
+        0 / the refusal into `ws.info_init` / `ws.info_loop`), from the
+        transformed parameters `prepare` wrote. One launch, no wait."""
+        var g = (self.eb + EW_TPB - 1) // EW_TPB
+        ctx.enqueue_function[css_ll_kernel](
+            self.ws.loglike.unsafe_ptr(), self.ws.info_init.unsafe_ptr(), self.ws.info_loop.unsafe_ptr(),
+            self.y_ext.unsafe_ptr(), self.t_params.mu.unsafe_ptr(), self.t_params.ar.unsafe_ptr(),
+            self.t_params.ma.unsafe_ptr(), self.css_mask.unsafe_ptr(),
+            Int32(self.nb), Int32(self.eb), Int32(self.n_obs), Int32(order.p), Int32(order.q),
+            Int32(order.k), Int32(1) if self.has_css_mask else Int32(0),
+            grid_dim=(g, 1, 1), block_dim=(EW_TPB, 1, 1),
+        )
+
+    def loglike_at(mut self, ctx: DeviceContext, order: ARIMAOrder, h: Float32,
+                   mut d_x: DeviceBuffer[DType.float32],
+                   mut d_bad: DeviceBuffer[DType.int32]) raises:
+        """Every member's objective at `d_x` (member 0 the unperturbed point)
+        into `ws.loglike`: CSS or the Kalman filter, as `eval` takes it."""
+        self.prepare(ctx, order, h, d_x, d_bad)
+        if self.css:
+            self.css_into(ctx, order)
+        else:
+            fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, 32,
+                             1 if self.n_exog > 0 else 0)
 
     def attach_exog(mut self, d_exog: DeviceBuffer[DType.float32], n_exog: Int) raises:
         """The fit's differenced regressors (`nb * n_exog * n_obs` floats),
@@ -328,9 +498,7 @@ struct FastEvalWS(Movable):
         comptime if not KALMAN_FAST_EVAL_WS:
             raise Error("FastEvalWS.eval: not compiled in this build (MOJOLEARN_ARIMA_FAST_EVAL_WS)")
         else:
-            self.prepare(ctx, order, h, d_x, d_bad)
-            fast_kalman_into(ctx, self.y_ext, self.t_params, order, self.eb, self.n_obs, self.ws, 32,
-                             1 if self.n_exog > 0 else 0)
+            self.loglike_at(ctx, order, h, d_x, d_bad)
             self.finish(ctx, h, scale, d_x, d_grad, d_x_pert, d_f, d_g, d_bad)
 
     def prepare(mut self, ctx: DeviceContext, order: ARIMAOrder, h: Float32,
