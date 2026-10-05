@@ -141,14 +141,23 @@ def dart_step(
     stream: Int, skip_thr: Int,
 ) raises:
     """The device `dart_step`: drop flags of iterations 0 .. t, the dropped
-    trees off the score, the gradients; the fit target of each class to
-    targets[c], the flags and the bad word to the caller."""
+    trees off the score, the gradients; the fit target of each class stays
+    in the session's `target` plane (read there by the member fits, the host
+    rf binding's `rf_regressor_fit_dart_export`), the flags and the bad word
+    to the caller."""
     comptime if DART_HOST:
         var reg = DART_HOST_SESSIONS.get_or_create_ptr()
         var idx = reg[].find(id)
         var n = reg[].sessions[idx].n
         var k = reg[].sessions[idx].k
-        if t < 0 or t > reg[].sessions[idx].cap_iters or len(targets) != k:
+        # box-run-2-dart-host (2026-10-05): cpu4-forest (820fd9928) moved the
+        # device protocol to "targets stay in the session's target plane"
+        # (xtrees/dart_device.mojo dart_step: `targets` must be empty) and the
+        # Python loop now passes []; the host twin required len(targets) == k
+        # and raised. Same protocol here: `targets` must be empty (kept in
+        # the signature only), the K planes stay in this session for
+        # `rf_regressor_fit_dart_export` (bindings/_mojolearn_rf_host.mojo).
+        if t < 0 or t > reg[].sessions[idx].cap_iters or len(targets) != 0:
             raise Error("x_trees dart_step: iteration count or targets out of range")
         var flags = _hi(reg[].sessions[idx].flags)
         var coef = F32P(unsafe_from_address=coef_addr)
@@ -169,10 +178,6 @@ def dart_step(
         var node_cap = reg[].sessions[idx].node_cap
         for i in range(n):
             dart_row_unit(i, n, k, t, kind, node_cap, flags, coef, nodes, values, y, score, dsum, target, h)
-        for c in range(k):
-            var out = F32P(unsafe_from_address=targets[c])
-            for i in range(n):
-                out[i] = target[c * n + i]
         if t > 0:
             var fo = I32P(unsafe_from_address=flags_out)
             for e in range(t):

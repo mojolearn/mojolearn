@@ -117,8 +117,9 @@ def dart_open_binding(x: PythonObject, y: PythonObject, inits: PythonObject, par
 def dart_step_binding(handle: PythonObject, coef: PythonObject, thr: PythonObject, flags: PythonObject,
                       bad: PythonObject, targets: PythonObject, params: PythonObject) raises -> PythonObject:
     """coef float32 t * k, thr int64 t (in), flags int32 t and bad int32 1
-    (out), targets = [k float32 n addresses] (out); params = [t, drop_seed,
-    iteration, skip_thr]."""
+    (out), targets = [] (box-run-2-dart-host: the K fit targets stay in the
+    host session for `rf_regressor_fit_dart_export`, as on the device since
+    cpu4-forest); params = [t, drop_seed, iteration, skip_thr]."""
     var p = _dart_ints(params, 4, "x_trees_dart_step")
     var outs = List[Int]()
     for i in range(len(targets)):
