@@ -1849,9 +1849,12 @@ def _device_rows_ok(estimator, scoring=None):
         return False
     if isinstance(scoring, dict):
         scoring = list(scoring.values())
-    if isinstance(scoring, (list, tuple, set)):
-        return all(isinstance(sc, (str, _Scorer)) for sc in scoring)  # glue: scorer kinds
-    return scoring is None or isinstance(scoring, (str, _Scorer))
+    if not isinstance(scoring, (list, tuple, set)):
+        scoring = [scoring]
+    ok = True
+    for sc in scoring:  # glue: the kind of each scorer (a handful)
+        ok = ok and (sc is None or isinstance(sc, (str, _Scorer)))
+    return ok
 
 
 # ---------------------------------------------------------------- scorers
