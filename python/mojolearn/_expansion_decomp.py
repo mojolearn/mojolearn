@@ -2112,32 +2112,12 @@ class NMF(_Base):
             W = k.ew("scale", k.ew("abs", k.rand(n, nc, seed, 11, 1)), s=avg)
             return W, H
         U, S, Vt = _thin_svd(k, M, nc, u_based=(n >= d))
-        # lane cpu2-l8-decomp (re-audit L8, NMF._init): S[j] stays a 1 x 1
-        # operand where S lives and sqrt(S[j]) / sqrt(S[j] sigma) are cells
-        # (float32, correctly rounded) instead of host doubles; the factor
-        # columns and rows are stacked where they live (k.hstack / k.vstack)
-        Wc, Hr = [], []
-        for j in range(nc):
-            x, y = U.cols(j, j + 1), Vt.rows(j, j + 1)
-            sj = S.cols(j, j + 1)
-            if j == 0:
-                r = k.ew("sqrt", sj)
-                Wc.append(k.ew("mul", k.ew("abs", x), r))
-                Hr.append(k.ew("mul", k.ew("abs", y), r))
-                continue
-            xp, yp = k.ew("maxs", x, s=0.0), k.ew("maxs", y, s=0.0)
-            xn, yn = k.ew("abs", k.ew("mins", x, s=0.0)), k.ew("abs", k.ew("mins", y, s=0.0))
-            xpn, ypn, xnn, ynn = _norm(k, xp), _norm(k, yp), _norm(k, xn), _norm(k, yn)
-            mp = _f32(_f32(xpn) * _f32(ypn))
-            mn = _f32(_f32(xnn) * _f32(ynn))
-            if mp > mn:
-                u, v, sigma = k.ew("scale", xp, s=1.0 / xpn if xpn else 0.0), k.ew("scale", yp, s=1.0 / ypn if ypn else 0.0), mp
-            else:
-                u, v, sigma = k.ew("scale", xn, s=1.0 / xnn if xnn else 0.0), k.ew("scale", yn, s=1.0 / ynn if ynn else 0.0), mn
-            lbd = k.ew("sqrt", k.ew("scale", sj, s=sigma))
-            Wc.append(k.ew("mul", u, lbd))
-            Hr.append(k.ew("mul", v, lbd))
-        W, H = k.hstack(Wc), k.vstack(Hr)
+        # the per-component factor pairs in ONE binding call (lane
+        # py-runtime-b: x_decomp/nmf.mojo `nmf_nndsvd`, the same cells per
+        # component and the same float32 products of the norms; on resident
+        # device matrices in the GPU binding)
+        W, H = _M.zeros(n, nc), _M.zeros(nc, d)
+        k.b.x_decomp_nmf_nndsvd(U.addr, S.addr, Vt.addr, W.addr, H.addr, [n, d, S.r * S.c, nc])
         z = _M.zeros(1, 1)
         W = k.ew("select", W, W, z, s=1e-6 - 1e-13)
         H = k.ew("select", H, H, z, s=1e-6 - 1e-13)
@@ -2170,139 +2150,24 @@ class NMF(_Base):
             res = dsum - M.r * M.c - lsum
         return math.sqrt(2 * res) if res > 0 else 0.0
 
-    def _mu_ratio(self, k, M, W, H, beta):
-        """(X / WH) for KL, (X / WH^2) for IS, WH clamped at EPSILON; and WH^(beta-1)."""
-        WH = k.ew("maxs", k.mm(W, H), s=_F32_EPS)
-        if beta == 1.0:
-            return k.ew("div", M, WH), None
-        return k.ew("div", k.ew("div", M, WH), WH), k.ew("recip", WH)
-
     # ---- solvers
-    def _mu(self, k, M, W, H, update_H, regs):
+    def _solve(self, k, M, W, H, update_H, regs):
+        """`_cd` (solver 'cd') or `_mu` (frobenius) / `_mu_beta` (KL, IS) in
+        ONE binding call (lane py-runtime-b: x_decomp/nmf.mojo on the host
+        column, x_decomp/nmf_dev.mojo on resident device matrices): the same
+        cells, broadcast modes and float32 scalars as the Python drivers it
+        replaces, their float64 convergence tests in the same order, the
+        shuffle orders from the same Philox streams (200 + draw). W and H
+        are copied; the binding replaces the copies."""
         l1W, l1H, l2W, l2H = regs
-        beta = self._beta()
-        if beta != 2.0:
-            return self._mu_beta(k, M, W, H, update_H, regs, beta)
-        err0 = self._err(k, M, W, H)
-        prev = err0
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            num = k.mm(M, H, tb=True)
-            den = k.mm(W, k.mm(H, H, tb=True))
-            if l1W > 0:
-                den = k.ew("adds", den, s=l1W)
-            if l2W > 0:
-                den = k.ew("axpy", den, W, s=l2W)
-            W = k.ew("muz", W, num, den, s=_F32_EPS)
-            if update_H:
-                num = k.mm(W, M, ta=True)
-                den = k.mm(k.mm(W, W, ta=True), H)
-                if l1H > 0:
-                    den = k.ew("adds", den, s=l1H)
-                if l2H > 0:
-                    den = k.ew("axpy", den, H, s=l2H)
-                H = k.ew("muz", H, num, den, s=_F32_EPS)
-            if self.tol > 0 and it % 10 == 0:
-                err = self._err(k, M, W, H)
-                if (prev - err) / err0 < self.tol:
-                    break
-                prev = err
+        W, H = W.copy(), H.copy()
+        p = [M.r, M.c, W.c, 0 if self.solver == "cd" else 1, int(bool(update_H)), int(self.max_iter),
+             int(bool(self.shuffle)), _seed_of(self.random_state) & 0xFFFFFFFF]
+        f = [self._beta(), float(self.tol), float(l1W), float(l1H), float(l2W), float(l2H)]
+        it = int(k.b.x_decomp_nmf_solve(M.addr, W.addr, H.addr, p, f))
+        if it < 0:
+            raise ZeroDivisionError("float division by zero")
         return W, H, it
-
-    def _mu_beta(self, k, M, W, H, update_H, regs, beta):
-        """sklearn `_multiplicative_update_w/_h` for beta 1 (KL) and 0 (IS):
-        the ratio matrix through H^T (W^T), the denominator H's row sums (W's
-        column sums, a zero replaced by 1) for KL or WH^-1 H^T (W^T WH^-1)
-        for IS, a zero denominator replaced by EPSILON, and for IS the
-        update's square root (gamma = 1 / (2 - beta))."""
-        l1W, l1H, l2W, l2H = regs
-        err0 = self._err(k, M, W, H)
-        prev = err0
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            R, P = self._mu_ratio(k, M, W, H, beta)
-            num = k.mm(R, H, tb=True)
-            den = k.rowsum(H).T if beta == 1.0 else k.mm(P, H, tb=True)
-            if beta == 1.0:
-                den = k.ew("add", _M.zeros(W.r, W.c), den)
-            if l1W > 0:
-                den = k.ew("adds", den, s=l1W)
-            if l2W > 0:
-                den = k.ew("axpy", den, W, s=l2W)
-            den = k.ew("select", k.ew("abs", den), den, k.const(_F32_EPS), s=0.0)
-            delta = k.ew("div", num, den)
-            if beta == 0.0:
-                delta = k.ew("sqrt", delta)
-            W = k.ew("mul", W, delta)
-            if update_H:
-                R, P = self._mu_ratio(k, M, W, H, beta)
-                num = k.mm(W, R, ta=True)
-                if beta == 1.0:
-                    ws = k.colsum(W)
-                    ws = k.ew("select", k.ew("abs", ws), ws, k.const(1.0), s=0.0)
-                    den = k.ew("add", _M.zeros(H.r, H.c), ws.T)
-                else:
-                    den = k.mm(W, P, ta=True)
-                if l1H > 0:
-                    den = k.ew("adds", den, s=l1H)
-                if l2H > 0:
-                    den = k.ew("axpy", den, H, s=l2H)
-                den = k.ew("select", k.ew("abs", den), den, k.const(_F32_EPS), s=0.0)
-                delta = k.ew("div", num, den)
-                if beta == 0.0:
-                    delta = k.ew("sqrt", delta)
-                H = k.ew("mul", H, delta)
-            if self.tol > 0 and it % 10 == 0:
-                err = self._err(k, M, W, H)
-                if (prev - err) / err0 < self.tol:
-                    break
-                prev = err
-        return W, H, it
-
-    def _cd_side(self, k, M, W, Ht, l1, l2, perm, trans):
-        HHt = k.mm(Ht, Ht, ta=True)
-        XHt = k.mm(M, Ht, ta=trans)
-        if l2:
-            # lane fix-d1-decomp: HHt + l2 I in one fused `axpy` cell against
-            # the identity mask (made on the device for a device HHt); lane
-            # cpu2-l8-decomp: in every mode (the host diagonal edit is gone)
-            mask = k.diag_mask(HHt.r) if HHt._d is not None else None
-            HHt = k.ew("axpy", HHt, mask if mask is not None else _eye(HHt.r), s=l2)
-        if l1:
-            XHt = k.ew("adds", XHt, s=-l1)
-        return k.cd_rows(W, HHt, XHt, perm)
-
-    def _perm(self, k, kc):
-        """The coordinate order of one `_update_coordinate_descent` call: the
-        identity, or with shuffle=True a Philox permutation (a sort of draws,
-        ties to the lower index; DEVIATION 5306)."""
-        if not self.shuffle:
-            return list(range(kc))
-        self._draws = getattr(self, "_draws", 0) + 1
-        # lane cpu2-l8-decomp: the order of the draws (ties to the lower
-        # index) made where they are drawn (x_decomp/select_*.mojo
-        # `order_small`); cd_rows takes the int32 list, kc words
-        u = k.rand(1, kc, _seed_of(self.random_state), 200 + self._draws, 0)
-        return [int(v) for v in k.order_small(u).s]  # glue: kc exact-float positions to the int32 argument list
-
-    def _cd(self, k, M, W, H, update_H, regs):
-        l1W, l1H, l2W, l2H = regs
-        self._draws = 0
-        Ht = H.T
-        W = W.copy()
-        v_init = None
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            viol = self._cd_side(k, M, W, Ht, l1W, l2W, self._perm(k, W.c), False)
-            if update_H:
-                viol += self._cd_side(k, M, Ht, W, l1H, l2H, self._perm(k, W.c), True)
-            if v_init is None:
-                v_init = viol
-            if v_init == 0:
-                break
-            if viol / v_init <= self.tol:
-                break
-        return W, Ht.T if update_H else H, it
 
     def _fit_transform(self, M, H=None, update_H=True):
         k = self._kit()
@@ -2326,8 +2191,7 @@ class NMF(_Base):
                 W = k.const(math.sqrt(xmean / nc), n, nc)
             else:
                 W = _M.zeros(n, nc)
-        solve = self._cd if self.solver == "cd" else self._mu
-        W, H, it = solve(k, M, W, H, update_H, regs)
+        W, H, it = self._solve(k, M, W, H, update_H, regs)
         return W, H, it, nc
 
     def fit_transform(self, X, y=None, W=None, H=None):
@@ -2338,8 +2202,7 @@ class NMF(_Base):
             k = self._kit()
             Wm, Hm = _M.from_input(W, "W"), _M.from_input(H, "H")
             regs = self._reg(M.r, M.c)
-            solve = self._cd if self.solver == "cd" else self._mu
-            Wm, Hm, it = solve(k, M, Wm, Hm, True, regs)
+            Wm, Hm, it = self._solve(k, M, Wm, Hm, True, regs)
             nc = Hm.r
         else:
             Wm, Hm, it, nc = self._fit_transform(M)
@@ -2370,23 +2233,6 @@ class NMF(_Base):
 
 
 # ================================================================ FastICA
-def _sym_decorrelation(k, W):
-    """sklearn `_fastica.py::_sym_decorrelation`: (W W^T)^(-1/2) W through
-    eigh, eigenvalues clipped at float32 tiny AND at float32 eps times the
-    largest one. sklearn clips at tiny alone; in float32 an eigenvalue below
-    eps * max is rounding noise of the eigh, and 1 / sqrt(tiny) = 9.2e18
-    turns that noise into a W whose next cube overflows to inf - inf = NaN
-    (a fit on duplicated / constant / zero columns: two null directions of
-    the whitened data, the identity reference's `dupes` fixture). The
-    relative floor bounds the gain at 1 / sqrt(eps); a W W^T with no
-    eigenvalue under eps * max is untouched. The floor is a host scalar from
-    the largest eigenvalue (eigh's last, ascending), times 2^-23: exact."""
-    w, u = k.eigh(k.mm(W, W, tb=True))
-    w = k.ew("maxs", w, s=max(1.1754943508222875e-38, float(w.s[w.c - 1]) * _F32_EPS))
-    ui = k.ew("mul", u, k.ew("recip", k.ew("sqrt", w)))
-    return k.mm(k.mm(ui, u, tb=True), W)
-
-
 class FastICA(_Base):
     """sklearn.decomposition.FastICA (reference: scikit-learn
     `decomposition/_fastica.py`: `_fit_transform`, `_ica_par`, `_ica_def`,
@@ -2407,69 +2253,24 @@ class FastICA(_Base):
         self.fun_args, self.max_iter, self.tol, self.w_init = fun_args, max_iter, tol, w_init
         self.whiten_solver, self.random_state, self.numeric_mode = whiten_solver, random_state, numeric_mode
 
-    def _g(self, k, Y):
+    def _solve(self, k, X1, Winit):
+        """`_par` (with `_sym_decorrelation`) or `_def` in ONE binding call
+        (lane py-runtime-b: x_decomp/ica.mojo on the host column,
+        x_decomp/ica_dev.mojo on resident device matrices): the same cells,
+        broadcast modes and float32 scalars as the Python loops it replaces,
+        their float64 limits and norms in the same order. Returns (W, it)."""
+        alpha = 1.0
         if self.fun == "logcosh":
             alpha = (self.fun_args or {}).get("alpha", 1.0)
             if not 1 <= alpha <= 2:
                 raise ValueError("alpha must be in [1,2]")
-            gx = k.ew("tanh", k.ew("scale", Y, s=alpha))
-            gp = k.ew("scale", k.ew("onemsq", gx), s=alpha)
-        elif self.fun == "exp":
-            gx, gp = k.ew("expg", Y), k.ew("expgp", Y)
-        elif self.fun == "cube":
-            gx, gp = k.ew("cube", Y), k.ew("cubep", Y)
-        else:
+        elif self.fun not in ("exp", "cube"):
             raise ValueError("fun must be 'logcosh', 'exp' or 'cube' (a callable is not carried)")
-        return gx, k.ew("scale", k.rowsum(gp), s=1.0 / Y.c)
-
-    def _par(self, k, X1, W):
-        W = _sym_decorrelation(k, W)
-        p = X1.c
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            gx, gp = self._g(k, k.mm(W, X1))
-            W1 = _sym_decorrelation(k, k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p),
-                                            k.ew("mul", W, gp)))
-            dots = k.rowsum(k.ew("mul", W1, W))
-            # lane fix-d1-decomp: one word down; lane cpu2-l8-decomp: in every
-            # mode (the select reduction of x_decomp/select_*.mojo)
-            lim = k.word(k.reduce(k.ew("adds", k.ew("abs", dots), s=-1.0), k._SEL_MAXABS))
-            W = W1
-            if lim < self.tol:
-                break
+        fun = {"logcosh": 0, "exp": 1, "cube": 2}[self.fun]
+        W = Winit.copy()
+        p = [W.r, X1.r, X1.c, 0 if self.algorithm == "parallel" else 1, fun, int(self.max_iter)]
+        it = int(k.b.x_decomp_ica_solve(X1.addr, W.addr, p, [float(alpha), float(self.tol)]))
         return W, it
-
-    def _def(self, k, X1, Winit):
-        # lane cpu2-l8-decomp (re-audit L8, FastICA `_vstack`): the unmixing
-        # rows found so far live in ONE matrix where the kit keeps it (the
-        # device for a GPU kit), row j written in place once it converges;
-        # Wp is a view of its first j rows: the same values as the host stack
-        # of the downloaded rows, with no download
-        nc = Winit.r
-        p = X1.c
-        Wall = k.copy(Winit)
-        its = []
-        for j in range(nc):
-            w = Winit.rows(j, j + 1)
-            Wp = Wall.rows(0, j) if j else None
-            if j:
-                w = k.ew("sub", w, k.mm(k.mm(w, Wp, tb=True), Wp))
-            w = k.ew("scale", w, s=1.0 / _norm(k, w) if _norm(k, w) else 0.0)
-            it = 0
-            for it in range(1, self.max_iter + 1):
-                gx, gp = self._g(k, k.mm(w, X1))
-                w1 = k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p), k.ew("mul", w, gp))
-                if j:
-                    w1 = k.ew("sub", w1, k.mm(k.mm(w1, Wp, tb=True), Wp))
-                nw = _norm(k, w1)
-                w1 = k.ew("scale", w1, s=1.0 / nw if nw else 0.0)
-                lim = abs(abs(k.total(k.ew("mul", w1, w)).s[0]) - 1)
-                w = w1
-                if lim < self.tol:
-                    break
-            its.append(it)
-            k.place_rows(Wall, w, j)
-        return Wall, max(its)  # glue: the largest of nc iteration counts
 
     def fit_transform(self, X, y=None):
         return self._fit(X, True).out()
@@ -2515,7 +2316,7 @@ class FastICA(_Base):
             Winit = _M.from_input(self.w_init, "w_init")
             if (Winit.r, Winit.c) != (nc, nc):
                 raise ValueError(f"w_init has invalid shape -- should be {(nc, nc)}")
-        W, it = (self._par if self.algorithm == "parallel" else self._def)(k, X1, Winit)
+        W, it = self._solve(k, X1, Winit)
         self.n_iter_ = it
         S = None
         if whiten:
@@ -2593,12 +2394,12 @@ def _dsum_sq(k, M):
     return float(k.b.x_decomp_dsum_sq(M.addr, n))  # cpu-route: host binding only (CPU-only installs); a GPU binding sums on the device above
 
 
-def _dsum(values):
-    """Sequential float64 sum (IEEE adds, ascending): the same on every box."""
-    t = 0.0
-    for v in values:
-        t += v
-    return t
+def _dsum(k, M):
+    """Sequential float64 sum (IEEE adds, ascending, from 0.0) of M's float32
+    words: the same on every box (lane py-runtime-b: x_decomp/fa_em.mojo
+    `dsum`, it was a Python loop)."""
+    n = M.r * M.c
+    return float(k.b.x_decomp_dsum_f32(M.addr, n)) if n else 0.0
 
 
 def _inv(k, A):
@@ -2624,47 +2425,16 @@ def _logdet(k, A):
     return k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
 
 
-def _polar(k, A):
-    """U V^T of the SVD of a square A, and the sum of its singular values:
-    A V S^-1 V^T through the eigh of A^T A.
-
-    A is first scaled by a power of two, 2^-e with 2^(e-1) <= max|A| < 2^e,
-    and the singular-value sum scaled back by 2^e. The polar factor is
-    scale-invariant and a power-of-two scale is exact, so a finite A^T A
-    gives the same words as before; what changes is that A^T A can no longer
-    overflow. Varimax on large loadings (FactorAnalysis on the identity
-    reference's `wide` fixture, columns up to 1e4) cubed them into an A whose
-    A^T A was inf in float32, and eigh refused it (DEVIATION 590) on every
-    column. A is n_components x n_components: the max is a k x k host read."""
-    # lane fix-d1-decomp: one word down; lane cpu2-l8-decomp: in every mode
-    m = k.word(k.reduce(A, k._SEL_MAXABS)) if A.r * A.c else 0.0
-    # clamped so 2^-e stays a normal float32 in the device's scale
-    e = max(-120, min(120, math.frexp(m)[1])) if m > 0.0 and math.isfinite(m) else 0
-    if e:
-        A = k.ew("scale", A, s=math.ldexp(1.0, -e))
-    w, V = k.eigh(k.mm(A, A, ta=True))
-    sv = k.ew("sqrt", w)
-    AV = k.ew("div", k.mm(A, V), sv)
-    return k.mm(AV, V, tb=True), math.ldexp(k.total(sv).s[0], e)
-
-
 def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
-    """sklearn `_factor_analysis.py::_ortho_rotation`; C is n_features x n_components."""
-    nrow, ncol = C.r, C.c
-    R = _eye(ncol)
-    var = 0.0
-    for _ in range(max_iter):
-        cr = k.mm(C, R)
-        if method == "varimax":
-            tmp = k.ew("mul", cr, k.ew("scale", k.colsum(k.ew("sq", cr)), s=1.0 / nrow))
-            target = k.ew("sub", k.ew("cube", cr), tmp)
-        else:
-            target = k.ew("cube", cr)
-        R, var_new = _polar(k, k.mm(C, target, ta=True))
-        if var != 0 and var_new < var * (1 + tol):
-            break
-        var = var_new
-    return k.mm(C, R).T
+    """sklearn `_factor_analysis.py::_ortho_rotation`; C is n_features x
+    n_components. The rotation loop (with `_polar`: the power-of-two
+    prescale, the eigh of A^T A) runs in ONE binding call (lane
+    py-runtime-b: x_decomp/rotation.mojo, x_decomp/rotation_dev.mojo on
+    resident device matrices), the same cells and stopping test."""
+    out = _M.zeros(C.c, C.r)
+    k.b.x_decomp_ortho_rotation(C.addr, out.addr, [C.r, C.c, 1 if method == "varimax" else 0, int(max_iter)],
+                                [float(tol)])
+    return out
 
 
 #: x_decomp/fa_fast.mojo's limits (kernel-derived): FA_MAX_D, FA_TR_MAXK, FA_TR_FLOATS
@@ -2748,53 +2518,22 @@ class FactorAnalysis(_Base):
         # values and right vectors of the d x d R D / sqrt(n) (Q orthogonal)
         # (n >= d never reads Xc again, so the QR may consume it: one copy of X on the device)
         Rx = k.qr_r(Xc, consume=True) if n >= d else None
-        old_ll = -math.inf
-        loglike = []
-        it = 0
-        W = None
-        for it in range(1, self.max_iter + 1):
-            sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
-            if n >= d:
-                sv, Vt = k.svd(k.ew("scale", k.ew("div", Rx, sqrt_psi), s=1.0 / nsqrt))
-                s2 = k.ew("sq", sv)
-            else:
-                Z = k.ew("scale", k.ew("div", Xc, sqrt_psi), s=1.0 / nsqrt)
-                ev, V = k.eigh(k.mm(Z, Z, ta=True))
-                order = list(range(d - 1, -1, -1))
-                s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
-                Vt = V.take_cols(order).T
-            Vfull = Vt
-            Vt = Vt.rows(0, nc)
-            sk = s2.cols(0, nc)
-            # the log-likelihood is accumulated in Python float64 (IEEE adds,
-            # sequential): at float32 its step falls under tol=1e-2 early
-            unexp = _dsum(s2.cols(nc, d).s) if nc < d else 0.0
-            W = k.ew("mul", Vt, k.ew("sqrt", k.ew("maxs", k.ew("adds", sk, s=-1.0), s=0.0)).T)
-            W = k.ew("mul", W, sqrt_psi)
-            slog = _dsum(k.ew("logs", sk, s=1.1754943508222875e-38).s)
-            plog = _dsum(k.ew("logs", psi, s=1.1754943508222875e-38).s)
-            ll = (llconst + slog + unexp + plog) * (-n / 2.0)
-            loglike.append(ll)
-            if (ll - old_ll) < self.tol:
-                break
-            old_ll = ll
-            # lane/apple-fast-quality-glmfa (2026-10-03): psi without the
-            # cancellation. Theirs is var - sum_k W_kj^2; both terms are near
-            # var for a column the factors explain, and in float32 their
-            # difference has a floor near var * 1e-7 (theirs, float64, keeps
-            # falling toward the 1e-12 floor: Istella's held-out
-            # log-likelihood 89.0 against 98.1). With q = (sqrt psi + SMALL)^2
-            # the scaled data's column norms are var_j / q_j = sum_i V_ij^2 s2_i
-            # (every singular vector), so var_j - sum_k W_kj^2 = q_j (sum_i
-            # V_ij^2 w_i), w_i = min(s2_i, 1) for the nc kept components and
-            # s2_i past them: a sum of nonnegative terms, relative accuracy at
-            # any psi. The same value in exact arithmetic; d x d device ops.
-            dfull = Vfull.r
-            keep = _M.of([1.0] * nc + [0.0] * (dfull - nc), 1, dfull)
-            drop = _M.of([0.0] * nc + [1.0] * (dfull - nc), 1, dfull)
-            wts = k.ew("add", k.ew("mul", k.ew("mins", s2, s=1.0), keep), k.ew("mul", s2, drop))
-            share = k.mm(wts, k.ew("sq", Vfull))
-            psi = k.ew("maxs", k.ew("mul", k.ew("sq", sqrt_psi), share), s=SMALL)
+        # the EM loop in ONE binding call (lane py-runtime-b:
+        # x_decomp/fa_em.mojo on the host column, x_decomp/fa_em_dev.mojo on
+        # resident device matrices): the same cells per iteration (the SVD
+        # of the scaled R when n >= d, else the eigh of the scaled Gram), the
+        # same cancellation-free psi update (lane/apple-fast-quality-glmfa)
+        # and the float64 log-likelihood (`_dsum`'s sequential adds) and
+        # stopping test in the same order
+        A = Rx if n >= d else Xc
+        W = _M.zeros(nc, d)
+        psi = psi.copy()
+        la = array.array("d", [0.0]) * max(int(self.max_iter), 1)
+        it = int(k.b.x_decomp_fa_em_main(A.addr, psi.addr, W.addr, la.buffer_info()[0],
+                                         [n, d, nc, int(self.max_iter), A.r], [float(self.tol), float(llconst)]))
+        loglike = la.tolist()[:it]
+        if it == 0:
+            W = None
         return self._fit_store(k, W, psi, mean, loglike, it, d, nc)
 
     def _psi_init(self, k, d):
@@ -2842,11 +2581,11 @@ class FactorAnalysis(_Base):
             Vfull = V.take_cols(order).T
             Vt = _svd_flip_v(Vfull.rows(0, nc))
             sk = s2.cols(0, nc)
-            unexp = _dsum(s2.cols(nc, d).s) if nc < d else 0.0
+            unexp = _dsum(k, s2.cols(nc, d)) if nc < d else 0.0
             W = k.ew("mul", Vt, k.ew("sqrt", k.ew("maxs", k.ew("adds", sk, s=-1.0), s=0.0)).T)
             W = k.ew("mul", W, sqrt_psi)
-            slog = _dsum(k.ew("logs", sk, s=1.1754943508222875e-38).s)
-            plog = _dsum(k.ew("logs", psi, s=1.1754943508222875e-38).s)
+            slog = _dsum(k, k.ew("logs", sk, s=1.1754943508222875e-38))
+            plog = _dsum(k, k.ew("logs", psi, s=1.1754943508222875e-38))
             ll = (llconst + slog + unexp + plog) * (-n / 2.0)
             loglike.append(ll)
             if (ll - old_ll) < self.tol:
@@ -4268,16 +4007,13 @@ class LatentDirichletAllocation(_Base):
             k.b.x_decomp_dev_lda_bound(k._did(M), k._did(ddt), k._did(dcomp), P._d.id, [n, nc, v], [floor])
             score = k.total(P).s[0]
         else:
-            zero = _M.zeros(n, v)
-            terms = [k.ew("add", k.ew("add", zero, ddt.cols(t, t + 1)), dcomp.rows(t, t + 1)) for t in range(nc)]
-            mx = terms[0]
-            for t in range(1, nc):
-                mx = k.ew("max", mx, terms[t])
-            acc = _M.zeros(n, v)
-            for t in range(nc):
-                acc = k.ew("add", acc, k.ew("exp", k.ew("sub", terms[t], mx)))
-            lse = k.ew("add", k.ew("logs", acc, s=floor), mx)
-            score = k.total(k.ew("mul", M, lse)).s[0]
+            # the host column (lane py-runtime-b): the same ew cells per
+            # (i, w) in `x_decomp_lda_bound` (x_decomp/chi2.mojo, the CPU
+            # twin of lda_bound_kernel), folded by the kit's total
+            P = _M.zeros(n, v)
+            if n * v:
+                k.b.x_decomp_lda_bound(M.addr, ddt.addr, dcomp.addr, P.addr, [n, nc, v], [floor])
+            score = k.total(P).s[0]
         score += self._loglik(k, self.doc_topic_prior_, Dt, ddt, nc)
         if sub_sampling:
             score *= float(self.total_samples) / n
@@ -5250,36 +4986,16 @@ def _mahal(k, X, loc, P):
 
 
 def _chi2_cdf(k, dof, m):
-    """P(chi2_dof <= m): the regularized lower incomplete gamma P(dof/2, m/2),
-    its series summed in float64 and its prefactor x^a e^-x / Gamma(a + 1)
-    through the cells' exp, log and lgamma."""
-    a = dof / 2.0
-    x = m / 2.0
-    if x <= 0:
-        return 0.0
-    pref = k.ew("exp", k.const(_f32(a * k.ew("logs", k.const(x), s=1e-30).s[0] - x
-                                     - k.ew("lgamma", k.const(a + 1)).s[0]))).s[0]
-    term, tot, n = 1.0, 1.0, 1
-    while n < 4000:
-        term *= x / (a + n)
-        tot += term
-        if term < 1e-17 * tot:
-            break
-        n += 1
-    return pref * tot
+    """P(chi2_dof <= m): the regularized lower incomplete gamma P(dof/2, m/2)
+    (lane py-runtime-b: x_decomp/chi2.mojo `chi2_cdf`, the prefactor through
+    the cells' logs, lgamma and exp on float32 words, the series in float64)."""
+    return float(k.b.x_decomp_chi2_cdf(float(dof), float(m)))
 
 
 def _chi2_quantile(k, dof, upper):
-    """The point m with P(chi2_dof > m) = upper (scipy chi2.isf), by bisection."""
-    target = 1.0 - upper
-    lo, hi = 0.0, max(1.0, 4.0 * dof + 40.0)
-    for _ in range(80):
-        mid = 0.5 * (lo + hi)
-        if _chi2_cdf(k, dof, mid) < target:
-            lo = mid
-        else:
-            hi = mid
-    return _f32(0.5 * (lo + hi))
+    """The point m with P(chi2_dof > m) = upper (scipy chi2.isf), by bisection
+    (lane py-runtime-b: x_decomp/chi2.mojo `chi2_quantile`)."""
+    return float(k.b.x_decomp_chi2_quantile(float(dof), float(upper)))
 
 
 def _consistency_factor(k, p, alpha):

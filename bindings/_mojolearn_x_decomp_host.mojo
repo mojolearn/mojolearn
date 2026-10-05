@@ -19,6 +19,11 @@ from x_decomp.api import (
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.select_ops import order_small_py, reduce_py
+from x_decomp.nmf import nmf_nndsvd_py, nmf_solve_py
+from x_decomp.ica import ica_solve_py
+from x_decomp.fa_em import dsum_f32_py, fa_em_main_py
+from x_decomp.chi2 import chi2_cdf_py, chi2_quantile_py, lda_bound_host_py
+from x_decomp.rotation import ortho_rotation_py
 from x_decomp.lanczos_host import lanczos_py
 from x_decomp.mds_iso import mds_disp_host_py, mds_setup_host_py
 from x_decomp.graph_host import (
@@ -95,6 +100,15 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[als_cg_rows_py[HostExec]]("x_decomp_als_cg_rows")
         m.def_function[mcd_py[HostExec]]("x_decomp_mcd")
         m.def_function[lda_online_py[HostExec]]("x_decomp_lda_online")
+        m.def_function[nmf_solve_py[HostExec]]("x_decomp_nmf_solve")
+        m.def_function[nmf_nndsvd_py[HostExec]]("x_decomp_nmf_nndsvd")
+        m.def_function[ica_solve_py[HostExec]]("x_decomp_ica_solve")
+        m.def_function[fa_em_main_py[HostExec]]("x_decomp_fa_em_main")
+        m.def_function[dsum_f32_py]("x_decomp_dsum_f32")
+        m.def_function[chi2_cdf_py]("x_decomp_chi2_cdf")
+        m.def_function[chi2_quantile_py]("x_decomp_chi2_quantile")
+        m.def_function[lda_bound_host_py]("x_decomp_lda_bound")
+        m.def_function[ortho_rotation_py[HostExec]]("x_decomp_ortho_rotation")
         m.def_function[gather_py]("x_decomp_gather")
         m.def_function[scatter_py]("x_decomp_scatter")
         m.def_function[triu_nonzero_py]("x_decomp_triu_nonzero")

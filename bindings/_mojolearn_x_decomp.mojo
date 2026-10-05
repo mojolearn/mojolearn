@@ -30,6 +30,12 @@ def mcd_g1_gram_last_py(index: PythonObject) raises -> PythonObject:
     return PythonObject(mcd_g1_last(Int(py=index)))
 
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
+from x_decomp.nmf_dev import nmf_nndsvd_dev_py, nmf_solve_dev_py
+from x_decomp.ica_dev import ica_solve_dev_py
+from x_decomp.fa_em import dsum_f32_py
+from x_decomp.chi2_dev import chi2_cdf_dev_py, chi2_quantile_dev_py
+from x_decomp.fa_em_dev import fa_em_main_dev_py
+from x_decomp.rotation_dev import ortho_rotation_dev_py
 from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
 from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dev_dict_update_py
 from x_decomp.select_ops import order_small_py, reduce_py
@@ -123,6 +129,14 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         # (x_decomp/kit_device.mojo)
         m.def_function[mcd_dev_py]("x_decomp_mcd")
         m.def_function[lda_online_dev_py]("x_decomp_lda_online")
+        m.def_function[nmf_solve_dev_py]("x_decomp_nmf_solve")
+        m.def_function[nmf_nndsvd_dev_py]("x_decomp_nmf_nndsvd")
+        m.def_function[ica_solve_dev_py]("x_decomp_ica_solve")
+        m.def_function[fa_em_main_dev_py]("x_decomp_fa_em_main")
+        m.def_function[dsum_f32_py]("x_decomp_dsum_f32")
+        m.def_function[chi2_cdf_dev_py]("x_decomp_chi2_cdf")
+        m.def_function[chi2_quantile_dev_py]("x_decomp_chi2_quantile")
+        m.def_function[ortho_rotation_dev_py]("x_decomp_ortho_rotation")
         m.def_function[gather_py]("x_decomp_gather")
         m.def_function[scatter_py]("x_decomp_scatter")
         m.def_function[triu_nonzero_py]("x_decomp_triu_nonzero")
