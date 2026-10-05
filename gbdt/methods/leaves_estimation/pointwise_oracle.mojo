@@ -972,7 +972,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         )
         self._stash_multi_stats(d_grad, 0, self.bin_count * self.cursor_dim)
         var hbs = self.single_bin_dim
-        for row in range(hbs):
+        for row in range(hbs):  # small-loop(hbs: the class dimensions of one cursor): enqueues one launch pair per class row
             var column_count = row + 1
             launch_multilogit_second_der(
                 self.ctx, self.num_classes, self.n_rows,

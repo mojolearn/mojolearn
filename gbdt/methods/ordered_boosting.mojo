@@ -1088,7 +1088,7 @@ struct _PermPartition(Movable):
         var uniq = List[Int]()
         for i in range(len(bounds)):  # small-loop(bounds: fold prefixes, a handful): the unique sorted prefix list
             var seen = False
-            for j in range(len(uniq)):  # small-loop(uniq: unique fold prefixes, a handful): duplicate test
+            for j in range(len(uniq)):  # small-loop(uniq: unique fold prefixes, a handful): the duplicate prefix test
                 if uniq[j] == bounds[i]:
                     seen = True
             if not seen:
@@ -2940,7 +2940,7 @@ def fit_ordered(
         if ord_dev_leaves:
             leaves = _ordered_device_leaves(est_pools[ord_dev_slot], n_leaves)
             var weak_dev = weak_later.pop()
-            for leaf in range(n_leaves):
+            for leaf in range(n_leaves):  # small-loop(n_leaves: one oblivious tree, 2^depth leaves): scale the read-back leaf values
                 weak_dev.leaf_values.append(
                     identical_mul(leaves[leaf], opts.learning_rate)
                 )
@@ -2950,7 +2950,7 @@ def fit_ordered(
             comptime if ORDERED_BATCH_EST:
                 leaves = _ord_fast_take_leaves(fast_h_leaves, n_leaves)
                 var weak_fast = weak_later.pop()
-                for leaf in range(n_leaves):
+                for leaf in range(n_leaves):  # small-loop(n_leaves: one oblivious tree, 2^depth leaves): scale the read-back leaf values
                     weak_fast.leaf_values.append(
                         identical_mul(leaves[leaf], opts.learning_rate)
                     )
