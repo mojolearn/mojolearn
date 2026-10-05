@@ -46,8 +46,10 @@ comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
 #: nothing (h_T or the recurrent/weight gradients come out zero or unused).
 #: The cause is not evident from reading the code (the step pointers in
 #: fwd_step / bwd_step match the per-step launches, team_barrier orders device
-#: memory on Apple); not fixed here. Next: an ID check of SCAN alone against the
-#: per-step path (it claims the same bits), then SMEM, then WGRAD.
+#: memory on Apple). FIX CANDIDATE (lane apple-fast-s-seq, 2026-10-05): the
+#: kernels' Args came from a non-inlined `_scan_args` that started from
+#: `Args()`, whose pointer slots are integer-made (`dummy_ptr`): see the note
+#: at `_scan_args`. Re-judge SCAN, SCAN + SMEM and the bundle on quality.
 comptime SEQ_LSTM_SCAN = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()
 comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()
 comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()
@@ -143,30 +145,29 @@ def op_cell_bwd_scan(row: Int, a: Args):
 
 
 # ------------------------------------------------------------------ device kernels
+@always_inline
 def _scan_args(
     p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
     p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
     cell: Int32, B: Int32, H: Int32, T: Int32, i4: Int32,
 ) -> Args:
-    var a = Args()
-    a.p0 = p0
-    a.p1 = p1
-    a.p2 = p2
-    a.p3 = p3
-    a.p4 = p4
-    a.p5 = p5
-    a.p6 = p6
-    a.p7 = p7
-    a.p8 = p8
-    a.p9 = p9
-    a.p10 = p10
-    a.p11 = p11
-    a.i0 = Int(cell)
-    a.i1 = Int(B)
-    a.i2 = Int(H)
-    a.i3 = Int(T)
-    a.i4 = Int(i4)
-    return a
+    #: THE BROKEN-BUNDLE FIX (lane apple-fast-s-seq, 2026-10-05). This built
+    #: `Args()` and then overwrote its slots, and was not inlined. `Args()`
+    #: fills every pointer slot with `dummy_ptr()`, a pointer made from the
+    #: integer 64, and the struct then crossed a non-inlined call (returned
+    #: through memory): the two Metal traps of
+    #: memory/metal-no-int-pointers-inline-oct2 (PageRank all zeros, lane
+    #: hr-graph). On Metal the kernel's loads and stores through those slots
+    #: silently missed, so h_T stayed the zero fill and the dG buffers stayed
+    #: zero: only the head bias trained, the constant predictor of the
+    #: OUTCOME above (logloss = ln 2, r2 ~ 0). `seq_kernel`, which works,
+    #: builds its Args with the fieldwise constructor in the kernel body
+    #: (sequence/exec_device.mojo seq_kernel); this now does the same, inlined,
+    #: with no integer-made pointer.
+    return Args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11,
+                Int(cell), Int(B), Int(H), Int(T), Int(i4), 0, 0, 0, 0, 0, 0, 0,
+                Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
+                Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0))
 
 
 def cell_fwd_scan_kernel(
