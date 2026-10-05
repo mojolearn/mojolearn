@@ -87,6 +87,8 @@ The restatement is a prediction until measured. The CPU identity gate
 pca-full-whiten --require-columns 4`) is the measurement.
 """
 from checks.numerics import ftz, identical_div, identical_mul_add, identical_sqrt
+from x_decomp.cells import F32Ptr
+from x_decomp.eigh_scale import host_es_scale_ptr, host_es_unscale
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
@@ -366,8 +368,11 @@ def host_pca_fit_full(
     host_pca_full_validate(n_rows, n_cols, n_components)
     var mu = host_column_mean_launch(x, n_rows, n_cols)
     var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
+    # the device's power-of-two range scale (x_decomp/eigh_scale.mojo)
+    var fac = host_es_scale_ptr(F32Ptr(unsafe_from_address=Int(centered.unsafe_ptr())), n_rows * n_cols)
     var r = host_qr_factor(centered, n_rows, n_cols)
     var svd = host_one_sided_jacobi_svd(r, n_cols, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+    host_es_unscale(svd.s, fac)
     if not svd.converged:
         raise Error(
             "the one-sided Jacobi SVD did not converge in "

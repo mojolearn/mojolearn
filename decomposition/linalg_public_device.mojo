@@ -60,6 +60,8 @@ turn a divergence into a pass.
 
 from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
+from x_decomp.cells import F32Ptr
+from x_decomp.eigh_scale import enqueue_es_scale_rect, enqueue_es_unscale
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
@@ -170,8 +172,12 @@ def device_svdvals(
     var v_buf = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var s_buf = ctx.enqueue_create_buffer[DType.float32](n_cols)
     ctx.synchronize()
+    # lane idn-cov-overflow: the power-of-two range scale of
+    # x_decomp/eigh_scale.mojo on A (`host_svdvals` takes the same)
+    var dfac = enqueue_es_scale_rect(ctx, F32Ptr(unsafe_from_address=Int(da.unsafe_ptr())), 1, n_rows, n_cols)
     _ = qr_factor(ctx, da, scratch, r_buf, n_rows, n_cols)
     svd_of_r(ctx, r_buf, v_buf, s_buf, n_cols)
+    enqueue_es_unscale(ctx, F32Ptr(unsafe_from_address=Int(s_buf.unsafe_ptr())), dfac, 1, n_cols)
     # descending on the device (decomposition/spectrum_order_device.mojo)
     var so = ctx.enqueue_create_buffer[DType.float32](n_cols)
     var spos = ctx.enqueue_create_buffer[DType.int32](n_cols)
@@ -180,6 +186,7 @@ def device_svdvals(
         so.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
     )
     var s = _download(ctx, so, n_cols)
+    _ = dfac^
     _ = so^
     _ = spos^
     _ = da^
