@@ -285,7 +285,13 @@ def _i32(values):
     """`values` (an int32 Array or a sequence of ints) as an int32 Array."""
     if isinstance(values, Array):
         return values
-    return Array.from_list([int(v) for v in values], "<i4")
+    # lane py-runtime-b: array('i') converts the ints in C (no Python
+    # comprehension over the indices); integral floats take int() as before
+    try:
+        store = array.array("i", values)
+    except TypeError:
+        store = array.array("i", map(int, values))
+    return Array._owned(store, (len(store),), "<i4", "C")
 
 
 def _gather(binding, x, rows=None, cols=None):
@@ -355,8 +361,14 @@ def _precomputed_columns(binding, q, support):
 
 def _check_support_bounds(support, n_cols, path):
     """`load` (the explicit CPU-only load route): every precomputed support
-    index of a saved model must name one of its n_cols training columns."""
-    for s in support:                   # glue: load-time validation of a saved file
+    index of a saved model must name one of its n_cols training columns.
+    An Array is checked by the native min and max; only a failing file is
+    walked, to name its first bad index (lane py-runtime-b)."""
+    if isinstance(support, Array):
+        if not support.size or (int(support.min()) >= 0 and int(support.max()) < n_cols):
+            return
+        support = support.tolist()
+    for s in support:                 # glue: load-time validation of a saved file
         if not 0 <= int(s) < n_cols:
             raise ValueError(
                 f"mojolearn: {path!r} kernel='precomputed' support index {int(s)} is outside the "
@@ -366,9 +378,15 @@ def _check_support_bounds(support, n_cols, path):
 def _concat_f32(blocks):
     """The float32 elements of every block, in order, as one flat Array
     (byte copies; the saved pair arrays)."""
+    return _concat_words([as_f32_c(b, ndim=None, name="block")[0] for b in blocks], "<f4")  # glue: byte copies of the saved pair blocks
+
+
+def _concat_words(parts, dtype):
+    """The 4-byte elements of every C-order Array in `parts`, in order, as
+    one flat `dtype` Array (byte copies)."""
     from ._bufcheck import memcopy
-    parts = [as_f32_c(b, ndim=None, name="block")[0] for b in blocks]  # glue: byte copies of the saved pair blocks
-    out = empty((max(sum(p.size for p in parts), 0),), "<f4")  # glue: byte copies of the saved pair blocks
+    parts = [p._as_c() for p in parts]  # glue: byte copies of the saved pair blocks
+    out = empty((max(sum(p.size for p in parts), 0),), dtype)  # glue: byte copies of the saved pair blocks
     at = addr(out, name="pairs") if out.size else 0
     for p in parts:  # glue: byte copies of the saved pair blocks
         if p.size:
@@ -1026,59 +1044,39 @@ class SVC(NumericModeMixin):
         """scikit-learn's multiclass attributes from the per-pair machines
         (also `load`'s path, where `x` is None and the rows come from each
         pair's own support vectors)."""
-        k = len(classes)
+        native = self._bind(_EXT_NAME)
         if x is not None:
-            self._set_ovo_native(self._bind(_EXT_NAME), classes, pairs, x, n_cols)
+            self._set_ovo_native(native, classes, pairs, x, n_cols)
             return
-        # glue: `load` only (no fit, transform or predict), from the saved
-        # pairs' own support vectors
-        per_class = [dict() for _ in range(k)]          # orig index -> row bytes
-        for p in pairs:
-            rows = p["sv"].tolist()
-            d = p["dual"].tolist()[0]
-            for pos, r in enumerate(p["support"]):
-                # the class of a support vector is its pair side: this
-                # solver's dual is +alpha on class j, -alpha on class i, and
-                # a returned support vector has alpha > 0
-                side = p["i"] if d[pos] < 0.0 else p["j"]
-                per_class[side][r] = rows[pos]
-        support, sv_rows, n_support, col_of = [], [], [], {}
-        for c in range(k):
-            keys = sorted(per_class[c])
-            n_support.append(len(keys))
-            for r in keys:
-                col_of[r] = len(support)
-                support.append(r)
-                sv_rows.append(per_class[c][r])
-        n_sv = len(support)
-        dual = [[0.0] * n_sv for _ in range(k - 1)]
-        for p in pairs:
-            i, j = p["i"], p["j"]
-            d = p["dual"].tolist()[0]
-            for pos, r in enumerate(p["support"]):
-                side = i if d[pos] < 0.0 else j
-                # a class-i vector's coefficient for pair (i, j) sits in
-                # row j - 1, a class-j vector's in row i; negated into
-                # scikit-learn's orientation
-                dual[j - 1 if side == i else i][col_of[r]] = -d[pos]
-        self.classes_ = classes
-        self.n_features_in_ = n_cols
-        self._pairs = pairs
-        self.support_ = Array.from_list(support, "<i4")
-        self.support_vectors_ = (Array.from_list(sv_rows, "<f4") if n_sv
-                                 else zeros((0, n_cols), "<f4"))
-        self.dual_coef_ = Array.from_list(dual, "<f4") if n_sv else zeros((k - 1, 0), "<f4")
-        self.intercept_ = Array.from_list([-p["b"] for p in pairs], "<f4")  # glue: per-pair intercepts and iteration counts
-        self.n_support_ = Array.from_list(n_support, "<i4")
-        self.n_iter_ = Array.from_list([p["n_iter"] for p in pairs], "<i4")  # glue: per-pair intercepts and iteration counts
+        # `load` (lane py-runtime-b: the per-vector Python dicts are gone):
+        # the same layout call as `fit`, with the row bound max(support) + 1;
+        # each original row's position in the saved pairs by one native
+        # scatter (a repeated row names the same X bytes), then the support
+        # rows by native gathers out of the saved pair rows
+        from ._buffer import _native
+        ps = _concat_words([_i32(p["support"]) for p in pairs], "<i4")  # glue: per-pair support arrays and sizes
+        total = ps.size
+        sv_all = _concat_f32([p["sv"] for p in pairs]).reshape((total, n_cols))  # glue: per-pair support arrays and sizes
+        n_rows = int(ps.max()) + 1 if total else 0
+        pos = zeros((max(n_rows, 1),), "<i8")
+        if total:
+            ps64 = ps.astype("<i8")
+            at = empty((total,), "<i8")
+            _native("arange_i64")(addr(at, name="positions"), 0, total)
+            _native("scatter_rows_bytes")(addr_ro(at, name="positions"), addr_ro(ps64, name="support"), total, 8,
+                                          addr(pos, name="row positions"), n_rows)
+        self._set_ovo_native(native, classes, pairs, None, n_cols, n_rows=n_rows, saved=(sv_all, pos))
 
-    def _set_ovo_native(self, native, classes, pairs, x, n_cols):
+    def _set_ovo_native(self, native, classes, pairs, x, n_cols, n_rows=None, saved=None):
         """`_set_ovo` in the binding (lane/apple-fast-py2mojo-linear,
         `svm/impl/svc_ovo_layout.mojo`): the same support_ order, dual_coef_
         cells and n_support_, then support_vectors_ as the gather of X at
-        support_ (the bytes the per-class dict held)."""
+        support_ (the bytes the per-class dict held). `load` passes x None,
+        the row bound and `saved` = (the saved pair rows, each original
+        row's position in them)."""
         k = len(classes)
-        n_rows = x.shape[0]
+        if x is not None:
+            n_rows = x.shape[0]
         sup_arrays = [_i32(p["support"]) for p in pairs]  # glue: per-pair support arrays and sizes
         ms = [p["dual"].shape[1] for p in pairs]  # glue: per-pair support arrays and sizes
         cap = min(n_rows, sum(ms))  # glue: per-pair support arrays and sizes
@@ -1099,7 +1097,19 @@ class SVC(NumericModeMixin):
         self._pairs = pairs
         if n_sv:
             self.support_ = support[:n_sv]
-            self.support_vectors_ = _gather(native, x, self.support_)
+            if x is not None:
+                self.support_vectors_ = _gather(native, x, self.support_)
+            else:
+                from ._buffer import _native
+                sv_all, pos = saved
+                sup64 = self.support_.astype("<i8")
+                at = empty((n_sv,), "<i8")
+                _native("gather_i64")(addr_ro(pos, name="row positions"), n_rows, addr_ro(sup64, name="support_"),
+                                      n_sv, addr(at, name="saved positions"))
+                sv = empty((n_sv, n_cols), "<f4")
+                _native("gather_rows_bytes")(addr_ro(sv_all, name="saved rows"), addr(sv, name="support_vectors_"),
+                                             addr_ro(at, name="saved positions"), sv_all.shape[0], n_sv, 4 * n_cols)
+                self.support_vectors_ = sv
             self.dual_coef_ = dual[:(k - 1) * n_sv].reshape((k - 1, n_sv))
         else:
             self.support_ = zeros((0,), "<i4")
@@ -1372,7 +1382,7 @@ class SVC(NumericModeMixin):
             arrays["pair_meta"] = Array.from_list(
                 [v for p in pairs for v in (p["i"], p["j"], p["dual"].shape[1], p["n_iter"])], "<i8")  # glue: saved per-pair metadata words
             arrays["pair_b"] = Array.from_list([p["b"] for p in pairs], "<f4")  # glue: saved per-pair metadata words
-            arrays["pair_support"] = Array.from_list([r for p in pairs for r in p["support"]], "<i4")
+            arrays["pair_support"] = _concat_words([_i32(p["support"]) for p in pairs], "<i4")  # glue: per-pair support arrays and sizes
             arrays["pair_dual"] = _concat_f32([p["dual"] for p in pairs])  # glue: saved per-pair metadata words
             arrays["pair_sv"] = _concat_f32([p["sv"] for p in pairs])  # glue: saved per-pair metadata words
         return _serialize.write_npz(path, arrays)
@@ -1428,7 +1438,7 @@ class SVC(NumericModeMixin):
         if support.ndim != 1 or support.size != n_support:
             raise ValueError(f"mojolearn: {path!r} support does not match n_support_")
         if kernel_setting == "precomputed":
-            _check_support_bounds(support.tolist(), nf, path)
+            _check_support_bounds(support, nf, path)
         intercept = _serialize.exact(arrays, "intercept", "<f4")
         if intercept.ndim != 1 or intercept.size != 1:
             raise ValueError(f"mojolearn: {path!r} intercept must hold one float32")
@@ -1461,13 +1471,15 @@ class SVC(NumericModeMixin):
         if k < 3 or len(pm) != 4 * n_pairs:
             raise ValueError(f"mojolearn: {path!r} pair_meta does not hold {n_pairs} pairs")
         pb = _serialize.exact(arrays, "pair_b", "<f4").tolist()
-        ps = _serialize.exact(arrays, "pair_support", "<i4").tolist()
+        # the per-pair blocks stay Arrays, cut by copying slices (lane
+        # py-runtime-b: no Python list of every saved value)
+        ps = _serialize.exact(arrays, "pair_support", "<i4").reshape((-1,))
         if obj.kernel == "precomputed":
             _check_support_bounds(ps, nf, path)
-        pd = _serialize.exact(arrays, "pair_dual", "<f4").tolist()
-        pv = _serialize.exact(arrays, "pair_sv", "<f4").tolist()
+        pd = _serialize.exact(arrays, "pair_dual", "<f4").reshape((-1,))
+        pv = _serialize.exact(arrays, "pair_sv", "<f4").reshape((-1,))
         total = sum(pm[4 * q + 2] for q in range(n_pairs))  # glue: pair metadata check over the class pairs
-        if len(pb) != n_pairs or len(ps) != total or len(pd) != total or len(pv) != total * nf:
+        if len(pb) != n_pairs or ps.size != total or pd.size != total or pv.size != total * nf:
             raise ValueError(f"mojolearn: {path!r} pair arrays do not match pair_meta")
         pairs, at, q = [], 0, 0
         for i in range(k):  # glue: pair metadata check over the class pairs
@@ -1477,9 +1489,9 @@ class SVC(NumericModeMixin):
                     raise ValueError(f"mojolearn: {path!r} pair {q} is ({pi}, {pj}), not ({i}, {j})")
                 pairs.append(dict(
                     i=i, j=j,
-                    dual=Array.from_list([pd[at:at + n_sv]], "<f4").reshape((1, n_sv)),
-                    sv=Array.from_list(pv[at * nf:(at + n_sv) * nf], "<f4").reshape((n_sv, nf)),
-                    support=Array.from_list(ps[at:at + n_sv], "<i4"), b=pb[q], n_iter=int(n_iter)))
+                    dual=pd[at:at + n_sv].reshape((1, n_sv)),
+                    sv=pv[at * nf:(at + n_sv) * nf].reshape((n_sv, nf)),
+                    support=ps[at:at + n_sv], b=pb[q], n_iter=int(n_iter)))
                 at += n_sv
                 q += 1
         shape = _serialize.scalar_str(arrays, "shape")
@@ -2066,7 +2078,7 @@ class SVR(NumericModeMixin):
         if support.ndim != 1 or support.size != n_support:
             raise ValueError(f"mojolearn: {path!r} support does not match n_support_")
         if kernel_setting == "precomputed":
-            _check_support_bounds(support.tolist(), nf, path)
+            _check_support_bounds(support, nf, path)
         intercept = _serialize.exact(arrays, "intercept", "<f4")
         if intercept.ndim != 1 or intercept.size != 1:
             raise ValueError(f"mojolearn: {path!r} intercept must hold one float32")
