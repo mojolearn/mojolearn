@@ -81,6 +81,8 @@ def identity(path):
                 candidate.append(name)
         if not candidate or sorted(overlay.get('replaced_files', [])) != sorted(candidate):
             raise ValueError('Overlay replacement list differs from candidate artifacts')
+        if d['code_path'] == 'ptx-baseline' and not full_sha(overlay.get('payload_manifest_sha256'), 64):
+            raise ValueError('PTX overlay requires the exact scoped payload manifest hash')
         out['experimental_overlay'] = overlay
     if d.get('installation') == 'source':
         if d['code_path'] != 'native' or not Path(d.get('source_root', '')).is_absolute():
@@ -211,6 +213,9 @@ def collect(manifest):
     if manifest['code_path'] == 'ptx-baseline':
         if not runtime or runtime.get('requested') != 'ptx-baseline' or runtime.get('selected') != 'ptx-baseline' or runtime.get('native_fallback') is not False or runtime.get('source_commit') != manifest['source_commit']:
             raise ValueError('Missing forced PTX runtime selection receipt')
+        overlay = manifest.get('experimental_overlay')
+        if overlay and runtime.get('manifest_sha256') != overlay['payload_manifest_sha256']:
+            raise ValueError('Actual PTX manifest differs from scoped overlay provenance')
         root = Path(backend._BASELINE_ROOT).resolve()
         actual = {((package / r['file']).relative_to(root).as_posix(), r['sha256']) for r in gpu}
         if {(r['file'], r['sha256']) for r in runtime.get('loaded_files', [])} != actual:
