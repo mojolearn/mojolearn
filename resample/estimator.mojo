@@ -250,8 +250,13 @@ comptime RESAMPLE_FAST_PERM_SELECT = (
 #: Array (a label list keeps the gather); the views are read-only so an
 #: estimator cannot write into the caller's X / y. Interacts with
 #: CV_FAST_TRUST_FOLDS only in that both read the same native folds.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab1d-cvslice): cross-val-score taxi 157.93 -> 126.18 ms (-20.1%), istella
+#: 3114.45 -> 2920.08 ms (-6.2%); mean_r2 and output digest identical. KEEP:
+#: the FAST + Apple default since then; rollback -D MOJOLEARN_CV_FAST_SLICE_OFF
+#: (the old -D name is harmless).
 comptime CV_FAST_SLICE = (
-    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_CV_FAST_SLICE"]()
+    RESAMPLE_FAST_APPLE and not is_defined["MOJOLEARN_CV_FAST_SLICE_OFF"]()
 )
 
 #: `-D MOJOLEARN_CV_FAST_TRUST_FOLDS` (model_selection.py _prepare_folds):
@@ -260,8 +265,14 @@ comptime CV_FAST_SLICE = (
 #: every fold's two int64 arrays. A splitter, groups, a bool cv or the
 #: sabotage control: as before. Source lane/apple-fast-resample@50b96e795.
 #: Known: never compiled, never measured.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab1d-cvtrust): cross-val-score taxi 161.86 -> 142.47 ms (-12.0%), istella
+#: 3099.08 -> 3089.22 ms (-0.3%); mean_r2 and output digest identical. KEEP:
+#: the FAST + Apple default since then; rollback
+#: -D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF (the old -D name is harmless).
 comptime CV_FAST_TRUST_FOLDS = (
-    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_CV_FAST_TRUST_FOLDS"]()
+    RESAMPLE_FAST_APPLE
+    and not is_defined["MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF"]()
 )
 
 

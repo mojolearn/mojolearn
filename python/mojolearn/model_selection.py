@@ -498,8 +498,9 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     if isinstance(scoring, str):
         scoring = get_scorer(scoring)
     X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
-    # -D MOJOLEARN_CV_FAST_SLICE (FAST + Apple build of the resample binding,
-    # default OFF; resample/estimator.mojo CV_FAST_SLICE): the native default
+    # CV_FAST_SLICE (FAST + Apple build of the resample binding, default ON
+    # since 2026-10-04, rollback -D MOJOLEARN_CV_FAST_SLICE_OFF;
+    # resample/estimator.mojo CV_FAST_SLICE): the native default
     # folds of a regressor are contiguous ascending row blocks, so each
     # fold's test rows are a zero-copy view and its training rows two
     # memcpys (or a view) instead of four `_take_rows` byte gathers. Same
@@ -549,8 +550,9 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
     if groups is not None:
         if getattr(groups, "ndim", 1) != 1 or len(groups) != len(X):
             raise ValueError('groups must be 1-D and match X rows')
-    # -D MOJOLEARN_CV_FAST_TRUST_FOLDS (FAST + Apple build of the resample
-    # binding, default OFF; resample/estimator.mojo CV_FAST_TRUST_FOLDS): the
+    # CV_FAST_TRUST_FOLDS (FAST + Apple build of the resample binding,
+    # default ON since 2026-10-04, rollback -D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF;
+    # resample/estimator.mojo CV_FAST_TRUST_FOLDS): the
     # native default folds (`fold_ids` + `select_fold_i64`) are a partition
     # of the rows by construction, so `_indices`' range/duplicate pass and
     # `_overlap` on every fold's two int64 arrays are skipped. A splitter,
@@ -578,8 +580,8 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
 # tier and build.
 # ---------------------------------------------------------------------------
 
-_CV_SLICE_BIT = 32        # -D MOJOLEARN_CV_FAST_SLICE
-_CV_TRUST_FOLDS_BIT = 64  # -D MOJOLEARN_CV_FAST_TRUST_FOLDS
+_CV_SLICE_BIT = 32        # CV_FAST_SLICE (default; _OFF rolls back)
+_CV_TRUST_FOLDS_BIT = 64  # CV_FAST_TRUST_FOLDS (default; _OFF rolls back)
 
 
 def _cv_fast_on(bit):
