@@ -2107,18 +2107,26 @@ comptime ET_BINNED_REG = (
 ) or IDN_ET_BINNED
 comptime ET_BINS = ET_QSTRIDE
 comptime ET_CODE = DType.uint16
-#: IDENTICAL (`et_identical_bins_wanted`, device and host column): binning
-#: pays in bytes per row, so it is taken only on wide data: the
-#: border pass is a fixed cost per column, while the saving (uint16 codes
-#: for float32 values) is per row read; a row of 64 float32 columns is 256 B,
-#: four 64-byte lines, where halving the bytes per row starts to save whole
-#: lines per row. A RANGE rule measured at 16 columns (loses) and 220 (wins)
-#: only: NEEDS NEIGHBOR-SHAPE VALIDATION (32, 48, 64, 96, 128 columns). The
-#: device and the host column read this same gate (`et_identical_bins_wanted`),
-#: so moving it moves bits on every vendor and the host together.
-#: (2026-10-05 merge: split from the FAST gate below, which main moved to
-#: every width; IDENTICAL keeps 64 so its bits do not move in the merge.)
-comptime ET_IDN_BINNED_MIN_COLS = 64
+#: IDENTICAL (`et_identical_bins_wanted`, device and host column).
+#: lane/no-dim-idn (2026-10-04): the old floor of 64 columns sat between the
+#: two board widths it was measured at (16 loses, 220 wins), so it was a
+#: board cut, not a cost rule. Cost reasoning at any width: the border pass
+#: reads every row of a column once per FIT, while the uint16 codes halve the
+#: bytes of every column value the range and score passes read at every
+#: level of every tree, so the saving is (trees x levels) reads per value
+#: against one: it is per value, not per row line, and does not depend on the
+#: column count. The fit-shape gate that remains is the tiled search's own
+#: `2k >= n_cols` (the sampled features cover at least half the row). This
+#: matches the FAST gate below, already moved to every width.
+#: `-D MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF` (and `MOJOLEARN_IDN_ALL_OFF`)
+#: restore the old floor of 64 (A/B arm B). Bits: the arm is a default-OFF
+#: candidate (`MOJOLEARN_IDN_ET_BINNED_U16`); under it, fits with 2..63
+#: columns now bin, and the device and the host column read this one gate,
+#: so NVIDIA, AMD, Apple and the host move together.
+comptime ET_IDN_BINNED_ANY_WIDTH = not is_defined[
+    "MOJOLEARN_ET_IDN_BINNED_ANY_WIDTH_OFF"
+]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime ET_IDN_BINNED_MIN_COLS = 1 if ET_IDN_BINNED_ANY_WIDTH else 64
 #: FAST + Apple: LEGACY, default OFF: binning was taken only at n_cols >= 64, chosen
 #: between taxi (16 columns, slower) and istella (220, faster). Removed as
 #: benchmark-tuned on 2026-10-04: binning now applies at every width;
@@ -2456,11 +2464,14 @@ struct DeviceDataset(Movable):
             return
         if self.has_rm:
             return
-        # ET_RM_NARROW (trial arm): a row whose floats fit one 64-byte line
-        # also takes the row-major copy, whatever k is.
+        # ET_RM_NARROW: a row whose floats fit one cache line (ET_RM_LINE_BYTES)
+        # also takes the row-major copy when a quarter of it is sampled.
         var narrow = False
         comptime if ET_RM_NARROW:
-            narrow = Int(self.n_cols) * 4 <= 64 and 4 * k >= Int(self.n_cols)
+            narrow = (
+                Int(self.n_cols) * 4 <= ET_RM_LINE_BYTES
+                and 4 * k >= Int(self.n_cols)
+            )
         if 2 * k < Int(self.n_cols) and not narrow:
             return
         var nr = Int(self.n_rows)
@@ -3320,6 +3331,25 @@ The range kernel's cells are the same min/max/NaN counts either way.
 M4 IDENTICAL (steward 1790610860810, always-on arm): ExtraTreesClassifier
 taxi 3904 -> 3745 ms, same hash; RandomTreesEmbedding (k = 1) 469 -> 1086
 ms, hence the quarter gate. `-D MOJOLEARN_ET_RM_NARROW_OFF` turns it off."""
+
+comptime ET_RM_LINE_BYTES = (
+    64
+    if (
+        is_defined["MOJOLEARN_ET_RM_LINE_HW_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+    else 128
+)
+"""lane/no-dim-idn (2026-10-04): the line `ET_RM_NARROW` compares a row
+against. It was a literal 64 bytes, i.e. `n_cols <= 16`, exactly the board's
+taxi width. It is now the cache line of the targets this arm runs on: 128
+bytes on Apple GPUs, the NVIDIA L1 line and the CDNA3 L2 line alike, so
+a row of up to 32 float32 columns is one line fetch however many of its
+features are sampled, and the quarter gate (`4k >= n_cols`, from the
+RandomTreesEmbedding k = 1 slowdown) still bounds the wasted bytes per line
+at three quarters at any width. Bit-inert: the range cells are the same
+either way. `-D MOJOLEARN_ET_RM_LINE_HW_OFF` (and `MOJOLEARN_IDN_ALL_OFF`)
+restore 64 (A/B arm B)."""
 
 
 @always_inline

@@ -183,6 +183,22 @@ comptime IVF_IDENTICAL_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_IVF_IDENTICAL_SCAN_OFF"]()
 )
+comptime IVF_IDENTICAL_SCAN_ANY_DIM = (
+    IVF_IDENTICAL_SCAN
+    and not is_defined["MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/no-dim-idn (2026-10-04): the IDENTICAL batched scans take every
+dimension. The old `dim <= 256` gate was the size of the shared query stage
+(IIVF_MAX_DIM), and it sat just above the board's widest row (istella, 220);
+wider data fell to the per-query path, one launch per query. The identical
+kernels now read a query wider than the stage straight from global memory,
+value for value (`ftz` of the same element, the same ascending
+`identical_mul_add` chain), so the distances, the top-k and the bits are the
+per-query path's (`ivf_query_device.mojo`, the same chain) and the host
+column's. `-D MOJOLEARN_IVF_IDENTICAL_ANY_DIM_OFF` (and
+`MOJOLEARN_IDN_ALL_OFF`) restore the cap (A/B arm B). The FAST kernel keeps
+FIVF_MAX_DIM (FAST is out of this lane's scope)."""
 """lane/neural-net-experiment (2026-09-30, the classical pass): EVERY
 vendor, not Apple alone. The Apple gate left NVIDIA and AMD on the host
 round trip per query: 526 s on an L40S and 265 s on an MI325X for
@@ -820,7 +836,7 @@ def ivf_flat_search_prepared(
             and not partial_storage
             and (not filtered or batched_filter_ok)
             and k <= 32
-            and dim <= FIVF_MAX_DIM
+            and (IVF_IDENTICAL_SCAN_ANY_DIM or dim <= FIVF_MAX_DIM)
         )
     # the trace records each query's probes sorted (checks only); no search
     # path reads the probes on the host
