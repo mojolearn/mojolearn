@@ -172,7 +172,7 @@ from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 from x_decomp.eigh_tridiag import EIGH_FAST_TRIDIAG, TD_MIN_N, eigh_td_on, td_copy_kernel
-from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale
+from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_scale_rect, enqueue_es_unscale
 
 
 #: rounds enqueued between two synchronize() calls
@@ -3268,6 +3268,11 @@ struct DevExec(Exec):
         var dfirst = ctx.enqueue_create_buffer[DType.int32](1)
         var hfirst = ctx.enqueue_create_host_buffer[DType.int32](1)
         ctx.synchronize()
+        # lane idn-cov-overflow: the power-of-two range scale of
+        # x_decomp/eigh_scale.mojo on A before the QR (its column norms and
+        # the Jacobi's ||r_i||^2 are folded squares); s unscaled below, U
+        # and V do not move. `HostExec.svd` takes the same.
+        var dfac = enqueue_es_scale_rect(ctx, _p(da), 1, m, n)
         # bounded in work per launch and poisoned (x_decomp/qr_bounded.mojo):
         # a launch macOS cut short leaves NaN in R, hence in s, refused below
         _ = qr_factor_bounded(ctx, da, scratch, r_buf, m, n, qr_cells)
@@ -3302,6 +3307,7 @@ struct DevExec(Exec):
                 " were one; see DEVIATION 590."
             )
         ctx.enqueue_function[rs_norm_kernel](_p(rt), _p(s_buf), Int32(n), grid_dim=n, block_dim=RS_TPB)
+        enqueue_es_unscale(ctx, _p(s_buf), dfac, 1, n)
         ctx.enqueue_function[pj_transpose_kernel](_p(vt), _p(v_buf), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
         _down(ctx, s_buf, s, n)
         _down(ctx, v_buf, v, n * n)
@@ -3312,6 +3318,7 @@ struct DevExec(Exec):
         if t_nan >= 0:
             raise Error("x_decomp svd: singular value " + String(t_nan) + " of " + String(n)
                         + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
+        _ = dfac^
         _ = scratch^
         _ = r_buf^
         _ = rt^

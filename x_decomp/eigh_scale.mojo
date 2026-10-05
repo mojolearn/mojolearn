@@ -153,14 +153,27 @@ def es_unscale_kernel(w: F32Ptr, fac: F32Ptr, per_in: Int32, total_in: Int32):
 def host_es_scale(mut m: List[Float32], n: Int) -> SIMD[DType.float32, 4]:
     """The host's `es_rowmax_kernel`, `es_fold_kernel` and `es_apply_kernel`
     on one n x n problem (m row major, scaled in place): the factors."""
+    return host_es_scale_ptr(F32Ptr(unsafe_from_address=Int(m.unsafe_ptr())), n * n)
+
+
+def host_es_scale_ptr(m: F32Ptr, count: Int) -> SIMD[DType.float32, 4]:
+    """`host_es_scale` on `count` words at m (one problem of any shape: the
+    max is the same word in any order)."""
     var mx = Float32(0.0)
-    for i in range(n * n):
-        mx = es_absmax(mx, m[i])
+    for i in range(count):
+        mx = es_absmax(mx, m.unsafe_load(i))
     var f = es_factors(mx)
     if f[0] != Float32(1.0) or f[1] != Float32(1.0):
-        for i in range(n * n):
-            m[i] = es_mul2(m[i], f[0], f[1])
+        for i in range(count):
+            m.unsafe_store(i, es_mul2(m.unsafe_load(i), f[0], f[1]))
     return f
+
+
+def host_es_unscale_ptr(w: F32Ptr, count: Int, f: SIMD[DType.float32, 4]):
+    """The host's `es_unscale_kernel` on `count` words at w."""
+    if f[2] != Float32(1.0) or f[3] != Float32(1.0):
+        for i in range(count):
+            w.unsafe_store(i, es_mul2(w.unsafe_load(i), f[2], f[3]))
 
 
 def host_es_unscale(mut w: List[Float32], f: SIMD[DType.float32, 4]):
@@ -196,19 +209,29 @@ def _es_blocks(count: Int) -> Int:
 
 def enqueue_es_scale(ctx: DeviceContext, a: F32Ptr, batch: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
     """x_decomp/eigh_scale.mojo on `batch` n x n problems stacked at `a`
-    (device): each problem's power-of-two range scale, applied in place (no
-    write inside the band). Returns the factors (4 a problem) for
-    `enqueue_es_unscale`. Three launches, nothing read back."""
-    var dfac = ctx.enqueue_create_buffer[DType.float32](4 * max(batch, 1))
-    var drm = ctx.enqueue_create_buffer[DType.float32](max(batch * n, 1))
+    (device): `enqueue_es_scale_rect` with rows = cols = n."""
+    return enqueue_es_scale_rect(ctx, a, batch, n, n)
+
+
+def enqueue_es_scale_rect(
+    ctx: DeviceContext, a: F32Ptr, batch: Int, rows: Int, cols: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """Each of `batch` rows x cols problems stacked at `a` (device) takes its
+    power-of-two range scale in place (no write inside the band). Returns
+    one buffer: the factors (4 a problem) for the unscale launches, then the
+    row maxima (kept in the same buffer so nothing is freed while a launch
+    still reads it). Three launches, nothing read back."""
+    var nf = 4 * max(batch, 1)
+    var dfac = ctx.enqueue_create_buffer[DType.float32](nf + max(batch * rows, 1))
+    var pf = F32Ptr(unsafe_from_address=Int(dfac.unsafe_ptr()))
+    var prm = pf + nf
     ctx.enqueue_function[es_rowmax_kernel](
-        a, F32Ptr(unsafe_from_address=Int(drm.unsafe_ptr())), Int32(batch * n), Int32(n), grid_dim=_es_blocks(batch * n), block_dim=ES_TPB
+        a, prm, Int32(batch * rows), Int32(cols), grid_dim=_es_blocks(batch * rows), block_dim=ES_TPB
     )
-    ctx.enqueue_function[es_fold_kernel](F32Ptr(unsafe_from_address=Int(drm.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dfac.unsafe_ptr())), Int32(n), grid_dim=max(batch, 1), block_dim=ES_TPB)
+    ctx.enqueue_function[es_fold_kernel](prm, pf, Int32(rows), grid_dim=max(batch, 1), block_dim=ES_TPB)
     ctx.enqueue_function[es_apply_kernel](
-        a, F32Ptr(unsafe_from_address=Int(dfac.unsafe_ptr())), Int32(n * n), Int32(batch * n * n), grid_dim=_es_blocks(batch * n * n), block_dim=ES_TPB
+        a, pf, Int32(rows * cols), Int32(batch * rows * cols), grid_dim=_es_blocks(batch * rows * cols), block_dim=ES_TPB
     )
-    _ = drm^
     return dfac^
 
 
