@@ -4007,16 +4007,13 @@ class LatentDirichletAllocation(_Base):
             k.b.x_decomp_dev_lda_bound(k._did(M), k._did(ddt), k._did(dcomp), P._d.id, [n, nc, v], [floor])
             score = k.total(P).s[0]
         else:
-            zero = _M.zeros(n, v)
-            terms = [k.ew("add", k.ew("add", zero, ddt.cols(t, t + 1)), dcomp.rows(t, t + 1)) for t in range(nc)]
-            mx = terms[0]
-            for t in range(1, nc):
-                mx = k.ew("max", mx, terms[t])
-            acc = _M.zeros(n, v)
-            for t in range(nc):
-                acc = k.ew("add", acc, k.ew("exp", k.ew("sub", terms[t], mx)))
-            lse = k.ew("add", k.ew("logs", acc, s=floor), mx)
-            score = k.total(k.ew("mul", M, lse)).s[0]
+            # the host column (lane py-runtime-b): the same ew cells per
+            # (i, w) in `x_decomp_lda_bound` (x_decomp/chi2.mojo, the CPU
+            # twin of lda_bound_kernel), folded by the kit's total
+            P = _M.zeros(n, v)
+            if n * v:
+                k.b.x_decomp_lda_bound(M.addr, ddt.addr, dcomp.addr, P.addr, [n, nc, v], [floor])
+            score = k.total(P).s[0]
         score += self._loglik(k, self.doc_topic_prior_, Dt, ddt, nc)
         if sub_sampling:
             score *= float(self.total_samples) / n
