@@ -172,8 +172,8 @@ python/mojolearn/_expansion_decomp.py	2683	runtime-fixed	varimax/quartimax rotat
 python/mojolearn/_expansion_decomp.py	2782	runtime-fixed	FactorAnalysis EM loop in Mojo (x_decomp_fa_em_main: x_decomp/fa_em.mojo, fa_em_dev.mojo), same cells and float64 log-likelihood
 python/mojolearn/_expansion_decomp.py	2830	glue	converts the noise_variance_init argument
 python/mojolearn/_expansion_decomp.py	3253	glue	drives the fixed randomized-SVD power iterations on the device
-python/mojolearn/_expansion_decomp.py	3487	runtime	PLS power driver with the Python convergence test; owed to a Mojo solver driver
-python/mojolearn/_expansion_decomp.py	3532	runtime	PLS per-component driver with Python tests on read-back counts; owed to a Mojo solver driver
+python/mojolearn/_expansion_decomp.py	3487	runtime-fixed	PLS component loop with _power/_thin_svd/_pinv in Mojo (x_decomp_pls_fit: x_decomp/pls.mojo, pls_dev.mojo)
+python/mojolearn/_expansion_decomp.py	3532	runtime-fixed	PLS component loop with _power/_thin_svd/_pinv in Mojo (x_decomp_pls_fit: x_decomp/pls.mojo, pls_dev.mojo)
 python/mojolearn/_expansion_decomp.py	3763	runtime-fixed	zero-column fill folded into the atom loop of kit launches (one FILL0 move per resampled atom); no Python pass
 python/mojolearn/_expansion_decomp.py	3792	runtime	dictionary learning driver with the Python error test; owed to a Mojo solver driver
 python/mojolearn/_expansion_decomp.py	3943	runtime	MiniBatchDictionaryLearning batch driver with Python cost arithmetic; owed to a Mojo solver driver
