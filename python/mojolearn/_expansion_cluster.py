@@ -44,7 +44,7 @@ def _aux(*parts):
     """The parts (Arrays or array-likes, None skipped) end to end as one
     float32 Array: byte copies, no Python pass over the values (lane
     pyglue-numeric: the aux blocks were Python lists of every value)."""
-    arrs = [_buffer.as_f32_c(p, ndim=None, name="aux")[0] for p in parts if p is not None]
+    arrs = [_buffer.as_f32_c(p, ndim=None, name="aux")[0] for p in parts if p is not None]  # glue: aux parts as float32 blocks
     total = sum(a.size for a in arrs)   # glue: the few part sizes
     if not total:
         return None
@@ -106,7 +106,7 @@ class _XCluster(NumericModeMixin):
         xn = x.size if x is not None else 0
         aa = _buffer.addr_ro(a, name="aux") if a is not None and a.size else 0
         an = a.size if a is not None else 0
-        f, i, s = b.x_cluster_call(which, xa, xn, aa, an, [int(v) for v in ip], [float(v) for v in fp])
+        f, i, s = b.x_cluster_call(which, xa, xn, aa, an, [int(v) for v in ip], [float(v) for v in fp])  # glue: integer and float binding params
         return f, i, s
 
     def _check_fitted(self, attr):
@@ -376,7 +376,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
         self._check_fitted("cluster_centers_")
         x = self._input_like_fit(X)
         n, d = x.shape
-        nodes = [int(v) for v in _buffer.flat_bytes(self._tree_nodes).cast("i")]
+        nodes = [int(v) for v in _buffer.flat_bytes(self._tree_nodes).cast("i")]  # glue: fitted bisect tree node words
         _, i, _ = self._call(_E_BISECT_PREDICT, x, self._tree_centers, [n, d] + nodes)
         return Array._from_flat(i[0], (n,), "<i4")
 

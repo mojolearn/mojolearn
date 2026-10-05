@@ -113,7 +113,7 @@ def _ovr_combine(ext, cols, n_star):
     ext.gpc_ovr_combine(
         # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_ovr_combine_binding.
         [addr(proba, name="proba_out"), addr(codes, name="codes_out")]
-        + [addr_ro(c, name=f"class_{i}") for i, c in enumerate(cols)],
+        + [addr_ro(c, name=f"class_{i}") for i, c in enumerate(cols)],  # glue: one class column address per class
         [int(n_star)],
     )
     return proba, codes
@@ -429,7 +429,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             self.n_iter_ = only.n_iter_
             self.log_marginal_likelihood_value_ = only.log_marginal_likelihood_value_
         else:
-            self.n_iter_ = [e.n_iter_ for e in fits]
+            self.n_iter_ = [e.n_iter_ for e in fits]  # glue: iteration counts per class
             total = 0.0
             for e in fits:
                 total += e.log_marginal_likelihood_value_
@@ -517,7 +517,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         if self.n_classes_ == 2:
             # `[1 - p, p]` from the binding (`gpc_binary_out`), every build
             return self._latent(ext, self.estimators_[0], q, True, 2)[3]
-        cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
+        cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]  # glue: one latent column per class
         proba, _ = _ovr_combine(ext, cols, int(q.shape[0]))
         return proba
 
@@ -571,7 +571,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             # `mean > 0` codes from the binding (`gpc_binary_out`), every build
             return decode_labels(self.classes_, self._latent(ext, self.estimators_[0], q, False, 1)[3])
         else:
-            cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
+            cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]  # glue: one latent column per class
             _, codes32 = _ovr_combine(ext, cols, int(q.shape[0]))
             codes = codes32.astype("<i8")
         return decode_labels(self.classes_, codes)
@@ -634,9 +634,9 @@ class GaussianProcessClassifier(NumericModeMixin):
             "L": _stacked([e.L_ for e in fits], "<f4", (n_train * n_train,)),  # glue: one buffer per class fit
             "pi": _stacked([e.pi_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
             "wsr": _stacked([e.W_sr_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
-            "lml": Array.from_list([float(e.log_marginal_likelihood_value_) for e in fits], "<f8"),
-            "n_iter": Array.from_list([int(e.n_iter_) for e in fits], "<i8"),
-            "nb": Array.from_list([int(e.nb_) for e in fits], "<i8"),
+            "lml": Array.from_list([float(e.log_marginal_likelihood_value_) for e in fits], "<f8"),  # glue: saved per-class fit scalars
+            "n_iter": Array.from_list([int(e.n_iter_) for e in fits], "<i8"),  # glue: saved per-class fit scalars
+            "nb": Array.from_list([int(e.nb_) for e in fits], "<i8"),  # glue: saved per-class fit scalars
         }
         return _serialize.write_npz(path, arrays)
 
@@ -691,7 +691,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         iters = rows("n_iter", "<i8", 0)
         nbs = rows("nb", "<i8", 0)
         fits = []
-        for e in range(n_est):
+        for e in range(n_est):  # glue: one loaded fit per class
             # row e of each saved block, copied by memoryview runs (no per-element Python)
             fits.append(_BinaryLaplace(
                 ys[e],

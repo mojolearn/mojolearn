@@ -62,8 +62,8 @@ def _f32(X, name="X"):
 def _feature_names_in(est, input_features):
     d = est.n_features_in_
     if input_features is None:
-        return [f"x{i}" for i in range(d)]
-    names = [str(v) for v in input_features]
+        return [f"x{i}" for i in range(d)]  # glue: feature names over the d columns
+    names = [str(v) for v in input_features]  # glue: feature names over the d columns
     if len(names) != d:
         raise ValueError(f"input_features should have length equal to number of features ({d}), got {len(names)}")
     return names
@@ -78,7 +78,7 @@ def _names_out(names):
 def _prefixed_names(est, count):
     """sklearn's ClassNamePrefixFeaturesOutMixin: `<classname lower><i>`."""
     base = type(est).__name__.lower()
-    return _names_out([f"{base}{i}" for i in range(count)])
+    return _names_out([f"{base}{i}" for i in range(count)])  # glue: feature names over the d columns
 
 
 def _accuracy(y_true, y_pred, sample_weight=None):
@@ -161,10 +161,10 @@ def _class_array(classes, codes):
     int64 Array, real classes a float64 Array (the native gather of
     `decode_labels`), other labels a list (`decode_labels`)."""
     from ._labels import decode_labels
-    if all(isinstance(v, (bool, int)) for v in classes):
+    if all(isinstance(v, (bool, int)) for v in classes):  # glue: type check over the k class labels
         return decode_labels([int(v) for v in classes], codes)   # glue: the k class values
-    if all(isinstance(v, (int, float)) for v in classes):
-        return decode_labels([float(v) for v in classes], codes)
+    if all(isinstance(v, (int, float)) for v in classes):  # glue: type check over the k class labels
+        return decode_labels([float(v) for v in classes], codes)  # glue: k class labels as floats
     return decode_labels(classes, codes)
 
 
@@ -226,8 +226,8 @@ class _XNeighbors(NumericModeMixin):
 
     def _op(self, name, bufs, ints=(), floats=()):
         addrs = [addr(a, name=f"xn_{name} output") if w else addr_ro(a, name=f"xn_{name} input")
-                 for a, w in bufs]
-        getattr(self._bind(), "xn_" + name)(addrs, [int(v) for v in ints], [float(v) for v in floats])
+                 for a, w in bufs]  # glue: buffer addresses and binding params
+        getattr(self._bind(), "xn_" + name)(addrs, [int(v) for v in ints], [float(v) for v in floats])  # glue: buffer addresses and binding params
 
     def _sqdist(self, A, B):
         n, d = A.shape
@@ -518,10 +518,10 @@ class NearestCentroid(_XNeighbors):
         elif self.priors == "uniform":
             prior = [1.0 / C] * C
         else:
-            prior = [float(v) for v in (self.priors.tolist() if hasattr(self.priors, "tolist") else self.priors)]
+            prior = [float(v) for v in (self.priors.tolist() if hasattr(self.priors, "tolist") else self.priors)]  # glue: user priors argument checks
             if len(prior) != C:
                 raise ValueError("priors must have one entry per class")
-            if any(p < 0 for p in prior):
+            if any(p < 0 for p in prior):  # glue: user priors argument checks
                 raise ValueError("priors must be non-negative")
             tot = math.fsum(prior)
             if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
@@ -538,7 +538,7 @@ class NearestCentroid(_XNeighbors):
             # class's middle value(s) at its offset; offsets are the class
             # counts' prefix (integer bookkeeping over the classes)
             start = [0] * (C + 1)
-            for c in range(C):
+            for c in range(C):  # glue: class offsets prefix over k classes
                 start[c + 1] = start[c] + counts[c]
             p = 1
             while p < n:
@@ -595,7 +595,7 @@ class NearestCentroid(_XNeighbors):
 
     def _uniform(self):
         C = len(self.classes_)
-        return all(math.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())
+        return all(math.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())  # glue: uniform prior check over k classes
 
     def predict(self, X):
         Q = _f32(X)
@@ -1112,13 +1112,13 @@ class _NumpyRandomState:
         self._rs = rs
 
     def random_sample(self, count):
-        return [float(v) for v in self._rs.random_sample(count)]
+        return [float(v) for v in self._rs.random_sample(count)]  # glue: numpy RandomState draws converted to Python scalars
 
     def uniform(self, low, high, count):
-        return [float(v) for v in self._rs.uniform(low, high, size=count)]
+        return [float(v) for v in self._rs.uniform(low, high, size=count)]  # glue: numpy RandomState draws converted to Python scalars
 
     def randint(self, high, count):
-        return [int(v) for v in self._rs.randint(0, high, size=count)]
+        return [int(v) for v in self._rs.randint(0, high, size=count)]  # glue: numpy RandomState draws converted to Python scalars
 
 
 # ====================================================================== PolynomialCountSketch
@@ -1258,10 +1258,10 @@ class AdditiveChi2Sampler(_XNeighbors):
     def get_feature_names_out(self, input_features=None):
         names = _feature_names_in(self, input_features)
         base = type(self).__name__.lower()
-        out = [f"{base}_{nm}_sqrt" for nm in names]
-        for j in range(1, int(self.sample_steps)):
-            out += [f"{base}_{nm}_cos{j}" for nm in names]
-            out += [f"{base}_{nm}_sin{j}" for nm in names]
+        out = [f"{base}_{nm}_sqrt" for nm in names]  # glue: feature names over the d columns
+        for j in range(1, int(self.sample_steps)):  # glue: feature names over the d columns
+            out += [f"{base}_{nm}_cos{j}" for nm in names]  # glue: feature names over the d columns
+            out += [f"{base}_{nm}_sin{j}" for nm in names]  # glue: feature names over the d columns
         return _names_out(out)
 
 
@@ -1441,7 +1441,7 @@ class _LabelPropagationBase(_XNeighbors):
         if codes.size != n:
             raise ValueError("X and y have different numbers of rows")
         skip = next((i for i, c in enumerate(allc) if c == -1 and not isinstance(c, str)), -1)   # glue: scan over the k class labels
-        classes = [c for i, c in enumerate(allc) if i != skip]
+        classes = [c for i, c in enumerate(allc) if i != skip]  # glue: class labels without the unlabeled marker
         C = len(classes)
         ld = _empty_out((n, C), "<f4")
         ys = _empty_out((n, C), "<f4")
@@ -1497,7 +1497,7 @@ class _LabelPropagationBase(_XNeighbors):
         s = _empty_out((1,), "<f4")
         n_iter = 0
         converged = False
-        for it in range(int(self.max_iter)):
+        for it in range(int(self.max_iter)):  # glue: one device propagation step per iteration
             n_iter = it
             self._op("absdiff_sum", [(ld, 0), (prev, 0), (s, 1)], (n * C,))
             if s.tolist()[0] < float(self.tol):
@@ -1670,8 +1670,8 @@ class KNNImputer(_XNeighbors):
         # lane/neural-pass71 (2026-10-01): the column flags from one native
         # pass over the cells (xn_nan_cells), no list of the matrix
         cm = self._nan_cells(X, 1)[1]
-        self._valid = [cm[f] < n for f in range(d)]
-        self._miss_cols = [f for f in range(d) if cm[f] > 0]
+        self._valid = [cm[f] < n for f in range(d)]  # glue: column masks over the d features
+        self._miss_cols = [f for f in range(d) if cm[f] > 0]  # glue: column masks over the d features
         self._fit_X = X
         self.n_features_in_ = d
         return self
@@ -1698,7 +1698,7 @@ class KNNImputer(_XNeighbors):
                 self._op("knn_impute_cells" if _OLD_ITEMS else "knn_impute_tiled",
                          [(cells, 0), (X, 0), (self._fit_X, 0), (out, 1)],
                          (n, m, d, k, 1 if self.weights == "distance" else 0, nc))
-        keep = [f for f in range(d) if self._valid[f]]
+        keep = [f for f in range(d) if self._valid[f]]  # glue: column masks over the d features
         if self.keep_empty_features:
             if n and not all(self._valid):
                 flags = _i32([0 if v else 1 for v in self._valid], "flags")   # glue: d fit flags
@@ -1721,9 +1721,9 @@ class KNNImputer(_XNeighbors):
 
     def get_feature_names_out(self, input_features=None):
         names = _feature_names_in(self, input_features)
-        out = [nm for f, nm in enumerate(names) if self._valid[f] or self.keep_empty_features]
+        out = [nm for f, nm in enumerate(names) if self._valid[f] or self.keep_empty_features]  # glue: feature names over the d columns
         if self.add_indicator:
-            out += [f"missingindicator_{names[f]}" for f in self._miss_cols]
+            out += [f"missingindicator_{names[f]}" for f in self._miss_cols]  # glue: feature names over the d columns
         return _names_out(out)
 
 
@@ -2023,7 +2023,7 @@ class SVGP(_XNeighbors):
             Z = _f32(self.inducing_points, "inducing_points")
         else:
             M = min(int(self.n_inducing), n)
-            Z = self._take_rows(X, [i * n // M for i in range(M)])
+            Z = self._take_rows(X, [i * n // M for i in range(M)])  # glue: evenly spaced inducing row indices (M sized)
         M = Z.shape[0]
         # one resident device chain (lane/cgr-kernel, `xn_svgp_fit_ff`):
         # Kuu, then B = Kuf Kfu and b = Kuf y in float-float per Kfu row tile

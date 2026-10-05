@@ -84,14 +84,14 @@ def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='p
     # from the worker (lane apple-fast-py2mojo-cluster)
     out_kind = (2 if method == 'predict_proba' else 1) if estimator.n_classes_ == 2 else 0
     requests = []
-    for fit in estimator.estimators_:
+    for fit in estimator.estimators_:  # glue: one worker request per class
         part = _fresh(estimator)
         part.X_train_, part.kernel_ = estimator.X_train_, estimator.kernel_
         part.n_features_in_ = estimator.n_features_in_
         args = (fit, q, want_proba, out_kind) if out_kind else (fit, q, want_proba)
         requests.append(('gpc_class_predict', part, args))
     arrays = list(_run(requests, devices))
-    if any(len(column) != q.shape[0] for column in arrays):
+    if any(len(column) != q.shape[0] for column in arrays):  # glue: worker row count check per class
         raise ValueError('GPC worker returned an invalid row count')
     if estimator.n_classes_ == 2:
         if method == 'predict_proba':

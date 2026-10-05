@@ -345,16 +345,16 @@ def _class_weight_rows(class_weight, classes, codes, xbind=None):
         unknown = set(class_weight).difference(classes)
         if unknown:
             raise ValueError("class_weight contains labels absent from y")
-        values = [class_weight.get(label, 1.0) for label in classes]
-    if any(is_bool(v) or not isinstance(v, numbers.Real) or not math.isfinite(v) or v < 0 for v in values):
+        values = [class_weight.get(label, 1.0) for label in classes]  # glue: user class_weight dict per class
+    if any(is_bool(v) or not isinstance(v, numbers.Real) or not math.isfinite(v) or v < 0 for v in values):  # glue: class weight argument checks
         raise ValueError("class weights must be finite nonnegative real numbers")
-    if all(v == 1 for v in values):
+    if all(v == 1 for v in values):  # glue: class weight argument checks
         return None
     try:
         narrowed = Array.from_list(values, "<f4")
     except OverflowError:
         raise ValueError("class weights must remain finite and nonzero when positive in Float32") from None
-    if not all_finite(narrowed) or any(v > 0 and n == 0 for v, n in zip(values, narrowed)):
+    if not all_finite(narrowed) or any(v > 0 and n == 0 for v, n in zip(values, narrowed)):  # glue: class weight argument checks
         raise ValueError("class weights must remain finite and nonzero when positive in Float32")
     if narrowed.max() <= 0:
         raise ValueError("class weights must have positive total")

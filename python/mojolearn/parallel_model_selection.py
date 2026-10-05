@@ -103,7 +103,7 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
         else:
             inventory = pool.map([('device_inventory', None, ()) for _ in pool.devices])  # glue: one inventory request per device
             require_distinct_workers(inventory, vendor, width)
-        for start in range(0, len(folds), width):
+        for start in range(0, len(folds), width):  # glue: one worker batch per width of folds
             requests = []
             for i in range(start, min(start + width, len(folds))):  # glue: one request per worker
                 Xtr, ytr, Xte, yte = rows.take(i)

@@ -93,7 +93,7 @@ def _load_knn(cls, path):
             f"mojolearn: {path!r} meta holds {meta.size} fields, "
             f"{_KNN_META_FIELDS} are needed"
         )
-    nf, ns, k, qt, o2d, n_out = (int(meta[i]) for i in range(_KNN_META_FIELDS))
+    nf, ns, k, qt, o2d, n_out = (int(meta[i]) for i in range(_KNN_META_FIELDS))  # glue: six saved metadata fields
     p = _serialize.exact(arrays, "p", "<f8")
     if p.size != 1:
         raise ValueError(f"mojolearn: {path!r} p holds {p.size} values, 1 is needed")
@@ -318,12 +318,12 @@ def _resolve_metric(cls_name, metric, p):
             f"mojolearn {cls_name}: metric={metric!r} is in cuML's "
             "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
             "(neighbors/NOT_IMPLEMENTED.tsv). Implemented: "
-            + ", ".join(sorted(_METRIC_TABLE))
+            + ", ".join(sorted(_METRIC_TABLE))  # glue: metric names for the error message
         )
     else:
         raise ValueError(
             f"mojolearn {cls_name}: unknown metric {metric!r}. Implemented: "
-            + ", ".join(sorted(_METRIC_TABLE))
+            + ", ".join(sorted(_METRIC_TABLE))  # glue: metric names for the error message
         )
 
     if value != _DIST_LP_UNEXPANDED:
@@ -433,7 +433,7 @@ def _resolve_rbc_metric(cls_name, metric, p):
     if key not in _RBC_METRIC_TABLE:
         raise ValueError(
             f"mojolearn {cls_name}: unknown metric {metric!r}. The random "
-            "ball cover admits: " + ", ".join(sorted(_RBC_METRIC_TABLE))
+            "ball cover admits: " + ", ".join(sorted(_RBC_METRIC_TABLE))  # glue: metric names for the error message
         )
     value = _RBC_METRIC_TABLE[key]
     if value != _DIST_LP_UNEXPANDED:
@@ -976,10 +976,10 @@ class KNeighborsClassifier(NearestNeighbors):
         arrays = _knn_arrays(self)
         arrays["y_cols"] = self._y_cols
         arrays["classes"] = Array.from_list(
-            [int(c) for cl in self._classes_list for c in cl], "<i8"
+            [int(c) for cl in self._classes_list for c in cl], "<i8"  # glue: saved classes per output column
         )
         arrays["class_counts"] = Array.from_list(
-            [len(cl) for cl in self._classes_list], "<i8"
+            [len(cl) for cl in self._classes_list], "<i8"  # glue: saved classes per output column
         )
         return _serialize.write_npz(path, arrays)
 
@@ -992,12 +992,12 @@ class KNeighborsClassifier(NearestNeighbors):
         y_cols = _load_y_cols(arrays, path, "<i4", obj.n_samples_fit_, n_out)
         classes = _serialize.exact(arrays, "classes", "<i8").tolist()
         counts = _serialize.exact(arrays, "class_counts", "<i8").tolist()
-        if len(counts) != n_out or sum(counts) != len(classes):
+        if len(counts) != n_out or sum(counts) != len(classes):  # glue: class count check over the outputs
             raise ValueError(f"mojolearn: {path!r} classes and class_counts disagree with n_outputs")
         rebuilt = [encode_labels(y_cols[i].tolist())[0] for i in range(n_out)]
         off = 0
-        for i, count in enumerate(counts):
-            saved = [int(c) for c in classes[off:off + count]]
+        for i, count in enumerate(counts):  # glue: saved class check per output
+            saved = [int(c) for c in classes[off:off + count]]  # glue: saved class check per output
             off += count
             if saved != rebuilt[i]:
                 raise ValueError(
@@ -1062,7 +1062,7 @@ class KNeighborsClassifier(NearestNeighbors):
             self._bind(_XN).xn_p2m_transpose_i(
                 [addr_ro(y32, name="y"), addr(yc, name="y_cols")], [n, n_out], [])
         self._y_cols = yc
-        self._classes_list = [encode_labels(yc[j])[0] for j in range(n_out)]
+        self._classes_list = [encode_labels(yc[j])[0] for j in range(n_out)]  # glue: one native encoding per output column
         return self
 
     @property
@@ -1091,7 +1091,7 @@ class KNeighborsClassifier(NearestNeighbors):
             )
         nq = q.shape[0]
         n_out = self._y_cols.shape[0]
-        n_classes = [len(c) for c in self._classes_list]
+        n_classes = [len(c) for c in self._classes_list]  # glue: class counts per output column
         # The native contract writes exactly one of these two outputs.  Keep
         # the unselected address valid without materializing its full public
         # shape: at million-row scale the unused probability matrix can be
@@ -1100,9 +1100,9 @@ class KNeighborsClassifier(NearestNeighbors):
         # write the unselected pointer (their one-element sentinel contract).
         labels = (empty((1,), "<i4") if want_proba else
                   empty((nq, n_out), "<i4"))
-        proba = (empty((nq * sum(n_classes),), "<f4") if want_proba else
+        proba = (empty((nq * sum(n_classes),), "<f4") if want_proba else  # glue: class counts per output column
                  empty((1,), "<f4"))
-        uniq = empty((sum(n_classes),), "<i4")
+        uniq = empty((sum(n_classes),), "<i4")  # glue: class counts per output column
         idx = self._index
         y_cols = self._y_cols
         binding = self._bind("_mojolearn")
@@ -1150,7 +1150,7 @@ class KNeighborsClassifier(NearestNeighbors):
         # np.split), in Python over O(classes) ints.
         flat = uniq.tolist()
         off = 0
-        for i, (count, b) in enumerate(zip(n_classes, self._classes_list)):
+        for i, (count, b) in enumerate(zip(n_classes, self._classes_list)):  # glue: class set check per output column
             a = flat[off:off + count]
             off += count
             if a != b:
@@ -1177,10 +1177,10 @@ class KNeighborsClassifier(NearestNeighbors):
         # `labels` is the one-element sentinel in this arm.  The selected
         # flat probability buffer records the query count without retaining
         # an otherwise-unused labels matrix.
-        nq = proba.shape[0] // sum(n_classes)
+        nq = proba.shape[0] // sum(n_classes)  # glue: class counts per output column
         out = []
         off = 0
-        for n in n_classes:
+        for n in n_classes:  # glue: probability block slices per output
             # A slice of an Array COPIES (the _array contract).
             out.append(proba[off:off + nq * n].reshape((nq, n)))
             off += nq * n
@@ -1631,8 +1631,8 @@ class RadiusNeighbors(NumericModeMixin):
         ptr = indptr.tolist()
         cols64 = cols.astype("<i8")
         # glue: one view per query row, the ragged API's list of Arrays
-        ind = [cols64[ptr[i]:ptr[i + 1]] for i in range(nq)]
-        dst = [dists[ptr[i]:ptr[i + 1]] for i in range(nq)]
+        ind = [cols64[ptr[i]:ptr[i + 1]] for i in range(nq)]  # glue: ragged API: one index view per query
+        dst = [dists[ptr[i]:ptr[i + 1]] for i in range(nq)]  # glue: ragged API: one index view per query
         if return_distance:
             return dst, ind
         return ind

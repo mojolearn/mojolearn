@@ -172,7 +172,7 @@ class LinearSVC(_LinearSVMBase):
                 objectives.append(float(fx))
                 retcodes.append(int(rc))
             selected = []
-        for cls in selected:
+        for cls in selected:  # glue: one binary fit per selected class
             # the 0/1 target through the core helpers (equal_elements, cast_elements)
             y_enc = (codes == cls).astype("<f4")
             w, k, fx, rc = _qn_fit_one_target(

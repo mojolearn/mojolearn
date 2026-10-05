@@ -202,9 +202,9 @@ def _clone(value, *, parameter=False):
     """
     kind = type(value)
     if kind is dict:
-        return {key: _clone(item, parameter=True) for key, item in value.items()}
+        return {key: _clone(item, parameter=True) for key, item in value.items()}  # glue: estimator parameter clone, one entry per parameter
     if kind in (list, tuple, set, frozenset):
-        return kind(_clone(item, parameter=True) for item in value)
+        return kind(_clone(item, parameter=True) for item in value)  # glue: estimator parameter clone, one entry per parameter
     if not isinstance(value, type) and hasattr(value, '__sklearn_clone__'):
         return value.__sklearn_clone__()
     if isinstance(value, type) or not callable(getattr(value, 'get_params', None)):
@@ -212,10 +212,10 @@ def _clone(value, *, parameter=False):
             return copy.deepcopy(value)
         raise TypeError('cross_val_score estimator must implement get_params')
     parameters = {name: _clone(item, parameter=True)
-                  for name, item in value.get_params(deep=False).items()}
+                  for name, item in value.get_params(deep=False).items()}  # glue: estimator parameter clone, one entry per parameter
     result = kind(**parameters)
     actual = result.get_params(deep=False)
-    if any(actual[name] is not item for name, item in parameters.items()):
+    if any(actual[name] is not item for name, item in parameters.items()):  # glue: estimator parameter clone, one entry per parameter
         raise RuntimeError('estimator constructor must retain its parameter objects for cloning')
     return result
 
@@ -375,15 +375,15 @@ def _native_default_folds(y, n_splits, classifier):
                         class_counts.buffer_info()[0], fold_store.buffer_info()[0],
                         fold_counts.buffer_info()[0])
     if codes is not None:
-        counts = [int(class_counts[i]) for i in range(len(classes))]
-        if max(counts) < n_splits:
+        counts = [int(class_counts[i]) for i in range(len(classes))]  # glue: k class counts read back for the fold count checks
+        if max(counts) < n_splits:  # glue: k class counts read back for the fold count checks
             raise ValueError('cv cannot exceed the number of members in every class')
-        if min(counts) < n_splits:
+        if min(counts) < n_splits:  # glue: k class counts read back for the fold count checks
             warnings.warn('The least populated class has fewer members than cv folds',
                           UserWarning, stacklevel=4)
     select = _native('select_fold_i64')
     out = []
-    for fold in range(n_splits):
+    for fold in range(n_splits):  # glue: one native fold selection per fold (n_splits sized)
         size = int(fold_counts[fold])
         test = empty((size,), '<i8')
         train = empty((n - size,), '<i8')
@@ -432,7 +432,7 @@ def _canonical(value):
 def _digest(*chunks):
     """sha256 over length-prefixed chunks, so no two field layouts collide."""
     m = hashlib.sha256()
-    for chunk in chunks:
+    for chunk in chunks:  # glue: length-prefixed sha256 over a few descriptor chunks
         m.update(len(chunk).to_bytes(8, 'little'))
         m.update(chunk)
     return m.hexdigest()
@@ -501,7 +501,7 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
     if len(y) != len(X):
         raise ValueError('y must be a 1-D buffer array matching X rows')
     folds = []
-    for train, test in _folds(cv, estimator, X, y, groups):
+    for train, test in _folds(cv, estimator, X, y, groups):  # glue: one validated index pair per fold (n_splits sized)
         # ``_indices`` has already normalized both sides to signed Int64, and
         # Array.tolist() returns ordinary Python ints.  Re-wrapping every row
         # with ``int`` duplicated millions of Python calls when recording a
@@ -521,7 +521,7 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
         # A summary, NOT the pin; see the trap in this function's docstring.
         'fold_assignment_sha256': _digest(b'folds', _canonical(folds)),
         'n_folds': len(folds),
-        'fold_sizes': [[len(train), len(test)] for train, test in folds],
+        'fold_sizes': [[len(train), len(test)] for train, test in folds],  # glue: two size integers per fold (n_splits sized)
     }
     descriptor['sha256'] = hashlib.sha256(_canonical(descriptor)).hexdigest()
     return descriptor
@@ -634,7 +634,7 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
         # n_splits >= 2 is checked inside, so this is never empty.
         return X, y, _native_default_folds(y, 5 if cv is None else cv, _classifier(estimator))
     folds = []
-    for train, test in _folds(cv, estimator, X, y, groups):
+    for train, test in _folds(cv, estimator, X, y, groups):  # glue: one validated index pair per fold (n_splits sized)
         train = _indices(train, len(X), 'train')
         test = _indices(test, len(X), 'test')
         if _overlap(train, test, len(X)):
@@ -757,7 +757,7 @@ def _comb(n, k):
     if k < 0 or k > n:
         return 0
     out = 1
-    for i in range(1, k + 1):
+    for i in range(1, k + 1):  # glue: n choose k of argument counts, combinatorics only
         out = out * (n - k + i) // i
     return out
 
@@ -802,12 +802,12 @@ def _first_seen_native(y):
         return None
     first = array.array('q', bytes(8 * gc.m))
     _expansion_metrics_binding().x_metrics_first_rows(_addr_ro(gc.codes), n, gc.m, first.buffer_info()[0])  # cpu-route: first-seen class order for label encoding at splitter entry
-    order = sorted(range(gc.m), key=first.__getitem__)
+    order = sorted(range(gc.m), key=first.__getitem__)  # glue: class order by first row over the k classes
     table = [0] * gc.m
-    for rank, c in enumerate(order):
+    for rank, c in enumerate(order):  # glue: class order by first row over the k classes
         table[c] = rank
     words = gc.mapped(table)
-    return Array._owned(words, (n,), '<i4', 'C'), gc.m, [gc.counts[c] for c in order]
+    return Array._owned(words, (n,), '<i4', 'C'), gc.m, [gc.counts[c] for c in order]  # glue: class order by first row over the k classes
 
 
 def _encode_sorted(values):
@@ -980,7 +980,7 @@ class _GroupCodes:
         """[(train, test)] per fold f < k from each group's fold `to_fold[g]`
         (int32 words) and each fold's row count `sizes[f]`."""
         words = self.mapped(to_fold)
-        return [self.rows(words, f, int(sizes[f])) for f in range(k)]
+        return [self.rows(words, f, int(sizes[f])) for f in range(k)]  # glue: one native row split per fold (k folds)
 
 
 _LITTLE_ENDIAN = __import__('sys').byteorder == 'little'
@@ -1000,11 +1000,11 @@ class _Splitter:
     (train, test) Int64 index Arrays; get_n_splits."""
 
     def __repr__(self):
-        params = ', '.join(f'{k}={v!r}' for k, v in sorted(self.get_params().items()))
+        params = ', '.join(f'{k}={v!r}' for k, v in sorted(self.get_params().items()))  # glue: repr and params over the splitter attributes
         return f'{type(self).__name__}({params})'
 
     def get_params(self, deep=True):
-        return {k: v for k, v in vars(self).items() if not k.startswith('_')}
+        return {k: v for k, v in vars(self).items() if not k.startswith('_')}  # glue: repr and params over the splitter attributes
 
     def _test_folds(self, X, y, groups):
         raise NotImplementedError
@@ -1060,7 +1060,7 @@ class KFold(_KFoldBase):
             perm = rng.permutation_rows([n])[0]
             whole = Array._owned(perm, (n,), '<i8', 'C')
             start = 0
-            for fold in range(self.n_splits):
+            for fold in range(self.n_splits):  # glue: one native row split per fold (n_splits sized)
                 size = n // self.n_splits + (fold < n % self.n_splits)
                 yield _split_indices(whole[start:start + size], n)
                 start += size
@@ -1101,7 +1101,7 @@ class StratifiedKFold(_KFoldBase):
         sizes = _zeros_i64(self.n_splits)
         _native('bincount_i64')(_addr_ro(folds), 2, n, self.n_splits, _addr(sizes), 0)
         select = _native('select_fold_i64')
-        for f, size in enumerate(sizes.tolist()):
+        for f, size in enumerate(sizes.tolist()):  # glue: one native row split per fold (n_splits sized)
             test, train = empty((size,), '<i8'), empty((n - size,), '<i8')
             scratch = empty((n,), '<i8')
             select(_addr_ro(folds), n, f, _addr(test) if size else _addr(scratch),
@@ -1125,10 +1125,10 @@ class StratifiedKFold(_KFoldBase):
             cnt = _zeros_i64(max(len(classes), 1))
             k = int(_native('first_seen_i32')(_addr_ro(codes), n, max(len(classes), 1), _addr(enc), _addr(cnt)))
             counts = cnt.tolist()[:k]
-        if not counts or max(counts) < self.n_splits:
+        if not counts or max(counts) < self.n_splits:  # glue: fold count checks over the k class counts
             raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
                              'each class.')
-        if min(counts) < self.n_splits:
+        if min(counts) < self.n_splits:  # glue: fold count checks over the k class counts
             warnings.warn(f'The least populated class in y has only {min(counts)} members, which is less '
                           f'than n_splits={self.n_splits}.', UserWarning, stacklevel=3)
         # alloc[i][c] = the positions p of class c in sorted(enc) (the run
@@ -1149,7 +1149,7 @@ class StratifiedKFold(_KFoldBase):
         perms = None
         if rng is not None:
             perms = array.array('q')
-            for p in rng.permutation_rows(counts):
+            for p in rng.permutation_rows(counts):  # glue: concatenates the k per-class device draws
                 perms.frombytes(p.tobytes())
         out = empty((n,), '<i4')
         _native('strat_fold_assign_i32')(_addr_ro(enc), n, k, K, _addr_ro(alloc),
@@ -1336,7 +1336,7 @@ class TimeSeriesSplit(_Splitter):
         if n - self.gap - test_size * self.n_splits <= 0:
             raise ValueError(f'Too many splits={self.n_splits} for number of samples={n} with '
                              f'test_size={test_size} and gap={self.gap}.')
-        for start in range(n - self.n_splits * test_size, n, test_size):
+        for start in range(n - self.n_splits * test_size, n, test_size):  # glue: one index range pair per split (n_splits sized)
             end = start - self.gap
             lo = end - self.max_train_size if self.max_train_size and self.max_train_size < end else 0
             yield _as_index(range(lo, end)), _as_index(range(start, start + test_size))
@@ -1356,7 +1356,7 @@ class LeaveOneOut(_Splitter):
             raise ValueError(f'Cannot perform LeaveOneOut with n_samples={n_splits}.')
         leave = _native('leave_range_i64')
         # split s: test row s, train every other row, written in Mojo
-        for s in range(n_splits):
+        for s in range(n_splits):  # glue: one native leave-range call per split
             train, test = empty((n_splits - 1,), '<i8'), empty((1,), '<i8')
             leave(n_splits, s, s + 1, _addr(train), _addr(test))
             yield train, test
@@ -1407,7 +1407,7 @@ class LeaveOneGroupOut(_Splitter):
             raise ValueError(f'The groups parameter contains fewer than 2 unique groups ({gc.classes}). '
                              'LeaveOneGroupOut expects at least 2.')
         # each group's rows straight from the codes (lane/py-misc-msel)
-        for gi in range(gc.m):
+        for gi in range(gc.m):  # glue: one native row split per group (m groups)
             yield gc.rows(gc.codes, gi, gc.counts[gi])
 
     def _test_folds(self, X, y, groups):
@@ -1438,11 +1438,11 @@ class LeavePGroupsOut(_Splitter):
             raise ValueError(f'The groups parameter contains fewer than (or equal to) n_groups '
                              f'({self.n_groups}) numbers of unique groups ({gc.classes}).')
         # the chosen groups as a per-group table, gathered per row (lane/py-misc-msel)
-        for combo in itertools.combinations(range(gc.m), self.n_groups):
+        for combo in itertools.combinations(range(gc.m), self.n_groups):  # glue: one per-group table per combination of groups
             table = [0] * gc.m
-            for g in combo:
+            for g in combo:  # glue: one per-group table per combination of groups
                 table[g] = 1
-            yield gc.rows(gc.mapped(table), 1, sum(gc.counts[g] for g in combo))
+            yield gc.rows(gc.mapped(table), 1, sum(gc.counts[g] for g in combo))  # glue: one per-group table per combination of groups
 
     def _test_folds(self, X, y, groups):
         import itertools
@@ -1474,7 +1474,7 @@ class _Repeated:
         # Repeat r draws its own seed from the base seed, so every repeat is
         # a different shuffle and the whole sequence is fixed by random_state.
         base = _rng(self.random_state)
-        for r in range(self.n_repeats):
+        for r in range(self.n_repeats):  # glue: one splitter run per repeat (n_repeats sized)
             seed = _mix_seed(base.seed, r)
             yield from self.cv(random_state=seed, shuffle=True, **self.cvargs).split(X, y, groups)
 
@@ -1563,7 +1563,7 @@ class ShuffleSplit(_Splitter):
         n_train, n_test = self._sizes(n)
         rng = _rng(self.random_state)
         # the permutations as Int64 rows, sliced as arrays (lane metrics-apple2)
-        for perm in rng.permutation_rows([n] * self.n_splits):
+        for perm in rng.permutation_rows([n] * self.n_splits):  # glue: one device permutation per split (n_splits sized)
             yield (Array._owned(perm[n_test:n_test + n_train], (n_train,), '<i8', 'C'),
                    Array._owned(perm[:n_test], (n_test,), '<i8', 'C'))
 
@@ -1587,7 +1587,7 @@ class GroupShuffleSplit(ShuffleSplit):
             counts = array.array('q', gc.counts)
             table = array.array('i', bytes(4 * m))
             sums = array.array('q', [0, 0])
-            for perm in rng.permutation_rows([m] * self.n_splits):
+            for perm in rng.permutation_rows([m] * self.n_splits):  # glue: one device permutation per split (n_splits sized)
                 _native('msel_split_table_i32')(perm.buffer_info()[0], m, n_test, n_train,
                                                 counts.buffer_info()[0], table.buffer_info()[0],
                                                 sums.buffer_info()[0])
@@ -1682,25 +1682,25 @@ class StratifiedShuffleSplit(ShuffleSplit):
             return None
         n, k, counts = gc.n, gc.m, gc.counts
         n_train, n_test = self._sizes(n)
-        if min(counts) < 2:
+        if min(counts) < 2:  # glue: least populated class check over k class counts
             raise ValueError('The least populated classes in y have only 1 member, which is too few. The '
                              'minimum number of groups for any class cannot be less than 2.')
         if n_train < k:
             raise ValueError(f'The train_size = {n_train} should be greater or equal to the number of classes = {k}')
         if n_test < k:
             raise ValueError(f'The test_size = {n_test} should be greater or equal to the number of classes = {k}')
-        rows = [gc.only(gc.codes, c, counts[c]) for c in range(k)]
+        rows = [gc.only(gc.codes, c, counts[c]) for c in range(k)]  # glue: one native row selection per class (k classes)
         rng = _rng(self.random_state)
 
         def gen():
-            for _ in range(self.n_splits):
+            for _ in range(self.n_splits):  # glue: one split per iteration (n_splits sized)
                 n_i = _approximate_mode(counts, n_train, rng)
                 t_i = _approximate_mode([c - a for c, a in zip(counts, n_i)], n_test, rng)
-                tr_len, te_len = sum(n_i), sum(t_i)
+                tr_len, te_len = sum(n_i), sum(t_i)  # glue: train and test sizes summed over k classes
                 train = empty((tr_len,), '<i8')
                 test = empty((te_len,), '<i8')
                 at_tr = at_te = 0
-                for c, perm in enumerate(rng.permutation_rows(counts)):
+                for c, perm in enumerate(rng.permutation_rows(counts)):  # glue: one native row selection per class (k classes)
                     p0 = perm.buffer_info()[0]
                     tab = _addr_ro(rows[c])
                     gather64(tab, counts[c], p0, n_i[c], _addr(train) + 8 * at_tr)
@@ -1739,7 +1739,7 @@ class PredefinedSplit(_Splitter):
         if gc is not None:
             # the sorted fold values natively, each fold's rows by its code
             # (lane/py-misc-msel)
-            for c, f in enumerate(gc.classes):
+            for c, f in enumerate(gc.classes):  # glue: one native row split per fold value
                 if f != -1:
                     yield gc.rows(gc.codes, c, gc.counts[c])
             return
@@ -1839,7 +1839,7 @@ def train_test_split(*arrays, test_size=None, train_size=None, random_state=None
     if not arrays:
         raise ValueError('At least one array required as input')
     n = _n_samples(arrays[0])
-    if any(_n_samples(a) != n for a in arrays):
+    if any(_n_samples(a) != n for a in arrays):  # glue: sample-count check over the input arrays
         raise ValueError('Found input variables with inconsistent numbers of samples: '
                          f'{[_n_samples(a) for a in arrays]}')
     n_train, n_test = _validate_shuffle_split(n, test_size, train_size, 0.25)
@@ -1852,7 +1852,7 @@ def train_test_split(*arrays, test_size=None, train_size=None, random_state=None
         cv = cls(n_splits=1, test_size=n_test, train_size=n_train, random_state=random_state)
         train, test = next(cv.split(arrays[0], stratify))
     out = []
-    for a in arrays:
+    for a in arrays:  # glue: sample-count check over the input arrays
         out.extend([_take_any(a, train), _take_any(a, test)])
     return out
 
@@ -1988,7 +1988,7 @@ class _Scorer:
         methods = self._response_method
         if isinstance(methods, str):
             methods = (methods,)
-        for m in methods:
+        for m in methods:  # glue: response method names tried in order
             fn = getattr(estimator, m, None)
             if fn is not None:
                 break
@@ -2081,11 +2081,11 @@ def _scorer_table():
         'normalized_mutual_info_score': s(m.normalized_mutual_info_score),
         'fowlkes_mallows_score': s(m.fowlkes_mallows_score),
     }
-    for base, fn in (('precision', m.precision_score), ('recall', m.recall_score), ('f1', m.f1_score),
+    for base, fn in (('precision', m.precision_score), ('recall', m.recall_score), ('f1', m.f1_score),  # glue: scorer table over the scorer names
                      ('jaccard', m.jaccard_score)):
-        for avg in ('macro', 'micro', 'weighted'):
+        for avg in ('macro', 'micro', 'weighted'):  # glue: scorer table over the scorer names
             t[f'{base}_{avg}'] = s(fn, average=avg)
-    for name, sc in t.items():
+    for name, sc in t.items():  # glue: scorer table over the scorer names
         sc._name = sc._name or name
     return t
 
@@ -2093,7 +2093,7 @@ def _scorer_table():
 def get_scorer_names():
     """The scorer names `get_scorer` accepts (scikit-learn's, less the
     multilabel 'samples' averages, which are NOT IMPLEMENTED)."""
-    return sorted(_scorer_table())
+    return sorted(_scorer_table())  # glue: scorer table over the scorer names
 
 
 def get_scorer(scoring):
@@ -2112,9 +2112,9 @@ def get_scorer(scoring):
 def _scorers(scoring):
     """{name: scorer} for multimetric scoring, or (None, single) for one."""
     if isinstance(scoring, (list, tuple, set)):
-        return {s: get_scorer(s) for s in scoring}
+        return {s: get_scorer(s) for s in scoring}  # glue: scorer table over the scorer names
     if isinstance(scoring, dict):
-        return {k: get_scorer(v) for k, v in scoring.items()}
+        return {k: get_scorer(v) for k, v in scoring.items()}  # glue: scorer table over the scorer names
     return None
 
 
@@ -2141,7 +2141,7 @@ def _cv_folds(estimator, X, y, cv, groups):
         y = flatten_labels(y)
     splitter = check_cv(cv, y, classifier=_classifier(estimator))
     folds = []
-    for train, test in splitter.split(X, y, groups):
+    for train, test in splitter.split(X, y, groups):  # glue: one validated index pair per fold (n_splits sized)
         train = _indices(train, len(X), 'train')
         test = _indices(test, len(X), 'test')
         if _overlap(train, test, len(X)):
@@ -2183,7 +2183,7 @@ def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=Fa
     single = None if multi is not None else get_scorer(scoring)
     names = list(multi) if multi is not None else ['score']
     out = {'fit_time': [], 'score_time': []}
-    for nm in names:
+    for nm in names:  # glue: one result list per scorer name
         out[f'test_{nm}'] = []
         if return_train_score:
             out[f'train_{nm}'] = []
@@ -2202,7 +2202,7 @@ def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=Fa
 def _cross_validate_loop(estimator, y, folds, rows, names, multi, single, out, ests, idx,
                          return_train_score, return_estimator, return_indices, error_score):
     import time
-    for i, (train, test) in enumerate(folds):
+    for i, (train, test) in enumerate(folds):  # glue: one fit and score per fold (n_splits sized)
         est = _clone(estimator)
         t0 = time.perf_counter()
         Xtr, ytr, Xte, yte = rows.take(i, None if y is rows.y else y)
@@ -2214,7 +2214,7 @@ def _cross_validate_loop(estimator, y, folds, rows, names, multi, single, out, e
                 raise
             ok = False
         t1 = time.perf_counter()
-        for nm in names:
+        for nm in names:  # glue: one result list per scorer name
             sc = multi[nm] if multi is not None else single
             out[f'test_{nm}'].append(_score(est, Xte, yte, sc) if ok else float(error_score))
             if return_train_score:
@@ -2226,7 +2226,7 @@ def _cross_validate_loop(estimator, y, folds, rows, names, multi, single, out, e
         if return_indices:
             idx['train'].append(train)
             idx['test'].append(test)
-    res = {k: Array.from_list(v, '<f8') for k, v in out.items()}
+    res = {k: Array.from_list(v, '<f8') for k, v in out.items()}  # glue: one result list per scorer name
     if return_estimator:
         res['estimator'] = ests
     if return_indices:
@@ -2259,13 +2259,13 @@ def _cross_val_predict_native(estimator, X, y, folds, n, method):
     the G5 input-prep case)."""
     import ctypes
     from ._buffer import _output_store
-    total = sum(int(test.size) for _, test in folds)
+    total = sum(int(test.size) for _, test in folds)  # glue: fold sizes summed over the folds
     if total != n:
         raise ValueError('cross_val_predict only works for partitions')
     held = _output_store('q', n)
     at = 0
     keep = []
-    for _, test in folds:
+    for _, test in folds:  # glue: fold sizes summed over the folds
         t = test if test.dtype == '<i8' and test._has_order('C') else test.astype('<i8')._as_c()
         ctypes.memmove(held.buffer_info()[0] + 8 * at, _addr_ro(t), 8 * t.size)
         at += t.size
@@ -2284,10 +2284,10 @@ def _cross_val_predict_native(estimator, X, y, folds, n, method):
 
 def _cross_val_predict_place(preds, n, res):
     numeric = all(isinstance(p, Array) and p.dtype in ('<f4', '<f8', '<i4', '<i8', '<u4', '<u1')
-                  and p.ndim >= 1 and p.shape[0] == t.size for p, t in preds)
+                  and p.ndim >= 1 and p.shape[0] == t.size for p, t in preds)  # glue: per-fold dtype and shape checks
     width = tuple(preds[-1][0].shape[1:]) if numeric else ()
-    if numeric and all(tuple(p.shape[1:]) == width for p, _ in preds):
-        integral = not width and all(p.dtype[1] in 'iu' for p, _ in preds)
+    if numeric and all(tuple(p.shape[1:]) == width for p, _ in preds):  # glue: per-fold dtype and shape checks
+        integral = not width and all(p.dtype[1] in 'iu' for p, _ in preds)  # glue: per-fold dtype and shape checks
         dtype = '<i8' if integral else '<f8'
         out = empty((n,) + width, dtype)
         cols = 1
@@ -2337,31 +2337,31 @@ class ParameterGrid:
             param_grid = [param_grid]
         if not isinstance(param_grid, (list, tuple)):
             raise TypeError(f'Parameter grid should be a dict or a list, got: {param_grid!r}')
-        for g in param_grid:
+        for g in param_grid:  # glue: parameter grid over the candidate dicts
             if not isinstance(g, dict):
                 raise TypeError(f'Parameter grid is not a dict ({g!r})')
-            for k, v in g.items():
+            for k, v in g.items():  # glue: parameter grid over the candidate dicts
                 if isinstance(v, str) or not hasattr(v, '__iter__'):
                     raise TypeError(f'Parameter grid for parameter {k!r} needs to be a list, got: {v!r}')
                 if len(list(v)) == 0:
                     raise ValueError(f'Parameter grid for parameter {k!r} need to be a non-empty sequence.')
-        self.param_grid = [dict(g) for g in param_grid]
+        self.param_grid = [dict(g) for g in param_grid]  # glue: parameter grid over the candidate dicts
 
     def __iter__(self):
         import itertools
-        for g in self.param_grid:
-            keys = sorted(g)
+        for g in self.param_grid:  # glue: parameter grid over the candidate dicts
+            keys = sorted(g)  # glue: parameter grid over the candidate dicts
             if not keys:
                 yield {}
                 continue
-            for combo in itertools.product(*[list(g[k]) for k in keys]):
+            for combo in itertools.product(*[list(g[k]) for k in keys]):  # glue: parameter grid over the candidate dicts
                 yield dict(zip(keys, combo))
 
     def __len__(self):
         total = 0
-        for g in self.param_grid:
+        for g in self.param_grid:  # glue: parameter grid over the candidate dicts
             size = 1
-            for v in g.values():
+            for v in g.values():  # glue: parameter grid over the candidate dicts
                 size *= len(list(v))
             total += size
         return total
@@ -2379,8 +2379,8 @@ class ParameterSampler:
     def __init__(self, param_distributions, n_iter, *, random_state=None):
         if isinstance(param_distributions, dict):
             param_distributions = [param_distributions]
-        for d in param_distributions:
-            for k, v in d.items():
+        for d in param_distributions:  # glue: parameter grid over the candidate dicts
+            for k, v in d.items():  # glue: parameter grid over the candidate dicts
                 if hasattr(v, 'rvs'):
                     raise NotImplementedError(
                         f'mojolearn ParameterSampler: {k!r} is a scipy.stats distribution; its draws are '
@@ -2400,7 +2400,7 @@ class ParameterSampler:
                           UserWarning, stacklevel=2)
             n_iter = len(grid)
         perm = _rng(self.random_state).permutation(len(grid))
-        for j in perm[:n_iter]:
+        for j in perm[:n_iter]:  # glue: parameter grid over the candidate dicts
             yield grid[j]
 
     def __len__(self):
@@ -2439,11 +2439,11 @@ class _BaseSearch:
 
     def get_params(self, deep=False):
         import inspect
-        names = [p for p in inspect.signature(type(self).__init__).parameters if p != 'self']
-        return {k: getattr(self, k) for k in names}
+        names = [p for p in inspect.signature(type(self).__init__).parameters if p != 'self']  # glue: estimator parameters over the init names
+        return {k: getattr(self, k) for k in names}  # glue: estimator parameters over the init names
 
     def set_params(self, **params):
-        for k, v in params.items():
+        for k, v in params.items():  # glue: estimator parameters over the init names
             setattr(self, k, v)
         return self
 
@@ -2461,8 +2461,8 @@ class _BaseSearch:
                              'whole data and make the best_* attributes available for that metric.')
         scoring = multi if multi is not None else self.scoring
         results = {'params': candidates}
-        per = {nm: [] for nm in names}
-        trains = {nm: [] for nm in names}
+        per = {nm: [] for nm in names}  # glue: result lists over the scorer names
+        trains = {nm: [] for nm in names}  # glue: result lists over the scorer names
         n_splits = None
         # the folds are drawn ONCE for every candidate (scikit-learn's
         # evaluate_candidates materializes cv.split once)
@@ -2470,28 +2470,28 @@ class _BaseSearch:
         # X, y and the fold indices stay resident on the device for every
         # candidate (lane cpu2-l4-modelsel)
         with _FoldRows(Xf, yf, folds, device_rows=_device_rows_ok(self.estimator, scoring)) as rows:
-            for params in candidates:
+            for params in candidates:  # glue: one cross-validation per candidate
                 est = _clone(self.estimator)
                 if hasattr(est, 'set_params'):
                     est.set_params(**params)
                 else:
-                    for k, v in params.items():
+                    for k, v in params.items():  # glue: candidate parameters set by name
                         setattr(est, k, v)
                 est = _Pinned(est)
                 cvr = _cross_validate_folds(est, Xf, yf, folds, scoring,
                                             return_train_score=self.return_train_score,
                                             error_score=self.error_score, rows=rows)
-                for nm in names:
+                for nm in names:  # glue: result lists over the scorer names
                     per[nm].append(cvr[f'test_{nm}'].tolist())
                     if self.return_train_score:
                         trains[nm].append(cvr[f'train_{nm}'].tolist())
                 n_splits = len(cvr['fit_time'])
-        for k in sorted({k for p in candidates for k in p}):
-            results[f'param_{k}'] = [p.get(k) for p in candidates]
-        for nm in names:
+        for k in sorted({k for p in candidates for k in p}):  # glue: param columns over the candidate keys
+            results[f'param_{k}'] = [p.get(k) for p in candidates]  # glue: param columns over the candidate keys
+        for nm in names:  # glue: result lists over the scorer names
             suffix = '' if multi is None else f'_{nm}'
-            for i in range(n_splits):
-                results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')
+            for i in range(n_splits):  # glue: one score column per split index
+                results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')  # glue: one score column per split index
             # glue: explicit scalar tail over the candidates x folds scores (Python floats, not data)
             means = [math.fsum(s) / len(s) for s in per[nm]]  # glue: one mean per candidate
             stds = [math.sqrt(math.fsum((v - m) * (v - m) for v in s) / len(s))  # glue: one std per candidate
@@ -2609,7 +2609,7 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
     Xf, yf, folds = _cv_folds(_Pinned(estimator), X, y, cv, groups)
     tr, te = [], []
     with _FoldRows(Xf, yf, folds, device_rows=_device_rows_ok(estimator, scoring)) as rows:
-        for v in param_range:
+        for v in param_range:  # glue: one cross-validation per parameter value
             est = _clone(estimator)
             est.set_params(**{param_name: v})
             r = _cross_validate_folds(_Pinned(est), Xf, yf, folds, scoring, return_train_score=True,
@@ -2617,8 +2617,8 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
             tr.append(r['train_score'].tolist())
             te.append(r['test_score'].tolist())
     k = len(tr[0])
-    return (Array.from_list([v for row in tr for v in row], '<f8').reshape((len(tr), k)),
-            Array.from_list([v for row in te for v in row], '<f8').reshape((len(te), k)))
+    return (Array.from_list([v for row in tr for v in row], '<f8').reshape((len(tr), k)),  # glue: score rows flattened into the result block
+            Array.from_list([v for row in te for v in row], '<f8').reshape((len(te), k)))  # glue: score rows flattened into the result block
 
 
 def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.55, 0.775, 1.0), cv=None,
@@ -2628,23 +2628,23 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
     (train_sizes_abs, train_scores, test_scores[, fit_times, score_times])."""
     import time
     X, y, folds = _cv_folds(estimator, X, y, cv, groups)
-    n_max = min(len(tr) for tr, _ in folds)
+    n_max = min(len(tr) for tr, _ in folds)  # glue: smallest training fold size over the folds
     sizes = []
-    for s in train_sizes:
+    for s in train_sizes:  # glue: train size arguments resolved and sorted
         a = int(math.floor(s * n_max)) if isinstance(s, float) else int(s)
         if not 0 < a <= n_max:
             raise ValueError(f'train_sizes has been interpreted as absolute numbers of training samples and '
                              f'must be within (0, {n_max}], but is within [{a}, {a}].')
         sizes.append(a)
-    sizes = sorted(set(sizes))
+    sizes = sorted(set(sizes))  # glue: train size arguments resolved and sorted
     # scikit-learn permutes each fold's training rows ONCE (in fold order)
     # and takes nested prefixes of that one order for every size
     rng = _rng(random_state) if shuffle else None
     orders = []
     # the draws, in fold order, as Int64 rows from one device program,
     # and each fold's training rows reordered by the core gather
-    perms = rng.permutation_rows([int(tr.size) for tr, _ in folds]) if rng is not None else None
-    for f, (train, _) in enumerate(folds):
+    perms = rng.permutation_rows([int(tr.size) for tr, _ in folds]) if rng is not None else None  # glue: one device permutation length per fold
+    for f, (train, _) in enumerate(folds):  # glue: one device permutation length per fold
         tr = train if train.dtype == '<i8' and train._has_order('C') else train.astype('<i8')._as_c()
         if perms is not None and tr.size:
             perm = Array._owned(perms[f], (tr.size,), '<i8', 'C')
@@ -2660,9 +2660,9 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
     def take(values, idx):
         return _take_rows(values, idx) if isinstance(values, list) else res.take(values, idx)
     try:
-        for a in sizes:
+        for a in sizes:  # glue: one fit per size and fold
             row_tr, row_te, row_ft, row_st = [], [], [], []
-            for (train, test), tr_idx in zip(folds, orders):
+            for (train, test), tr_idx in zip(folds, orders):  # glue: one fit per size and fold
                 sub = tr_idx[0:a]
                 est = _clone(estimator)
                 t0 = time.perf_counter()
@@ -2683,7 +2683,7 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
         res.close()
     k = len(folds)
     shape = (len(sizes), k)
-    pack = lambda m: Array.from_list([v for row in m for v in row], '<f8').reshape(shape)
+    pack = lambda m: Array.from_list([v for row in m for v in row], '<f8').reshape(shape)  # glue: score rows flattened into the result block
     out = [Array.from_list(sizes, '<i8'), pack(tr_s), pack(te_s)]
     if return_times:
         out += [pack(ft), pack(st)]
@@ -2835,7 +2835,7 @@ class _NativePermutation:
         rng = _rng(random_state)
         order = None if groups is None else self._group_order(groups)
         perm_scores = []
-        for _ in range(n_permutations):
+        for _ in range(n_permutations):  # glue: one permuted cross-validation per permutation
             if order is None:
                 idx = rng.permutation_rows([n])[0]
             else:
@@ -2876,7 +2876,7 @@ class _NativePermutation:
         prog.stage("rows64", n, inv, w_inv)
         _execute(prog, None)
         offs = prog.ints(off, m + 1)
-        sizes = [offs[g + 1] - offs[g] for g in range(m)]
+        sizes = [offs[g + 1] - offs[g] for g in range(m)]  # glue: group sizes from the m+1 offsets
         return sizes, prog.words(w_ord, 2 * n, "q"), prog.words(w_inv, 2 * n, "q")
 
     def _group_index(self, rng, order):
@@ -2886,7 +2886,7 @@ class _NativePermutation:
         src = array.array('q', bytes(8 * n))
         s0, o0 = src.buffer_info()[0], ordr.buffer_info()[0]
         at = 0
-        for size, perm in zip(sizes, rng.permutation_rows(sizes)):
+        for size, perm in zip(sizes, rng.permutation_rows(sizes)):  # glue: one device gather per group (m groups)
             self.gather64(o0 + 8 * at, size, perm.buffer_info()[0], size, s0 + 8 * at)
             at += size
         idx = array.array('q', bytes(8 * n))

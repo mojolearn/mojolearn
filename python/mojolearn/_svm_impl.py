@@ -197,7 +197,7 @@ def _as_labels(y):
         # One-vs-one over the binary solver (`SVC._fit_ovo`): the caller
         # forms each pair's rows and 0.0 / 1.0 labels from these int32 codes.
         return None, classes, codes_arr
-    if not all(isinstance(c, numbers.Real) for c in classes):
+    if not all(isinstance(c, numbers.Real) for c in classes):  # glue: type check over the k class labels
         # String (or other non-numeric) labels: the solver sees each row's
         # dense code, 0.0 or 1.0, so `classes_[1]` still maps to +1 and the
         # label pair it reports back is (0.0, 1.0). Numeric labels keep the
@@ -262,7 +262,7 @@ def _c_rows(binding, C, n_rows, sample_weight, class_weight=None, y=None, who="S
             cw = [n_rows / (len(classes) * counts[k]) for k in range(len(classes))]
         else:
             cw = [1.0] * len(classes)
-            for key, value in dict(class_weight).items():
+            for key, value in dict(class_weight).items():  # glue: user class_weight dict entries
                 if key not in classes:
                     raise ValueError(
                         f"mojolearn {who}: class_weight names the label {key!r}, "
@@ -367,10 +367,10 @@ def _concat_f32(blocks):
     """The float32 elements of every block, in order, as one flat Array
     (byte copies; the saved pair arrays)."""
     from ._bufcheck import memcopy
-    parts = [as_f32_c(b, ndim=None, name="block")[0] for b in blocks]
-    out = empty((max(sum(p.size for p in parts), 0),), "<f4")
+    parts = [as_f32_c(b, ndim=None, name="block")[0] for b in blocks]  # glue: byte copies of the saved pair blocks
+    out = empty((max(sum(p.size for p in parts), 0),), "<f4")  # glue: byte copies of the saved pair blocks
     at = addr(out, name="pairs") if out.size else 0
-    for p in parts:
+    for p in parts:  # glue: byte copies of the saved pair blocks
         if p.size:
             memcopy(at, addr_ro(p, name="block"), 4 * p.size)
             at += 4 * p.size
@@ -897,8 +897,8 @@ class SVC(NumericModeMixin):
         pair_no = 0
         n_all = codes.shape[0]
         c_col = None if c_rows is None else c_rows.reshape((n_all, 1))
-        for ci in range(k):
-            for cj in range(ci + 1, k):
+        for ci in range(k):  # glue: one probability fit per class pair
+            for cj in range(ci + 1, k):  # glue: one probability fit per class pair
                 # the pair's rows in row order, selected in the binding (a
                 # device compaction on a GPU install); libsvm's +1 is class ci
                 idx_a, lab_a, _ = _pair_select(native, codes, ci, cj)
@@ -910,7 +910,7 @@ class SVC(NumericModeMixin):
                 # on a GPU install; no Python list over the rows)
                 dec_perm = zeros((max(n, 1),), "<f4")
                 consts = [0.0] * 10
-                for f in range(5):
+                for f in range(5):  # glue: five Platt folds per pair
                     begin = f * n // 5
                     end = (f + 1) * n // 5
                     h = end - begin
@@ -958,8 +958,8 @@ class SVC(NumericModeMixin):
                 ab.append((ab_out[0], ab_out[1]))
                 pair_no += 1
         self._prob_ab = ab
-        self.probA_ = Array.from_list([a for a, _ in ab], "<f8")
-        self.probB_ = Array.from_list([b for _, b in ab], "<f8")
+        self.probA_ = Array.from_list([a for a, _ in ab], "<f8")  # glue: per-pair sigmoid parameters
+        self.probB_ = Array.from_list([b for _, b in ab], "<f8")  # glue: per-pair sigmoid parameters
 
     def _fit_ovo(self, x, classes, codes, gamma, c_rows):
         """MULTICLASS: one-vs-one, libsvm's (and scikit-learn's SVC's)
@@ -982,8 +982,8 @@ class SVC(NumericModeMixin):
         k = len(classes)
         native = self._bind(_EXT_NAME)
         pairs = []
-        for i in range(k):
-            for j in range(i + 1, k):
+        for i in range(k):  # glue: one binary machine per class pair
+            for j in range(i + 1, k):  # glue: one binary machine per class pair
                 # the pair's rows in row order, their 0.0 / 1.0 labels and
                 # bounds, selected in the binding (a device compaction on a
                 # GPU install), then their X rows gathered there
@@ -1068,9 +1068,9 @@ class SVC(NumericModeMixin):
         self.support_vectors_ = (Array.from_list(sv_rows, "<f4") if n_sv
                                  else zeros((0, n_cols), "<f4"))
         self.dual_coef_ = Array.from_list(dual, "<f4") if n_sv else zeros((k - 1, 0), "<f4")
-        self.intercept_ = Array.from_list([-p["b"] for p in pairs], "<f4")
+        self.intercept_ = Array.from_list([-p["b"] for p in pairs], "<f4")  # glue: per-pair intercepts and iteration counts
         self.n_support_ = Array.from_list(n_support, "<i4")
-        self.n_iter_ = Array.from_list([p["n_iter"] for p in pairs], "<i4")
+        self.n_iter_ = Array.from_list([p["n_iter"] for p in pairs], "<i4")  # glue: per-pair intercepts and iteration counts
 
     def _set_ovo_native(self, native, classes, pairs, x, n_cols):
         """`_set_ovo` in the binding (lane/apple-fast-py2mojo-linear,
@@ -1079,18 +1079,18 @@ class SVC(NumericModeMixin):
         support_ (the bytes the per-class dict held)."""
         k = len(classes)
         n_rows = x.shape[0]
-        sup_arrays = [_i32(p["support"]) for p in pairs]
-        ms = [p["dual"].shape[1] for p in pairs]
-        cap = min(n_rows, sum(ms))
+        sup_arrays = [_i32(p["support"]) for p in pairs]  # glue: per-pair support arrays and sizes
+        ms = [p["dual"].shape[1] for p in pairs]  # glue: per-pair support arrays and sizes
+        cap = min(n_rows, sum(ms))  # glue: per-pair support arrays and sizes
         meta = [k, n_rows, len(pairs)]
-        for p, m in zip(pairs, ms):
+        for p, m in zip(pairs, ms):  # glue: per-pair support arrays and sizes
             meta += [p["i"], p["j"], m]
         support = empty((max(1, cap),), "<i4")
         n_support = empty((k,), "<i4")
         dual = empty((max(1, (k - 1) * cap),), "<f4")
         n_sv = int(native.svc_ovo_layout(
-            [addr_ro(a, name="pair support") if m else 0 for a, m in zip(sup_arrays, ms)],
-            [addr_ro(p["dual"], name="pair dual") if m else 0 for p, m in zip(pairs, ms)],
+            [addr_ro(a, name="pair support") if m else 0 for a, m in zip(sup_arrays, ms)],  # glue: per-pair support arrays and sizes
+            [addr_ro(p["dual"], name="pair dual") if m else 0 for p, m in zip(pairs, ms)],  # glue: per-pair support arrays and sizes
             meta,
             [addr(support, name="support_"), addr(n_support, name="n_support_"),
              addr(dual, name="dual_coef_"), cap]))
@@ -1105,9 +1105,9 @@ class SVC(NumericModeMixin):
             self.support_ = zeros((0,), "<i4")
             self.support_vectors_ = zeros((0, n_cols), "<f4")
             self.dual_coef_ = zeros((k - 1, 0), "<f4")
-        self.intercept_ = Array.from_list([-p["b"] for p in pairs], "<f4")
+        self.intercept_ = Array.from_list([-p["b"] for p in pairs], "<f4")  # glue: per-pair intercepts and iteration counts
         self.n_support_ = n_support
-        self.n_iter_ = Array.from_list([p["n_iter"] for p in pairs], "<i4")
+        self.n_iter_ = Array.from_list([p["n_iter"] for p in pairs], "<i4")  # glue: per-pair intercepts and iteration counts
 
     def _dual_times_sv(self, dual_coef, support_vectors, out=None, row=0, negate=False):
         """`dual_coef_ @ support_vectors_` in the binding (`svc_dual_gemv`,
@@ -1204,7 +1204,7 @@ class SVC(NumericModeMixin):
         n_rows = q.shape[0]
         dec = empty((len(self._pairs), n_rows), "<f4")
         base = addr(dec, name="decisions")
-        for pno, p in enumerate(self._pairs):
+        for pno, p in enumerate(self._pairs):  # glue: one machine per class pair
             self._machine(q, p["dual"], p["sv"], p["dual"].shape[1], p["b"],
                           0.0, 1.0, False, p["support"], out_addr=base + 4 * n_rows * pno)
         return dec
@@ -1219,8 +1219,8 @@ class SVC(NumericModeMixin):
         n_pairs, n_rows = dec.shape
         out = empty(out_shape, out_dtype)
         if n_rows:
-            pi = array.array("i", [v for pair in pairs for v in pair])
-            abuf = array.array("d", [v for pair in ab for v in pair]) if ab is not None else None
+            pi = array.array("i", [v for pair in pairs for v in pair])  # glue: pair codes and sigmoid parameters as words
+            abuf = array.array("d", [v for pair in ab for v in pair]) if ab is not None else None  # glue: pair codes and sigmoid parameters as words
             self._bind(_EXT_NAME).svc_pair_epilogue(
                 addr_ro(dec, name="decisions"),
                 pi.buffer_info()[0] if len(pi) else 0,
@@ -1230,7 +1230,7 @@ class SVC(NumericModeMixin):
         return out
 
     def _pair_codes(self):
-        return [(p["i"], p["j"]) for p in self._pairs]
+        return [(p["i"], p["j"]) for p in self._pairs]  # glue: pair codes and sigmoid parameters as words
 
     def decision_function(self, X):
         """Binary: the raw `sum_j K(x, sv_j) dual_j + b`, one value per row.
@@ -1355,7 +1355,7 @@ class SVC(NumericModeMixin):
         if ab is not None:
             # probability=True only, so every other file keeps its bytes:
             # the per-pair sigmoid (A, B), binary64.
-            arrays["prob_ab"] = Array.from_list([v for pair in ab for v in pair], "<f8")
+            arrays["prob_ab"] = Array.from_list([v for pair in ab for v in pair], "<f8")  # glue: saved per-pair metadata words
         pairs = self.__dict__.get("_pairs")
         if pairs is not None:
             # MULTICLASS ONLY, so every binary file keeps its bytes: the
@@ -1364,17 +1364,17 @@ class SVC(NumericModeMixin):
             # rebuilds the public attributes exactly as `fit` built them.
             nf = int(self.n_features_in_)
             arrays["meta"] = Array.from_list(
-                [nf, len(self.support_.tolist()), sum(p["n_iter"] for p in pairs),
+                [nf, len(self.support_.tolist()), sum(p["n_iter"] for p in pairs),  # glue: saved per-pair metadata words
                  int(self.max_iter), int(self.nochange_steps), int(self.degree)], "<i8")
             arrays["labels"] = Array.from_list([0.0, 1.0], "<f8")
             arrays["shape"] = str(self.decision_function_shape)
             arrays["break_ties"] = Array.from_list([1 if self.break_ties else 0], "<i8")
             arrays["pair_meta"] = Array.from_list(
-                [v for p in pairs for v in (p["i"], p["j"], p["dual"].shape[1], p["n_iter"])], "<i8")
-            arrays["pair_b"] = Array.from_list([p["b"] for p in pairs], "<f4")
+                [v for p in pairs for v in (p["i"], p["j"], p["dual"].shape[1], p["n_iter"])], "<i8")  # glue: saved per-pair metadata words
+            arrays["pair_b"] = Array.from_list([p["b"] for p in pairs], "<f4")  # glue: saved per-pair metadata words
             arrays["pair_support"] = Array.from_list([r for p in pairs for r in p["support"]], "<i4")
-            arrays["pair_dual"] = _concat_f32([p["dual"] for p in pairs])
-            arrays["pair_sv"] = _concat_f32([p["sv"] for p in pairs])
+            arrays["pair_dual"] = _concat_f32([p["dual"] for p in pairs])  # glue: saved per-pair metadata words
+            arrays["pair_sv"] = _concat_f32([p["sv"] for p in pairs])  # glue: saved per-pair metadata words
         return _serialize.write_npz(path, arrays)
 
     @classmethod
@@ -1413,7 +1413,7 @@ class SVC(NumericModeMixin):
         if "prob_ab" in arrays:
             flat = _serialize.exact(arrays, "prob_ab", "<f8").tolist()
             obj.probability = True
-            obj._prob_ab = [(flat[2 * i], flat[2 * i + 1]) for i in range(len(flat) // 2)]
+            obj._prob_ab = [(flat[2 * i], flat[2 * i + 1]) for i in range(len(flat) // 2)]  # glue: saved per-pair metadata words
             obj.probA_ = Array.from_list(flat[0::2], "<f8")
             obj.probB_ = Array.from_list(flat[1::2], "<f8")
         if "pair_meta" in arrays:
@@ -1466,12 +1466,12 @@ class SVC(NumericModeMixin):
             _check_support_bounds(ps, nf, path)
         pd = _serialize.exact(arrays, "pair_dual", "<f4").tolist()
         pv = _serialize.exact(arrays, "pair_sv", "<f4").tolist()
-        total = sum(pm[4 * q + 2] for q in range(n_pairs))
+        total = sum(pm[4 * q + 2] for q in range(n_pairs))  # glue: pair metadata check over the class pairs
         if len(pb) != n_pairs or len(ps) != total or len(pd) != total or len(pv) != total * nf:
             raise ValueError(f"mojolearn: {path!r} pair arrays do not match pair_meta")
         pairs, at, q = [], 0, 0
-        for i in range(k):
-            for j in range(i + 1, k):
+        for i in range(k):  # glue: pair metadata check over the class pairs
+            for j in range(i + 1, k):  # glue: pair metadata check over the class pairs
                 pi, pj, n_sv, n_iter = pm[4 * q:4 * q + 4]
                 if (pi, pj) != (i, j):
                     raise ValueError(f"mojolearn: {path!r} pair {q} is ({pi}, {pj}), not ({i}, {j})")
