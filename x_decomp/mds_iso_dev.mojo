@@ -218,23 +218,21 @@ def _scan(a: I32Ptr, b: I32Ptr, m: Int, use_max: Bool) raises -> Bool:
     return in_b
 
 
-def dev_mds_setup_py(dis: PythonObject, ids: PythonObject, p: PythonObject) raises -> PythonObject:
+def mds_setup_dev(dis_id: Int, ids: List[Int], n: Int, N2: Int) raises -> Tuple[Int, Int]:
     """ids = [keys, idx, gid, tmp, gst, word] device matrices (keys, idx,
     gid, tmp: N2 values; gst: N2 + 1; word: 1); p = [n, N2]. Returns (m, G).
     gid always ends in ids[2] (copied from tmp when the scan ended there)."""
-    var n = _n(p, 0)
-    var N2 = _n(p, 1)
     if n < 1 or n * n > N2 or (N2 & (N2 - 1)) != 0:
         raise Error("x_decomp: mds setup size out of range")
-    var pd = _ptr(_id(dis), n * n)
-    var kid = _id(ids[0])
+    var pd = _ptr(dis_id, n * n)
+    var kid = ids[0]
     var pk = _ptr(kid, N2)
-    var pi = _iptr(_id(ids[1]), N2)
-    var gid_id = _id(ids[2])
+    var pi = _iptr(ids[1], N2)
+    var gid_id = ids[2]
     var pg = _iptr(gid_id, N2)
-    var pt = _iptr(_id(ids[3]), N2)
-    var ps = _iptr(_id(ids[4]), N2 + 1)
-    var wid = _id(ids[5])
+    var pt = _iptr(ids[3], N2)
+    var ps = _iptr(ids[4], N2 + 1)
+    var wid = ids[5]
     var pw = _iptr(wid, 1)
     var ctx = xd_ctx()
     ctx.enqueue_function[mds_keys_kernel](pd, pk, pi, Int32(n), Int32(N2), grid_dim=_blocks(N2), block_dim=TPB)
@@ -248,45 +246,52 @@ def dev_mds_setup_py(dis: PythonObject, ids: PythonObject, p: PythonObject) rais
     ctx.enqueue_function[mds_count_kernel](pk, pw, Int32(N2), grid_dim=_blocks(N2), block_dim=TPB)
     var m = _read_i32(wid)
     if m == 0:
-        return Python.tuple(0, 0)
+        return (0, 0)
     ctx.enqueue_function[mds_start_kernel](pk, pg, Int32(m), grid_dim=_blocks(m), block_dim=TPB)
     if _scan(pg, pt, m, False):
         ctx.enqueue_function[scan_add_kernel](pt, pg, Int32(m + 1), Int32(m), grid_dim=_blocks(m), block_dim=TPB)
     ctx.enqueue_function[mds_gst_kernel](pk, pg, ps, Int32(m), pw, grid_dim=_blocks(m), block_dim=TPB)
     var G = _read_i32(wid)
-    return Python.tuple(m, G)
+    return (m, G)
 
 
-def dev_mds_disp_py(d: PythonObject, dst: PythonObject, ids: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_mds_setup_py(dis: PythonObject, ids: PythonObject, p: PythonObject) raises -> PythonObject:
+    """ids = [keys, idx, gid, tmp, gst, word] device matrices (keys, idx,
+    gid, tmp: N2 values; gst: N2 + 1; word: 1); p = [n, N2]. Returns (m, G).
+    gid always ends in ids[2] (copied from tmp when the scan ended there)."""
+    var li = List[Int]()
+    for i in range(6):
+        li.append(_id(ids[i]))
+    var r = mds_setup_dev(_id(dis), li, _n(p, 0), _n(p, 1))
+    return Python.tuple(r[0], r[1])
+
+
+def mds_disp_dev(d_id: Int, dst_id: Int, ids: List[Int], n: Int, m: Int, G: Int, first: Bool) raises:
     """One iteration's upper-triangle disparities into dst (n x n), enqueued.
     ids = [keys, idx, gid, gst, sm, wt, end, prv, last, hf, hd0, hd1, gv]
     device matrices; p = [n, m, G, first]."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var G = _n(p, 2)
-    var first = Int(py=p[3]) != 0
-    var po = _ptr(_id(dst), n * n)
+    var po = _ptr(dst_id, n * n)
     var ctx = xd_ctx()
     ctx.enqueue_function[zero_kernel](po, Int32(n * n), grid_dim=_blocks(n * n), block_dim=TPB)
     if m == 0:
-        return PythonObject(0)
-    var pk = _ptr(_id(ids[0]), m)
-    var pi = _iptr(_id(ids[1]), m)
-    var pg = _iptr(_id(ids[2]), m)
+        return
+    var pk = _ptr(ids[0], m)
+    var pi = _iptr(ids[1], m)
+    var pg = _iptr(ids[2], m)
     if first:
         ctx.enqueue_function[scatter_keys_kernel](pk, pi, po, Int32(m), grid_dim=_blocks(m), block_dim=TPB)
-        return PythonObject(m)
-    var pd = _ptr(_id(d), n * n)
-    var ps = _iptr(_id(ids[3]), G + 1)
-    var sm = _ptr(_id(ids[4]), G)
-    var wt = _iptr(_id(ids[5]), G)
-    var endp = _iptr(_id(ids[6]), G)
-    var prv = _iptr(_id(ids[7]), G)
-    var last = _iptr(_id(ids[8]), G)
-    var hf = _iptr(_id(ids[9]), G)
-    var h0 = _iptr(_id(ids[10]), G)
-    var h1 = _iptr(_id(ids[11]), G)
-    var gv = _ptr(_id(ids[12]), G)
+        return
+    var pd = _ptr(d_id, n * n)
+    var ps = _iptr(ids[3], G + 1)
+    var sm = _ptr(ids[4], G)
+    var wt = _iptr(ids[5], G)
+    var endp = _iptr(ids[6], G)
+    var prv = _iptr(ids[7], G)
+    var last = _iptr(ids[8], G)
+    var hf = _iptr(ids[9], G)
+    var h0 = _iptr(ids[10], G)
+    var h1 = _iptr(ids[11], G)
+    var gv = _ptr(ids[12], G)
     ctx.enqueue_function[group_sum_kernel](pd, pi, ps, sm, wt, Int32(G), grid_dim=_blocks(G), block_dim=TPB)
     var nch = (G + ISO_CHUNK - 1) // ISO_CHUNK
     ctx.enqueue_function[chunk_kernel](sm, wt, endp, prv, last, hf, Int32(G), grid_dim=_blocks(nch), block_dim=TPB)
@@ -301,4 +306,15 @@ def dev_mds_disp_py(d: PythonObject, dst: PythonObject, ids: PythonObject, p: Py
         hd = h1
     ctx.enqueue_function[value_kernel](sm, wt, hd, gv, Int32(G), grid_dim=_blocks(G), block_dim=TPB)
     ctx.enqueue_function[scatter_disp_kernel](gv, pg, pi, po, Int32(m), grid_dim=_blocks(m), block_dim=TPB)
+
+
+def dev_mds_disp_py(d: PythonObject, dst: PythonObject, ids: PythonObject, p: PythonObject) raises -> PythonObject:
+    """One iteration's upper-triangle disparities into dst (n x n), enqueued.
+    ids = [keys, idx, gid, gst, sm, wt, end, prv, last, hf, hd0, hd1, gv]
+    device matrices; p = [n, m, G, first]."""
+    var li = List[Int]()
+    for i in range(13):
+        li.append(_id(ids[i]))
+    var m = _n(p, 1)
+    mds_disp_dev(_id(d), _id(dst), li, _n(p, 0), m, _n(p, 2), Int(py=p[3]) != 0)
     return PythonObject(m)

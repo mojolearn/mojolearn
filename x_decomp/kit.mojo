@@ -35,6 +35,7 @@ comptime OP_SQDIFF = 21
 comptime OP_GTS = 23
 comptime OP_SELECT = 35
 comptime OP_MUZ = 36
+comptime OP_FMA = 15
 comptime OP_TANH = 11
 comptime OP_ONEMSQ = 12
 comptime OP_EXPG = 25
@@ -217,6 +218,13 @@ struct Kit[E: Exec](Movable):
         var pp = I32Ptr(unsafe_from_address=Int(perm.unsafe_ptr()))
         Self.E.cd_rows(W.p(), HHt.p(), XHt.p(), pp, viol.p(), W.r, W.c)
         return self.word(self.total(viol))
+
+    def sqdist(self, A: Mat, B: Mat) raises -> Mat:
+        """`_Kit.sqdist(A, B)`: the squared distances (A.r x B.r)."""
+        var out = Mat(A.r, B.r)
+        if A.r * B.r > 0 and A.c > 0:
+            Self.E.sqdist(A.p(), B.p(), out.p(), A.r, B.r, A.c)
+        return out^
 
     def mm(self, A: Mat, B: Mat, ta: Bool, tb: Bool) raises -> Mat:
         var m = A.c if ta else A.r

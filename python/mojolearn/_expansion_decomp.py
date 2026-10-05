@@ -4430,105 +4430,6 @@ class MDS(_Base):
     def _dist(self, k, Y):
         return k.ew("sqrt", k.sqdist(Y, Y))
 
-    def _nm_native(self, k, Dis, n):
-        """Non-metric SMACOF's disparity function (lane cpu2-l8-decomp,
-        re-audit L8 `MDS._nm_native`): one Mojo entry a fit for the setup and
-        one an iteration for the disparities (x_decomp/mds_iso.mojo, the
-        device form x_decomp/mds_iso_dev.mojo, the same words), the pairs
-        and the isotonic fit never leaving where the kit keeps them. The old
-        bookkeeping (host-address triu/gather/sort helpers and x_linear's
-        isotonic fit and predict on host buffers, every iteration) is
-        deleted. Returns disparities(d, first) -> the symmetric n x n P,
-        normalized to sum of squares n (n - 1) / 2 over the upper triangle."""
-        if k._res():
-            N2 = 1 << max(0, (n * n - 1).bit_length())
-            keys, idx, gid = k._dout(1, N2), k._dout(1, N2), k._dout(1, N2)
-            tmp, gst, word = k._dout(1, N2), k._dout(1, N2 + 1), k._dout(1, 1)
-            m, G = k.b.x_decomp_dev_mds_setup(
-                k._did(Dis), [keys._d.id, idx._d.id, gid._d.id, tmp._d.id, gst._d.id, word._d.id], [n, N2])
-            del tmp, word
-            m, G = int(m), int(G)
-            # sm, wt, end, prv, last, hf, hd0, hd1, gv: G values each
-            work = [k._dout(1, max(G, 1)) for _ in range(9)]  # glue: nine scratch matrices
-            hold = (keys, idx, gid, gst, work)
-            ids = [keys._d.id, idx._d.id, gid._d.id, gst._d.id] + [w._d.id for w in work]  # glue: the scratch buffer ids
-
-            def run(d, first):
-                _ = hold                # the buffers live as long as this function
-                P = k._dout(n, n)
-                k.b.x_decomp_dev_mds_disp(P._d.id if first else k._did(d), P._d.id, ids,
-                                          [n, m, G, 1 if first else 0])
-                return P
-        else:
-            cap = max(n * (n - 1) // 2, 1)
-            keys = array.array("f", [0.0]) * cap
-            idx, gid = array.array("i", [0]) * cap, array.array("i", [0]) * cap
-            gst = array.array("i", [0]) * (cap + 1)
-            m, G = k.b.x_decomp_mds_setup(Dis.addr, keys.buffer_info()[0], idx.buffer_info()[0],
-                                          gid.buffer_info()[0], gst.buffer_info()[0], [n])
-            m, G = int(m), int(G)
-            gw = max(G, 1)
-            ints = [array.array("i", [0]) * gw for _ in range(5)]  # glue: five int32 scratch buffers
-            work = [array.array("f", [0.0]) * gw] + ints + [array.array("f", [0.0]) * gw]
-            addrs = [a.buffer_info()[0] for a in [keys, idx, gid, gst] + work]  # glue: the scratch buffer addresses
-
-            def run(d, first):
-                _ = (keys, idx, gid, gst, work)     # alive as long as this function
-                P = _M.zeros(n, n)
-                k.b.x_decomp_mds_disp(P.addr if first else d.addr, P.addr, addrs, [n, m, G, 1 if first else 0])
-                return P
-
-        def disparities(d, first):
-            P = run(d, first)
-            ss = k.total(k.ew("sq", P)).s[0]
-            P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss))
-            return k.ew("add", P, P.T)          # the mirror: u + 0 above, 0 + u below
-
-        return disparities
-
-    def _single(self, k, Dis, Y, run):
-        n = Dis.r
-        # cgfin-c-decomp: non-metric SMACOF's bookkeeping is the native
-        # calls only (`_nm_native`); the Python pair lists and the
-        # MOJOLEARN_XD_MDS_PYTHON switch are deleted
-        native = not self.metric_mds
-        if native:
-            if n * n > 2147483647:
-                raise ValueError(f"MDS(metric_mds=False): {n} rows exceed the 32-bit pair index (n * n <= 2**31 - 1)")
-            nm = self._nm_native(k, Dis, n)
-        disp = Dis
-        d = self._dist(k, Y)
-        old = None
-        it = 0
-        # The Guttman transform's diagonal (lane hr2-mds-agglo): B's diagonal
-        # gets the row sums by fma(I, rs, B) (1 * rs + B, one rounding;
-        # 0 * rs + B is B off it), so the n x n matrix stays resident. The
-        # host binding takes the same fma on a host identity.
-        eye = k.diag_mask(n)
-        if eye is None:
-            eye = _eye(n)
-        floor = k.const(1e-5)
-        for it in range(1, self.max_iter + 1):
-            if native:
-                disp = nm(d, it == 1)
-            dz = k.ew("select", d, d, floor, s=0.0)
-            ratio = k.ew("div", disp, dz)
-            B = k.ew("scale", ratio, s=-1.0)
-            rs = k.rowsum(ratio)
-            B = k.ew("fma", eye, rs, B)
-            Y = k.ew("scale", k.mm(B, Y), s=1.0 / n)
-            d = self._dist(k, Y)
-            stress = k.total(k.ew("sqdiff", d, disp)).s[0] / 2
-            if old is not None:
-                ssd = k.total(k.ew("sq", d)).s[0]
-                if (old - stress) / (ssd / 2) < self.eps:
-                    break
-            old = stress
-        if self._norm:
-            ssd = k.total(k.ew("sq", d)).s[0]
-            stress = math.sqrt(stress / (ssd / 2)) if ssd else 0.0
-        return Y, stress, it
-
     def fit_transform(self, X, y=None, init=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
@@ -4552,12 +4453,17 @@ class MDS(_Base):
             starts = [k.rand(n, nc, seed, 70 + r, 0) for r in range(int(self.n_init))]  # glue: draws one device start per restart (n_init-sized: random restarts)
         else:
             raise ValueError("init must be 'random', 'classical_mds' or an array")
-        best = None
-        for r, Y0 in enumerate(starts):
-            Y, stress, it = self._single(k, Dis, Y0, r)
-            if best is None or stress < best[1]:
-                best = (Y, stress, it)
-        Y, self.stress_, self.n_iter_ = best
+        if not self.metric_mds and n * n > 2147483647:
+            raise ValueError(f"MDS(metric_mds=False): {n} rows exceed the 32-bit pair index (n * n <= 2**31 - 1)")
+        # every start's SMACOF and the restart pick in ONE binding call (lane
+        # py-runtime-b: x_decomp/mds.mojo on the host column, mds_dev.mojo on
+        # resident device matrices): the same cells and float64 stress tests
+        S = k.vstack(starts) if len(starts) > 1 else starts[0]
+        Y = _M.zeros(n, nc)
+        st, it = k.b.x_decomp_mds_fit(Dis.addr, S.addr, Y.addr,
+                                      [n, nc, len(starts), int(self.max_iter), int(bool(self.metric_mds)),
+                                       int(bool(self._norm))], [float(self.eps)])
+        self.stress_, self.n_iter_ = float(st), int(it)
         self.embedding_ = Y.out()
         self.n_features_in_ = M.c
         return self.embedding_

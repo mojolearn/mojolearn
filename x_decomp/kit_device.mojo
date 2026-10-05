@@ -48,6 +48,7 @@ from x_decomp.device import (
     launch_gemm,
     launch_lu,
     launch_rowsum,
+    launch_sqdist,
     cd_rows_kernel,
     lda_rows_kernel,
     rand_kernel,
@@ -496,6 +497,13 @@ struct DKit(Movable):
         DevExec._svd_on(self.ctx, da, m, n, s.p(), v.p(), QRB_CELLS)
         _ = da^
         self.sync()
+
+    def sqdist(self, A: DMat, B: DMat) raises -> DMat:
+        """`_Kit.sqdist(A, B)` on the device (`launch_sqdist`)."""
+        var out = DMat(A.r, B.r)
+        if A.r * B.r > 0 and A.c > 0:
+            launch_sqdist(self.ctx, A.p(), B.p(), out.p(), A.r, B.r, A.c, 0, Float32(2))
+        return out^
 
     def word(mut self, A: DMat) raises -> Float64:
         """`A.s[0]` as Python reads it: one word home (a sync)."""
