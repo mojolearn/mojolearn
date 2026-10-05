@@ -17,6 +17,7 @@ group_sort wrote) runs its sequential unit unchanged.
 from x_metrics.common import IP, STAGE_INTS, PARAMS, LEAF
 from x_metrics.par import RUN, KEY_COL, KEY_CURVE, KEY_PERM
 from x_metrics.cls_epi import OP_CLS_EPI
+from x_metrics.curve_out import OP_CURVE_OUT, OP_CO_KEEP, OP_CO_EMIT, OP_CO_DET, CO_DET
 
 comptime OP_GROUP_SORT = 0
 comptime OP_GROUP_SUM = 1
@@ -105,7 +106,7 @@ def is_user_op(op: Int) -> Bool:
     label layout units onehot, rep_rows and pair_cols."""
     return ((op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64 or op == OP_STRAT_CODES
             or op == OP_CURVE_FOLD or op == OP_ONEHOT or op == OP_REP_ROWS or op == OP_PAIR_COLS
-            or (op >= OP_CLS_EPI and op <= OP_LAST_TAIL))
+            or (op >= OP_CLS_EPI and op <= OP_LAST_TAIL) or op == OP_CURVE_OUT)
 #: the chunk length the counting sort aims for, and the bound on its
 #: (groups x chunks) count table
 comptime CS_CHUNK = 256
@@ -199,6 +200,42 @@ def _plan_keep(mut pl: Plan, r: IP, n: Int, total: Int):
             pl.emit(OP_CK_OFF, total, [S, C, _a(r, 13)])
             pl.emit(OP_CK_FILL, C * total, [n, _a(r, 10), _a(r, 9), S, C, CK_CHUNK,
                                             _a(r, 6), _a(r, 7), _a(r, 8), CF, n * total])
+
+
+def _plan_curve_out(mut pl: Plan, r: IP, total: Int) raises:
+    """curve_out (lane cpu4-python, x_metrics/curve_out.mojo): q = [kind, n,
+    FPS, TPS, THR, CNT, DROP, OUT, LEN], one problem. DROP (precision-recall
+    and DET): the drop rule's flags (co_keep), then the curve compaction
+    (ck_cnt, ck_off, ck_fill) into scratch; DET: its slice (co_det); then
+    one co_emit unit per output index."""
+    var kind = _a(r, 0)
+    var n = _a(r, 1)
+    if total != 1 or n <= 0:
+        raise Error("x_metrics: curve_out takes one problem of at least one point")
+    var fps = _a(r, 2)
+    var tps = _a(r, 3)
+    var thr = _a(r, 4)
+    var cnt = _a(r, 5)
+    var C = (n + CK_CHUNK - 1) // CK_CHUNK
+    if not pl.fits(n + C + 3 * n + 2):
+        raise Error("x_metrics: curve_out exceeds the arena bound")
+    if _a(r, 6) != 0:
+        var KEEP = pl.alloc(n)
+        var S = pl.alloc(C)
+        var CF = pl.alloc(3 * n)
+        var CM = pl.alloc(1)
+        pl.emit(OP_CO_KEEP, n, [n, tps, cnt, KEEP])
+        pl.emit(OP_CK_CNT, C, [n, KEEP, cnt, S, C, CK_CHUNK])
+        pl.emit(OP_CK_OFF, 1, [S, C, CM])
+        pl.emit(OP_CK_FILL, C, [n, KEEP, cnt, S, C, CK_CHUNK, fps, tps, thr, CF, n])
+        fps = CF
+        tps = CF + n
+        thr = CF + 2 * n
+        cnt = CM
+    var B = pl.alloc(1)
+    if kind == CO_DET:
+        pl.emit(OP_CO_DET, 1, [fps, tps, cnt, _a(r, 8), B])
+    pl.emit(OP_CO_EMIT, n + 1, [kind, n, fps, tps, thr, cnt, _a(r, 7), _a(r, 8), B])
 
 
 def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
@@ -353,6 +390,8 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             pl.emit(OP_FR_CNT, K * C, [n, K, _a(r, 2), S, C, FR_CHUNK])
             pl.emit(OP_FR_OFF, K, [S, C, _a(r, 5)])
             pl.emit(OP_FR_FILL, K * C, [n, K, _a(r, 2), S, C, FR_CHUNK, _a(r, 4), _a(r, 5)])
+        elif op == OP_CURVE_OUT:
+            _plan_curve_out(pl, r, total)
         else:
             pl.copy_stage(q, s)
     return pl^

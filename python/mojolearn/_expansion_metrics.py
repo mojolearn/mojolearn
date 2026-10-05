@@ -57,7 +57,9 @@ _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wperc
             cls_epi=55,
             # lane cpu2-l7-metrics: the metric tails and scans on the device
             # (x_metrics/tail.mojo, cm_epi.mojo, reg_epi.mojo, rank_epi.mojo)
-            off_diff=56, flag_scan=57, proba_rows=58, cm_epi=59, reg_epi=60, rank_epi=61, cl_epi=62)
+            off_diff=56, flag_scan=57, proba_rows=58, cm_epi=59, reg_epi=60, rank_epi=61, cl_epi=62,
+            # lane cpu4-python: the curve arrays on the device (x_metrics/curve_out.mojo)
+            curve_out=63)
 _PARAMS = 14
 _NONE = -1
 
@@ -1576,19 +1578,6 @@ class _DevCurve:
         p = self.prog
         return p.floats(self.fps + self.c - 1, 1)[0], p.floats(self.tps + self.c - 1, 1)[0]
 
-    def native(self, name):
-        """The binding's epilogue entry `name`, its words checked readable."""
-        fn = _epilogue(name, self.numeric_mode)
-        p = self.prog
-        p._check(self.fps, self.c)
-        p._check(self.tps, self.c)
-        if self.keep >= 0:
-            p._check(self.keep, self.c)
-        return fn
-
-    def addr(self):
-        return self.prog.arena.buffer_info()[0]
-
     def lists(self):
         p, c = self.prog, self.c
         cur = _Curve((p.floats(self.fps, c), p.floats(self.tps, c),
@@ -1600,36 +1589,6 @@ class _DevCurve:
         elif self.keep == -2:
             cur.keep = b"\x01" * c       # the device dropped the collinear points already
         return cur
-
-
-def _epilogue(name, numeric_mode):
-    """The binding's epilogue entry `name` (x_metrics/epilogue.mojo, lane
-    py-misc-metrics). Every install's x_metrics binding carries it: the
-    MOJOLEARN_METRICS_EPILOGUE=python and MOJOLEARN_HOTPATH=python reference
-    arms are gone (lane pyglue-sweep: Python is glue only)."""
-    return getattr(_binding(numeric_mode), name)
-
-
-def _dev_epilogue(dev, name):
-    """`_epilogue` for a `_DevCurve` with thresholds, its fps, tps and
-    thresholds words checked readable (declared outputs)."""
-    if dev.c <= 0 or dev.thr < 0:
-        raise ValueError("mojolearn metrics: an empty curve has no thresholds")
-    fn = _epilogue(name, dev.numeric_mode)
-    p = dev.prog
-    p._check(dev.fps, dev.c)
-    p._check(dev.tps, dev.c)
-    p._check(dev.thr, dev.c)
-    return fn
-
-
-def _f64_out(n):
-    return array.array("d", bytes(8 * max(int(n), 1)))
-
-
-def _f64_array(buf, m):
-    del buf[m:]
-    return Array._owned(buf, (m,), "<f8", "C")
 
 
 def _f32_weights_addr(w):
@@ -1851,19 +1810,6 @@ class _FoldCurve:
         return float(max(0.0, s / T))
 
 
-def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, lazy=False, compact=False):
-    from ._metrics_impl import _label_map
-    true, kind, classes = _targets(y_true, caller)
-    if len(classes) > 2 and pos_label is None:
-        raise ValueError("multiclass format is not supported")
-    pos = _pos_label(pos_label, kind, classes, caller)
-    n = len(true)
-    s = _scores(y_score, n, caller, ndim=1)
-    w = _weights(sample_weight, n, caller)
-    flags = _label_map(true, lambda v: int(v == pos))
-    return _curves(s, flags, w, n, 1, numeric_mode, lazy=lazy, compact=compact)[0], classes
-
-
 def _drop_collinear(fps, tps, thr, keep=None):
     """Keep the first and last points and every point where either step
     changes: (f[i+1] - f[i]) != (f[i] - f[i-1]), the same binary64
@@ -1881,60 +1827,108 @@ def _drop_collinear(fps, tps, thr, keep=None):
             list(itertools.compress(thr, keep)))
 
 
+#: x_metrics/curve_out.mojo kinds and statuses
+_CO_ROC, _CO_PR, _CO_DET = 0, 1, 2
+_CO_EMPTY, _CO_ZERO_CLASS = 1, 2
+
+
+def _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, kind, drop):
+    """One binary curve's three Float64 output arrays, formed on the device
+    (lane cpu4-python: x_metrics/curve_out.mojo, the units the host column
+    runs too) in the program that sorts and counts: bin_curve (compacted by
+    its collinear drop for a dropping ROC), then curve_out. Only the arrays
+    (up to their length) and six head words come back. Returns (arrays,
+    length, F, T, classes): F, T the last fps and tps."""
+    from ._metrics_impl import _label_map
+    true, kind_y, classes = _targets(y_true, caller)
+    if len(classes) > 2 and pos_label is None:
+        raise ValueError("multiclass format is not supported")
+    pos = _pos_label(pos_label, kind_y, classes, caller)
+    n = len(true)
+    s = _scores(y_score, n, caller, ndim=1)
+    w = _weights(sample_weight, n, caller)
+    flags = _label_map(true, lambda v: int(v == pos))
+    if n <= 0:
+        raise ValueError("mojolearn metrics: an empty curve has no thresholds")
+    prog = _Prog()
+    S = prog.put(s)
+    POS = _put_flags(prog, flags)
+    W = _put_weights(prog, w)
+    order = prog.scratch(n)
+    cnt = prog.scratch(1)
+    fps = prog.scratch(n)
+    tps = prog.scratch(n)
+    thr = prog.scratch(n)
+    roc_drop = kind == _CO_ROC and bool(drop)
+    keep = _NONE
+    CF = CM = 0
+    if roc_drop:
+        keep = prog.scratch(n)
+        CF = prog.scratch(3 * n)
+        CM = prog.scratch(1)
+    prog.stage("bin_curve", 1, S, 1, POS, W, n, order, fps, tps, thr, cnt, keep, 1 if roc_drop else 0, CF, CM)
+    LEN = prog.want(prog.alloc(6), 6)
+    OUT = prog.alloc(6 * (n + 1))
+    for b in range(3):  # glue: declares the three output arrays, each up to its length
+        prog.want(OUT + 2 * b * (n + 1), 2 * (n + 1), count=LEN, mult=2)
+    src = (CF, CF + n, CF + 2 * n, CM) if roc_drop else (fps, tps, thr, cnt)
+    prog.stage("curve_out", 1, kind, n, *src, 1 if (drop and kind != _CO_ROC) else 0, OUT, LEN)
+    _execute(prog, numeric_mode)
+    m, status = prog.ints(LEN, 2)
+    if status == _CO_EMPTY:
+        raise ValueError("mojolearn metrics: an empty curve has no thresholds")
+    F, T = prog.words(LEN + 2, 4, "d")
+    if status == _CO_ZERO_CLASS:
+        return None, 0, F, T, classes
+    # precision-recall's thresholds hold one word fewer than its precision and recall
+    lens = (m, m, m - 1) if kind == _CO_PR else (m, m, m)
+    arrays = tuple(Array._owned(prog.words(OUT + 2 * b * (n + 1), 2 * lens[b], "d"), (lens[b],), "<f8", "C")
+                   for b in range(3))  # glue: wraps the three downloaded arrays
+    return arrays, m, F, T, classes
+
+
 def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=True,
               numeric_mode=None):
     """scikit-learn 1.9 `roc_curve` for binary targets: fpr, tpr, thresholds
-    (Float64; the first threshold is +inf). The sort and the cumulative
-    counts run on the device; drop_intermediate removes collinear points."""
-    dev, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve", lazy=True,
-                           compact=bool(drop_intermediate))
-    # the three Float64 arrays straight from the arena words
-    # (x_metrics/epilogue.mojo roc_arrays; lane metrics-apple2), an empty
-    # class's NaN rates there too (lane pyglue-sweep)
-    F, T = dev.last()
+    (Float64; the first threshold is +inf). The sort, the cumulative
+    counts, the collinear drop and the rates run on the device (lane
+    cpu4-python: x_metrics/curve_out.mojo; an empty class's NaN rates
+    there too)."""
+    arrays, _, F, T, _ = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve",
+                                    _CO_ROC, drop_intermediate)
     if F <= 0:
         _undefined_warning("No negative samples in y_true, false positive value should be meaningless")
     if T <= 0:
         _undefined_warning("No positive samples in y_true, true positive value should be meaningless")
-    fn = dev.native("x_metrics_curve_roc")
-    bufs = [_f64_out(dev.c + 1) for _ in range(3)]  # glue: three output buffers
-    m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr, dev.keep), dev.c,
-               1 if drop_intermediate else 0, tuple(b.buffer_info()[0] for b in bufs)))  # glue: three buffer addresses
-    return tuple(_f64_array(b, m) for b in bufs)  # glue: three output arrays
+    return arrays
 
 
 def precision_recall_curve_options(y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode):
     """precision_recall_curve with sample_weight or drop_intermediate=True
-    (lane/metrics): Float64 outputs; the default call keeps its kernel."""
-    dev, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "precision_recall_curve",
-                           lazy=True)
-    # the three Float64 arrays straight from the arena words
-    # (x_metrics/epilogue.mojo pr_arrays; lane py-misc-metrics), no
-    # positives' recall of one there too (lane pyglue-sweep)
-    fn = _dev_epilogue(dev, "x_metrics_curve_pr")
-    if dev.last()[1] == 0:
+    (lane/metrics): Float64 outputs, formed on the device (lane cpu4-python:
+    x_metrics/curve_out.mojo; no positives' recall of one there too); the
+    default call keeps its kernel."""
+    arrays, _, _, T, _ = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode,
+                                    "precision_recall_curve", _CO_PR, drop_intermediate)
+    if T == 0:
         warnings.warn("No positive class found in y_true, recall is set to one for all thresholds.",
                       UserWarning, stacklevel=3)
-    bufs = [_f64_out(dev.c + 1) for _ in range(3)]  # glue: three output buffers
-    m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr), dev.c, 1 if drop_intermediate else 0,
-               tuple(b.buffer_info()[0] for b in bufs)))  # glue: three buffer addresses
-    return _f64_array(bufs[0], m + 1), _f64_array(bufs[1], m + 1), _f64_array(bufs[2], m)
+    return arrays
 
 
 def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=False,
               numeric_mode=None):
-    """scikit-learn 1.9 `det_curve`: fpr, fnr, thresholds."""
-    dev, classes = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "det_curve", lazy=True)
+    """scikit-learn 1.9 `det_curve`: fpr, fnr, thresholds, formed on the
+    device (lane cpu4-python: x_metrics/curve_out.mojo); a zero class
+    weight raises as the Python division by zero did."""
+    arrays, _, _, _, classes = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, "det_curve",
+                                          _CO_DET, drop_intermediate)
     if len(classes) != 2:
         raise ValueError("Only one class is present in y_true. Detection error tradeoff curve is not "
                          "defined in that case.")
-    # x_metrics/epilogue.mojo det_arrays (lane py-misc-metrics); a zero class
-    # weight raises there as the Python division by zero did
-    fn = _dev_epilogue(dev, "x_metrics_curve_det")
-    bufs = [_f64_out(dev.c + 1) for _ in range(3)]  # glue: three output buffers
-    m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr), dev.c, 1 if drop_intermediate else 0,
-               tuple(b.buffer_info()[0] for b in bufs)))  # glue: three buffer addresses
-    return tuple(_f64_array(b, m) for b in bufs)  # glue: three output arrays
+    if arrays is None:
+        raise ZeroDivisionError("float division by zero")
+    return arrays
 
 
 def _trapezoid(x, y):

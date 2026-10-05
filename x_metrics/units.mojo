@@ -24,6 +24,7 @@ from x_metrics.tail import off_diff_unit, flag_scan_unit, proba_rows_unit
 from x_metrics.cm_epi import cm_epi_unit
 from x_metrics.reg_epi import reg_epi_unit
 from x_metrics.rank_epi import rank_epi_unit, cl_epi_unit
+from x_metrics.curve_out import curve_out_unit, co_keep_unit, co_emit_unit, co_det_unit
 
 #: ops 0..10, 36 (fold_rows), 41 (rows64), 45 (strat_codes) (lane metrics-apple2) and 46
 #: (curve_fold, lane cgr2-metrics-shap) are the caller's (x_metrics/plan.mojo
@@ -35,7 +36,9 @@ from x_metrics.rank_epi import rank_epi_unit, cl_epi_unit
 #: 56..62 (lane cpu2-l7-metrics) are the caller's: off_diff, flag_scan, proba_rows
 #: (x_metrics/tail.mojo), cm_epi (x_metrics/cm_epi.mojo), reg_epi (x_metrics/reg_epi.mojo),
 #: rank_epi and cl_epi (x_metrics/rank_epi.mojo): the metric tails and scans on the device.
-comptime N_OPS = 63
+#: 63 (curve_out, lane cpu4-python) is the caller's; 64..66 (co_keep, co_emit, co_det) are
+#: its planned schedule (x_metrics/curve_out.mojo): the curve arrays on the device.
+comptime N_OPS = 67
 
 
 @always_inline
@@ -162,3 +165,11 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         rank_epi_unit(t, f, q)
     comptime if OP == 62:
         cl_epi_unit(t, f, q)
+    comptime if OP == 63:
+        curve_out_unit(t, f, q)
+    comptime if OP == 64:
+        co_keep_unit(t, f, q)
+    comptime if OP == 65:
+        co_emit_unit(t, f, q)
+    comptime if OP == 66:
+        co_det_unit(t, f, q)
