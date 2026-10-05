@@ -793,8 +793,210 @@ def _t_ard_sigma_eq(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: In
     return dk
 
 
+#: ONE FACTOR PER ITERATION (lane apple-fast-general-speed, 2026-10-04),
+#: the default under ARD_FAST_EQ; `-D MOJOLEARN_ARD_EQ_ONEPASS_OFF` restores
+#: the ridge retry and the full inverse above. M3 board (FAST, 1 run per
+#: arm): the ARD_FAST_EQ fix took ard istella from 67 ms (quality wrong,
+#: r2 -0.1387) to 1,348 ms (r2 0.327, scikit-learn 0.3274). Each iteration
+#: built A~ in full, factored it, refactored on a failed pivot with a ridge
+#: x10 (up to ARD_EQ_TRIES factors), then formed all of sigma by dk
+#: `chol_solve`s (2 dk^2 each, a thread a column). Here:
+#:   * A~'s lower triangle only (`cholesky` never reads the upper);
+#:   * one factor with a pivot floor: a Schur pivot below dk * eps32 (A~ has
+#:     unit diagonal, so this is the float32 noise level of a dk-term sum)
+#:     is set to the floor, so the factor never fails and never repeats; the
+#:     floor perturbs only the near-dependent directions, where the retry
+#:     ridge perturbed every diagonal;
+#:   * only what the iteration reads: sigma's diagonal (`ard_update`) and
+#:     sigma X'y (the coefficients). Column c of inv(L) is one forward solve
+#:     over rows c.. (dk^2 / 2 for c = 0, a thread a column), stored below
+#:     sigma's diagonal; sigma_cc = s_c^2 |inv(L) e_c|^2; the coefficients
+#:     are alpha S inv(L)' (inv(L) (S X'y)), two parallel triangular
+#:     matvecs (rows, then columns, each its own chain ascending).
+#: Same team, same launches, no host step; the bits change (FAST).
+comptime ARD_EQ_ONEPASS = ARD_FAST_EQ and not is_defined["MOJOLEARN_ARD_EQ_ONEPASS_OFF"]()
+
+
+@always_inline
+def _ard_op_floor(dk: Int) -> Float32:
+    """The pivot floor of the unit-diagonal A~: dk * eps32."""
+    return fm(Float32(1.1920929e-07), i2f(max(dk, 1)))
+
+
+@always_inline
+def _ard_op_kept(d: Int, iw: IP, keep: Int) -> Int:
+    var dk = 0
+    for j in range(d):
+        if ldi(iw, keep + j) != 0:
+            sti(iw, keep + d + dk, j)
+            dk += 1
+    return dk
+
+
+@always_inline
+def _ard_op_row(fw: FP, gg: Int, aa: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int, d: Int, dk: Int, a: Int):
+    """Row a of A~ = S (diag(lambda) + alpha G) S, columns 0..a (the lower
+    triangle and the diagonal)."""
+    var ja = ldi(iw, keep + d + a)
+    var sa = _ard_eq_scale(fw, gg, lamo, alpha, d, ja)
+    for b in range(a + 1):
+        var jb = ldi(iw, keep + d + b)
+        var v = fm(alpha, ld(fw, gg + ja * d + jb))
+        if a == b:
+            v = fa(v, ld(fw, lamo + ja))
+        st(fw, aa + a * dk + b, fm(fm(v, sa), _ard_eq_scale(fw, gg, lamo, alpha, d, jb)))
+
+
+@always_inline
+def _ard_op_pivot(fw: FP, aa: Int, dk: Int, j: Int, floor: Float32) -> Float32:
+    """L_jj: sqrt of the Schur pivot (k ascending), floored."""
+    var s = ld(fw, aa + j * dk + j)
+    for k in range(j):
+        var l = ld(fw, aa + j * dk + k)
+        s = fs(s, fm(l, l))
+    if not (s > floor):
+        s = floor
+    return fsqrt(s)
+
+
+@always_inline
+def _ard_op_below(fw: FP, aa: Int, dk: Int, i: Int, j: Int, r: Float32):
+    """L_ij for i > j (k ascending), once column j's pivot r is stored."""
+    var tv = ld(fw, aa + i * dk + j)
+    for k in range(j):
+        tv = fs(tv, fm(ld(fw, aa + i * dk + k), ld(fw, aa + j * dk + k)))
+    st(fw, aa + i * dk + j, fd(tv, r))
+
+
+@always_inline
+def _ard_op_col(fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int, d: Int,
+                dk: Int, c: Int):
+    """Column c of inv(L) into sg[c * dk + r] (r > c), and sigma_cc =
+    s_c^2 sum_r inv(L)_rc^2 into sg[c * dk + c]. Reads only L."""
+    var col = sg + c * dk
+    var yc = fd(Float32(1), ld(fw, aa + c * dk + c))
+    st(fw, col + c, yc)
+    var ss = fm(yc, yc)
+    for r in range(c + 1, dk):
+        var acc = Float32(0)
+        for k in range(c, r):
+            acc = fmad(ld(fw, aa + r * dk + k), ld(fw, col + k), acc)
+        var yr = fs(Float32(0), fd(acc, ld(fw, aa + r * dk + r)))
+        st(fw, col + r, yr)
+        ss = fmad(yr, yr, ss)
+    var sc = _ard_eq_scale(fw, gg, lamo, alpha, d, ldi(iw, keep + d + c))
+    st(fw, col + c, fm(fm(sc, sc), ss))
+
+
+@always_inline
+def _ard_op_y(fw: FP, gg: Int, aa: Int, sg: Int, xty: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int,
+              d: Int, dk: Int, r: Int) -> Float32:
+    """(inv(L) S X'y)_r: c ascending over c <= r (inv(L)_rr = 1 / L_rr)."""
+    var acc = Float32(0)
+    for c in range(r + 1):
+        var jc = ldi(iw, keep + d + c)
+        var bc = fm(_ard_eq_scale(fw, gg, lamo, alpha, d, jc), ld(fw, xty + jc))
+        var lrc = fd(Float32(1), ld(fw, aa + r * dk + r)) if c == r else ld(fw, sg + c * dk + r)
+        acc = fmad(lrc, bc, acc)
+    return acc
+
+
+@always_inline
+def _ard_op_coef_one(fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int,
+                     d: Int, dk: Int, a: Int, y: FP, yoff: Int, ystride_kept: Bool) -> Float32:
+    """alpha s_a (inv(L)' y)_a: r ascending over r >= a. y_r sits at
+    y[yoff + r], or at y[yoff + kept_r] when ystride_kept."""
+    var acc = Float32(0)
+    for r in range(a, dk):
+        var lra = fd(Float32(1), ld(fw, aa + a * dk + a)) if r == a else ld(fw, sg + a * dk + r)
+        var yi = yoff + (ldi(iw, keep + d + r) if ystride_kept else r)
+        acc = fmad(lra, ld(y, yi), acc)
+    var ja = ldi(iw, keep + d + a)
+    return fm(alpha, fm(_ard_eq_scale(fw, gg, lamo, alpha, d, ja), acc))
+
+
+def _ard_sigma_op(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
+    """ARD_EQ_ONEPASS's sigma on one thread. Returns dk."""
+    var dk = _ard_op_kept(d, iw, keep)
+    for a in range(dk):
+        _ard_op_row(fw, gg, aa, lamo, alpha, iw, keep, d, dk, a)
+    var floor = _ard_op_floor(dk)
+    for j in range(dk):
+        var r = _ard_op_pivot(fw, aa, dk, j, floor)
+        st(fw, aa + j * dk + j, r)
+        for i in range(j + 1, dk):
+            _ard_op_below(fw, aa, dk, i, j, r)
+    for c in range(dk):
+        _ard_op_col(fw, gg, aa, sg, lamo, alpha, iw, keep, d, dk, c)
+    return dk
+
+
+def _t_ard_sigma_op(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP,
+                    keep: Int) -> Int:
+    """ARD_EQ_ONEPASS's sigma on the team: rows split, the factor column by
+    column (every thread the pivot from the same words, the entries below
+    split; `t_cholesky`'s shape), then a thread a column of inv(L)."""
+    var dk = 0
+    if t.lead():
+        dk = _ard_op_kept(d, iw, keep)
+    dk = t.bcast_int(dk, 0)
+    for a in range(t.tid, dk, t.nt):
+        _ard_op_row(fw, gg, aa, lamo, alpha, iw, keep, d, dk, a)
+    t.sync()
+    var floor = _ard_op_floor(dk)
+    for j in range(dk):
+        var r = _ard_op_pivot(fw, aa, dk, j, floor)
+        t.sync()
+        if t.lead():
+            st(fw, aa + j * dk + j, r)
+        for i in range(j + 1 + t.tid, dk, t.nt):
+            _ard_op_below(fw, aa, dk, i, j, r)
+        t.sync()
+    for c in range(t.tid, dk, t.nt):
+        _ard_op_col(fw, gg, aa, sg, lamo, alpha, iw, keep, d, dk, c)
+    t.sync()
+    return dk
+
+
+def _ard_coef_op(d: Int, dk: Int, fw: FP, res: FP, alpha: Float32, iw: IP, keep: Int):
+    """ARD_EQ_ONEPASS's coefficients on one thread: y = inv(L) S X'y into
+    res at the kept positions, then a ascending (z_a reads y_r, r >= a,
+    none yet overwritten) res[kept_a] = alpha s_a (inv(L)' y)_a."""
+    var o = ard_layout(d)
+    fill(res, 0, d, Float32(0))
+    for r in range(dk):
+        st(res, ldi(iw, keep + d + r), _ard_op_y(fw, o[1], o[3], o[4], o[2], o[5], alpha, iw, keep, d, dk, r))
+    for a in range(dk):
+        var z = _ard_op_coef_one(fw, o[1], o[3], o[4], o[5], alpha, iw, keep, d, dk, a, res, 0, True)
+        st(res, ldi(iw, keep + d + a), z)
+
+
+def _t_ard_coef_op(t: Team, d: Int, dk: Int, fw: FP, res: FP, alpha: Float32, iw: IP, keep: Int):
+    """ARD_EQ_ONEPASS's coefficients on the team: y into the team's row 2
+    (a thread a row), then a thread a coefficient. A team whose rows are
+    shorter than dk runs `_ard_coef_op` on the lead."""
+    if t.n < dk:
+        if t.lead():
+            _ard_coef_op(d, dk, fw, res, alpha, iw, keep)
+        t.sync()
+        return
+    var o = ard_layout(d)
+    var yb = t.row(2)
+    for j in range(t.tid, d, t.nt):
+        st(res, j, Float32(0))
+    for r in range(t.tid, dk, t.nt):
+        st(yb, r, _ard_op_y(fw, o[1], o[3], o[4], o[2], o[5], alpha, iw, keep, d, dk, r))
+    t.sync()
+    for a in range(t.tid, dk, t.nt):
+        var z = _ard_op_coef_one(fw, o[1], o[3], o[4], o[5], alpha, iw, keep, d, dk, a, yb, 0, False)
+        st(res, ldi(iw, keep + d + a), z)
+    t.sync()
+
+
 def _ard_sigma(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
     """sigma (dk x dk, over the kept features in ascending order) = inv(diag(lambda) + alpha G). Returns dk."""
+    comptime if ARD_EQ_ONEPASS:
+        return _ard_sigma_op(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
     comptime if ARD_FAST_EQ:
         return _ard_sigma_eq(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
     var dk = 0
@@ -838,6 +1040,9 @@ def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, 
         return dk0
     if t.nt <= 1:
         return _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+    comptime if ARD_EQ_ONEPASS:
+        if d >= ARD_TEAM_MIN:
+            return _t_ard_sigma_op(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
     comptime if ARD_FAST_EQ:
         if d >= ARD_TEAM_MIN:
             return _t_ard_sigma_eq(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
@@ -877,6 +1082,12 @@ def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, 
 def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
     """`_ard_coef` with its dk outputs split across the team (each its own
     chain over b ascending); the same words."""
+    comptime if ARD_EQ_ONEPASS:
+        if t.nt <= 1:
+            _ard_coef_op(d, dk, fw, res, alpha, iw, keep)
+        else:
+            _t_ard_coef_op(t, d, dk, fw, res, alpha, iw, keep)
+        return
     if t.nt <= 1:
         _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
         return
@@ -892,6 +1103,9 @@ def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Floa
 
 
 def _ard_coef(d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
+    comptime if ARD_EQ_ONEPASS:
+        _ard_coef_op(d, dk, fw, res, alpha, iw, keep)
+        return
     fill(res, 0, d, Float32(0))
     for a in range(dk):
         var acc = Float32(0)
