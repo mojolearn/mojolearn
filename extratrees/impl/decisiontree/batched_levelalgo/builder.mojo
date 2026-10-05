@@ -5415,7 +5415,7 @@ struct EtDeviceLoop(Movable):
         k_out: Int,
         tree_ids: List[Int32],
         first: Int,
-        mut out: List[TreeMetaDataNode[DType.float32]],
+        mut trees_out: List[TreeMetaDataNode[DType.float32]],
     ) raises:
         """The group's model, once: per-tree counters and bases, the
         concatenated nodes and leaf values, one synchronize, then each tree's
@@ -5458,7 +5458,7 @@ struct EtDeviceLoop(Movable):
                 src=lp + base * k_out,
                 count=n_s * k_out,
             )
-            out.append(
+            trees_out.append(
                 TreeMetaDataNode[DType.float32](
                     treeid=tree_ids[first + s],
                     depth_counter=sp[
