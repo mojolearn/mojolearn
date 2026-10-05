@@ -54,6 +54,34 @@ def identity(path):
             raise ValueError('Invalid artifact inventory member')
     out = dict(schema=SCHEMA, source_commit=d['source_commit'], code_path=d['code_path'],
                numeric_mode=d['numeric_mode'], files=files)
+    overlay = d.get('experimental_overlay')
+    if overlay is not None:
+        # A scoped benchmark may replace one compiled family while retaining
+        # byte-pinned dependencies. Keep their origins in every worker receipt;
+        # the core source marker must never relabel reused binaries as rebuilt.
+        import re
+        full_sha = lambda value, size: isinstance(value, str) and re.fullmatch('[0-9a-f]{%d}' % size, value)
+        if (not isinstance(overlay, dict) or overlay.get('schema') != 'mojolearn.experimental-overlay/1'
+                or overlay.get('base_source_commit') != d['source_commit']
+                or overlay.get('uniform_numerical_source') is not False
+                or overlay.get('identical_qualified') is not False
+                or not full_sha(overlay.get('candidate_source_commit'), 40)
+                or overlay['candidate_source_commit'] == d['source_commit']):
+            raise ValueError('Invalid experimental overlay identity')
+        origins = overlay.get('artifacts')
+        if not isinstance(origins, dict) or set(origins) != set(files):
+            raise ValueError('Overlay origins must cover exactly the guarded artifact inventory')
+        candidate = []
+        for name, origin in origins.items():
+            if (not isinstance(origin, dict) or origin.get('sha256') != files[name]
+                    or origin.get('source_commit') not in (d['source_commit'], overlay['candidate_source_commit'])
+                    or not full_sha(origin.get('build_receipt_sha256'), 64)):
+                raise ValueError('Overlay origin differs from guarded artifact: ' + name)
+            if origin['source_commit'] == overlay['candidate_source_commit']:
+                candidate.append(name)
+        if not candidate or sorted(overlay.get('replaced_files', [])) != sorted(candidate):
+            raise ValueError('Overlay replacement list differs from candidate artifacts')
+        out['experimental_overlay'] = overlay
     if d.get('installation') == 'source':
         if d['code_path'] != 'native' or not Path(d.get('source_root', '')).is_absolute():
             raise ValueError('Source layout is explicit native-only with absolute source_root')

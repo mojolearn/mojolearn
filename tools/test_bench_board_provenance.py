@@ -30,6 +30,38 @@ class Provenance(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def overlay_manifest(self):
+        import copy
+        d = copy.deepcopy(self.native)
+        name = next(iter(d['files']))
+        d['experimental_overlay'] = dict(
+            schema='mojolearn.experimental-overlay/1', base_source_commit='a'*40,
+            candidate_source_commit='c'*40, uniform_numerical_source=False,
+            identical_qualified=False, replaced_files=[name], artifacts={name: dict(
+                source_commit='c'*40, sha256=d['files'][name], build_receipt_sha256='d'*64)})
+        return d
+
+    def test_overlay_origin_is_part_of_resume_and_worker_identity(self):
+        d = self.overlay_manifest(); f = self.root/'overlay.json'
+        with patch.dict(os.environ, {}, clear=True):
+            f.write_text(json.dumps(d)); first = P.identity(f)
+            self.assertEqual(first['experimental_overlay'], d['experimental_overlay'])
+            d['experimental_overlay']['artifacts'][next(iter(d['files']))]['build_receipt_sha256'] = 'e'*64
+            f.write_text(json.dumps(d)); self.assertNotEqual(first, P.identity(f))
+
+    def test_overlay_rejects_incomplete_mismatched_or_false_qualification(self):
+        for mutation in ('missing', 'bytes', 'source', 'qualified', 'uniform', 'replacement'):
+            with self.subTest(mutation=mutation), patch.dict(os.environ, {}, clear=True):
+                d=self.overlay_manifest(); overlay=d['experimental_overlay']; name=next(iter(d['files']))
+                if mutation=='missing': overlay['artifacts'].clear()
+                if mutation=='bytes': overlay['artifacts'][name]['sha256']='e'*64
+                if mutation=='source': overlay['artifacts'][name]['source_commit']='f'*40
+                if mutation=='qualified': overlay['identical_qualified']=True
+                if mutation=='uniform': overlay['uniform_numerical_source']=True
+                if mutation=='replacement': overlay['replaced_files']=[]
+                f=self.root/'overlay.json'; f.write_text(json.dumps(d))
+                with self.assertRaises(ValueError): P.identity(f)
+
     def test_nested_and_aliased_extensions_are_pinned_by_actual_file(self):
         import types
         gpu = self.root/'_mojolearn_linalg.so'; gpu.write_bytes(b'gpu')
