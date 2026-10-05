@@ -30,6 +30,8 @@ def log_launch_ctx(ctx: DeviceContext, name: StringSlice) raises:
         var sel = String(getenv("RF_LAUNCH_SYNC_BEFORE"))
         if sel != "" and sel.find("," + String(name) + ",") >= 0:
             ctx.synchronize()
+            with open(st[].path, "a") as fh:
+                fh.write("SYNCED\n")
         return
     ctx.synchronize()
     var now = Int(perf_counter_ns())
