@@ -950,6 +950,7 @@ def build_parser():
                         "a name asked for and not built is REFUSED by name. "
                         "`ours` always runs; the filter reads opponents only. "
                         "Naming opponents here races them (default: ours only).")
+    p.add_argument("--opponents-only", action="store_true", help="run only explicitly selected opponents; never construct or run ours")
     p.add_argument("--ours-ab", default=None, metavar="PARAM=VALUE",
                    help="add a second ours arm, `ours-ab`, equal to `ours` "
                         "except one estimator keyword (a Python literal, "
@@ -1024,6 +1025,8 @@ def main(argv=None):
     started = time.time()
     args = build_parser().parse_args(argv)
     lane = args.lane
+    if args.opponents_only and (not args.arms or args.ours_only or args.ours_ab or args.host_digest):
+        raise SystemExit("--opponents-only requires --arms and forbids ours options")
     # Default: our arm(s) only. Opponents race only on an explicit ask:
     # --with-opponents, an --arms list, or --opponents-first.
     if not (args.with_opponents or args.arms or args.opponents_first):
@@ -1093,10 +1096,12 @@ def main(argv=None):
                        "; ".join("%s %s" % kv for kv in sorted(task["objectives"].items())))
     spec.prepare_cuml_labels(data)
     spec.prepare_anomaly_labels(lane, data)
-    prepare_our_inputs(data)
+    if not args.opponents_only:
+        prepare_our_inputs(data)
 
     if args.list_arms:
-        print("ours  %s" % OUR_ENTRY_POINTS[lane])
+        if not args.opponents_only:
+            print("ours  %s" % OUR_ENTRY_POINTS[lane])
         for names, _ in spec.opponent_builders(lane, cfg, data, devices):
             for name in names:
                 print(name)
@@ -1124,7 +1129,7 @@ def main(argv=None):
     if not args.ours_only and args.opponents_first:
         print("FSPEED-IMPORT-ORDER lane=%s first=opponents" % lane, flush=True)
         opponents = spec.build_opponents(lane, cfg, data, devices, wanted)
-    arms = build_ours(lane, cfg, data)
+    arms = [] if args.opponents_only else build_ours(lane, cfg, data)
     if args.ours_ab:
         import ast
         key, _, raw = args.ours_ab.partition("=")

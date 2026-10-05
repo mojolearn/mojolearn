@@ -4715,8 +4715,8 @@ def quality(lane, D, outs):
 #: Per-arm environment a library documents as its own setting. implicit asks
 #: for a single-threaded BLAS (its CPU solver threads itself); with OpenBLAS
 #: on a box with more cores than its build limit its fit otherwise aborts.
-ARM_ENV = {"implicit-cpu": {"OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"},
-           "implicit-gpu": {"OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"}}
+# Owner policy: opponent workers have no imposed CPU thread cap.
+ARM_ENV = {}
 
 
 def _worker_env(arm):

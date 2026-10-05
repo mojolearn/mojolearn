@@ -100,6 +100,7 @@ import datetime
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import platform
 import re
@@ -1441,7 +1442,7 @@ def parse_tree_log(path):
 
 def tree_cmd(ctx, race):
     ours = race["our_arms"]
-    primary = ours["ours"]
+    primary = ours.get("ours", "identical")
     cmd = [ctx["python"], "-u", ctx["tree_driver"], "--lane", race["lane"],
            "--dataset", tree_driver_dataset(race["lane"], race["dataset"])]
     if race["rows"]:
@@ -1453,6 +1454,10 @@ def tree_cmd(ctx, race):
         cmd += ["--ours-only"]
     if "ours-ab" in ours:
         cmd += ["--ours-ab", "numeric_mode='%s'" % ours["ours-ab"]]
+    if ctx.get("opponents_only"):
+        if ours or not race["opponents"]:
+            raise ValueError("opponents-only tree command requires only opponents")
+        cmd += ["--opponents-only"]
     cmd += ["--mem"]
     if ctx.get("infer"):
         cmd += INFER.driver_args(race)
@@ -2117,6 +2122,22 @@ def params_probe(ctx, race, arms):
     return out
 
 
+def successful_opponent_cell(cell):
+    """Admission for missing-only runs: finite scores, warmup, no quality error."""
+    def finite(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0
+    def quality_ok(v):
+        if isinstance(v, dict):
+            return "error" not in v and v.get("finite") is not False and all(quality_ok(x) for x in v.values())
+        if isinstance(v, list):
+            return all(quality_ok(x) for x in v)
+        return not isinstance(v, (int, float)) or math.isfinite(v)
+    times = cell.get("times_ms") or []
+    return (cell.get("status") == "ok" and cell.get("rounds") == len(times)
+            and len(times) >= 1 and all(finite(t) for t in times) and finite(cell.get("median_ms"))
+            and finite(cell.get("warmup_ms")) and quality_ok(cell.get("quality")))
+
+
 def stored_opponents(ctx, race):
     """{arm: stored record} for the race's opponents the store holds under the
     same key, read-back included: a candidate (the fields known before
@@ -2146,6 +2167,9 @@ def stored_opponents(ctx, race):
                            device_name=pr.get("device_name"))
         hit = STORE.lookup(store, key)
         if hit is not None:
+            cell = hit.get("cell") or {}
+            if ctx.get("opponents_only") and (not successful_opponent_cell(cell)):
+                continue
             out[arm] = hit
     return out
 
@@ -2378,6 +2402,11 @@ def run_race(ctx, race):
                     _refuse_cell(cell, "WORKER PROVENANCE: " + str(exc))
         rec["provenance_dir"] = os.path.relpath(ctx["receipt_dir"], ctx["out"])
     note_host_memory(rec, HOST_MEMORY_KILLS[mark:], race["arms"])
+    if ctx.get("opponents_only") and any(c.get("library") == "mojolearn" or str(c.get("arm", "")).startswith("ours") for c in rec["cells"]):
+        raise RuntimeError("opponents-only safety violation: own arm appeared")
+    if ctx.get("opponents_only") and not race["arms"]:
+        rec["status"] = "done"
+        rec["no_execution"] = True
     rec["arms"] = [a for a in full["arms"] if a not in skipped]
     rec["stored_arms"] = sorted(stored)
     rec["skipped_opponents"] = list(skipped)
@@ -2391,6 +2420,9 @@ def run_race(ctx, race):
                 ic = dict(ic, source=STORE.source_text(r))
                 rec["infer_cells"].append(ic)
     rec["cells"] = add_ratios(rec["cells"])
+    if ctx.get("opponents_only"):
+        cells = {c["arm"]: c for c in rec["cells"]}
+        rec["status"] = "done" if all(successful_opponent_cell(cells.get(a, {})) for a in full["opponents"]) else "failed"
     rec["stored_now"] = store_opponents(ctx, full, rec)
     return rec
 
@@ -3163,6 +3195,7 @@ def build_parser():
     p.add_argument("--retime-opponents", action="store_true",
                    help="measure every opponent again (and store the new measurement); "
                         "implies --with-opponents")
+    p.add_argument("--opponents-only", action="store_true", help="run missing or failed opponent cells only; never run our arms")
     p.add_argument("--with-opponents", action="store_true",
                    help="also race the opponents the store does not hold (default: our GPU "
                         "arm(s) only; stored opponent cells still join the race)")
@@ -3420,6 +3453,8 @@ def main(argv=None):
     datasets = _csv(args.datasets, DATASETS, "dataset")
     rows = parse_rows(args.rows)
     races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape)
+    if args.opponents_only:
+        races = [dict(r, our_arms={}, arms=list(r["opponents"])) for r in races]
     if args.shard:
         races = shard_races(races, args.shard)
     # taxi and Istella-S are read by trees and classical only; a neural-only
@@ -3540,7 +3575,8 @@ def main(argv=None):
         ctx["artifact_hardware"] = box["artifact_hardware"]
     ctx["box"] = box
     ctx["retime"] = args.retime_opponents
-    ctx["with_opponents"] = bool(args.with_opponents or args.retime_opponents)
+    ctx["opponents_only"] = args.opponents_only
+    ctx["with_opponents"] = bool(args.with_opponents or args.retime_opponents or args.opponents_only)
     ctx["store_path"] = os.path.abspath(os.path.expanduser(
         args.opponent_store or os.path.join(os.path.dirname(out), "opponent-store.jsonl")))
     ctx["data_sha"] = {}
@@ -3573,6 +3609,7 @@ def main(argv=None):
                         "data_sha256": ctx["data_sha"],
                         "opponent_store": ctx["store_path"],
                         "retime_opponents": ctx["retime"],
+                        "opponents_only": args.opponents_only,
                         "smoke_check": bool(args.smoke), "shard": args.shard,
                         "smoke_gate": gate}
     result["plan"] = [r["id"] for r in races]
@@ -3582,7 +3619,7 @@ def main(argv=None):
     todo = []
     for r in races:
         prev = result["races"].get(r["id"])
-        if prev and prev.get("status") == "done" and prev.get("params_check") != "MATCHED" \
+        if prev and prev.get("status") == "done" and not prev.get("no_execution") and prev.get("params_check") != "MATCHED" \
                 and _driver_has_params_check(ctx, r["family"]):
             print("bench_board: RERUN %s (done %s without a MATCHED parameter check: %s; its "
                   "driver now has the check)" % (r["id"], prev.get("finished"),
