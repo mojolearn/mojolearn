@@ -215,6 +215,8 @@ def hardware_receipt(vendor):
         values = data[cards[0]]
         if not any('unique' in k.lower() and str(v).strip() not in ('', 'N/A', '0') for k,v in values.items()):
             raise ValueError('ROCm GPU unique identity is missing')
+        if not any('series' in k.lower() and str(v).strip() for k,v in values.items()) or not data.get('system', {}).get('Driver version'):
+            raise ValueError('ROCm GPU product/driver evidence is missing')
         return json.dumps(data, sort_keys=True)
     raise ValueError('Unsupported guarded GPU vendor')
 

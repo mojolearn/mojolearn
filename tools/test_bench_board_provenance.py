@@ -59,9 +59,9 @@ class Provenance(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'vendor'): P.identity(f)
 
     def test_rocm_receipt_refuses_missing_or_ambiguous_identity(self):
-        for data in ({'card0':{'GPU Unique ID':'abc','Card series':'MI325X'}}, {'card0':{'GPU Unique ID':'abc'},'card1':{'GPU Unique ID':'def'}}, {'card0':{'GPU Unique ID':'N/A'}}):
+        for data in ({'card0':{'GPU Unique ID':'abc','Card series':'MI325X'},'system':{'Driver version':'6.12'}}, {'card0':{'GPU Unique ID':'abc'},'card1':{'GPU Unique ID':'def'}}, {'card0':{'GPU Unique ID':'N/A'}}):
             with patch.object(P.subprocess,'check_output',return_value=json.dumps(data)):
-                if len(data)==1 and data['card0']['GPU Unique ID']=='abc': self.assertIn('abc',P.hardware_receipt('hip'))
+                if 'system' in data: self.assertIn('abc',P.hardware_receipt('hip'))
                 else:
                     with self.assertRaises(ValueError):P.hardware_receipt('hip')
 
