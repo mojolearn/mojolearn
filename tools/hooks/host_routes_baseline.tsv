@@ -867,12 +867,6 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_sched.
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_sched.py	1	for k in range(count):
 # why: lrs(n) and OneCycle _fill loop over optimizer steps in exact-rational/binary64 Python; owed to a Mojo port of the fixed-point enclosure (big-int Fraction fallback has no Mojo equivalent yet)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_x_sequence_sched.py	0	return [self.lr_at(t) for t in range(1, int(n) + 1)]
-# why: PCA float n_components: cumulative explained-variance-ratio fold and tail sum over components; owed to the estimators binding's PCA finish
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/decomposition.py	0	ev = [float(v) for v in self.explained_variance_]
-# why: PCA float n_components: cumulative explained-variance-ratio fold and tail sum over components; owed to the estimators binding's PCA finish
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/decomposition.py	0	for i, r in enumerate(ratios):
-# why: PCA float n_components: cumulative explained-variance-ratio fold and tail sum over components; owed to the estimators binding's PCA finish
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/decomposition.py	0	for v in rest:
 # why: CatBoost Pool argument walks over Python objects (group_id runs of str/bytes/int ids, pairs and pairs_weight entries, a list permutation's element types) and the O(leaves) model-text parse of get_leaf_values / get_tree_leaf_counts; owed to a native group-run helper for integer id buffers and a binding export of the leaf table; FeatureFreq's per-feature constant check dispatches reduce_stat per column (one helper call per feature, a per-column range helper owed)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/ensemble.py	0	for f in range(n_features):
 # why: CatBoost Pool argument walks over Python objects (group_id runs of str/bytes/int ids, pairs and pairs_weight entries, a list permutation's element types) and the O(leaves) model-text parse of get_leaf_values / get_tree_leaf_counts; owed to a native group-run helper for integer id buffers and a binding export of the leaf table; FeatureFreq's per-feature constant check dispatches reduce_stat per column (one helper call per feature, a per-column range helper owed)
