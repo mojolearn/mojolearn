@@ -80,7 +80,7 @@ from mamba.impl.modules.mamba3_refusal import m3_refuse_nonfinite_named
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
-from gemm.checks.gemm_identical import identical_gemm
+from mamba.impl.modules.idn_gemm_ws import mamba_proj_gemm
 
 # ORIENTATION NUMBERING: gemm_oracle's OP_NT = 1 -- the numbering
 # identical_gemm reads. The Mamba-1 header's trap note applies verbatim.
@@ -119,6 +119,11 @@ from mamba.impl.ops.mamba3_siso import (
     SISO3_ANY_SABOTAGE,
     m3_phase_tick,
     m3_mod_2pi,
+    M3_ANGLE_PARALLEL,
+    M3_ANGLE_Q_MASK,
+    m3_angle_q_from_inc,
+    m3_angle_q_from_state,
+    m3_angle_q_to_theta,
     m3_n_chunks,
     m3_q_eff,
     m3_siso_forward,
@@ -137,6 +142,7 @@ from mamba.impl.modules.afn_defines import (
     AFN_MAMBA3_SISO_FUSED,
     AFN_MAMBA_ARENA,
     AFN_MAMBA_DEVICE_REFUSAL,
+    IDN_MAMBA_ARENA,
 )
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
@@ -314,6 +320,22 @@ struct Mamba3DeviceState(Movable):
         self.buf_adt = mamba_zeros(ctx, b * M3_CHUNK_SIZE * nh)
         self.pend_k = mamba_zeros(ctx, b * nh * M3_D_STATE)
         self.pend_v = mamba_zeros(ctx, b * nh * M3_HEADDIM)
+
+    def rezero(mut self) raises:
+        """lane/fam2-lm (IDN_M3_SESSION_STAGE_REUSE): the certified zero
+        state again, on the buffers already held."""
+        self.buf_len = 0
+        self.pending = False
+        self.theta.enqueue_fill(Float32(0.0))
+        self.h.enqueue_fill(Float32(0.0))
+        self.buf_qrot.enqueue_fill(Float32(0.0))
+        self.buf_krot.enqueue_fill(Float32(0.0))
+        self.buf_v.enqueue_fill(Float32(0.0))
+        self.buf_dt.enqueue_fill(Float32(0.0))
+        self.buf_sig.enqueue_fill(Float32(0.0))
+        self.buf_adt.enqueue_fill(Float32(0.0))
+        self.pend_k.enqueue_fill(Float32(0.0))
+        self.pend_v.enqueue_fill(Float32(0.0))
 
     def __init__(
         out self, ctx: DeviceContext, b: Int, dims: Mamba3Dims, mut arena: MambaArena
@@ -493,6 +515,46 @@ struct Mamba3DeviceStages(Movable):
         self.v_last = mamba_zeros(ctx, b * nh * p_dim)
         self.theta_last = mamba_zeros(ctx, b * nh * r_ang)
 
+    def rezero(mut self) raises:
+        """lane/fam2-lm (IDN_M3_SESSION_STAGE_REUSE): every stage back to
+        the zeros its constructor filled, on the buffers already held (no
+        allocation). Fills only, in stream order ahead of the next forward's
+        launches. Not for a guarded (poison) build, whose fills cover a
+        body view."""
+        self.norm_sumsq.enqueue_fill(Float32(0.0))
+        self.norm_out.enqueue_fill(Float32(0.0))
+        self.in_proj.enqueue_fill(Float32(0.0))
+        self.a_out.enqueue_fill(Float32(0.0))
+        self.dt_out.enqueue_fill(Float32(0.0))
+        self.adt_work.enqueue_fill(Float32(0.0))
+        self.sig_work.enqueue_fill(Float32(0.0))
+        self.dt_work.enqueue_fill(Float32(0.0))
+        self.gamma_work.enqueue_fill(Float32(0.0))
+        self.betap_work.enqueue_fill(Float32(0.0))
+        self.scale_work.enqueue_fill(Float32(0.0))
+        self.bcnorm_b.enqueue_fill(Float32(0.0))
+        self.bcnorm_c.enqueue_fill(Float32(0.0))
+        self.theta_out.enqueue_fill(Float32(0.0))
+        self.rotq_work.enqueue_fill(Float32(0.0))
+        self.rotk_work.enqueue_fill(Float32(0.0))
+        self.qkdot.enqueue_fill(Float32(0.0))
+        self.kscale_work.enqueue_fill(Float32(0.0))
+        self.v_work.enqueue_fill(Float32(0.0))
+        self.dacs.enqueue_fill(Float32(0.0))
+        self.seg_l.enqueue_fill(Float32(0.0))
+        self.qk_s.enqueue_fill(Float32(0.0))
+        self.pass_states.enqueue_fill(Float32(0.0))
+        self.yintra.enqueue_fill(Float32(0.0))
+        self.ystate.enqueue_fill(Float32(0.0))
+        self.skip_out.enqueue_fill(Float32(0.0))
+        self.gate_out.enqueue_fill(Float32(0.0))
+        self.out_proj.enqueue_fill(Float32(0.0))
+        self.residual_out.enqueue_fill(Float32(0.0))
+        self.h_last.enqueue_fill(Float32(0.0))
+        self.k_last.enqueue_fill(Float32(0.0))
+        self.v_last.enqueue_fill(Float32(0.0))
+        self.theta_last.enqueue_fill(Float32(0.0))
+
     def __init__(
         out self,
         ctx: DeviceContext,
@@ -624,6 +686,18 @@ def _m3_stage_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
             ctx.synchronize()
     else:
         ctx.synchronize()
+
+
+def _m3_final_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
+    """The block forward's LAST stage wait. lane fam-lm: under
+    IDN_MAMBA_ARENA (IDENTICAL) the per-stage waits above are traced-only,
+    but this one stays unconditional, so every caller that is not the arena
+    binding (the prefill session, the backward's tail, gates) still gets a
+    forward that has completed when it returns, as main's did."""
+    comptime if IDN_MAMBA_ARENA:
+        ctx.synchronize()
+    else:
+        _m3_stage_sync(ctx, trace)
 
 
 # ===========================================================================
@@ -970,9 +1044,23 @@ def m3_step_angle_kernel(
         )
     )
     var inc = ftz(identical_mul(a, ftz(dt_out.unsafe_load(bb * nh + hh))))
-    theta_state.unsafe_store(
-        cell, m3_mod_2pi(ftz(ftz(theta_state.unsafe_load(cell)) + inc))
-    )
+    comptime if M3_ANGLE_PARALLEL:
+        # lane/fam2-lm candidate arm: the one-token case of the integer
+        # chain (mamba3_siso.mojo `M3_ANGLE_PARALLEL`), so a decode step
+        # continues a prefill bit for bit.
+        theta_state.unsafe_store(
+            cell,
+            m3_angle_q_to_theta(
+                (
+                    m3_angle_q_from_state(theta_state.unsafe_load(cell))
+                    + m3_angle_q_from_inc(inc)
+                ) & M3_ANGLE_Q_MASK
+            ),
+        )
+    else:
+        theta_state.unsafe_store(
+            cell, m3_mod_2pi(ftz(ftz(theta_state.unsafe_load(cell)) + inc))
+        )
 
 
 def m3_step_core_kernel(
@@ -1366,11 +1454,11 @@ def mamba3_block_forward(
         if not afn_proj_gemm_into(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
         )
 
@@ -1648,7 +1736,7 @@ def mamba3_block_forward(
         if trace.enabled or not afn_proj_gemm_resid_into(
             ctx, stages.residual_out, x, stages.gate_out, w.w_out, m, dm, di, OP_NT
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
             )
             m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
@@ -1663,7 +1751,7 @@ def mamba3_block_forward(
         else:
             m3_phase_tick(ctx, phase_tick, String("block.out_proj"))
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx, stages.out_proj, stages.gate_out, w.w_out, m, dm, di, OP_NT
         )
 
@@ -1676,7 +1764,7 @@ def mamba3_block_forward(
             grid_dim=(_grid(m * dm), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
-    _m3_stage_sync(ctx, trace)
+    _m3_final_sync(ctx, trace)
 
     # ---- the card, contract section 7's order (input.x recorded above).
     trace.record_device[DType.float32](

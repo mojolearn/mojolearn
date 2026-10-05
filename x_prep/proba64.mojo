@@ -26,6 +26,12 @@ winner's 1 - c built exactly from c's bits (no FP64 arithmetic, which
 Apple GPUs lack), every other class (and a winner below 1/2) the exact
 widening of its float32 value. Integer bit work only, one thread a row.
 Python reads the 2*n*K words as float64 (byte reinterpretation).
+
+OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+rab5-proba64, istella): log loss better on all six (gaussian-nb 3.574 ->
+3.415, bernoulli-nb 5.351 -> 4.274, multinomial-nb 3.631 -> 3.077,
+complement-nb 3.767 -> 3.165, qda 3.609 -> 3.478, nearest-centroid 4.299 ->
+4.118), accuracy identical, time within +-5% (-0.2% to +5.3%). KEEP.
 """
 from std.memory import bitcast
 from std.sys.compile import is_defined

@@ -59,6 +59,8 @@ initialization.
 
 from std.memory import bitcast
 from mixture.meanll_order import gmm_meanll_host
+from mixture.nk_order import IDN_GMM_NK_LEVELS, gmm_nk_fold_levels
+from mixture.chol_order import gmm_idn_chol_applies, gmm_idn_chol_host
 
 from checks.numerics import (
     ftz,
@@ -388,8 +390,15 @@ def gmmh_m_step(
 
     def _nk(k: Int) {imm resp, imm nkp, imm n, imm ncomp, imm ten_eps}:
         var acc = Float32(0.0)
-        for i in range(n):
-            acc = ftz(acc + ftz(resp[i * ncomp + k]))
+        comptime if IDN_GMM_NK_LEVELS:
+            # the device's chunked levels (`mixture/nk_order.mojo`)
+            var col = List[Float32](capacity=n)
+            for i in range(n):
+                col.append(resp[i * ncomp + k])
+            acc = gmm_nk_fold_levels(col)
+        else:
+            for i in range(n):
+                acc = ftz(acc + ftz(resp[i * ncomp + k]))
         nkp.unsafe_store(k, ftz(acc + ten_eps))
 
     host_cells(_nk, ncomp, 2 * n)
@@ -460,6 +469,18 @@ def gmmh_precision_cholesky(
     var dd = d * d
     var prec = List[Float32](length=ncomp * dd, fill=Float32(0.0))
     var logdet = List[Float32](length=ncomp, fill=Float32(0.0))
+    if gmm_idn_chol_applies(d):
+        # fam2-cluster, IDN_GMM_FUSED_CHOL: the one-launch order
+        # (`mixture/chol_order.mojo`), the device kernel's words.
+        for kc in range(ncomp):
+            var fc = gmm_idn_chol_host(cov, kc * dd, d, Float32(0.0))
+            if fc.info != 0:
+                return GmmHostPrecision(fc.info, kc, prec^, logdet^)
+            logdet[kc] = fc.logdet
+            for i in range(d):
+                for j in range(d):
+                    prec[kc * dd + i * d + j] = fc.linv[j * d + i]
+        return GmmHostPrecision(0, -1, prec^, logdet^)
     for kc in range(ncomp):
         var work = List[Float32](capacity=dd)
         for i in range(dd):

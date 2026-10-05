@@ -8,6 +8,7 @@ from std.math import isfinite
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from umap.optimizer_identical_device import umap_dense_graph_to_device
 
 
 comptime FAST_OPT_TPB = 128
@@ -141,62 +142,23 @@ def optimize_layout_fast(
         raise Error("UMAP FAST optimizer parameters are invalid")
     if not (a > Float32(0.0)) or not (b > Float32(0.0)):
         raise Error("UMAP FAST optimizer curve parameters are invalid")
-    # Stable CSR: scanning the dense graph in (head, tail) order makes the
-    # CSR position exactly the serial reference's positive-edge ordinal.
-    var row_offsets = List[UInt32]()
-    var tails = List[UInt32]()
-    var edge_weights = List[Float32]()
-    row_offsets.append(UInt32(0))
-    var max_weight = Float32(0.0)
-    for head in range(n_samples):
-        for tail in range(n_samples):
-            var weight = weights[head * n_samples + tail]
-            if not isfinite(weight) or weight < Float32(0.0):
-                raise Error("UMAP FAST optimizer graph weight is invalid")
-            if weight > max_weight:
-                max_weight = weight
-            if weight != weights[tail * n_samples + head]:
-                raise Error("UMAP FAST optimizer requires symmetric weights")
-            if head != tail and weight > Float32(0.0):
-                tails.append(UInt32(tail))
-                edge_weights.append(weight)
-        row_offsets.append(UInt32(len(tails)))
-    if not (max_weight > Float32(0.0)):
-        raise Error("UMAP FAST optimizer graph has no positive edges")
-    if len(edge_weights) == 0:
-        raise Error("UMAP FAST optimizer graph has no non-self edges")
-    for i in range(len(initial)):
-        if not isfinite(initial[i]):
-            raise Error("UMAP FAST optimizer initialization is invalid")
-    var h_initial = ctx.enqueue_create_host_buffer[DType.float32](len(initial))
-    var h_offsets = ctx.enqueue_create_host_buffer[DType.uint32](
-        len(row_offsets)
-    )
-    var h_tails = ctx.enqueue_create_host_buffer[DType.uint32](len(tails))
-    var h_weights = ctx.enqueue_create_host_buffer[DType.float32](
-        len(edge_weights)
-    )
-    for i in range(len(initial)):
-        h_initial.unsafe_ptr().unsafe_store(i, initial[i])
-    for i in range(len(row_offsets)):
-        h_offsets.unsafe_ptr().unsafe_store(i, row_offsets[i])
-    for i in range(len(tails)):
-        h_tails.unsafe_ptr().unsafe_store(i, tails[i])
-        h_weights.unsafe_ptr().unsafe_store(i, edge_weights[i])
-    var first = ctx.enqueue_create_buffer[DType.float32](len(initial))
+    # Stable CSR: the dense graph scanned in (head, tail) order makes the
+    # CSR position exactly the serial reference's positive-edge ordinal. The
+    # validation, the symmetry refusal, the compaction and the init check
+    # run on the device in the host walk's refusal order
+    # (`umap_dense_graph_to_device`, lane cpu3-neighbors).
+    var g = umap_dense_graph_to_device(ctx, initial, weights, n_samples, True)
+    var max_weight = g.max_weight
+    var g_first = g.first^
+    var g_offsets = g.offsets^
+    var g_tails = g.tails^
+    var g_weights = g.weights^
     var second = ctx.enqueue_create_buffer[DType.float32](len(initial))
-    var d_offsets = ctx.enqueue_create_buffer[DType.uint32](len(row_offsets))
-    var d_tails = ctx.enqueue_create_buffer[DType.uint32](len(tails))
-    var d_weights = ctx.enqueue_create_buffer[DType.float32](len(edge_weights))
-    ctx.enqueue_copy(dst_buf=first, src_ptr=h_initial.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_offsets, src_ptr=h_offsets.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tails, src_ptr=h_tails.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_weights, src_ptr=h_weights.unsafe_ptr())
     for epoch in range(n_epochs):
         if epoch % 2 == 0:
             ctx.enqueue_function[umap_jacobi_epoch_kernel](
-                first.unsafe_ptr(), d_offsets.unsafe_ptr(),
-                d_tails.unsafe_ptr(), d_weights.unsafe_ptr(),
+                g_first.unsafe_ptr(), g_offsets.unsafe_ptr(),
+                g_tails.unsafe_ptr(), g_weights.unsafe_ptr(),
                 second.unsafe_ptr(),
                 Int32(n_samples), Int32(n_components), Int32(epoch),
                 Int32(n_epochs), learning_rate, Int32(negative_rate),
@@ -206,34 +168,26 @@ def optimize_layout_fast(
             )
         else:
             ctx.enqueue_function[umap_jacobi_epoch_kernel](
-                second.unsafe_ptr(), d_offsets.unsafe_ptr(),
-                d_tails.unsafe_ptr(), d_weights.unsafe_ptr(),
-                first.unsafe_ptr(),
+                second.unsafe_ptr(), g_offsets.unsafe_ptr(),
+                g_tails.unsafe_ptr(), g_weights.unsafe_ptr(),
+                g_first.unsafe_ptr(),
                 Int32(n_samples), Int32(n_components), Int32(epoch),
                 Int32(n_epochs), learning_rate, Int32(negative_rate),
                 repulsion, a, b, max_weight, seed,
                 grid_dim=((n_samples + FAST_OPT_TPB - 1) // FAST_OPT_TPB, 1, 1),
                 block_dim=(FAST_OPT_TPB, 1, 1),
             )
-    var host_out = ctx.enqueue_create_host_buffer[DType.float32](len(initial))
+    var out = List[Float32](length=len(initial), fill=Float32(0.0))
     if n_epochs % 2 == 0:
-        ctx.enqueue_copy(dst_ptr=host_out.unsafe_ptr(), src_buf=first)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=g_first)
     else:
-        ctx.enqueue_copy(dst_ptr=host_out.unsafe_ptr(), src_buf=second)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=second)
     ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(len(initial)):
-        out.append(host_out.unsafe_ptr().unsafe_load(i))
-    _ = h_initial^
-    _ = h_offsets^
-    _ = h_tails^
-    _ = h_weights^
-    _ = first^
     _ = second^
-    _ = d_offsets^
-    _ = d_tails^
-    _ = d_weights^
-    _ = host_out^
+    _ = g_first^
+    _ = g_offsets^
+    _ = g_tails^
+    _ = g_weights^
     return out^
 
 

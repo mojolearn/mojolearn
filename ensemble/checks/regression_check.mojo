@@ -576,7 +576,7 @@ def arm_f_estimator_predict(ctx: DeviceContext) raises -> Int:
             rm[r * n_cols + c] = x[c * n_rows + r]
     var preds = List[Float32]()
     preds.resize(n_rows, Float32(-1))
-    rf.predict(rm, n_rows, n_cols, preds, f)
+    rf.predict_host(rm, n_rows, n_cols, preds, f)
 
     var wrong = 0
     for r in range(n_rows):

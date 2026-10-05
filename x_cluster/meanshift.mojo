@@ -19,6 +19,7 @@ one dropped, then the nearest center per row (the lowest index on a tie), -1
 beyond the bandwidth when not `cluster_all`."""
 from checks.numerics import ftz, identical_mul
 from x_cluster.ops import ClusterOps
+from x_cluster.bodies import MSI_SCRATCH_PER_SEED
 from x_cluster.post_bodies import FM_SQRT
 from x_cluster.optics import dist_slot
 
@@ -72,7 +73,8 @@ def meanshift_fit[O: ClusterOps](
         cs = ops.put(x)
     else:
         cs = ops.put(seeds)
-    var sc = ops.zeros(ns * d)
+    # K6: the blocked fold keeps a chunk partial per seed beside its sums
+    var sc = ops.zeros(MSI_SCRATCH_PER_SEED * ns * d)
     var it_s = ops.zeros_i(ns)
     var ic_s = ops.zeros_i(ns)
     var stop = ftz(identical_mul(Float32(1e-3), bw))

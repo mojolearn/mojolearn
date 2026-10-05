@@ -266,6 +266,17 @@ def _fill_ones[wait: Bool = True](
 
 #: The RMSNorm backward's `c` fold spelled product-then-add instead of one
 #: `fma` per term. INERT at `d_model == 1` and on exactly-representable rows.
+comptime IDN_BWD_ENTRY_ALIAS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/nr-attn (2026-10-04), roadmap C9, default ON under IDENTICAL: the
+layer backward's entry copy of `d_out` into `in_d_residual2` (stage 0, an
+identity) runs only on a traced or materialized call; the production path
+hands `d_out` to the copy's readers instead (one `[M, d_model]` read and
+write fewer per layer). Same bytes read: no bit moves on any column.
+`-D MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF` restores the copy."""
+
+
 comptime SAB_B01_DOT_UNFUSED = is_defined[
     "MOJOLEARN_TRANSFORMER_SABOTAGE_B01_DOT_UNFUSED"
 ]()
@@ -3287,14 +3298,30 @@ def llama_decoder_layer_backward_device(
     # arguments, so both branches take the incoming gradient unchanged. NO
     # ROUNDING: a copy, not a seam.
     # =====================================================================
-    step_count_launch()
-    ctx.enqueue_function[bwd_copy_kernel](
-        bst.in_d_residual2.unsafe_ptr(),
-        d_out.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
+    # IDN_BWD_ENTRY_ALIAS (roadmap C9): on the production path (no trace,
+    # no materialized stages) the stage-0 copy is skipped and its three
+    # readers (the down GEMMs' A/B operand, the residual-1 add or the fused
+    # norm2 epilogue) read the caller's `d_out` itself; the copy was the
+    # identity, so every reader sees the same bytes. A traced or
+    # materialized call keeps the copy, so stages 0-1 hold the gradient as
+    # before. `d_out` is the caller's buffer and this call never writes it.
+    var alias_in = False
+    comptime if IDN_BWD_ENTRY_ALIAS:
+        alias_in = not (materialize or trace.enabled)
+    var din: DeviceBuffer[DType.float32]
+    if alias_in:
+        din = d_out.create_sub_buffer[DType.float32](0, m * dm)
+    else:
+        din = bst.in_d_residual2.create_sub_buffer[DType.float32](0, m * dm)
+    if not alias_in:
+        step_count_launch()
+        ctx.enqueue_function[bwd_copy_kernel](
+            bst.in_d_residual2.unsafe_ptr(),
+            d_out.unsafe_ptr(),
+            Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -3308,12 +3335,12 @@ def llama_decoder_layer_backward_device(
     # STAGE 2-3. `down_proj`: forward `OP_NT` at `(m, dm, it)`. ROUTED.
     # =====================================================================
     _route_a(
-        ctx, bst.gemm_workspace, bst.d_mlp_gated, bst.d_down_proj_out, w.w_down, OP_NT, m, dm, it
+        ctx, bst.gemm_workspace, bst.d_mlp_gated, din, w.w_down, OP_NT, m, dm, it
     )
     _rec(ctx, trace, prefix, 2, bst.d_mlp_gated, m * it)
     pc.tick(ctx, "grad.down_dA", "down_dA")
     _route_b(
-        ctx, bst.gemm_workspace, bst.dw_down, bst.d_down_proj_out, fwd.gated, OP_NT, m, dm, it
+        ctx, bst.gemm_workspace, bst.dw_down, din, fwd.gated, OP_NT, m, dm, it
     )
     _rec(ctx, trace, prefix, 3, bst.dw_down, dm * it)
     pc.tick(ctx, "grad.down_dB", "down_dB")
@@ -3489,7 +3516,7 @@ def llama_decoder_layer_backward_device(
         w.norm2_w,
         fwd.norm2_sumsq,
         bst.d_residual1.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        bst.in_d_residual2.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        din.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
         fuse_norm2_residual,
         m,
         dm,
@@ -3510,7 +3537,7 @@ def llama_decoder_layer_backward_device(
         step_count_launch()
         ctx.enqueue_function[bwd_add2_kernel](
             bst.d_residual1.unsafe_ptr(), bst.norm2_dx.unsafe_ptr(),
-            bst.in_d_residual2.unsafe_ptr(), Int32(m * dm),
+            din.unsafe_ptr(), Int32(m * dm),
             grid_dim=(_grid(m * dm), 1, 1), block_dim=(BWD_TPB, 1, 1),
         )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
@@ -3578,6 +3605,20 @@ def llama_decoder_layer_backward_device(
     elif choice != ATTN_PATH_EAGER:
         var status = -1
         var estash_done = False
+        # IDN_ATTN_BWD_SCAN_REUSE: the forward's q/k/v regime maxima when
+        # its record matches these very buffers and lengths (-1 otherwise:
+        # the launcher then scans all four buffers as before).
+        var fqmax = Float64(-1.0)
+        var fkmax = Float64(-1.0)
+        var fvmax = Float64(-1.0)
+        if fwd.attn_fwd_scan.valid_for(
+            Int(fwd.q_rope.unsafe_ptr()), b * l * nh * hd,
+            Int(fwd.k_cache.unsafe_ptr()), Int(fwd.v_cache.unsafe_ptr()),
+            b * nkv * s * hd,
+        ):
+            fqmax = fwd.attn_fwd_scan.qmax
+            fkmax = fwd.attn_fwd_scan.kmax
+            fvmax = fwd.attn_fwd_scan.vmax
         comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm the
             # backward reads the exp stash this call's forward kept in
@@ -3595,6 +3636,7 @@ def llama_decoder_layer_backward_device(
                     fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
                     fwd.denom, fwd.aexp, kept_cells, b, l, nh, nkv, hd, s, pos0,
                     key_lo, window, scale, arm, ran, bst.attn_repaired,
+                    fwd_qmax=fqmax, fwd_kmax=fkmax, fwd_vmax=fvmax,
                 )
                 estash_done = True
         comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
@@ -3614,6 +3656,7 @@ def llama_decoder_layer_backward_device(
                 ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
                 fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
                 fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
+                fwd_qmax=fqmax, fwd_kmax=fkmax, fwd_vmax=fvmax,
             )
         bst.attn_backward_status = status
         if status != FUSED_RAN and not need_eager:

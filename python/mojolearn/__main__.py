@@ -122,6 +122,10 @@ QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
 
 
 def _verify_dispatch(args):
+    if getattr(args, "qualify_gpu", False):
+        # Not a verification scope: it drives full verifier runs itself.
+        from . import _ptx_qualify
+        return _ptx_qualify.cmd_qualify_gpu(args)
     if getattr(args, "training_only", False) or getattr(args, 'neural_training', False):
         args.no_models = True
     if not _asks_for_card(args):
@@ -325,6 +329,18 @@ def build_parser():
                         "--lanes and --fixtures explicitly select a custom "
                         "scope. Missing or failed checks exit nonzero. On a CPU-only "
                         "install it says so rather than silently skipping")
+    v.add_argument("--qualify-gpu", dest="qualify_gpu", action="store_true",
+                   help="QUALIFY THIS NVIDIA GPU AND DRIVER FOR IDENTICAL MODE. For a GPU "
+                        "with no native kernels in this release, which runs the PTX "
+                        "fallback: runs every applicable lane, fixture and part "
+                        "(--all, then --all --neural-training) through the PTX payload "
+                        "on this device and compares each with the reference table "
+                        "shipped in the wheel. Only a complete, identical comparison "
+                        "writes a local admission for this exact wheel, device and "
+                        "driver; a driver update or a new wheel needs it run again. "
+                        "Any difference, missing reference or unfinished cell writes "
+                        "no admission and is listed. Not needed on a GPU with native "
+                        "kernels (docs/NVIDIA_PTX_IDENTITY.md)")
     v.add_argument("--par", nargs="?", const="default",
                    choices=("quick", "default", "all"), default=None,
                    help="THE TWO-DEVICE COLUMN, on this box, against the "

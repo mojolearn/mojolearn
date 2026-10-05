@@ -24,6 +24,30 @@ them query by query, winner row by winner row (`gpu_data/samples_grouping.h:
 generated one included.
 """
 
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+#: lane/fam2-gbdt F2 (IDENTICAL, every vendor and the host column; default
+#: ON): generated PairLogit pairs are ENUMERATED ON THE DEVICE per query
+#: group (`gbdt/targets/kernel/pair_logit_group.mojo`, the FAST Apple
+#: kernel) instead of streaming a host-generated pair list twice per target
+#: call. BITS MOVE: a row's sum takes the group's document order, the value
+#: and magnitude partials are per group, the per-row pair weight is
+#: `ftz(w * count)`. The host column restates the group kernel
+#: (`gbdt/host/gbdt_oracle_pair.mojo::host_pair_groups` and the `_group_*`
+#: functions) under this same constant, so NVIDIA, AMD, Apple and the host
+#: change together. A caller's own pair list keeps the pair-list path.
+#: `-D MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF` (or the master
+#: `-D MOJOLEARN_IDN_ALL_OFF`) restores the pair list on all four.
+comptime IDN_PAIRLOGIT_GROUP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
 #: `MAX_PAIR_COUNT_ON_GPU` (`private/libs/pairs/util.h:13`)
 comptime MAX_PAIR_COUNT_ON_GPU = 1022 * 1023 // 2
 

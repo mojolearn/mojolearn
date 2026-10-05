@@ -11,8 +11,9 @@ from std.python.bindings import PythonModuleBuilder
 from x_decomp.api import (
     cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, als_cg_rows_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
-    py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_terms_py, pca_mle_pa_py, topn_desc_py,
+    py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py,
     rowsum_py, sqdist_py, vendor_py, fast_defines_py,
+    idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
 )
 from x_decomp.device import DevExec
 from x_decomp.fa_fast import FA_FAST_APPLE, fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
@@ -30,6 +31,12 @@ def mcd_g1_gram_last_py(index: PythonObject) raises -> PythonObject:
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
 from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
 from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dev_dict_update_py
+from x_decomp.select_ops import order_small_py, reduce_py
+from x_decomp.select_dev import (
+    dev_argmin_all_py, dev_dsum_sq_py, dev_order_f_py, dev_order_small_py, dev_pca_mle_rank_py, dev_reduce_py,
+    dev_select_smallest_py,
+)
+from x_decomp.mds_iso_dev import dev_mds_disp_py, dev_mds_setup_py
 from x_decomp.graph_device import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py,
     dev_graph_join_py, dev_graph_dijkstra_py,
@@ -42,7 +49,18 @@ from x_decomp.resident import (
 )
 from x_decomp.resident import GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, GRP_FAST_FUSED, grp_cls2_py, dev_first_nonfinite_py, grp_fit_fused_py
 from x_decomp.lanczos_dev import dev_lanczos_py, ipca_dev_on_py, kpca_lanczos_dev_on_py
-from x_decomp.w4_fast import LLE_FAST_DEV_LU, dev_lu_aux_py, w4_flags_py
+from x_decomp.resident import IDN_CD_RESIDENT, dev_cd_rows_py
+from x_decomp.resident import IDN_SVD_RESIDENT, dev_svd_py
+from x_decomp.resident import IDN_LU_RESIDENT, dev_lu_py, dev_lu_aux_py
+from x_decomp.resident import IDN_QR_R_RESIDENT, dev_qr_r_py
+from x_decomp.resident import dev_maxabs_py
+from x_decomp.api import IDN_DEV_MAXABS
+from x_decomp.resident import IDN_CODE_RESIDENT, dev_code_rows_py
+from x_decomp.resident import IDN_EIGH_RESIDENT, dev_eigh_py
+# merge 2026-10-05: both sides export `dev_lu_aux_py`; the w4 (FAST + Apple) one is
+# aliased here. Same Python name "x_decomp_dev_lu_aux" for both: LLE_FAST_DEV_LU is
+# FAST-only and IDN_LU_RESIDENT is IDENTICAL-only, so one build registers at most one.
+from x_decomp.w4_fast import LLE_FAST_DEV_LU, dev_lu_aux_py as w4_dev_lu_aux_py, w4_flags_py
 from x_decomp.qfix import LU_QFIX, lu_resid_py, qfix_flags_py
 
 
@@ -88,6 +106,10 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[orgqr_py[DevExec]]("x_decomp_orgqr")
         m.def_function[tsqr_r_py[DevExec]]("x_decomp_tsqr_r")
         m.def_function[tsqr_q_py[DevExec]]("x_decomp_tsqr_q")
+        # lane idn-dense-linalg: the one-entry OLS and solve routes
+        m.def_function[idn_flags_py]("x_decomp_idn_flags")
+        m.def_function[ols_tsqr_r_py[DevExec]]("x_decomp_ols_tsqr_r")
+        m.def_function[lu_gesv_py[DevExec]]("x_decomp_lu_gesv")
         m.def_function[als_cg_rows_py[DevExec]]("x_decomp_als_cg_rows")
         # MinCovDet's fast_mcd and online LDA on the resident kit
         # (x_decomp/kit_device.mojo)
@@ -106,10 +128,21 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[argmin_all_py]("x_decomp_argmin_all")
         m.def_function[sign_labels_py]("x_decomp_sign_labels")
         m.def_function[accuracy_py]("x_decomp_accuracy")
-        m.def_function[pca_mle_rank_terms_py]("x_decomp_pca_mle_terms")
-        m.def_function[pca_mle_pa_py]("x_decomp_pca_mle_pa")
+        m.def_function[pca_mle_rank_host_py]("x_decomp_pca_mle_rank")
         m.def_function[topn_desc_py]("x_decomp_topn_desc")
         m.def_function[dev_move_py]("x_decomp_dev_move")
+        # lane cpu2-l8-decomp: exact select reductions and the small stable order (x_decomp/select_*.mojo)
+        m.def_function[reduce_py]("x_decomp_reduce")
+        m.def_function[order_small_py]("x_decomp_order_small")
+        m.def_function[dev_reduce_py]("x_decomp_dev_reduce")
+        m.def_function[dev_order_small_py]("x_decomp_dev_order_small")
+        m.def_function[dev_pca_mle_rank_py]("x_decomp_dev_pca_mle_rank")
+        m.def_function[dev_order_f_py]("x_decomp_dev_order_f")
+        m.def_function[dev_argmin_all_py]("x_decomp_dev_argmin_all")
+        m.def_function[dev_select_smallest_py]("x_decomp_dev_select_smallest")
+        m.def_function[dev_dsum_sq_py]("x_decomp_dev_dsum_sq")
+        m.def_function[dev_mds_setup_py]("x_decomp_dev_mds_setup")
+        m.def_function[dev_mds_disp_py]("x_decomp_dev_mds_disp")
         # device-resident matrices (x_decomp/resident.mojo; GPU binding only)
         m.def_function[dev_alloc_py]("x_decomp_dev_alloc")
         m.def_function[dev_free_py]("x_decomp_dev_free")
@@ -136,7 +169,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         comptime if LU_QFIX:
             m.def_function[lu_resid_py]("x_decomp_lu_resid")
         comptime if LLE_FAST_DEV_LU:
-            m.def_function[dev_lu_aux_py]("x_decomp_dev_lu_aux")
+            m.def_function[w4_dev_lu_aux_py]("x_decomp_dev_lu_aux")
         m.def_function[dev_knn_select_py]("x_decomp_dev_knn_select")
         m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
         m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")
@@ -150,6 +183,29 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
             # lane apple-fast-nb: FAST + Apple default (off: -D MOJOLEARN_LDA_FUSED_SS_OFF) (x_decomp/lda_fast.mojo)
             m.def_function[dev_lda_estep_ss_py]("x_decomp_dev_lda_estep_ss")
         m.def_function[dev_als_rows_py]("x_decomp_dev_als_rows")
+        comptime if IDN_CD_RESIDENT:
+            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_CD_RESIDENT_OFF) (x_decomp/resident.mojo)
+            m.def_function[dev_cd_rows_py]("x_decomp_dev_cd_rows")
+        comptime if IDN_SVD_RESIDENT:
+            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_SVD_RESIDENT_OFF) (x_decomp/resident.mojo)
+            m.def_function[dev_svd_py]("x_decomp_dev_svd")
+        comptime if IDN_LU_RESIDENT:
+            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_LU_RESIDENT_OFF) (x_decomp/resident.mojo)
+            m.def_function[dev_lu_py]("x_decomp_dev_lu")
+            m.def_function[dev_lu_aux_py]("x_decomp_dev_lu_aux")
+        comptime if IDN_QR_R_RESIDENT:
+            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_QR_R_RESIDENT_OFF) (x_decomp/resident.mojo)
+            m.def_function[dev_qr_r_py]("x_decomp_dev_qr_r")
+        comptime if IDN_DEV_MAXABS:
+            # lane fix-d1-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_ICA_LIM_DEV_OFF and
+            # -D MOJOLEARN_IDN_POLAR_MAX_DEV_OFF) (x_decomp/resident.mojo)
+            m.def_function[dev_maxabs_py]("x_decomp_dev_maxabs")
+        comptime if IDN_CODE_RESIDENT:
+            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_CODE_RESIDENT_OFF) (x_decomp/resident.mojo)
+            m.def_function[dev_code_rows_py]("x_decomp_dev_code_rows")
+        comptime if IDN_EIGH_RESIDENT:
+            # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF) (x_decomp/resident.mojo)
+            m.def_function[dev_eigh_py]("x_decomp_dev_eigh")
         comptime if DECOMP_FAST_DICT_DEV:
             # lane/apple-fast-gap-clus3: FAST + Apple default (off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF) (x_decomp/dict_fast.mojo)
             m.def_function[dev_dict_update_py]("x_decomp_dev_dict_update")

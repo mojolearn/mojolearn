@@ -49,6 +49,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from checks.numerics import GLOBAL_NUMERIC_MODE
 
 from holtwinters.estimator import holtwinters_fit_ptr, holtwinters_forecast_ptr, holtwinters_predict_ptr
 from tsa.estimator import kpss_test_host, select_d_host
@@ -319,6 +320,15 @@ def select_d_binding(
     return PythonObject(count)
 
 
+def tsa_numeric_mode_binding() raises -> PythonObject:
+    """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
+    IDENTICAL, 2 DETERMINISTIC; the same read-back as `svm_numeric_mode`.
+    box-run-2 (2026-10-05): this binding exported no `*_numeric_mode`, so the
+    wave native import smoke (tools/identical_wave_native_build.py) refused it
+    in both arms. Read-back only; no kernel or bits change."""
+    return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
 def tsa_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
@@ -335,6 +345,7 @@ def PyInit__mojolearn_tsa() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_tsa")
         m.def_function[tsa_vendor_binding]("tsa_vendor")
+        m.def_function[tsa_numeric_mode_binding]("tsa_numeric_mode")
         m.def_function[holtwinters_fit_binding]("holtwinters_fit")
         m.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
         # The in-sample prediction runs on the device (one thread per cell);

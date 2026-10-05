@@ -603,7 +603,7 @@ def mamba_weight_spec(model, d):
         (tuple(shapes["x"]), ranges["x"])
 
 
-def make_inputs(lane, shape, steps, path):
+def make_inputs(lane, shape, steps, path, *, mamba_spec=None):
     """Write the race's single input file (.npz) and return its record."""
     import numpy as np
     rng = np.random.default_rng(SEED)
@@ -652,7 +652,7 @@ def make_inputs(lane, shape, steps, path):
         arrays["x"] = rng.standard_normal((d["batch"], d["length"], dm)).astype(np.float32)
         rec["inputs"] = "weights default_rng(%d).normal(0, .02) (+1 on norms), x standard normal" % SEED
     elif model in MAMBA_NAMES:
-        spec, (xshape, xrange) = mamba_weight_spec(model, d)
+        spec, (xshape, xrange) = (mamba_spec or mamba_weight_spec)(model, d)
         for n, s, (lo, hi) in spec:
             arrays["w:" + n] = rng.uniform(lo, hi, s).astype(np.float32)
         arrays["x"] = rng.uniform(xrange[0], xrange[1], xshape).astype(np.float32)

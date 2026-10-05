@@ -300,8 +300,10 @@ def mi_reduce_unit(t: Int, f: FP, q: IP):
     """q = [TERM, n, d, KIND, k, NUSED, OUT, CNT, KS]; t = column. KIND 0
     (cc): psi(n) + psi(k) - mean(TERM); KIND 1 (cd): psi(NUSED) +
     sum(TERM) / NUSED; KIND 2 (cd per column): KIND 1 with NUSED the sum of
-    column t's counts CNT[t*KS : (t+1)*KS] that exceed 1. Negative estimates
-    are 0."""
+    column t's counts CNT[t*KS : (t+1)*KS] that exceed 1; KIND 3 (cd, lane
+    cpu2-l3-prep): KIND 2 over the one table CNT[0 : KS] (the class counts)
+    for every column, in place of the host's sum. Negative estimates are
+    0."""
     var n = p(q, 1)
     var d = p(q, 2)
     var s = Float32(0)
@@ -312,10 +314,12 @@ def mi_reduce_unit(t: Int, f: FP, q: IP):
         mi = sub(add(digammaf(Float32(n)), digammaf(Float32(p(q, 4)))), div(s, Float32(n)))
     else:
         var used = p(q, 5)
-        if p(q, 3) == 2:
+        if p(q, 3) >= 2:
+            # KIND 3 (lane cpu2-l3-prep): one count table shared by every column
+            var cb = p(q, 7) + (0 if p(q, 3) == 3 else t * p(q, 8))
             used = 0
             for k in range(p(q, 8)):
-                var cnt = Int(ld(f, p(q, 7) + t * p(q, 8) + k))
+                var cnt = Int(ld(f, cb + k))
                 if cnt > 1:
                     used += cnt
         mi = add(digammaf(Float32(used)), div(s, Float32(used))) if used > 0 else Float32(0)

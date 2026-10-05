@@ -197,7 +197,7 @@ struct DevicePlatt(PlattSums, Movable):
             self.ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=self.pb.create_sub_buffer[DType.uint64](0, 8))
         self.ctx.synchronize()
         var out = SIMD[DType.uint64, 8](0)
-        for ch in range(nch):
+        for ch in range(nch):  # small-loop(nch: Platt sum channels): at most 8 words, the SIMD width of the result
             out[ch] = h.unsafe_ptr()[ch]
         _ = h^
         return out
@@ -623,7 +623,7 @@ def check_pairs(pairs_addr: Int, n_pairs: Int, k: Int) raises:
     """The pair codes (2 per pair, a host list of K(K-1)/2 entries) are in
     range and distinct."""
     var pi = I32P(unsafe_from_address=pairs_addr)
-    for pr in range(n_pairs):
+    for pr in range(n_pairs):  # small-loop(n_pairs: OvO class pairs): validates the k(k-1)/2 pair table, two ints a pair, no row data
         var i = Int(pi[2 * pr])
         var j = Int(pi[2 * pr + 1])
         if i < 0 or j < 0 or i >= k or j >= k or i == j:

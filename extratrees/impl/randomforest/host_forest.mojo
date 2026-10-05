@@ -18,7 +18,13 @@ from extratrees.impl.decisiontree.decisiontree import (
 from extratrees.impl.decisiontree.flatnode import TreeMetaDataNode
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     DEVICE_MAX_ACC,
+    et_identical_bins_wanted,
+    n_sampled_cols_for,
     train_tree_exact,
+)
+from extratrees.impl.decisiontree.batched_levelalgo.host_binned import (
+    HostBinTables,
+    host_bin_tables,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.host_builder import (
     train_classification,
@@ -30,7 +36,7 @@ from extratrees.impl.randomforest.randomforest import (
     Forest,
     error_checking,
     resolve_n_sampled_rows,
-    row_sample_for,
+    row_sample_for_host,
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -70,7 +76,7 @@ def fit_classification(
         # `:169` -- each tree gets its OWN row list, because `train_*`
         # partitions it in place. `:59-67` -- the bootstrap arm is keyed by
         # `(seed, tree_id)` (DEVIATION 460).
-        var row_ids = row_sample_for(
+        var row_ids = row_sample_for_host(
             n_rows, bootstrap, n_sampled, seed, Int32(tree_id)
         )
         var dataset = Dataset(
@@ -119,7 +125,7 @@ def fit_regression(
     var n_sampled = resolve_n_sampled_rows(n_rows, bootstrap, n_sampled_rows)
     var forest = Forest(1)
     for tree_id in range(Int(n_trees)):
-        var row_ids = row_sample_for(
+        var row_ids = row_sample_for_host(
             n_rows, bootstrap, n_sampled, seed, Int32(tree_id)
         )
         var dataset = Dataset(
@@ -166,8 +172,8 @@ def fit_forest_exact(
     `train_tree_exact`, the HOST RESTATEMENT OF THE DEVICE TRAINER (the CPU
     training lane, 2026-09-14; the block comment above `train_tree_exact`
     in `builder.mojo`). `labels_q` is the device's label plane: the class
-    ids `class_ids_for` derives for a classifier (`num_outputs = n_classes`,
-    `inv_scale = 1`), `quantize_labels`'s fixed point for a regressor
+    ids `class_ids_for_host` derives for a classifier (`num_outputs = n_classes`,
+    `inv_scale = 1`), `quantize_labels_host`'s fixed point for a regressor
     (`num_outputs = 1`, `inv_scale = Float32(1 / scale)`). `labels` is the
     float plane the `Dataset` carries beside it; the exact search never
     reads it. The device's own refusal on the class count
@@ -202,6 +208,17 @@ def fit_forest_exact(
     var forest = Forest(num_outputs)
     var labels_q_p = labels_q.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
     var x_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](x_col_major.unsafe_ptr())
+    # `IDN_ET_BINNED` (fam2-forests, a candidate arm, default OFF): the
+    # device's regression forest loop bins X when
+    # `et_identical_bins_wanted(n_cols, k)`; the same gate builds the same
+    # borders and codes here and the exact search reads them. Off (always,
+    # without the define) the tables are one element and unread.
+    var bin_tables = HostBinTables()
+    if not is_classification and et_identical_bins_wanted(
+        Int(n_cols), Int(n_sampled_cols_for(params, n_cols))
+    ):
+        bin_tables = host_bin_tables(x_col_major, Int(n_rows), Int(n_cols))
+    var bins = bin_tables.view()
     var labels_p = rebind[MutPointer[Float32, MutUntrackedOrigin]](labels.unsafe_ptr())
     # THE TREES, ONE TASK PER CONTIGUOUS TREE RANGE (lane/trees-cpu,
     # 2026-09-28). A tree reads X, the label planes and its own seed and
@@ -220,12 +237,12 @@ def fit_forest_exact(
     var failed = List[Bool](length=tasks, fill=False)
     var messages = List[String](length=tasks, fill=String(""))
 
-    def _tree_task(task: Int) {mut slots, mut failed, mut messages, imm x_p, imm labels_p, imm labels_q_p, imm n_rows, imm n_cols, imm n_sampled, imm bootstrap, imm seed, imm tree_start, imm num_outputs, imm params, imm is_classification, imm inv_scale, imm chunk, imm n, imm tasks}:
+    def _tree_task(task: Int) {mut slots, mut failed, mut messages, imm x_p, imm labels_p, imm labels_q_p, imm n_rows, imm n_cols, imm n_sampled, imm bootstrap, imm seed, imm tree_start, imm num_outputs, imm params, imm is_classification, imm inv_scale, imm chunk, imm n, imm tasks, imm bins}:
         var lo = task * chunk
         var hi = min(lo + chunk, n)
         try:
             for tree_id in range(lo, hi):
-                var row_ids = row_sample_for(
+                var row_ids = row_sample_for_host(
                     n_rows, bootstrap, n_sampled, seed, Int32(tree_start + tree_id)
                 )
                 var dataset = Dataset(
@@ -242,7 +259,7 @@ def fit_forest_exact(
                 )
                 slots[tree_id] = train_tree_exact(
                     dataset, labels_q_p, params, Int32(tree_start + tree_id), seed,
-                    is_classification, Int(num_outputs), inv_scale,
+                    is_classification, Int(num_outputs), inv_scale, bins,
                 )
                 _ = row_ids.unsafe_ptr()
         except e:
@@ -256,6 +273,9 @@ def fit_forest_exact(
     _ = x_col_major.unsafe_ptr()
     _ = labels.unsafe_ptr()
     _ = labels_q.unsafe_ptr()
+    _ = bin_tables.codes.unsafe_ptr()
+    _ = bin_tables.q.unsafe_ptr()
+    _ = bin_tables.nb.unsafe_ptr()
     # the serial walk raised its first failing tree's error; the lowest
     # failing task holds the lowest trees and stopped at its first
     for k in range(tasks):

@@ -1,12 +1,16 @@
---- a/x_cnn/ops.mojo	2026-09-27 13:05:19
-+++ b/x_cnn/ops.mojo	2026-09-27 13:05:19
-@@ -846,7 +846,8 @@
-     var h = t % H
-     var nc = t // H
+diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
+index 64c9b4267..db7403f82 100644
+--- a/x_cnn/ops.mojo
++++ b/x_cnn/ops.mojo
+@@ -1436,7 +1436,10 @@ def adapt_avg_bwd_at(i: Int, g: FP, f1: FP, dx: FP, f3: FP, q: IP, p: IP):
      var acc = Float32(0)
--    for oh in range(OH):
-+    for a in range(OH):
-+        var oh = OH - 1 - a
+     # lane fam-neural (IDN_ADAPT_BWD_BOUNDED): only the cells that can hold
+     # the pixel, ascending, the membership test kept
+-    for oh in range(_acell_lo(h, OH, H), _acell_hi(h, OH, H)):
++    var oh_lo = _acell_lo(h, OH, H)
++    var oh_hi = _acell_hi(h, OH, H)
++    for a in range(oh_hi - oh_lo):
++        var oh = oh_hi - 1 - a
          var hs = _astart(oh, OH, H); var he = _aend(oh, OH, H)
          if h < hs or h >= he:
              continue

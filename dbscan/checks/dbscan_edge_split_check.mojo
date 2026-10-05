@@ -12,7 +12,7 @@ wraps back POSITIVE and would have passed the check with a garbage CSR.
 
 The fix, and what this driver gates:
 
-1. `rbc_exact_edge_total` (`neighbors/impl/ball_cover/scan.mojo`) recovers
+1. `rbc_exact_edge_total_host` (`neighbors/impl/ball_cover/scan.mojo`) recovers
    the exact 64-bit count from a wrapped int32 scan. Gated on synthetic
    scans whose totals pass 2^31 and 2^32, where the tail reads negative and
    small-positive respectively.
@@ -43,7 +43,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from dbscan.impl.adjgraph.algo import scan_blocks_needed
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC, dbscan_fit
 from dbscan.impl.sparse.detail.csr import MAX_LABEL
-from neighbors.impl.ball_cover.scan import rbc_exact_edge_total
+from neighbors.impl.ball_cover.scan import rbc_exact_edge_total_host
 
 
 comptime ES_BLOBS = 6
@@ -136,9 +136,8 @@ def _differ(a: List[Int32], b: List[Int32]) -> Int:
     return d
 
 
-def check_exact_total_past_the_wrap() raises:
+def check_exact_total_past_the_wrap(ctx: DeviceContext) raises:
     """Part 1: a wrapped int32 scan still yields the exact count."""
-    var ctx = DeviceContext()
     comptime ROWS = 4
     var h = ctx.enqueue_create_host_buffer[DType.int32](ROWS + 1)
     ctx.synchronize()
@@ -157,10 +156,10 @@ def check_exact_total_past_the_wrap() raises:
             run = run + Int32(cases[c][r])   # the device scan's int32 wrap
             h.unsafe_ptr().unsafe_store(r + 1, run)
         tails.append(Int(h.unsafe_ptr().unsafe_load(ROWS)))
-        var got = rbc_exact_edge_total(h, ROWS)
+        var got = rbc_exact_edge_total_host(h, ROWS)
         if got != want:
             raise Error(
-                "rbc_exact_edge_total case " + String(c) + ": got "
+                "rbc_exact_edge_total_host case " + String(c) + ": got "
                 + String(got) + ", the exact count is " + String(want)
                 + " (the wrapped int32 tail reads "
                 + String(Int(h.unsafe_ptr().unsafe_load(ROWS))) + ")"
@@ -180,9 +179,8 @@ def check_exact_total_past_the_wrap() raises:
     )
 
 
-def check_split_moves_no_label() raises:
+def check_split_moves_no_label(ctx: DeviceContext) raises:
     """Part 2: forced splits and forced small batches, bit for bit."""
-    var ctx = DeviceContext()
     var n = ES_N
     var x = ctx.enqueue_create_buffer[DType.float32](n * ES_D)
     var hx = ctx.enqueue_create_host_buffer[DType.float32](n * ES_D)
@@ -269,6 +267,12 @@ def check_split_moves_no_label() raises:
 
 
 def main() raises:
-    check_exact_total_past_the_wrap()
-    check_split_moves_no_label()
+    # One context for both checks, matching the production estimator binding's
+    # process_ctx lifetime. On RTX 4090, destroying the count-only context and
+    # then allocating in a new context can deadlock before the first DBSCAN
+    # kernel (the existing runtime hazard documented in core/neural_context,
+    # DEVIATION 2513). This does not fix arbitrary context teardown/recreation.
+    var ctx = DeviceContext()
+    check_exact_total_past_the_wrap(ctx)
+    check_split_moves_no_label(ctx)
     print("dbscan_edge_split_check: PASS")

@@ -255,7 +255,7 @@ def exact_sum_device(
     ctx.enqueue_copy(dst_buf=h_flags, src_buf=d_flags)
     ctx.enqueue_copy(dst_ptr=res.bitcast[UInt64](), src_buf=d_tot)
     ctx.synchronize()
-    for i in range(ES_FLAGS - 1):
+    for i in range(ES_FLAGS - 1):  # small-loop(ES_FLAGS: comptime flag words): copies the few flag words out
         flags_out[unsafe_offset=i] = h_flags.unsafe_ptr().unsafe_load(i)
     var ok = (Int(flags_out[unsafe_offset=ES_NAN]) | Int(flags_out[unsafe_offset=ES_PINF])
               | Int(flags_out[unsafe_offset=ES_NINF]) | Int(flags_out[unsafe_offset=ES_NEG])) == 0
@@ -301,7 +301,7 @@ def exact_sum_host(
             else:
                 fl[ES_POS] = 1
         es_add(acc, bits)
-    for i in range(ES_FLAGS - 1):
+    for i in range(ES_FLAGS - 1):  # small-loop(ES_FLAGS: comptime flag words): copies the few flag words out
         flags_out[unsafe_offset=i] = fl[i]
     var w = es_round(acc)
     res.bitcast[UInt64]()[unsafe_offset=0] = w

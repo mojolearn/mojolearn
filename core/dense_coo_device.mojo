@@ -13,8 +13,9 @@ k smallest (value, column) candidates, never on the order they are visited:
   2. one thread per row: a NaN or negative candidate marks the row kind 1,
      fewer than k candidates kind 2; otherwise the k smallest keys by
      insertion into a k-slot buffer, and C[i, j] = 1 for each.
-  3. the first failing row in row order (an atomic min of the row id) and
-     its kind go to `status`, as the host body's row-order check does.
+  3. the first failing row in row order (an atomic min of the row id), its
+     kind and its candidate count go to `status`, as the host body's
+     row-order check does.
   4. one thread per cell: A[i, j] = 0.5 (C + C^T) in {0, 0.5, 1}, written
      only when no row failed (the host body returns before writing).
 Compares, integers and the exact values 0, 0.5 and 1: the same bytes as the
@@ -121,15 +122,20 @@ def _knn_rows_kernel(
         cmat.unsafe_store(i * n + j, UInt8(1))
 
 
-def _aff_kernel(cmat: _B, bad: _I, first: _I, n_: Int32, status: _I, aff: _F):
-    # the status pair (code, first bad row) is written by thread 0 of the same
-    # launch; every thread reads the same `first`, so no separate one-thread launch
+def _aff_kernel(cmat: _B, bad: _I, first: _I, cnt: _I, sparse: Int32, n_: Int32, status: _I, aff: _F):
+    # the status triple (code, first bad row, that row's candidate count) is
+    # written by thread 0 of the same launch; every thread reads the same
+    # `first`, so no separate one-thread launch
     var t = _tid()
     var n = Int(n_)
     var f = Int(first.unsafe_load(0))
     if t == 0:
         status.unsafe_store(0, bad.unsafe_load(f) if f < n else Int32(0))
         status.unsafe_store(1, Int32(f) if f < n else Int32(0))
+        var c = Int32(0)
+        if f < n:
+            c = cnt.unsafe_load(f) if sparse != 0 else Int32(n)
+        status.unsafe_store(2, c)
     if t >= n * n or f < n:
         return
     var i = t // n
@@ -143,7 +149,7 @@ def knn_affinity_f32_device(
     n: Int, k: Int, aff: Int, status: Int,
 ) raises:
     """`knn_affinity_f32`'s contract (the caller's zeroed host `aff`, n x n,
-    and `status`, 2 int32) with the work on the device."""
+    and `status`, 3 int32) with the work on the device."""
     var nn = n * n
     var d_dense = ctx.enqueue_create_buffer[DType.float32](max(0 if sparse else nn, 1))
     var d_rows = ctx.enqueue_create_buffer[DType.int32](max(nnz if sparse else 0, 1))
@@ -159,7 +165,7 @@ def knn_affinity_f32_device(
     var d_c = ctx.enqueue_create_buffer[DType.uint8](max(nn, 1))
     var d_bad = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
     var d_first = ctx.enqueue_create_buffer[DType.int32](1)
-    var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+    var d_status = ctx.enqueue_create_buffer[DType.int32](3)
     var d_aff = ctx.enqueue_create_buffer[DType.float32](max(nn, 1))
     enqueue_fill(ctx, d_cnt, Int32(0))
     enqueue_fill(ctx, d_fill, Int32(0))
@@ -198,7 +204,8 @@ def knn_affinity_f32_device(
         d_bad.unsafe_ptr(), d_first.unsafe_ptr(), grid_dim=_blocks(n), block_dim=_TPB,
     )
     ctx.enqueue_function[_aff_kernel](
-        d_c.unsafe_ptr(), d_bad.unsafe_ptr(), d_first.unsafe_ptr(), Int32(n), d_status.unsafe_ptr(), d_aff.unsafe_ptr(),
+        d_c.unsafe_ptr(), d_bad.unsafe_ptr(), d_first.unsafe_ptr(), d_cnt.unsafe_ptr(), Int32(1 if sparse else 0),
+        Int32(n), d_status.unsafe_ptr(), d_aff.unsafe_ptr(),
         grid_dim=_blocks(max(nn, 1)), block_dim=_TPB,
     )
     ctx.enqueue_copy(dst_ptr=_I(unsafe_from_address=status), src_buf=d_status)

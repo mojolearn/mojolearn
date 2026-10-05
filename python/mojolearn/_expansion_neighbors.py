@@ -722,14 +722,23 @@ class OneClassSVM(_XNeighbors):
             # lane/apple-fast-gap-cls2 (FAST + Apple default; -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF off):
             # the binding forms the same Gram on the device and solves over it
             # there (no 400 MB download into a fresh host array and upload back)
-            res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident", None) if self._fast_tier() else None
+            # lane/fam2-neighbors: IDENTICAL takes the same resident solve on
+            # every vendor (`x_neighbors_ocsvm_resident_idn`, registered unless
+            # -D MOJOLEARN_IDN_OCSVM_RES_OFF; the host binding has none)
+            res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident" if self._fast_tier()
+                             else "x_neighbors_ocsvm_resident_idn", None)
             Q = None if res_fn is not None else self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
         # libsvm's start (solve_one_class) by the base binding's
         # `ocsvm_alpha_init_f32` (lane pyglue-numeric: a Python loop)
         from ._buffer import _native
         alpha = empty((m,), "<f4")
-        _native("ocsvm_alpha_init_f32")(addr_ro(cv, name="C"), m, float(self.nu),
-                                        0 if sample_weight is None else 1, addr(alpha, name="alpha"))
+        # lane/fam2-neighbors (cpu-gpu audit case 2): the start as three device
+        # launches (x_neighbors/ocsvm_init.mojo; the host binding runs the same
+        # items), registered in every mode since lane cpu2-l9-neighbors (no
+        # host fallback)
+        self._bind().x_neighbors_ocsvm_alpha_init(
+            [addr_ro(cv, name="xn_ocsvm_init C"), addr(alpha, name="xn_ocsvm_init alpha")],
+            [m], [float(self.nu)])
         info = _empty_out((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
@@ -806,6 +815,17 @@ class OneClassSVM(_XNeighbors):
 
 
 # ====================================================================== KernelPCA
+def _kpca_clamp_count(kit, w):
+    """KernelPCA's eigenvalue tail on the kit's cells (lane
+    cpu2-l9-neighbors): `w` (1 x c, descending) clamped at zero (`maxs`,
+    `x if x > 0 else 0`), and the count of positive clamped values (`gts`
+    flags folded by `total`; 0/1 sums are exact in float32 below 2^24).
+    Returns (clamped 1 x c matrix, count); only the count word is read."""
+    wc = kit.ew("maxs", w, s=0.0)
+    npos = int(kit.total(kit.ew("gts", wc, s=0.0)).s[0])
+    return wc, npos
+
+
 class KernelPCA(_XNeighbors):
     """Kernel principal component analysis.
 
@@ -913,11 +933,17 @@ class KernelPCA(_XNeighbors):
         if result is not None:
             values, vectors = result
             vectors = vectors.neg_cols(kit.absmax_flags(vectors, True))
-            vals = [max(float(v), 0.0) for v in values.s]
-            keep = [i for i, v in enumerate(vals) if not self.remove_zero_eig or v > 0]
-            vectors = vectors.take_cols(keep)
-            self.eigenvalues_ = Array._from_flat([vals[i] for i in keep], (len(keep),), "<f4")
-            self.eigenvectors_ = Array._from_flat(vectors.s, (n, len(keep)), "<f4")
+            # lane cpu2-l9-neighbors: the clamp and the positive count on the
+            # kit's cells (values come back descending, so the kept set is a
+            # prefix); one count word read back, no host list of the values
+            nv = values.r * values.c
+            vals_m, npos = _kpca_clamp_count(kit, values if values.r == 1 else values.reshape(1, nv))
+            kept = npos if self.remove_zero_eig else nv
+            if kept < nv:
+                vectors = vectors.cols(0, kept)
+                vals_m = vals_m.cols(0, kept)
+            self.eigenvalues_ = vals_m.out((kept,))
+            self.eigenvectors_ = Array._from_flat(vectors.s, (n, kept), "<f4")
             self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
             self.n_features_in_ = d
             return self
@@ -935,15 +961,21 @@ class KernelPCA(_XNeighbors):
             store.frombytes(Kc.tobytes())
             Kc_M = _M(store, n, n)
         wm, Vm = kit.eigh(Kc_M)
-        wl = list(wm.s)
-        order = list(range(n - 1, -1, -1))           # descending; equal values: higher index first
-        order = order[:c]
-        vals = [max(wl[i], 0.0) for i in order]
-        if self.n_components is None or self.remove_zero_eig:
-            keep = [j for j in range(c) if vals[j] > 0]
-            order = [order[j] for j in keep]
-            vals = [vals[j] for j in keep]
-        self.eigenvalues_ = Array.from_list(vals, "<f4")
+        # descending (eigh is ascending; equal values: higher index first);
+        # lane cpu2-l9-neighbors: only the top c values are taken, and the
+        # clamp and the positive count run on the kit's cells (a prefix of
+        # the descending order is kept); one count word read back
+        order = range(n - 1, n - 1 - c, -1)
+        kept = c
+        vals_m = _M(array.array("f"), 1, 0)
+        if c:
+            vals_m, npos = _kpca_clamp_count(kit, wm.take_cols(order))  # wm is 1 x n
+            if self.n_components is None or self.remove_zero_eig:
+                kept = npos
+            if kept < c:
+                vals_m = vals_m.cols(0, kept)
+        order = list(range(n - 1, n - 1 - kept, -1))  # glue: the kept column indices
+        self.eigenvalues_ = vals_m.out((kept,))
         # sklearn's svd_flip(u, None) on the kept columns: each column's
         # largest-|.| entry (ties to the lower row) made positive
         vecs = Vm.take_cols(order)
@@ -1058,6 +1090,21 @@ def _random_state(seed):
     raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
 
 
+def _seed_word(seed):
+    """The sketch samplers' seed (lane cpu2-l9-neighbors): an int as given;
+    None (numpy's global RandomState) or a caller's numpy RandomState gives
+    ONE draw, a word in [0, 2^31), and that word seeds the device
+    counter-based generator exactly as an int random_state would. The
+    O(d * n_components) table is then drawn on the device, never in a Python
+    loop over the caller's generator. Not scikit-learn's numbers for those
+    two inputs (theirs are not reproducible for None either); the
+    distribution is the same. Anything else is refused as `_random_state`
+    refuses it."""
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        return seed
+    return int(_random_state(seed).randint(1 << 31, 1)[0])
+
+
 class _NumpyRandomState:
     """The `_LegacyRandomState` draws, from a numpy RandomState."""
 
@@ -1102,7 +1149,21 @@ class PolynomialCountSketch(_XNeighbors):
         deg, nc = int(self.degree), int(self.n_components)
         if deg < 1 or nc < 1:
             raise ValueError("degree and n_components must be >= 1")
-        rs = _random_state(self.random_state)
+        seed = _seed_word(self.random_state)
+        draw_idn = (getattr(self._bind(), "x_neighbors_kfeat_pcs_draw_idn", None)
+                    if isinstance(seed, int) and not isinstance(seed, bool) and nf > 0 else None)
+        if draw_idn is not None:
+            # IDN_XN_SKETCH_CTR (IDENTICAL default with an _OFF A/B; FAST always;
+            # x_neighbors/kfeat_rng.mojo): the tables from the counter-based
+            # generator on the device, not the MT19937 Python loop
+            ih = empty((deg, nf), "<i4")
+            bh = empty((deg, nf), "<i4")
+            draw_idn([seed & 0xFFFFFFFF, nc, deg * nf], addr(ih, name="indexHash_"), addr(bh, name="bitHash_"))
+            self.indexHash_ = ih
+            self.bitHash_ = bh
+            self.n_features_in_ = d
+            return self
+        rs = _random_state(seed)
         idx = rs.randint(nc, deg * nf)
         bits = [(-1, 1)[v] for v in rs.randint(2, deg * nf)]
         self.indexHash_ = Array.from_list([idx[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
@@ -1224,21 +1285,27 @@ class SkewedChi2Sampler(_XNeighbors):
         X = _f32(X)
         d = X.shape[1]
         nc = int(self.n_components)
-        seed = self.random_state
+        seed = _seed_word(self.random_state)
         flags = (_kfeat_flags(self) if isinstance(seed, int) and not isinstance(seed, bool)
                  and d > 0 and nc > 0 else 0)
         self.__dict__.pop("_schi2_z", None)
-        if flags & 4:
-            # XN_FAST_SCHI2_LAZYW (default, rollback _OFF; x_neighbors/kfeat_dev.mojo):
-            # main's z = pi/2 * u and offsets drawn into our arrays, no device
-            # work; the weights come from z in the first transform's one call
-            # (or on the first read of random_weights_)
-            z = empty((d, nc), "<f4")
+        # lane cpu3-python: the counter-based device draw first, on every
+        # tier that compiles it (IDENTICAL, and since this lane FAST on every
+        # vendor: x_neighbors/kfeat_rng.mojo XN_IDN_SKETCH_CTR). FAST + Apple's
+        # SCHI2_LAZYW route drew z and the offsets with sklearn's sequential
+        # stream on the host (`x_neighbors_kfeat_schi2_draw`); it has left the
+        # GPU route.
+        fit_idn = (getattr(self._bind(), "x_neighbors_kfeat_schi2_fit_idn", None)
+                   if isinstance(seed, int) and not isinstance(seed, bool) and d > 0 and nc > 0 else None)
+        if fit_idn is not None:
+            # IDN_XN_SKETCH_CTR (IDENTICAL default with an _OFF A/B; FAST always;
+            # x_neighbors/kfeat_rng.mojo): z, the weights and the offsets
+            # from the counter-based generator on the device, one call
+            w = _empty_out((d, nc), "<f4")
             off = empty((nc,), "<f4")
-            self._bind().x_neighbors_kfeat_schi2_draw([seed & 0xFFFFFFFF, d, nc], addr(z, name="schi2 z"),
-                                                      addr(off, name="random_offset_"))
-            self.__dict__.pop("_random_weights", None)
-            self.__dict__["_schi2_z"] = z
+            fit_idn([seed & 0xFFFFFFFF, d, nc], addr(w, name="random_weights_"),
+                    addr(off, name="random_offset_"))
+            self.random_weights_ = w
             self.random_offset_ = off
             self.n_features_in_ = d
             return self
@@ -1254,7 +1321,7 @@ class SkewedChi2Sampler(_XNeighbors):
             self.random_offset_ = off
             self.n_features_in_ = d
             return self
-        rs = _random_state(self.random_state)
+        rs = _random_state(seed)
         u = rs.random_sample(d * nc)
         z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
         w = _empty_out((d, nc), "<f4")
@@ -1397,7 +1464,9 @@ class _LabelPropagationBase(_XNeighbors):
             self._op("lp_clamp", [(ld, 0), (ld, 0), (unlabeled, 0), (ystatic, 1)], (n, C))
         else:
             ystatic = ys
-        if isinstance(G, tuple) and self._fast_tier() and _lp_fast_resident(self):
+        # lane/fam2-neighbors: IDENTICAL device binaries answer 1 too
+        # (LP_IDN_RESIDENT: the same items, no per-iteration host round trip)
+        if isinstance(G, tuple) and _lp_fast_resident(self):
             # lane/apple-fast-neighbors2: the loop below over the compact kNN
             # graph as ONE resident op (x_neighbors/iter_device.mojo
             # op_lp_iterate_knn), the graph uploaded once, the stopping sum
@@ -1693,10 +1762,25 @@ class PageRank(_XNeighbors):
         self.weight = weight
         self.dangling = dangling
 
-    @staticmethod
-    def _unit(v, n, what):
+    def _unit(self, v, n, what):
         """A caller's length-n non-negative vector divided by its sum (IEEE
         double, rounded once to float32), as networkx normalizes its dicts."""
+        # lane/fam2-neighbors: the sum, the sign test and the n divisions by
+        # the binding (`x_neighbors_unit_ff`, device kernels; registered in
+        # IDENTICAL unless -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)
+        unit_fn = getattr(self._bind(), "x_neighbors_unit_ff", None)
+        if unit_fn is not None:
+            wv = _f32_1d(v, what)
+            if wv.shape[0] != n:
+                raise ValueError(f"{what} must be n non-negative values, not all zero")
+            out = _empty_out((n,), "<f4")
+            uinfo = empty((2,), "<i4")
+            unit_fn([addr_ro(wv, name="xn_unit v"), addr(out, name="xn_unit out"),
+                     addr(uinfo, name="xn_unit info")], [n], [])
+            neg, zero = uinfo.tolist()
+            if neg or zero:
+                raise ValueError(f"{what} must be n non-negative values, not all zero")
+            return out
         pv = [float(t) for t in (v.tolist() if hasattr(v, "tolist") else v)]
         if len(pv) != n or any(t < 0 for t in pv) or math.fsum(pv) == 0:
             raise ValueError(f"{what} must be n non-negative values, not all zero")
@@ -1765,7 +1849,7 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         lab = _p2m_iota(est, n)
         if _cc_fast_tier(est):
             # lane/apple-fast-graph (2026-10-02), FAST on Apple only: two
-            # info words. Under `-D MOJOLEARN_CC_FAST` the device compacts the
+            # info words. Under CC_FAST (default; `-D MOJOLEARN_CC_FAST_OFF` rolls back) the device compacts the
             # labels itself in order of first appearance (`_cc_relabel`'s
             # integers) and puts n_components + 1 in info[1]; info[1] == 0
             # means the binding's main path ran and `lab` still needs
@@ -1800,7 +1884,7 @@ def _p2m_iota(est, n):
 def _cc_fast_tier(est):
     """True on the FAST tier on Apple (lane/apple-fast-graph): the x_neighbors
     binding may compact connected_components' labels on the device
-    (`-D MOJOLEARN_CC_FAST`). IDENTICAL and the other vendors never come
+    (CC_FAST, default; rollback `-D MOJOLEARN_CC_FAST_OFF`). IDENTICAL and the other vendors never come
     through the branch this gates."""
     return est.numeric_mode_used() == "fast" and est.vendor_used() == "metal"
 

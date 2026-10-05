@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "reviewed": false,
+  "status": "RESAMPLING_REVIEW_REQUIRED",
+  "primary_metrics": ["accuracy", "r2"],
+  "family_alpha": 0.05,
+  "per_metric_alpha": 0.025,
+  "resamples": 2000,
+  "seed": 20261004,
+  "quantile_method": "linear",
+  "margin_rule": "baseline_score_minus_lower_95_bound",
+  "resampling": {
+    "kind": "review_required",
+    "unit": null,
+    "minimum_units": 20,
+    "justification": "Taxi is a deterministic temporal tail holdout with stride sampling, not random IID rows. Select and justify group/block units using baseline-only data/provenance before marking reviewed."
+  },
+  "cases": {
+    "classification": {
+      "prediction_key": "clf-repeat0-prediction",
+      "probability_key": "clf-repeat0-probability",
+      "target_key": "classification_y"
+    },
+    "regression": {
+      "prediction_key": "reg-repeat0-prediction",
+      "target_key": "regression_y"
+    }
+  },
+  "data_provenance": {
+    "loader": "tools/speed_gbdt_arm.py::load_taxi",
+    "split": "LAST TAXI_N_TEST rows, late February; no shuffle",
+    "board_subset": "tools/bench_board_more.py::prep uses classical_two_datasets.stride_rows for evaluation rows",
+    "time_features": "TAXI_NUMERIC preserves pickup_hour, pickup_weekday and pickup_day; chronological order must be verified rather than inferred from file row index."
+  },
+  "diagnostics": ["classification logloss, clipping probabilities to [1e-15, 1-1e-15]"],
+  "exclusions": ["model fitting", "opponent execution", "timing", "identity tolerance changes", "numerical residual gate changes"],
+  "decision_owner": "root; statistical output alone does not promote code"
+}

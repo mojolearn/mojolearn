@@ -12,14 +12,19 @@ from umap.params import UMAPParams
 from umap.sparse_estimator import sparse_fit_transform
 
 
-def fuzzy_graph_from_data(
+def fuzzy_graph_from_data_reference(
     ctx: DeviceContext,
     x_rowmajor: List[Float32],
     n_samples: Int,
     n_features: Int,
     params: UMAPParams,
 ) raises -> FuzzySimplicialGraph:
-    """Reuse mojolearn's exact k-NN surface, then build UMAP memberships."""
+    """Reuse mojolearn's exact k-NN surface, then build UMAP memberships.
+
+    The DENSE n x n reference adapter the checks compare the sparse route
+    against (`umap/checks/*`); no binding reaches it (the public fit is
+    `sparse_fit_transform`). Named a reference so the host-route guard
+    reads it as one (lane cpu3-neighbors, 2026-10-04)."""
     params.validate(n_samples)
     if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
         raise Error("UMAP input does not match its declared shape")

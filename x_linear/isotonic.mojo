@@ -22,6 +22,10 @@ from x_linear.team import Team
 
 comptime OOB_NAN = 0
 comptime OOB_CLIP = 1
+#: out_of_bounds='raise' (lane cpu2-l10-linear): predicted as 'nan', and the
+#: word res[n] (the caller's n + 1st output word, zeroed by the binding) is set
+#: to 1 when some query lies outside [X_min, X_max]; Python reads that one word
+comptime OOB_RAISE = 2
 
 
 @always_inline
@@ -377,14 +381,27 @@ def iso_after_unique(m: Int, n: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
 
 
 def isotonic_predict(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """x: the n query points; y: xs m | ys m. ip: [m, out_of_bounds (0 nan, 1 clip)];
-    fp: [X_min, X_max]. res: n predictions. Queries dealt across the team."""
+    """x: the n query points; y: xs m | ys m. ip: [m, out_of_bounds (0 nan, 1 clip,
+    2 raise)]; fp: [X_min, X_max]. res: n predictions (then the out-of-bounds
+    word res[n] under OOB_RAISE). Queries dealt across the team."""
     var m = ldi(ip, 0)
     var oob = ldi(ip, 1)
     # DEVIATION 5006 (IDENTITY_PATHS row 106): the constant word, never 0/0
     var nan = bitcast[DType.float32](UInt32(0x7FC00000))
     for q in range(t.tid, n, t.nt):
         iso_predict_one(q, x, y, m, oob, fp, res)
+        iso_oob_flag(q, n, x, oob, fp, res)
+
+
+@always_inline
+def iso_oob_flag(q: Int, n: Int, x: FP, oob: Int, fp: FP, res: FP):
+    """OOB_RAISE: res[n] = 1 when query q is below X_min or above X_max (their
+    `x_new < X_min_ or x_new > X_max_` test). Every writer stores the same
+    word, so the order of the writes does not matter."""
+    if oob == OOB_RAISE:
+        var tq = ld(x, q)
+        if tq < ld(fp, 0) or tq > ld(fp, 1):
+            st(res, n, Float32(1))
 
 
 @always_inline

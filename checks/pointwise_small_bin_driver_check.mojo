@@ -41,6 +41,7 @@
 """
 
 from max.gpu.host import DeviceContext
+from core.device_zero import enqueue_fill
 
 from gbdt.methods.kernel.pointwise_hist2_half_byte_template import (
     PW_HB_BLOCK,
@@ -75,13 +76,18 @@ def _launch_hb[
     total_bin_features: Int,
     gx: Int,
 ) raises:
+    # the kernel reads the scale from a device word (T5 drain, lane
+    # cpu3-gbdt-a); held past the launch
+    var scale_word = ctx.enqueue_create_buffer[DType.float32](1)
+    enqueue_fill(ctx, scale_word, Float32(1.0))
     ctx.enqueue_function[
         compute_split_properties_half_byte_kernel[full, m]
     ](
         p_off, p_ffi, p_folds, Int32(f_count), p_ci, p_tgt, p_wt, p_idx,
-        p_part, p_sums, Int32(total_bin_features), Float32(1.0), Int32(0),
-        grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
+        p_part, p_sums, Int32(total_bin_features), scale_word.unsafe_ptr(),
+        Int32(0), grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
     )
+    _ = scale_word^
 
 
 def _launch_b[
@@ -102,11 +108,16 @@ def _launch_b[
     total_bin_features: Int,
     gx: Int,
 ) raises:
+    # the kernel reads the scale from a device word (T5 drain, lane
+    # cpu3-gbdt-a); held past the launch
+    var scale_word = ctx.enqueue_create_buffer[DType.float32](1)
+    enqueue_fill(ctx, scale_word, Float32(1.0))
     ctx.enqueue_function[compute_split_properties_b_kernel[full, m]](
         p_off, p_ffi, Int32(f_count), p_ci, p_tgt, p_wt, p_idx, p_part,
-        p_sums, Int32(total_bin_features), Float32(1.0), Int32(0),
+        p_sums, Int32(total_bin_features), scale_word.unsafe_ptr(), Int32(0),
         grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
     )
+    _ = scale_word^
 
 
 def main() raises:

@@ -102,14 +102,15 @@ class LightReleaseTests(unittest.TestCase):
             z.writestr('mojolearn-0.8.7.dist-info/gpu_plugins.json', '{}')
         plugin = {'cuda': 'mojolearn_nvidia', 'hip': 'mojolearn_amd'}[vendor] + '-0.8.7-py3-none-manylinux_2_35_x86_64.whl'
         with zipfile.ZipFile(self.root / plugin, 'w') as z:
-            z.writestr(f'mojolearn/{vendor}/x/_mojolearn_knn.so', 'inert')
+            z.writestr(plugin.split('-')[0] + '-0.8.7.dist-info/LINUX_PAYLOAD.json',
+                       json.dumps({'source_commit': self.commit}))
         digests = {w: gate.digest(self.root / w) for w in (core, plugin)}
         published = core if publish == 'core' else plugin
         (self.root / (plugin if publish == 'core' else core)).unlink()
         self.manifest = {'files': {published: digests[published]},
                          'light_smoke': {'source_commit': self.commit, 'receipts': {}}}
         self.reports = {vendor: dict(status='PASSED', scope='expanded', source_commit=self.commit,
-            release_qualified=False, installed={'vendor': vendor}, wheel='/box/' + core, wheel_sha256=digests[core],
+            release_qualified=False, installed={'vendor': vendor, 'gpu_arch': 'sm_89' if vendor=='cuda' else 'gfx942'}, wheel='/box/' + core, wheel_sha256=digests[core],
             plugins=[dict(wheel='/box/' + plugin, wheel_sha256=digests[plugin])],
             jobs=[dict(name=name, exit_code=0) for name in sorted(gate.JOBS)], expanded={'scope': 'expanded'})}
         self.write()
@@ -166,6 +167,19 @@ class LightReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'another version'):
             gate.check(self.root, self.commit, 'linux')
 
+    def test_vendor_receipt_requires_a_registered_native_architecture(self):
+        self.split('nvidia', 'cuda')
+        report = self.reports['cuda']
+        for arch in (None, 'sm_80', 'gfx942'):
+            report['installed']['gpu_arch'] = arch
+            self.write()
+            with self.assertRaisesRegex(ValueError, 'another GPU architecture'):
+                gate.check(self.root, self.commit, 'linux')
+        for arch in ('sm_89', 'sm_90', 'sm_90a'):
+            report['installed']['gpu_arch'] = arch
+            self.write()
+            self.assertEqual(gate.check(self.root, self.commit, 'linux')['status'], 'PASSED_LIGHT_RELEASE')
+
     def test_the_combined_linux_wheel_still_needs_the_nvidia_receipt(self):
         self.reports.pop('metal')
         wheel = [w for w in self.manifest['files'] if 'macosx' in w][0]
@@ -184,16 +198,16 @@ class LightReleaseTests(unittest.TestCase):
         jobs = workflow['jobs']
         self.assertEqual(jobs['alpha_stage']['needs'], 'validate_inputs')
         self.assertEqual(jobs['build']['needs'], 'validate_inputs')
-        self.assertIn("validation_profile != 'light'", jobs['build']['if'])
+        self.assertIn("validation_profile == 'full'", jobs['build']['if'])
         self.assertIn('exit 2', jobs['validate_inputs']['steps'][0]['run'])
-        self.assertIn("validation_profile != 'light'", jobs['cpu_certification']['if'])
+        self.assertIn("validation_profile == 'full'", jobs['cpu_certification']['if'])
         publish = jobs['publish_alpha']['if']
         self.assertIn("needs.alpha_stage.result == 'success'", publish)
         self.assertIn("needs.cpu_certification.result == 'success'", publish)
         build_publish = jobs['publish']['if']
         self.assertIn("needs.build.result == 'success'", build_publish)
         self.assertIn("needs.cpu_certification.result == 'success'", build_publish)
-        self.assertIn("inputs.validation_profile != 'light'", build_publish)
+        self.assertIn("inputs.validation_profile == 'full'", build_publish)
         for name in ('alpha_stage', 'publish_alpha'):
             self.assertIn('tools/check_light_release.py', '\n'.join(step.get('run', '') for step in jobs[name]['steps']))
 
@@ -238,14 +252,14 @@ class LightReleaseTests(unittest.TestCase):
         self.assertIn('tools/check_light_release.py',
                       '\n'.join(s.get('run', '') for s in jobs['publish_alpha_plugins']['steps']))
         self.assertIn("needs.alpha_stage.outputs.core == 'true'", jobs['publish_alpha']['if'])
-        self.assertEqual(set(jobs['alpha_stage']['outputs']), {'linux_qualification', 'core', 'plugins'})
+        self.assertEqual(set(jobs['alpha_stage']['outputs']), {'linux_qualification', 'core', 'plugins', 'payloads'})
         # the matrix value is the plugin's name, so the environments are
         # <target>-nvidia and <target>-amd (docs/RELEASE_CHECKLIST.md 3b)
         build = '\n'.join(s.get('run', '') for s in jobs['build']['steps'])
-        self.assertIn('"mojolearn_nvidia-$v_toml-"*) plugins="$plugins nvidia" ;;', build)
-        self.assertIn('"mojolearn_amd-$v_toml-"*) plugins="$plugins amd" ;;', build)
+        self.assertIn('gpu_release_projects.py "$DIR" --version "$v_toml" --require-complete --github-output', build)
         stage = '\n'.join(s.get('run', '') for s in jobs['alpha_stage']['steps'])
-        self.assertIn("('mojolearn_nvidia-', 'mojolearn_amd-')", stage)
+        self.assertIn('gpu_release_projects.py dist --github-output', stage)
+
 
 
 if __name__ == '__main__':

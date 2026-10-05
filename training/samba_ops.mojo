@@ -16,7 +16,9 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import ftz, identical_mul_add, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
+from core.device_scan import device_first_nonfinite
 from embedding.checks.embedding_identical import (
     identical_embedding_backward_into,
     identical_embedding_forward_into,
@@ -83,6 +85,45 @@ def _upload_f32(
     return buf^
 
 
+#: lane fam2-neural (2026-10-04): THE NON-FINITE REFUSAL ON THE DEVICE. Every
+#: op here walked each float input on the host, one thread, before
+#: uploading it (`_refuse_nonfinite`: m*k + n*k + m*n `isfinite` calls for a
+#: linear backward). Under IDENTICAL the input is uploaded first and scanned
+#: there (`core/device_scan.device_first_nonfinite`, the scan the loss and
+#: the optimizer already use): the same refusal, the same message, the same
+#: first index, no host walk. An op with two bad inputs still names the
+#: first one in the old order (the uploads are in the refusals' order).
+#: `-D MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF` restores the host walk.
+comptime IDN_SAMBA_DEV_REFUSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def _refuse_host(
+    name: String, ptr: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) raises:
+    """The host walk, where it is still the refusal (not IDN_SAMBA_DEV_REFUSE)."""
+    comptime if not IDN_SAMBA_DEV_REFUSE:
+        _refuse_nonfinite(name, ptr, n)
+
+
+def _upload_checked(
+    ctx: DeviceContext, name: String, ptr: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) raises -> DeviceBuffer[DType.float32]:
+    """`_upload_f32`, then (IDN_SAMBA_DEV_REFUSE) the non-finite refusal on
+    the uploaded buffer, with `_refuse_nonfinite`'s message."""
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=ptr)
+    comptime if IDN_SAMBA_DEV_REFUSE:
+        var idx = device_first_nonfinite(ctx, buf, n)
+        if idx >= 0:
+            raise Error(
+                "mojolearn samba ops: non-finite " + name + " at flat index "
+                + String(idx)
+            )
+    return buf^
+
+
 def _upload_i32(
     ctx: DeviceContext, ptr: MutPointer[Int32, MutUntrackedOrigin], n: Int
 ) raises -> DeviceBuffer[DType.int32]:
@@ -119,9 +160,9 @@ def samba_embedding_forward_host(
         )
     if n_positions < 1 or vocab < 1 or width < 1:
         raise Error("mojolearn samba ops: embedding shape must be positive")
-    _refuse_nonfinite("embedding weight", w_ptr, vocab * width)
+    _refuse_host("embedding weight", w_ptr, vocab * width)
     var cells = n_positions * width
-    var w = _upload_f32(ctx, w_ptr, vocab * width)
+    var w = _upload_checked(ctx, "embedding weight", w_ptr, vocab * width)
     var ids = _upload_i32(ctx, ids_ptr, n_positions)
     var y = ctx.enqueue_create_buffer[DType.float32](cells)
     var cfg = EmbConfig.llama(vocab, width)
@@ -151,9 +192,9 @@ def samba_embedding_backward_host(
         )
     if n_positions < 1 or vocab < 1 or width < 1:
         raise Error("mojolearn samba ops: embedding shape must be positive")
-    _refuse_nonfinite("embedding upstream gradient", dy_ptr, n_positions * width)
+    _refuse_host("embedding upstream gradient", dy_ptr, n_positions * width)
     var cells = vocab * width
-    var dy = _upload_f32(ctx, dy_ptr, n_positions * width)
+    var dy = _upload_checked(ctx, "embedding upstream gradient", dy_ptr, n_positions * width)
     var ids = _upload_i32(ctx, ids_ptr, n_positions)
     var dw = ctx.enqueue_create_buffer[DType.float32](cells)
     var counts = ctx.enqueue_create_buffer[DType.int32](vocab)
@@ -195,11 +236,11 @@ def samba_rms_norm_forward_host(
         raise Error("mojolearn samba ops: rms_norm shape must be positive")
     if not isfinite(eps) or eps < Float32(0.0):
         raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
-    _refuse_nonfinite("rms_norm input", x_ptr, m * dm)
-    _refuse_nonfinite("rms_norm weight", w_ptr, dm)
+    _refuse_host("rms_norm input", x_ptr, m * dm)
+    _refuse_host("rms_norm weight", w_ptr, dm)
     var cells = m * dm
-    var x = _upload_f32(ctx, x_ptr, cells)
-    var w = _upload_f32(ctx, w_ptr, dm)
+    var x = _upload_checked(ctx, "rms_norm input", x_ptr, cells)
+    var w = _upload_checked(ctx, "rms_norm weight", w_ptr, dm)
     var y = ctx.enqueue_create_buffer[DType.float32](cells)
     var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
     llama_rms_norm(ctx, sumsq, y, x, w, m, dm, eps)
@@ -235,12 +276,12 @@ def samba_rms_norm_backward_host(
     if not isfinite(eps) or eps < Float32(0.0):
         raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
     var cells = m * dm
-    _refuse_nonfinite("rms_norm input", x_ptr, cells)
-    _refuse_nonfinite("rms_norm weight", w_ptr, dm)
-    _refuse_nonfinite("rms_norm upstream gradient", dy_ptr, cells)
-    var x = _upload_f32(ctx, x_ptr, cells)
-    var w = _upload_f32(ctx, w_ptr, dm)
-    var dy = _upload_f32(ctx, dy_ptr, cells)
+    _refuse_host("rms_norm input", x_ptr, cells)
+    _refuse_host("rms_norm weight", w_ptr, dm)
+    _refuse_host("rms_norm upstream gradient", dy_ptr, cells)
+    var x = _upload_checked(ctx, "rms_norm input", x_ptr, cells)
+    var w = _upload_checked(ctx, "rms_norm weight", w_ptr, dm)
+    var dy = _upload_checked(ctx, "rms_norm upstream gradient", dy_ptr, cells)
     var y = ctx.enqueue_create_buffer[DType.float32](cells)
     var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
     var dot_out = ctx.enqueue_create_buffer[DType.float32](m)
@@ -298,10 +339,10 @@ def samba_linear_forward_host(
     """Returns `m * n`."""
     if m < 1 or n < 1 or k < 1:
         raise Error("mojolearn samba ops: linear shape must be positive")
-    _refuse_nonfinite("linear input", a_ptr, m * k)
-    _refuse_nonfinite("linear weight", w_ptr, n * k)
-    var a = _upload_f32(ctx, a_ptr, m * k)
-    var w = _upload_f32(ctx, w_ptr, n * k)
+    _refuse_host("linear input", a_ptr, m * k)
+    _refuse_host("linear weight", w_ptr, n * k)
+    var a = _upload_checked(ctx, "linear input", a_ptr, m * k)
+    var w = _upload_checked(ctx, "linear weight", w_ptr, n * k)
     var c = ctx.enqueue_create_buffer[DType.float32](m * n)
     var ws = ctx.enqueue_create_buffer[DType.float32](
         identical_gemm_workspace_max_floats(m, n, k)
@@ -332,12 +373,12 @@ def samba_linear_backward_host(
     about. Returns `m * k`."""
     if m < 1 or n < 1 or k < 1:
         raise Error("mojolearn samba ops: linear shape must be positive")
-    _refuse_nonfinite("linear input", a_ptr, m * k)
-    _refuse_nonfinite("linear weight", w_ptr, n * k)
-    _refuse_nonfinite("linear upstream gradient", dc_ptr, m * n)
-    var a = _upload_f32(ctx, a_ptr, m * k)
-    var w = _upload_f32(ctx, w_ptr, n * k)
-    var dc = _upload_f32(ctx, dc_ptr, m * n)
+    _refuse_host("linear input", a_ptr, m * k)
+    _refuse_host("linear weight", w_ptr, n * k)
+    _refuse_host("linear upstream gradient", dc_ptr, m * n)
+    var a = _upload_checked(ctx, "linear input", a_ptr, m * k)
+    var w = _upload_checked(ctx, "linear weight", w_ptr, n * k)
+    var dc = _upload_checked(ctx, "linear upstream gradient", dc_ptr, m * n)
     var da = ctx.enqueue_create_buffer[DType.float32](m * k)
     var dw = ctx.enqueue_create_buffer[DType.float32](n * k)
     var ws_a = ctx.enqueue_create_buffer[DType.float32](
@@ -409,11 +450,11 @@ def samba_head_loss_host(
         )
     if m < 1 or n < 1 or k < 1:
         raise Error("mojolearn samba ops: linear shape must be positive")
-    _refuse_nonfinite("linear input", a_ptr, m * k)
-    _refuse_nonfinite("linear weight", w_ptr, n * k)
+    _refuse_host("linear input", a_ptr, m * k)
+    _refuse_host("linear weight", w_ptr, n * k)
     var cells = m * n
-    var a = _upload_f32(ctx, a_ptr, m * k)
-    var w = _upload_f32(ctx, w_ptr, n * k)
+    var a = _upload_checked(ctx, "linear input", a_ptr, m * k)
+    var w = _upload_checked(ctx, "linear weight", w_ptr, n * k)
     var c = ctx.enqueue_create_buffer[DType.float32](cells)
     var ws = ctx.enqueue_create_buffer[DType.float32](
         identical_gemm_workspace_max_floats(m, n, k)
@@ -607,6 +648,6 @@ def samba_accumulate_host(
     misaligned split BY NAME; `t_tokens < 0` makes no alignment claim (the
     residual or tied-weight pair add). Returns `n`."""
     samba_validate_accumulation(n, a, t_tokens)
-    _refuse_nonfinite("accumulate parts", parts_ptr, n * a)
-    var src = _upload_f32(ctx, parts_ptr, n * a)
+    _refuse_host("accumulate parts", parts_ptr, n * a)
+    var src = _upload_checked(ctx, "accumulate parts", parts_ptr, n * a)
     return samba_accumulate_buffer(ctx, src^, out_ptr, n, a)

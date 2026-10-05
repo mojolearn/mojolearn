@@ -34,6 +34,7 @@ from x_linear.scan import SC_NT, _sc_block_excl
 from x_linear.tops import FOLD_BLOCK
 from x_linear.team import team_at
 from x_linear.tops import fold_blocks, fold_parts
+from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.vfold import vscratch
 from x_linear.lbfgs_device import LbObjective, lbfgs_device, lbd_words, lbd_th, lbd_witness_words, LBD_TPB
@@ -510,6 +511,8 @@ def logcv_fit_grid(
     var p = kp * (d + 1)
     var c = ctx.copy()
     var obj = LcvObjective(c, x, n_x, y, n_y, n, d, kp, fi, sw)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(c, obj.x, n_x, y, n_y)
     var wcap = max(lbd_witness_words(obj.blocks_at(n), p), 2 * _blocks(n) + _blocks(fold_blocks(n)) + 2)
     var wit = Witness(c, wcap)
     var lw = c.enqueue_create_buffer[DType.float32](lbd_words(p))
@@ -522,7 +525,7 @@ def logcv_fit_grid(
     scores.enqueue_fill(Float32(0))
     var cvals = c.enqueue_create_buffer[DType.float32](max(nc, 1))
     var hc = List[Float32](length=max(nc, 1), fill=Float32(0))
-    for ci in range(nc):
+    for ci in range(nc):  # small-loop(nc: C grid values): the user's Cs list, one launch constant each
         hc[ci] = fp[1 + ci]
     c.enqueue_copy(dst_buf=cvals, src_ptr=hc.unsafe_ptr())
     # the StratifiedKFold ids from the device labels (the caller sent zeros)

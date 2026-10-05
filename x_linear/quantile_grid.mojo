@@ -25,6 +25,7 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, row_dot
 from x_linear.tops import fold_parts, fold_blocks, fold_fa, fold_sq, FOLD_BLOCK, t_cholesky
 from x_linear.team import device_team, team_work, LINEAR_TPB
+from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.quantile import (
     q_lower_cell, q_a, q_gram_part, q_gram_cell, q_spread_part, q_resid, q_prox,
@@ -404,6 +405,8 @@ def quantile_fit_grid(
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(ctx, dx, n_x, y, n_y)
     ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
     var xp = dx.unsafe_ptr()
     var yp = dy.unsafe_ptr()

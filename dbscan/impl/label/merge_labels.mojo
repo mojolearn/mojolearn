@@ -49,7 +49,12 @@ from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from dbscan.impl.sparse.detail.csr import MAX_LABEL
+from dbscan.impl.sparse.detail.csr import (
+    DBSCAN_CC_FLAG_CELLS,
+    IDN_DBSCAN_CC_CHUNK,
+    IDN_DBSCAN_CC_GATED,
+    MAX_LABEL,
+)
 
 
 comptime MERGE_TPB = 256
@@ -89,6 +94,40 @@ def propagate_label_kernel(
                 m.unsafe_store(0, Int32(1))
                 # min(ra, rb) would be sufficient but this speeds up
                 # convergence
+                var lo = ra
+                if rb < ra:
+                    lo = rb
+                var rmin = r.unsafe_load(Int(lo))
+                _ = Atomic.min(r.unsafe_offset(la), rmin)
+                _ = Atomic.min(r.unsafe_offset(lb), rmin)
+
+
+def propagate_label_gated_kernel(
+    labels_a: MutPointer[Int32, MutAnyOrigin],
+    labels_b: MutPointer[Int32, MutAnyOrigin],
+    r: MutPointer[Int32, MutAnyOrigin],
+    mask: MutPointer[UInt8, MutAnyOrigin],
+    gate: MutPointer[Int32, MutAnyOrigin],
+    pass_in: Int32,
+    n_in: Int32,
+):
+    """`propagate_label_kernel` behind a device flag (`IDN_DBSCAN_CC_GATED`,
+    `dbscan/impl/sparse/detail/csr.mojo`). Same body; it returns at once
+    when `gate[pass - 1]` is zero and its `m` cell is `gate[pass]`.
+    """
+    var p = Int(pass_in)
+    if gate.unsafe_load(p - 1) == Int32(0):
+        return
+    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if tid < Int(n_in):
+        if mask.unsafe_load(tid) != 0:
+            # Note: labels are from 1 to N
+            var la = Int(labels_a.unsafe_load(tid)) - 1
+            var lb = Int(labels_b.unsafe_load(tid)) - 1
+            var ra = r.unsafe_load(la)
+            var rb = r.unsafe_load(lb)
+            if ra != rb:
+                gate.unsafe_store(p, Int32(1))
                 var lo = ra
                 if rb < ra:
                     lo = rb
@@ -154,25 +193,43 @@ def merge_labels(
     # has not reached it. Under IDENTICAL that is refused; under FAST it is
     # the reference's silent truncation.
     var merged = False
-    for _it in range(max_iterations):
-        h_m.unsafe_ptr().unsafe_store(0, Int32(0))
-        ctx.enqueue_copy(dst_buf=d_m, src_ptr=h_m.unsafe_ptr())
-        ctx.enqueue_function[propagate_label_kernel](
-            labels_a.unsafe_ptr(),
-            labels_b.unsafe_ptr(),
-            work_buffer.unsafe_ptr(),
-            mask.unsafe_ptr(),
-            d_m.unsafe_ptr(),
-            Int32(n_rows),
-            grid_dim=(blocks, 1, 1),
-            block_dim=(MERGE_TPB, 1, 1),
+    comptime if IDN_DBSCAN_CC_GATED:
+        # `d_m` / `h_m` hold `DBSCAN_CC_FLAG_CELLS` cells. One upload, a
+        # chunk of gated passes and one download per chunk; a pass after the
+        # one that found `ra == rb` everywhere returns at its first load.
+        var git = 0
+        while git < max_iterations and not merged:
+            var gruns = IDN_DBSCAN_CC_CHUNK
+            if gruns > max_iterations - git:
+                gruns = max_iterations - git
+            h_m.unsafe_ptr().unsafe_store(0, Int32(1))
+            for c in range(1, DBSCAN_CC_FLAG_CELLS):
+                h_m.unsafe_ptr().unsafe_store(c, Int32(0))
+            ctx.enqueue_copy(dst_buf=d_m, src_ptr=h_m.unsafe_ptr())
+            for pr in range(1, gruns + 1):
+                ctx.enqueue_function[propagate_label_gated_kernel](
+                    labels_a.unsafe_ptr(),
+                    labels_b.unsafe_ptr(),
+                    work_buffer.unsafe_ptr(),
+                    mask.unsafe_ptr(),
+                    d_m.unsafe_ptr(),
+                    Int32(pr),
+                    Int32(n_rows),
+                    grid_dim=(blocks, 1, 1),
+                    block_dim=(MERGE_TPB, 1, 1),
+                )
+            ctx.enqueue_copy(dst_ptr=h_m.unsafe_ptr(), src_buf=d_m)
+            ctx.synchronize()
+            for pr2 in range(1, gruns + 1):  # small-loop(gruns: at most IDN_DBSCAN_CC_CHUNK per-pass flags): reads the chunk's convergence words, no data
+                git += 1
+                if h_m.unsafe_ptr().unsafe_load(pr2) == Int32(0):
+                    merged = True
+                    break
+    else:
+        merged = _merge_propagate_per_sync(
+            ctx, labels_a, labels_b, mask, work_buffer, d_m, h_m, n_rows,
+            blocks, max_iterations,
         )
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=h_m.unsafe_ptr(), src_buf=d_m)
-        ctx.synchronize()
-        if h_m.unsafe_ptr().unsafe_load(0) == Int32(0):
-            merged = True
-            break
     comptime if PIN_DETERMINISM:
         # DEVIATION 507, and `PIN_DETERMINISM` since 2026-08-29:
         # `propagate_label_kernel` reaches a UNIQUE fixed point whatever
@@ -201,3 +258,40 @@ def merge_labels(
         block_dim=(MERGE_TPB, 1, 1),
     )
     ctx.synchronize()
+
+
+def _merge_propagate_per_sync(
+    ctx: DeviceContext,
+    mut labels_a: DeviceBuffer[DType.int32],
+    mut labels_b: DeviceBuffer[DType.int32],
+    mut mask: DeviceBuffer[DType.uint8],
+    mut work_buffer: DeviceBuffer[DType.int32],
+    mut d_m: DeviceBuffer[DType.int32],
+    mut h_m: HostBuffer[DType.int32],
+    n_rows: Int,
+    blocks: Int,
+    max_iterations: Int,
+) raises -> Bool:
+    """The per-pass readback loop `merge_labels` had before
+    `IDN_DBSCAN_CC_GATED`, unchanged. Returns whether it settled."""
+    var merged = False
+    for _it in range(max_iterations):
+        h_m.unsafe_ptr().unsafe_store(0, Int32(0))
+        ctx.enqueue_copy(dst_buf=d_m, src_ptr=h_m.unsafe_ptr())
+        ctx.enqueue_function[propagate_label_kernel](
+            labels_a.unsafe_ptr(),
+            labels_b.unsafe_ptr(),
+            work_buffer.unsafe_ptr(),
+            mask.unsafe_ptr(),
+            d_m.unsafe_ptr(),
+            Int32(n_rows),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(MERGE_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=h_m.unsafe_ptr(), src_buf=d_m)
+        ctx.synchronize()
+        if h_m.unsafe_ptr().unsafe_load(0) == Int32(0):
+            merged = True
+            break
+    return merged

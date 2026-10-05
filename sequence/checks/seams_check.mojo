@@ -27,16 +27,16 @@ from sequence.exec_device import DeviceExec
 from sequence.ops import (
     FP, Args, OP_GEMM, OP_COLSUM, OP_CELL_FWD, OP_CE, OP_OPT, OP_MLP_ROWLOSS, OP_COLSCALE, OP_CHOLSOLVE,
     OP_MOE_ROUTE, OP_LN_FWD, OP_CROSTON, OP_ETS_LIK, OP_ETS_INIT, CELL_LSTM, CELL_GRU, OPT_ADAM, OPT_ADAMAX,
-    OP_AF_VEC, OP_LAMB_RATIO, OP_PROPHET_FEATURES, OPT_RMSPROP, OPT_ADAGRAD, OPT_LION, OPT_NADAM,
+    OP_AF_VEC, OP_LAMB_RATIO, OP_PROPHET_FEATURES, OPT_RMSPROP, OPT_ADAGRAD, OPT_LION, OPT_NADAM, OP_MLP_PERM,
 )
 from sequence.theta import theta_run
 from sequence.garch import garch_sigma2
-from sequence.mlp import LOSS_BINARY_LOG, SplitMix, fisher_yates
+from sequence.mlp import LOSS_BINARY_LOG, SplitMix, fisher_yates, mlp_epoch_key, mlp_perm_args
 from sequence.stl import stl_rwts
 from sequence.nm import Objective, nelder_mead
 from sequence.recurrent import Net, Work, forward, head, backward
 from sequence.checks.oracle import (
-    o_gemm, o_gemm_split, o_colsum, o_lstm, o_gru, o_bptt_dw, o_ce, o_adam, o_adamax, o_binary_logloss, o_shuffle,
+    o_gemm, o_gemm_split, o_colsum, o_lstm, o_gru, o_bptt_dw, o_ce, o_adam, o_adamax, o_binary_logloss, o_shuffle, o_mlp_perm,
     o_stl_rwts, o_colscale, o_cholsolve, o_nm_quantized, quant_obj, o_moe_route, o_layer_norm, o_croston,
     o_ets_calc, o_ets_init, o_nadam, o_af_vec, o_rmsprop, o_adagrad, o_lion, o_lamb_ratio, o_theta_run,
     o_garch_sigma2, o_prophet_features,
@@ -197,6 +197,17 @@ def _both[OP: Int](
     return Cols(d^, h^)
 
 
+# ------------------------------------------------------------ 5545 MLP epoch order
+def _perm_col[E: Exec](mut ex: E, n: Int, key: UInt64) raises -> List[Float32]:
+    """`op_mlp_perm` over n positions on one executor, as mlp_fit launches it."""
+    var p = ex.alloc(n)
+    ex.launch[OP_MLP_PERM](mlp_perm_args(n, key, p), n)
+    ex.sync()
+    var back = List[Float32](length=n, fill=Float32(0.0))
+    ex.download(_host_ptr(back), p, n)
+    return back^
+
+
 # ------------------------------------------------------------ 5504 BPTT
 def _bptt[E: Exec](mut ex: E, net: Net, P: List[Float32], x: List[Float32], dy: List[Float32], T: Int, B: Int) raises -> Tuple[List[Float32], List[Float32]]:
     """(dW_ih of layer 0, dgx) after forward, head and backward."""
@@ -322,6 +333,15 @@ def main() raises:
     _check("5504_bptt_fold", o_bptt_dw(bh[1], x5, T, B5, GH, 3, False), o_bptt_dw(bh[1], x5, T, B5, GH, 3, True),
            bd[0], bh[0], tr)
     _same("5504_bptt_fold dgx", "device vs host", _diff(bd[1], bh[1]))
+    # nr-small D3: K = T B = 600 > 512 rows, two blocks of the IDENTICAL
+    # blocked weight-gradient order (one fold when it is off)
+    var Tb = 200
+    var xb5 = _mixed(Tb * B5 * 3, 54)
+    var bdb = _bptt(dx, net, P, xb5, dy, Tb, B5)
+    var bhb = _bptt(hx, net, P, xb5, dy, Tb, B5)
+    _check("5504_bptt_fold_blocked", o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, False),
+           o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, True), bdb[0], bhb[0], tr)
+    _same("5504_bptt_fold_blocked dgx", "device vs host", _diff(bdb[1], bhb[1]))
 
     # ---- 5505 softmax cross entropy, B 3, C 40.
     var B6 = 3; var C6 = 40
@@ -712,6 +732,12 @@ def main() raises:
     _check("5543_prophet_fourier", o_prophet_features(fr43, ord43, hol43, N43, nh43, False),
            o_prophet_features(fr43, ord43, hol43, N43, nh43, True), pf.dev[3], pf.host[3], tr)
 
+    # ---- 5545 the MLP device epoch order (`op_mlp_perm`, roadmap D13), n 97
+    # (a 256-value domain: the cycle walk runs), seed 20260927, epoch 3.
+    var key45 = mlp_epoch_key(UInt64(20260927), 3)
+    _check("5545_mlp_epoch_perm", o_mlp_perm(97, UInt64(20260927), 3, False), o_mlp_perm(97, UInt64(20260927), 3, True),
+           _perm_col(dx, 97, key45), _perm_col(hx, 97, key45), tr)
+
     _ = dx^
     _ = hx^
-    print("PASS sequence seams (27 seams: 5500-5518, 5536-5539, 5541-5544; 5540 is sched_check.py)")
+    print("PASS sequence seams (28 seams: 5500-5518, 5536-5539, 5541-5545; 5540 is sched_check.py)")

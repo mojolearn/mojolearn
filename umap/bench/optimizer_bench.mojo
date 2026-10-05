@@ -3,7 +3,7 @@
 
 from max.gpu.host import DeviceContext
 from std.time import perf_counter_ns
-from umap.optimizer import optimize_layout_identical
+from umap.optimizer import optimize_layout_identical_reference
 from umap.optimizer_fast import optimize_layout_fast
 
 
@@ -22,7 +22,7 @@ def main() raises:
             weights[i * n + j] = Float32(1.0)
             weights[j * n + i] = Float32(1.0)
     var t0 = perf_counter_ns()
-    _ = optimize_layout_identical(initial, weights, n, 2, 10)
+    _ = optimize_layout_identical_reference(initial, weights, n, 2, 10)
     var serial_ms = Float64(perf_counter_ns() - t0) / Float64(1.0e6)
     t0 = perf_counter_ns()
     _ = optimize_layout_fast(

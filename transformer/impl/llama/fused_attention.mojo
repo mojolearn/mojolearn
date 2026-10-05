@@ -102,7 +102,8 @@ from std.sys._assembly import inlined_assembly
 from std.sys.compile import is_defined
 from std.sys.info import is_amd_gpu
 from std.time import perf_counter_ns
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.host.device_attribute import DeviceAttribute
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -115,6 +116,7 @@ from core.step_phase import (
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
+from core.ctx_key import ctx_cache_key, ctx_cache_slot
 from core.device_scan import (
     NONFINITE_NONE,
     device_first_nonfinite,
@@ -153,6 +155,8 @@ from gemm.checks.gemm_identical import (
     _amma_mma,
 )
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     identical_mul,
     ftz,
     identical_div,
@@ -627,6 +631,28 @@ instantiates them at 16 rows, which halves a block's threadgroup page
 (the Apple matrix-unit copy: 27.6 KB -> 19 KB) and doubles the blocks, for
 the Apple column where a 256-thread block with a 27.6 KB page sits alone on
 a core. The chains per row are the same; only which block owns a row moves."""
+
+comptime ATTN_FWD_TQ_RULE = (
+    is_defined["MOJOLEARN_ATTN_FWD_TQ_RULE"]()
+    and not is_defined["MOJOLEARN_ATTN_FWD_TQ16"]()
+    and not is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and lib_smem_page_fits_for[TARGET_COLUMN, _fwd_r2_page_bytes(16, True)]()
+)
+"""lane/nr-attn (2026-10-04), CANDIDATE (opt-in `-D
+MOJOLEARN_ATTN_FWD_TQ_RULE=1`): the lane/neural-pass46/pass59 forward TQ16
+arm ported onto the per-launch tile rule. The shipped estash forward
+(`_launch_fwd_r2_keep`, NVIDIA's and AMD's default word) takes its query
+rows per block (16 or 32) from `attn_fwd_rows_for`, i.e.
+`attn_rows_tile_rule` over `b * n_heads` groups of `l` rows at two waves
+(the dk/dv rule's: an output and a score accumulator per thread), instead of
+the comptime `ATTN_FWD_TQ`. Compiled only when the 16-row Q-resident page
+fits the column (`lib_smem_page_fits_for`; NVIDIA's 48 KB static page; the
+r2 page at 16 rows is about 11.5 KB, the MFMA copy's 10.4 KB). The page fix
+of lane/neural-pass59 ba90adec2 / pass67 dec693302 (the page never smaller
+than the V tile) is already in both kernels. Which block owns a row touches
+no chain: same bits at either tile, on every vendor. The forward's `ran`
+word keeps reporting 32 rows, as the comptime TQ16 arm did."""
 
 
 def _attn_arm_base_from_name(base: String, full: String) raises -> Int:
@@ -1961,12 +1987,11 @@ def _dump_f32(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, 
         var view = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
+    # cpu3-seq: the pinned buffer's bytes go to the file as they are (a
+    # span over the host buffer), no byte-by-byte copy into a List.
     var raw = host.unsafe_ptr().bitcast[UInt8]()
-    var bytes = List[UInt8]()
-    for i in range(n * 4):
-        bytes.append(raw.unsafe_load(i))
     with open(path, "w") as fh:
-        fh.write_bytes(Span(bytes))
+        fh.write_bytes(Span(unsafe_ptr=raw, length=n * 4))
     _ = host^
 
 
@@ -2228,7 +2253,7 @@ def device_absmax(
     step_count_sync()
     ctx.synchronize()
     var m = Float32(0.0)
-    for i in range(blocks):
+    for i in range(blocks):  # small-loop(blocks: absmax partials, at most ABSMAX_BLOCKS): max fold of the device reduction partials
         var v = host.unsafe_ptr().unsafe_load(i)
         if v > m:
             m = v
@@ -2244,6 +2269,146 @@ def _absmax_blocks(n: Int) -> Int:
     if blocks > ABSMAX_BLOCKS:
         blocks = ABSMAX_BLOCKS
     return blocks
+
+
+comptime IDN_ATTN_SCAN_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/fam-lm (2026-10-04), default ON under IDENTICAL: the fused
+attention's regime scan (`device_absmax4`) and corner flag (`_zero_flag`,
+`_read_flags`) take their partials buffer, their flag buffer and their
+pinned host buffer from one process cache, created once, where every fused
+forward and backward (per layer, per call) made a device allocation and a
+pinned host allocation for the scan and another pair for the flag. Each
+call still writes every partial and zero-fills the flag before it reads
+them, and waits before the host reads, so the values read are the same: no
+bit moves (a regime BOUND and a flag; nothing reaches a card). One cache
+per process, as the other process workspaces are.
+`-D MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF` restores the per-call allocations."""
+
+comptime _SCAN_CACHE_PART = 4 * ABSMAX_BLOCKS
+comptime _SCAN_CACHE_FLAGS = 4
+
+
+struct _AttnScanCache(Defaultable, Movable):
+    # lane/fam2-lm: one entry per device context (`ids[i]` is the key of
+    # entry i, core/ctx_key.mojo); the first pass held one entry per process,
+    # which handed context A's buffers to context B in a two-GPU process.
+    var ids: List[Int]
+    var part: List[DeviceBuffer[DType.float32]]  # each [_SCAN_CACHE_PART]
+    var flag: List[DeviceBuffer[DType.float32]]  # each [_SCAN_CACHE_FLAGS]
+    var host: List[HostBuffer[DType.float32]]  # each [_SCAN_CACHE_PART + _SCAN_CACHE_FLAGS]
+
+    def __init__(out self):
+        self.ids = List[Int]()
+        self.part = List[DeviceBuffer[DType.float32]]()
+        self.flag = List[DeviceBuffer[DType.float32]]()
+        self.host = List[HostBuffer[DType.float32]]()
+
+
+comptime _ATTN_SCAN_CACHE = _Global[StorageType=_AttnScanCache,
+    name="MojolearnAttnScanCacheV1", init_fn=_AttnScanCache.__init__]
+
+
+def _scan_cache_slot(ctx: DeviceContext) raises -> Int:
+    """This context's entry in the scan cache, created (all three buffers)
+    on the context's first use."""
+    var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
+    var si = ctx_cache_slot(g[].ids, ctx)
+    if si >= 0:
+        return si
+    step_count_device_alloc()
+    g[].part.append(ctx.enqueue_create_buffer[DType.float32](_SCAN_CACHE_PART))
+    step_count_device_alloc()
+    g[].flag.append(ctx.enqueue_create_buffer[DType.float32](_SCAN_CACHE_FLAGS))
+    step_count_host_alloc()
+    g[].host.append(
+        ctx.enqueue_create_host_buffer[DType.float32](_SCAN_CACHE_PART + _SCAN_CACHE_FLAGS)
+    )
+    g[].ids.append(ctx_cache_key(ctx))
+    return len(g[].ids) - 1
+
+
+def _scan_cache_host(ctx: DeviceContext) raises -> MutPointer[Float32, MutAnyOrigin]:
+    """The cached pinned buffer: the scan's partials at `[0,
+    _SCAN_CACHE_PART)`, the flag words after them. Created on first use."""
+    var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
+    var si = _scan_cache_slot(ctx)
+    return g[].host[si].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def _device_absmax4_cached(
+    ctx: DeviceContext,
+    b0_p: MutPointer[Float32, MutAnyOrigin], n0: Int,
+    b1_p: MutPointer[Float32, MutAnyOrigin], n1: Int,
+    b2_p: MutPointer[Float32, MutAnyOrigin], n2: Int,
+    b3_p: MutPointer[Float32, MutAnyOrigin], n3: Int,
+) raises -> StaticTuple[Float64, 4]:
+    """`device_absmax4` on the cached partials and host buffers: the same
+    launches at the same grids into the same slices, one copy of the slices
+    written, one wait, the same host fold."""
+    var k0 = _absmax_blocks(n0)
+    var k1 = _absmax_blocks(n1)
+    var k2 = _absmax_blocks(n2)
+    var k3 = _absmax_blocks(n3)
+    var total = k0 + k1 + k2 + k3
+    var out = StaticTuple[Float64, 4](0.0, 0.0, 0.0, 0.0)
+    if total == 0:
+        return out
+    var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
+    var si = _scan_cache_slot(ctx)
+    var part = g[].part[si].create_sub_buffer[DType.float32](0, total)
+    var hp = _scan_cache_host(ctx)
+    var off = 0
+    if k0 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b0_p, Int32(n0),
+            grid_dim=(k0, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k0
+    if k1 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b1_p, Int32(n1),
+            grid_dim=(k1, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k1
+    if k2 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b2_p, Int32(n2),
+            grid_dim=(k2, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    off += k2
+    if k3 > 0:
+        step_count_launch()
+        ctx.enqueue_function[absmax_partial_kernel](
+            part.unsafe_ptr() + off, b3_p, Int32(n3),
+            grid_dim=(k3, 1, 1), block_dim=(ABSMAX_TPB, 1, 1),
+        )
+    step_count_d2h()
+    ctx.enqueue_copy(dst_ptr=hp, src_buf=part)
+    step_count_sync()
+    ctx.synchronize()
+    var lo = 0
+    for which in range(4):
+        var kb = k0
+        if which == 1:
+            kb = k1
+        elif which == 2:
+            kb = k2
+        elif which == 3:
+            kb = k3
+        var m = Float32(0.0)
+        for i in range(lo, lo + kb):  # small-loop(kb: one operand partials, at most ABSMAX_BLOCKS): max fold of the device reduction partials
+            var v = hp.unsafe_load(i)
+            if v > m:
+                m = v
+        out[which] = Float64(m)
+        lo += kb
+    _ = part^
+    return out
 
 
 def device_absmax4(
@@ -2264,6 +2429,8 @@ def device_absmax4(
     allocation, copy); on Apple a wait with pending work is the step's
     dominant cost (memory: metal-cost-is-syncs-not-launches). A buffer with
     `n <= 0` reads 0.0 and launches nothing, as `device_absmax` returns."""
+    comptime if IDN_ATTN_SCAN_CACHE:
+        return _device_absmax4_cached(ctx, b0_p, n0, b1_p, n1, b2_p, n2, b3_p, n3)
     var k0 = _absmax_blocks(n0)
     var k1 = _absmax_blocks(n1)
     var k2 = _absmax_blocks(n2)
@@ -2318,7 +2485,7 @@ def device_absmax4(
         elif which == 3:
             kb = k3
         var m = Float32(0.0)
-        for i in range(lo, lo + kb):
+        for i in range(lo, lo + kb):  # small-loop(kb: one operand partials, at most ABSMAX_BLOCKS): max fold of the device reduction partials
             var v = host.unsafe_ptr().unsafe_load(i)
             if v > m:
                 m = v
@@ -2349,6 +2516,159 @@ def regime_product_ok(hd: Int, a_max: Float64, b_max: Float64) -> Bool:
 def regime_finite(x_max: Float64) -> Bool:
     var inf = Float64(bitcast[DType.float32](UInt32(0x7F800000)))
     return x_max < inf
+
+
+comptime IDN_ATTN_BWD_SCAN_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/nr-attn (2026-10-04), default ON under IDENTICAL (the review's
+"backward regime scan re-reads q_rope/k_cache/v_cache", fused_attention
+:10770). The fused backward's regime scan read q_rope, k_cache, v_cache and
+dctx; the fused forward of the same call had already scanned the first three
+with the same `absmax_partial_kernel` at the same grid, and nothing writes
+them between that forward and its backward. The forward now records its
+three maxima (`AttnFwdScan`, keyed by the three buffer addresses and their
+lengths), the caller keeps the record in its stages (cleared at the start of
+every attention forward, the only place those buffers are rewritten), and
+the backward, handed a record that matches its own buffers, scans dctx only
+and takes the other three maxima from the record. `max` over the same
+partials of the same bytes is the same value, so the regime decision is the
+same decision: no bit moves on any column. A NaN or absent maximum (-1) falls
+back to the full scan. `-D MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF` restores
+the four-buffer scan."""
+
+
+struct AttnFwdScan(Copyable, Movable):
+    """The fused forward's regime-scan maxima for one call: q_rope, k_cache
+    and v_cache, keyed by each buffer's address and the lengths scanned.
+    `ok` is False when no scan is recorded."""
+
+    var ok: Bool
+    var q: Int
+    var k: Int
+    var v: Int
+    var nq: Int
+    var nkv: Int
+    var qmax: Float64
+    var kmax: Float64
+    var vmax: Float64
+
+    def __init__(out self):
+        self.ok = False
+        self.q = 0
+        self.k = 0
+        self.v = 0
+        self.nq = 0
+        self.nkv = 0
+        self.qmax = -1.0
+        self.kmax = -1.0
+        self.vmax = -1.0
+
+    def clear(mut self):
+        self.ok = False
+        self.qmax = -1.0
+        self.kmax = -1.0
+        self.vmax = -1.0
+
+    def valid_for(self, q: Int, nq: Int, k: Int, v: Int, nkv: Int) -> Bool:
+        return (
+            self.ok and self.q == q and self.nq == nq and self.k == k
+            and self.v == v and self.nkv == nkv
+        )
+
+
+struct _AttnFwdScanLast(Defaultable, Movable):
+    # The last fused forward scan of this process: the caller takes it right
+    # after the forward returns (`attention_fwd_scan_take`).
+    var ctx_id: Int
+    var rec: AttnFwdScan
+
+    def __init__(out self):
+        self.ctx_id = 0
+        self.rec = AttnFwdScan()
+
+
+comptime _ATTN_FWD_SCAN_LAST = _Global[StorageType=_AttnFwdScanLast,
+    name="MojolearnAttnFwdScanLastV1", init_fn=_AttnFwdScanLast.__init__]
+
+
+def attention_fwd_scan_clear() raises:
+    """Forget the last fused forward scan (called before a fused forward)."""
+    comptime if IDN_ATTN_BWD_SCAN_REUSE:
+        var g = _ATTN_FWD_SCAN_LAST.get_or_create_ptr()
+        g[].rec.clear()
+
+
+def _attn_fwd_scan_note(
+    ctx: DeviceContext, q: Int, nq: Int, k: Int, v: Int, nkv: Int,
+    qmax: Float64, kmax: Float64, vmax: Float64,
+) raises:
+    """Record a fused forward's regime-scan maxima (the values the host
+    already holds; no device work)."""
+    comptime if IDN_ATTN_BWD_SCAN_REUSE:
+        var g = _ATTN_FWD_SCAN_LAST.get_or_create_ptr()
+        g[].ctx_id = ctx_cache_key(ctx)
+        g[].rec.ok = True
+        g[].rec.q = q
+        g[].rec.k = k
+        g[].rec.v = v
+        g[].rec.nq = nq
+        g[].rec.nkv = nkv
+        g[].rec.qmax = qmax
+        g[].rec.kmax = kmax
+        g[].rec.vmax = vmax
+
+
+def attention_fwd_scan_take(
+    ctx: DeviceContext, q: Int, nq: Int, k: Int, v: Int, nkv: Int
+) raises -> AttnFwdScan:
+    """The last fused forward scan when it was taken on `ctx` over exactly
+    these buffers and lengths, else an empty record. Clears the record."""
+    var out = AttnFwdScan()
+    comptime if IDN_ATTN_BWD_SCAN_REUSE:
+        var g = _ATTN_FWD_SCAN_LAST.get_or_create_ptr()
+        if g[].ctx_id == ctx_cache_key(ctx) and g[].rec.valid_for(q, nq, k, v, nkv):
+            out = g[].rec.copy()
+        g[].rec.clear()
+    return out^
+
+
+def _attn_bwd_regime_scan(
+    ctx: DeviceContext,
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    nq: Int,
+    nkv: Int,
+    fwd_qmax: Float64,
+    fwd_kmax: Float64,
+    fwd_vmax: Float64,
+) raises -> StaticTuple[Float64, 4]:
+    """The fused backward's regime scan: (qmax, kmax, vmax, dmax). Under
+    IDN_ATTN_BWD_SCAN_REUSE with all three forward maxima present (>= 0) it
+    scans dctx alone, in slot 3 at the grid `device_absmax4` gives it there,
+    and returns the forward's three; otherwise the four-buffer scan."""
+    var reuse = False
+    comptime if IDN_ATTN_BWD_SCAN_REUSE:
+        reuse = fwd_qmax >= 0.0 and fwd_kmax >= 0.0 and fwd_vmax >= 0.0
+    if reuse:
+        var amx = device_absmax4(
+            ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+            k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+            v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+            dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), nq,
+        )
+        amx[0] = fwd_qmax
+        amx[1] = fwd_kmax
+        amx[2] = fwd_vmax
+        return amx
+    return device_absmax4(
+        ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), nq,
+        k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), nkv,
+        v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), nkv,
+        dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), nq,
+    )
 
 
 # ===========================================================================
@@ -4100,6 +4420,137 @@ comptime TILED_TT = 16
 """Queries per staged tile of `fused_bwd_dkdv_tiled_kernel`."""
 
 
+#: lane/no-bench-tuning-2 (2026-10-04): the two constants above were measured
+#: at one board shape (192 dq blocks / 384 dkdv blocks on 142 SMs and 304
+#: CUs). They now stay only as the explicit A/B arms and as the rollback:
+#: `-D MOJOLEARN_ATTN_TILE_RULE_OFF=1` (or any explicit DQ_TQ* / DKDV_BJ*
+#: define) launches the comptime constants exactly as before. By default the
+#: rows (dq) or keys (dkdv) per block are chosen per launch from the grid,
+#: the head size and the device by one stated rule, `attn_rows_tile_rule`:
+#:   - the largest tile in [lo, hi] (powers of two) whose grid
+#:     `groups * ceil(rows / tile)` still gives every SM / CU at least
+#:     `per_sm = max(1, waves * 64 // max(hd, 64))` blocks; `lo` if none does;
+#:   - never a tile at least twice the sequence (half its rows would idle);
+#:   - `waves` = 4 for dq (one accumulator set per thread) and 2 for dk/dv
+#:     (two sets, dk and dv, so about half the blocks fit per SM); a head
+#:     twice as wide doubles the accumulators per thread and halves `per_sm`.
+#: Reproduces the measured picks at the board (L40S dq 16 / dkdv 32, MI325X
+#: 16 / 16, M2 Pro 64 / 32) and moves with sequence length, head size and
+#: device for every other shape. Which thread or block holds a cell's chain
+#: is an execution-plan choice the contract does not read: same bits at
+#: every tile, on every vendor (no host-column change).
+#: lane/review-fixes: off under MOJOLEARN_IDN_ALL_OFF too (the wave's OFF arm).
+comptime ATTN_TILE_RULE_OFF = is_defined["MOJOLEARN_ATTN_TILE_RULE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime ATTN_DQ_TQ_PINNED = (
+    ATTN_TILE_RULE_OFF
+    or is_defined["MOJOLEARN_ATTN_DQ_TQ16"]()
+    or is_defined["MOJOLEARN_ATTN_DQ_TQ32"]()
+    or is_defined["MOJOLEARN_ATTN_DQ_TQ64"]()
+)
+comptime ATTN_DKDV_BJ_PINNED = (
+    ATTN_TILE_RULE_OFF
+    or is_defined["MOJOLEARN_ATTN_DKDV_BJ16"]()
+    or is_defined["MOJOLEARN_ATTN_DKDV_BJ32"]()
+)
+
+
+def attn_device_units(ctx: DeviceContext) -> Int:
+    """SMs (NVIDIA) or CUs (AMD) of `ctx`; 0 when the driver does not report
+    it (the rule then takes the largest tile)."""
+    try:
+        return ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    except:
+        return 0
+
+
+def attn_rows_tile_rule(
+    groups: Int, rows: Int, hd: Int, units: Int, waves: Int, lo: Int, hi: Int
+) -> Int:
+    """The tile rule stated above `ATTN_TILE_RULE_OFF`. Pure: the checks call
+    it at neighbor shapes."""
+    var per_sm = waves * 64 // max(hd, 64)
+    if per_sm < 1:
+        per_sm = 1
+    var want = per_sm * units
+    var t = hi
+    while t > lo and (t // 2) >= rows:
+        t //= 2
+    while t > lo:
+        if groups * ((rows + t - 1) // t) >= want:
+            return t
+        t //= 2
+    return lo
+
+
+def attn_dq_rows_for(ctx: DeviceContext, b: Int, nh: Int, l: Int, hd: Int) -> Int:
+    """Query rows per block of `fused_bwd_dq_tiled_pf_kernel` for this launch."""
+    comptime if ATTN_DQ_TQ_PINNED:
+        return ATTN_DQ_TQ
+    return attn_rows_tile_rule(b * nh, l, hd, attn_device_units(ctx), 4, 16, 64)
+
+
+def attn_fwd_rows_for(ctx: DeviceContext, b: Int, nh: Int, l: Int) -> Int:
+    """Query rows per block (16 or 32) of the shipped estash forward under
+    `ATTN_FWD_TQ_RULE`: the tile rule at two waves, head_dim 64."""
+    return attn_rows_tile_rule(b * nh, l, ATTN_STASH_HD, attn_device_units(ctx), 2, 16, 32)
+
+
+def attn_dkdv_keys_r32_for(ctx: DeviceContext, b: Int, nkv: Int, s: Int, hd: Int) -> Int:
+    """Keys per block of the `_r32` dk/dv arm (16 or 32) for this launch."""
+    comptime if ATTN_DKDV_BJ_PINNED:
+        return ATTN_DKDV_BJ_R32
+    return attn_rows_tile_rule(b * nkv, s, hd, attn_device_units(ctx), 2, 16, 32)
+
+
+def _enqueue_dq_tiled_pf[HD: Int, SWZ: Bool = False](
+    ctx: DeviceContext,
+    tq: Int,
+    mut dq: DeviceBuffer[DType.float32],
+    mut corner: DeviceBuffer[DType.float32],
+    mut y_st: DeviceBuffer[DType.float32],
+    mut dy_st: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut zdot: DeviceBuffer[DType.float32],
+    b: Int, l: Int, nh: Int, nkv: Int, s: Int, pos0: Int, key_lo: Int,
+    window: Int, scale: Float32,
+    mut dctx: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+) raises:
+    """`fused_bwd_dq_tiled_pf_kernel` at `tq` rows per block (16, 32 or 64,
+    from `attn_dq_rows_for`); same bits at each."""
+    var blocks = b * nh * ((l + tq - 1) // tq)
+    if tq == 16:
+        comptime k16 = fused_bwd_dq_tiled_pf_kernel[HD, SWZ, 16]
+        ctx.enqueue_function[k16](
+            dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
+            Int32(pos0), Int32(key_lo), Int32(window), scale,
+            dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        )
+    elif tq == 32:
+        comptime k32 = fused_bwd_dq_tiled_pf_kernel[HD, SWZ, 32]
+        ctx.enqueue_function[k32](
+            dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
+            Int32(pos0), Int32(key_lo), Int32(window), scale,
+            dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        )
+    else:
+        comptime k64 = fused_bwd_dq_tiled_pf_kernel[HD, SWZ, 64]
+        ctx.enqueue_function[k64](
+            dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
+            Int32(pos0), Int32(key_lo), Int32(window), scale,
+            dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        )
+
+
 def fused_bwd_dq_tiled_kernel[HD: Int, SABOTAGE: Bool](
     dq: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
@@ -4868,7 +5319,7 @@ def _masked_tail_dy[HD: Int](
 
 
 @__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_DQ_LAUNCH_BOUND)))
-def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
+def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False, TQP: Int = ATTN_DQ_TQ](
     dq: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
     y_st: MutPointer[Float32, MutAnyOrigin],
@@ -4889,9 +5340,12 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
 ):
     """`fused_bwd_dq_tiled_kernel` (clean) with the dq fold stepped by
     `_step_preflushed` (DEVIATION 2533): `dcell` is a `_pmul` output and the
-    K tile is staged through `ftz`. 256 threads; `TQ = 64` rows per block."""
+    K tile is staged through `ftz`. 256 threads; `TQ = TQP` rows per block
+    (16, 32 or 64; `attn_dq_rows_for` picks it per launch). The rows a block
+    holds touch no chain: same bits at every TQ."""
     _attn_mode_enter()
-    comptime TQ = ATTN_DQ_TQ
+    comptime TQ = TQP
+    comptime assert TQ == 16 or TQ == 32 or TQ == 64, "dq_tiled_pf rows per block"
     comptime RPT = TQ // 16
     comptime CPT = HD // 16
     comptime TK = TILED_TK
@@ -7497,6 +7951,22 @@ def _read_flags(
     # the copy and the kernels that wrote `flag` are in stream order on
     # `ctx`, so the wait after the copy covers them all. The wait that sat
     # between the creation and the copy was a second full round trip.
+    comptime if IDN_ATTN_SCAN_CACHE:
+        # lane/fam-lm: the cached pinned buffer's flag words.
+        if len(flag) <= _SCAN_CACHE_FLAGS:
+            var fp = _scan_cache_host(ctx) + _SCAN_CACHE_PART
+            step_count_d2h()
+            ctx.enqueue_copy(dst_ptr=fp, src_buf=flag)
+            step_count_sync()
+            ctx.synchronize()
+            var cv = fp.unsafe_load(0)
+            var crep = 0
+            if len(flag) >= 3:
+                if fp.unsafe_load(1) != Float32(0.0):
+                    crep += 1
+                if fp.unsafe_load(2) != Float32(0.0):
+                    crep += 2
+            return (cv != Float32(0.0), crep)
     step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](len(flag))
     step_count_d2h()
@@ -7518,6 +7988,17 @@ def _read_flag(ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]) raises
 
 
 def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
+    comptime if IDN_ATTN_SCAN_CACHE:
+        # lane/fam-lm: a view of the cached flag buffer, zero-filled for
+        # this call exactly as the fresh one is.
+        var g = _ATTN_SCAN_CACHE.get_or_create_ptr()
+        var si = _scan_cache_slot(ctx)
+        var cf = g[].flag[si].create_sub_buffer[DType.float32](
+            0, 3 if ATTN_REPAIR_MASKED_TAIL else 1
+        )
+        step_count_launch()
+        cf.enqueue_fill(Float32(0.0))
+        return cf^
     step_count_device_alloc()
     var f = ctx.enqueue_create_buffer[DType.float32](3 if ATTN_REPAIR_MASKED_TAIL else 1)
     step_count_launch()
@@ -7636,6 +8117,10 @@ def fused_forward_launch_ran(
         var qmax = amx[0]
         var kmax = amx[1]
         var vmax = amx[2]
+        _attn_fwd_scan_note(
+            ctx, Int(q_rope.unsafe_ptr()), b * l * nh * hd, Int(k_cache.unsafe_ptr()),
+            Int(v_cache.unsafe_ptr()), b * nkv * s * hd, qmax, kmax, vmax,
+        )
         if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
             return FUSED_REFUSED_REGIME
         _attn_tick(ctx, ton, tk, "fwd_regime_scan")
@@ -7852,13 +8337,20 @@ def fused_forward_launch_ran(
         var hit2 = _read_flag(ctx, corner)
         _ = corner^
         _attn_tick(ctx, ton, tk, "fwd_regime_scan_behind_and_corner_flag")
+        _attn_fwd_scan_note(
+            ctx, Int(q_rope.unsafe_ptr()), b * l * nh * hd, Int(k_cache.unsafe_ptr()),
+            Int(v_cache.unsafe_ptr()), b * nkv * s * hd, amx2[0], amx2[1], amx2[2],
+        )
         if not regime_product_ok(hd, amx2[0], amx2[1]) or not regime_finite(amx2[2]):
             return FUSED_REFUSED_REGIME
         if hit2:
             return FUSED_CORNER
         return FUSED_RAN
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+    # the kernels; the wait that sat here was a second round trip.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     var hit = _read_flag(ctx, corner)
     _ = corner^
     _attn_tick(ctx, ton, tk, "fwd_corner_flag")
@@ -7889,6 +8381,9 @@ def fused_backward_launch(
     key_lo: Int,
     window: Int,
     scale: Float32,
+    fwd_qmax: Float64 = -1.0,
+    fwd_kmax: Float64 = -1.0,
+    fwd_vmax: Float64 = -1.0,
 ) raises -> Int:
     """The fused backward: `zdot` (stage 18), `dq` (22, `[M, nh*hd]`),
     `dk` and `dv` (23-24, `[B, n_kv, S, hd]`) on `FUSED_RAN`. `amax` and
@@ -7898,6 +8393,7 @@ def fused_backward_launch(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
         fused_attention_arm_from_env(),
+        fwd_qmax=fwd_qmax, fwd_kmax=fwd_kmax, fwd_vmax=fwd_vmax,
     )
 
 
@@ -8719,8 +9215,21 @@ def fused_bwd_zdot_stash_amma_kernel[HD: Int](
         zdot.unsafe_store(row, zf)
 
 
+comptime IDN_ATTN_SCRATCH_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/fam-lm (2026-10-04), default ON under IDENTICAL: the Apple scratch
+cache below on NVIDIA and AMD too. The forward's `[B, n_heads, L, S]`
+score/exp stash and the backward's y and dy stashes were a fresh device
+allocation per layer per call there; they now come from the process cache
+(grown to the largest call, reused). The launchers that take a cached
+scratch wait before they return and their kernels write every cell they
+later read, so no bit moves. The cache is one per process, as the other
+process workspaces are: a process driving two device contexts must build
+with `-D MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF` (per-call allocation)."""
 comptime ATTN_SCRATCH_CACHE = (
-    TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_ATTN_NO_SCRATCH_CACHE"]()
+    (TARGET_COLUMN == COLUMN_APPLE or IDN_ATTN_SCRATCH_CACHE)
+    and not is_defined["MOJOLEARN_ATTN_NO_SCRATCH_CACHE"]()
 )
 """lane/neural-apple2 (2026-09-28): on Apple the attention launchers' big
 `[B, n_heads, L, S]` scratches (the round 3 forward's score/exp stash, the
@@ -8732,12 +9241,47 @@ by two calls. Every kernel writes each cell it later reads within the call
 (the fresh buffers were never guaranteed zero on Metal, DEVIATION 2712), so
 no bit moves. `-D MOJOLEARN_ATTN_NO_SCRATCH_CACHE` allocates per call."""
 
+comptime IDN_ATTN_ONE_FLAG_WAIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN != COLUMN_APPLE
+    and not (
+        is_defined["MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+"""lane/nr-attn (2026-10-04), default ON under IDENTICAL on NVIDIA and AMD
+(the review's "double waits", fused_attention :8161 / :10870). The corner
+flag read `_read_flags` enqueues its copy behind the kernels on the same
+in-order context and waits once; the explicit `ctx.synchronize()` the
+launchers ran before it was a second full round trip that ordered nothing.
+The same holds inside the shipped launchers whose buffers outlive the call:
+`_launch_fwd_r2_keep` (the kept stash is the caller's) and, under
+`ATTN_SCRATCH_CACHE`, `_launch_bwd_estash` (its y/dy stashes are the
+process cache's, so no buffer is freed under a running kernel; the wait
+after the scratch request and the one between the zdot and dq launches
+ordered nothing either: same context, in order). Each of those launchers is
+followed, in every caller, by the flag read's wait before the caller
+returns, so the next call never grows a cached scratch under a running
+kernel. Per layer on the shipped estash words (NVIDIA and AMD): four fewer
+waits in the backward, two in the forward.
+No arithmetic moves: same bits on every column. The Apple column keeps
+every wait (a Metal command buffer that grows past a few seconds is cut
+silently). `-D MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF` restores them."""
+
+
+comptime _ATTN_SCRATCH_SLOTS = 3
+
 
 struct _AttnScratch(Defaultable, Movable):
+    # lane/fam2-lm: `_ATTN_SCRATCH_SLOTS` buffers per device context; context
+    # entry e (key `ids[e]`, core/ctx_key.mojo) owns
+    # `bufs[e * _ATTN_SCRATCH_SLOTS + slot]`.
+    var ids: List[Int]
     var bufs: List[DeviceBuffer[DType.float32]]
     var cells: List[Int]
 
     def __init__(out self):
+        self.ids = List[Int]()
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.cells = List[Int]()
 
@@ -8755,13 +9299,18 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
     comptime if not ATTN_SCRATCH_CACHE:
         return ctx.enqueue_create_buffer[DType.float32](cells)
     var g = _ATTN_SCRATCH.get_or_create_ptr()
-    while len(g[].bufs) <= slot:
-        g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](1))
-        g[].cells.append(1)
-    if g[].cells[slot] < cells:
-        g[].bufs[slot] = ctx.enqueue_create_buffer[DType.float32](cells)
-        g[].cells[slot] = cells
-    return g[].bufs[slot].create_sub_buffer[DType.float32](0, cells)
+    var e = ctx_cache_slot(g[].ids, ctx)
+    if e < 0:
+        for _ in range(_ATTN_SCRATCH_SLOTS):
+            g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](1))
+            g[].cells.append(1)
+        g[].ids.append(ctx_cache_key(ctx))
+        e = len(g[].ids) - 1
+    var at = e * _ATTN_SCRATCH_SLOTS + slot
+    if g[].cells[at] < cells:
+        g[].bufs[at] = ctx.enqueue_create_buffer[DType.float32](cells)
+        g[].cells[at] = cells
+    return g[].bufs[at].create_sub_buffer[DType.float32](0, cells)
 
 
 def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
@@ -8877,8 +9426,11 @@ def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ:
             grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
             block_dim=(FUSED_THREADS, 1, 1),
         )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: `sstash` is the caller's kept buffer; the
+    # caller's flag read waits behind this kernel.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     _attn_tick(ctx, on, tk, "fwd_r2_keep_kernel")
 
 
@@ -8942,17 +9494,12 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
             block_dim=(FUSED_THREADS, 1, 1),
         )
     _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
-    var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
     var kv_blocks = b * nkv * ((s + 63) // 64)
-    comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
     step_count_launch()
-    ctx.enqueue_function[qp](
-        dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-        dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
-        Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
-        Int32(pos0), Int32(key_lo), Int32(window), scale,
-        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
-        grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+    _enqueue_dq_tiled_pf[HD](
+        ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, y_st, dy_st,
+        k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx,
+        v_cache,
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
     comptime kvp = fused_bwd_dkdv_tiled_pf_kernel[HD]
@@ -9126,16 +9673,11 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
         _attn_tick(ctx, on, tk, "bwd_zdot_zdefer_pf")
     else:
         _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
-    var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
-    comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
     step_count_launch()
-    ctx.enqueue_function[qp](
-        dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-        dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
-        Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
-        Int32(pos0), Int32(key_lo), Int32(window), scale,
-        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
-        grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+    _enqueue_dq_tiled_pf[HD](
+        ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, y_st, dy_st,
+        k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx,
+        v_cache,
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
 
@@ -9497,8 +10039,11 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         y_cells = 1
     var y_st = _attn_scratch(ctx, 1, y_cells)
     var dy_st = _attn_scratch(ctx, 2, cells)
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: a stream-ordered allocation; the kernels below
+    # run behind it on the same context.
+    comptime if not (IDN_ATTN_ONE_FLAG_WAIT and ATTN_SCRATCH_CACHE):
+        step_count_sync()
+        ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     var zdot_tq = attention_estash_zdot_tq(l, window)
     step_count_launch()
@@ -9544,14 +10089,16 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
                     Int32(window), grid_dim=(b * nh * ((l + 7) // 8), 1, 1),
                     block_dim=(FUSED_THREADS, 1, 1),
                 )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: dq reads zdot and the stashes behind the zdot
+    # kernel on the same in-order context; the host reads nothing here.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     comptime if DRES:
         _attn_tick(ctx, on, tk, "bwd_zdot_estash_dres_pf")
     else:
         _attn_tick(ctx, on, tk, "bwd_zdot_estash_pf")
     var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
-    comptime qp = fused_bwd_dq_tiled_pf_kernel[HD, SWZ]
     step_count_launch()
     comptime if ATTN_DQ_MFMA and HD == 64:
         comptime qm = fused_bwd_dq_mfma_kernel[HD, SWZ]
@@ -9560,15 +10107,23 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         else:
             ctx.enqueue_function[qm](dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), Float32(1.0), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
     elif ATTN_V1_ALIAS_Y_ESTASH:
-        ctx.enqueue_function[qp](dq.unsafe_ptr(), corner.unsafe_ptr(), kept.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
+        _enqueue_dq_tiled_pf[HD, SWZ](ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, kept, dy_st, k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx, v_cache)
     else:
-        ctx.enqueue_function[qp](dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
+        _enqueue_dq_tiled_pf[HD, SWZ](ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, y_st, dy_st, k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx, v_cache)
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
     if keys == 32:
-        comptime if ATTN_V1_ALIAS_Y_ESTASH:
-            _estash_dkdv_launch[HD, ATTN_DKDV_BJ_R32, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+        # Keys per block by `attn_dkdv_keys_r32_for` (the comptime
+        # `ATTN_DKDV_BJ_R32` under the OFF / explicit defines); same bits.
+        if attn_dkdv_keys_r32_for(ctx, b, nkv, s, HD) == 16:
+            comptime if ATTN_V1_ALIAS_Y_ESTASH:
+                _estash_dkdv_launch[HD, 16, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+            else:
+                _estash_dkdv_launch[HD, 16, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
         else:
-            _estash_dkdv_launch[HD, ATTN_DKDV_BJ_R32, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+            comptime if ATTN_V1_ALIAS_Y_ESTASH:
+                _estash_dkdv_launch[HD, 32, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+            else:
+                _estash_dkdv_launch[HD, 32, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
     else:
         comptime if ATTN_V1_ALIAS_Y_ESTASH:
             _estash_dkdv_launch[HD, 64, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
@@ -9577,8 +10132,12 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     _attn_tick(ctx, on, tk, "bwd_kvgrid_dkdv_pf")
     # The stashes must outlive the enqueued kernels: synchronize, then the
     # explicit last use (a buffer is freed at its last use).
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT under ATTN_SCRATCH_CACHE: `y_st`/`dy_st` are
+    # views of the process cache's buffers, which outlive these kernels; the
+    # caller's flag read waits behind them before the caller returns.
+    comptime if not (IDN_ATTN_ONE_FLAG_WAIT and ATTN_SCRATCH_CACHE):
+        step_count_sync()
+        ctx.synchronize()
     _ = y_st^
     _ = dy_st^
 
@@ -9648,15 +10207,11 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
     var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
     var kv_blocks = b * nkv * ((s + 63) // 64)
     comptime if PF:
-        comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
         step_count_launch()
-        ctx.enqueue_function[qp](
-            dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-            dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
-            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
-            Int32(pos0), Int32(key_lo), Int32(window), scale,
-            dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
-            grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+        _enqueue_dq_tiled_pf[HD](
+            ctx, attn_dq_rows_for(ctx, b, nh, l, HD), dq, corner, y_st, dy_st,
+            k_cache, zdot, b, l, nh, nkv, s, pos0, key_lo, window, scale, dctx,
+            v_cache,
         )
         _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
         comptime kvp = fused_bwd_dkdv_tiled_pf_kernel[HD]
@@ -9743,6 +10298,9 @@ def fused_backward_launch_arm(
     window: Int,
     scale: Float32,
     arm: Int,
+    fwd_qmax: Float64 = -1.0,
+    fwd_kmax: Float64 = -1.0,
+    fwd_vmax: Float64 = -1.0,
 ) raises -> Int:
     """`fused_backward_launch` with the arm given; see
     `fused_forward_launch_arm` for what an arm value means on a build
@@ -9751,6 +10309,7 @@ def fused_backward_launch_arm(
     return fused_backward_launch_ran(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran,
+        fwd_qmax=fwd_qmax, fwd_kmax=fwd_kmax, fwd_vmax=fwd_vmax,
     )
 
 
@@ -9778,12 +10337,16 @@ def fused_backward_launch_ran(
     scale: Float32,
     arm: Int,
     mut ran: Int,
+    fwd_qmax: Float64 = -1.0,
+    fwd_kmax: Float64 = -1.0,
+    fwd_vmax: Float64 = -1.0,
 ) raises -> Int:
     """`fused_backward_launch_ran_report` without the replay-site report."""
     var repaired = 0
     return fused_backward_launch_ran_report(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran, repaired,
+        fwd_qmax=fwd_qmax, fwd_kmax=fwd_kmax, fwd_vmax=fwd_vmax,
     )
 
 
@@ -9812,6 +10375,9 @@ def fused_backward_launch_ran_report(
     arm: Int,
     mut ran: Int,
     mut repaired: Int,
+    fwd_qmax: Float64 = -1.0,
+    fwd_kmax: Float64 = -1.0,
+    fwd_vmax: Float64 = -1.0,
 ) raises -> Int:
     """`fused_backward_launch_arm`, also reporting in `ran` the arm word of
     the kernels that launched (DEVIATION 2534): 0 for the shipped kernels
@@ -9836,10 +10402,10 @@ def fused_backward_launch_ran_report(
         )
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
-    var amx = device_absmax4(
-        ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
-        dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+    # IDN_ATTN_BWD_SCAN_REUSE: dctx alone when the forward's maxima came in.
+    var amx = _attn_bwd_regime_scan(
+        ctx, q_rope, dctx, k_cache, v_cache, b * l * nh * hd, b * nkv * s * hd,
+        fwd_qmax, fwd_kmax, fwd_vmax,
     )
     var qmax = amx[0]
     var kmax = amx[1]
@@ -10187,8 +10753,11 @@ def fused_backward_launch_ran_report(
                 v_cache, amax, denom, b, l, nh, nkv, s, pos0, key_lo, window,
                 scale, row_blocks, key_blocks, nt,
             )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+    # the kernels; the wait that sat here was a second round trip.
+    comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+        step_count_sync()
+        ctx.synchronize()
     var flags = _read_flags(ctx, corner)
     var hit = flags[0]
     repaired = flags[1]
@@ -10267,6 +10836,10 @@ def fused_forward_launch_estash_ran(
                 var qmax = amx[0]
                 var kmax = amx[1]
                 var vmax = amx[2]
+                _attn_fwd_scan_note(
+                    ctx, Int(q_rope.unsafe_ptr()), b * l * nh * hd, Int(k_cache.unsafe_ptr()),
+                    Int(v_cache.unsafe_ptr()), b * nkv * s * hd, qmax, kmax, vmax,
+                )
                 if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
                     return FUSED_REFUSED_REGIME
                 _attn_tick(ctx, ton, tk, "fwd_regime_scan")
@@ -10318,11 +10891,22 @@ def fused_forward_launch_estash_ran(
                             scale,
                         )
                 else:
-                    _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, ATTN_DEFAULT_BSWZ](
-                        ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
-                        k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
-                        scale,
-                    )
+                    var fwd_tq = ATTN_FWD_TQ
+                    comptime if ATTN_FWD_TQ_RULE:
+                        fwd_tq = attn_fwd_rows_for(ctx, b, nh, l)
+                    if fwd_tq == 16 and ATTN_FWD_TQ != 16:
+                        comptime if ATTN_FWD_TQ_RULE:
+                            _launch_fwd_r2_keep[ATTN_STASH_HD, 16, True, True, False, ATTN_DEFAULT_BSWZ](
+                                ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                                k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                                scale,
+                            )
+                    else:
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, ATTN_DEFAULT_BSWZ](
+                            ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                            k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                            scale,
+                        )
             # DEVIATION 2900 leaves the FORWARD's `ran` word alone: the
             # word `fused_attention_arm_forward_resolved` predicts has no
             # estash slot either, and the backward's word carries the bit
@@ -10337,14 +10921,21 @@ def fused_forward_launch_estash_ran(
                 var hit2 = _read_flag(ctx, corner)
                 _ = corner^
                 _attn_tick(ctx, ton, tk, "fwd_regime_scan_behind_and_corner_flag")
+                _attn_fwd_scan_note(
+                    ctx, Int(q_rope.unsafe_ptr()), b * l * nh * hd, Int(k_cache.unsafe_ptr()),
+                    Int(v_cache.unsafe_ptr()), b * nkv * s * hd, amx2[0], amx2[1], amx2[2],
+                )
                 if not regime_product_ok(hd, amx2[0], amx2[1]) or not regime_finite(amx2[2]):
                     return FUSED_REFUSED_REGIME
                 kept_cells = cells
                 if hit2:
                     return FUSED_CORNER
                 return FUSED_RAN
-            step_count_sync()
-            ctx.synchronize()
+            # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+            # the kernels; the wait that sat here was a second round trip.
+            comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+                step_count_sync()
+                ctx.synchronize()
             var hit = _read_flag(ctx, corner)
             _ = corner^
             _attn_tick(ctx, ton, tk, "fwd_corner_flag")
@@ -10420,6 +11011,9 @@ def fused_backward_launch_estash_report(
     arm: Int,
     mut ran: Int,
     mut repaired: Int,
+    fwd_qmax: Float64 = -1.0,
+    fwd_kmax: Float64 = -1.0,
+    fwd_vmax: Float64 = -1.0,
 ) raises -> Int:
     """`fused_backward_launch_ran`, and under an `_estash` arm this build
     runs (`fused_attention_arm_estash_runs`, head_dim 64) with a VALID kept
@@ -10448,10 +11042,10 @@ def fused_backward_launch_estash_report(
                 )
             var ton = _attn_timer_on()
             var tk = Int(perf_counter_ns())
-            var amx = device_absmax4(
-                ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
-                dctx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd,
+            # IDN_ATTN_BWD_SCAN_REUSE: dctx alone when the forward's maxima came in.
+            var amx = _attn_bwd_regime_scan(
+                ctx, q_rope, dctx, k_cache, v_cache, b * l * nh * hd, b * nkv * s * hd,
+                fwd_qmax, fwd_kmax, fwd_vmax,
             )
             var qmax = amx[0]
             var kmax = amx[1]
@@ -10547,8 +11141,11 @@ def fused_backward_launch_estash_report(
             )
             if swz:
                 ran = ran | ATTN_ARM_BSWZ
-            step_count_sync()
-            ctx.synchronize()
+            # IDN_ATTN_ONE_FLAG_WAIT: the flag read below waits once behind
+            # the kernels; the wait that sat here was a second round trip.
+            comptime if not IDN_ATTN_ONE_FLAG_WAIT:
+                step_count_sync()
+                ctx.synchronize()
             var flags = _read_flags(ctx, corner)
             var hit = flags[0]
             repaired = flags[1]
@@ -10564,6 +11161,7 @@ def fused_backward_launch_estash_report(
     return fused_backward_launch_ran_report(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran, repaired,
+        fwd_qmax=fwd_qmax, fwd_kmax=fwd_kmax, fwd_vmax=fwd_vmax,
     )
 
 

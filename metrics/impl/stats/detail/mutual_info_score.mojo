@@ -40,6 +40,16 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from metrics.impl.stats.detail.contingency_matrix import contingency_matrix
+from metrics.impl.stats.detail.sf_epilogue import mi_epilogue_device
+from metrics.impl.stats.detail.sf_epilogue_core import (
+    IDN_METRIC_EPI,
+    mi_sf_parts,
+    mi_term,
+    sf_fold_list,
+    sf_to_f64,
+    sf64_from_i64,
+)
+from checks.soft_f64 import sf64_div
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -162,7 +172,22 @@ def mutual_info_from_contingency_traced(
         trace.record_host(tag_prefix + ".col_sums", b.unsafe_ptr(), k)
     var terms = List[Float64]()
     var accs = List[Float64]()
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+    comptime if IDN_METRIC_EPI:
+        # lane fam2-prep-metrics (sf_epilogue.mojo): binary64 terms in the
+        # chunked order the device kernels use; the trail records each cell's
+        # term and the chunk sums
+        var parts = mi_sf_parts(c, a, b, k, size)
+        if trace.enabled:
+            for t in range(k * k):
+                var ti = t // k
+                terms.append(sf_to_f64(mi_term(Int(c[t]), Int(a[ti]) * Int(b[t - ti * k]), size)))
+            for u in range(len(parts)):
+                accs.append(sf_to_f64(parts[u]))
+        _record_mi_trail(trace, tag_prefix, terms, accs)
+        _ = terms^
+        _ = accs^
+        return sf_to_f64(sf64_div(sf_fold_list(parts), sf64_from_i64(size)))
+    elif GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var acc = Float32(0.0)
         var fsize = Float32(size)
         for i in range(k):
@@ -282,6 +307,23 @@ def mutual_info_score_traced(
             + " (0 / 0 is refused by name)"
         )
     var k = Int(upper_label_range - lower_label_range + 1)
+    comptime if IDN_METRIC_EPI:
+        if not trace.enabled:
+            # lane fam2-prep-metrics: no card to fill, so the contingency
+            # matrix stays on the device and its epilogue runs there
+            var cm = ctx.enqueue_create_buffer[DType.int32](k * k)
+            contingency_matrix(
+                ctx,
+                first_cluster_array,
+                second_cluster_array,
+                size,
+                cm,
+                lower_label_range,
+                upper_label_range,
+            )
+            var value = mi_epilogue_device(ctx, cm, k, size)
+            _ = cm^
+            return value
     var c = contingency_matrix_host(
         ctx,
         first_cluster_array,

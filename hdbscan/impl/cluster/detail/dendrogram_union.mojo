@@ -116,9 +116,13 @@ def build_dendrogram_union(
     mut children: DeviceBuffer[DType.int32],
     mut out_delta: DeviceBuffer[DType.float32],
     mut out_size: DeviceBuffer[DType.int32],
+    drain: Bool = False,
 ) raises:
     """`build_dendrogram_device`'s three outputs, the same integers, with
-    seven launches per level and no wait (module docstring)."""
+    seven launches per level and no wait (module docstring). `drain`
+    (fam2-cluster, the IDENTICAL callers on every vendor): one synchronize
+    before the scratch buffers are released, as `build_dendrogram_device`
+    ends; the FAST Apple caller keeps the default."""
     var cnt = nnz
     if cnt < 1:
         return
@@ -190,6 +194,8 @@ def build_dendrogram_union(
     )
     # no synchronize: the condense is the next work on this queue (the
     # buffers below are released in queue order, as td_sort_pairs' are).
+    if drain:
+        ctx.synchronize()
     _ = la^
     _ = lb^
     _ = par^

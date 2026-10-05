@@ -17,7 +17,10 @@ from x_ann.abi import a_int, check_search, in_f32, in_i32, out_f32, out_i32, p_i
 from x_ann.switches import ANN3_DIRECT_OUT
 from x_ann.ivf_pq_core import pq_len_of
 from x_ann.stage_timer import AnnStages
-from x_ann.cagra_device import cagra_build_device, cagra_search_device
+from x_ann.cagra_device import cagra_build_device, cagra_search_device, cagra_search_on
+from x_ann.device_ctx import x_ann_ctx
+from x_ann.io import upload_f32, upload_i32
+from core.abs_sum_blocked import device_any_index_out_of_range
 from x_ann.tsne_device import tsne_fit_device
 from x_ann.resident import x_ann_index_prepare_binding, x_ann_index_release_binding, x_ann_index_search_binding
 from x_ann.ivf_pq_device import ivf_pq_build_device, ivf_pq_search_device, ivf_sq_build_device, ivf_sq_search_device, refine_device, ivf_rabitq_build_device, ivf_rabitq_search_device
@@ -155,14 +158,26 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
         raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
     var x = in_f32(addrs, 0, n * d)
     var g = in_i32(addrs, 1, n * deg)
-    for e in range(n * deg):
-        if Int(g[e]) < 0 or Int(g[e]) >= n:
-            raise Error("CAGRA search: the graph names a row outside the dataset")
     var q = in_f32(addrs, 2, m * d)
     var od = List[Float32]()
     var oi = List[Int32]()
     with GILReleased(Python()):
-        cagra_search_device(x, n, d, g, deg, q, m, k, L, width, max_iter, n_seeds, od, oi, rs)
+        # cpu3-bindings: `cagra_search_device`'s uploads, then the graph's
+        # row-id range refusal as one device pass over the uploaded graph
+        # (one Int32 back) instead of a host walk over n * deg ids
+        var ctx = x_ann_ctx()
+        var dx = upload_f32(ctx, x)
+        var dg = upload_i32(ctx, g)
+        if device_any_index_out_of_range(ctx, dg, n * deg, n):
+            raise Error("CAGRA search: the graph names a row outside the dataset")
+        cagra_search_on(
+            ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, d,
+            dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg, q, m, k, L, width,
+            max_iter, n_seeds, od, oi, rs,
+        )
+        _ = dg^
+        _ = dx^
+        _ = ctx^
     out_f32(od, addrs, 3)
     out_i32(oi, addrs, 4)
     return PythonObject(m)

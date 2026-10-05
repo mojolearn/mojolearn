@@ -19,6 +19,7 @@ from arima.impl.fast_lbfgs_async import (
 )
 from arima.impl.lbfgs_device import LBFGS_TPB, lbfgs_init_kernel
 from arima.impl.tsa.arima_common import ARIMAOrder
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from glm.impl.qn.qn_util import LBFGSParam
 
 # KEEP candidate for default promotion, M3 2026-10-04, source 7ba385b30:
@@ -30,9 +31,23 @@ from glm.impl.qn.qn_util import LBFGSParam
 # Default only within existing FAST+Apple guards; named OFF restores the
 # pre-batching GPU optimizer/search while leaving fused eval tail enabled.
 # See docs/apple-fast/ab/arima-orders-default.md and EXPERIMENTS.md.
+# IDENTICAL ON EVERY VENDOR since lane/fam-timeseries (2026-10-04), with
+# IDN_ARIMA_EVAL_WS and IDN_ARIMA_LLONLY (`batched_kalman.mojo`): AutoARIMA's
+# nonseasonal order grid runs as grouped device fits (one filter launch per
+# state dimension for every order's gradient members, one wait per
+# ASYNC_READ_EVERY rounds) instead of one full fit per order from Python.
+# Every order keeps its own parameters, Jones transform and L-BFGS state and
+# every member is its own filter thread, so each order's fitted point and
+# re-evaluated log-likelihood are the single-order fit's.
+# -D MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF=1 restores the per-order fits under
+# IDENTICAL; MOJOLEARN_IDN_ALL_OFF turns the workspace, and so this, off.
 comptime ARIMA_ORDER_BATCH = (
     KALMAN_FAST_EVAL_WS and KALMAN_LL_ONLY
     and not is_defined["MOJOLEARN_ARIMA_ORDER_BATCH_OFF"]()
+    and not (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and is_defined["MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF"]()
+    )
 )
 
 
@@ -73,7 +88,11 @@ struct OrderOptimizer(Movable):
 
     def __init__(out self, ctx: DeviceContext, mut ews: FastEvalWS,
                  batch_size: Int, scale: Float32, order_kf: ARIMAOrder,
-                 x0: List[Float32], param: LBFGSParam, h: Float32) raises:
+                 var x: DeviceBuffer[DType.float32], param: LBFGSParam, h: Float32) raises:
+        """`x` is the starting point ALREADY ON THE DEVICE (packed, at least
+        `max(1, batch_size * N)` floats), taken over as the optimizer's
+        iterate (lane/fam2-timeseries: the grouped search hands the device
+        buffer `pack` wrote; `order_x_from_list` uploads a host list)."""
         var n = order_kf.complexity()
         var bs = batch_size
         var b_n = bs * n
@@ -82,7 +101,6 @@ struct OrderOptimizer(Movable):
         var grid = (bs + LBFGS_TPB - 1) // LBFGS_TPB
         var ist = ctx.enqueue_create_buffer[DType.int32](max(1, I_N * bs))
         var fst = ctx.enqueue_create_buffer[DType.float32](max(1, F_N * bs))
-        var x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
         var cand = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
         var xp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
         var grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
@@ -113,11 +131,10 @@ struct OrderOptimizer(Movable):
         ctx.enqueue_memset(alpha, Float32(0.0))
         ctx.enqueue_memset(fx_hist, Float32(0.0))
         if b_n > 0:
-            var hx = x0.copy()
-            ctx.enqueue_copy(dst_buf=x.create_sub_buffer[DType.float32](0, b_n), src_ptr=hx.unsafe_ptr())
-            ctx.synchronize()
-            _ = hx^
-        ctx.enqueue_copy(dst_buf=cand, src_buf=x)
+            ctx.enqueue_copy(
+                dst_buf=cand.create_sub_buffer[DType.float32](0, b_n),
+                src_buf=x.create_sub_buffer[DType.float32](0, b_n),
+            )
         # the evaluation at x0, then `lbfgs_init_kernel` on the packed fields
         ews.eval(ctx, order_kf, h, scale, cand, d_grad, d_x_pert, f_fx, grad, bad)
         var ip = ist.unsafe_ptr()
@@ -231,10 +248,23 @@ struct OrderOptimizer(Movable):
                              retcode=retcode_out^, n_eval=self.rounds + 1)
 
 
+def order_x_from_list(ctx: DeviceContext, x0: List[Float32], b_n: Int) raises -> DeviceBuffer[DType.float32]:
+    """The packed starting point uploaded from a host list (the upload
+    `OrderOptimizer.__init__` made itself before lane/fam2-timeseries)."""
+    var x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    if b_n > 0:
+        var hx = x0.copy()
+        ctx.enqueue_copy(dst_buf=x.create_sub_buffer[DType.float32](0, b_n), src_ptr=hx.unsafe_ptr())
+        ctx.synchronize()
+        _ = hx^
+    return x^
+
+
 def order_min_lbfgs(ctx: DeviceContext, mut ews: FastEvalWS, batch_size: Int,
                     scale: Float32, order: ARIMAOrder, x0: List[Float32],
                     param: LBFGSParam, h: Float32) raises -> AsyncLBFGSOut:
-    var state = OrderOptimizer(ctx, ews, batch_size, scale, order, x0, param, h)
+    var x_dev = order_x_from_list(ctx, x0, batch_size * order.complexity())
+    var state = OrderOptimizer(ctx, ews, batch_size, scale, order, x_dev^, param, h)
     while state.rounds < state.max_rounds:
         if state.rounds % ASYNC_READ_EVERY == 0:
             state.enqueue_poll(ctx)

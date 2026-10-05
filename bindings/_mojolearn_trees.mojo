@@ -14,7 +14,7 @@ THE MODEL LAYOUT REMAINS FLAT ARRAYS: per-node `colid` / `quesval` /
 `left_child_id`, the flat
 `vector_leaf`, and a `tree_offsets` prefix so tree `t` is the node range
 `[offsets[t], offsets[t+1])`. `et_predict` rebuilds the forest from those
-arrays and calls the IMPLEMENTED `forest_vote` -- the traversal is
+arrays and calls the IMPLEMENTED `forest_vote_host` -- the traversal is
 `decisiontree.cuh:394-413` through `flatnode.mojo`, not a reimplementation at
 this boundary. `instance_count` and `best_metric_val` are not carried: the
 traversal never reads either (`flatnode.mojo` says so of `best_metric_val`
@@ -31,6 +31,7 @@ from ensemble.device_finite import FOREST_DEVICE_FINITE
 from ensemble.instruments import StageTimes
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from hostptr import list_f32, list_i32, store_f32
 from std.python.bindings import PythonModuleBuilder
 
 from forest_inference_binding import (
@@ -72,7 +73,7 @@ from extratrees.impl.decisiontree.flatnode import (
     SparseTreeNode,
     TreeMetaDataNode,
 )
-from extratrees.impl.randomforest.randomforest import Forest, forest_vote
+from extratrees.impl.randomforest.randomforest import Forest, forest_vote_host
 from core.forest_inference_model import (
     resident_prepare, resident_predict_into, resident_release,
 )
@@ -94,9 +95,10 @@ comptime ET_EXPORTS = _Global[StorageType=ForestExportRegistry[FitResult],
 def _retain_et_export(var result: FitResult) raises -> PythonObject:
     var trees = len(result.forest.trees)
     var nodes = 0
-    for tree in result.forest.trees:
-        nodes += tree.num_nodes()
-        if len(tree.vector_leaf) != tree.num_nodes() * Int(result.forest.num_outputs):
+    for t in range(trees):  # small-loop(trees: fitted trees, one node count each): export shape bookkeeping, no row or node data
+        var tree_nodes = result.forest.trees[t].num_nodes()
+        nodes += tree_nodes
+        if len(result.forest.trees[t].vector_leaf) != tree_nodes * Int(result.forest.num_outputs):
             raise Error("fitted ET leaf storage differs from export dimensions")
     var meta: List[Int64] = [Int64(result.forest.n_trees), Int64(result.forest.num_outputs),
         Int64(1 if result.depth_cap_bound else 0), Int64(result.plan.params.max_depth),
@@ -170,11 +172,8 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
 def _copy_f32(addr: PythonObject, n: Int) raises -> List[Float32]:
     """Borrowed host memory into an owned List, read while the GIL-holding
     caller keeps the array alive (the `_arrays.py` contract)."""
-    var p = _f32_ptr(Int(py=addr))
-    var out = List[Float32](capacity=n)
-    for i in range(n):
-        out.append(p[i])
-    return out^
+    # one memcpy (no per-element host loop)
+    return list_f32(_f32_ptr(Int(py=addr)), n)
 
 
 comptime N_FIT_PARAMS = 22
@@ -485,7 +484,7 @@ def et_predict_binding(
     Model arrays are int32/float32 as `_forest_out` laid them out (the
     wrapper exports and keeps host Arrays). `x` here is
     ROW-major (the traversal reads `row[offset + colid]`). `out` is
-    n_rows * num_outputs float32 and receives `forest_vote`'s average --
+    n_rows * num_outputs float32 and receives `forest_vote_host`'s average --
     per-class probabilities for the classifier (argmax is the wrapper's,
     exactly as `RandomForest::predict` argmaxes over `predict_proba`), the
     mean prediction for the regressor. `params` is `[n_rows, n_features,
@@ -515,7 +514,7 @@ def et_predict_binding(
     # cpu-gpu-cleanup t-gbdt: the `sequential` engine runs on the device.
     # The host walk (`core/forest_host_predict.mojo`'s `et_host_predict`,
     # DEVIATION 2900) is the CPU-only install's (`_mojolearn_trees_host`);
-    # here `forest_vote`'s arithmetic -- zero, add every tree's leaf in
+    # here `forest_vote_host`'s arithmetic -- zero, add every tree's leaf in
     # increasing tree order, divide by `Float32(n_trees)` -- is
     # `forest_ordered_kernel`, one thread per (row, output), through a
     # one-call ordered snapshot. The GIL stays held for the registry.
@@ -526,19 +525,12 @@ def et_predict_binding(
         raise Error("et_predict: tree_offsets must start at 0 and hold at least one node per tree")
     if n_nodes > 2147483647 // num_outputs:
         raise Error("et_predict: node/output count exceeds Int32")
-    var offsets = List[Int32](capacity=n_trees + 1)
-    var columns = List[Int32](capacity=n_nodes)
-    var thresholds = List[Float32](capacity=n_nodes)
-    var left = List[Int32](capacity=n_nodes)
-    var leaves = List[Float32](capacity=n_nodes * num_outputs)
-    for i in range(n_trees + 1):
-        offsets.append(offsets_p[i])
-    for i in range(n_nodes):
-        columns.append(colid_p[i])
-        thresholds.append(quesval_p[i])
-        left.append(left_p[i])
-    for i in range(n_nodes * num_outputs):
-        leaves.append(leaves_p[i])
+    # one memcpy per array (no per-node host loop); the snapshot uploads once
+    var offsets = list_i32(offsets_p, n_trees + 1)
+    var columns = list_i32(colid_p, n_nodes)
+    var thresholds = list_f32(quesval_p, n_nodes)
+    var left = list_i32(left_p, n_nodes)
+    var leaves = list_f32(leaves_p, n_nodes * num_outputs)
     var handle = resident_prepare[False](
         offsets, columns, thresholds, left, leaves, n_features, num_outputs, True
     )
@@ -588,29 +580,19 @@ def et_predict_gpu_parallel_binding(
     if nodes < 1 or nodes > 2147483647 // outputs:
         raise Error("GPU parallel prediction node/output count is invalid")
     with GILReleased(Python()):
-        var offsets = List[Int32](capacity=trees + 1)
-        var columns = List[Int32](capacity=nodes)
-        var thresholds = List[Float32](capacity=nodes)
-        var left = List[Int32](capacity=nodes)
-        var leaves = List[Float32](capacity=nodes * outputs)
-        var x = List[Float32](capacity=rows * features)
-        for i in range(trees + 1):
-            offsets.append(offsets_p[i])
-        for i in range(nodes):
-            columns.append(columns_p[i])
-            thresholds.append(thresholds_p[i])
-            left.append(left_p[i])
-        for i in range(nodes * outputs):
-            leaves.append(leaves_p[i])
-        for i in range(rows * features):
-            x.append(x_p[i])
+        # one memcpy per array (no per-element host loop) feeding one upload each
+        var offsets = list_i32(offsets_p, trees + 1)
+        var columns = list_i32(columns_p, nodes)
+        var thresholds = list_f32(thresholds_p, nodes)
+        var left = list_i32(left_p, nodes)
+        var leaves = list_f32(leaves_p, nodes * outputs)
+        var x = list_f32(x_p, rows * features)
         var ctx = process_ctx[_DEVCTX_SLOT]()
         var result = forest_predict_gpu[False, True](
             ctx, offsets, columns, thresholds, left, leaves, x,
             rows, features, outputs,
         )
-        for i in range(rows * outputs):
-            out_p[i] = result[i]
+        store_f32(out_p, result, rows * outputs)
         _ = result^
         _ = ctx^
     return PythonObject(rows)

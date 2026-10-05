@@ -30,6 +30,7 @@ from x_ann.tsne_core import (
     F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_fold, ts_repulse_pair, ts_repulse_terms, ts_step_cell, ts_z_add,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
 )
+from x_ann.tsne_core import TS_LANE_FOLD, TS_LANES
 
 comptime TPB = 128
 
@@ -75,6 +76,12 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
     var z = Float32(0.0)
     var r0 = Float32(0.0)
     var r1 = Float32(0.0)
+    # TS_LANE_FOLD (x_ann/tsne_core.mojo): lane s = j mod TS_LANES; a tile
+    # starts at a multiple of RTJ, itself a multiple of TS_LANES
+    comptime assert RTJ % TS_LANES == 0, "the repulsion tile must hold whole lane groups"
+    var lz = SIMD[DType.float32, TS_LANES](0.0)
+    var l0 = SIMD[DType.float32, TS_LANES](0.0)
+    var l1 = SIMD[DType.float32, TS_LANES](0.0)
     var j0 = 0
     while j0 < nr:
         for e in range(t, 2 * RTJ, RTB):
@@ -85,32 +92,52 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
         barrier()
         if live:
             var jn = RTJ if nr - j0 > RTJ else nr - j0
-            # four j at a time: their terms are independent, so they are
-            # formed first and folded after in ascending j (the same
-            # statements in the same fold order; only the independent work
-            # overlaps). The group holding row i itself takes the plain loop.
-            var r = 0
-            while r + 4 <= jn:
-                if i >= j0 + r and i < j0 + r + 4:
-                    for u in range(4):
-                        if j0 + r + u != i:
-                            ts_repulse_pair(y0, y1, tile[2 * (r + u)], tile[2 * (r + u) + 1], z, r0, r1)
-                else:
-                    var ta = ts_repulse_terms(y0, y1, tile[2 * r], tile[2 * r + 1])
-                    var tb = ts_repulse_terms(y0, y1, tile[2 * r + 2], tile[2 * r + 3])
-                    var tc = ts_repulse_terms(y0, y1, tile[2 * r + 4], tile[2 * r + 5])
-                    var td = ts_repulse_terms(y0, y1, tile[2 * r + 6], tile[2 * r + 7])
-                    ts_repulse_fold(ta, z, r0, r1)
-                    ts_repulse_fold(tb, z, r0, r1)
-                    ts_repulse_fold(tc, z, r0, r1)
-                    ts_repulse_fold(td, z, r0, r1)
-                r += 4
-            while r < jn:
-                if j0 + r != i:
-                    ts_repulse_pair(y0, y1, tile[2 * r], tile[2 * r + 1], z, r0, r1)
-                r += 1
+            comptime if TS_LANE_FOLD:
+                for g in range(RTJ // TS_LANES):
+                    comptime for s in range(TS_LANES):
+                        var rl = g * TS_LANES + s
+                        if rl < jn and j0 + rl != i:
+                            var tm = ts_repulse_terms(y0, y1, tile[2 * rl], tile[2 * rl + 1])
+                            var zz = lz[s]
+                            var aa = l0[s]
+                            var bb = l1[s]
+                            ts_repulse_fold(tm, zz, aa, bb)
+                            lz[s] = zz
+                            l0[s] = aa
+                            l1[s] = bb
+            else:
+                # four j at a time: their terms are independent, so they are
+                # formed first and folded after in ascending j (the same
+                # statements in the same fold order; only the independent work
+                # overlaps). The group holding row i itself takes the plain loop.
+                var r = 0
+                while r + 4 <= jn:
+                    if i >= j0 + r and i < j0 + r + 4:
+                        for u in range(4):
+                            if j0 + r + u != i:
+                                ts_repulse_pair(y0, y1, tile[2 * (r + u)], tile[2 * (r + u) + 1], z, r0, r1)
+                    else:
+                        var ta = ts_repulse_terms(y0, y1, tile[2 * r], tile[2 * r + 1])
+                        var tb = ts_repulse_terms(y0, y1, tile[2 * r + 2], tile[2 * r + 3])
+                        var tc = ts_repulse_terms(y0, y1, tile[2 * r + 4], tile[2 * r + 5])
+                        var td = ts_repulse_terms(y0, y1, tile[2 * r + 6], tile[2 * r + 7])
+                        ts_repulse_fold(ta, z, r0, r1)
+                        ts_repulse_fold(tb, z, r0, r1)
+                        ts_repulse_fold(tc, z, r0, r1)
+                        ts_repulse_fold(td, z, r0, r1)
+                    r += 4
+                while r < jn:
+                    if j0 + r != i:
+                        ts_repulse_pair(y0, y1, tile[2 * r], tile[2 * r + 1], z, r0, r1)
+                    r += 1
         barrier()
         j0 += RTJ
+    comptime if TS_LANE_FOLD:
+        # the lane partials, ascending s, each add flushed
+        comptime for s in range(TS_LANES):
+            z = ftz(z + lz[s])
+            r0 = ftz(r0 + l0[s])
+            r1 = ftz(r1 + l1[s])
     if live:
         row_z.unsafe_store(i, z)
         rep.unsafe_store(2 * i, r0)
@@ -181,6 +208,8 @@ comptime RS_ROWS = 32
 comptime RS_TJ = 64
 comptime RS_TPB = 256
 comptime RS_DS = RS_TJ + 1
+#: (row, candidate) pairs a thread of the split kernel forms per tile
+comptime RS_Q = RS_ROWS * RS_TJ // RS_TPB
 #: the parts folded per pass by the last block (a power of two, <= 8 * RS_TPB)
 comptime ZT_CHUNK = 2048
 comptime ZS_CHUNK = 2048
@@ -205,6 +234,13 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
     var z = Float32(0.0)
     var r0 = Float32(0.0)
     var r1 = Float32(0.0)
+    # TS_LANE_FOLD (x_ann/tsne_core.mojo): this thread's RS_Q (row, lane)
+    # partials stay in registers for the whole pass; thread tid owns lane
+    # tid mod RS_TJ of rows tid // RS_TJ + (RS_TPB // RS_TJ) q.
+    comptime assert RS_TJ == TS_LANES, "a staged candidate tile is one lane group"
+    var lz = SIMD[DType.float32, RS_Q](0.0)
+    var l0 = SIMD[DType.float32, RS_Q](0.0)
+    var l1 = SIMD[DType.float32, RS_Q](0.0)
     var j0 = 0
     while j0 < nr:
         if tid < 2 * RS_TJ:
@@ -213,24 +249,57 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
                 v = ftz(y.unsafe_load(2 * j0 + tid))
             ys[tid] = v
         barrier()
-        comptime for q in range(RS_ROWS * RS_TJ // RS_TPB):
+        comptime if TS_LANE_FOLD:
+            comptime for q in range(RS_Q):
+                var e = tid + q * RS_TPB
+                var rr = e // RS_TJ
+                var jj = e - rr * RS_TJ
+                if j0 + jj < nr and j0 + jj != i0 + rr:
+                    var tm = ts_repulse_terms(yi_s[2 * rr], yi_s[2 * rr + 1], ys[2 * jj], ys[2 * jj + 1])
+                    var zz = lz[q]
+                    var aa = l0[q]
+                    var bb = l1[q]
+                    ts_repulse_fold(tm, zz, aa, bb)
+                    lz[q] = zz
+                    l0[q] = aa
+                    l1[q] = bb
+            barrier()
+        else:
+            comptime for q in range(RS_ROWS * RS_TJ // RS_TPB):
+                var e = tid + q * RS_TPB
+                var rr = e // RS_TJ
+                var jj = e - rr * RS_TJ
+                var tm = ts_repulse_terms(yi_s[2 * rr], yi_s[2 * rr + 1], ys[2 * jj], ys[2 * jj + 1])
+                q_s[rr * RS_DS + jj] = tm[0]
+                a_s[rr * RS_DS + jj] = tm[1]
+                b_s[rr * RS_DS + jj] = tm[2]
+            barrier()
+            if owner:
+                var jn = RS_TJ if nr - j0 > RS_TJ else nr - j0
+                var row = tid * RS_DS
+                for r in range(jn):
+                    if j0 + r != i:
+                        var tm = SIMD[DType.float32, 4](q_s[row + r], a_s[row + r], b_s[row + r], Float32(0.0))
+                        ts_repulse_fold(tm, z, r0, r1)
+            barrier()
+        j0 += RS_TJ
+    comptime if TS_LANE_FOLD:
+        # publish the lane partials; row i's owner adds its TS_LANES lanes
+        # in ascending s, each add flushed
+        comptime for q in range(RS_Q):
             var e = tid + q * RS_TPB
             var rr = e // RS_TJ
             var jj = e - rr * RS_TJ
-            var tm = ts_repulse_terms(yi_s[2 * rr], yi_s[2 * rr + 1], ys[2 * jj], ys[2 * jj + 1])
-            q_s[rr * RS_DS + jj] = tm[0]
-            a_s[rr * RS_DS + jj] = tm[1]
-            b_s[rr * RS_DS + jj] = tm[2]
+            q_s[rr * RS_DS + jj] = lz[q]
+            a_s[rr * RS_DS + jj] = l0[q]
+            b_s[rr * RS_DS + jj] = l1[q]
         barrier()
         if owner:
-            var jn = RS_TJ if nr - j0 > RS_TJ else nr - j0
             var row = tid * RS_DS
-            for r in range(jn):
-                if j0 + r != i:
-                    var tm = SIMD[DType.float32, 4](q_s[row + r], a_s[row + r], b_s[row + r], Float32(0.0))
-                    ts_repulse_fold(tm, z, r0, r1)
-        barrier()
-        j0 += RS_TJ
+            for s in range(RS_TJ):
+                z = ftz(z + q_s[row + s])
+                r0 = ftz(r0 + a_s[row + s])
+                r1 = ftz(r1 + b_s[row + s])
     if owner:
         row_z.unsafe_store(i, z)
         rep.unsafe_store(2 * i, r0)
@@ -246,7 +315,7 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
     var rows_here = RS_ROWS if nr - i0 > RS_ROWS else nr - i0
     if tid < rows_here:
         zs[tid] = z
-    var root = _tree_shared(zs, rows_here, tid, RS_TPB)
+    var root = _tree_shared_kern(zs, rows_here, tid, RS_TPB)
     if tid == 0:
         parts.unsafe_store(Int(block_idx.x), root)
         fence[ordering = Ordering.RELEASE]()
@@ -267,7 +336,7 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
             var w = ZT_CHUNK if count - c0 > ZT_CHUNK else count - c0
             for e in range(tid, w, RS_TPB):
                 zs[e] = parts.unsafe_load(c0 + e)
-            var r = _tree_shared(zs, w, tid, RS_TPB)
+            var r = _tree_shared_kern(zs, w, tid, RS_TPB)
             if tid == 0:
                 parts.unsafe_store(nc, r)
             barrier()
@@ -281,7 +350,7 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
 
 
 @always_inline
-def _tree_shared(
+def _tree_shared_kern(
     buf: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED], w_in: Int, tid: Int, nth: Int
 ) -> Float32:
     """The pinned pairwise tree over buf[0 : w_in] in place: level by level

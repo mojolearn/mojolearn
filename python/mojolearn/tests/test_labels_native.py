@@ -86,9 +86,13 @@ def test_array_input_takes_the_native_arm():
     assert _same_classes(got[0], ref[0]) and got[1].tolist() == ref[1]
 
 
-def test_more_classes_than_the_cap_falls_back():
+def test_more_classes_than_the_cap_takes_unique_inverse():
+    # lane cpu2-l2-labels: over the cap the native arm answers through the
+    # device unique_inverse instead of handing the rows to the Python routine
     y = np.arange(_labels._NATIVE_ENCODE_MAX_CLASSES + 1, dtype=np.int32)
-    assert _encode_labels_native(y) is None
+    got = _encode_labels_native(y)
+    assert got is not None
+    assert got[0] == list(range(len(y))) and got[1].tolist() == list(range(len(y)))
     classes, codes = encode_labels(y)
     assert classes == list(range(len(y))) and codes.tolist() == list(range(len(y)))
 

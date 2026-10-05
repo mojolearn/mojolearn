@@ -86,6 +86,7 @@ from checks.numerics import ftz, identical_mul_add, identical_mul_add_simd, iden
 from core.classical_host_predict import host_gemm_nt
 from decomposition.spectrum_order_device import spectrum_rank_desc
 from core.host_predict_threads import HostF32Ptr, host_list_ptr
+from core.host_tile_fold import IDN_XTY_TILED, host_xty_tiled
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
@@ -147,6 +148,17 @@ def host_xty(
     return out^
 
 
+def host_xty_launch(
+    x: List[Float32], y: List[Float32], n_rows: Int, n_cols: Int,
+) -> List[Float32]:
+    """`core/xtdz_coalesced.mojo::xty_launch`'s value: the tile order under
+    IDN_XTY_TILED (lane fam2-shared), else `xty_kernel`'s (`host_xty`)."""
+    comptime if IDN_XTY_TILED:
+        if n_rows >= 1 and n_cols >= 1:
+            return host_xty_tiled(x, y, n_rows, n_cols)
+    return host_xty(x, y, n_rows, n_cols)
+
+
 def host_equilibration_scale(diag: Float32) -> Float32:
     """`ols_equilibration_scale`, DEVIATION 2620, copied."""
     var bits = bitcast[DType.uint32](diag)
@@ -188,7 +200,7 @@ def host_lstsq_eig(
     through the equilibrated pseudo-inverse."""
     # covA <- A^T A, Ab <- A^T b.
     var cov = host_gemm_tn(a, n_cols, n_rows)
-    var ab = host_xty(a, b, n_rows, n_cols)
+    var ab = host_xty_launch(a, b, n_rows, n_cols)
 
     # Step 2b: S from the diagonal's bits; G <- S G S (rows first, then
     # columns, each `ftz(a * b)`); Ab <- S Ab.
@@ -373,7 +385,7 @@ def host_ridge_solve(
     for idx in range(n_cols * n_cols):
         v[idx] = ftz(v[idx] * s[idx % n_cols])
     # S_nnz <- U^T b (xty), w <- V S_nnz (gemv)
-    var utb = host_xty(u, b, n_rows, n_cols)
+    var utb = host_xty_launch(u, b, n_rows, n_cols)
     return host_gemm_nt(v, utb, n_cols, 1, n_cols)
 
 

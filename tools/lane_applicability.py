@@ -4,6 +4,10 @@
 """WHICH LANES ARE MEANINGFUL ON WHICH COLUMN, and what each one is compared
 against (lane/oracle-and-applicability-audit, 2026-09-16).
 
+Current fold-metadata route: cross-val-folds now requires core's CPU helpers
+through split_descriptor. The pure-Python discussion below describes the
+original route; PUBLIC_HOST_ONLY_LANES now names its native core dependency.
+
 `tools/lane_select.py` answers a DIFFERENT question, "which lanes can a change
 possibly move". This one answers "on which columns can a lane's proposition
 even be stated", and "when this cell passes, what did it pass against".
@@ -359,11 +363,40 @@ RAISING_COMPARE = ("_same_bytes", "_same_state")
 #: calls it independent. They are read at the CALL SITE and never followed
 #: into. Every other harness helper is followed, because a comparison a lane
 #: reaches through a helper it calls is still a comparison inside its cell.
-COMPARE_PRIMITIVES = ("_same_bytes", "_same_state", "_mismatch_bytes")
+COMPARE_PRIMITIVES = ("_same_bytes", "_same_state", "_mismatch_bytes", "_oracle_mismatch")
+
+
+def _oracle_mismatch_pairs(call):
+    """Comparison operands visible at a batched mismatch callsite.
+
+    Expand explicit four-tuples and starred tuple comprehensions. Unknown
+    dynamic operands stay unclassified rather than inventing an oracle from
+    the comparison helper's formal parameters.
+    """
+    for arg in call.args:
+        bound = set()
+        if isinstance(arg, ast.Starred):
+            value = arg.value
+            if isinstance(value, (ast.ListComp, ast.GeneratorExp, ast.SetComp)):
+                candidates = [value.elt]
+                bound = {name.id for generator in value.generators
+                         for name in ast.walk(generator.target) if isinstance(name, ast.Name)}
+            elif isinstance(value, (ast.List, ast.Tuple)):
+                candidates = value.elts
+            else:
+                candidates = []
+        else:
+            candidates = [arg]
+        for pair in candidates:
+            if isinstance(pair, (ast.Tuple, ast.List)) and len(pair.elts) == 4:
+                if _root(pair.elts[1]) in bound or _root(pair.elts[3]) in bound:
+                    continue  # Loop variables do not establish distinct caller objects.
+                yield ast.Call(func=ast.Name(id="_mismatch_bytes", ctx=ast.Load()),
+                               args=list(pair.elts), keywords=[])
 
 
 def _raised_mismatches(node):
-    """The `_mismatch_bytes` calls in this body whose message is RAISED.
+    """The direct or batched mismatch calls whose message is RAISED.
 
     The idiom `_mismatch_bytes` was introduced for (lane/sabotage-sweep,
     2026-09-17) is
@@ -381,7 +414,7 @@ def _raised_mismatches(node):
         if (isinstance(sub, ast.Assign) and len(sub.targets) == 1
                 and isinstance(sub.targets[0], ast.Name)
                 and isinstance(sub.value, ast.Call)
-                and _root_name(sub.value.func) == "_mismatch_bytes"):
+                and _root_name(sub.value.func) in ("_mismatch_bytes", "_oracle_mismatch")):
             assigned.setdefault(sub.targets[0].id, []).append(sub.value)
     raised = set()
     for sub in ast.walk(node):
@@ -392,7 +425,14 @@ def _raised_mismatches(node):
         for t in ast.walk(sub.test):
             if isinstance(t, ast.Name) and t.id in assigned:
                 raised.add(t.id)
-    return [call for name in raised for call in assigned[name]]
+    calls = []
+    for name in raised:
+        for call in assigned[name]:
+            if _root_name(call.func) == "_oracle_mismatch":
+                calls.extend(_oracle_mismatch_pairs(call))
+            else:
+                calls.append(call)
+    return calls
 
 
 #: Names that are INPUTS to a body, never an object under test, so they never
@@ -814,6 +854,8 @@ def scopes():
     hs = host_surface()
     excluded = set(ib.record_excluded_lanes())
     covered = covered_lanes()
+    host_families = {f['family']: f['binding'] for f in hs.FAMILIES}
+    declared_host_only = getattr(hs, 'PUBLIC_HOST_ONLY_LANES', {})
     out = {}
     disagreements = []
     for name, fn in ib.LANES.items():
@@ -829,13 +871,25 @@ def scopes():
             disagreements.append(
                 f"{name}: name says {'driver' if name.startswith('par-') else 'not a driver'}, "
                 f"body says {'reaches' if claim_devices >= 2 else 'does not reach'} _par_devices")
+        host_only = _host_only_names(ml_attrs)
+        host_family = declared_host_only.get(name)
+        if host_family is not None:
+            # Host helpers can live in the same module/binary as GPU code.
+            # A whole-module scan cannot distinguish split_descriptor's CPU
+            # fold helpers from model_selection's GPU splitters/scorers.
+            # The host-surface route names the family providing this lane;
+            # preserve it rather than attributing CPU work to every GPU.
+            if host_family not in host_families:
+                disagreements.append(f'{name}: unknown declared host family {host_family!r}')
+            else:
+                host_only.add(host_families[host_family])
         out[name] = Scope(
             name=name,
             claim_devices=claim_devices,
             oracle=oracle,
             oracle_evidence=evidence,
-            host_only=_host_only_names(ml_attrs),
-            has_cpu_route=name in covered,
+            host_only=host_only,
+            has_cpu_route=name in covered or host_family in host_families,
             is_function=_is_function_lane(node),
             record_excluded=name in excluded,
             ml_attrs=sorted(ml_attrs),
@@ -1044,25 +1098,22 @@ def _selfcheck():
         """) == "recorded",
          "a body with no comparison at all was given an oracle")
 
-    # 6b. THE PURE-PYTHON LANE IS MEANINGFUL ON THE CPU COLUMN AND VACUOUS ON
-    #     THE GPU ONES (2026-09-19). Until this arm the rule held exactly the
-    #     opposite for `cross-val-folds`: refused on cpu-host as DEGENERATE
-    #     ("host_surface declares no CPU route"), admitted on all five GPU
-    #     columns where no GPU code runs at all. Both halves are asserted here,
-    #     because fixing only the refusal would leave five vacuous cells.
-    want(s["cross-val-folds"].pure_python,
-         "cross-val-folds stands on no binding at all; it must read pure_python")
+    # 6b. Fold metadata is host-only. split_descriptor now calls core's
+    # native fold helpers, so the historical pure-Python classification no
+    # longer holds. Both routes must remain honest about the actual work.
+    want(not s["cross-val-folds"].pure_python and s["cross-val-folds"].host_only,
+         "cross-val-folds requires native CPU helpers, not GPU arithmetic")
     try:
         check(["cross-val-folds"], "cpu-host")
     except LaneNotApplicable as exc:
-        fails.append("check() REFUSED the pure-Python lane on the one column its "
+        fails.append("check() REFUSED the host fold lane on the one column its "
                      "proposition is stateable on: " + str(exc).splitlines()[1].strip())
     try:
         check(["cross-val-folds"], "apple-metal")
-        fails.append("check() did NOT refuse the pure-Python lane on a GPU column")
+        fails.append("check() did NOT refuse the host fold lane on a GPU column")
     except LaneNotApplicable as exc:
-        want("vacuous" in str(exc) and "metal" in str(exc),
-             "the GPU refusal did not say the cell is vacuous on that backend")
+        want("CPU host route" in str(exc) and "metal" in str(exc),
+             "the GPU refusal did not identify host arithmetic on that backend")
 
     # 6c. THE CPU EXEMPTION IS NARROW, watched on BOTH sides of the one branch
     #     this change touched. The exemption is for "stands on no binding
@@ -1099,8 +1150,9 @@ def _selfcheck():
               "mlp", "par-mlp", "optim-sgd", "training-primitives", "cross-entropy-arms"):
         want(not s[n].pure_python, f"{n} stands on a binding; it must not read pure_python")
     pure = sorted(n for n, sc in s.items() if sc.pure_python)
-    want(pure == ["cross-val-folds"],
-         "the pure-Python set must be exactly cross-val-folds on this registry; it is "
+    declared_pure = sorted(n for n, family in host_surface().PUBLIC_HOST_ONLY_LANES.items() if family is None)
+    want(pure == declared_pure,
+         "pure-Python derivation disagrees with current host declaration; derived set is "
          + (", ".join(pure) if pure else "empty"))
 
     # 6. THE DERIVATION IS NOT READING THE LANE NAMES. Renaming a driver lane

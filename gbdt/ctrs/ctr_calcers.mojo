@@ -39,7 +39,9 @@ of deviation 52.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
+
+from core.device_zero import enqueue_fill
 
 from gbdt.ctrs.ctr import (
     CTR_BORDERS,
@@ -55,6 +57,7 @@ from gbdt.ctrs.index_wrapper import (
     is_segment_start,
 )
 from gbdt.ctrs.kernel.ctr_calcers import (
+    launch_compute_non_weighted_bin_freq_ctr,
     launch_compute_weighted_bin_freq_ctr,
     launch_extract_border_masks,
     launch_fill_binarized_targets_stats,
@@ -111,24 +114,24 @@ def compute_simple_ctrs(
     """
     var n_rows = len(cat_codes)
     var builder = TCtrBinBuilder(n_rows)
-    builder.add_cat_feature_bins(cat_codes, unique_values)
+    builder.add_cat_feature_bins_host(cat_codes, unique_values)
 
     var out = List[List[Float32]]()
-    for _ in range(len(ctr_configs)):
+    for _ in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
         out.append(List[Float32]())
 
     # `CreateEqualUpToPriorAndBinarizationCtrsGroupping` (`ctr.h:60-68`),
     # keyed by (Type, ParamId) as `IsEqualUpToPriorAndBinarization` is.
     var done = List[Bool]()
-    for _ in range(len(ctr_configs)):
+    for _ in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
         done.append(False)
 
-    for i in range(len(ctr_configs)):
+    for i in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
         if done[i]:
             continue
         var group = List[TCtrConfig]()
         var group_slots = List[Int]()
-        for j in range(i, len(ctr_configs)):
+        for j in range(i, len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
             if not done[j] and is_equal_up_to_prior_and_binarization(
                 ctr_configs[j], ctr_configs[i]
             ):
@@ -140,10 +143,10 @@ def compute_simple_ctrs(
         if group[0].ctr_type == CTR_FEATURE_FREQ:
             # `IsCatFeatureStatisticCtr` arm (`ctr_helper.h:95-111`)
             if counter_calc_method_is_full:
-                columns = builder.visit_equal_up_to_prior_freq_ctrs(group)
+                columns = builder.visit_equal_up_to_prior_freq_ctrs_host(group)
             else:
-                var calcer = TWeightedBinFreqCalcer.trivial(n_rows)
-                columns = calcer.visit_equal_up_to_prior_freq_ctrs(
+                var calcer = TWeightedBinFreqCalcer.trivial_host(n_rows)
+                columns = calcer.visit_equal_up_to_prior_freq_ctrs_host(
                     builder, group
                 )
         elif group[0].ctr_type == CTR_BORDERS or (
@@ -169,7 +172,7 @@ def compute_simple_ctrs(
                 "ctr type " + String(group[0].ctr_type) + " has no calcer"
             )
 
-        for k in range(len(group_slots)):
+        for k in range(len(group_slots)):  # small-loop(group_slots: one slot per grouped config): a handful of priors per group
             out[group_slots[k]] = columns[k].copy()
 
     # `binarized_target` is consumed by the Borders arm above; it is taken
@@ -198,7 +201,7 @@ struct TWeightedBinFreqCalcer(Movable):
         self.total_weight = total_weight
 
     @staticmethod
-    def trivial(n_rows: Int) -> Self:
+    def trivial_host(n_rows: Int) -> Self:
         """`BuildCtrTarget`'s trivial-weights case: 1.0 per learn row, and
         `TotalWeight` their sum. `TCtrTargets::IsTrivialWeights()` returns
         an unconditional `true` in their source (`ctr_helper.h:19-21`), so
@@ -208,7 +211,7 @@ struct TWeightedBinFreqCalcer(Movable):
             w.append(Float32(1.0))
         return Self(w^, Float32(n_rows))
 
-    def visit_equal_up_to_prior_freq_ctrs(
+    def visit_equal_up_to_prior_freq_ctrs_host(
         self, builder: TCtrBinBuilder, ctr_configs: List[TCtrConfig]
     ) raises -> List[List[Float32]]:
         """Their `VisitEqualUpToPriorFreqCtrs` (`ctr_calcers.h:307-341`),
@@ -242,18 +245,24 @@ struct TWeightedBinFreqCalcer(Movable):
                 + String(size)
             )
 
-        var segment_ids = builder.segment_ids()
-        var offsets = builder.segment_offsets(segment_ids)
+        var segment_ids = builder.segment_ids_host()
+        var offsets = builder.segment_offsets_host(segment_ids)
         var n_segments = len(offsets) - 1
 
-        # `GatherWithMask` + `SegmentedReduceVector(..., Sum)`
-        var bin_weights = List[Float32]()
-        for _ in range(n_segments):
-            bin_weights.append(Float32(0.0))
+        # `GatherWithMask` + `SegmentedReduceVector(..., Sum)` over the
+        # TRIVIAL weights (1.0 per learn row, the only weights their GPU
+        # learner builds), so each bin's weight is its INTEGER row count,
+        # converted to Float32 once (lane cpu4-gbdt). Below 2^24 rows that
+        # is the same word as the old Float32 running sum; above it the
+        # running sum stopped counting and the integer does not. The device
+        # calcer (`TWeightedBinFreqCalcerGpu`) counts the same way, so the
+        # GPU fit no longer needs this host arm at 2^24 rows and up.
+        var bin_counts = List[Int](length=n_segments, fill=0)
         for i in range(size):
-            bin_weights[Int(segment_ids[i])] += self.weights[
-                Int(index_of(builder.indices[i]))
-            ]
+            bin_counts[Int(segment_ids[i])] += 1
+        var bin_weights = List[Float32](length=n_segments, fill=Float32(0.0))
+        for s in range(n_segments):
+            bin_weights[s] = Float32(bin_counts[s])
 
         var out = List[List[Float32]]()
         for c in range(len(ctr_configs)):
@@ -276,7 +285,7 @@ struct TWeightedBinFreqCalcer(Movable):
         return out^
 
 
-def segmented_scan_and_scatter_non_negative_vector(
+def segmented_scan_and_scatter_non_negative_vector_host(
     src: List[Float32], indices: List[UInt32]
 ) raises -> List[Float32]:
     """THE SEAM. Their `SegmentedScanAndScatterNonNegativeVector`
@@ -410,9 +419,9 @@ struct THistoryBasedCtrCalcer(Movable):
         self.binarized_sample = List[UInt8]()
         self.gathered_weights_with_mask = List[Float32]()
         self.scanned_scattered_weights = List[Float32]()
-        self.reset()
+        self.reset_host()
 
-    def reset(mut self) raises:
+    def reset_host(mut self) raises:
         """`GatherTrivialWeights` then the segmented scan
         (`ctr_calcers.h:87-100`). The kernel twin of the first line is
         `kernel/ctr_calcers.gather_trivial_weights_kernel`."""
@@ -428,7 +437,7 @@ struct THistoryBasedCtrCalcer(Movable):
             else:
                 self.gathered_weights_with_mask.append(val)
         self.scanned_scattered_weights = (
-            segmented_scan_and_scatter_non_negative_vector(
+            segmented_scan_and_scatter_non_negative_vector_host(
                 self.gathered_weights_with_mask, self.indices
             )
         )
@@ -448,7 +457,7 @@ struct THistoryBasedCtrCalcer(Movable):
         """`HasBinarizedTargetSample` (`ctr_calcers.h:102-104`)."""
         return len(self.binarized_sample) > 0
 
-    def visit_cat_feature_ctr(
+    def visit_cat_feature_ctr_host(
         self, ctr_configs: List[TCtrConfig]
     ) raises -> List[List[Float32]]:
         """`VisitCatFeatureCtr` (`ctr_calcers.h:121-153`), step for step.
@@ -515,7 +524,7 @@ struct THistoryBasedCtrCalcer(Movable):
                 v = -v
             dst.append(v)
 
-        var tmp = segmented_scan_and_scatter_non_negative_vector(
+        var tmp = segmented_scan_and_scatter_non_negative_vector_host(
             dst, self.indices
         )
 
@@ -680,8 +689,9 @@ struct THistoryBasedCtrCalcerGpu(Movable):
                 + String(self.size)
             )
         var h = ctx.enqueue_create_host_buffer[DType.uint8](self.size)
-        for i in range(self.size):
-            h.unsafe_ptr().unsafe_store(i, sample[i])
+        ctx.synchronize()
+        # one bulk copy into the stage (lane cpu4-gbdt; was a per-row loop)
+        memcpy(dest=h.unsafe_ptr(), src=sample.unsafe_ptr(), count=self.size)
         ctx.enqueue_copy(
             dst_buf=self.binarized_sample, src_ptr=h.unsafe_ptr()
         )
@@ -689,9 +699,19 @@ struct THistoryBasedCtrCalcerGpu(Movable):
         _ = h^  # past the drain (step-33 race class)
         self.has_sample = True
 
+    def set_binarized_sample_device(
+        mut self, ctx: DeviceContext, sample: DeviceBuffer[DType.uint8]
+    ) raises:
+        """`SetBinarizedSample` from a target ALREADY ON THE DEVICE (lane
+        cpu4-gbdt): `train` uploads the binarized target once per fit and
+        every feature and permutation copies it device to device, as
+        theirs takes a device buffer. `sample` holds `self.size` classes."""
+        ctx.enqueue_copy(dst_buf=self.binarized_sample, src_buf=sample)
+        self.has_sample = True
+
     def visit_cat_feature_ctr(
         mut self, ctx: DeviceContext, ctr_configs: List[TCtrConfig]
-    ) raises -> List[List[Float32]]:
+    ) raises -> List[DeviceBuffer[DType.float32]]:
         """`VisitCatFeatureCtr` (`ctr_calcers.h:121-153`), launch for launch.
 
             gatheredSample = GetGatheredBinSample()
@@ -764,15 +784,20 @@ struct THistoryBasedCtrCalcerGpu(Movable):
             self.scan_block_flags,
         )
 
-        var out = List[List[Float32]]()
-        var host = ctx.enqueue_create_host_buffer[DType.float32](self.size)
-        for c in range(len(ctr_configs)):
+        # lane cpu4-gbdt: every config's column is its OWN device buffer
+        # and stays on the device; their `visitor(ctrConfig, constDst)`
+        # (`ctr_calcers.h:149`) reads `Dst` back to binarize it
+        # (`batch_binarized_ctr_calcer.cpp:66-71`), and `train` binarizes
+        # the resident column on the device instead
+        var out = List[DeviceBuffer[DType.float32]]()
+        for c in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): one launch per prior, a handful per feature
             ref config = ctr_configs[c]
             if not is_equal_up_to_prior_and_binarization(config, reference):
                 raise Error(
                     "VisitCatFeatureCtr: every config in one call must be"
                     " equal up to prior and binarization"
                 )
+            var dst = ctx.enqueue_create_buffer[DType.float32](self.size)
             launch_make_means_and_scatter(
                 ctx,
                 self.tmp,
@@ -783,18 +808,9 @@ struct THistoryBasedCtrCalcerGpu(Movable):
                 self.indices,
                 False,
                 CTR_INDEX_MASK,
-                self.dst,
+                dst,
             )
-            # their `visitor(ctrConfig, constDst, Stream)`
-            # (`ctr_calcers.h:149`), which for the batched calcer reads the
-            # column back to the host to binarize it
-            # (`batch_binarized_ctr_calcer.cpp:66-71`)
-            ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=self.dst)
-            ctx.synchronize()
-            var column = List[Float32]()
-            for r in range(self.size):
-                column.append(host.unsafe_ptr().unsafe_load(r))
-            out.append(column^)
+            out.append(dst^)
         return out^
 
 
@@ -845,7 +861,7 @@ def compute_simple_ctrs_gpu(
             + " rows; a Borders ctr is a statistic OF the target and"
             " cannot be computed without its grid"
         )
-    for i in range(len(ctr_configs)):
+    for i in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
         if ctr_configs[i].ctr_type == CTR_FEATURE_FREQ:
             raise Error(
                 "compute_simple_ctrs_gpu is their permutation-DEPENDENT"
@@ -854,29 +870,75 @@ def compute_simple_ctrs_gpu(
                 " over the identity order"
             )
 
-    var builder = TCtrBinBuilderGpu(ctx, order)
-    builder.add_cat_feature_bins(ctx, cat_codes, unique_values)
+    var d_codes = _upload_codes(ctx, cat_codes)
+    var h_target = ctx.enqueue_create_host_buffer[DType.uint8](n)
+    var h_order = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    ctx.synchronize()
+    memcpy(dest=h_target.unsafe_ptr(), src=binarized_target.unsafe_ptr(), count=n)
+    memcpy(dest=h_order.unsafe_ptr(), src=order.unsafe_ptr(), count=n)
+    var d_target = ctx.enqueue_create_buffer[DType.uint8](n)
+    var d_order = ctx.enqueue_create_buffer[DType.uint32](n)
+    ctx.enqueue_copy(dst_buf=d_target, src_ptr=h_target.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_order, src_ptr=h_order.unsafe_ptr())
+    ctx.synchronize()
+    _ = h_target^  # past the drain (step-33 race class)
+    _ = h_order^
+    var cols = compute_simple_ctrs_gpu_resident(
+        ctx, d_codes, n, unique_values, ctr_configs, d_target, d_order
+    )
+    var out = download_ctr_columns(ctx, cols, n)
+    _ = d_codes^
+    _ = d_target^
+    _ = d_order^
+    return out^
 
-    var out = List[List[Float32]]()
-    for _ in range(len(ctr_configs)):
-        out.append(List[Float32]())
 
-    # `CreateEqualUpToPriorAndBinarizationCtrsGroupping` (`ctr.h:60-68`),
-    # the same grouping the host driver above runs, so the expensive scan
-    # runs once per bucket and only the priors' divide repeats.
-    var done = List[Bool]()
-    for _ in range(len(ctr_configs)):
-        done.append(False)
+def compute_simple_ctrs_gpu_resident(
+    ctx: DeviceContext,
+    cat_codes: DeviceBuffer[DType.uint32],
+    n_rows: Int,
+    unique_values: Int,
+    ctr_configs: List[TCtrConfig],
+    binarized_target: DeviceBuffer[DType.uint8],
+    order: DeviceBuffer[DType.uint32],
+) raises -> List[DeviceBuffer[DType.float32]]:
+    """`compute_simple_ctrs_gpu` with every input and output RESIDENT (lane
+    cpu4-gbdt): the feature's codes (`cat_column_codes_resident`), the
+    binarized target (uploaded once per fit), and the permutation's CTR
+    estimation order (`launch_ctr_estimation_order`, written once per fit)
+    are device buffers of `n_rows`, copied device to device into the
+    builder and calcer; one device column per config comes back, in config
+    order, indexed by original row. Same launches, same grouping, same
+    arithmetic as the list entry, which now runs through this one."""
+    for i in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
+        if ctr_configs[i].ctr_type == CTR_FEATURE_FREQ:
+            raise Error(
+                "compute_simple_ctrs_gpu is their permutation-DEPENDENT"
+                " writeCtrs call; FeatureFreq is permutation independent"
+                " (ctr_type.cpp:52-55) and belongs in"
+                " compute_simple_ctrs_device_resident, over the identity"
+                " order"
+            )
+    var builder = TCtrBinBuilderGpu(
+        ctx, device_order=order, n_rows=n_rows
+    )
+    builder.add_cat_feature_bins_device(ctx, cat_codes, unique_values)
 
     var calcer = THistoryBasedCtrCalcerGpu(ctx, builder)
-    calcer.set_binarized_sample(ctx, binarized_target)
+    calcer.set_binarized_sample_device(ctx, binarized_target)
 
-    for i in range(len(ctr_configs)):
+    # `CreateEqualUpToPriorAndBinarizationCtrsGroupping` (`ctr.h:60-68`),
+    # so the expensive scan runs once per bucket and only the priors'
+    # divide repeats; `slot_buf[c]` is config `c`'s index into `bufs`
+    var bufs = List[DeviceBuffer[DType.float32]]()
+    var slot_buf = List[Int](length=len(ctr_configs), fill=-1)
+    var done = List[Bool](length=len(ctr_configs), fill=False)
+    for i in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
         if done[i]:
             continue
         var group = List[TCtrConfig]()
         var group_slots = List[Int]()
-        for j in range(i, len(ctr_configs)):
+        for j in range(i, len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
             if not done[j] and is_equal_up_to_prior_and_binarization(
                 ctr_configs[j], ctr_configs[i]
             ):
@@ -885,9 +947,17 @@ def compute_simple_ctrs_gpu(
                 group_slots.append(j)
 
         var columns = calcer.visit_cat_feature_ctr(ctx, group)
-        for k in range(len(group_slots)):
-            out[group_slots[k]] = columns[k].copy()
+        for k in range(len(group_slots)):  # small-loop(group_slots: one slot per grouped config): a handful of priors per group
+            slot_buf[group_slots[k]] = len(bufs)
+            bufs.append(columns[k])
 
+    var out = List[DeviceBuffer[DType.float32]]()
+    for c in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
+        out.append(bufs[slot_buf[c]])
+    # the builder's and calcer's scratch is read by the enqueued launches
+    ctx.synchronize()
+    _ = builder^
+    _ = calcer^
     return out^
 
 
@@ -955,12 +1025,9 @@ struct TWeightedBinFreqCalcerGpu(Movable):
         `IsTrivialWeights()` unconditional true (`ctr_helper.h:19-21`):
         1.0 per learn row, `TotalWeight` their sum."""
         var w = ctx.enqueue_create_buffer[DType.float32](n_rows)
-        var h = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-        for i in range(n_rows):
-            h.unsafe_ptr().unsafe_store(i, Float32(1.0))
-        ctx.enqueue_copy(dst_buf=w, src_ptr=h.unsafe_ptr())
-        ctx.synchronize()
-        _ = h^  # past the drain (step-33 race class)
+        # filled on the device (cpu3-gbdt-b): 1.0 is the same bits the
+        # host staging loop wrote
+        enqueue_fill(ctx, w, Float32(1.0))
         return Self(ctx, w^, Float32(n_rows), n_rows)
 
     def visit_equal_up_to_prior_freq_ctrs(
@@ -968,26 +1035,35 @@ struct TWeightedBinFreqCalcerGpu(Movable):
         ctx: DeviceContext,
         mut builder: TCtrBinBuilderGpu,
         ctr_configs: List[TCtrConfig],
-    ) raises -> List[List[Float32]]:
-        """Their `VisitEqualUpToPriorFreqCtrs` (`ctr_calcers.h:307-341`),
-        launch for launch:
+        unique_values: Int,
+    ) raises -> List[DeviceBuffer[DType.float32]]:
+        """Their `VisitEqualUpToPriorFreqCtrs` (`ctr_calcers.h:307-341`)
+        over the TRIVIAL weights, every column left ON THE DEVICE (lane
+        cpu4-gbdt):
 
             ExtractMask(indices, TempFlags, false)
             ScanVector(TempFlags, Bins, false)
-            binCountWithFakeLastBin = ReadLast(Bins) + 2
             UpdatePartitionOffsets(Bins, SegmentStarts)
-            GatherWithMask(Tmp, Weights, indices, Mask)
-            SegmentedReduceVector(Tmp, SegmentStarts, BinWeights, Sum)
-            for each config: ComputeWeightedBinFreqCtr(...)
+            for each config: (count(bin) + prior)
+                             / (totalWeight + priorObservations)
 
-        `SegmentStarts` and `BinWeights` are allocated per visit because
-        their size is `ReadLast + 2`, known only here -- their `Reset`
-        calls in the same place (`:317`, `:320`).
+        With trivial weights (`IsTrivialWeights()` is unconditionally true,
+        `ctr_helper.h:19-21`) a bin's summed weight IS its row count, so the
+        column is `ComputeNonWeightedBinFreqCtr`'s arithmetic
+        (`non_weighted_bin_freq_ctrs_kernel`): the INTEGER segment length,
+        converted to Float32 once, over `Float32(n)`, which is
+        `TotalWeight`. That replaces the `GatherWithMask` +
+        `SegmentedReduceVector(Sum)` of 1.0s: the same words below 2^24
+        rows (an integer-valued Float32 sum is exact there in any order)
+        and exact above it, where the old running sum stopped counting.
+        The host arm (`TWeightedBinFreqCalcer`) counts the same way.
 
-        Returns one HOST column per config, in config order, indexed by
-        ORIGINAL row, exactly as the host reference does -- and on the
-        trivial weights the two are bit-identical, because integer-valued
-        float sums below 2^24 are exact in any reduction order.
+        `SegmentStarts` is sized `unique_values + 1` (no bin id exceeds
+        `unique_values - 1`, and the trailing entries are written with
+        `n`), so their `ReadLast(Bins) + 2` readback is not needed.
+
+        Returns one DEVICE column per config, in config order, indexed by
+        ORIGINAL row.
         """
         if builder.size != self.size:
             raise Error(
@@ -1004,113 +1080,106 @@ struct TWeightedBinFreqCalcerGpu(Movable):
         launch_scan_vector_u32(
             ctx, n, False, self.temp_flags, self.bins, self.scan_block_sums
         )
-
-        # ReadLast(Bins) + 2 (:315): one fake bin for the last segment end
-        var h_bins = ctx.enqueue_create_host_buffer[DType.uint32](n)
-        ctx.enqueue_copy(dst_ptr=h_bins.unsafe_ptr(), src_buf=self.bins)
-        ctx.synchronize()
-        var bin_count_with_fake = Int(
-            h_bins.unsafe_ptr().unsafe_load(n - 1)
-        ) + 2
-
+        var part_count = unique_values + 1
         var segment_starts = ctx.enqueue_create_buffer[DType.uint32](
-            bin_count_with_fake
+            part_count
         )
         launch_update_partition_offsets(
-            ctx, segment_starts, bin_count_with_fake, self.bins, n
+            ctx, segment_starts, part_count, self.bins, n
         )
 
-        var bin_weights = ctx.enqueue_create_buffer[DType.float32](
-            bin_count_with_fake - 1
-        )
-        launch_gather_with_mask_f32(
-            ctx, self.tmp, self.weights, builder.indices, n, CTR_INDEX_MASK
-        )
-        launch_segmented_reduce_sum(
-            ctx, self.tmp, segment_starts, bin_weights,
-            bin_count_with_fake - 1,
-        )
-
-        var out = List[List[Float32]]()
-        var dst = ctx.enqueue_create_buffer[DType.float32](n)
-        var h_col = ctx.enqueue_create_host_buffer[DType.float32](n)
-        for c in range(len(ctr_configs)):
+        var out = List[DeviceBuffer[DType.float32]]()
+        for c in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): one launch per prior, a handful per feature
             ref config = ctr_configs[c]
             if config.ctr_type != CTR_FEATURE_FREQ:
                 raise Error(
                     "TWeightedBinFreqCalcerGpu takes FeatureFreq configs"
                     " only; got " + String(config.ctr_type)
                 )
-            launch_compute_weighted_bin_freq_ctr(
+            var dst = ctx.enqueue_create_buffer[DType.float32](n)
+            launch_compute_non_weighted_bin_freq_ctr(
                 ctx,
                 builder.indices,
                 True,
                 self.bins,
-                bin_weights,
-                self.total_weight,
+                segment_starts,
+                n,
                 config.numerator_shift(),
                 config.denumerator_shift(),
                 dst,
-                n,
             )
-            ctx.enqueue_copy(dst_ptr=h_col.unsafe_ptr(), src_buf=dst)
-            ctx.synchronize()
-            var column = List[Float32]()
-            for i in range(n):
-                column.append(h_col.unsafe_ptr().unsafe_load(i))
-            out.append(column^)
+            out.append(dst^)
+        # `segment_starts` is read by the launches above; it is released
+        # only after they have run
+        ctx.synchronize()
+        _ = segment_starts^
         return out^
 
 
-def compute_simple_ctrs_device(
+def download_ctr_columns(
+    ctx: DeviceContext, cols: List[DeviceBuffer[DType.float32]], n: Int
+) raises -> List[List[Float32]]:
+    """Device CTR columns back to host lists, one bulk copy each, for the
+    list-returning entries the checks call (`checks/freq_ctr_device_check`,
+    `checks/ctr_device_check`). `train` keeps the columns resident."""
+    var out = List[List[Float32]]()
+    var h = ctx.enqueue_create_host_buffer[DType.float32](max(n, 1))
+    for c in range(len(cols)):  # small-loop(cols: one slot per ctr config): one bulk copy per column, a handful per feature
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=cols[c])
+        ctx.synchronize()
+        var column = List[Float32](unsafe_uninit_length=n)
+        memcpy(dest=column.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+        out.append(column^)
+    _ = h^
+    return out^
+
+
+def compute_simple_ctrs_device_resident(
     ctx: DeviceContext,
-    cat_codes: List[UInt32],
+    cat_codes: DeviceBuffer[DType.uint32],
+    n_rows: Int,
     unique_values: Int,
     ctr_configs: List[TCtrConfig],
-) raises -> List[List[Float32]]:
+) raises -> List[DeviceBuffer[DType.float32]]:
     """The permutation-INDEPENDENT half of their two `writeCtrs` calls, ON
-    THE DEVICE -- the driver `compute_simple_ctrs` above runs on the host.
+    THE DEVICE, columns LEFT ON THE DEVICE (lane cpu4-gbdt) -- the GPU fit's
+    only FeatureFreq writer, for `counter_calc_method` SkipTest AND Full and
+    at any row count.
 
     Same grouping, same identity order (`MakeSequence(ctrEstimationOrder)`,
     `doc_parallel_dataset_builder.cpp:206`), same dispatch: a FeatureFreq
     group goes to `TWeightedBinFreqCalcerGpu` (the `SkipTest` default
-    dispatch, `ctr_helper.h:96-111`); Borders/Buckets are refused with the
-    same sentence the host driver refuses them with, because they are
-    permutation DEPENDENT and belong to `compute_simple_ctrs_gpu`. The
-    `counter_calc_method == Full` arm keeps its host implementation in
-    `TCtrBinBuilder.visit_equal_up_to_prior_freq_ctrs`; it is opt-in, no
-    benchmark reaches it, and with no test pool it is the same number.
+    dispatch, `ctr_helper.h:96-111`); Borders/Buckets are refused, because
+    they are permutation DEPENDENT and belong to
+    `compute_simple_ctrs_gpu_resident`. `Full` reaches the same calcer:
+    with no test pool the pure-freq arm (`TCtrBinBuilder`'s
+    `ComputeNonWeightedBinFreqCtr`) and the weighted arm over trivial
+    weights are the same arithmetic, `(count + prior) / (n + prior_obs)`,
+    which is what the device calcer now computes (integer counts), so the
+    GPU fit no longer keeps a host arm for it.
 
-    THE WIRING NOTE, for the lane that owns `gbdt/train.mojo`: `train()`'s
-    independent-half call at its `compute_simple_ctrs(...)` site becomes
-    `compute_simple_ctrs_device(ctx, ...)` -- a one-line change in a file
-    this lane does not own, the same handoff shape as the ctr_quality
-    harness rewire. Until then this driver is reached by
-    `pixi run check-freq-ctr-device` only, and archive/plans/UNWIRED.md carries it.
+    `cat_codes` holds the feature's `n_rows` dense codes, resident from
+    `cat_column_codes_resident` (validated there). Returns one device
+    column per config, in config order, indexed by original row.
     """
-    var n = len(cat_codes)
-    var order = List[UInt32]()
-    for i in range(n):
-        order.append(UInt32(i))
-    var builder = TCtrBinBuilderGpu(ctx, order)
-    builder.add_cat_feature_bins(ctx, cat_codes, unique_values)
-
-    var out = List[List[Float32]]()
-    for _ in range(len(ctr_configs)):
-        out.append(List[Float32]())
-
-    var done = List[Bool]()
-    for _ in range(len(ctr_configs)):
-        done.append(False)
+    var n = n_rows
+    # `MakeSequence(ctrEstimationOrder)` (`:206`) on the device
+    var builder = TCtrBinBuilderGpu(ctx, identity_rows=n)
+    builder.add_cat_feature_bins_device(ctx, cat_codes, unique_values)
 
     var calcer = TWeightedBinFreqCalcerGpu.trivial(ctx, n)
 
-    for i in range(len(ctr_configs)):
+    # `CreateEqualUpToPriorAndBinarizationCtrsGroupping` (`ctr.h:60-68`);
+    # `slot_buf[c]` is config `c`'s index into `bufs`
+    var bufs = List[DeviceBuffer[DType.float32]]()
+    var slot_buf = List[Int](length=len(ctr_configs), fill=-1)
+    var done = List[Bool](length=len(ctr_configs), fill=False)
+    for i in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
         if done[i]:
             continue
         var group = List[TCtrConfig]()
         var group_slots = List[Int]()
-        for j in range(i, len(ctr_configs)):
+        for j in range(i, len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
             if not done[j] and is_equal_up_to_prior_and_binarization(
                 ctr_configs[j], ctr_configs[i]
             ):
@@ -1127,9 +1196,53 @@ def compute_simple_ctrs_device(
                 " to compute_simple_ctrs_gpu"
             )
         var columns = calcer.visit_equal_up_to_prior_freq_ctrs(
-            ctx, builder, group
+            ctx, builder, group, unique_values
         )
-        for k in range(len(group_slots)):
-            out[group_slots[k]] = columns[k].copy()
+        for k in range(len(group_slots)):  # small-loop(group_slots: one slot per grouped config): a handful of priors per group
+            slot_buf[group_slots[k]] = len(bufs)
+            bufs.append(columns[k])
 
+    var out = List[DeviceBuffer[DType.float32]]()
+    for c in range(len(ctr_configs)):  # small-loop(ctr_configs: one slot per ctr config): a handful of priors per feature
+        out.append(bufs[slot_buf[c]])
+    # the builder's and calcer's scratch is read by the enqueued launches
+    ctx.synchronize()
+    _ = builder^
+    _ = calcer^
+    return out^
+
+
+def _upload_codes(
+    ctx: DeviceContext, cat_codes: List[UInt32]
+) raises -> DeviceBuffer[DType.uint32]:
+    """A host code list on the device, one bulk copy (the list entries'
+    adapter; `train` passes resident codes instead)."""
+    var n = len(cat_codes)
+    var h = ctx.enqueue_create_host_buffer[DType.uint32](max(n, 1))
+    ctx.synchronize()
+    memcpy(dest=h.unsafe_ptr(), src=cat_codes.unsafe_ptr(), count=n)
+    var d = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+    _ = h^  # past the drain (step-33 race class)
+    return d^
+
+
+def compute_simple_ctrs_device(
+    ctx: DeviceContext,
+    cat_codes: List[UInt32],
+    unique_values: Int,
+    ctr_configs: List[TCtrConfig],
+) raises -> List[List[Float32]]:
+    """`compute_simple_ctrs_device_resident` from a host code list, its
+    columns read back to host lists: the entry `checks/freq_ctr_device_check`
+    compares against the host `compute_simple_ctrs`. `train` calls the
+    resident form."""
+    var n = len(cat_codes)
+    var d_codes = _upload_codes(ctx, cat_codes)
+    var cols = compute_simple_ctrs_device_resident(
+        ctx, d_codes, n, unique_values, ctr_configs
+    )
+    var out = download_ctr_columns(ctx, cols, n)
+    _ = d_codes^
     return out^

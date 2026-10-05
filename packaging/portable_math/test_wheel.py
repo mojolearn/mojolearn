@@ -189,3 +189,41 @@ def test_sparse_adapter_does_not_add_a_numpy_runtime_dependency(tmp_path):
     path = tmp_path / 'adapter.py'
     path.write_text(ast.unparse(cls))
     assert audit.numpy_errors(path, 'mojolearn/_expansion_neighbors.py') == []
+
+
+def test_metadata_only_vendor_aggregate_needs_no_elf(tmp_path):
+    import json
+    dist = tmp_path / 'mojolearn_nvidia-1.0.dist-info'
+    dist.mkdir()
+    (dist / 'gpu_plugin.json').write_text(json.dumps({'role': 'aggregate'}))
+    assert audit.audit_tree(tmp_path)['binaries'] == []
+    (tmp_path / 'payload.so').write_bytes(b'inert')
+    with pytest.raises(ValueError, match='aggregate contains non-metadata'):
+        audit.audit_tree(tmp_path)
+
+
+def test_empty_payload_cannot_use_aggregate_exception(tmp_path):
+    import json
+    dist = tmp_path / 'mojolearn_nvidia_sm89-1.0.dist-info'
+    dist.mkdir()
+    (dist / 'gpu_payload.json').write_text(json.dumps({'role': 'payload'}))
+    with pytest.raises(ValueError, match='no native binaries'):
+        audit.audit_tree(tmp_path)
+
+
+def test_baseline_manifest_is_rechecked_against_final_bytes(payload):
+    import json
+    directory = payload / 'mojolearn/cuda_ptx/sm_80'
+    directory.mkdir(parents=True)
+    binary = directory / 'probe.so'
+    binary.write_bytes(b'fixture\0.version 8.1\n.target sm_80\n.address_size 64\n'
+                       b'.visible .entry probe() {\nret;\n}\n\0')
+    manifest = audit.ptx_baseline.audit_tree(directory, 'a' * 40, 'test compiler')
+    assert not manifest['errors']
+    (directory / 'PTX_BASELINE.json').write_text(json.dumps(manifest))
+    report = audit.audit_tree(payload)
+    assert report['identical_cuda_machine_code'] is False
+    assert report['experimental_ptx_baselines'][0]['identical_qualified'] is False
+    binary.write_bytes(binary.read_bytes() + b'changed')
+    with pytest.raises(ValueError, match='final bytes differ'):
+        audit.audit_tree(payload)

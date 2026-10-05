@@ -309,6 +309,28 @@ def rre_order_kernel(f: FP, dg: FP, v: FP, w_off: Int32, v_off: Int32, n_in: Int
         f.unsafe_store(eo + c * n + r, ftz(vb.unsafe_load(c * n + i)))
 
 
+def rre_clear_kernel(a0: FP, astride: Int32, n_in: Int32, batch_in: Int32):
+    """Thread b n n + c: cell c of matrix b (at a0 + b astride) zeroed (lane
+    fam-prep-metrics, IDN_RR_EIGH: the destroyed A's words made the same on
+    every column; x_prep/host/rr_eigh_host.mojo zeroes it too)."""
+    var n = Int(n_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(batch_in) * n * n:
+        return
+    var b = t // (n * n)
+    var c = t - b * n * n
+    var a = a0 + b * Int(astride)
+    a.unsafe_store(c, Float32(0.0))
+
+
+def rr_eigh_clear(mut ctx: DeviceContext, f: FP, a_off: Int, n: Int, astride: Int, batch: Int) raises:
+    """Enqueues `rre_clear_kernel` over the batch (after `rr_eigh_into`)."""
+    if n <= 0 or batch <= 0:
+        return
+    ctx.enqueue_function[rre_clear_kernel](f + a_off, Int32(astride), Int32(n), Int32(batch),
+                                           grid_dim=_blocks(batch * n * n), block_dim=RRE_TPB)
+
+
 def rr_eigh_into(mut ctx: DeviceContext, f: FP, a_off: Int, n: Int, astride: Int, batch: Int, w_off: Int,
                  v_off: Int, scratch: FP) raises:
     """`eigh_unit`'s stage q = [A, n, astride, EVAL, EVEC] for `batch`

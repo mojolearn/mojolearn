@@ -11,10 +11,29 @@ ascending, `w = fma(alpha_i, alpha_j, -Kinv[i, j])`, `acc = fma(w,
 dK_p[j, i], acc)`, seeded +0.0, every value through `ftz`); the block
 partials are then added ascending (`ftz(acc + part)`) and scaled by 0.5
 (`identical_mul`). The same words on every column."""
-from checks.numerics import ftz, identical_mul, identical_mul_add
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul, identical_mul_add
 
 comptime _P = MutPointer[Float32, MutAnyOrigin]
-comptime GP_GRAD_ROWS = 16
+
+#: fam2-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF` restores 16-row blocks): one
+#: thread per (parameter, ROW) instead of one per (parameter, 16 rows). A
+#: thread's chain was 16 n fused multiply-adds and a parameter had only n / 16
+#: threads (125 at n = 2000), every optimizer evaluation; now n threads of n
+#: steps each, and the partials (n per parameter) are added ascending as
+#: before. BITS MOVE (the block boundaries are the fold order). The device
+#: kernels and the host column (`host/gp_theta.mojo`) both read
+#: `GP_GRAD_ROWS` from this file, so NVIDIA, AMD, Apple and the host column
+#: change together. Shorter chains: the rounding error bound only shrinks.
+#: CANDIDATE ARM (default OFF): `-D MOJOLEARN_IDN_GP_GRAD_ROWS4` takes 4-row
+#: blocks instead of 1, for the orchestrator to time against the default.
+comptime GP_IDN_GRAD_ROWFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime _GP_GRAD_ROWS_ON = 4 if is_defined["MOJOLEARN_IDN_GP_GRAD_ROWS4"]() else 1
+comptime GP_GRAD_ROWS = _GP_GRAD_ROWS_ON if GP_IDN_GRAD_ROWFOLD else 16
 
 
 @always_inline

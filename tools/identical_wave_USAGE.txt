@@ -1,0 +1,134 @@
+IDENTICAL NVIDIA/AMD wave tools
+
+No Apple access. No published mojolearn or plugins. No opponent execution.
+Keep complete logs on box beneath /root/lq; supervisor harvests that directory.
+Inspect return codes, JSON receipts, and bounded grep before expanding diagnostics.
+
+Native compilation (root already launched source SHA2191cd1ec...):
+  python3 tools/identical_wave_native_build.py --repo /root/mojolearn \
+    --sha FULL_40_HEX_SHA --vendor nvidia --out /root/lq/native-SHA \
+    --python /root/mojolearn/.pixi/envs/default/bin/python
+Use amd on the MI325X. Optional --arm off; --mode fast must omit host builders.
+Each binding compile holds compile_slot.sh, runs -j1, then direct native import
+checks numeric mode and actual vendor. Failures do not prevent independent
+modules compiling. A failed module cannot inherit an old binary from a wheel.
+No algorithm fit is part of this import smoke.
+
+Quality/identity/timing conductor:
+  python3 tools/identical_wave_runner.py PHASE \
+    --repo /root/mojolearn --sha FULL_40_HEX_SHA --vendor nvidia \
+    --plan /path/to/reviewed-plan.json --out /root/lq/medium-SHA \
+    --python /root/mojolearn/.pixi/envs/default/bin/python \
+    --data /root/board-0833/cache/algos-data/rows-small
+PHASE order: prepare, quality, identity, timing. Same plan/out/SHA/data each time.
+The plan contains builders, quality obligations and exact lane/dataset cases.
+Prepare creates separate ON/OFF source trees, source portable math, builds every
+explicit binding with global OFF reaching GPU AND host builders. It never installs
+anything. Existing Python must already have NumPy/SciPy and required dependencies.
+Environment strips inherited MojoLearn/candidate compile settings. Mandatory
+compile semaphore covers native and Mojo quality compiles. Preserve AMD Mojo cache.
+
+The reviewed plan contains 47 representative cases across all 11 affected
+families, 25 concrete quality gates, and 50 GPU/host binding build scripts.
+Coverage includes VAR, knn-imputer, Gaussian/sparse random projections,
+additive-chi2 and maxabs-scaler fixed-cost rows. This is bounded representative
+coverage, not every estimator or a full race. The classical PCA/OLS/KMeans
+adapters use canonical medium regression blocks, not stored full classical data.
+
+Before prepare, generate neural inputs ONCE on the NVIDIA Linux box:
+  python3 tools/identical_wave_prepare_neural.py --source /path/to/frozen/source \
+    --out /root/board-0833/cache/algos-data/wave-neural
+Transfer that directory unchanged through R2 to AMD; verify manifest SHA256s.
+Preparation generates seeded arrays only and executes zero models/opponents.
+The wave identity pins those hashes as well as all medium file checksums.
+
+Timing refuses unless every applicable gate and every per-arm GPU/host identity
+case passes. ON-only gates are explicitly marked in the plan. Mamba angle
+explicitly enables its candidate on ON; this does not claim default activation.
+Default block Jacobi is disabled across every column after a captured pivot
+failed its strict local convergence gate. Its opt-in and OFF precedence are
+covered by an expected-refusal regression, not a successful decomposition.
+Large eigh tests4096/513; PCA tests220/33/7 columns; analytic GramCD reaches the
+optimized route. Tree checks cover zero/mixed depths. CNN controls cover epoch
+permutations and 100000 Adam steps against the source float64 control helper.
+QR memory is a call-end driver measurement, not a transient allocation peak.
+DART quality verifies exact full-row input hashes/parameters against stored own
+quality and stored LightGBM metrics, then runs our code only. Medium timing has
+no direct comparison against those full-row stored timing cells.
+
+Identity executes fit/infer once and saves full raw outputs plus SHA256 including
+names, dtypes and shapes. Host identity does NOT start timers. Timing executes
+one untimed GPU fit/infer warmup followed by one reported fit/infer sample per
+ON/OFF arm. This matches the warm board contract without a repeated timing race.
+Cold-single-call is an explicit alternative contract requiring a separate plan;
+neither contract claims grouped-caller performance. No median or confidence
+interval is inferred from one sample. A durable timing receipt reserves the run before work;
+a partial/failed run cannot be silently repeated. Runtime package and all mapped
+_mojolearn native files must originate inside frozen source; vendor and IDENTICAL
+mode readbacks must match. No missing outputs or missing mode readbacks can pass.
+
+Each box's GPU/host match still needs cross-box aggregation: compare same full
+SHA, plan hash, canonical-data manifest hash, ON/OFF arm, lane/dataset and complete
+output digest between NVIDIA and AMD. Never compare ON to OFF as an identity
+requirement when an accepted arithmetic change deliberately moves version bits.
+Apple identity remains UNVERIFIED because user forbids all Apple access. Do not
+claim four-vendor verification or promote winners as fully verified from NV/AMD.
+Stored opponent rows need matching workload/parameters; absence stays missing.
+Explicit grouped/device-handle callers, a complete GPU-only call-path audit,
+and full neural training remain separate coverage; forward fixtures cover
+Mamba/Transformer only. Read the plan's coverage notes before interpreting results.
+
+Static validation only at handoff: Python py_compile and JSON schema structure
+checks passed. No new quality/identity/timing jobs have been executed by this agent.
+
+Verified native build reuse (prepare only)
+----------------------------------------
+Pass --reuse-native-on /absolute/on/native-build.json and/or
+--reuse-native-off /absolute/off/native-build.json to the external runner.
+Keep identical_wave_reuse.py beside identical_wave_runner.py. Receipt donors
+are read-only; verified .so files are copied into fresh wave source directories,
+and only remaining plan builders run. The prepare receipt retains donor,
+attestation and complete artifact-inventory hashes. All subsequent phases still
+verify the complete copied/built .so inventory.
+
+Required donor sidecars: producer-attestation.json, native-builder-producer.py,
+and artifact-inventory.json. Source SHA, numeric mode, arm flags, GPU target,
+compiler/Python/pixi binaries and pixi.lock must match. A composite receipt may
+reuse earlier artifacts only with the reviewed conservative-repository-v1
+closure proof, a passed donor module/import, and a fresh successful import.
+The initializer repair's different x_linear GPU entrypoint cannot be reused.
+Missing or changed evidence refuses preparation; it never silently recompiles
+or accepts incomplete evidence. External harness/plan updates need not change
+the frozen numerical SHA.
+
+Explicit opt-in candidates (not activated by ordinary ON/OFF):
+  tools/identical_candidate_recipes.json records75 builds across38 candidate
+  groups, including prerequisites and required fixtures. All remain UNQUALIFIED
+  or quarantined unless separately supported by retained evidence. No recipe
+  automatically schedules a model or timing job.
+
+  python tools/identical_wave_native_build.py --sha FULL_SHA --repo /root/mojolearn \
+    --out /root/lq/recipe-preview --python /root/mojolearn/.pixi/envs/default/bin/python \
+    --vendor nvidia --gpu-arch sm_120 --candidate-recipe rf_device_level_loop/4 \
+    --recipe-role candidate --plan-only
+
+Recipes come from FULL_SHA itself, not the mutable launcher checkout. Remove
+--plan-only only when root authorizes compilation. --recipe-role baseline and
+candidate normally BOTH use --arm on; baseline disables only the selected
+opt-in while retaining prerequisite flags. Master --arm off remains available
+for override-precedence gates and the separate all-OFF comparison.
+
+--define MOJOLEARN_NAME[=positive_integer] is repeatable for narrower diagnostics.
+Unknown/comment-only source names, duplicate flags, shell fragments, mode/vendor
+or master-OFF overrides, and=0 are refused. is_defined treats=0 as PRESENT,
+so omit a presence flag to disable it. Effective flags, frozen source references,
+recipe role and recipe-file hash enter the native receipt. Recipe dependencies
+are selected automatically; a partial builder list is refused (use explicit
+--define for deliberately partial compile diagnostics).
+
+Building a recipe is not route proof: RF device-loop requires unlimited leaves,
+extra-trees bins need>=64columns, HDB thresholds need cases on both sides, and
+Mamba angle candidates require the explicit all-column host twin. Do not label
+an ineligible default-sized case a candidate PASS. Keep per-arm raw identity,
+quality and timing receipts. Block-eigh reenable/width variants remain quarantined
+following strict convergence failure; do not silently promote them.

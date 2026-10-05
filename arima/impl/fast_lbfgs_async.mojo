@@ -46,6 +46,8 @@ from arima.impl.lbfgs_device import (
 )
 from arima.impl.tsa.arima_common import ARIMAOrder
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_mul,
     identical_mul_add,
@@ -68,9 +70,21 @@ from glm.impl.qn.qn_util import (
 #: 14,918 ms (-48%), forecast_rmse identical. The old
 #: `-D MOJOLEARN_ARIMA_FAST_ASYNC=1` stays harmless;
 #: `-D MOJOLEARN_ARIMA_FAST_ASYNC_OFF=1` turns it off.
+#: IDENTICAL ON EVERY VENDOR since lane/fam-timeseries (2026-10-04), with
+#: the held evaluation workspace (IDN_ARIMA_EVAL_WS, `batched_kalman.mojo`):
+#: each series' iterates, `n_iter` and `retcode` are the lock-step solver's
+#: bit for bit (module banner), and the host reads one word every
+#: ASYNC_READ_EVERY evaluations instead of one per line-search step and one
+#: per iteration. `-D MOJOLEARN_IDN_ARIMA_ASYNC_OFF=1` keeps the lock-step
+#: solver under IDENTICAL; `MOJOLEARN_IDN_ALL_OFF` turns the workspace, and
+#: so this, off.
 comptime ARIMA_FAST_ASYNC = (
     KALMAN_FAST_EVAL_WS
     and not is_defined["MOJOLEARN_ARIMA_FAST_ASYNC_OFF"]()
+    and not (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and is_defined["MOJOLEARN_IDN_ARIMA_ASYNC_OFF"]()
+    )
 )
 
 #: evaluations between two reads of the "any series still running" word;
@@ -111,14 +125,14 @@ def _series() -> Int:
 
 @always_inline
 def _copy_x(cand: FP, x: FP, b: Int, n: Int):
-    for i in range(n):
+    for i in range(n):  # small-loop(n: parameters of ONE series, the ARIMA complexity): per-thread device helper inside a kernel
         cand[b * n + i] = x[b * n + i]
 
 
 @always_inline
 def _candidate(cand: FP, xp: FP, drt: FP, s: Float32, b: Int, n: Int):
     """`lbfgs_candidate_kernel`'s searching arm."""
-    for i in range(n):
+    for i in range(n):  # small-loop(n: parameters of ONE series, the ARIMA complexity): per-thread device helper inside a kernel
         cand[b * n + i] = ftz(identical_mul_add(s, drt[b * n + i], xp[b * n + i]))
 
 
@@ -129,7 +143,7 @@ def _prelude(
 ) -> Bool:
     """`lbfgs_prelude_kernel` for an active series; True = searching."""
     ist[I_SEARCHING * bs + b] = 0
-    for i in range(n):
+    for i in range(n):  # small-loop(n: parameters of ONE series, the ARIMA complexity): per-thread device helper inside a kernel
         xp[b * n + i] = x[b * n + i]
         gradp[b * n + i] = grad[b * n + i]
     fst[F_FXP * bs + b] = fst[F_FX * bs + b]
@@ -188,14 +202,14 @@ def _verdict(
     ist[I_RETCODE * bs + b] = Int32(code)
     if restore:
         fst[F_FX * bs + b] = fp
-        for i in range(n):
+        for i in range(n):  # small-loop(n: parameters of ONE series, the ARIMA complexity): per-thread device helper inside a kernel
             x[b * n + i] = xp[b * n + i]
             grad[b * n + i] = gradp[b * n + i]
     ist[I_NITER * bs + b] = Int32(k)
     if stop:
         return True
     var e = Int(ist[I_ENDV * bs + b])
-    for i in range(n):
+    for i in range(n):  # small-loop(n: parameters of ONE series, the ARIMA complexity): per-thread device helper inside a kernel
         S[(b * m + e) * n + i] = ftz(
             identical_mul_add(Float32(-1.0), xp[b * n + i], x[b * n + i])
         )

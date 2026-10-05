@@ -15,7 +15,8 @@ import zipfile
 #: wheel-name prefix -> distribution of the split Linux GPU plugins
 #: (python/mojolearn/gpu_plugins.py; spelled here because this driver ships
 #: alone to the box, stdlib only, with no checkout beside it).
-PLUGIN_DISTRIBUTIONS = {"mojolearn_nvidia": "mojolearn-nvidia", "mojolearn_amd": "mojolearn-amd"}
+PLUGIN_DISTRIBUTIONS = {name.replace("-", "_"): name for name in (
+    "mojolearn-nvidia", "mojolearn-amd")}
 
 
 def admit(kind, doc, models):
@@ -125,10 +126,11 @@ def expanded_checks(run, python, work, output, *, vendor, scope, devices=None):
 
 
 INSTALLED_GUARD = """import json,pathlib,sys,mojolearn
+from mojolearn import _backend
 p=pathlib.Path(mojolearn.__file__).resolve()
 assert p.is_relative_to(pathlib.Path(sys.prefix).resolve()) and 'site-packages' in p.parts
 assert mojolearn.__version__ == sys.argv[1]
-print(json.dumps(dict(package=str(p),version=mojolearn.__version__,vendor=mojolearn.vendor())))
+print(json.dumps(dict(package=str(p),version=mojolearn.__version__,vendor=mojolearn.vendor(),gpu_arch=_backend.gpu_arch(),gpu_plugin=_backend.gpu_plugin())))
 """
 
 

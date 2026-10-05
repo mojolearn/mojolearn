@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The dictionary update of (MiniBatch)DictionaryLearning on resident
 matrices, FAST on Apple (lane/apple-fast-gap-clus3, 2026-10-03). Switch:
-`DECOMP_FAST_DICT_DEV`, default on in FAST on Apple
+`DECOMP_FAST_DICT_DEV`, default on in FAST (Apple since apple-fast-gap-clus3, every vendor since cpu2-l8-decomp)
 (`-D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF` turns it off): only that build exports `x_decomp_dev_dict_update`, and
 python/mojolearn/_expansion_decomp.py `_update_dict` takes it when the
 binding has it. IDENTICAL compiles none of this.
@@ -32,7 +32,6 @@ from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.python import PythonObject
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -42,11 +41,13 @@ from x_decomp.device import xd_ctx
 from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free, X_DECOMP_POOL
 
 comptime DECOMP_FAST_DICT_DEV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF"]()
 )  # FAST + Apple default since the M3 A/B clus3-mbdl-dictdev-istella (n=1):
 # mb-dict-learning istella 6832 -> 5193 ms (-24%), sparsity .08636 and
-# reconstruction error .6483 identical; -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF turns it off
+# reconstruction error .6483 identical; -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF turns it off.
+# Lane cpu2-l8-decomp (2026-10-04, re-audit L8): FAST on every vendor (NVIDIA
+# and AMD FAST ran the per-atom host loop); IDENTICAL keeps the kit loop of
+# `_update_dict`, now resident (same words as the host column).
 comptime DD_TPB = 64
 
 
@@ -127,4 +128,4 @@ def dev_dict_update_py(
         # the stream orders a later reuse of the scratch behind these launches
         pool_free(sid)
         return PythonObject(cells)
-    raise Error("x_decomp: dev_dict_update needs a FAST Apple build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF")
+    raise Error("x_decomp: dev_dict_update needs a FAST build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF")

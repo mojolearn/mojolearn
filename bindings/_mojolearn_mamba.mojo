@@ -149,6 +149,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
+from core.device_scan import device_first_nonfinite
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralMambaContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralMambaContextFast"
 from checks.vendor import COMPILED_VENDOR
@@ -176,7 +177,9 @@ from mamba.impl.modules.mamba_simple import mamba_step
 #: lane afn-mamba (2026-10-03): under FAST + Apple + `-D MOJOLEARN_AFN_MAMBA_ARENA`
 #: every block call's device buffers are views of ONE arena and the caller's
 #: arrays are copied in with no per-buffer wait (`_mamba{1,2,3}_run_arena`).
-from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA
+from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA, IDN_MAMBA_ALLOC_NOWAIT
+from mamba.impl.modules.afn_defines import IDN_MAMBA3_REPORTS_ON_REQUEST
+from mamba.impl.modules.afn_defines import IDN_M3_SESSION_STAGE_REUSE
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modeling.modeling_mamba import mamba1_arena_floats
 from mamba.impl.modules.mamba2 import mamba2_arena_floats
@@ -2215,14 +2218,37 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
         phase_tick = Int(perf_counter_ns())
     _m3_prefill_weights(s, a, dims)
+    # lane/fam2-lm (IDN_M3_SESSION_STAGE_REUSE): the retained stages and
+    # state serve this call when they have its shape; they are refilled with
+    # zeros below. (`stages_valid` is not asked: stale VALUES do not matter,
+    # every buffer is refilled.)
+    var reuse = False
+    comptime if IDN_M3_SESSION_STAGE_REUSE and MAMBA_GUARD == 0:
+        if s.stages and s.state:
+            reuse = (
+                s.stages_b == b
+                and s.stages_l == l
+                and s.stages.value().dims.d_model == dm
+            )
     # The previous forward's stages go before this call's are built.
-    s.drop_stages()
+    if not reuse:
+        s.drop_stages()
     ref ctx = s.ctx.value()
     ref dw = s.w.value()
     m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
-    # The certified zero state and this call's stages, built per call.
-    var dstate = Mamba3DeviceState(ctx, b, dims)
-    var dstages = Mamba3DeviceStages(ctx, b, l, 0, dims)
+    # The certified zero state and this call's stages, built per call (or
+    # the retained ones, zeroed).
+    var dstate: Mamba3DeviceState
+    var dstages: Mamba3DeviceStages
+    if reuse:
+        dstate = s.state.take()
+        dstages = s.stages.take()
+        s.stages_valid = False
+        dstate.rezero()
+        dstages.rezero()
+    else:
+        dstate = Mamba3DeviceState(ctx, b, dims)
+        dstages = Mamba3DeviceStages(ctx, b, l, 0, dims)
     m3_phase_tick(ctx, phase_tick, String("surface.stage_allocations"))
     var n_x = b * l * dm
     var have_dx = False
@@ -2233,7 +2259,11 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
         s.dx = mamba_device_alloc(ctx, max(n_x, 1))
     ref dx = s.dx.value()
     ctx.enqueue_copy(dst_buf=dx, src_ptr=_f32_ptr(a[0]))
-    ctx.synchronize()
+    # lane fam-lm (IDN_MAMBA_ALLOC_NOWAIT, IDENTICAL): the caller's x array
+    # outlives this call and the copy is ahead of every reader on the
+    # in-order context, so the upload's own wait ordered nothing.
+    comptime if not IDN_MAMBA_ALLOC_NOWAIT:
+        ctx.synchronize()
     m3_phase_tick(ctx, phase_tick, String("surface.x_upload"))
     var trace = IdentityTrace.disabled()
     mamba3_block_forward(
@@ -2241,10 +2271,18 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     )
     m3_phase_tick(ctx, phase_tick, String("surface.block"))
     _m3_download_addr[False](ctx, dstages.residual_out, n_x, a[20])
-    _m3_download_addr[False](ctx, dstages.h_last, h_n, a[21])
-    _m3_download_addr[False](ctx, dstages.k_last, k_n, a[22])
-    _m3_download_addr[False](ctx, dstages.v_last, v_n, a[23])
-    _m3_download_addr[False](ctx, dstages.theta_last, theta_n, a[24])
+    # lane/fam2-lm (IDN_MAMBA3_REPORTS_ON_REQUEST): a report comes down only
+    # where the caller gave it an address; the session forward entry admits
+    # a null report address only under that switch, so with it off every
+    # address here is non-null and all four copies run as before.
+    if a[21] != 0:
+        _m3_download_addr[False](ctx, dstages.h_last, h_n, a[21])
+    if a[22] != 0:
+        _m3_download_addr[False](ctx, dstages.k_last, k_n, a[22])
+    if a[23] != 0:
+        _m3_download_addr[False](ctx, dstages.v_last, v_n, a[23])
+    if a[24] != 0:
+        _m3_download_addr[False](ctx, dstages.theta_last, theta_n, a[24])
     ctx.synchronize()
     m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
     var out_len = dstate.buf_len
@@ -2329,6 +2367,9 @@ def _m3_prefill_backward_forward(mut s: Mamba3PrefillSession, a: List[Int], b: I
     s.stages_valid = True
 
 
+comptime _M3_BWD_NONFINITE_DY = "mamba3 backward: non-finite grad_output at flat index "
+
+
 def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int) raises:
     """`mamba3_backward` on the session: `a` is the entry's 21-slot list
     (x, nine weights, grad_output, grad_x, nine weight gradients).
@@ -2345,6 +2386,15 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     var n_x = b * l * dm
     if not s.ctx:
         s.ctx = neural_ctx[_NEURAL_CTX]()
+    # cpu2-l11-neural (2026-10-04): the entry's refusal of a non-finite
+    # grad_output is a DEVICE scan of the uploaded buffer (one launch, one
+    # partials copy; the same first flat index the host walk reported), run
+    # before the weights or the stages are touched, so the refusal leaves
+    # the session as it was (the entry keeps it usable).
+    var d_output = _m3_upload_addr(s.ctx.value(), a[10], n_x)
+    var bad_dy = device_first_nonfinite(s.ctx.value(), d_output, n_x)
+    if bad_dy >= 0:
+        raise Error(String(_M3_BWD_NONFINITE_DY) + String(bad_dy))
     _m3_prefill_weights(s, a, dims)
     var reuse = False
     if s.stages_valid and s.stages and s.stages_b == b and s.stages_l == l and s.dx:
@@ -2359,7 +2409,6 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     ref dw = s.w.value()
     ref stages = s.stages.value()
     ref dx = s.dx.value()
-    var d_output = _m3_upload_addr(ctx, a[10], n_x)
     var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
     var tk = Int(perf_counter_ns())
     var g = mamba3_prefill_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton, tk)
@@ -2409,7 +2458,14 @@ def mamba3_prefill_session_forward_binding(session: PythonObject, addrs: PythonO
         a.append(0)
     for i in range(10, 15):
         var p = Int(py=addrs[i])
-        if p == 0: raise Error("mamba3_prefill_session_forward: null buffer address")
+        if p == 0:
+            # lane/fam2-lm: a null REPORT address (11..14) means "do not
+            # download this report"; y (10) is always required.
+            var report_optional = False
+            comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
+                report_optional = i >= 11
+            if not report_optional:
+                raise Error("mamba3_prefill_session_forward: null buffer address")
         a.append(p)
     var b = Int(py=params[0])
     var l = Int(py=params[1])
@@ -2453,23 +2509,32 @@ def mamba3_prefill_session_backward_binding(session: PythonObject, addrs: Python
         if address == 0:
             raise Error("mamba3_prefill_session_backward: null buffer address at slot " + String(i))
         a.append(address)
-    # The entry's own refusal of a non-finite grad_output, before any work.
-    var dy = _f32_ptr(a[10])
-    for i in range(b * l * dm):
-        var bits = bitcast[DType.uint32](dy.unsafe_load(i))
-        if (bits & UInt32(0x7f800000)) == UInt32(0x7f800000):
-            raise Error("mamba3 backward: non-finite grad_output at flat index " + String(i))
+    # The entry's own refusal of a non-finite grad_output now runs on the
+    # device, first thing in `_m3_prefill_backward_run` (cpu2-l11-neural);
+    # that refusal touched nothing, so the session stays usable.
     owner[].busy = True
     try:
         with GILReleased(Python()):
             _m3_prefill_backward_run(owner[], a, b, l, dm)
     except error:
         owner[].busy = False
+        if String(error).startswith(_M3_BWD_NONFINITE_DY):
+            raise error
         owner[].usable = False
         owner[].release()
         raise error
     owner[].busy = False
     return PythonObject(0)
+
+
+def mamba3_prefill_session_reports_optional_binding() raises -> PythonObject:
+    """True where `mamba3_prefill_session_forward` admits a null report
+    address (IDN_MAMBA3_REPORTS_ON_REQUEST); the Python block asks before
+    it passes one."""
+    comptime if IDN_MAMBA3_REPORTS_ON_REQUEST:
+        return PythonObject(True)
+    else:
+        return PythonObject(False)
 
 
 def mamba3_prefill_session_info_binding(session: PythonObject) raises -> PythonObject:
@@ -2768,6 +2833,9 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
             m.def_function[mamba3_prefill_session_forward_binding]("mamba3_prefill_session_forward")
             m.def_function[mamba3_prefill_session_backward_binding]("mamba3_prefill_session_backward")
             m.def_function[mamba3_prefill_session_info_binding]("mamba3_prefill_session_info")
+            m.def_function[mamba3_prefill_session_reports_optional_binding](
+                "mamba3_prefill_session_reports_optional"
+            )
         m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         _ = m.add_type[Mamba3DecodeSession]("_Mamba3DecodeSession")
         m.def_function[mamba3_session_create_binding]("mamba3_session_create")

@@ -182,7 +182,7 @@ def nsum_f64_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject
     return PythonObject(total)
 
 
-def shard_topk_merge_f32_binding(
+def shard_topk_merge_f32_host_binding(
     table_addr: PythonObject, n_shards: PythonObject, n_queries: PythonObject, k: PythonObject,
     out_dist_addr: PythonObject, out_idx_addr: PythonObject,
 ) raises -> PythonObject:

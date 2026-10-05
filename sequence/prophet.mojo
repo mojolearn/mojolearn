@@ -20,10 +20,37 @@ Features: sin(2 pi (i+1) frac), cos(...) with frac = (t mod P) / P computed
 by the caller in float64 (exact fmod, one rounding) and the trigonometry by
 the portable float32 seams, so the features are the same bits everywhere."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_sin, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_sin, identical_sqrt
+from std.sys.compile import is_defined
+from std.memory import bitcast
+from checks.soft_f64 import SF64_NAN, SF64_ONE, SF64_SIGN, SF64_ZERO, sf64_add, sf64_div, sf64_lt, sf64_sub, sf64_to_f32
 
 comptime TWO_PI: Float32 = 6.283185307179586
 comptime MEM = 5
+
+#: lane/fam2-timeseries (2026-10-04), IDENTICAL ON EVERY VENDOR AND THE HOST
+#: COLUMN: the fit is the block-cooperative one (`sequence/prophet_coop.mojo`,
+#: one block of COOP_NT threads per series: every likelihood accumulator a
+#: strided fold per thread, a 32-lane butterfly, then the simdgroups'
+#: partials ascending; every L-BFGS dot product a lane-strided fold and a
+#: butterfly). It was FAST + Apple only because its fold orders differ from
+#: the one-thread chain; old bits do not bind a new version, so the ORDER
+#: CHANGES EVERYWHERE TOGETHER: NVIDIA, AMD and Apple run the cooperative
+#: kernel (PROPHET_COOP, which reads this switch) and the host column's
+#: `op_prophet_fit` replays the same folds in the same order one after
+#: another (`_coop_fg`, `_dot_coop` below). Same model, priors, start, line
+#: search and stopping rules. `-D MOJOLEARN_IDN_PROPHET_COOP_OFF=1` (or
+#: MOJOLEARN_IDN_ALL_OFF) restores the one-thread chain on the device
+#: (prophet_fit_team) and in the host column.
+comptime PROPHET_COOP_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_PROPHET_COOP_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: the cooperative block's threads and simdgroup width, restated for the
+#: host replay; prophet_coop.mojo's PROPHET_COOP_TPB and PW are these
+comptime COOP_NT = 256
+comptime COOP_PW = 32
+#: accumulators the host replay folds per pass over the points
+comptime COOP_JB = 128
 
 
 @always_inline
@@ -214,6 +241,177 @@ def _dot(a: FP, b: FP, n: Int) -> Float32:
     return s
 
 
+@always_inline
+def _bitrev5(c: Int) -> Int:
+    """The 5-bit reversal: leaf c of the butterfly's sum tree is lane
+    _bitrev5(c) (pairs 16 apart first, then 8, 4, 2, 1)."""
+    return ((c & 1) << 4) | ((c & 2) << 2) | (c & 4) | ((c & 8) >> 2) | ((c & 16) >> 4)
+
+
+@always_inline
+def _dot_coop(a: FP, b: FP, n: Int) -> Float32:
+    """prophet_coop's `_cdot` replayed by one thread: each lane's strided
+    fma chain from 0 (coordinates lane, lane + 32, ...), then `_wsum`'s
+    butterfly, whose value in every lane is the pairwise tree over the
+    lanes taken in bit-reversed order (float addition commutes)."""
+    var stack = InlineArray[Float32, 5](fill=Float32(0.0))
+    var out = Float32(0.0)
+    for c in range(COOP_PW):
+        var s = Float32(0.0)
+        var i = _bitrev5(c)
+        while i < n:
+            s = fma3(ld(a, i), ld(b, i), s)
+            i += COOP_PW
+        var level = 0
+        while level < 5 and ((c >> level) & 1) == 1:
+            s = add(stack[level], s)
+            level += 1
+        if level < 5:
+            stack[level] = s
+        else:
+            out = s
+    return out
+
+
+@always_inline
+def _dotx[COOP: Bool](a: FP, b: FP, n: Int) -> Float32:
+    comptime if COOP:
+        return _dot_coop(a, b, n)
+    return _dot(a, b, n)
+
+
+@always_inline
+def _coop_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
+    """`CoopFG.fg` (sequence/prophet_coop.mojo) replayed by one thread, the
+    host column of the cooperative fit: accumulator j of thread tid is its
+    chain over points tid, tid + COOP_NT, ... from 0; a simdgroup's 32 chains
+    are summed by the butterfly's tree; the COOP_NT / 32 partials are added
+    ascending from 0; then the priors per coordinate and the objective's
+    prior terms folded per lane and summed by the butterfly. The point
+    values (residual, weights) are pass A's, recomputed per block of COOP_JB
+    accumulators so no scratch beyond the stack is needed."""
+    var S = d.S
+    var K = d.K
+    var N = d.N
+    var P = 3 + S + K
+    var nw = COOP_NT // COOP_PW
+    var k = ld(th, 0)
+    var m = ld(th, 1)
+    var u = ld(th, 2 + S)
+    var sigma = ftz(identical_exp(u))
+    var s2 = mul(sigma, sigma)
+    for j in range(P):
+        st(g, j, Float32(0.0))
+    var sse = Float32(0.0)
+    var acc = InlineArray[Float32, COOP_JB](fill=Float32(0.0))
+    var stack = InlineArray[Float32, 5 * COOP_JB](fill=Float32(0.0))
+    var j0 = 0
+    while j0 < P + 1:
+        var jn = P + 1 - j0
+        if jn > COOP_JB:
+            jn = COOP_JB
+        for wid in range(nw):
+            for c in range(COOP_PW):
+                var tid = wid * COOP_PW + _bitrev5(c)
+                for jj in range(jn):
+                    acc[jj] = Float32(0.0)
+                var i = tid
+                while i < N:
+                    var ti = ld(d.t, i)
+                    var tr = fma3(k, ti, m)
+                    for j in range(S):
+                        var cj = ld(d.cp, j)
+                        if ti >= cj:
+                            tr = fma3(ld(th, 2 + j), sub(ti, cj), tr)
+                    var se = Float32(0.0)
+                    for q in range(K):
+                        se = fma3(ld(d.X, i * K + q), ld(th, 3 + S + q), se)
+                    var yhat: Float32
+                    if d.mult:
+                        yhat = fma3(tr, se, tr)
+                    else:
+                        yhat = add(tr, se)
+                    var r = sub(ld(y, i), yhat)
+                    var w = div(-r, s2)
+                    var wt = mul(w, add(Float32(1.0), se)) if d.mult else w
+                    var wb = mul(w, tr) if d.mult else w
+                    for jj in range(jn):
+                        var j = j0 + jj
+                        if j == 0:
+                            acc[jj] = fma3(wt, ti, acc[jj])
+                        elif j == 1:
+                            acc[jj] = add(acc[jj], wt)
+                        elif j < 2 + S:
+                            var cj = ld(d.cp, j - 2)
+                            if ti >= cj:
+                                acc[jj] = fma3(wt, sub(ti, cj), acc[jj])
+                        elif j == 2 + S:
+                            pass
+                        elif j < P:
+                            acc[jj] = fma3(wb, ld(d.X, i * K + (j - 3 - S)), acc[jj])
+                        else:
+                            acc[jj] = fma3(r, r, acc[jj])
+                    i += COOP_NT
+                # the butterfly's tree, one leaf (lane) at a time
+                for jj in range(jn):
+                    var v = acc[jj]
+                    var level = 0
+                    while level < 5 and ((c >> level) & 1) == 1:
+                        v = add(stack[level * COOP_JB + jj], v)
+                        level += 1
+                    if level < 5:
+                        stack[level * COOP_JB + jj] = v
+                    else:
+                        # the simdgroup's partial, folded ascending over wid
+                        var j = j0 + jj
+                        if j < P:
+                            st(g, j, add(ld(g, j), v))
+                        else:
+                            sse = add(sse, v)
+        j0 += jn
+    # the priors: each lane folds its own coordinates' terms, then the butterfly
+    var fstack = InlineArray[Float32, 5](fill=Float32(0.0))
+    var f = Float32(0.0)
+    for c in range(COOP_PW):
+        var fc = Float32(0.0)
+        var i = _bitrev5(c)
+        while i < P:
+            var gi = ld(g, i)
+            var x = ld(th, i)
+            if i == 0 or i == 1:
+                fc = add(fc, div(mul(x, x), Float32(50.0)))
+                gi = add(gi, div(x, Float32(25.0)))
+            elif i < 2 + S:
+                fc = add(fc, div(abs(x), d.tau))
+                var sg = Float32(0.0)
+                if x > Float32(0.0):
+                    sg = Float32(1.0)
+                elif x < Float32(0.0):
+                    sg = Float32(-1.0)
+                gi = add(gi, div(sg, d.tau))
+            elif i == 2 + S:
+                gi = sub(add(div(s2, Float32(0.25)), Float32(N)), div(sse, s2))
+            else:
+                var sq = mul(ld(d.sig, i - 3 - S), ld(d.sig, i - 3 - S))
+                fc = add(fc, div(mul(x, x), mul(Float32(2.0), sq)))
+                gi = add(gi, div(x, sq))
+            st(g, i, gi)
+            i += COOP_PW
+        var level = 0
+        while level < 5 and ((c >> level) & 1) == 1:
+            fc = add(fstack[level], fc)
+            level += 1
+        if level < 5:
+            fstack[level] = fc
+        else:
+            f = fc
+    # sigma: prior N(0, 0.5), likelihood N log sigma + sse / (2 sigma^2)
+    f = add(f, div(s2, Float32(0.5)))
+    f = fma3(Float32(N), u, f)
+    f = add(f, div(sse, mul(Float32(2.0), s2)))
+    return f
+
+
 trait ProphetFG:
     """The objective `lbfgs_steps` minimises: -log posterior at th and its
     gradient into g (`prophet_fg`, or the block-cooperative form of
@@ -259,6 +457,22 @@ struct LBState(ImplicitlyCopyable, Movable):
         self.done = False
 
 
+struct CoopOrderFG(ProphetFG):
+    """The cooperative fit's objective replayed by one thread (`_coop_fg`):
+    the host column under PROPHET_COOP_IDN."""
+    var d: ProphetData
+    var y: FP
+
+    @always_inline
+    def __init__(out self, d: ProphetData, y: FP):
+        self.d = d
+        self.y = y
+
+    @always_inline
+    def fg(mut self, th: FP, g: FP) -> Float32:
+        return _coop_fg(self.d, self.y, th, g)
+
+
 @always_inline
 def lbfgs_start[F: ProphetFG](mut fg: F, th: FP, w: FP) -> LBState:
     """The objective at the start point (gradient into w's g)."""
@@ -266,11 +480,14 @@ def lbfgs_start[F: ProphetFG](mut fg: F, th: FP, w: FP) -> LBState:
 
 
 @always_inline
-def lbfgs_steps[F: ProphetFG](mut fg: F, mut s: LBState, P: Int, th: FP, w: FP,
-                              max_iter: Int, budget: Int = -1) -> Int:
+def lbfgs_steps[F: ProphetFG, COOP: Bool = False](mut fg: F, mut s: LBState, P: Int, th: FP, w: FP,
+                                                 max_iter: Int, budget: Int = -1) -> Int:
     """`lbfgs_prophet`'s iterations from state `s`: at most `budget` of them
     (all when budget < 0); `s.done` says whether the loop ended. Returns the
-    number run here."""
+    number run here. COOP (lane/fam2-timeseries): every dot product is the
+    cooperative block's (`_dot_coop`); everything else of
+    `lbfgs_coop_steps` is this loop statement for statement (its elementwise
+    updates are per coordinate, its gradient maximum is order-free)."""
     var g = w
     var dvec = g + P
     var thn = dvec + P
@@ -301,18 +518,18 @@ def lbfgs_steps[F: ProphetFG](mut fg: F, mut s: LBState, P: Int, th: FP, w: FP,
         var idx = head
         for _ in range(npairs):
             idx = (idx - 1 + MEM) % MEM
-            var aa = mul(ld(rho, idx), _dot(sm + idx * P, q, P))
+            var aa = mul(ld(rho, idx), _dotx[COOP](sm + idx * P, q, P))
             st(al, idx, aa)
             for i in range(P):
                 st(q, i, sub(ld(q, i), mul(aa, ld(ym + idx * P, i))))
         var gamma = Float32(1.0)
         if npairs > 0:
             var last = (head - 1 + MEM) % MEM
-            var yy = _dot(ym + last * P, ym + last * P, P)
+            var yy = _dotx[COOP](ym + last * P, ym + last * P, P)
             if yy > Float32(0.0):
-                gamma = div(_dot(sm + last * P, ym + last * P, P), yy)
+                gamma = div(_dotx[COOP](sm + last * P, ym + last * P, P), yy)
         else:
-            var gg = ftz(identical_sqrt(_dot(g, g, P)))
+            var gg = ftz(identical_sqrt(_dotx[COOP](g, g, P)))
             if gg > Float32(1.0):
                 gamma = div(Float32(1.0), gg)
         for i in range(P):
@@ -320,18 +537,18 @@ def lbfgs_steps[F: ProphetFG](mut fg: F, mut s: LBState, P: Int, th: FP, w: FP,
         var start = (head - npairs + MEM) % MEM
         idx = start
         for _ in range(npairs):
-            var bb = mul(ld(rho, idx), _dot(ym + idx * P, q, P))
+            var bb = mul(ld(rho, idx), _dotx[COOP](ym + idx * P, q, P))
             var coef = sub(ld(al, idx), bb)
             for i in range(P):
                 st(q, i, fma3(coef, ld(sm + idx * P, i), ld(q, i)))
             idx = (idx + 1) % MEM
         for i in range(P):
             st(dvec, i, -ld(q, i))
-        var gd = _dot(g, dvec, P)
+        var gd = _dotx[COOP](g, dvec, P)
         if not (gd < Float32(0.0)):
             for i in range(P):
                 st(dvec, i, -ld(g, i))
-            gd = -_dot(g, g, P)
+            gd = -_dotx[COOP](g, g, P)
             npairs = 0
         # backtracking Armijo
         var step = Float32(1.0)
@@ -353,7 +570,7 @@ def lbfgs_steps[F: ProphetFG](mut fg: F, mut s: LBState, P: Int, th: FP, w: FP,
         for i in range(P):
             st(q, i, sub(ld(thn, i), ld(th, i)))
             st(dvec, i, sub(ld(gn, i), ld(g, i)))
-        var sy = _dot(q, dvec, P)
+        var sy = _dotx[COOP](q, dvec, P)
         if sy > Float32(1e-12):
             var slot = head
             for i in range(P):
@@ -400,6 +617,12 @@ def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[
     """Minimise prophet_fg from th (in place). w: scratch of
     (6 + 2 MEM) P + 2 MEM floats. Returns (f, iterations)."""
     var P = 3 + d.S + d.K
+    comptime if PROPHET_COOP_IDN:
+        # the cooperative fit's fold orders, replayed (the host column)
+        var cfg = CoopOrderFG(d, y)
+        var cs = lbfgs_start(cfg, th, w)
+        _ = lbfgs_steps[CoopOrderFG, True](cfg, cs, P, th, w, max_iter)
+        return (cs.f, cs.it)
     var fg = PlainFG(d, y)
     var s = lbfgs_start(fg, th, w)
     _ = lbfgs_steps(fg, s, P, th, w, max_iter)
@@ -472,3 +695,101 @@ def op_prophet_predict(t: Int, a: Args):
     var scale = ld(a.p1, b * 4)
     st(a.p5, t, mul(yh, scale))
     st(a.p6, t, mul(tr, scale))
+
+
+# ---- input preparation on the executor (lane cpu4-python) ------------------
+# `prophet_features` computed t = (days - start) / t_scale and the seasonal
+# phases fmod(days, P) / P (+ 1 when negative) in float64 on the host, one
+# rounding to float32 each. Here every float64 step is soft binary64 over the
+# IEEE words (checks/soft_f64.mojo: correctly rounded, integer instructions
+# only, so Apple without float64 too) and the fmod is the exact integer long
+# division it was: the IEEE results the host float64 unit gave, the same
+# bits, on every column.
+
+
+@always_inline
+def _words64(a: FP, i: Int) -> UInt64:
+    """Float64 i of a buffer holding float64 words as float32 pairs (low
+    word first: the little-endian layout of the caller's float64 array)."""
+    var lo = UInt64(bitcast[DType.uint32](a.unsafe_load(2 * i)))
+    var hi = UInt64(bitcast[DType.uint32](a.unsafe_load(2 * i + 1)))
+    return (hi << 32) | lo
+
+
+@always_inline
+def _arg64(a: Args, at: Int) -> UInt64:
+    """A 64-bit word carried as four 16-bit Int slots i[at..at+3], low first."""
+    var w0: Int
+    var w1: Int
+    var w2: Int
+    var w3: Int
+    if at == 2:
+        w0 = a.i2; w1 = a.i3; w2 = a.i4; w3 = a.i5
+    else:
+        w0 = a.i6; w1 = a.i7; w2 = a.i8; w3 = a.i9
+    return (UInt64(w0 & 0xFFFF) | (UInt64(w1 & 0xFFFF) << 16)
+            | (UInt64(w2 & 0xFFFF) << 32) | (UInt64(w3 & 0xFFFF) << 48))
+
+
+def fmod_exact64_bits(ua: UInt64, ub: UInt64) -> UInt64:
+    """C fmod(a, b) on IEEE words for a finite b > 0, exact (the sign of a),
+    by integer long division of the significands; a NaN or infinite a gives
+    the canonical NaN. `sequence/prophet_prep.mojo::fmod_exact64` on words."""
+    var ea = Int((ua >> 52) & UInt64(0x7FF))
+    var eb = Int((ub >> 52) & UInt64(0x7FF))
+    if ea == 0x7FF:
+        return SF64_NAN
+    if (ua & ~SF64_SIGN) < ub:
+        return ua
+    var ma = ua & UInt64(0xFFFFFFFFFFFFF)
+    var mb = ub & UInt64(0xFFFFFFFFFFFFF)
+    if ea == 0:
+        ea = 1
+    else:
+        ma |= UInt64(1) << 52
+    if eb == 0:
+        eb = 1
+    else:
+        mb |= UInt64(1) << 52
+    var r = ma % mb
+    for _ in range(ea - eb):
+        r = (r << 1) % mb
+    var bits = UInt64(0)
+    if r != 0:
+        var sh = 0
+        while (r << UInt64(sh)) < (UInt64(1) << 52):
+            sh += 1
+        var m = r << UInt64(sh)
+        var E = eb - sh
+        if E >= 1:
+            bits = (UInt64(E) << 52) | (m & UInt64(0xFFFFFFFFFFFFF))
+        else:
+            bits = m >> UInt64(1 - E)
+    return bits | (ua & SF64_SIGN)
+
+
+def op_prophet_prep(t: Int, a: Args):
+    """Element t of an (N, W) grid, W = 1 + max(ns, 1): column 0 writes
+    p2[r] = f32((days[r] - start) / t_scale); column 1 + s writes
+    p3[r, s] = f32(fmod(days[r], P_s) / P_s, + 1 when negative), or 0 when
+    ns == 0. p0: days (N float64 as float32 pairs), p1: periods (ns float64
+    as pairs); i0 = N, i1 = ns; start in i2..i5, t_scale in i6..i9 (16-bit
+    words, low first)."""
+    var ns = a.i1
+    var W = 1 + (ns if ns > 0 else 1)
+    var r = t // W
+    var c = t - r * W
+    var d = _words64(a.p0, r)
+    if c == 0:
+        var v = sf64_div(sf64_sub(d, _arg64(a, 2)), _arg64(a, 6))
+        a.p2.unsafe_store(r, sf64_to_f32(v))
+        return
+    var s = c - 1
+    if ns == 0:
+        a.p3.unsafe_store(r, Float32(0.0))
+        return
+    var P = _words64(a.p1, s)
+    var q = sf64_div(fmod_exact64_bits(d, P), P)
+    if sf64_lt(q, SF64_ZERO):
+        q = sf64_add(q, SF64_ONE)
+    a.p3.unsafe_store(r * ns + s, sf64_to_f32(q))

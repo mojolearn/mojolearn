@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-gap-linalg2-kpca (2026-10-03): KPCA_FAST_LANCZOS_DEV (default; _OFF reverts),
+"""lane/apple-fast-gap-linalg2-kpca (2026-10-03): KPCA_FAST_LANCZOS_DEV,
 the Lanczos steps of `_expansion_decomp._lanczos_top` on the device with no
-host read inside a batch (FAST on Apple only).
+host read inside a batch (every mode and vendor since lane cpu2-l8-decomp;
+the host column: x_decomp/lanczos_host.mojo).
 
 The Python loop paid, per Lanczos step, a download of q (QT grows on the
 host), an upload of the whole basis Q_j twice (a fresh host `_M` each
@@ -18,7 +19,7 @@ Python step (`launch_gemm`, the kit's `mm`):
                           which the host finds in the betas and stops at)
 
 alpha and beta land in a device array (alphas at [0, cap), betas at
-[cap, 2 cap)) the host reads ONCE per batch. Differences from the Python
+[cap, 2 cap)) the host reads ONCE per batch. Differences from the old Python
 step: alpha's two halves add in float32 (Python added them in float64) and
 1 / beta is a float32 reciprocal; both are below the route's 1e-7 Ritz
 residual test, which still decides convergence on the host.
@@ -26,12 +27,12 @@ residual test, which still decides convergence on the host.
 
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from std.math import sqrt
 from std.gpu import block_dim, block_idx, thread_idx
 from std.python import PythonObject
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, gemm_scratch, launch_gemm, xd_ctx
+from x_decomp.lanczos_step import lz_alpha, lz_beta, lz_inv, lz_q, lz_w
 from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
 
 #: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
@@ -39,12 +40,15 @@ from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
 #: the board reports no kernel-pca quality, so the M2 quality-only check
 #: gl2k-kpca-quality-r3: eigenvalues max relative difference 1.795e-07,
 #: transform subspace angle 1.879e-06 rad against arm A).
-#: -D MOJOLEARN_KPCA_FAST_LANCZOS_DEV_OFF restores the host-driven loop.
-comptime KPCA_FAST_LANCZOS_DEV = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_KPCA_FAST_LANCZOS_DEV_OFF"]()
-)
+#: Lane cpu2-l8-decomp (2026-10-04, re-audit L8 `_lanczos_top`): THE route,
+#: in every mode on every vendor. The host-driven Python loop (the basis
+#: downloaded and re-uploaded every step) is deleted; the host column runs
+#: x_decomp/lanczos_host.mojo, the same steps through HostExec's gemm and the
+#: same scalar functions (x_decomp/lanczos_step.mojo), so the words agree.
+#: The scalar steps moved to the cells' flush-to-zero arithmetic (alpha's
+#: halves add in float32, beta through the correctly rounded sqrt, 1 / beta
+#: through the correctly rounded division): FAST Apple's words change.
+comptime KPCA_FAST_LANCZOS_DEV = True
 
 
 def lz_sub_kernel(w: F32Ptr, t: F32Ptr, ab: F32Ptr, c: F32Ptr, j: Int32, add: Int32, n: Int32):
@@ -52,34 +56,26 @@ def lz_sub_kernel(w: F32Ptr, t: F32Ptr, ab: F32Ptr, c: F32Ptr, j: Int32, add: In
     the second pass)."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
-        w.unsafe_store(i, w.unsafe_load(i) - t.unsafe_load(i))
+        w.unsafe_store(i, lz_w(w.unsafe_load(i), t.unsafe_load(i)))
     if i == 0:
-        var v = c.unsafe_load(Int(j))
-        if Int(add) != 0:
-            v = ab.unsafe_load(Int(j)) + v
-        ab.unsafe_store(Int(j), v)
+        ab.unsafe_store(Int(j), lz_alpha(ab.unsafe_load(Int(j)), c.unsafe_load(Int(j)), Int(add) != 0))
 
 
 def lz_scale_kernel(w: F32Ptr, dot: F32Ptr, ab: F32Ptr, q: F32Ptr, j: Int32, cap: Int32, n: Int32):
     """beta[j] and q_{j+1} = w / beta (every thread forms the same beta;
     thread 0 stores it)."""
-    var dd = dot.unsafe_load(0)
-    if not (dd > Float32(0)):
-        dd = Float32(0)
-    var b = sqrt(dd)
-    var a = abs(ab.unsafe_load(Int(j)))
-    var s = Float32(0)
-    if b > Float32(1e-30) * max(Float32(1), a):
-        s = Float32(1) / b
+    var b = lz_beta(dot.unsafe_load(0))
+    var s = lz_inv(b, ab.unsafe_load(Int(j)))
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i == 0:
         ab.unsafe_store(Int(cap) + Int(j), b)
     if i < Int(n):
-        q.unsafe_store(i, w.unsafe_load(i) * s)
+        q.unsafe_store(i, lz_q(w.unsafe_load(i), s))
 
 
 def kpca_lanczos_dev_on_py() raises -> PythonObject:
-    """1 when this binding carries the device Lanczos route."""
+    """1 when this binding carries the device Lanczos route (every GPU build
+    since lane cpu2-l8-decomp)."""
     comptime if KPCA_FAST_LANCZOS_DEV:
         return PythonObject(1)
     return PythonObject(0)

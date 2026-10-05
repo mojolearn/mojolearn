@@ -128,7 +128,7 @@ from hierarchy.impl.cluster.detail.connectivities import (
 )
 from hierarchy.impl.cluster.detail.mst import build_sorted_mst
 from hierarchy.impl.linkage import single_linkage
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, numeric_mode_name
 
 
@@ -319,7 +319,7 @@ def _canonical_mst(
             pack_edge_key(weight_order_key(w[i]), edge_lo(src[i], dst[i]), edge_hi(src[i], dst[i]))
         )
         idx.append(i)
-    merge_sort_u64_with_index(keys, idx)
+    merge_sort_u64_with_index_host(keys, idx)
     var lo = List[Int32](capacity=n)
     var hi = List[Int32](capacity=n)
     var ww = List[Float32](capacity=n)

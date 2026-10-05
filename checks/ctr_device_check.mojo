@@ -83,6 +83,7 @@ from gbdt.ctrs.ctr_calcers import (
     THistoryBasedCtrCalcer,
     THistoryBasedCtrCalcerGpu,
     compute_simple_ctrs_gpu,
+    download_ctr_columns,
 )
 from gbdt.ctrs.index_wrapper import index_of, is_segment_start
 from gbdt.data.permutation import (
@@ -319,7 +320,7 @@ def _check_bin_ordering(ctx: DeviceContext, mut failures: List[String]) raises:
         var codes = _codes(n, k, 13 + ci)
 
         var host = TCtrBinBuilder(order.copy())
-        host.add_cat_feature_bins(codes, k)
+        host.add_cat_feature_bins_host(codes, k)
 
         var gpu = TCtrBinBuilderGpu(ctx, order)
         gpu.add_cat_feature_bins(ctx, codes, k)
@@ -497,14 +498,16 @@ def _check_ordered_statistic(
         gpu_builder.add_cat_feature_bins(ctx, codes, k)
         var gpu_calcer = THistoryBasedCtrCalcerGpu(ctx, gpu_builder)
         gpu_calcer.set_binarized_sample(ctx, target)
-        var got = gpu_calcer.visit_cat_feature_ctr(ctx, configs)
+        var got = download_ctr_columns(
+            ctx, gpu_calcer.visit_cat_feature_ctr(ctx, configs), n
+        )
 
         # the HOST arm, same order
         var host_builder = TCtrBinBuilder(order.copy())
-        host_builder.add_cat_feature_bins(codes, k)
+        host_builder.add_cat_feature_bins_host(codes, k)
         var host_calcer = THistoryBasedCtrCalcer(host_builder)
         host_calcer.set_binarized_sample(target.copy())
-        var host = host_calcer.visit_cat_feature_ctr(configs)
+        var host = host_calcer.visit_cat_feature_ctr_host(configs)
 
         var label = String("k=") + String(k)
         if len(got) != 3 or len(host) != 3:

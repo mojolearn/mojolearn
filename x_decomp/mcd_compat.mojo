@@ -93,7 +93,7 @@ def mc_pinvh_kernel[MMA: Bool = False, DM: Int = 64, DEFL: Bool = False](
     after all rounds finish. Eigenvalues are ranked stably before the Gram
     fold, reproducing main's ascending-eigenvalue accumulation order.
 
-    DEFL (MOJOLEARN_MCD_DEFLATE, w4-mcd, opt-in): an index j whose covariance
+    DEFL (MCD_DEFLATE, w4-mcd, default; _OFF rolls back): an index j whose covariance
     row AND column are exactly zero is an exact eigenpair (0, e_j) that pinvh
     drops (|0| > cut is false), and main's rotations on its pairs are the
     identity. The Jacobi then runs on the ns x ns submatrix of the live

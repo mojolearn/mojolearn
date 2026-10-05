@@ -14,6 +14,14 @@ from x_prep.host.program import run_program_host
 from x_prep.user_host import F32P, F64P, I32P, ii_rows, ii_gather, ii_scatter, ii_conv
 from x_prep.folds import kfold_folds, strat_folds
 from x_prep.py2mojo import PY2MOJO_PREP
+from x_prep.label_fast import IDN_LABEL
+from x_prep.blocked import IDN_NB_ONEPASS
+from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
+from x_prep.select_blocked import IDN_SELECT_BLOCKED
+from x_prep.pt_blocked import IDN_PT_BLOCKED
+from x_prep.host.rr_eigh_host import IDN_RR_EIGH
+from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, IDN_LABEL_INV
+from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
 from x_prep.proba64 import PROBA64
 
 
@@ -168,6 +176,45 @@ def py2mojo_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def label_present_binding() raises -> PythonObject:
+    return PythonObject(1)
+
+
+def idn_int_binding() raises -> PythonObject:
+    """Lane idn-int-prep: bindings/_mojolearn_x_prep.mojo `idn_int_binding`'s
+    bits for the host column (1 IDN_LABEL, 2 IDN_NB_ONEPASS; the CSR entry
+    is the device's only)."""
+    return PythonObject((1 if IDN_LABEL else 0) | (2 if IDN_NB_ONEPASS else 0))
+
+
+def idn_fam_binding() raises -> PythonObject:
+    """Lane fam-prep-metrics (IDENTICAL, device and host column alike): the
+    bits of the family switches this binding was built with, read by
+    python/mojolearn/_expansion_prep.py `_idn_fam` (1 IDN_STATS_BLOCKED, 2
+    IDN_CLASS_ONEPASS: op 165, 4 IDN_SELECT_BLOCKED: ops 166-171, 8
+    IDN_PT_BLOCKED: ops 172-176, 16 IDN_RR_EIGH: informational, the eigh
+    stage's order is the binding's own); registered only when one is on."""
+    return PythonObject(
+        (1 if IDN_STATS_BLOCKED else 0) | (2 if IDN_CLASS_ONEPASS else 0) | (4 if IDN_SELECT_BLOCKED else 0)
+        | (8 if IDN_PT_BLOCKED else 0) | (16 if IDN_RR_EIGH else 0)
+    )
+
+
+def idn_fam2_binding() raises -> PythonObject:
+    """Lane fam2-prep-metrics (IDENTICAL, device and host column alike): the
+    bits of the x_prep/fam2.mojo switches this binding was built with, read
+    by python/mojolearn/_expansion_prep.py `_idn_fam2` (1 IDN_WDRAW: ops
+    230-232, 2 IDN_PERM_DRAW: op 233, 4 IDN_WPICK: op 234, 8
+    IDN_PARTIAL_CODES: op 235, 16 IDN_GRAM_BLOCKED: ops 236, 238-240, 32
+    IDN_GRAM_ROWTILE: op 237 (candidate), 64 IDN_LABEL_INV: op 241, bits 16 and up: the Gram's rows per
+    block); registered only when one is on."""
+    return PythonObject(
+        (1 if IDN_WDRAW else 0) | (2 if IDN_PERM_DRAW else 0) | (4 if IDN_WPICK else 0)
+        | (8 if IDN_PARTIAL_CODES else 0) | (16 if IDN_GRAM_BLOCKED else 0) | (32 if IDN_GRAM_ROWTILE else 0)
+        | (64 if IDN_LABEL_INV else 0) | (IDN_GRAM_ROWS << 16)
+    )
+
+
 @export
 def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
     try:
@@ -187,6 +234,18 @@ def PyInit__mojolearn_x_prep_host() abi("C") -> PythonObject:
         m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         comptime if PY2MOJO_PREP:
             m.def_function[py2mojo_binding]("x_prep_py2mojo")
+        # lane idn-int-prep: the host column runs the same programs as the
+        # IDENTICAL device binding (x_prep/label_fast.mojo, x_prep/blocked.mojo)
+        comptime if IDN_LABEL:
+            m.def_function[label_present_binding]("x_prep_label_present")
+        comptime if IDN_LABEL or IDN_NB_ONEPASS:
+            m.def_function[idn_int_binding]("x_prep_idn_int")
+        comptime if IDN_STATS_BLOCKED or IDN_CLASS_ONEPASS or IDN_SELECT_BLOCKED or IDN_PT_BLOCKED or IDN_RR_EIGH:
+            # lane fam-prep-metrics
+            m.def_function[idn_fam_binding]("x_prep_idn_fam")
+        comptime if IDN_WDRAW or IDN_PERM_DRAW or IDN_WPICK or IDN_PARTIAL_CODES or IDN_GRAM_BLOCKED or IDN_LABEL_INV:
+            # lane fam2-prep-metrics: the fam2 switches (x_prep/fam2.mojo)
+            m.def_function[idn_fam2_binding]("x_prep_idn_fam2")
         comptime if PROBA64:
             m.def_function[proba64_binding]("x_prep_proba64")
         return m.finalize()

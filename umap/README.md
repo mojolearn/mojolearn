@@ -63,7 +63,7 @@ at the parameter, curve and fuzzy-graph surfaces.
 
 Both optimizer entries also reject non-finite learning rates, repulsion,
 curve parameters, graph weights and initial coordinates. The public
-`fuzzy_graph_from_data` and `fit_transform` entries reject non-finite input
+`fuzzy_graph_from_data_reference` and `fit_transform` entries reject non-finite input
 coordinates before uploading data or running k-NN. The direct FAST check
 bypasses the small-layout serial fallback so the GPU entry's validation is
 covered independently.

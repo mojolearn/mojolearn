@@ -114,6 +114,10 @@ from std.math import inf, isfinite, isinf, isnan
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
+from arima.impl.idn_ls_math import (
+    ILS_MAX_COLS, ILS_R2, ILS_RSZ, ILS_TPB, X0_IDN_PAR_LS, X0_IDN_PAR_LS_MIN_OBS,
+    ils_div, ils_fma, ils_givens_row, ils_solve,
+)
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_list_ptr, host_predict_chunk, host_predict_task_count
 from checks.numerics import (
@@ -1630,6 +1634,169 @@ def _ls_refusal_fill(
         sigma2[bid] = Float32(1.0)
 
 
+def _ils_tree_solve(
+    mut sh: List[Float32], n: Int, mut x: InlineArray[Float32, ILS_MAX_COLS]
+) -> Int32:
+    """`idn_arma_ls._ils_merge_solve` replayed: `sh` holds the ILS_TPB
+    published triangles (ILS_RSZ floats each: R row major, then Q'b); round
+    by round, thread t with t % (2 stride) == 0 folds the n rows of thread
+    t + stride (ascending) into its own; thread 0's triangle is solved."""
+    var r = InlineArray[Float32, ILS_R2](fill=Float32(0.0))
+    var qb = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
+    var a = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
+    var stride = 1
+    while stride < ILS_TPB:
+        var tid = 0
+        while tid < ILS_TPB:
+            var o = tid + stride
+            for t in range(ILS_R2):
+                r[t] = sh[tid * ILS_RSZ + t]
+            for t in range(ILS_MAX_COLS):
+                qb[t] = sh[tid * ILS_RSZ + ILS_R2 + t]
+            for row in range(n):
+                for c in range(ILS_MAX_COLS):
+                    a[c] = sh[o * ILS_RSZ + row * ILS_MAX_COLS + c]
+                ils_givens_row(r, qb, a, sh[o * ILS_RSZ + ILS_R2 + row], n)
+            for t in range(ILS_R2):
+                sh[tid * ILS_RSZ + t] = r[t]
+            for t in range(ILS_MAX_COLS):
+                sh[tid * ILS_RSZ + ILS_R2 + t] = qb[t]
+            tid += 2 * stride
+        stride *= 2
+    for t in range(ILS_R2):
+        r[t] = sh[t]
+    for t in range(ILS_MAX_COLS):
+        qb[t] = sh[ILS_R2 + t]
+    return ils_solve(r, qb, n, x)
+
+
+def _ils_resid(yd: List[Float32], yb: Int, p_ar: Int, j: Int,
+               arfit: InlineArray[Float32, ILS_MAX_COLS]) -> Float32:
+    """The AR pre-fit residual at row j, recomputed from y as the kernel
+    does: y[p_ar + j] - sum_c y[p_ar - c - 1 + j] arfit[c], ascending c."""
+    var acc = ftz(yd[yb + p_ar + j])
+    for c in range(p_ar):
+        acc = ils_fma(-ftz(yd[yb + p_ar - c - 1 + j]), arfit[c], acc)
+    return acc
+
+
+def _arma_least_squares_par(
+    mut ar: List[Float32], mut ma: List[Float32],
+    mut sigma2: List[Float32], mut mu: List[Float32],
+    yd: List[Float32], batch_size: Int, n_obs_d: Int,
+    p: Int, q: Int, s: Int, est_sigma2: Bool, k: Int, p_ar: Int, r_ls: Int,
+):
+    """The host column of `idn_arma_ls_kernel` + `fast_ls_finish_kernel`
+    (lane/fam2-timeseries, X0_IDN_PAR_LS): the block's ILS_TPB threads one
+    after another, each folding its strided rows from zero, then the
+    pairwise tree, the solve, the strided sigma2 partials and their halving
+    tree, in the kernel's order with the kernel's arithmetic
+    (`arima/impl/idn_ls_math.mojo`)."""
+    var m1 = n_obs_d - r_ls
+    var ncols = p + q + k
+    var ar_offset = r_ls - p * s
+    var res_offset = r_ls - p_ar - q * s
+    for bid in range(batch_size):
+        var yb = bid * n_obs_d
+        var sh = _zeros(ILS_TPB * ILS_RSZ)
+        var r = InlineArray[Float32, ILS_R2](fill=Float32(0.0))
+        var qb = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
+        var a = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
+        var arfit = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
+        var afit = InlineArray[Float32, ILS_MAX_COLS](fill=Float32(0.0))
+
+        # -- 1. the AR(p_ar) pre-fit
+        if q != 0:
+            var m2 = n_obs_d - p_ar
+            for tid in range(ILS_TPB):
+                for t in range(ILS_R2):
+                    r[t] = Float32(0.0)
+                for t in range(ILS_MAX_COLS):
+                    qb[t] = Float32(0.0)
+                var i = tid
+                while i < m2:
+                    for c in range(ILS_MAX_COLS):
+                        a[c] = ftz(yd[yb + p_ar - c - 1 + i]) if c < p_ar else Float32(0.0)
+                    ils_givens_row(r, qb, a, ftz(yd[yb + p_ar + i]), p_ar)
+                    i += ILS_TPB
+                for t in range(ILS_R2):
+                    sh[tid * ILS_RSZ + t] = r[t]
+                for t in range(ILS_MAX_COLS):
+                    sh[tid * ILS_RSZ + ILS_R2 + t] = qb[t]
+            if _ils_tree_solve(sh, p_ar, arfit) != Int32(0):
+                _ls_refusal_fill(bid, p, q, k, est_sigma2, ar, ma, sigma2, mu)
+                continue
+
+        # -- 2 to 5. the ARMA design, row by row, and its fit
+        for tid in range(ILS_TPB):
+            for t in range(ILS_R2):
+                r[t] = Float32(0.0)
+            for t in range(ILS_MAX_COLS):
+                qb[t] = Float32(0.0)
+            var i = tid
+            while i < m1:
+                for c in range(ILS_MAX_COLS):
+                    a[c] = Float32(0.0)
+                if k != 0:
+                    a[0] = Float32(1.0)
+                for lag in range(p):
+                    a[k + lag] = ftz(yd[yb + ar_offset + s * (p - lag - 1) + i])
+                for lag in range(q):
+                    a[k + p + lag] = _ils_resid(yd, yb, p_ar, res_offset + s * (q - lag - 1) + i, arfit)
+                ils_givens_row(r, qb, a, ftz(yd[yb + r_ls + i]), ncols)
+                i += ILS_TPB
+            for t in range(ILS_R2):
+                sh[tid * ILS_RSZ + t] = r[t]
+            for t in range(ILS_MAX_COLS):
+                sh[tid * ILS_RSZ + ILS_R2 + t] = qb[t]
+        if _ils_tree_solve(sh, ncols, afit) != Int32(0):
+            _ls_refusal_fill(bid, p, q, k, est_sigma2, ar, ma, sigma2, mu)
+            continue
+
+        # -- 7. sigma2: each thread's strided partial, then the halving tree
+        if est_sigma2:
+            var parts = _zeros(ILS_TPB)
+            for tid in range(ILS_TPB):
+                var part = Float32(0.0)
+                var i = q + tid
+                while i < m1:
+                    var res = ftz(yd[yb + r_ls + i])
+                    if k != 0:
+                        res = ftz(res - afit[0])
+                    for lag in range(p):
+                        res = ils_fma(-ftz(yd[yb + ar_offset + s * (p - lag - 1) + i]), afit[k + lag], res)
+                    for lag in range(q):
+                        var acc = _ils_resid(yd, yb, p_ar, res_offset + s * (q - lag - 1) + i, arfit)
+                        res = ils_fma(-acc, afit[k + p + lag], res)
+                    part = ils_fma(res, res, part)
+                    i += ILS_TPB
+                parts[tid] = part
+            var w = ILS_TPB // 2
+            while w > 0:
+                for tid in range(w):
+                    parts[tid] = ftz(parts[tid] + parts[tid + w])
+                w //= 2
+            sigma2[bid] = ils_div(parts[0], Float32(m1 - q))
+
+        # -- 6. the solution into the parameter vectors
+        if k != 0:
+            mu[bid] = afit[0]
+        for c in range(p):
+            ar[p * bid + c] = afit[k + c]
+        for c in range(q):
+            ma[q * bid + c] = afit[k + p + c]
+
+        # -- 8. zero what the inverse transform would reject
+        if p != 0:
+            if not _test_invparams(ar, p * bid, p, True):
+                for ip in range(p):
+                    ar[p * bid + ip] = Float32(0.0)
+        if q != 0:
+            if not _test_invparams(ma, q * bid, q, False):
+                for iq in range(q):
+                    ma[q * bid + iq] = Float32(0.0)
+
+
 def _arma_least_squares(
     mut ar: List[Float32], mut ma: List[Float32],
     mut sigma2: List[Float32], mut mu: List[Float32],
@@ -1651,6 +1818,18 @@ def _arma_least_squares(
             + " columns, above LS_MAX_COLS = " + String(AH_LS_MAX_COLS)
             + "; refused by name (arima/NOT_IMPLEMENTED.tsv)"
         )
+    comptime if X0_IDN_PAR_LS:
+        # lane/fam2-timeseries, candidate arm: the device's condition
+        # (`estimate_x0.mojo::arma_least_squares`) and its block's fold order
+        if (
+            n_obs_d >= X0_IDN_PAR_LS_MIN_OBS
+            and p + q + k <= ILS_MAX_COLS
+            and (q == 0 or p_ar <= ILS_MAX_COLS)
+        ):
+            _arma_least_squares_par(
+                ar, ma, sigma2, mu, yd, batch_size, n_obs_d, p, q, s, est_sigma2, k, p_ar, r_ls
+            )
+            return
     var ps = p * s
     var qs = q * s
     var m1 = n_obs_d - r_ls

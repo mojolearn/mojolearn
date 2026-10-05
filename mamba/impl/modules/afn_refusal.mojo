@@ -16,7 +16,7 @@ per-name row of partial codes; one final launch folds the rows into one
 code per name; ONE copy and ONE wait bring the codes back. The code is
 `2 * index + (0 for NaN, 1 for infinity)` (mamba3_refusal.mojo's scheme),
 so the minimum is the first offending cell, and the raised text is
-`_refuse_nonfinite_named`'s verbatim. Tested BY BITS, as the host spelling
+`_refuse_nonfinite_named_host`'s verbatim. Tested BY BITS, as the host spelling
 is (row 49: Metal flushes compare operands).
 
 Codes are Int32 (Metal has no 64-bit atomics and none are needed; a
@@ -159,7 +159,7 @@ struct AfnRefusalBatch(Movable):
         ctx.enqueue_copy(dst_buf=host, src_buf=view)
         ctx.synchronize()
         _ = view^
-        for s in range(n_slots):
+        for s in range(n_slots):  # small-loop(n_slots: named inputs of one block call, at most 20): first refusal code by name order
             var code = host.unsafe_ptr().unsafe_load(s)
             if code == AFN_REFUSAL_NONE:
                 continue

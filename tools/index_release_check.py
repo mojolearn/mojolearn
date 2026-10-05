@@ -5,20 +5,20 @@ the Mac and ships alone to a rented box.
 The release columns install LOCAL wheel files. A user runs
 `pip install mojolearn==V` against an index, and that is where the split
 Linux release can break: the core requires mojolearn-nvidia==V and
-mojolearn-amd==V, each plugin requires mojolearn==V back (a cycle pip must
-resolve), and the three are uploaded in order by separate jobs. Two
+mojolearn-amd==V; aggregates require native architecture payloads, which pin
+mojolearn==V back. All six projects upload in dependency order by separate jobs. Two
 subcommands:
 
   precheck --index testpypi|pypi --version V
-      On the Mac, before anything is rented: all three projects serve V on
+      On the Mac, before anything is rented: all release projects serve V on
       the index (the JSON API), each with a manylinux x86_64 wheel, none
       yanked, and where the index reports Requires-Dist, the exact pins of
       the cycle. Refuses by project name.
 
   verify --index testpypi|pypi --version V --vendor cuda|hip --report R --out J
       On the box, run by the python of the venv pip installed into:
-      mojolearn, mojolearn-nvidia and mojolearn-amd are installed at exactly
-      V (importlib.metadata); in pip's --report R each of the three came from
+      all six release projects are installed at exactly
+      V (importlib.metadata); in pip's --report R each came from
       the index's own file host (TestPyPI: test-files.pythonhosted.org) and
       every other distribution from PyPI's (files.pythonhosted.org), so a
       same-named project on the other index cannot stand in for ours
@@ -38,7 +38,10 @@ import urllib.request
 #: spelled here because this file ships to the box without the package).
 CORE = "mojolearn"
 PLUGINS = {"cuda": "mojolearn-nvidia", "hip": "mojolearn-amd"}
-PROJECTS = (CORE, PLUGINS["cuda"], PLUGINS["hip"])
+PAYLOADS = {vendor: (project,) for vendor, project in PLUGINS.items()}
+PROJECTS = (CORE, *PLUGINS.values())
+REQUIRES = {CORE: tuple(PLUGINS.values()), **{project: (CORE,) for project in PLUGINS.values()}}
+
 
 #: index -> (simple index, JSON API root, file host of OUR three projects)
 INDEXES = {
@@ -127,18 +130,13 @@ def precheck(index, version, api=None, fetch=fetch_json, fetch_meta=fetch_text):
             problems.append(f"{project}=={version} on {index} has yanked file(s): {', '.join(yanked)}")
         if info.get("requires_dist") is None:
             facts += "; Requires-Dist not reported by the index (the box's resolution checks the pins)"
-        elif project == CORE:
-            want = {norm(p): version for p in PLUGINS.values()}
-            got = {k: v for k, v in pins.items() if k in want}
-            if got != want:
-                problems.append(f"{CORE}=={version} on {index} requires {got or 'no plugin'}, not both plugins "
-                                f"at =={version} (this is not the split core: a combined wheel, or a broken pin)")
-            facts += f"; requires {', '.join(f'{k}=={v}' for k, v in sorted(got.items())) or 'no plugin'}"
         else:
-            if pins.get(CORE) != version:
-                problems.append(f"{project}=={version} on {index} does not require {CORE}=={version} "
-                                f"(requires {info.get('requires_dist')})")
-            facts += f"; requires {CORE}=={pins.get(CORE, '?')}"
+            want = {norm(p): version for p in REQUIRES[project]}
+            got = {k: v for k, v in pins.items() if k in PROJECTS}
+            if got != want:
+                problems.append(f"{project}=={version} on {index} has invalid release requirements: "
+                                f"{got}, expected {want}" + (" (not the split core)" if project == CORE else ""))
+            facts += f"; requires {', '.join(f'{k}=={v}' for k, v in sorted(got.items()))}"
         lines.append(f"  {project}=={version}: on {index}, {facts}")
     return lines, problems
 
@@ -204,7 +202,9 @@ def load_check(vendor, version):
     plugin = facts["plugin"] or {}
     if plugin.get("distribution") != PLUGINS[vendor] or plugin.get("version") != version:
         problems.append(f"the loaded GPU set is not from {PLUGINS[vendor]} {version} (gpu_plugin() = {facts['plugin']})")
-    want_dir = os.path.join(facts["package"], vendor) + os.sep
+    if set(plugin.get("payloads") or []) != set(PAYLOADS[vendor]):
+        problems.append(f"loaded vendor package has unexpected native ownership: {plugin}")
+    want_dir = os.path.join(facts["package"], {"cuda": "cuda_native", "hip": "hip_native"}[vendor]) + os.sep
     if not (facts["tier_dir"] + os.sep).startswith(want_dir):
         problems.append(f"the loaded tier directory {facts['tier_dir']} is not under {want_dir}")
     return facts, problems
@@ -266,7 +266,7 @@ def main(argv=None):
         for problem in problems:
             print("REFUSED: " + problem, file=sys.stderr)
         if not problems:
-            print(f"index precheck PASSED: all three projects serve {args.version} on {args.index}")
+            print(f"index precheck PASSED: all release projects serve {args.version} on {args.index}")
         return int(bool(problems))
     return verify(args.index, args.version, args.vendor, args.report, args.out)
 

@@ -32,7 +32,7 @@ COO stages). `-D MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF` keeps the host path.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import block_dim, block_idx, thread_idx, WARP_SIZE
 from std.gpu.primitives.warp import prefix_sum as _warp_prefix_sum
 from std.bit import pop_count
 from std.memory import bitcast, stack_allocation
@@ -43,6 +43,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 from neighbors.estimator import knn_self_search_device_indices
 from core.device_fold import device_exclusive_scan_total, device_exclusive_scan_total_from
 from spectral.impl.sparse.linalg.detail.laplacian import (
@@ -50,9 +51,31 @@ from spectral.impl.sparse.linalg.detail.laplacian import (
     laplacian_from_sorted_device,
 )
 
+#: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns builds
+#: the graph on the device too (it was Apple only; those columns read the
+#: kNN back and pushed `2 n k` entries through host lists, two host sorts
+#: and an O(n k^2) transpose scan). Integer keys and the three values 0,
+#: 0.5 and 1 only, so the COO is the host path's entry for entry (the
+#: module docstring) and no bit moves. The one width-dependent step, the
+#: two-level scan in `fg_bm_row_kernel`, now takes its group width from
+#: `WARP_SIZE` (32 on NVIDIA and Apple, 64 on AMD).
+#: `-D MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF=1` keeps the host path there.
+comptime IDN_SPECTRAL_GRAPH_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not (
+        is_defined["MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 comptime SPECTRAL_GRAPH_FAST = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
+    (
+        (
+            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+            and has_apple_gpu_accelerator()
+        )
+        or IDN_SPECTRAL_GRAPH_DEVICE
+    )
     and not is_defined["MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF"]()
 )
 comptime FG_MAX_K = 4096
@@ -514,17 +537,23 @@ def fg_bm_row_kernel[write: Bool](
             u |= dbit
         cnt += Int32(pop_count(u))
         w += 1
-    # two-level scan: within each simdgroup, then over the 32 group totals
+    # two-level scan: within each simdgroup, then over the group totals
+    # (FG_SORT_TPB // WARP_SIZE of them: 32 groups of 32, or 16 of 64 on a
+    # 64-wide wavefront, where the first group's upper lanes carry zeros)
+    comptime fg_groups = FG_SORT_TPB // WARP_SIZE
     var incl = _warp_prefix_sum(cnt)
-    var lane = t % 32
-    var wid = t // 32
-    if lane == 31:
+    var lane = t % WARP_SIZE
+    var wid = t // WARP_SIZE
+    if lane == WARP_SIZE - 1:
         sc[wid] = incl
     barrier()
     if wid == 0:
-        var tot = sc[lane]
+        var tot = Int32(0)
+        if lane < fg_groups:
+            tot = sc[lane]
         var winc = _warp_prefix_sum(tot)
-        sc[lane] = winc - tot
+        if lane < fg_groups:
+            sc[lane] = winc - tot
     barrier()
     var before = sc[wid] + incl - cnt
     comptime if not write:

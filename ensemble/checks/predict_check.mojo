@@ -110,9 +110,9 @@ from ensemble.randomforest import (
     REGRESSION,
     RandomForest,
     RandomForestMetaData,
-    compute_feature_importances,
-    postprocess_labels,
-    preprocess_labels,
+    compute_feature_importances_host,
+    postprocess_labels_host,
+    preprocess_labels_host,
     compute_max_features,
     compute_max_features_float,
     compute_max_features_int,
@@ -513,7 +513,7 @@ def importance_tree(
     inner_count: Int32,
 ) raises -> TreeMetaDataNode[F32]:
     """Fixture C's SHAPE with hand-chosen BestMetric / InstanceCount, for
-    `compute_feature_importances`.
+    `compute_feature_importances_host`.
 
         0: split (root_col,  root_metric,  root_count)  -> children 1, 2
         1: leaf
@@ -624,7 +624,7 @@ def arm_predict_proba() raises -> Int:
     var proba = List[Float32]()
     for _ in range(4):
         proba.append(0.0)
-    rf.predict_proba(rows, 2, 1, proba, forest)
+    rf.predict_proba_host(rows, 2, 1, proba, forest)
 
     # left:  ((1,0) + (0.5,0.5)) / 2 = (0.75, 0.25)
     # right: ((0,1) + (0,1))     / 2 = (0.0,  1.0)
@@ -645,7 +645,7 @@ def arm_predict_proba() raises -> Int:
     var preds = List[Scalar[I32]]()
     for _ in range(2):
         preds.append(0)
-    rf.predict(rows, 2, 1, preds, forest)
+    rf.predict_host(rows, 2, 1, preds, forest)
     for r in range(2):
         var best = 0
         var bp = proba[r * 2]
@@ -662,7 +662,7 @@ def arm_predict_proba() raises -> Int:
     var rfr = RandomForest[F32, I32](rf_params=params, rf_type=REGRESSION)
     var refused = False
     try:
-        rfr.predict_proba(rows, 2, 1, proba, forest)
+        rfr.predict_proba_host(rows, 2, 1, proba, forest)
     except:
         refused = True
     print("    regressor refuses predict_proba:", refused)
@@ -678,7 +678,7 @@ def arm_predict_proba() raises -> Int:
 
 
 def arm_label_maps() raises -> Int:
-    """`preprocess_labels` / `postprocess_labels`, `randomforest.cu:113-161`.
+    """`preprocess_labels_host` / `postprocess_labels_host`, `randomforest.cu:113-161`.
 
     The trap is that `std::map` is SORTED but the dense index is not: it
     comes from `n_unique_labels`, which increments only when the insert
@@ -692,7 +692,7 @@ def arm_label_maps() raises -> Int:
     # 7 appears first, then 3, then 9. Sorted order would be 3, 7, 9.
     var labels: List[Int32] = [7, 3, 7, 9, 3, 7]
     var original = labels.copy()
-    var m = preprocess_labels(len(labels), labels)
+    var m = preprocess_labels_host(len(labels), labels)
     var want: List[Int32] = [0, 1, 0, 2, 1, 0]
     print("    [7,3,7,9,3,7] ->", end=" ")
     for i in range(len(labels)):
@@ -715,7 +715,7 @@ def arm_label_maps() raises -> Int:
         wrong += 1
 
     # round trip
-    postprocess_labels(len(labels), labels, m)
+    postprocess_labels_host(len(labels), labels, m)
     var bad = 0
     for i in range(len(labels)):
         if labels[i] != original[i]:
@@ -728,7 +728,7 @@ def arm_label_maps() raises -> Int:
     var stray: List[Int32] = [0, 99]
     var refused = False
     try:
-        postprocess_labels(2, stray, m)
+        postprocess_labels_host(2, stray, m)
     except:
         refused = True
     print("    a label outside the map refused:", refused)
@@ -919,7 +919,7 @@ def main() raises:
     var preds_d = List[Scalar[I32]]()
     for _ in range(n_rows_a):
         preds_d.append(0)
-    rf.predict(rows_a, n_rows_a, n_cols_a, preds_d, forest)
+    rf.predict_host(rows_a, n_rows_a, n_cols_a, preds_d, forest)
 
     print("fixture D (2 trees, num_outputs=3, classifier vote)")
     for r in range(n_rows_a):
@@ -1012,7 +1012,7 @@ def main() raises:
     )
     var tie_preds = List[Scalar[I32]]()
     tie_preds.append(0)
-    tie_rf.predict(rows_b, 1, 2, tie_preds, tie_forest)
+    tie_rf.predict_host(rows_b, 1, 2, tie_preds, tie_forest)
     if Int(tie_preds[0]) != 0:
         failures += 1
         print(
@@ -1034,7 +1034,7 @@ def main() raises:
     )
     var neg_preds = List[Scalar[I32]]()
     neg_preds.append(0)
-    tie_rf.predict(rows_b, 1, 2, neg_preds, neg_forest)
+    tie_rf.predict_host(rows_b, 1, 2, neg_preds, neg_forest)
     if Int(neg_preds[0]) != 0:
         failures += 1
         print(
@@ -1084,7 +1084,7 @@ def main() raises:
     var reg_preds = List[Float32]()
     for _ in range(n_rows_a):
         reg_preds.append(0.0)
-    reg_rf.predict(rows_a, n_rows_a, n_cols_a, reg_preds, reg_forest)
+    reg_rf.predict_host(rows_a, n_rows_a, n_cols_a, reg_preds, reg_forest)
 
     print("regressor arm (3 trees, two shapes, mean of leaf values)")
     for r in range(n_rows_a):
@@ -1514,7 +1514,7 @@ def main() raises:
     print("score (raft 661a3b8 stats/detail/scores.cuh)")
     var s_pred: List[Scalar[I32]] = [0, 1, 1, 0, 2]
     var s_ref: List[Scalar[I32]] = [0, 1, 0, 0, 2]
-    var acc = RandomForest[F32, I32].score(s_ref, 5, s_pred, CLASSIFICATION)
+    var acc = RandomForest[F32, I32].score_host(s_ref, 5, s_pred, CLASSIFICATION)
     if acc.accuracy != Float32(4.0) / Float32(5.0):
         failures += 1
         print("  FAIL accuracy: expected 0.8, got", acc.accuracy)
@@ -1527,7 +1527,7 @@ def main() raises:
     # sorted  = [ 0.0, 0.0,  0.5, 2.0]  -> med  = (0.5 + 0.0) / 2 = 0.25
     var r_pred: List[Float32] = [1.0, 2.0, 3.0, 4.0]
     var r_ref: List[Float32] = [1.5, 2.0, 5.0, 4.0]
-    var reg_m = RandomForest[F32, F32].score(r_ref, 4, r_pred, REGRESSION)
+    var reg_m = RandomForest[F32, F32].score_host(r_ref, 4, r_pred, REGRESSION)
     if reg_m.mean_abs_error != 0.625:
         failures += 1
         print("  FAIL mean_abs_error: expected 0.625, got", reg_m.mean_abs_error)
@@ -1547,7 +1547,7 @@ def main() raises:
     # ODD n takes the middle element outright (scores.cuh:213).
     var o_pred: List[Float32] = [1.0, 2.0, 3.0]
     var o_ref: List[Float32] = [1.0, 5.0, 4.0]
-    var odd_m = RandomForest[F32, F32].score(o_ref, 3, o_pred, REGRESSION)
+    var odd_m = RandomForest[F32, F32].score_host(o_ref, 3, o_pred, REGRESSION)
     if odd_m.median_abs_error != 1.0:
         failures += 1
         print(
@@ -1560,7 +1560,7 @@ def main() raises:
         print("  FAIL regression metrics must leave accuracy at -1.0")
     print("  accuracy 0.8, MAE 0.625, MSE 1.0625, median 0.25 (even) / 1.0 (odd)")
 
-    # ---------------- compute_feature_importances -----------------------
+    # ---------------- compute_feature_importances_host -----------------------
     #
     # Hand-built, hand-computed, and DELIBERATELY NON-UNIFORM across the
     # two features -- an importances check whose expected value is the
@@ -1574,7 +1574,7 @@ def main() raises:
     #          node2 split col1, metric 0.5, count  20 ->  10
     #          tree sum 330 -> f0 = 0,       f1 = 330/330 = 1
     # forest:  f0 = 200/240, f1 = 40/240 + 1; total = 2
-    print("compute_feature_importances (randomforest.cu:799-860)")
+    print("compute_feature_importances_host (randomforest.cu:799-860)")
     var imp_trees = List[TreeMetaDataNode[F32]]()
     imp_trees.append(importance_tree(0, 0, 2.0, 100, 1, 1.0, 40))
     imp_trees.append(importance_tree(1, 1, 4.0, 80, 1, 0.5, 20))
@@ -1582,7 +1582,7 @@ def main() raises:
         trees=imp_trees^, rf_params=reg_params.copy(), n_features=2
     )
     var importances: List[Float32] = [0.0, 0.0]
-    compute_feature_importances(imp_forest, importances)
+    compute_feature_importances_host(imp_forest, importances)
     var acc0 = 200.0 / 240.0
     var acc1 = 40.0 / 240.0 + 330.0 / 330.0
     var tot = acc0 + acc1
@@ -1617,7 +1617,7 @@ def main() raises:
         trees=inf_trees^, rf_params=reg_params.copy(), n_features=2
     )
     var inf_imp: List[Float32] = [0.0, 0.0]
-    compute_feature_importances(inf_forest, inf_imp)
+    compute_feature_importances_host(inf_forest, inf_imp)
     if inf_imp[0] != 1.0 or inf_imp[1] != 0.0:
         failures += 1
         print(

@@ -15,8 +15,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.py2mojo import P2M_BASE, P2M_N, is_p2m_op, run_p2m_unit
+#: lane fam2-prep-metrics: ops F2_BASE .. (x_prep/fam2.mojo), IDENTICAL only
+from x_prep.fam2 import F2_BASE, F2_N, is_f2_op, run_f2_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
-from x_prep.dradix import RADIX_SORT, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
+from x_prep.dradix import RADIX_SORT, IDN_XPREP_RADIX, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
 from x_prep.fastred import (
     TGR, col_stats_fast_kernel, pt_fold_fast_kernel, class_stats_fast_kernel, ii_mean_fast_kernel,
     ii_gram_fast_kernel,
@@ -29,6 +31,8 @@ from x_prep.select_fast import (
     select_freg_device, select_fcls_device, select_cstats_device,
 )
 from x_prep.fastprep2 import PREP2_FAST, Prep2Switches, prep2_scratch_words, prep2_fast_stage
+#: lane ml-prep-nb: te_global / te_enc / ii_gram in the lane-tree order on a threadgroup (IDENTICAL)
+from x_prep.idn_tree import IDN_TREE_ANY, idn_tree_scratch_words, idn_tree_stage
 
 #: lane af-ptimpute (2026-10-03), FAST + Apple + define only (x_prep/fastpt.mojo): the import
 #: instantiates nothing; every launch below sits inside `comptime if PT_* / SI_*`
@@ -114,7 +118,10 @@ def _download_ranges_staged(ctx: DeviceContext, mut df: DeviceBuffer[DType.float
             ctx.enqueue_copy(dst_ptr=hf + lo, src_buf=df.create_sub_buffer[DType.float32](lo, hi - lo))
 from core.device_store import DeviceStore
 from x_linear.fast_gram import fast_sym_gram_into, fg_part_words
-from x_prep.rr_eigh import rr_eigh_into, rre_words
+from x_prep.rr_eigh import rr_eigh_into, rre_words, rr_eigh_clear
+#: lane fam-prep-metrics: IDENTICAL takes the round-robin eigh on every vendor (the host column runs
+#: the same rounds, x_prep/host/rr_eigh_host.mojo; -D MOJOLEARN_IDN_RR_EIGH_OFF: `eigh_unit`)
+from x_prep.host.rr_eigh_host import IDN_RR_EIGH, eigh_rr_takes
 from x_prep.da_par import (
     DA_TPB, DT, DT_TPB, lda2_rank_kernel, lda2_scal1_kernel, lda2_ms_kernel, lda2_g2_kernel, lda3_rank_kernel,
     lda3_scal_kernel, lda3_tmp_kernel, lda3_inter_kernel, lda3_coef_kernel, lda3_dot_kernel, qda_prep_scal_kernel,
@@ -314,6 +321,13 @@ def p2m_kernel[OP: Int](f: FP, q: IP, total: Int32):
         run_p2m_unit[OP](t, f, q)
 
 
+def f2_kernel[OP: Int](f: FP, q: IP, total: Int32):
+    """Lane fam2-prep-metrics: ops F2_BASE .. (x_prep/fam2.mojo)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(total):
+        run_f2_unit[OP](t, f, q)
+
+
 def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int = 0,
                        out_addr: Int = 0, out_len: Int = 0) raises:
     run_program_device_ptr(
@@ -333,9 +347,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     host arena's words arrive zeroed), never uploaded, and copied back into
     the host buffer at out_addr, not into the arena. Where a word lives moves
     no bit."""
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
-        if (op < 0 or op >= N_OPS) and not is_p2m_op(op):
+        if (op < 0 or op >= N_OPS) and not is_p2m_op(op) and not is_f2_op(op):
             raise Error(String("x_prep: unknown op ", op))
     # FAST on Apple (lane prep-apple3): sort_cols by radix (x_prep/dradix.mojo, the same words).
     # Default since request 1790627886703 (M3 Ultra, 16 columns x 1M rows: RobustScaler 0.141 ->
@@ -343,14 +357,17 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # MOJOLEARN_XPREP_SORT_CHUNK = positions per chunk (512 to 4096 measured within 0.006 s).
     var radix = False
     var radix_rows = 2048
-    comptime if RADIX_SORT:
+    comptime if IDN_XPREP_RADIX:
+        # K1: IDENTICAL takes the radix sort by define, not by env (the same words either way)
+        radix = True
+    elif RADIX_SORT:
         radix = getenv("MOJOLEARN_XPREP_SORT_RADIX", "1") != "0"
         radix_rows = max(1, _env_int("MOJOLEARN_XPREP_SORT_CHUNK", 2048))
     # MOJOLEARN_XPREP_PROFILE=1: XPPHASE lines (a wait after every phase; timing only)
     var prof = getenv("MOJOLEARN_XPREP_PROFILE", "0") == "1"
     var t_last = perf_counter_ns()
     var scratch = 1
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_SORT_COLS:
             var sq = host_q + (s * STAGE_INTS + 2)
             var units = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
@@ -361,7 +378,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         # FAST on Apple (lane/apple-fast-select, -D MOJOLEARN_SELECT_FREG / _FCLS): the
         # f_regression / f_classif tiles' partials live in the sort scratch (x_prep/select_fast.mojo)
         var sel_fcls = program_has_op(host_q, stages, OP_F_CLASSIF)
-        for s in range(stages):
+        for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
             var sq = host_q + (s * STAGE_INTS + 2)
             scratch = max(scratch, select_scratch_words(Int(host_q.unsafe_load(s * STAGE_INTS)), Int(sq[1]),
                                                         Int(sq[2]), Int(sq[4]), sel_fcls))
@@ -374,11 +391,13 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     var p2 = Prep2Switches()
     comptime if PREP2_FAST:
         scratch = max(scratch, prep2_scratch_words(host_q, stages, p2))
+    comptime if IDN_TREE_ANY:
+        scratch = max(scratch, idn_tree_scratch_words(host_q, stages))
     var mi_sorted = getenv("MOJOLEARN_XPREP_MI_SORTED", "1") != "0"
     var mi_ties = getenv("MOJOLEARN_XPREP_MI_TIES", "1") != "0"
     var mi_w = 1
     var mi_u = 1
-    for s in range(stages):
+    for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
         if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_MI_CD:
             var mq = host_q + (s * STAGE_INTS + 2)
             mi_w = max(mi_w, mi_w_words(Int(mq[1]), Int(mq[2])))
@@ -391,7 +410,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                  and not is_defined["MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF"]()):
         cov_grid = True
         if cov_grid:
-            for s in range(stages):
+            for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
                 var op = Int(host_q.unsafe_load(s * STAGE_INTS))
                 var total = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
                 var cq = host_q + (s * STAGE_INTS + 2)
@@ -401,13 +420,13 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     cov_words = max(cov_words, fg_part_words(Int(cq[8]), Int(cq[7])))
     # the round-robin eigh's scratch and done marks, sized over the program
     var rre_scr = 1
-    comptime if RR_EIGH:
-        for s in range(stages):
+    comptime if RR_EIGH or IDN_RR_EIGH:
+        for s in range(stages):  # small-loop(stages: program stages): reads the op words of one program, a plan list, never data
             if (Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_EIGH
                     and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0):
                 var eb = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
                 var en = Int(host_q.unsafe_load(s * STAGE_INTS + 3))
-                if eb > 0 and en > 0:
+                if eb > 0 and en > 0 and eigh_rr_takes(en):
                     rre_scr = max(rre_scr, rre_words(en, eb))
     # lane af-ptimpute: the row-tiled folds' per-(chunk, column) partials, sized over the program
     var ptw = 1
@@ -541,13 +560,20 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         comptime if PREP2_FAST:
             if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp)), p2):
                 continue
-        comptime if RR_EIGH:
-            if op == OP_EIGH and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0:
+        comptime if IDN_TREE_ANY:
+            if idn_tree_stage(ctx, df, dw, host_q, s, op, total, IP(unsafe_from_address=Int(qp))):
+                continue
+        comptime if RR_EIGH or IDN_RR_EIGH:
+            if (op == OP_EIGH and Int(host_q.unsafe_load(s * STAGE_INTS + 2 + EIGH_CYCLIC_Q)) == 0
+                    and eigh_rr_takes(Int(host_q.unsafe_load(s * STAGE_INTS + 3)))):
                 # q = [A, m, astride, EVAL, EVEC, cyclic], one unit a matrix
                 var hq = host_q + (s * STAGE_INTS + 2)
                 var pf = FP(unsafe_from_address=Int(df.unsafe_ptr()))
                 var pr = FP(unsafe_from_address=Int(dre.unsafe_ptr()))
                 rr_eigh_into(ctx, pf, Int(hq[0]), Int(hq[1]), Int(hq[2]), total, Int(hq[3]), Int(hq[4]), pr)
+                comptime if IDN_RR_EIGH:
+                    # the destroyed A zeroed, as the host column leaves it
+                    rr_eigh_clear(ctx, pf, Int(hq[0]), Int(hq[1]), Int(hq[2]), total)
                 continue
         comptime if PAR_STAGES:
             if op == OP_LDA_STAGE2 or op == OP_LDA_STAGE3 or op == OP_QDA_PREP:
@@ -707,6 +733,12 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         comptime for k in range(P2M_BASE, P2M_BASE + P2M_N):
             if op == k:
                 ctx.enqueue_function[p2m_kernel[k]](
+                    df.unsafe_ptr(), qp, Int32(total),
+                    grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                )
+        comptime for k in range(F2_BASE, F2_BASE + F2_N):
+            if op == k:
+                ctx.enqueue_function[f2_kernel[k]](
                     df.unsafe_ptr(), qp, Int32(total),
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )

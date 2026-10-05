@@ -53,7 +53,7 @@ struct MambaArena(Movable):
     def total(sizes: List[Int], guard: Int) -> Int:
         """The arena floats a list of logical lengths consumes."""
         var t = 0
-        for i in range(len(sizes)):
+        for i in range(len(sizes)):  # small-loop(sizes: arena views of one block call): slot sizes, integer layout arithmetic
             t += Self.slot(sizes[i], guard)
         return t
 

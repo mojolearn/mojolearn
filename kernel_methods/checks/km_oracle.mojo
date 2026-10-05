@@ -52,8 +52,13 @@ from cholesky.checks.cholesky_oracle import (
 from decomposition.checks.jacobi_eigh import jacobi_eigh
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, gemm_oracle
 from kernel_methods.checks.kernel_matrix import (
+    KM_DOT_CELL_MAX_D,
+    KM_IDN_DOT_CELL,
+    KM_IDN_RBF_CELL,
+    KM_RBF_CELL_MAX_D,
     KM_KERNEL_LAPLACIAN,
     KM_KERNEL_LINEAR,
+    KM_KERNEL_POLYNOMIAL,
     KM_KERNEL_RBF,
     KM_KERNEL_SIGMOID,
 )
@@ -200,6 +205,45 @@ def km_kernel_matrix_f32(
                     )
                 out.append(ftz(identical_exp(ftz(identical_mul(gain, acc)))))
         return out^
+
+    comptime if KM_IDN_RBF_CELL:
+        if kp.kernel == KM_KERNEL_RBF and k <= KM_RBF_CELL_MAX_D:
+            # `km_rbf_cell_kernel`, seam for seam (lane/review-fixes): the
+            # candidate arm's device route, the same gate as the device
+            # (sabotage `via_copy` aside) and `KMH_RBF_CELL`.
+            var neg_gamma = -Float32(kp.gamma)
+            var outr = List[Float32]()
+            for i in range(m):
+                for j in range(n):
+                    var acc = Float32(0.0)
+                    for c in range(k):
+                        var d = ftz(ftz(xa[i * k + c]) - ftz(xb[j * k + c]))
+                        acc = ftz(identical_mul_add(d, d, acc))
+                    outr.append(ftz(identical_exp(ftz(identical_mul(neg_gamma, acc)))))
+            return outr^
+
+    comptime if KM_IDN_DOT_CELL:
+        if (
+            kp.kernel == KM_KERNEL_POLYNOMIAL or kp.kernel == KM_KERNEL_SIGMOID
+        ) and k <= KM_DOT_CELL_MAX_D:
+            # `km_dot_cell_kernel`, seam for seam (fix-kg1-kernel, B11)
+            var g = Float32(kp.gamma)
+            var o = Float32(kp.coef0)
+            var outc = List[Float32]()
+            for i in range(m):
+                for j in range(n):
+                    var dd = Float32(0.0)
+                    for c in range(k):
+                        dd = ftz(identical_mul_add(ftz(xa[i * k + c]), ftz(xb[j * k + c]), dd))
+                    var bc = ftz(identical_mul_add(g, dd, o))
+                    if kp.kernel == KM_KERNEL_SIGMOID:
+                        outc.append(ftz(identical_tanh(bc)))
+                    else:
+                        var ac = Float32(1.0)
+                        for _ in range(kp.degree):
+                            ac = ftz(identical_mul(ac, bc))
+                        outc.append(ac)
+            return outc^
 
     var dot = gemm_oracle(xa, xb, OP_NT, m, n, k)
 

@@ -60,6 +60,7 @@ from hdbscan.impl.detail.condense import (
 )
 from hdbscan.impl.detail.extract import ExtractOutput, extract_clusters
 from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC
+from hdbscan.impl.detail.idn_switches import IDN_HDB_ONE_SYNC
 from hdbscan.impl.detail.tree_device import (
     td_stage_f32,
     td_stage_i32,
@@ -354,7 +355,9 @@ def fit_hdbscan(
     # lane af-hdbscan2 (FAST on Apple, -D MOJOLEARN_HDB_ONE_SYNC): the tree's
     # four arrays and the core distances staged, ONE wait; main's route
     # (`download_condensed` + `_download_f32`) waits six times.
-    comptime if HDB_ONE_SYNC:
+    # fam2-cluster: the same route under IDENTICAL on every vendor
+    # (IDN_HDB_ONE_SYNC).
+    comptime if HDB_ONE_SYNC or IDN_HDB_ONE_SYNC:
         var s_par = td_stage_i32(ctx, dtree.parents)
         var s_chi = td_stage_i32(ctx, dtree.children)
         var s_lam = td_stage_f32(ctx, dtree.lambdas)

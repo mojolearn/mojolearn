@@ -4,8 +4,8 @@
 
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
-from umap.estimator import fit_transform, fuzzy_graph_from_data
-from umap.optimizer import optimize_layout_identical
+from umap.estimator import fit_transform, fuzzy_graph_from_data_reference
+from umap.optimizer import optimize_layout_identical_reference
 from umap.optimizer_fast import optimize_layout_fast
 from umap.params import UMAPParams
 
@@ -45,7 +45,7 @@ def main() raises:
                 var message = String("")
                 try:
                     if fast == 0:
-                        _ = optimize_layout_identical(
+                        _ = optimize_layout_identical_reference(
                             initial, weights, 2, 2, 1, lr, 1,
                             repulsion, a, b, UInt64(19),
                         )
@@ -67,7 +67,7 @@ def main() raises:
             var message = String("")
             try:
                 if surface == 0:
-                    _ = fuzzy_graph_from_data(ctx, x, 8, 1, params)
+                    _ = fuzzy_graph_from_data_reference(ctx, x, 8, 1, params)
                 else:
                     _ = fit_transform(ctx, x, 8, 1, params)
             except e:

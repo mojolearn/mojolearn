@@ -23,11 +23,13 @@ below) when the page fits; the per-value kernels otherwise. (The
 cpu-gpu-cleanup c-linear.)
 """
 from std.gpu import block_idx, block_dim, thread_idx
+from std.atomic import Atomic
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from max.gpu.host import DeviceContext
+from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.ops import FP, IP, fa, fm, fs, fd, fmad, ld, st, ldi, i2f, fill
 from x_linear.team import Team, TEAM_SLOTS, LINEAR_TPB, team_at
@@ -600,6 +602,46 @@ def _blocks(count: Int) -> Int:
     return max((count + ECV_TPB - 1) // ECV_TPB, 1)
 
 
+def ecv_span_init_kernel(lohi: MutPointer[Int32, MutAnyOrigin], f_n_in: Int32, n_in: Int32):
+    """One thread a fold: its span starts empty (lo = n, hi = 0)."""
+    var f = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if f < Int(f_n_in):
+        lohi.unsafe_store(2 * f, n_in)
+        lohi.unsafe_store(2 * f + 1, Int32(0))
+
+
+def ecv_span_rows_kernel(
+    dy: MutPointer[Float32, MutAnyOrigin], n_in: Int32, f_n_in: Int32,
+    lohi: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread a row: its fold id (y's second n words, truncated as the
+    host loop did) widens that fold's [lo, hi) by integer atomics (exact,
+    order-free)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_in)
+    if i < n:
+        var f = Int(dy.unsafe_load(n + i))
+        if f >= 0 and f < Int(f_n_in):
+            _ = Atomic.min(lohi.unsafe_offset(2 * f), Int32(i))
+            _ = Atomic.max(lohi.unsafe_offset(2 * f + 1), Int32(i + 1))
+
+
+def ecv_span_finish_kernel(
+    lohi: MutPointer[Int32, MutAnyOrigin], f_n_in: Int32, span: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread a fold: (lo, hi - lo), or (0, 0) for a fold with no row."""
+    var f = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if f < Int(f_n_in):
+        var lo = lohi.unsafe_load(2 * f)
+        var hi = lohi.unsafe_load(2 * f + 1)
+        if hi > Int32(0):
+            span.unsafe_store(2 * f, lo)
+            span.unsafe_store(2 * f + 1, hi - lo)
+        else:
+            span.unsafe_store(2 * f, Int32(0))
+            span.unsafe_store(2 * f + 1, Int32(0))
+
+
 def enetcv_fit_grid(
     ctx: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, res: FP,
@@ -624,6 +666,8 @@ def enetcv_fit_grid(
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    comptime if XLIN_IDN_DEV_FINITE:
+        xlin_finite_device(ctx, dx, n_x, y, n_y)
     ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
     if len(hfp) > 0:
         ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
@@ -631,21 +675,24 @@ def enetcv_fit_grid(
     var staged_score = ECV_SCORE_STAGED and n_y >= 2 * n
     # each fold's held-out rows lie in [lo, lo + span) (KFold: exactly
     # them; rows of other folds inside are skipped by their id)
-    var hsp = List[Int32](length=max(2 * f_n, 1), fill=Int32(0))
+    # (lane cpu3-core: the spans come from the resident fold ids on the
+    # device, not from a host walk over the n rows)
+    var sp_len = max(2 * f_n, 1)
+    var dspan = ctx.enqueue_create_buffer[DType.int32](sp_len)
+    ctx.enqueue_memset(dspan, Int32(0))
     if staged_score:
-        var lo = List[Int](length=max(f_n, 1), fill=n)
-        var hi = List[Int](length=max(f_n, 1), fill=0)
-        var fid = y + n
-        for i in range(n):
-            var f = Int(fid.unsafe_load(i))
-            if f >= 0 and f < f_n:
-                lo[f] = min(lo[f], i)
-                hi[f] = i + 1
-        for f in range(f_n):
-            if hi[f] > 0:
-                hsp[2 * f] = Int32(lo[f])
-                hsp[2 * f + 1] = Int32(hi[f] - lo[f])
-    var dsp = ctx.enqueue_create_buffer[DType.int32](len(hsp))
+        var dlohi = ctx.enqueue_create_buffer[DType.int32](sp_len)
+        ctx.enqueue_function[ecv_span_init_kernel](
+            dlohi.unsafe_ptr(), Int32(f_n), Int32(n), grid_dim=_blocks(f_n), block_dim=ECV_TPB,
+        )
+        ctx.enqueue_function[ecv_span_rows_kernel](
+            dy.unsafe_ptr(), Int32(n), Int32(f_n), dlohi.unsafe_ptr(), grid_dim=_blocks(n), block_dim=ECV_TPB,
+        )
+        ctx.enqueue_function[ecv_span_finish_kernel](
+            dlohi.unsafe_ptr(), Int32(f_n), dspan.unsafe_ptr(), grid_dim=_blocks(f_n), block_dim=ECV_TPB,
+        )
+        _ = dlohi^
+    var dsp = ctx.enqueue_create_buffer[DType.int32](sp_len)
     var ctx_w = ctx.copy()
     # the whole fit (no host step between its launches) as ONE guarded unit
     # from zeroed scratch: a cut launch reruns it (x_linear/witness.mojo)
@@ -692,7 +739,7 @@ def enetcv_fit_grid(
             )
             wo += paths
             if staged_score:
-                ctx.enqueue_copy(dst_buf=dsp, src_ptr=hsp.unsafe_ptr())
+                ctx.enqueue_copy(dst_buf=dsp, src_buf=dspan)
                 ctx.enqueue_function[ecv_score_staged_kernel](
                     dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dout.unsafe_ptr(),
                     dew.unsafe_ptr(), dsp.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=paths, block_dim=ECV_SNT,
@@ -729,5 +776,5 @@ def enetcv_fit_grid(
     _ = dew^
     _ = dtw^
     _ = dsp^
-    _ = hsp^
+    _ = dspan^
     _ = wit^

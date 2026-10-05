@@ -56,7 +56,7 @@ from hdbscan.impl.cluster.detail.single_linkage import (
     build_mr_linkage,
 )
 from hdbscan.impl.cluster.detail.sparse_mr_mst import sparse_mr_mst
-from hdbscan.impl.detail.extract import probabilities_from_labels
+from hdbscan.impl.detail.extract import probabilities_from_labels_host
 from hdbscan.impl.detail.reachability import compute_core_dists
 from hdbscan.impl.detail.select import (
     CLUSTER_SELECTION_EOM,
@@ -298,8 +298,8 @@ def check_one(
     var xd2 = _upload(ctx, x)
     var t2 = IdentityTrace.disabled()
     var fs = fit_hdbscan(ctx, t2, xh2, xd2, m, d, DISTANCE_L2_SQRT_EXPANDED, params.copy(), graph=MR_GRAPH_SPARSE)
-    var pd = probabilities_from_labels(fd.condensed, fd.labels, fd.inverse_label_map, m)
-    var ps = probabilities_from_labels(fs.condensed, fs.labels, fs.inverse_label_map, m)
+    var pd = probabilities_from_labels_host(fd.condensed, fd.labels, fd.inverse_label_map, m)
+    var ps = probabilities_from_labels_host(fs.condensed, fs.labels, fs.inverse_label_map, m)
     var fit_ok = (
         _i32_eq(fd.labels, fs.labels) and _i32_eq(fd.raw_labels, fs.raw_labels)
         and _f32_eq(fd.core_dists, fs.core_dists)
@@ -327,8 +327,8 @@ def check_one(
                       DISTANCE_L2_SQRT_EXPANDED, HDBH_GRAPH_DENSE)
     var hs = hdbh_fit(x, m, d, min_samples, mcs, 0, alpha, False, method, Float32(0.0),
                       DISTANCE_L2_SQRT_EXPANDED, HDBH_GRAPH_SPARSE)
-    var hpd = probabilities_from_labels(hd.tree, hd.labels, hd.inverse_label_map, m)
-    var hps = probabilities_from_labels(hs.tree, hs.labels, hs.inverse_label_map, m)
+    var hpd = probabilities_from_labels_host(hd.tree, hd.labels, hd.inverse_label_map, m)
+    var hps = probabilities_from_labels_host(hs.tree, hs.labels, hs.inverse_label_map, m)
     bad += _say(
         _i32_eq(hd.labels, hs.labels) and _f32_eq(hd.core_dists, hs.core_dists)
         and hd.n_boruvka_rounds == hs.n_boruvka_rounds and hd.n_clusters == hs.n_clusters

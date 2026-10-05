@@ -65,8 +65,8 @@ from extratrees.impl.decisiontree.decisiontree import (
 )
 from extratrees.impl.randomforest.randomforest import (
     Forest,
-    predict_class_forest,
-    predict_regression_forest,
+    predict_class_forest_host,
+    predict_regression_forest_host,
 )
 
 comptime DEFAULT_REPS = 3
@@ -248,7 +248,7 @@ def main() raises:
                     var se = Float64(0.0)
                     for r in range(n_rows):
                         var d = Float64(
-                            predict_regression_forest(
+                            predict_regression_forest_host(
                                 forest, xrow, r * n_feat
                             )
                         ) - Float64(target[r])
@@ -322,7 +322,7 @@ def main() raises:
           var right = 0
           for r in range(n_rows):
               if (
-                  predict_class_forest(res.forest, xr, r * n_features)
+                  predict_class_forest_host(res.forest, xr, r * n_features)
                   == Int(labels[r])
               ):
                   right += 1

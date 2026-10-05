@@ -462,8 +462,8 @@ def get_stability_scores_device(
     n_selected: Int,
 ) raises -> List[Float32]:
     """`runner.h:208-219` (max_lambda, then `get_stability_scores`) on the
-    device; `get_stability_scores` below is the host statement of the same
-    passes. Returns the `n_selected` scores."""
+    device (the host form had no caller and was removed, cpu3-neighbors).
+    Returns the `n_selected` scores."""
     if tree.n_edges < 1:
         raise Error(
             "hdbscan.max_lambda_of: the condensed tree has no edges; their"
@@ -501,96 +501,7 @@ def get_stability_scores_device(
     return out^
 
 
-def max_lambda_of(tree: CondensedHierarchy) raises -> Float32:
-    """`runner.h:208-210`:
-
-        value_t max_lambda = *(thrust::max_element(exec_policy, lambdas_ptr,
-                                lambdas_ptr + condensed_tree.get_n_edges()));
-
-    A max over floats, so IDENTITY_PATHS row 39 applies: taken on the
-    `weight_order_key` INTEGER order rather than a hardware `max`, for the
-    same reason DEVIATION 1604's min is. `thrust::max_element` returns the
-    FIRST maximal element; with a total order there is only one maximal
-    VALUE, and the value is all the caller reads.
-    """
-    if tree.n_edges < 1:
-        raise Error(
-            "hdbscan.max_lambda_of: the condensed tree has no edges; their"
-            " thrust::max_element at runner.h:209 dereferences an empty"
-            " range here"
-        )
-    var best = tree.lambdas[0]
-    for i in range(1, tree.n_edges):
-        if weight_order_key(tree.lambdas[i]) > weight_order_key(best):
-            best = tree.lambdas[i]
-    return best
-
-
-def get_stability_scores(
-    labels: List[Int32],
-    stability: List[Float32],
-    n_condensed_clusters: Int,
-    max_lambda: Float32,
-    n_leaves: Int,
-    label_map: List[Int32],
-    n_selected: Int,
-) raises -> List[Float32]:
-    """`stabilities.cuh:153-200`, on the host.
-
-    WHERE IT RUNS. Theirs is two `thrust::for_each`es on the device: an
-    INTEGER `atomicAdd` per point into `cluster_sizes` (`:173-175`, exact
-    and order-free) and a per-cluster elementwise epilogue (`:183-199`).
-    Ours is the same two passes serially on the host, because `labels` is
-    already a host array by the time this is called (`do_labelling_on_host`
-    produces it, `extract.cuh:89-167`, and it is theirs that puts it
-    there). No fold order changes: a count is exact and each output cell
-    is written by one pass over one cluster.
-
-    THE EPILOGUE, unchanged (`:191-198`):
-
-        if (out_cluster >= 0) {
-          bool expr = max_lambda == FLT_MAX || max_lambda == 0.0 || size == 0;
-          result[out_cluster] = expr ? 1.0f : stability[c] / (size * max_lambda);
-        }
-
-    with the product and the quotient through `identical_mul` /
-    `identical_div` (rows 9 and 49's seams). The three-way guard is theirs
-    and is what keeps a `0/0` out of the result.
-    """
-    # `:167-175` populate cluster sizes
-    var cluster_sizes = List[Int](capacity=n_condensed_clusters)
-    for _ in range(n_condensed_clusters):
-        cluster_sizes.append(0)
-    for i in range(n_leaves):
-        var v = Int(labels[i])
-        if v > -1:
-            if v >= n_condensed_clusters:
-                raise Error(
-                    "hdbscan.get_stability_scores: label " + String(v)
-                    + " at point " + String(i) + " is outside [0, "
-                    + String(n_condensed_clusters) + "); their atomicAdd at"
-                    " stabilities.cuh:174 would write past cluster_sizes"
-                )
-            cluster_sizes[v] += 1
-
-    var result = List[Float32](capacity=n_selected)
-    for _ in range(n_selected):
-        result.append(Float32(0.0))
-    # `:181-199`
-    for c in range(n_condensed_clusters):
-        var out_cluster = Int(label_map[c])
-        if out_cluster < 0:
-            continue
-        var size = cluster_sizes[c]
-        var expr = (
-            max_lambda == FLOAT32_MAX
-            or max_lambda == Float32(0.0)
-            or size == 0
-        )
-        if expr:
-            result[out_cluster] = Float32(1.0)
-        else:
-            result[out_cluster] = identical_div(
-                stability[c], identical_mul(Float32(size), max_lambda)
-            )
-    return result^
+# cpu3-neighbors (2026-10-04): `max_lambda_of` and `get_stability_scores`, the
+# host forms of `runner.h:208-219`, had no caller left (the device fit uses
+# `get_stability_scores_device` above, which carries their statements) and
+# were removed from this GPU module.

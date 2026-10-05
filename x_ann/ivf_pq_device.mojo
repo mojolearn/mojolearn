@@ -5,7 +5,7 @@
 The coarse quantizer is the same Lloyd cells over whole rows."""
 
 from std.gpu import block_idx, block_dim, thread_idx
-from std.memory import stack_allocation
+from std.memory import stack_allocation, memcpy
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -20,7 +20,7 @@ from x_ann.pq_kmeans_device import PQK_CODES_MAX, PQK_LEN_MAX, pq_codebooks_devi
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.ivf_scan_device import ivf_scan_search
 
-from cluster.estimator import kmeans_fit
+from cluster.estimator import kmeans_fit_rows
 from cluster.impl.kmeans_params import INIT_ARRAY, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_trainset_rows
@@ -192,78 +192,110 @@ def _coarse(
     )
     ctx.synchronize()
     cst.host("flat_build")
-    comptime if ANN3_HOST_PASSES:
-        swap(centers, flat.centers)
-        swap(offsets, flat.list_offsets)
-        list_indices = List[Int32](length=n, fill=Int32(0))
-        labels = List[Int32](length=n, fill=Int32(0))
-        for s in range(n):
-            list_indices[s] = Int32(Int(flat.list_indices[s]))
-            labels[s] = Int32(Int(flat.labels[s]))
-    else:
-        centers = flat.centers.copy()
-        offsets = flat.list_offsets.copy()
-        list_indices = List[Int32](capacity=n)
-        for s in range(n):
-            list_indices.append(Int32(Int(flat.list_indices[s])))
-        labels = pq_labels_from_lists(offsets, list_indices, n_lists, n)
+    # cpu3-neighbors: the ids move over as words (each below n < 2^31, so a
+    # uint32 word IS the int32 word), with no per-row host conversion walk;
+    # the old `ANN3_HOST_PASSES`-off arm (always on) is gone.
+    swap(centers, flat.centers)
+    swap(offsets, flat.list_offsets)
+    list_indices = List[Int32](length=n, fill=Int32(0))
+    labels = List[Int32](length=n, fill=Int32(0))
+    if n > 0:
+        memcpy(dest=list_indices.unsafe_ptr(), src=flat.list_indices.unsafe_ptr().bitcast[Int32](), count=n)
+        memcpy(dest=labels.unsafe_ptr(), src=flat.labels.unsafe_ptr().bitcast[Int32](), count=n)
     _ = flat^
     _ = ctx^
     cst.host("convert")
 
 
+def pq_sub_gather_kernel(
+    count: Int32, r: F32P, rows: I32P, use_rows: Int32, rot_dim: Int32, j: Int32, pq_len: Int32, dst: F32P,
+):
+    """cpu3-neighbors: subspace j's training sample, gathered on the device
+    from the resident residuals: dst[i, t] = r[row(i), j pq_len + t] with
+    row(i) = rows[i] (a sampled train set) or i (every row). A copy, so the
+    words are the host gather's."""
+    var e = _tid()
+    if e < Int(count):
+        var pl = Int(pq_len)
+        var i = e // pl
+        var t = e - i * pl
+        var src = i
+        if use_rows != Int32(0):
+            src = Int(rows.unsafe_load(i))
+        dst.unsafe_store(e, r.unsafe_load(src * Int(rot_dim) + Int(j) * pl + t))
+
+
 def _codebooks(
-    r: List[Float32], n: Int, rot_dim: Int, pq_dim: Int, pq_len: Int, n_codes: Int, pq_iters: Int, seed: Int,
+    ctx: DeviceContext, mut dr: DeviceBuffer[DType.float32], n: Int, rot_dim: Int, pq_dim: Int, pq_len: Int,
+    n_codes: Int, pq_iters: Int, seed: Int,
 ) raises -> List[Float32]:
-    """Per subspace, cluster/'s k-means (`cluster/estimator.mojo::kmeans_fit`,
+    """Per subspace, cluster/'s k-means (`cluster/estimator.mojo::
+    kmeans_fit_rows`, the same words as `kmeans_fit` with unit weights:
     k-means++, L2Expanded, one restart) over that subspace's residual
-    columns; the host twin is `host_kmeans_fit`."""
-    var codebooks = List[Float32](capacity=pq_dim * n_codes * pq_len)
-    var ctx = x_ann_ctx()
+    columns; the host twin is `host_kmeans_fit`.
+
+    cpu3-neighbors: the residuals stay on the device. Each subspace's sample
+    is gathered by `pq_sub_gather_kernel` from `dr` (no n x rot_dim download,
+    no host gather), the fit reads that device copy, and each fit writes its
+    centroids straight into its slot of the returned codebooks. Same words
+    as before: the gathered values and their order are the host gather's."""
+    var cb_len = n_codes * pq_len
+    var codebooks = List[Float32](length=pq_dim * cb_len, fill=Float32(0.0))
     var n_train = n
     comptime if PQ_FAST_TRAINSET:
         if n > PQ_FAST_ROWS_PER_CODE * n_codes:
             n_train = PQ_FAST_ROWS_PER_CODE * n_codes
-    var rows = List[Int]()
-    if n_train < n:
+    # `kmeans_fit_rows` reads only the length of its row list (the gathered
+    # copy is already on the device); the sample's row ids go up once
+    var rows = List[Int](length=n_train, fill=0)
+    var use_rows = n_train < n
+    var drows = ctx.enqueue_create_buffer[DType.int32](n_train if use_rows else 1)
+    if use_rows:
         rows = ivf_trainset_rows(n, n_train, UInt64(seed))
-    else:
-        for i in range(n):
-            rows.append(i)
+        var rows32 = List[Int32](length=n_train, fill=Int32(0))
+        for i in range(n_train):  # small-loop(n_train: at most PQ_FAST_ROWS_PER_CODE x n_codes sample ids, FAST only): narrows the FAST sample's row ids for one upload
+            rows32[i] = Int32(rows[i])
+        ctx.enqueue_copy(dst_buf=drows, src_ptr=rows32.unsafe_ptr())
+        ctx.synchronize()
+        _ = rows32^
     var cbs = AnnStages("ivf_pq_codebooks")
     cbs.host("rows")
+    var dsub = ctx.enqueue_create_buffer[DType.float32](n_train * pq_len)
+    var lab = List[UInt32](length=n_train, fill=UInt32(0))
     for j in range(pq_dim):
-        var sub = List[Float32](capacity=n_train * pq_len)
-        for i in range(n_train):
-            for t in range(pq_len):
-                sub.append(r[rows[i] * rot_dim + j * pq_len + t])
-        var cb = List[Float32](length=n_codes * pq_len, fill=Float32(0.0))
-        var lab = List[UInt32](length=n_train, fill=UInt32(0))
+        ctx.enqueue_function[pq_sub_gather_kernel](
+            Int32(n_train * pq_len), _dp(dr), _dp(drows), Int32(1 if use_rows else 0), Int32(rot_dim),
+            Int32(j), Int32(pq_len), _dp(dsub),
+            grid_dim=_grid(n_train * pq_len), block_dim=TPB,
+        )
         cbs.host("gather")
+        var cb_ptr = codebooks.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]().unsafe_offset(j * cb_len)
         var init_kind: Int = INIT_KMEANS_PLUS_PLUS
         comptime if PQ_FAST_SEED:
+            # FAST on Apple, OPT-IN (`-D MOJOLEARN_ANN3_PQ_SEED`): the host
+            # k-means++ seed reads the sample, so this opt-in arm alone
+            # downloads it
             if n_train >= n_codes:
+                var sub = download_f32(ctx, dsub, n_train * pq_len)
+                var cb = List[Float32](length=cb_len, fill=Float32(0.0))
                 kpp_seed(
                     sub, n_train, pq_len, n_codes,
                     UInt64(seed) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15)), 16, cb,
                 )
+                memcpy(dest=cb_ptr, src=cb.unsafe_ptr(), count=cb_len)
                 init_kind = INIT_ARRAY
                 cbs.host("seed")
-        _ = kmeans_fit(
-            ctx, sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n_train, pq_len, n_codes,
-            cb.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+        _ = kmeans_fit_rows(
+            ctx, dsub, cb_ptr, rows, pq_len, n_codes, cb_ptr,
             lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-            sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), 0,
-            pq_iters, Float64(1e-4), UInt64(seed), 1, init_kind, METRIC_L2_EXPANDED, 0.0, Float64(2.0),
+            pq_iters, Float64(1e-4), UInt64(seed), 1, init_kind, METRIC_L2_EXPANDED, Float64(2.0),
             lazy_shift=True,  # KMEANS_LAZY_SHIFT (FAST on Apple default, 2026-10-04): IVF-PQ codebooks
         )
         ctx.synchronize()
         cbs.host("kmeans_fit")
-        for e in range(n_codes * pq_len):
-            codebooks.append(cb[e])
-        _ = sub^
-        _ = lab^
-    _ = ctx^
+    _ = lab^
+    _ = dsub^
+    _ = drows^
     return codebooks^
 
 
@@ -317,9 +349,7 @@ def ivf_pq_build_device(
         codebooks = download_f32(ctx, dcb, pq_dim * n_codes * pq_len)
         st.host("codebooks")
     else:
-        var r = download_f32(ctx, dr, n * rot_dim)
-        st.host("residuals")
-        codebooks = _codebooks(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+        codebooks = _codebooks(ctx, dr, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
         st.host("codebooks")
         dcb = upload_f32(ctx, codebooks)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * pq_dim)

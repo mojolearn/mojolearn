@@ -16,8 +16,9 @@ metal-transfer-costs-on-apple: ~290 ms on the M4), most of the fit
 an upload from a raw host pointer runs at ~2 ms per 64 MB.
 
 Here X is uploaded from the caller's pointer (`ctx.enqueue_copy(src_ptr=)`,
-no host list), and the only host reads of X are the init-sized row gathers
-`minibatch_fit` already does (the validation and init samples). Everything
+no host list), and X is never read on the host: the validation and init
+samples and the picked init centers are gathered from the resident X on
+the device (`_gather_slot`, `_kpp_indices_slot`; lane cpu3-core). Everything
 else is `minibatch_fit`'s FAST path word for word (the same seeded draws in
 the same order, `ops.minibatch_fast` for the steps, `nearest_all` for the
 labels), so a fit returns what the copying path returns. Unit weights and
@@ -31,7 +32,8 @@ from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_cluster.bodies import SplitMix64
-from x_cluster.common import greedy_kmeans_pp, nearest_all, sum_f64, weighted_draw
+from x_cluster.common import nearest_all, sum_f64
+from x_cluster.post_bodies import FM_VAL
 from x_cluster.device_ops import DeviceOps
 from x_cluster.minibatch import MiniBatchParams
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, MBK_CLS2_POOL, MBK_W2_LABRG, MBF_RG_MAXK, mbk_labels_rg
@@ -46,14 +48,50 @@ comptime MBK_ZEROCOPY = (
 comptime XPtr = MutPointer[Float32, MutUntrackedOrigin]
 
 
-@always_inline
-def _gather_ptr(xp: XPtr, d: Int, idx: List[Int]) -> List[Float32]:
-    """`common.gather_rows` on the caller's array."""
-    var out = List[Float32](capacity=len(idx) * d)
-    for r in idx:
-        for f in range(d):
-            out.append(xp[r * d + f])
-    return out^
+def _gather_slot(mut ops: DeviceOps, xs: Int, d: Int, idx: List[Int32]) raises -> Int:
+    """The rows `idx` of the resident X slot `xs`, gathered on the device into
+    a new slot (`common.gather_rows`' words, no host read of X)."""
+    var m = len(idx)
+    var ids = ops.put_i(idx)
+    var dst = ops.alloc(m * d)
+    ops.gather_rows(xs, d, ids, m, dst)
+    return dst
+
+
+def _kpp_indices_slot(mut ops: DeviceOps, xs: Int, m: Int, d: Int, k: Int, mut rng: SplitMix64) raises -> List[Int32]:
+    """`common.greedy_kmeans_pp_indices` (unit weights) over the resident
+    slot `xs` (m x d): the same device steps in the same order and the same
+    draws, so the same picks, without a host copy of the sample."""
+    from std.math import log
+
+    var n_trials = 2 + Int(log(Float64(k)))
+    var picks = List[Int32](capacity=k)
+    var first = rng.below(m)
+    picks.append(Int32(first))
+    var ids = ops.zeros_i(n_trials)
+    ops.set_i(ids, [Int32(first)])
+    var cslot = ops.alloc(n_trials * d)
+    ops.gather_rows(xs, d, ids, 1, cslot)
+    var closest = ops.alloc(m)
+    ops.sqdist(cslot, 1, xs, m, d, closest)
+    var pot = ops.sum_ff(closest, -1, -1, m, FM_VAL)
+    var dc_s = ops.alloc(n_trials * m)
+    for _c in range(1, k):  # small-loop(k: centers picked): k <= 256, each pick launches device steps
+        var vs = List[Float64](capacity=n_trials)
+        for _t in range(n_trials):  # small-loop(n_trials: candidate uniforms): 2 + log(k) draws per pick
+            vs.append(rng.unit() * pot)
+        ops.kpp_search(closest, -1, m, vs, ids)
+        ops.gather_rows(xs, d, ids, n_trials, cslot)
+        ops.sqdist(cslot, n_trials, xs, m, d, dc_s)
+        var pots = ops.kpp_pots(dc_s, closest, -1, n_trials, m)
+        var best = 0
+        for t in range(1, n_trials):  # small-loop(n_trials: candidate potentials): 2 + log(k) words per pick
+            if pots[t] < pots[best]:
+                best = t
+        ops.kpp_take(dc_s, closest, best, m)
+        pot = pots[best]
+        picks.append(ops.get_i(ids, n_trials)[best])
+    return picks^
 
 
 def minibatch_entry_ptr(
@@ -62,13 +100,17 @@ def minibatch_entry_ptr(
 ) raises -> Bool:
     """`entries.minibatch_entry` with X read from `xp` (nx values, alive for
     the call). False (nothing done, `out` untouched) outside the switch or
-    for weights, tol > 0, or a shape the device steps refuse before any
+    for weights (tol > 0 only under the GENERAL_OFF define), or a shape the device steps refuse before any
     work (the binding then copies X and runs `minibatch_entry`)."""
     comptime if MBK_ZEROCOPY:
         var n = ip[0]
         var d = ip[1]
         var has_w = len(ip) > 11 and ip[11] != 0
-        if has_w or fp[0] > 0 or n * d != nx:
+        # lane/no-bench-tuning-2: tol > 0 runs here too (the device steps
+        # stop on the squared center shift); weights take `minibatch_entry`,
+        # whose weighted init and draws run the same device steps
+        var tol_ok = fp[0] <= 0 or not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF"]()
+        if has_w or not tol_ok or n * d != nx:
             return False
         var p = MiniBatchParams(
             k=ip[2], max_iter=ip[3], batch_size=ip[4], tol=fp[0], max_no_improvement=ip[5],
@@ -89,7 +131,7 @@ def minibatch_entry_ptr(
             return False
         var n_c = k * d if p.has_init else 0
         var centers = List[Float32](capacity=n_c)
-        for t in range(n_c):
+        for t in range(n_c):  # small-loop(n_c: user init center words): k * d <= 4096 checked above
             centers.append(a[t])
         var init_size = p.init_size
         if init_size <= 0:
@@ -114,37 +156,56 @@ def minibatch_entry_ptr(
         ops.f.append(xbuf^)
         var xs = len(ops.f) - 1
 
-        var vidx = List[Int](capacity=init_size)
-        for _t in range(init_size):
-            vidx.append(rng.below(n))
-        var vslot = ops.put(_gather_ptr(xp, d, vidx))
+        # the validation sample: seeded row ids on the host (the serial
+        # SplitMix64 stream of `minibatch_fit`), the rows gathered on the device
+        var vidx = List[Int32](capacity=init_size)
+        for _t in range(init_size):  # small-loop(init_size: seeded sample row ids): serial seeded draws, no data read
+            vidx.append(Int32(rng.below(n)))
+        var vslot = _gather_slot(ops, xs, d, vidx)
         var best = List[Float32]()
         var best_inertia = Float64(0)
         var n_init = 1 if p.has_init else p.n_init
-        for it in range(n_init):
+        for it in range(n_init):  # small-loop(n_init: init restarts): each restart launches device steps
             var cand: List[Float32]
             if p.has_init:
                 cand = centers.copy()
             else:
-                var iidx = List[Int](capacity=init_size)
-                for _t in range(init_size):
-                    iidx.append(rng.below(n))
+                var iidx = List[Int32](capacity=init_size)
+                for _t in range(init_size):  # small-loop(init_size: seeded sample row ids): serial seeded draws, no data read
+                    iidx.append(Int32(rng.below(n)))
+                var picks: List[Int32]
                 if p.init_random:
-                    var taken = List[Bool](length=init_size, fill=False)
-                    var picks = List[Int]()
-                    for _c in range(k):
-                        var cum = List[Float64](capacity=init_size)
-                        var acc = Float64(0)
-                        for t in range(init_size):
-                            if not taken[t]:
-                                acc = acc + Float64(1)
-                            cum.append(acc)
-                        var r = weighted_draw(cum, rng)
-                        taken[r] = True
+                    # `weighted_draw` over the 0/1 table of untaken sample
+                    # positions, without the table: u * free (free = the
+                    # count of untaken positions, an exact Float64 integer)
+                    # searched side left lands on the (floor + 1)-th
+                    # untaken position, found by stepping over the taken
+                    # ones in ascending order (the same pick, word for word)
+                    picks = List[Int32](capacity=k)
+                    var tk = List[Int](capacity=k)
+                    for c in range(k):  # small-loop(k: centers picked): k <= 256 checked above
+                        var free = init_size - c
+                        var r = Int(rng.unit() * Float64(free))
+                        if r > free - 1:
+                            r = free - 1
+                        var pos = 0
+                        for q in range(len(tk)):  # small-loop(tk: taken sample positions): at most k <= 256 entries
+                            if tk[q] <= r:
+                                r += 1
+                                pos = q + 1
+                        tk.insert(pos, r)
                         picks.append(iidx[r])
-                    cand = _gather_ptr(xp, d, picks)
+                    # the k picked rows of X, gathered on the device; the
+                    # k x d centers come back (k * d <= 4096 words)
+                    var csl = _gather_slot(ops, xs, d, picks)
+                    cand = ops.get(csl, k * d)
                 else:
-                    cand = greedy_kmeans_pp(ops, _gather_ptr(xp, d, iidx), init_size, d, k, rng)
+                    # kmeans++ on the device-gathered sample, its picked
+                    # rows gathered there too (`greedy_kmeans_pp`'s words)
+                    var isl = _gather_slot(ops, xs, d, iidx)
+                    picks = _kpp_indices_slot(ops, isl, init_size, d, k, rng)
+                    var csl = _gather_slot(ops, isl, d, picks)
+                    cand = ops.get(csl, k * d)
             var vl = List[Int32]()
             var vd = List[Float32]()
             nearest_all(ops, vslot, init_size, cand, k, d, vl, vd)
@@ -160,7 +221,7 @@ def minibatch_entry_ptr(
         if n_steps > 0:
             if not ops.minibatch_fast(
                 xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w,
-                steps_done,
+                steps_done, p.tol, List[Float64](),
             ):
                 raise Error("MiniBatchKMeans: the device steps refused a shape the zero-copy path admitted")
         var labels = List[Int32]()

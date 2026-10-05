@@ -430,6 +430,8 @@ def _unpack_into(flat, arrays, probes):
 #: every optimizer's moments on the host and the per-call `optimizer_step`
 #: (the before arm of the A/B, `tools/optimizer_resident_check.py`).
 _RESIDENT_ENV = "MOJOLEARN_OPTIMIZER_RESIDENT"
+#: lane fam2-neural: the device-resident parameter/gradient entries
+_IO_ENTRIES = ("optimizer_resident_put", "optimizer_resident_get", "optimizer_resident_step_io")
 _RESIDENT_ENTRIES = ("optimizer_resident_open", "optimizer_resident_close",
                      "optimizer_resident_download", "optimizer_resident_upload",
                      "optimizer_resident_step")
@@ -628,6 +630,180 @@ class _Optimizer(NumericModeMixin):
         """True once the moments live on the device."""
         return self._res is not None
 
+    # -- lane fam2-neural (2026-10-04): parameters and gradients resident ----
+    # `step` moves three registry-sized buffers a step (parameters up,
+    # gradient up, parameters down). After `params_to_device()` the
+    # parameters live in the optimizer's device handle: `step(grads)` then
+    # uploads the gradient only, and `step_device()` with the gradient
+    # already on the device (`grads_to_device`) moves nothing. The caller's
+    # host arrays are STALE until `params_to_host()` writes them back. The
+    # step is the same device call on the same buffers: the same bits.
+    def _io_binding(self):
+        binding = _load(getattr(self, "numeric_mode", None))
+        self._open_resident(binding)
+        if self._res is None or not all(callable(getattr(binding, n, None)) for n in _IO_ENTRIES):  # glue: checks binding entry names
+            raise RuntimeError(
+                "mojolearn.%s: this build has no device-resident parameter "
+                "entries (IDENTICAL GPU builds only; "
+                "MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF or a resident-less "
+                "optimizer turns them off)" % self._where)
+        return binding
+
+    def params_resident_available(self):
+        """Whether `params_to_device` works on this build."""
+        try:
+            self._io_binding()
+        except RuntimeError:
+            return False
+        return True
+
+    def _flat(self, arrays, name):
+        seq = _as_seq(arrays, name, self._where)
+        probes = _check_dtype(seq, name, self._where, inplace=True)
+        if len(seq) != len(self.params) or sum(nelems(pb.shape) for pb in probes) != self.n_total:  # glue: element count over tensor shapes
+            raise ValueError(
+                "mojolearn.%s: %s does not match the optimizer's registry "
+                "(%d tensors, %d floats)" % (self._where, name, len(self.params), self.n_total))
+        flat, packed = _pack(seq, probes)
+        return seq, probes, flat, packed
+
+    def params_to_device(self):
+        """Upload the parameters into the optimizer's device handle and keep
+        them there: later steps neither upload nor download them. Call it
+        again after editing the host arrays. Returns self."""
+        binding = self._io_binding()
+        _, _, flat, _ = self._flat(self.params, "params")
+        binding.optimizer_resident_put(self._res, 0, addr(flat, name="params"), int(self.n_total))
+        self._p_dev = True
+        return self
+
+    def params_to_host(self):
+        """Download the device parameters into the caller's arrays (in
+        place); they stay resident. Returns the parameter list."""
+        if not getattr(self, "_p_dev", False):
+            return self.params
+        binding = self._io_binding()
+        seq, probes, flat, packed = self._flat(self.params, "params")
+        binding.optimizer_resident_get(self._res, 0, addr(flat, name="params"), int(self.n_total))
+        if packed:
+            _unpack_into(flat, seq, probes)
+        return self.params
+
+    def grads_to_device(self, grads):
+        """Upload a gradient into the handle's device gradient buffer, for
+        `step_device()`. Returns self."""
+        binding = self._io_binding()
+        _, _, flat, _ = self._flat(grads, "grads")
+        binding.optimizer_resident_put(self._res, 1, addr(flat, name="grads"), int(self.n_total))
+        self._g_dev = True
+        return self
+
+    def grads_to_host(self, grads):
+        """Download the device gradient (clipped, if the last step clipped)
+        into `grads`, in place. Returns `grads`."""
+        binding = self._io_binding()
+        seq, probes, flat, packed = self._flat(grads, "grads")
+        binding.optimizer_resident_get(self._res, 1, addr(flat, name="grads"), int(self.n_total))
+        if packed:
+            _unpack_into(flat, seq, probes)
+        return grads
+
+    def _copy_dev(self, binding, where):
+        fn = getattr(binding, "optimizer_resident_copy_dev", None)
+        if not callable(fn):
+            raise RuntimeError("mojolearn.%s.%s: this build has no training device arrays" % (self._where, where))
+        return fn
+
+    def _grads_from_device(self, binding, grads):
+        fn = self._copy_dev(binding, "step_device")
+        if len(grads) != len(self.params):
+            raise ValueError("mojolearn.%s.step_device: %d gradients for %d parameter tensors"
+                             % (self._where, len(grads), len(self.params)))
+        for j, g in enumerate(grads):  # glue: one device copy per parameter tensor
+            n_j = int(self.offsets[j + 1]) - int(self.offsets[j])
+            if not _is_dev(g) or g.size != n_j:
+                raise ValueError("mojolearn.%s.step_device: grads[%d] must be a device array of %d floats"
+                                 % (self._where, j, n_j))
+            fn(self._res, [1, g.h, int(self.offsets[j]), n_j, 0])
+
+    def param_device(self, j):
+        """Parameter tensor `j` as a `TrainDeviceArray` (a device copy of
+        the resident parameters; `params_to_device()` first), for the next
+        forward. Its shape is the host tensor's."""
+        if not getattr(self, "_p_dev", False):
+            raise RuntimeError("mojolearn.%s.param_device: call params_to_device() first" % self._where)
+        binding = self._io_binding()
+        fn = self._copy_dev(binding, "param_device")
+        dev = _dev_binding(getattr(self, "numeric_mode", None), "param_device")
+        shape = probe(self.params[j]).shape
+        out = TrainDeviceArray._new(dev, shape)
+        fn(self._res, [0, out.h, int(self.offsets[j]), int(out.size), 1])
+        return out
+
+    def step_device(self, grads=None, max_norm=None):
+        """`step` on device-resident parameters (`params_to_device()` first).
+        `grads` given: uploaded (one transfer), and scaled in place on the
+        host when `max_norm` clips, as `step` does. `grads` None: the
+        gradient already in the handle (`grads_to_device`) is used and, with
+        `max_norm`, clipped there; nothing crosses the bus but the three
+        info words. Returns what `step` returns."""
+        if not getattr(self, "_p_dev", False):
+            raise RuntimeError("mojolearn.%s.step_device: call params_to_device() first" % self._where)
+        binding = self._io_binding()
+        io = 0
+        flat_g, packed_g, gs, gprobes = None, False, None, None
+        if _is_dev(grads):
+            grads = [grads]
+        if isinstance(grads, (list, tuple)) and len(grads) > 0 and _is_dev(grads[0]):
+            # device gradients: copied on the device into the handle's
+            # gradient buffer, tensor by tensor; nothing crosses the bus
+            self._grads_from_device(binding, grads)
+        elif grads is not None:
+            gs, gprobes, flat_g, packed_g = self._flat(grads, "grads")
+            io = 2 if max_norm is None else 10
+        else:
+            if not getattr(self, "_g_dev", False):
+                raise RuntimeError("mojolearn.%s.step_device: no gradient on the device "
+                                   "(pass grads or call grads_to_device)" % self._where)
+        if self.lr_schedule is not None:
+            self.lr = float(self.lr_schedule.lr_at(self.t + 1))
+        cfg = self._config()
+        max_norm_f = 0.0 if max_norm is None else float(max_norm)
+        if max_norm is not None and not (max_norm_f > 0.0):
+            raise ValueError("mojolearn.%s.step_device: max_norm must be > 0 or None, got %r"
+                             % (self._where, max_norm))
+        info = zeros((3,), "<f4")
+        self.t += 1
+        # `optimizer_step`'s params list, word for word (see `step`)
+        plist = [
+            int(len(self.params)), int(self._KIND), int(self.t), int(cfg["nesterov"]),
+            float(cfg["lr"]), float(cfg["beta1"]), float(cfg["beta2"]), float(cfg["eps"]),
+            float(cfg["weight_decay"]), float(cfg["momentum"]), float(cfg["dampening"]),
+            max_norm_f, 1 if getattr(self, "maximize", False) else 0,
+        ]
+        info_addr = addr(info, name="info")
+        binding.optimizer_resident_step_io(
+            info_addr,
+            addr(flat_g, name="grads") if flat_g is not None else info_addr,
+            addr_ro(self.offsets, name="offsets"),
+            addr(self.buf_initialized, name="buf_initialized"),
+            info_addr,
+            plist,
+            [int(self._res), int(io)],
+        )
+        self._host_fresh = False
+        self._g_dev = True
+        if max_norm is not None and packed_g:
+            _unpack_into(flat_g, gs, gprobes)
+        if info[0] != 0.0:
+            self.total_norm_ = float(info[1])
+            self.clip_coef_ = float(info[2])
+        else:
+            self.total_norm_ = None
+            self.clip_coef_ = None
+        self.lr_ = float(_round_f32(cfg["lr"]))
+        return self.total_norm_
+
     def __del__(self):
         res, binding = getattr(self, "_res", None), getattr(self, "_res_binding", None)
         if res is not None and binding is not None:
@@ -712,6 +888,9 @@ class _Optimizer(NumericModeMixin):
         not running, and `optimizer_step_oracle` draws the same line by
         leaving its `clip.*` stages empty rather than filling them.
         """
+        if getattr(self, "_p_dev", False):
+            # lane fam2-neural: the parameters live on the device
+            return self.step_device(grads, max_norm)
         gs = _as_seq(grads, "grads", self._where)
         gprobes = _check_dtype(gs, "grads", self._where, inplace=True)
         # Re-read every parameter buffer's shape and layout on EVERY step
@@ -809,7 +988,21 @@ class _Optimizer(NumericModeMixin):
         # while the owning objects are alive (`_buffer.py`). `addr` (writable
         # required) for everything the kernel writes; `addr_ro` for the
         # offsets registry, which it only reads.
-        if self._res is not None:
+        if (self._res is not None and plist[12]
+                and callable(getattr(binding, "optimizer_maximize_dev", None))):
+            # lane fam2-neural: maximize negates on the device (the per-call
+            # entry negates the gradient in a host loop); all four transfers
+            binding.optimizer_resident_step_io(
+                addr(flat_p, name="params"),
+                addr(flat_g, name="grads"),
+                addr_ro(self.offsets, name="offsets"),
+                addr(self.buf_initialized, name="buf_initialized"),
+                addr(info, name="info"),
+                plist,
+                [int(self._res), 15],
+            )
+            self._host_fresh = False
+        elif self._res is not None:
             # the moments stay on the device; the host copies are stale
             # until the next read of `exp_avg` / `exp_avg_sq` downloads them
             binding.optimizer_resident_step(
@@ -1517,6 +1710,10 @@ def cross_entropy(logits, targets, ignore_index=_IGNORE_INDEX_DEFAULT,
     # before: a float64 array was refused, not cast) and `targets` may be
     # any integer buffer or a plain list of ints, converted to int32 the
     # way `np.ascontiguousarray(y, dtype=np.int32)` converted it.
+    if _is_dev(logits):
+        # lane fam2-neural: the logits are on the device and the gradient stays there
+        return _cross_entropy_dev(logits, targets, ignore_index, red, num_items, return_grad,
+                                  label_smoothing, numeric_mode)
     try:
         xp = probe(logits)
     except TypeError:
@@ -2492,9 +2689,159 @@ def rms_norm_backward(dy, x, weight, eps, numeric_mode=None):
     return dx.reshape(x.shape), dw
 
 
+# ===================================================================
+# DEVICE ARRAYS (lane fam2-neural, 2026-10-04)
+# ===================================================================
+# `linear_forward`, `cross_entropy`, `linear_backward` and an optimizer step
+# each upload their operands and download their results, so a loop written
+# with them moves every N * V and parameter-sized array across the bus four
+# or more times a step. `train_to_device(array)` uploads once and returns a
+# `TrainDeviceArray` (a handle in the training binding's device pool);
+# `linear_forward`, `linear_backward` and `cross_entropy` given device
+# arrays keep their results on the device and return device arrays, and an
+# optimizer whose parameters are resident (`params_to_device`) steps from
+# device gradients (`step_device(grads)`) and hands a parameter tensor back
+# as a device array (`param_device(j)`). `to_host()` downloads. The device
+# calls are the host entries' own, on the same values: the same bits.
+# IDENTICAL GPU builds only (training/dev_tensors.mojo); elsewhere
+# `train_to_device` refuses by name. No arithmetic here.
+_DEV_ENTRIES = ("train_dev_alloc", "train_dev_free", "train_dev_put", "train_dev_get",
+                "linear_forward_dev", "linear_backward_dev", "ce_loss_dev")
+
+
+def _dev_binding(numeric_mode, where):
+    binding = _load(numeric_mode)
+    if not all(callable(getattr(binding, n, None)) for n in _DEV_ENTRIES):  # glue: checks binding entry names
+        raise RuntimeError(
+            "mojolearn.%s: this build has no training device arrays (IDENTICAL "
+            "GPU builds only; MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF turns them off)" % where)
+    return binding
+
+
+class TrainDeviceArray(object):
+    """A float32 array resident on the device (the training binding's
+    pool). Make one with `train_to_device`; read it with `to_host()`."""
+
+    def __init__(self, binding, handle, shape, base=None):
+        self._b = binding
+        self.h = int(handle)
+        self.shape = tuple(shape)
+        self.size = nelems(self.shape)
+        self._base = base  # a reshaped view keeps its owner alive
+
+    @staticmethod
+    def _new(binding, shape):
+        shape = tuple(shape)
+        return TrainDeviceArray(binding, binding.train_dev_alloc(int(nelems(shape))), shape)
+
+    def reshape(self, shape):
+        shape = tuple(shape)
+        if nelems(shape) != self.size:
+            raise ValueError("mojolearn.TrainDeviceArray.reshape: %r does not hold %d floats" % (shape, self.size))
+        return TrainDeviceArray(self._b, self.h, shape, base=self if self._base is None else self._base)
+
+    def to_host(self):
+        """The array as a host `mojolearn.Array` (one download)."""
+        out = _buffers.empty(self.shape, '<f4')
+        self._b.train_dev_get(self.h, _addr(out), int(self.size))
+        return out
+
+    def __del__(self):
+        if getattr(self, "_base", None) is None and getattr(self, "_b", None) is not None:
+            try:
+                self._b.train_dev_free(self.h)
+            except Exception:
+                pass
+
+
+def _is_dev(x):
+    return isinstance(x, TrainDeviceArray)
+
+
+def train_to_device(a, numeric_mode=None):
+    """float32 array `a` as a `TrainDeviceArray` (uploaded once, here)."""
+    if _is_dev(a):
+        return a
+    binding = _dev_binding(numeric_mode, "train_to_device")
+    a = _c32(a, "a", "train_to_device")
+    out = TrainDeviceArray._new(binding, a.shape)
+    binding.train_dev_put(out.h, _addr_ro(a), int(out.size))
+    return out
+
+
+def _all_dev(where, **named):
+    if not all(_is_dev(v) for v in named.values()):  # glue: checks argument kinds
+        raise TypeError(
+            "mojolearn.%s: device and host arrays are mixed (%s); pass every "
+            "array through train_to_device, or none"
+            % (where, ", ".join(k for k in named)))  # glue: argument names for the message
+
+
+def _linear_forward_dev(a, w, numeric_mode):
+    _all_dev("linear_forward", a=a, weight=w)
+    binding = _dev_binding(numeric_mode, "linear_forward")
+    if len(w.shape) != 2 or len(a.shape) < 1 or a.shape[-1] != w.shape[1]:
+        raise ValueError("mojolearn.linear_forward: a has K=%r, weight has shape %r" % (a.shape[-1:], w.shape))
+    n, k = w.shape
+    m = a.size // k
+    c = TrainDeviceArray._new(binding, a.shape[:-1] + (n,))
+    binding.linear_forward_dev([c.h, a.h, w.h], [int(m), int(n), int(k)])
+    return c
+
+
+def _linear_backward_dev(dc, a, w, numeric_mode):
+    _all_dev("linear_backward", dc=dc, a=a, weight=w)
+    binding = _dev_binding(numeric_mode, "linear_backward")
+    if len(w.shape) != 2 or len(a.shape) < 1 or a.shape[-1] != w.shape[1]:
+        raise ValueError("mojolearn.linear_backward: a has K=%r, weight has shape %r" % (a.shape[-1:], w.shape))
+    n, k = w.shape
+    m = a.size // k
+    if dc.size != m * n or dc.shape[-1] != n:
+        raise ValueError("mojolearn.linear_backward: dc must be (M, N)")
+    da = TrainDeviceArray._new(binding, a.shape)
+    dw = TrainDeviceArray._new(binding, (n, k))
+    binding.linear_backward_dev([da.h, dw.h, dc.h, a.h, w.h], [int(m), int(n), int(k)])
+    return da, dw
+
+
+def _cross_entropy_dev(logits, targets, ignore_index, red, num_items, return_grad, label_smoothing,
+                       numeric_mode):
+    """`cross_entropy` on a `TrainDeviceArray` of logits: the gradient, when
+    asked for, is returned as a device array; the loss and row losses are
+    host values as before."""
+    binding = _dev_binding(numeric_mode, "cross_entropy")
+    if len(logits.shape) != 2:
+        raise ValueError("mojolearn.cross_entropy: logits must be 2-D (N, V), got shape %r" % (logits.shape,))
+    n_rows, vocab = logits.shape
+    if not _is_buffer(targets):
+        targets = Array.from_list(targets, "<i8")
+    yp = probe(targets)
+    if yp.ndim != 1 or not is_integer(yp.format):
+        raise TypeError("mojolearn.cross_entropy: targets must be a 1-D integer array of class indices")
+    y, _ = as_i32_c(targets, ndim=1, name="targets")
+    if y.shape[0] != n_rows:
+        raise ValueError("mojolearn.cross_entropy: logits has %d rows and targets has %d" % (n_rows, y.shape[0]))
+    loss_out = zeros((1,), "<f4")
+    row_out = empty((n_rows,), "<f4")
+    grad = TrainDeviceArray._new(binding, logits.shape) if return_grad else None
+    # `ce_loss`'s params list, word for word (see `cross_entropy`)
+    plist = [int(n_rows), int(vocab), int(ignore_index), int(red),
+             int(0 if num_items is None else num_items), int(1 if return_grad else 0),
+             float(label_smoothing)]
+    binding.ce_loss_dev(addr(loss_out, name="loss"), addr(row_out, name="row_loss"),
+                        addr_ro(y, name="targets"),
+                        [grad.h if grad is not None else logits.h, logits.h], plist)
+    value = row_out if red == _REDUCTION_NONE else float(loss_out[0])
+    if return_grad:
+        return value, grad
+    return value
+
+
 def linear_forward(a, weight, numeric_mode=None):
     """`a (M, K) . weight (N, K)^T -> (M, N)`, torch's Linear without bias,
     through the certified GEMM at OP_NT."""
+    if _is_dev(a) or _is_dev(weight):
+        return _linear_forward_dev(a, weight, numeric_mode)
     a = _c32(a, "a", "linear_forward")
     w = _c32(weight, "weight", "linear_forward")
     m, k = a.reshape((-1, a.shape[-1])).shape
@@ -2556,6 +2903,8 @@ def samba_head_loss(a, weight, targets, num_items, numeric_mode=None):
 def linear_backward(dc, a, weight, numeric_mode=None):
     """`(da, dweight)` of `linear_forward`. `dweight`'s contraction is over
     the M tokens, the clause 9.2 contraction."""
+    if _is_dev(dc) or _is_dev(a) or _is_dev(weight):
+        return _linear_backward_dev(dc, a, weight, numeric_mode)
     a = _c32(a, "a", "linear_backward")
     w = _c32(weight, "weight", "linear_backward")
     dc = _c32(dc, "dc", "linear_backward")

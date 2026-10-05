@@ -16,9 +16,10 @@ category on the device (the unknown code -1), and is skipped here. Work per
 (fold, feature, target column): O(n + CMAX), where the device's is
 O(n * CMAX).
 """
-from x_prep.common import FP, IP, p, ld, st
+from x_prep.common import FP, IP, p, ld, st, sti
 from x_prep.prims import add, sub, mul, div
-from x_prep.target import te_value
+from x_prep.target import te_value, te_enc_lt_fold
+from x_prep.idn_fold import IDN_TE_ENC_TREE
 
 
 @always_inline
@@ -50,6 +51,9 @@ def te_enc_host_group(g: Int, f: FP, q: IP):
     var ymean = ld(f, p(q, 8) + 2 * (fi * T + tt))
     var yvar = ld(f, p(q, 8) + 2 * (fi * T + tt) + 1)
     var smooth = ld(f, p(q, 9))
+    comptime if IDN_TE_ENC_TREE:
+        te_enc_host_group_lt(fj, fi, j, tt, ncat, ymean, yvar, smooth, f, q)
+        return
     var s = List[Float32](length=ncat, fill=Float32(0))
     var cnt = List[Int](length=ncat, fill=0)
     for i in range(n):
@@ -77,3 +81,43 @@ def te_enc_host_group(g: Int, f: FP, q: IP):
     for cat in range(ncat):
         st(f, p(q, 10) + (fj * cmax + cat) * T + tt,
            te_value(ymean, yvar, smooth, s[cat], cnt[cat], mean[cat], ssd[cat]))
+
+
+def te_enc_host_group_lt(fj: Int, fi: Int, j: Int, tt: Int, ncat: Int, ymean: Float32, yvar: Float32,
+                         smooth: Float32, f: FP, q: IP):
+    """IDN_TE_ENC_TREE (lane ml-prep-nb): the group's categories in the
+    lane-tree order (x_prep/idn_fold.mojo). A row's rank among its category's
+    rows (all folds, ascending) is its position in a counting-sort bucket
+    built here (the device's `te_bucket`: O(n + NCAT) words), and
+    `te_enc_lt_fold` (shared with the unit) folds each bucket, so every
+    category's sum, count, mean and squared deviation is the device's word."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var T = p(q, 4)
+    var cmax = p(q, 6)
+    var start = List[Int](length=ncat + 1, fill=0)
+    for i in range(n):
+        var code = Int(ld(f, p(q, 0) + i * d + j))
+        if code >= 0 and code < ncat:
+            start[code + 1] += 1
+    for c in range(ncat):
+        start[c + 1] += start[c]
+    var put = List[Int](length=ncat, fill=0)
+    # the bucket's row indices as int words (te_enc_lt_fold reads them with ldi)
+    var rows = List[Float32](length=max(start[ncat], 1), fill=Float32(0))
+    var rp = FP(unsafe_from_address=Int(rows.unsafe_ptr()))
+    for i in range(n):
+        var code = Int(ld(f, p(q, 0) + i * d + j))
+        if code >= 0 and code < ncat:
+            sti(rp, start[code] + put[code], i)
+            put[code] += 1
+    for cat in range(ncat):
+        var s = Float32(0)
+        var cnt = 0
+        var mean = Float32(0)
+        var ssd = Float32(0)
+        te_enc_lt_fold(f, rp, -1, 0, 0, p(q, 3), T, tt, p(q, 5), start[cat], start[cat + 1], fi, smooth, s, cnt,
+                       mean, ssd)
+        st(f, p(q, 10) + (fj * cmax + cat) * T + tt, te_value(ymean, yvar, smooth, s, cnt, mean, ssd))
+    # rows backs rp: keep it alive past the last fold
+    _ = rows^

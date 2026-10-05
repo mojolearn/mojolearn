@@ -16,10 +16,11 @@ from extratrees.estimator import (
     FitResult,
     classifier_plan,
     depth_cap_bound,
-    quantize_labels,
     regressor_plan,
 )
-from extratrees.impl.randomforest.randomforest import class_ids_for
+from extratrees.impl.randomforest.randomforest import class_ids_for_host
+from extratrees.checks.fixed_point import choose_scale, quantize
+from core.abs_sum_blocked_host import host_abs_sum_blocked
 from extratrees.impl.randomforest.host_forest import (
     fit_classification,
     fit_forest_exact,
@@ -91,13 +92,13 @@ def fit_extra_trees_classifier_host_exact(
     the host, over `fit_forest_exact` (the block comment above
     `train_tree_exact` in `batched_levelalgo/builder.mojo`). The plan is
     `classifier_plan`, the same resolver both GPU arms call, so every
-    refusal is theirs; the label plane is `class_ids_for`, the device's
+    refusal is theirs; the label plane is `class_ids_for_host`, the device's
     cast with its range refusal. Takes no DeviceContext; what
     `bindings/_mojolearn_trees_host.mojo` runs, and what
     `tools/identity_break.py --diff ... --require-columns 4` holds to the
     three GPU columns."""
     var plan = classifier_plan(config, n_rows, n_features)
-    var class_ids = class_ids_for(labels, n_rows, n_classes)
+    var class_ids = class_ids_for_host(labels, n_rows, n_classes)
     var forest = fit_forest_exact(
         x_col_major,
         labels,
@@ -128,7 +129,7 @@ def fit_extra_trees_regressor_host_exact(
 ) raises -> FitResult:
     """THE CPU COLUMN'S REGRESSOR FIT (et-reg, 2026-09-14):
     `fit_extra_trees_regressor_device` restated on the host. The labels
-    are QUANTIZED by `quantize_labels` exactly as the device arm quantizes
+    are QUANTIZED by `quantize_labels_host` exactly as the device arm quantizes
     them (DEVIATION 135), the search is the device's exact `Int64` MSE key
     over those integers (DEVIATION 189) and the leaves are means of the
     quantized labels rescaled by `Float32(1 / scale)` as `leaf_kernel`
@@ -137,7 +138,7 @@ def fit_extra_trees_regressor_host_exact(
     differ from the device by up to one quantization step and cannot be
     the CPU column. Takes no DeviceContext."""
     var plan = regressor_plan(config, n_rows, n_features)
-    var ql = quantize_labels(y, n_rows)
+    var ql = quantize_labels_host(y, n_rows)
     var forest = fit_forest_exact(
         x_col_major,
         y,
@@ -156,3 +157,27 @@ def fit_extra_trees_regressor_host_exact(
     )
     var bound = depth_cap_bound(forest, plan)
     return FitResult(forest^, plan, bound)
+
+
+def quantize_labels_host(
+    y: List[Float32], n_rows: Int32
+) raises -> Tuple[List[Int32], Float64]:
+    """The label vector in deviation 135's fixed point, and its scale.
+
+    `choose_scale` takes the sum of magnitudes over the WHOLE label vector,
+    because any node's rows are a subset of it -- 135's bound, which makes
+    accumulator overflow impossible rather than unlikely. The same derivation
+    `device_regression_check` uses. cpu3-trees: this is the HOST COLUMN
+    (CPU fits, checks, benches); the GPU fit quantizes on the device
+    (`upload_dataset_labels_quantized`) to the same Int32s and scale.
+    """
+    # cpu3-trees: the blocked fixed-order sum (`core/abs_sum_blocked`), the
+    # same word the device fit (`upload_dataset_labels_quantized`) reads back
+    if len(y) < Int(n_rows):
+        raise Error("quantize_labels_host: y is shorter than n_rows")
+    var mag = host_abs_sum_blocked(Int(y.unsafe_ptr()), Int(n_rows))
+    var scale = choose_scale(mag, Int(n_rows))
+    var q = List[Int32]()
+    for r in range(Int(n_rows)):
+        q.append(Int32(quantize(Float64(y[r]), scale)))
+    return (q^, scale)

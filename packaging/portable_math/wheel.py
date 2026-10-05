@@ -21,6 +21,7 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "linux"))
 import ptx_contract  # noqa: E402
 import cubin_contract  # noqa: E402
+import ptx_baseline  # noqa: E402
 
 # C99 math entry points, including float/long-double variants. A new runtime
 # dependency must fail closed instead of being silently removed by the patcher.
@@ -33,7 +34,7 @@ MATH_SYMBOLS |= {"__sincosf_stret", "__sincos_stret", "__sincospif_stret", "__si
                  "__exp10f", "__exp10"}
 #: A FAST-tier binding of a Linux GPU set: mojolearn/<cuda|hip>/<arch>/<name>.so
 #: with no tier directory (identical/ and deterministic/ sit one level deeper).
-FAST_SET = re.compile(r"^mojolearn/(cuda|hip)/[^/]+/_mojolearn[^/]*\.so$"
+FAST_SET = re.compile(r"^mojolearn/(cuda|hip|cuda_native|hip_native|cuda_ptx)/[^/]+/_mojolearn[^/]*\.so$"
                       # macOS: FAST GPU bindings sit at the package root; host/,
                       # identical/ and deterministic/ are directories below it.
                       r"|^mojolearn/_mojolearn[^/]*\.so$")
@@ -270,7 +271,34 @@ def audit_tree(root, python_only=False):
             (root / "mojolearn" / path).is_file() for path in
             (".libs/libMojolearnMath.so", ".dylibs/libMojolearnMath.dylib")):
         errors.append("owned Python math helper is missing its native library")
-    if not binaries:
+    baseline_reports = []
+    baseline_root = root / "mojolearn/cuda_ptx"
+    if baseline_root.exists():
+        for directory in sorted(baseline_root.iterdir()):
+            if not directory.is_dir() or directory.name != "sm_80":
+                errors.append("unregistered portable PTX directory: " + str(directory))
+                continue
+            try:
+                manifest = json.loads((directory / "PTX_BASELINE.json").read_text())
+                report = ptx_baseline.audit_tree(directory, manifest["source_commit"],
+                                                manifest["mojo_version"], manifest.get("source_dirty", False))
+                errors.extend(report["errors"])
+                if report != manifest:
+                    errors.append("portable PTX final bytes differ from their build manifest")
+                baseline_reports.append(report)
+            except (OSError, ValueError, KeyError) as exc:
+                errors.append("portable PTX manifest is missing or invalid: " + str(exc))
+    aggregate = False
+    aggregate_markers = list(root.glob("*.dist-info/gpu_plugin.json"))
+    if len(aggregate_markers) == 1:
+        try:
+            aggregate = json.loads(aggregate_markers[0].read_text()).get("role") == "aggregate"
+        except ValueError:
+            pass
+    if aggregate and any(p.is_file() and not p.relative_to(root).parts[0].endswith(".dist-info")
+                         for p in root.rglob("*")):
+        errors.append("vendor aggregate contains non-metadata files")
+    if not binaries and not aggregate:
         errors.append("wheel contains no native binaries")
     if errors:
         raise ValueError("platform math audit failed:\n" + "\n".join(errors))
@@ -278,7 +306,8 @@ def audit_tree(root, python_only=False):
             "python_math_policy": "owned helpers and guarded CPython fsum", "platform_math_free": True,
             "scope": "wheel native math imports and Python operation policy; excludes Python and OS dependencies", "binaries": binaries,
             "identical_ptx_rounding_pinned": True, "identical_ptx": ptx_rows,
-            "identical_cuda_machine_code": True, "identical_cuda_fatbins": fatbin_rows}
+            "identical_cuda_machine_code": not baseline_reports, "identical_cuda_fatbins": fatbin_rows,
+            "experimental_ptx_baselines": baseline_reports}
 
 
 def finalize(wheel, helper=None, audit_only=False):

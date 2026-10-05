@@ -366,7 +366,7 @@ def run_arm[
             var rf = RandomForest[DT, LT](
                 rf_params=p, rf_type=CLASSIFICATION
             )
-            rf.predict(rows, n_rows, n_cols, preds, forest)
+            rf.predict_host(rows, n_rows, n_cols, preds, forest)
             var correct = 0
             for r in range(n_rows):
                 if preds[r] == test_y[r]:
@@ -538,7 +538,7 @@ def run_eps_arm(ctx: DeviceContext) raises:
             var rf = RandomForest[DT, LT](
                 rf_params=p, rf_type=CLASSIFICATION
             )
-            rf.predict(rows, n_test, EPS_COLS, preds, forest)
+            rf.predict_host(rows, n_test, EPS_COLS, preds, forest)
             var correct = 0
             for r in range(n_test):
                 if preds[r] == test_y[r]:

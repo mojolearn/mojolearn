@@ -754,7 +754,7 @@ def rbc_eps_pass_count(
     # can wrap back to a positive value past 2^32. The caller refuses or
     # splits on this number, so it must never be the wrapped one. Lane
     # cgr4-download-loop: the degrees (`vd`, still the scan's input) are
-    # summed in Int64 on the device, the value `rbc_exact_edge_total` got
+    # summed in Int64 on the device, the value `rbc_exact_edge_total_host` got
     # from the downloaded offsets' wrapped differences, with no download.
     var nnz = Int(device_sum_i32(ctx, vd, n_queries))
 

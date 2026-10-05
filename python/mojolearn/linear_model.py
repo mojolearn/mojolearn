@@ -243,14 +243,12 @@ def _r2_sums(pred, y):
     pyglue-sweep (Oct 3): these were sequential Python float64 loops over
     the rows (DEVIATION 2365); the bits of `score()` move. Callers apply
     their own convention for `SS_tot == 0`."""
-    from ._expansion_metrics import _Reg, _centered, _centered_sse, _diff_and_y_means
+    from ._expansion_metrics import _Reg, _r2_sums_of
     t, _ = as_f32_c(y, ndim=1, name="y")
     p, _ = as_f32_c(pred, ndim=1, name="predictions")
     r = _Reg(t, p, None, "uniform_average", "score", variance_ok=True)
-    ss_res = _centered_sse(r, None)[0]
-    _, y_mean = _diff_and_y_means(r, None)
-    ss_tot = _centered(r, "y", y_mean, None, mean=False)[0]
-    return float(ss_res), float(ss_tot)
+    # lane cpu2-l7-metrics: one program, the y mean rounded on the device
+    return _r2_sums_of(r, None)
 
 
 def _r2_host(pred, y):
@@ -483,6 +481,33 @@ def _ols_tsqr(x, y, rows, cols, mode):
     return X.out((cols,))
 
 
+def _ols_tsqr_centered(x, y, rows, cols, mode):
+    """`(coef_, column means, y mean)` of the unweighted fit with an
+    intercept in ONE binding entry (lane idn-dense-linalg,
+    `x_decomp_ols_tsqr_r`): X and y cross to the device once; the exact
+    column sums, the means, the centering and the blocked TSQR of
+    [X - mu | y - mean] read the resident buffers, then `_ols_tsqr`'s solve
+    on the small R. The same words as `_column_means` + `_center` +
+    `_ols_tsqr`, which crossed X four times. None when the binding does not
+    route here (an older binding, a FAST build, or one built with -D
+    MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF): the caller keeps that sequence."""
+    from ._expansion_decomp import _F32_EPS, _Kit, _M, _mode, _tsqr_lstsq_core
+    k = _Kit(_mode(mode))
+    flags = _optional_export(k._raw(), "x_decomp_idn_flags")
+    if flags is None or not int(flags()) & 1:
+        return None
+    n = cols + 1
+    Ra = _M.zeros(n, n)
+    mu = empty((cols,), "<f4")
+    ymean = empty((1,), "<f8")
+    # ORDER MATCHES x_decomp/api.mojo ols_tsqr_r_py: (a, b, r_out, mu, ymean), (m, d)
+    k.b.x_decomp_ols_tsqr_r(addr_ro(x, name="X"), addr_ro(y, name="y"), Ra.addr,
+                            addr(mu, name="column means"), addr(ymean, name="y mean"),
+                            [int(rows), int(cols)])
+    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True, Ra=Ra)
+    return X.out((cols,)), mu, float(ymean.tolist()[0])
+
+
 class LinearRegression(NumericModeMixin):
     """Ordinary least squares on the GPU.
 
@@ -624,6 +649,13 @@ class LinearRegression(NumericModeMixin):
                 self._y_mean = 0.0
             self._set_intercept(cols)
             return self
+        if self.fit_intercept and weights is None and not normal_eq:
+            # lane idn-dense-linalg: center + TSQR in one entry, X up once
+            got = _ols_tsqr_centered(x, target, rows, cols, getattr(self, "numeric_mode", None))
+            if got is not None:
+                self.coef_, self._x_mean, self._y_mean = got
+                self._set_intercept(cols)
+                return self
         if self.fit_intercept:
             # float64 column means -> float32, then a float32 subtraction.
             # The means come from exact column sums rounded once to float64
@@ -1230,6 +1262,27 @@ class LogisticRegression(NumericModeMixin):
                 addr(codes, name="codes"),
                 [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
             )
+            return decode_labels(self.classes_, codes)
+        # lane fam2-linear: the row argmax runs on the device beside the
+        # scores (`qn_predict_multiclass`); a binding without the entry (a
+        # CPU-only install, or a build with MOJOLEARN_QN_DEV_ARGMAX_OFF)
+        # keeps the host scan, the same first-maximum rule.
+        binding = self._bind("_mojolearn_estimators")
+        native = getattr(binding, "qn_predict_multiclass", None)
+        if native is not None:
+            if not hasattr(self, "_w"):
+                raise ValueError("mojolearn LogisticRegression: call fit first")
+            x, _ = as_f32_c(X, ndim=2, name="X")
+            if x.shape[1] != self.n_features_in_:
+                raise ValueError("mojolearn LogisticRegression feature count differs from fit")
+            codes = empty((x.shape[0],), "<i8")
+            if x.shape[0]:
+                native(
+                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
+                    addr(codes, name="codes"),
+                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0,
+                     self._n_targets()],
+                )
             return decode_labels(self.classes_, codes)
         scores = self.decision_function(X)
         return decode_labels(self.classes_, argmax_rows(scores))

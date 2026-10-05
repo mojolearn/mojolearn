@@ -1229,8 +1229,10 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     At least two labels are required; explicit labels permit one observed class.
     Probabilities must lie in [0,1], with row sums within sqrt(Float32 epsilon)
     of one. Validation does not renormalize. The GPU clips selected probabilities
-    to [Float32 epsilon, 1-epsilon] and returns a Float32 mean (normalize=True)
-    or sum. Sample weights and empty inputs are not supported.
+    to [Float32 epsilon, 1-epsilon] and returns the Float32 PairSum of the rows
+    divided by n in binary64 (normalize=True) or the sum; the check, the layout
+    and the folds run in one x_metrics device program. Empty inputs are not
+    supported; sample weights take log_loss_options.
     """
     if sample_weight is not None:
         # lane/metrics: the weighted mean of the clipped -log p_true rows.
@@ -1263,24 +1265,28 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     if len(true) > 2147483647 or probabilities.size > 2147483647 or (binary and 2 * len(true) > 2147483647):
         raise ValueError("log_loss exceeds the native Int32 indexing bound")
     probabilities = as_f32_c(probabilities, ndim=probabilities.ndim, name="probabilities")[0]
-    packed = empty((len(true), 2), "<f4") if binary else None
-    validate = _native("probability_rows_f32")
-    code = int(validate(_addr_ro(probabilities), _addr(packed) if binary else 0,
-                        len(true), 1 if binary else len(selected), int(binary)))
-    if code:
-        reasons = {1: "must be finite", 2: "must lie in [0,1]",
-                   3: "rows must sum to one within sqrt(float32 eps)"}
-        raise ValueError("log_loss probabilities " + reasons.get(code, "failed native validation"))
-    if binary:
-        probabilities = packed
+    if not len(true):
+        raise ValueError("log_loss requires at least one sample")
+    # lane cpu2-l7-metrics: the probabilities' check (finite, in [0, 1], rows
+    # summing to one), the binary [1 - p, p] layout, the clipped -log p_true
+    # per row, its PairSum and the mean run in ONE x_metrics device program
+    # (x_metrics/tail.mojo proba_rows, ranking.mojo row_metric, rank_epi.mojo
+    # MEAN); no host probability_rows_f32 pass
+    from ._expansion_metrics import _Prog, _put_proba, _proba_code, _row_mean
     encoded = _label_map(true, mapping.__getitem__)
-    probabilities = as_f32_c(probabilities, ndim=probabilities.ndim, name="probabilities")[0]
-    result = empty(1, '<f4')
-    _get_binding(numeric_mode).log_loss(
-        _addr_ro(encoded), _addr_ro(probabilities), _addr(result),
-        [len(true), len(selected), int(normalize)])
-    return float(result[0])
+    n, k = len(true), len(selected)
+    prog = _Prog()
+    S, flags = _put_proba(prog, probabilities, n, k, binary)
+    Y = prog.put_i32(encoded)
 
+    def check(prog):
+        code = _proba_code(prog, flags)
+        if code:
+            reasons = {1: "must be finite", 2: "must lie in [0,1]",
+                       3: "rows must sum to one within sqrt(float32 eps)"}
+            raise ValueError("log_loss probabilities " + reasons.get(code, "failed native validation"))
+    return float(_row_mean(S, k, Y, n, "logloss", None, numeric_mode, prog=prog, normalize=bool(normalize),
+                           after=(check,)))
 
 
 def _binary_ranking_inputs(y_true, y_score, sample_weight):

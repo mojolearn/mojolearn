@@ -1582,13 +1582,6 @@ class Mamba3Block(_MambaBase):
         b, l = int(x.shape[0]), int(x.shape[1])
         nh = self.nheads
         y = _buffers.empty((b, l, self.d_model), '<f4')
-        h_last = _buffers.empty((b, nh, _M3_HEADDIM, _M3_D_STATE), '<f4')
-        k_last = _buffers.empty((b, nh, _M3_D_STATE), '<f4')
-        v_last = _buffers.empty((b, nh, _M3_HEADDIM), '<f4')
-        theta_last = _buffers.empty((b, nh, _M3_NUM_ROPE_ANGLES), '<f4')
-        addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w]  # glue: one address per weight tensor
-                 + [_addr(y), _addr(h_last), _addr(k_last), _addr(v_last),
-                    _addr(theta_last)])
         # lane/neural-net-experiment (2026-09-30): the session keeps the
         # weights on the device across calls (reused only when their bytes
         # are unchanged; the binding compares them). Same entry arithmetic.
@@ -1597,7 +1590,28 @@ class Mamba3Block(_MambaBase):
             session_forward = getattr(ext, "mamba3_prefill_session_forward", None)
         except (ImportError, AttributeError):
             session_forward = None
-        if session_forward is not None and os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") != "1":
+        use_session = (session_forward is not None
+                       and os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") != "1")
+        # lane/fam2-lm (2026-10-04): a block owned by a stack (SambaStack
+        # sets `_discard_reports`) reads no report, so where the binding
+        # admits it the four report downloads are not requested (address 0)
+        # and the `*_last_` attributes are None after the call.
+        skip_reports = False
+        if use_session and getattr(self, "_discard_reports", False):
+            optional = getattr(ext, "mamba3_prefill_session_reports_optional", None)
+            skip_reports = bool(optional()) if optional is not None else False
+        if skip_reports:
+            h_last = k_last = v_last = theta_last = None
+            report_addrs = [0, 0, 0, 0]
+        else:
+            h_last = _buffers.empty((b, nh, _M3_HEADDIM, _M3_D_STATE), '<f4')
+            k_last = _buffers.empty((b, nh, _M3_D_STATE), '<f4')
+            v_last = _buffers.empty((b, nh, _M3_HEADDIM), '<f4')
+            theta_last = _buffers.empty((b, nh, _M3_NUM_ROPE_ANGLES), '<f4')
+            report_addrs = [_addr(h_last), _addr(k_last), _addr(v_last), _addr(theta_last)]
+        addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w]  # glue: one address per weight tensor
+                 + [_addr(y)] + report_addrs)
+        if use_session:
             if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not ext:
                 self._prefill_session = ext.mamba3_prefill_session_create()
                 self._prefill_binding = ext

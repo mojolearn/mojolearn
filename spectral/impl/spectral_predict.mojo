@@ -35,6 +35,7 @@ from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from core.device_zero import enqueue_fill
 from neighbors.estimator import knn_search
 from spectral.checks.device_io import download_f32, download_i32, upload_f32
+from spectral.impl.labels_device import IDN_SPECTRAL_LABELS_DEVICE, download_labels_i32
 from spectral.impl.spectral_predict_common import (
     SPECTRAL_AFFINITY_NEAREST_NEIGHBORS,
     SPECTRAL_PREDICT_ONE_WAY_EDGE,
@@ -252,9 +253,14 @@ def spectral_predict_device(
         ctx, d_out, n_queries, k, n_clusters, d_cent, d_labels, METRIC_L2_EXPANDED
     )
     var emb = download_f32(ctx, d_out, n_queries * k)
-    var u_labels = List[UInt32](length=n_queries, fill=UInt32(0))
-    ctx.enqueue_copy(dst_ptr=u_labels.unsafe_ptr(), src_buf=d_labels)
-    ctx.synchronize()
+    var u_labels = List[UInt32]()
+    var labels = List[Int32]()
+    comptime if IDN_SPECTRAL_LABELS_DEVICE:
+        labels = download_labels_i32(ctx, d_labels, n_queries)
+    else:
+        u_labels = List[UInt32](length=n_queries, fill=UInt32(0))
+        ctx.enqueue_copy(dst_ptr=u_labels.unsafe_ptr(), src_buf=d_labels)
+        ctx.synchronize()
     _ = bad^
     _ = h_idx^
     _ = d_cols^
@@ -265,9 +271,10 @@ def spectral_predict_device(
     _ = d_cent^
     _ = d_out^
     _ = d_labels^
-    var labels = List[Int32](capacity=n_queries)
-    for i in range(n_queries):
-        labels.append(Int32(u_labels[i]))
+    comptime if not IDN_SPECTRAL_LABELS_DEVICE:
+        labels = List[Int32](capacity=n_queries)
+        for i in range(n_queries):
+            labels.append(Int32(u_labels[i]))
     return SpectralPrediction(labels^, emb^)
 
 

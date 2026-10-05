@@ -58,6 +58,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_scan import device_first_nonfinite
 from std.memory import bitcast
 from hdbscan.impl.detail.fast_apple import HDB_LINKAGE_DEVICE
+from hdbscan.impl.detail.idn_switches import IDN_HDB_CONDENSE_TWO_READS
 from core.fast_radix_sort import (
     fast_radix_sort_pairs_u32,
     frs_counts_len,
@@ -1066,7 +1067,9 @@ def build_condensed_device(
         )
     # lane af-hdbscan2 (-D MOJOLEARN_HDB_LINKAGE_DEVICE): the same tree
     # with two status readbacks instead of eight waits.
-    comptime if HDB_LINKAGE_DEVICE:
+    # fam2-cluster: the same route under IDENTICAL on every vendor
+    # (IDN_HDB_CONDENSE_TWO_READS).
+    comptime if HDB_LINKAGE_DEVICE or IDN_HDB_CONDENSE_TWO_READS:
         return _condensed_two_reads(
             ctx, children, delta, sizes, min_cluster_size, n_leaves, sabotage
         )

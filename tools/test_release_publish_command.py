@@ -22,6 +22,7 @@ class PublishCommandTests(unittest.TestCase):
                 (root / name).mkdir(parents=True)
             (root / 'python/mojolearn/_version.py').write_text('__version__ = "0.8.9"\n')
             shutil.copy(ROOT / 'tools/check_light_release.py', root / 'tools')
+            shutil.copy(ROOT / 'python/mojolearn/gpu_plugins.py', root / 'python/mojolearn')
             # This is a staging/dispatch test, not native artifact admission.
             (root / 'packaging/verify_alpha_artifacts.py').write_text('print("{}")\n')
             source = 'a' * 40
@@ -36,12 +37,13 @@ class PublishCommandTests(unittest.TestCase):
                 wheel = root / f'mojolearn_{split}-0.8.9-py3-none-manylinux_2_35_x86_64.whl'
                 with zipfile.ZipFile(wheel, 'w') as archive:
                     archive.writestr(f'mojolearn/{vendor}/x/_mojolearn_knn.so', 'inert')
+                    archive.writestr(f'mojolearn_{split}-0.8.9.dist-info/LINUX_PAYLOAD.json', json.dumps({'source_commit': source}))
                 plugins = [dict(wheel='/box/' + wheel.name, wheel_sha256=gate.digest(wheel))]
             report = root / 'results.json'
             report.write_text(json.dumps(dict(status='FAILED' if failed else 'PASSED',
                 scope='expanded', release_qualified=False, source_commit=source,
                 wheel=str(core if split else wheel), wheel_sha256=gate.digest(core if split else wheel),
-                plugins=plugins, installed={'vendor': vendor},
+                plugins=plugins, installed={'vendor': vendor, 'gpu_arch': 'gfx942' if vendor == 'hip' else 'sm_89'},
                 expanded={'scope': 'expanded'},
                 jobs=[dict(name=name, exit_code=0) for name in sorted(gate.JOBS)])))
             scripts = {

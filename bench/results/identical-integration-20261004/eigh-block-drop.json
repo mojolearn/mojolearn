@@ -1,0 +1,50 @@
+{
+  "decision": "DROP default block Jacobi on all GPU vendors and host; retain explicit experimental opt-in with OFF precedence",
+  "numerical_source_sha": "2191cd1ec57bcdf5749ed9a6d6411b8c8896779d",
+  "fixture": "identical_wave_quality.eigh n4096 dense2I+uuT",
+  "first_refusal": {
+    "vendor": "AMD MI325X",
+    "outer_sweep": 0,
+    "round": 183,
+    "group": 71,
+    "pivot_n": 32,
+    "sweeps": 60,
+    "local_tolerance": 6.25e-09
+  },
+  "captured_log_sha256": "fad302120a004520faf9c36914343cbe9ea28f59ba2508d3b1e448127eec5368",
+  "host_replay": [
+    {
+      "budget": 60,
+      "converged": false,
+      "off": 2.3107969e-14
+    },
+    {
+      "budget": 120,
+      "converged": false,
+      "off": 2.285097e-14
+    },
+    {
+      "budget": 180,
+      "converged": false,
+      "off": 2.2596937e-14
+    },
+    {
+      "budget": 240,
+      "converged": false,
+      "off": 2.2345727e-14
+    }
+  ],
+  "diagonal_mass": 132.95196,
+  "frobenius_guard": "PASS all host replays",
+  "validation": "Expected REFUSAL regression on AMD Linux host passed default,optin,per-laneOFFprecedence,masterOFFprecedence; no decomposition PASS claimed",
+  "unchanged_checks": [
+    "local tolerance",
+    "60 sweep production budget",
+    "global convergence",
+    "Frobenius preservation",
+    "full residual/orthogonality/eigenvalue gates"
+  ],
+  "remote_evidence": "/root/lq/eigh-pivot-debug",
+  "invalidated_preliminary": "probe.log and capture.log used incorrect shorthand defines and are excluded; corrected probe-identical.log and capture-identical.log assert IDENTICAL at compile time",
+  "remaining": "Rebuild source x_decomp and host at fixed SHA, rerun full4096/513 quality; no large established-route result claimed yet"
+}

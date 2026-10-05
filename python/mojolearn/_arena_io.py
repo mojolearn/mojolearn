@@ -33,6 +33,17 @@ Two APIs every family can call:
    directly: `cache = DeviceCache(binding, "x_foo")`, `cache.id_of(arr)`,
    `cache.close()`.
 
+3. DEVICE-ROWS INPUT (`DeviceRows`, `rows_slot`; lane cpu4-misc): a fold
+   view of a host float32 C-contiguous 2-D Array (the base and an int64
+   index Array), handed by model_selection to an estimator that opts in
+   (class attribute `_mojolearn_device_rows = True`). An arena runner that
+   meets one puts the base ONCE into its own binding's store (the active
+   `resident()` scope's cache, identity-keyed, so every fold and candidate
+   shares the upload) and gathers the fold rows on the device
+   (`<prefix>_dev_take_rows`); the rows never come to the host. A runner
+   without a device store (the host column, a CPU-only install) calls
+   `materialize()`: the fold rows as a host Array, as before.
+
 Where a word travels moves no bit. The Python here only lays out Int32
 range lists; a CPU-only install never reaches it (host bindings run the
 arena in place).
@@ -41,8 +52,8 @@ import array
 import os
 import threading
 
-__all__ = ["DeviceCache", "resident", "ranges_enabled", "input_ranges", "output_ranges",
-           "complement", "pack_ins", "pack_outs", "RESIDENT_MIN_WORDS"]
+__all__ = ["DeviceCache", "DeviceRows", "resident", "ranges_enabled", "input_ranges", "output_ranges",
+           "complement", "pack_ins", "pack_outs", "RESIDENT_MIN_WORDS", "rows_slot"]
 
 #: Inputs below this many words always go up from the host arena: a
 #: put costs one synchronized copy, which pays only on a big buffer.
@@ -231,3 +242,58 @@ def active_cache(binding, prefix, n_words):
     if scope is None or n_words < scope.min_words:
         return None
     return scope.cache(binding, prefix)
+
+
+class DeviceRows:
+    """Rows `indices` (a C-contiguous int64 Array) of `base` (a float32
+    C-contiguous 2-D Array): a fold's X with no host gather. shape, dtype,
+    ndim, size and len are known without the data. `materialize()` gives
+    the rows as a host Array through `take(base, indices)` (model_selection's
+    resident device gather) for a route that needs host words; it is called
+    at most once."""
+
+    def __init__(self, base, indices, take):
+        self.base, self.indices = base, indices
+        self._take = take
+        self._host = None
+        self.shape = (int(indices.size),) + tuple(base.shape[1:])
+        self.dtype = base.dtype
+        self.itemsize = base.itemsize
+        self.ndim = base.ndim
+        n = 1
+        for v in self.shape:  # glue: the product of shape dims
+            n *= v
+        self.size = n
+        self.row_words = (base.size // base.shape[0]) if base.shape[0] else 0
+
+    def __len__(self):
+        return self.shape[0]
+
+    def materialize(self):
+        if self._host is None:
+            self._host = self._take(self.base, self.indices)
+        return self._host
+
+
+def rows_slot(binding, prefix, rows, direct):
+    """The store id (in `binding`'s own store) of `rows`' device gather, or
+    None when the binding cannot gather (no `<prefix>_dev_take_rows` or no
+    store): the caller then copies `rows.materialize()`. The base goes up
+    once through the active `resident()` scope's cache (any size), else
+    through `direct` (a DeviceCache the caller closes after its run). The
+    returned slot belongs to the caller, who frees it with
+    `<prefix>_dev_free` after the run."""
+    try:
+        take = getattr(binding, prefix + "_dev_take_rows")
+    except (AttributeError, ImportError):  # an older build, or a host facade
+        return None
+    if take is None or not rows.size or not DeviceCache.supports(binding, prefix):
+        return None
+    scope = getattr(_LOCAL, "scope", None)
+    cache = scope.cache(binding, prefix) if scope is not None else None
+    if cache is None:
+        cache = direct
+    if cache is None:
+        return None
+    base_id = cache.id_of(rows.base)
+    return int(take(base_id, rows.row_words, int(rows.indices._addr), int(rows.indices.size)))

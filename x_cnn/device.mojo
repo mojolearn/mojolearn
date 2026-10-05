@@ -17,7 +17,7 @@ from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_rsqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_rsqrt
 from checks.rtf_seam import rtf_mul_add
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
@@ -25,7 +25,10 @@ from gemm.checks.gemm_identical import (
     PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, apple_mma_applies_one_leaf, PLAN_APPLE_MMA_SPLIT, PLAN_APPLE_MMA_SPLIT_BIG,
     identical_gemm_splitk_fits, choose_gemm_plan,
 )
-from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
+from gemm.checks.gemm_identical import (
+    GEMM_FOLD_SLOTS, _fold_drain, _fold_push, _rtf_leaf_partial, contract_partition, gemm_operand_strides,
+)
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_AMD, COLUMN_NVIDIA
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
@@ -44,8 +47,18 @@ from x_cnn.ops import (
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
+    BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
+    bn_blk_red_at, bn_blk_red_fin_at, DROPOUT2D_CH_MASK, dropout2d_chan_at, dropout2d_apply_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at, argmax_row_at,
+    chan_slice_at, chan_place_at,
+)
+# lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
+from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
+# lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
+from x_cnn.ops import (
+    IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_rows_prm,
+    AH_ROW, adam_hyper_at,
 )
 
 comptime TPB = 256
@@ -88,6 +101,9 @@ struct _CnnContext(Defaultable, Movable):
     #: lane/cnn-apple2: freed resident arrays kept for reuse by `res_alloc`
     #: (at most `RES_POOL_MAX_FLOATS` in all).
     var pool: List[DeviceBuffer[DType.float32]]
+    #: lane idn-cnn-resident: the leading words of workspace slot
+    #: `ONES_WS_SLOT` that already hold 1.0f (`ones_buf`).
+    var ones_n: Int
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
@@ -95,6 +111,7 @@ struct _CnnContext(Defaultable, Movable):
         self.res = List[DeviceBuffer[DType.float32]]()
         self.tuned = List[Int]()
         self.pool = List[DeviceBuffer[DType.float32]]()
+        self.ones_n = 0
 
 
 #: The pinned stages of this binding's downloads (core/staged_download.mojo),
@@ -250,9 +267,22 @@ def _im2col(
 # weights sit flushed in threadgroup memory; the NCHW store is
 # `conv_out_val` of that cell. No GEMM launch, no y2 round trip, no
 # conv_out launch. `-D MOJOLEARN_XCNN_NO_DIRECT_CONV` is the before arm.
-#: Apple only: measured there (the other columns keep their GEMM path until
-#: their own runs time it).
-comptime DIRECT_CONV = TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
+#: Apple since lane/cnn-apple2; NVIDIA and AMD since nr-small D6
+#: (2026-10-04, roadmap D6 / review "ALREADY WRITTEN, gated"): the cell is
+#: the pinned contract's one-leaf chain on every column (k <= DC_MAXK is one
+#: leaf; the leaf bound is 128, DC_MAXK = 32 is the register staging of the
+#: taps), and the kernel uses only `barrier()` over threadgroup memory, so
+#: the words are the GEMM path's. Needs the NV/AMD ID check.
+#: IDENTICAL only on NV/AMD (FAST keeps its AFN direct path there).
+#: -D MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF (or MOJOLEARN_IDN_ALL_OFF)
+#: restores Apple only.
+comptime DIRECT_CONV_NVAMD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_DIRECT_CONV_NVAMD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime DIRECT_CONV = (
+    TARGET_COLUMN == COLUMN_APPLE
+    or (DIRECT_CONV_NVAMD and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD))
+) and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
 comptime DC_MAXK = 32
 comptime DC_MAXW = 2048  # 8 KB of threadgroup memory: four blocks fit a core
 comptime DC_TPB = 256
@@ -358,7 +388,7 @@ def _apple_tuned_plan(
             return s[].tuned[i + 4]
         i += 5
     var need = 0
-    for j in range(len(cand)):
+    for j in range(len(cand)):  # small-loop(cand: GEMM plan candidates, a handful): largest workspace over the plans
         need = max(need, identical_gemm_workspace_floats(m, n, k, cand[j]))
     var wp = ws(ctx, GEMM_WS_SLOT, need)
     ctx.synchronize()
@@ -561,6 +591,106 @@ def ws_i(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.int
     return view_i(ctx, b.unsafe_ptr().bitcast[Int32]().unsafe_origin_cast[MutAnyOrigin](), n)
 
 
+#: lane idn-cnn-resident (2026-10-04): THE DEVICE ONES VECTOR. The bias
+#: gradient is the pinned GEMM's fold of G against a vector of ones; every
+#: backward filled that vector again (a launch over the rows, or a fill).
+#: IDENTICAL now keeps one resident vector of 1.0f words in its own
+#: workspace slot, filled when it first grows to a size and read by every
+#: later backward. The same operand words into the same GEMM: no bit moves.
+#: `-D MOJOLEARN_XCNN_ONES_CACHE_OFF` is the before arm (a fill per call).
+comptime ONES_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_XCNN_ONES_CACHE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime ONES_WS_SLOT = 30
+
+
+#: nr-small D8 (2026-10-04): THE BIAS GRADIENT AS A COLUMN FOLD. gb[oc] =
+#: sum over the rows of G[row, oc] was the pinned GEMM (OP_TN, n = 1)
+#: against the ones vector, on a split plan sized for a matrix. It is now
+#: two launches that ARE that GEMM's cell: one thread per (leaf, oc) runs
+#: `_rtf_leaf_partial` (the contract's leaf, the exact rtf step, against the
+#: same ones words), then one thread per oc pushes the leaf partials in
+#: order through `_fold_push` / `_fold_drain` (the contract's tree) and
+#: stores ftz of the root: `_rtf_cell`'s arithmetic, which every plan equals
+#: (contract 7), with the partition from `contract_partition(k)` alone. Same
+#: bits on every column (the host keeps its pinned host GEMM). Needs the
+#: NV/AMD ID check. -D MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF (or
+#: MOJOLEARN_IDN_ALL_OFF) restores the GEMM. IDENTICAL, NVIDIA and AMD
+#: (Apple keeps its measured plan pick; `_rtf_leaf_partial` is not inlined).
+comptime XCNN_BIAS_FOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_APPLE and not (
+    is_defined["MOJOLEARN_IDN_XCNN_BIAS_FOLD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime BIAS_WS_SLOT = 29
+comptime BIAS_TPB = 128
+
+
+def bias_leaf_kernel(g: FP, ones: FP, part: FP, m_oc: Int32, k_rows: Int32, leaf: Int32, p_count: Int32):
+    """Thread t = l OC + oc: part[t] = leaf l of cell (oc, 0) of G^T ones."""
+    var OC = Int(m_oc)
+    var P = Int(p_count)
+    var t = Int(block_idx.x) * BIAS_TPB + Int(thread_idx.x)
+    if t >= OC * P:
+        return
+    var l = t // OC
+    var oc = t - l * OC
+    var k = Int(k_rows)
+    var sd = gemm_operand_strides(OP_TN, OC, 1, k)
+    part.unsafe_store(t, _rtf_leaf_partial(g, ones, oc, 0, l, P, Int(leaf), k, sd[0], sd[1], sd[2], sd[3]))
+
+
+def bias_fold_kernel(part: FP, gb: FP, m_oc: Int32, p_count: Int32):
+    """Thread oc: gb[oc] = ftz(the contract tree over part[l OC + oc], l ascending)."""
+    var OC = Int(m_oc)
+    var oc = Int(block_idx.x) * BIAS_TPB + Int(thread_idx.x)
+    if oc >= OC:
+        return
+    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+    var occ = 0
+    for l in range(Int(p_count)):
+        _ = _fold_push(stack, occ, part.unsafe_load(l * OC + oc))
+    gb.unsafe_store(oc, ftz(_fold_drain(stack, occ)))
+
+
+def bias_grad_gemm(
+    ctx: DeviceContext, mut gb: DeviceBuffer[DType.float32], mut g: DeviceBuffer[DType.float32],
+    mut ones: DeviceBuffer[DType.float32], OC: Int, rows: Int,
+) raises:
+    """gb = G^T ones (OC x 1 over `rows`): the pinned GEMM TN's words, by
+    XCNN_BIAS_FOLD's two launches when it is on."""
+    comptime if XCNN_BIAS_FOLD:
+        if rows > 0 and OC > 0:
+            var lp = contract_partition(rows)
+            var leaf = lp[0]
+            var P = lp[1]
+            var part = ws(ctx, BIAS_WS_SLOT, OC * P)
+            ctx.enqueue_function[bias_leaf_kernel](
+                fp(g), fp(ones), fp(part), Int32(OC), Int32(rows), Int32(leaf), Int32(P),
+                grid_dim=((OC * P + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
+            )
+            ctx.enqueue_function[bias_fold_kernel](
+                fp(part), fp(gb), Int32(OC), Int32(P),
+                grid_dim=((OC + BIAS_TPB - 1) // BIAS_TPB, 1, 1), block_dim=(BIAS_TPB, 1, 1),
+            )
+            _ = part^
+            return
+    device_gemm(ctx, gb, g, ones, OC, 1, rows, OP_TN)
+
+
+def ones_buf(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """`n` floats for a backward's ones operand. With `ONES_CACHE` they are
+    the resident ones (already 1.0f; filled here, in order, when the vector
+    grows); without it they are workspace slot `slot`, which the caller
+    fills as it always did."""
+    comptime if ONES_CACHE:
+        var need = n if n > 0 else 1
+        var b = ws(ctx, ONES_WS_SLOT, need)
+        var s = _slots()
+        if s[].ones_n < need:
+            # a grown slot is a new buffer (`ws`), so every word is filled
+            b.enqueue_fill(Float32(1))
+            s[].ones_n = need
+        return b^
+    return ws(ctx, slot, n)
+
+
 def put[resident: Bool](ctx: DeviceContext, slot: Int, src: FP, n: Int) raises -> DeviceBuffer[DType.float32]:
     """An entry's input: the resident array itself, or host `src` copied into slot `slot`."""
     comptime if resident:
@@ -634,7 +764,7 @@ def res_alloc(n: Int) raises -> Int:
     comptime if RES_POOL:
         var s = _slots()
         var pick = -1
-        for j in range(len(s[].pool)):
+        for j in range(len(s[].pool)):  # small-loop(pool: freed resident arrays, under the pool cap): smallest fitting slot search, no data
             var ln = len(s[].pool[j])
             if ln >= need and ln <= 2 * need and (pick < 0 or ln < len(s[].pool[pick])):
                 pick = j
@@ -661,14 +791,14 @@ def res_free(addr: Int) raises:
     ctx.synchronize()
     _ = ctx^
     var s = _slots()
-    for k in range(len(s[].res)):
+    for k in range(len(s[].res)):  # small-loop(res: live resident arrays of the session): address lookup, no data
         if Int(s[].res[k].unsafe_ptr()) == addr:
             var b = s[].res.pop(k)
             comptime if RES_POOL:
                 # keep it for reuse while the pool stays under its cap
                 # (the wait above ended every use of it)
                 var held = len(b)
-                for j in range(len(s[].pool)):
+                for j in range(len(s[].pool)):  # small-loop(pool: freed resident arrays, under the pool cap): pool size total for the cap test
                     held += len(s[].pool[j])
                 if held <= RES_POOL_MAX_FLOATS:
                     s[].pool.append(b^)
@@ -898,7 +1028,7 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dp = put_prm(ctx, 3, prm)
     var cols = ws(ctx, 4, rows * ckk)
     var g = ws(ctx, 5, rows * OC)
-    var ones = ws(ctx, 6, rows)
+    var ones = ones_buf(ctx, 6, rows)
     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
     var gb = m_out(ctx, 8, a[5], OC, isdev(dev, 5))
     var dcols = ws(ctx, 9, rows * ckk)
@@ -912,11 +1042,12 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
         )
     else:
         launch[dout_rows_at](ctx, fp(ddout), fp(g), fp(g), fp(g), ip(dp), ip(dp), rows * OC)
-    launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
+    comptime if not ONES_CACHE:
+        launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
     device_gemm(ctx, gw, g, cols, OC, ckk, rows, OP_TN)
-    device_gemm(ctx, gb, g, ones, OC, 1, rows, OP_TN)
+    bias_grad_gemm(ctx, gb, g, ones, OC, rows)
     device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
     launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
     m_fetch(ctx, gx, a[3], nx, isdev(dev, 3))
@@ -1154,13 +1285,14 @@ def linear_backward_m(a: List[Int], dev: Int, n: Int, d_in: Int, d_out: Int) rai
     var dx = m_in(ctx, 0, a[0], n * d_in, isdev(dev, 0))
     var dw = m_in(ctx, 1, a[1], d_out * d_in, isdev(dev, 1))
     var dg = m_in(ctx, 2, a[2], n * d_out, isdev(dev, 2))
-    var dones = ws(ctx, 3, n)
-    dones.enqueue_fill(Float32(1))
+    var dones = ones_buf(ctx, 3, n)
+    comptime if not ONES_CACHE:
+        dones.enqueue_fill(Float32(1))
     var gx = m_out(ctx, 4, a[3], n * d_in, isdev(dev, 3))
     var gw = m_out(ctx, 5, a[4], d_out * d_in, isdev(dev, 4))
     var gb = m_out(ctx, 6, a[5], d_out, isdev(dev, 5))
     device_gemm(ctx, gw, dg, dx, d_out, d_in, n, OP_TN)
-    device_gemm(ctx, gb, dg, dones, d_out, 1, n, OP_TN)
+    bias_grad_gemm(ctx, gb, dg, dones, d_out, n)
     device_gemm(ctx, gx, dg, dw, n, d_in, d_out, OP_NN)
     m_fetch(ctx, gx, a[3], n * d_in, isdev(dev, 3))
     m_fetch(ctx, gw, a[4], d_out * d_in, isdev(dev, 4))
@@ -1183,6 +1315,29 @@ def linear_backward_into[resident: Bool = False](
     linear_backward_m([_a(x), _a(w), _a(g), _a(gx_out), _a(gw_out), _a(gb_out)], 63 if resident else 0, n, d_in, d_out)
 
 
+def fold_launch(ctx: DeviceContext, a: FP, b: FP, final_dst: FP, pp: IP, count: Int) raises:
+    """lane fam2-neural: the blocked fold of a[0:count] (`blk_fold_at`, the
+    levels of `fold_plan` at `pp`): level sums ping-pong between `a` and
+    `b` (b holds ceil(count / LOSS_FOLD_BLOCK) words); the last level writes
+    its one word to final_dst[the plan's index]. Enqueues only."""
+    var c = count
+    var src = a
+    var dst = b
+    var lvl = 0
+    while True:
+        var nb = (c + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK
+        var lp_ = pp + 3 * lvl
+        if nb <= 1:
+            launch[blk_fold_at](ctx, src, final_dst, final_dst, final_dst, lp_, lp_, 1)
+            break
+        launch[blk_fold_at](ctx, src, dst, dst, dst, lp_, lp_, nb)
+        var t = src
+        src = dst
+        dst = t
+        c = nb
+        lvl += 1
+
+
 def softmax_xent_into[resident: Bool = False](
     logits: FP, labels: IP, n: Int, k: Int, grad_out: FP, proba_out: FP
 ) raises -> Float32:
@@ -1198,6 +1353,35 @@ def softmax_xent_into[resident: Bool = False](
     grad.enqueue_fill(Float32(0))
     rl.enqueue_fill(Float32(0))
     launch[softmax_xent_row_at](ctx, fp(dl), fp(grad), fp(proba), fp(rl), ip(dy), ip(dp), n)
+    comptime if IDN_XENT_DEV_FOLD:
+        # lane fam2-neural: the mean is folded on the device (`blk_fold_at`,
+        # the host column's fold too); one word comes down instead of n
+        if n > 0:
+            var fprm = fold_plan(n, n, 0)
+            var dfp = put_prm(ctx, 7, fprm)
+            var pong = ws(ctx, 6, (n + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK)
+            var red = ws(ctx, 8, 1)
+            fold_launch(ctx, fp(rl), fp(pong), fp(red), ip(dfp), n)
+            var mean = List[Float32](length=1, fill=Float32(0))
+            fetch[resident](ctx, grad, grad_out, n * k)
+            fetch[resident](ctx, proba, proba_out, n * k)
+            down(ctx, red, lp(mean), 1)
+            ctx.synchronize()
+            var loss = mean[0]
+            _ = mean^
+            _ = fprm^
+            _ = prm^
+            _ = dfp^
+            _ = pong^
+            _ = red^
+            _ = dl^
+            _ = dy^
+            _ = dp^
+            _ = grad^
+            _ = proba^
+            _ = rl^
+            _ = ctx^
+            return loss
     var rows = List[Float32](length=n, fill=Float32(0))
     fetch[resident](ctx, grad, grad_out, n * k)
     fetch[resident](ctx, proba, proba_out, n * k)
@@ -1451,14 +1635,24 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
     var da = m_in(ctx, 2, a[2], na, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
     var dout = m_out(ctx, 4, a[3], total, isdev(dev, 3))
+    # lane idn-loss-norm-folds: the blocked folds' partials (x_cnn/ops.mojo
+    # BN_FOLD_BLOCK), C * NB words; one word when the single chain runs
+    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    var dpart = ws(ctx, 5, nblk)
     if training:
-        var blk = False
-        comptime if BN_BLOCK:
-            blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
-        if blk:
-            ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+        comptime if BN_FOLD_BLOCK:
+            launch[bn_blk_sum_at](ctx, fp(dx), fp(dpart), fp(dpart), fp(dpart), ip(dp), ip(dp), nblk)
+            launch[bn_blk_mean_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            launch[bn_blk_sq_at](ctx, fp(dx), fp(dpart), fp(da), fp(da), ip(dp), ip(dp), nblk)
+            launch[bn_blk_var_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
         else:
-            launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+            var blk = False
+            comptime if BN_BLOCK:
+                blk = _bn_use_block[True](ctx, dx, dr, da, dp, Int(prm[0]), C, Int(prm[2]))
+            if blk:
+                ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+            else:
+                launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
         launch[bn_eval_stats_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     launch[bn_apply_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
@@ -1470,6 +1664,7 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
     ctx.synchronize()
     _ = dx^
     _ = dr^
+    _ = dpart^
     _ = da^
     _ = dp^
     _ = dout^
@@ -1507,13 +1702,21 @@ def batchnorm_backward_m(a: List[Int], dev: Int, prm: List[Int32], training: Boo
     var da = m_in(ctx, 2, a[2], na, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
     var dout = m_out(ctx, 4, a[3], total, isdev(dev, 3))
-    var blk = False
-    comptime if BN_BLOCK:
-        blk = _bn_use_block[False](ctx, dx, dg, da, dp, Int(prm[0]), C, Int(prm[2]))
-    if blk:
-        ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+    # lane idn-loss-norm-folds: blocked folds (x_cnn/ops.mojo BN_FOLD_BLOCK),
+    # partials [sum_g C * NB | sum_gx C * NB]
+    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    var dpart = ws(ctx, 5, 2 * nblk)
+    comptime if BN_FOLD_BLOCK:
+        launch[bn_blk_red_at](ctx, fp(dx), fp(dg), fp(da), fp(dpart), ip(dp), ip(dp), nblk)
+        launch[bn_blk_red_fin_at](ctx, fp(dpart), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
-        launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
+        var blk = False
+        comptime if BN_BLOCK:
+            blk = _bn_use_block[False](ctx, dx, dg, da, dp, Int(prm[0]), C, Int(prm[2]))
+        if blk:
+            ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+        else:
+            launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
     if training:
         launch[bn_bwd_dx_at](ctx, fp(dx), fp(dg), fp(da), fp(dout), ip(dp), ip(dp), total)
     else:
@@ -1523,6 +1726,7 @@ def batchnorm_backward_m(a: List[Int], dev: Int, prm: List[Int32], training: Boo
     ctx.synchronize()
     _ = dx^
     _ = dg^
+    _ = dpart^
     _ = da^
     _ = dp^
     _ = dout^
@@ -1543,10 +1747,19 @@ def dropout2d_m(a: List[Int], dev: Int, n: Int, prm: List[Int32], hyper: List[Fl
     var dh = put_hyper(ctx, 2, hyper)
     var mask = m_out(ctx, 3, a[2], n, isdev(dev, 2))
     var dout = m_out(ctx, 4, a[1], n, isdev(dev, 1))
-    launch[dropout2d_at](ctx, fp(dx), fp(mask), fp(dout), fp(dh), ip(dp), ip(dp), n)
+    # lane idn-loss-norm-folds: one draw per (n, c) channel into a table,
+    # then the element pass (x_cnn/ops.mojo DROPOUT2D_CH_MASK); same words
+    var nch = Int(prm[0]) * Int(prm[1]) if DROPOUT2D_CH_MASK else 1
+    var dtab = ws(ctx, 5, nch)
+    comptime if DROPOUT2D_CH_MASK:
+        launch[dropout2d_chan_at](ctx, fp(dtab), fp(dh), fp(dh), fp(dh), ip(dp), ip(dp), nch)
+        launch[dropout2d_apply_at](ctx, fp(dx), fp(mask), fp(dout), fp(dtab), ip(dp), ip(dp), n)
+    else:
+        launch[dropout2d_at](ctx, fp(dx), fp(mask), fp(dout), fp(dh), ip(dp), ip(dp), n)
     m_fetch(ctx, dout, a[1], n, isdev(dev, 1))
     m_fetch(ctx, mask, a[2], n, isdev(dev, 2))
     ctx.synchronize()
+    _ = dtab^
     _ = dx^
     _ = dp^
     _ = dh^
@@ -1675,6 +1888,27 @@ def adaptive_pool_device(x: List[Float32], idx: List[Int32], prm: List[Int32], k
     var nin = nc * Int(prm[2]) * Int(prm[3])
     var nout = nc * Int(prm[4]) * Int(prm[5])
     if kind == 0:
+        comptime if IDN_GAP_BLOCK_FOLD:
+            var nb = gap_fold_blocks(Int(prm[2]), Int(prm[3]), Int(prm[4]), Int(prm[5]))
+            if nb > 1:
+                # lane fix-n1-lm-neural: one thread per (output, block), then one per output
+                var ctx = cnn_ctx()
+                var da = upload_f32(ctx, x)
+                var di = upload_i32(ctx, idx)
+                var dp = upload_i32(ctx, prm)
+                var part = ctx.enqueue_create_buffer[DType.float32](nout * nb)
+                var out = ctx.enqueue_create_buffer[DType.float32](nout)
+                launch[adapt_avg_blk_at](ctx, fp(da), fp(da), fp(part), fp(part), ip(di), ip(dp), nout * nb)
+                launch[adapt_avg_fin_at](ctx, fp(part), fp(part), fp(out), fp(out), ip(di), ip(dp), nout)
+                var result = download_f32(ctx, out, nout)
+                idx_out = download_i32(ctx, di, len(idx))
+                _ = da^
+                _ = di^
+                _ = dp^
+                _ = part^
+                _ = out^
+                _ = ctx^
+                return result^
         return adaptive_device[adapt_avg_fwd_at](x, idx, nout, prm, idx_out)
     if kind == 1:
         return adaptive_device[adapt_avg_bwd_at](x, idx, nin, prm, idx_out)
@@ -1718,6 +1952,247 @@ def graph_op_device(a: List[Float32], b: List[Float32], aux: List[Float32], csr:
     if kind == 2:
         return graph4_device[l2norm_fwd_at](a, b, aux, csr, prm, n, n * F)
     return graph4_device[l2norm_bwd_at](a, b, aux, csr, prm, n, n * F)
+
+
+# ------------------------------------------------ lane fam-neural: `_m` forms
+# lane fam-neural (2026-10-04). The entries above this line that had no
+# mixed-residency form (adaptive pooling, the graph element ops, gcn_norm,
+# padding, a grouped convolution's channel slice) took Lists: the binding
+# copied each host array into a List, the entry uploaded it into fresh device
+# buffers, downloaded the result into another List, and the binding copied
+# that out; a layer chain crossed the bus both ways around each of them. The
+# `_m` forms below are the same launches of the same element functions on the
+# same words through the workspace slots, each argument a host address or a
+# resident one (`isdev`), so they sit in a resident chain with no transfer
+# and, on host addresses, copy once each way with no List. Plumbing only: no
+# kernel, operand or order changes, so no bit moves on any column.
+# IDENTICAL only. The entries are always compiled; `idn_flags()` tells the
+# Python glue which of them to use (bit k = switch k is on), so each has its
+# own before arm and all are off under MOJOLEARN_IDN_ALL_OFF.
+# cpu2-l11-neural (2026-10-04): FAST takes these plumbing forms too, on every
+# vendor (no bit moves, so nothing for FAST to keep on the host); the `_OFF`
+# defines still restore the List forms for an A/B, and MOJOLEARN_IDN_ALL_OFF
+# stays an IDENTICAL-only master.
+comptime _FAM_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_FAST or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: bit 0: adaptive pooling through `adaptive_pool_m`. `-D MOJOLEARN_IDN_ADAPT_M_OFF`.
+comptime IDN_ADAPT_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_ADAPT_M_OFF"]()
+#: bit 1: SAGE max / L2 normalize / gcn_norm through `graph_op_m`, `gcn_norm_m`. `-D MOJOLEARN_IDN_GRAPH_M_OFF`.
+comptime IDN_GRAPH_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_GRAPH_M_OFF"]()
+#: bit 2: an explicitly padded convolution stays resident (`pad2d_m`). `-D MOJOLEARN_IDN_PAD_M_OFF`.
+comptime IDN_PAD_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PAD_M_OFF"]()
+#: bit 3: a grouped convolution stays resident (`chan_copy_m`). `-D MOJOLEARN_IDN_GROUP_M_OFF`.
+comptime IDN_GROUP_M = _FAM_IDN and not is_defined["MOJOLEARN_IDN_GROUP_M_OFF"]()
+#: bit 4: BatchNorm, Dropout2d and ReLU take and return resident tensors
+#: (glue only; the entries are the existing `_m` ones). `-D MOJOLEARN_IDN_LAYER_DEV_IO_OFF`.
+comptime IDN_LAYER_DEV_IO = _FAM_IDN and not is_defined["MOJOLEARN_IDN_LAYER_DEV_IO_OFF"]()
+#: bit 5 (lane fam2-neural): `layer.pin_weights()` keeps a layer's weights
+#: resident and the `_m` entries read them there (glue only; the entries are
+#: the existing ones). `-D MOJOLEARN_IDN_PIN_WEIGHTS_OFF`.
+comptime IDN_PIN_WEIGHTS = _FAM_IDN and not is_defined["MOJOLEARN_IDN_PIN_WEIGHTS_OFF"]()
+
+
+def idn_flags() -> Int:
+    """The lane fam-neural switches this build has on, one bit each."""
+    var f = 0
+    comptime if IDN_ADAPT_M:
+        f |= 1
+    comptime if IDN_GRAPH_M:
+        f |= 2
+    comptime if IDN_PAD_M:
+        f |= 4
+    comptime if IDN_GROUP_M:
+        f |= 8
+    comptime if IDN_LAYER_DEV_IO:
+        f |= 16
+    comptime if IDN_PIN_WEIGHTS:
+        f |= 32
+    return f
+
+
+def _adapt_idx(ctx: DeviceContext, addr: Int, n: Int, d: Bool, kind: Int) raises -> DeviceBuffer[DType.int32]:
+    """The adaptive entry's winners: read by the max backward, written by
+    the max forward, a one-word placeholder for the average kinds."""
+    if kind == 3:
+        return m_in_i(ctx, 3, addr, n, d)
+    if kind == 2:
+        return m_out_i(ctx, 3, addr, n, d)
+    return ws_i(ctx, 3, 1)
+
+
+def adaptive_pool_m(a: List[Int], dev: Int, prm: List[Int32], kind: Int) raises:
+    """a = [in, out, idx (int32)]; prm = [N, C, H, W, OH, OW]. kind 0 avg
+    forward (in x, out y), 1 avg backward (in g, out dx), 2 max forward
+    (idx written), 3 max backward (idx read): `adaptive_pool_device`'s
+    launches. The average kinds never touch a[2]."""
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nin = nc * Int(prm[2]) * Int(prm[3])
+    var nout = nc * Int(prm[4]) * Int(prm[5])
+    var fwd = kind == 0 or kind == 2
+    var n_read = nin if fwd else nout
+    var n_write = nout if fwd else nin
+    var ctx = cnn_ctx()
+    var da = m_in(ctx, 0, a[0], n_read, isdev(dev, 0))
+    var dp = put_prm(ctx, 1, prm)
+    var dout = m_out(ctx, 2, a[1], n_write, isdev(dev, 1))
+    var di = _adapt_idx(ctx, a[2], nout, isdev(dev, 2), kind)
+    var gap_nb = 1
+    comptime if IDN_GAP_BLOCK_FOLD:
+        if kind == 0:
+            gap_nb = gap_fold_blocks(Int(prm[2]), Int(prm[3]), Int(prm[4]), Int(prm[5]))
+    if kind == 0 and gap_nb > 1:
+        # lane fix-n1-lm-neural (IDN_GAP_BLOCK_FOLD): the blocked window fold
+        var part = ws(ctx, 4, n_write * gap_nb)
+        launch[adapt_avg_blk_at](ctx, fp(da), fp(da), fp(part), fp(part), ip(di), ip(dp), n_write * gap_nb)
+        launch[adapt_avg_fin_at](ctx, fp(part), fp(part), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+        _ = part^
+    elif kind == 0:
+        launch[adapt_avg_fwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+    elif kind == 1:
+        launch[adapt_avg_bwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+    elif kind == 2:
+        launch[adapt_max_fwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+    else:
+        launch[adapt_max_bwd_at](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(di), ip(dp), n_write)
+    m_fetch(ctx, dout, a[1], n_write, isdev(dev, 1))
+    if kind == 2:
+        m_fetch_i(ctx, di, a[2], nout, isdev(dev, 2))
+    ctx.synchronize()
+    _ = da^
+    _ = dp^
+    _ = dout^
+    _ = di^
+    _ = ctx^
+
+
+def _graph_in(ctx: DeviceContext, slot: Int, addr: Int, n: Int, d: Bool, used: Bool) raises -> DeviceBuffer[DType.float32]:
+    """A graph-op float argument the kind reads, or a one-word placeholder."""
+    if used:
+        return m_in(ctx, slot, addr, n, d)
+    return ws(ctx, slot, 1)
+
+
+def _graph_aux(ctx: DeviceContext, addr: Int, n: Int, d: Bool, reads_input: Bool) raises -> DeviceBuffer[DType.float32]:
+    """The graph op's aux block: read by a backward, written by a forward."""
+    if reads_input:
+        return m_in(ctx, 2, addr, n, d)
+    return m_out(ctx, 2, addr, n, d)
+
+
+def _graph_csr(ctx: DeviceContext, addr: Int, n: Int, d: Bool, used: Bool) raises -> DeviceBuffer[DType.int32]:
+    if used:
+        return m_in_i(ctx, 3, addr, n, d)
+    return ws_i(ctx, 3, 1)
+
+
+def graph_op_m(a: List[Int], dev: Int, prm: List[Int32], kind: Int) raises:
+    """a = [a, b, aux, out, csr (int32, n + 1 + 2 * nnz words)]; prm = [n, F,
+    nnz, 0]. kind 0 SAGE max forward (a = h; aux 2nF written), 1 its
+    backward (a = h, b = g, aux read; the TRANSPOSED csr), 2 row L2
+    normalize forward (a = x; aux n written), 3 its backward (a = y, b = g,
+    aux read): `graph_op_device`'s launches. b is touched only by the
+    backwards, csr only by the SAGE kinds."""
+    var n = Int(prm[0])
+    var F = Int(prm[1])
+    var nnz = Int(prm[2])
+    var nf = n * F
+    var naux = 2 * nf if kind < 2 else n
+    var bwd = kind == 1 or kind == 3
+    var ctx = cnn_ctx()
+    var da = m_in(ctx, 0, a[0], nf, isdev(dev, 0))
+    var db = _graph_in(ctx, 1, a[1], nf, isdev(dev, 1), bwd)
+    var dx = _graph_aux(ctx, a[2], naux, isdev(dev, 2), bwd)
+    var dq = _graph_csr(ctx, a[4], n + 1 + 2 * nnz, isdev(dev, 4), kind < 2)
+    var dp = put_prm(ctx, 4, prm)
+    var dout = m_out(ctx, 5, a[3], nf, isdev(dev, 3))
+    if kind == 0:
+        launch[sage_max_fwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), nf)
+    elif kind == 1:
+        launch[sage_max_bwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), nf)
+    elif kind == 2:
+        launch[l2norm_fwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), n)
+    else:
+        launch[l2norm_bwd_at](ctx, fp(da), fp(db), fp(dx), fp(dout), ip(dq), ip(dp), n)
+    m_fetch(ctx, dout, a[3], nf, isdev(dev, 3))
+    if not bwd:
+        m_fetch(ctx, dx, a[2], naux, isdev(dev, 2))
+    ctx.synchronize()
+    _ = da^
+    _ = db^
+    _ = dx^
+    _ = dq^
+    _ = dp^
+    _ = dout^
+    _ = ctx^
+
+
+def gcn_norm_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
+    """a = [w (nnz), vals (nnz), csr (int32, n + 1 + 2 * nnz words)]; prm =
+    [n, F, nnz, mode]: `gcn_norm_device`'s two launches."""
+    var n = Int(prm[0])
+    var nnz = Int(prm[2])
+    var ctx = cnn_ctx()
+    var dw = m_in(ctx, 0, a[0], nnz, isdev(dev, 0))
+    var dq = m_in_i(ctx, 1, a[2], n + 1 + 2 * nnz, isdev(dev, 2))
+    var dp = put_prm(ctx, 2, prm)
+    var dis = ws(ctx, 3, n)
+    var vals = m_out(ctx, 4, a[1], nnz, isdev(dev, 1))
+    launch[gcn_deg_at](ctx, fp(dw), fp(dis), fp(dis), fp(dis), ip(dq), ip(dp), n)
+    launch[gcn_norm_at](ctx, fp(dw), fp(dis), fp(vals), fp(vals), ip(dq), ip(dp), nnz)
+    m_fetch(ctx, vals, a[1], nnz, isdev(dev, 1))
+    ctx.synchronize()
+    _ = dw^
+    _ = dq^
+    _ = dp^
+    _ = dis^
+    _ = vals^
+    _ = ctx^
+
+
+def pad2d_m(a: List[Int], dev: Int, prm: List[Int32], backward: Bool) raises:
+    """a = [in, out]; prm = [N, C, H, W, top, bottom, left, right, mode].
+    Forward: in x (N, C, H, W), out the padded tensor; backward: in the
+    padded gradient, out dx. `pad2d_forward_into` / `pad2d_backward_into`'s
+    launch (`map2_m` with the second operand unused)."""
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nx = nc * Int(prm[2]) * Int(prm[3])
+    var np_ = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
+    # map2's addresses are [a, b (unused, nb == 0), dst]: bit 0 stays the
+    # input's, the output's bit moves from 1 to 2, the unused b is a host slot
+    var d3 = (dev & 1) | (((dev >> 1) & 1) << 2)
+    if backward:
+        map2_m[pad_bwd_at]([a[0], a[0], a[1]], d3, np_, 0, nx, prm)
+    else:
+        map2_m[pad_fwd_at]([a[0], a[0], a[1]], d3, nx, 0, np_, prm)
+
+
+def chan_copy_m(a: List[Int], dev: Int, prm: List[Int32], place: Bool) raises:
+    """a = [src, dst]; prm = [N, C, HW, cg, c0] (x_cnn/ops.mojo "channel
+    groups"). Slice: src the full (N, C, HW) tensor, dst the (N, cg, HW)
+    part. Place: src the part, dst the full tensor, which must be resident
+    (only the group's words are written; a host dst has no full copy to
+    download)."""
+    var N = Int(prm[0])
+    var hw = Int(prm[2])
+    var full = N * Int(prm[1]) * hw
+    var part = N * Int(prm[3]) * hw
+    if place and not isdev(dev, 1):
+        raise Error("x_cnn chan place: the destination must be a resident array")
+    var ctx = cnn_ctx()
+    var ds = m_in(ctx, 0, a[0], part if place else full, isdev(dev, 0))
+    var dp = put_prm(ctx, 1, prm)
+    var dd = m_out(ctx, 2, a[1], full if place else part, isdev(dev, 1))
+    if place:
+        launch[chan_place_at](ctx, fp(ds), fp(ds), fp(dd), fp(dd), ip(dp), ip(dp), part)
+    else:
+        launch[chan_slice_at](ctx, fp(ds), fp(ds), fp(dd), fp(dd), ip(dp), ip(dp), part)
+        m_fetch(ctx, dd, a[1], part, isdev(dev, 1))
+    ctx.synchronize()
+    _ = ds^
+    _ = dp^
+    _ = dd^
+    _ = ctx^
 
 
 def adam_into[resident: Bool = False](w: FP, g: FP, mv: FP, hyper: List[Float32], n: Int) raises:
@@ -1766,7 +2241,7 @@ def opt_many_resident[adam: Bool](
     var ctx = cnn_ctx()
     var dh = put_hyper(ctx, 3, hyper)
     var prm = List[Int32]()
-    for j in range(len(ns)):
+    for j in range(len(ns)):  # small-loop(ns: parameter tensors of the model): per-launch length list for the device
         prm.append(Int32(ns[j]))
     var dp = put_prm(ctx, 4, prm)
     var pp = ip(dp)
@@ -1812,6 +2287,172 @@ def res_gather_pair(
     _ = prm^
     _ = di^
     _ = dp^
+    _ = ctx^
+
+
+# ------------------------------------------------ lane fam2-neural: the device epoch
+# IDN_CNN_EPOCH_DEV (x_cnn/ops.mojo): the pieces `x_cnn_fit_epoch_d` runs so
+# a fit epoch has no host arithmetic and one download (its losses).
+
+
+def epoch_rows_download(dst: IP, n: Int, pos: Int, count: Int, shuffle: Bool, key: UInt64) raises:
+    """Host dst[0:count] = positions pos .. pos + count - 1 of the epoch's
+    order over n rows (`epoch_rows_at` on the device, then down): for the
+    trainers whose batch is gathered from host memory."""
+    if count <= 0:
+        return
+    var ctx = cnn_ctx()
+    var prm = epoch_rows_prm(n, pos, shuffle, key)
+    var dp = put_prm(ctx, 1, prm)
+    var out = ws_i(ctx, 0, count)
+    var none = ws(ctx, 2, 1)
+    launch[epoch_rows_at](ctx, fp(none), fp(none), fp(none), fp(none), ip(out), ip(dp), count)
+    down_i(ctx, out, dst, count)
+    ctx.synchronize()
+    _ = prm^
+    _ = dp^
+    _ = out^
+    _ = none^
+    _ = ctx^
+
+
+def res_gather_pair_perm(
+    dst_addr: Int, src_addr: Int, row: Int, dst2_addr: Int, src2_addr: Int, row2: Int, n: Int, pos: Int,
+    m: Int, shuffle: Bool, key: UInt64,
+) raises:
+    """`res_gather_pair` with the step's rows computed on the device
+    (`epoch_rows_at`, positions pos .. pos + m - 1 of the epoch over n rows)
+    instead of uploaded: nothing crosses the bus."""
+    if m <= 0:
+        return
+    var ctx = cnn_ctx()
+    var prm = epoch_rows_prm(n, pos, shuffle, key)
+    prm.append(Int32(row))
+    prm.append(Int32(row2))
+    var dp = put_prm(ctx, 1, prm)
+    var pp = ip(dp)
+    var di = ws_i(ctx, 0, m)
+    launch[epoch_rows_at](
+        ctx, FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr),
+        FP(unsafe_from_address=dst_addr), ip(di), pp, m,
+    )
+    if row > 0:
+        launch[gather_rows_at](
+            ctx, FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
+            FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), ip(di), pp + EP_LEN, m * row,
+        )
+    if row2 > 0:
+        launch[gather_rows_at](
+            ctx, FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr),
+            FP(unsafe_from_address=dst2_addr), FP(unsafe_from_address=dst2_addr), ip(di), pp + EP_LEN + 1,
+            m * row2,
+        )
+    ctx.synchronize()
+    _ = prm^
+    _ = di^
+    _ = dp^
+    _ = ctx^
+
+
+def adam_hyper_resident(base: List[Float32], step0: Int, nsteps: Int, dst_addr: Int) raises:
+    """Resident dst[9 t : 9 t + 9] = Adam's hyper block of 1-based step
+    step0 + t for t < nsteps (`adam_hyper_at`, one thread per step)."""
+    if nsteps <= 0:
+        return
+    var ctx = cnn_ctx()
+    var db = put_hyper(ctx, 3, base)
+    var prm: List[Int32] = [Int32(step0)]
+    var dp = put_prm(ctx, 4, prm)
+    var dst = FP(unsafe_from_address=dst_addr)
+    launch[adam_hyper_at](ctx, fp(db), dst, dst, dst, ip(dp), ip(dp), nsteps)
+    ctx.synchronize()
+    _ = prm^
+    _ = db^
+    _ = dp^
+    _ = ctx^
+
+
+def adam_hyper_download(base: List[Float32], step0: Int, nsteps: Int, dst: FP) raises:
+    """Host dst[0 : 9 nsteps] = the same blocks (for the per-step entries,
+    which take the block from the caller)."""
+    if nsteps <= 0:
+        return
+    var ctx = cnn_ctx()
+    var db = put_hyper(ctx, 3, base)
+    var prm: List[Int32] = [Int32(step0)]
+    var dp = put_prm(ctx, 4, prm)
+    var out = ws(ctx, 5, nsteps * AH_ROW)
+    launch[adam_hyper_at](ctx, fp(db), fp(out), fp(out), fp(out), ip(dp), ip(dp), nsteps)
+    down(ctx, out, dst, nsteps * AH_ROW)
+    ctx.synchronize()
+    _ = prm^
+    _ = db^
+    _ = dp^
+    _ = out^
+    _ = ctx^
+
+
+def opt_many_resident_h[adam: Bool](
+    ws_: List[Int], gs: List[Int], bs: List[Int], ns: List[Int], hyper_addr: Int
+) raises:
+    """`opt_many_resident` with the step's hyper block already on the device
+    at `hyper_addr` (a row of the epoch's resident block): no upload."""
+    var ctx = cnn_ctx()
+    var prm = List[Int32]()
+    for j in range(len(ns)):  # small-loop(ns: parameter tensors of the model): per-launch length list for the device
+        prm.append(Int32(ns[j]))
+    var dp = put_prm(ctx, 4, prm)
+    var pp = ip(dp)
+    var ph = FP(unsafe_from_address=hyper_addr)
+    for j in range(len(ns)):
+        var pw = FP(unsafe_from_address=ws_[j])
+        var pg = FP(unsafe_from_address=gs[j])
+        var pb = FP(unsafe_from_address=bs[j])
+        comptime if adam:
+            launch[adam_at](ctx, pw, pg, pb, ph, pp + j, pp + j, ns[j])
+        else:
+            launch[sgd_at](ctx, pw, pg, pb, ph, pp + j, pp + j, ns[j])
+    ctx.synchronize()
+    _ = prm^
+    _ = dp^
+    _ = ctx^
+
+
+def softmax_xent_res_loss(
+    logits: FP, labels: IP, n: Int, k: Int, grad_out: FP, proba_out: FP, loss_addr: Int, index: Int
+) raises:
+    """`softmax_xent_into[True]` with the mean loss left on the device:
+    resident loss[index] = the blocked fold of the row losses over n
+    (`blk_fold_at`, what `softmax_xent_into` returns under
+    IDN_XENT_DEV_FOLD). Nothing comes down."""
+    if n <= 0:
+        return
+    var ctx = cnn_ctx()
+    var dl = view(ctx, logits, n * k)
+    var dy = view_i(ctx, labels, n)
+    var prm: List[Int32] = [Int32(n), Int32(k)]
+    var dp = put_prm(ctx, 2, prm)
+    var grad = view(ctx, grad_out, n * k)
+    var proba = view(ctx, proba_out, n * k)
+    var rl = ws(ctx, 5, n)
+    grad.enqueue_fill(Float32(0))
+    rl.enqueue_fill(Float32(0))
+    launch[softmax_xent_row_at](ctx, fp(dl), fp(grad), fp(proba), fp(rl), ip(dy), ip(dp), n)
+    var fprm = fold_plan(n, n, index)
+    var dfp = put_prm(ctx, 7, fprm)
+    var pong = ws(ctx, 6, (n + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK)
+    fold_launch(ctx, fp(rl), fp(pong), FP(unsafe_from_address=loss_addr), ip(dfp), n)
+    ctx.synchronize()
+    _ = fprm^
+    _ = prm^
+    _ = dfp^
+    _ = pong^
+    _ = dl^
+    _ = dy^
+    _ = dp^
+    _ = grad^
+    _ = proba^
+    _ = rl^
     _ = ctx^
 
 
@@ -1999,13 +2640,14 @@ def conv_block_backward_into[resident: Bool = False](
     else:
         launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
         launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
-    var ones = ws(ctx, 13, rows)
+    var ones = ones_buf(ctx, 13, rows)
     var gw = outb[resident](ctx, 14, gw_out, OC * ckk)
     var gb = outb[resident](ctx, 15, gb_out, OC)
-    launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
+    comptime if not ONES_CACHE:
+        launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
     device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
-    device_gemm(ctx, gb, grow, ones, OC, 1, rows, OP_TN)
+    bias_grad_gemm(ctx, gb, grow, ones, OC, rows)
     if need_dx:
         var dcols = ws(ctx, 16, rows * ckk)
         var gx = outb[resident](ctx, 17, gx_out, nx)
@@ -2150,3 +2792,137 @@ def csr_build_device(rows_h: IP, cols_h: IP, nnz: Int, n: Int, csr_out: IP, orde
     _ = csr_d^
     _ = order_d^
     _ = ctx^
+
+
+# ---------------------------------------------------------------------------
+# lane fix-n1-lm-neural (2026-10-04), IDN_GCN_LOOPS_DEV (x_cnn/ops.mojo):
+# GCNConv's add_remaining_self_loops on the device. Every edge gets the key
+# 0 (not a loop) or 1 + node (a loop); one stable radix sort puts the kept
+# edges first in edge order and each node's loops together in edge order.
+# The output is the kept edges, then one loop per node i carrying the
+# weight of node i's LAST loop in edge order (NumPy's `loop_w[src[loop]] =
+# w[loop]`), else `fill`. Copies only: the same words on every column.
+# ---------------------------------------------------------------------------
+
+
+def _gcn_loop_key_kernel(keys: UP, ids: UP, src: IP, dst: IP, nnz: Int32):
+    var e = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if e >= Int(nnz):
+        return
+    var s = src[e]
+    if s == dst[e]:
+        keys[e] = s.cast[DType.uint32]() + UInt32(1)
+    else:
+        keys[e] = UInt32(0)
+    ids[e] = UInt32(e)
+
+
+@always_inline
+def _gcn_lower_bound(keys: UP, nnz: Int, v: UInt32) -> Int:
+    """The first sorted position whose key is >= v."""
+    var lo = 0
+    var hi = nnz
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if keys[mid] < v:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+
+
+def _gcn_loop_kept_kernel(keys: UP, ids: UP, src: IP, dst: IP, w: FP, so: IP, dso: IP, wo: FP, nnz: Int32):
+    """Sorted position p < K (key 0) copies kept edge ids[p] to slot p."""
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if p >= Int(nnz):
+        return
+    if keys[p] != UInt32(0):
+        return
+    var e = Int(ids[p])
+    so[p] = src[e]
+    dso[p] = dst[e]
+    wo[p] = w[e]
+
+
+def _gcn_loop_nodes_kernel(
+    keys: UP, ids: UP, w: FP, so: IP, dso: IP, wo: FP, kout: IP, n: Int32, nnz: Int32, fill: Float32
+):
+    """Node i writes its loop at slot K + i (K = the kept count, found by a
+    binary search of the sorted keys); node 0 also writes K."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n):
+        return
+    var m = Int(nnz)
+    var k = _gcn_lower_bound(keys, m, UInt32(1))
+    var lo = _gcn_lower_bound(keys, m, UInt32(i) + UInt32(1))
+    var hi = _gcn_lower_bound(keys, m, UInt32(i) + UInt32(2))
+    var wi = fill
+    if hi > lo:
+        wi = w[Int(ids[hi - 1])]
+    so[k + i] = Int32(i)
+    dso[k + i] = Int32(i)
+    wo[k + i] = wi
+    if i == 0:
+        kout[0] = Int32(k)
+
+
+def gcn_loops_device(
+    src_h: IP, dst_h: IP, w_h: FP, nnz: Int, n: Int, fill: Float32, src_out: IP, dst_out: IP, w_out: FP
+) raises -> Int:
+    """The edge list with GCN's remaining self loops (host arrays in; the
+    outputs hold nnz + n slots, the first K + n written). Returns K, the
+    number of kept (non-loop) edges."""
+    var ctx = cnn_ctx()
+    var m = max(1, nnz)
+    var t = nnz + n
+    var src_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var dst_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var w_d = ctx.enqueue_create_buffer[DType.float32](m)
+    var keys = ctx.enqueue_create_buffer[DType.uint32](m)
+    var ids = ctx.enqueue_create_buffer[DType.uint32](m)
+    var tkeys = ctx.enqueue_create_buffer[DType.uint32](m)
+    var tids = ctx.enqueue_create_buffer[DType.uint32](m)
+    var counts = ctx.enqueue_create_buffer[DType.int32](max(1, frs_counts_len(m)))
+    var so_d = ctx.enqueue_create_buffer[DType.int32](t)
+    var do_d = ctx.enqueue_create_buffer[DType.int32](t)
+    var wo_d = ctx.enqueue_create_buffer[DType.float32](t)
+    var k_d = ctx.enqueue_create_buffer[DType.int32](1)
+    var grid = (m + TPB - 1) // TPB
+    if nnz > 0:
+        ctx.enqueue_copy(dst_buf=src_d, src_ptr=src_h)
+        ctx.enqueue_copy(dst_buf=dst_d, src_ptr=dst_h)
+        ctx.enqueue_copy(dst_buf=w_d, src_ptr=w_h)
+        ctx.enqueue_function[_gcn_loop_key_kernel](
+            keys.unsafe_ptr(), ids.unsafe_ptr(), src_d.unsafe_ptr(), dst_d.unsafe_ptr(), Int32(nnz),
+            grid_dim=grid, block_dim=TPB,
+        )
+        fast_radix_sort_pairs_u32(ctx, nnz, keys, ids, tkeys, tids, counts)
+        ctx.enqueue_function[_gcn_loop_kept_kernel](
+            keys.unsafe_ptr(), ids.unsafe_ptr(), src_d.unsafe_ptr(), dst_d.unsafe_ptr(), w_d.unsafe_ptr(),
+            so_d.unsafe_ptr(), do_d.unsafe_ptr(), wo_d.unsafe_ptr(), Int32(nnz),
+            grid_dim=grid, block_dim=TPB,
+        )
+    ctx.enqueue_function[_gcn_loop_nodes_kernel](
+        keys.unsafe_ptr(), ids.unsafe_ptr(), w_d.unsafe_ptr(), so_d.unsafe_ptr(), do_d.unsafe_ptr(),
+        wo_d.unsafe_ptr(), k_d.unsafe_ptr(), Int32(n), Int32(nnz), fill,
+        grid_dim=(n + TPB - 1) // TPB, block_dim=TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=src_out, src_buf=so_d)
+    ctx.enqueue_copy(dst_ptr=dst_out, src_buf=do_d)
+    ctx.enqueue_copy(dst_ptr=w_out, src_buf=wo_d)
+    var kh = download_i32(ctx, k_d, 1)
+    ctx.synchronize()
+    _ = src_d^
+    _ = dst_d^
+    _ = w_d^
+    _ = keys^
+    _ = ids^
+    _ = tkeys^
+    _ = tids^
+    _ = counts^
+    _ = so_d^
+    _ = do_d^
+    _ = wo_d^
+    _ = k_d^
+    _ = ctx^
+    return Int(kh[0])

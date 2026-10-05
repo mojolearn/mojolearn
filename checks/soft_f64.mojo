@@ -627,6 +627,62 @@ def sf64_to_f32(a: UInt64) -> Float32:
     return bitcast[DType.float32](UInt32((s << 31) + (UInt64(exp) << 23) + sig))
 
 
+def sf64_sqrt(a: UInt64) -> UInt64:
+    """`sqrt(a)`, correctly rounded (round-to-nearest-even), as IEEE-754
+    requires of a hardware double `sqrt` (lane fix-g1-gbdt, 2026-10-04; NEW,
+    no existing function changed). Special cases: NaN -> `SF64_NAN`;
+    `+-0` -> itself; a negative nonzero -> `SF64_NAN`; `+inf` -> `+inf`.
+
+    Digit-by-digit (restoring) square root. The finite positive input is
+    `m * 2^(E-52)` with `m` normalized to 53 bits; an odd `E` moves one bit
+    into `m` so `E'` is even. The radicand `R = m' << 56` (110 bits) gives a
+    55-bit root `r = floor(sqrt(R))` in `[2^54, 2^55)`: 53 result bits, one
+    round bit, one more, plus the remainder as the sticky bit, so
+    `_round_pack` rounds once and correctly (a square root is never exactly
+    halfway). `R`'s low 56 bits are zero, so the two radicand bits taken at
+    step `i` are `m'` bits `53-2i` and `52-2i` while `i <= 26`, else 0. The
+    remainder stays under `2^59`, inside one word."""
+    var ea = _exp_of(a)
+    var sa = a & SF64_FRAC
+    if ea == 0x7FF:
+        if sa != 0:
+            return SF64_NAN
+        if (a >> 63) != 0:
+            return SF64_NAN
+        return a
+    if (a & ~SF64_SIGN) == 0:
+        return a
+    if (a >> 63) != 0:
+        return SF64_NAN
+    if ea == 0:
+        ea = _norm_sub_exp(sa)
+        sa = _norm_sub_sig(sa)
+    var m = sa | SF64_HIDDEN
+    var e_unb = ea - 1023
+    if (e_unb & 1) != 0:
+        m <<= 1
+        e_unb -= 1
+    var root = UInt64(0)
+    var rem = UInt64(0)
+    for i in range(55):
+        var pair = UInt64(0)
+        if i <= 26:
+            pair = (m >> UInt64(52 - 2 * i)) & UInt64(3)
+        rem = (rem << 2) | pair
+        var trial = (root << 2) | UInt64(1)
+        if rem >= trial:
+            rem -= trial
+            root = (root << 1) | UInt64(1)
+        else:
+            root = root << 1
+    var sig = root << 8
+    if rem != 0:
+        sig |= UInt64(1)
+    # value = sig * 2^(exp - 1084) and sqrt = r * 2^(E'/2 - 54), so
+    # exp = 1022 + E'/2 (E' even; `//` is exact here)
+    return _round_pack(UInt64(0), 1022 + e_unb // 2, sig)
+
+
 @always_inline
 def sf64_ftz(a: UInt64) -> UInt64:
     """A subnormal becomes its signed zero (the FTZ+DAZ host pool's
@@ -729,6 +785,89 @@ def sf64_log(x_in: UInt64) -> UInt64:
     z = sf64_add(xm, y)
     z = sf64_fma(ye2, _L_C1, z)
     return z
+
+
+def sf64_pow(x: UInt64, p: UInt64) -> UInt64:
+    """`checks/numerics.mojo::portable_pow64`, statement for statement, over
+    these operations (lane cpu4-umap, 2026-10-04): the UMAP transform's
+    attraction term and supervised UMAP's set intersection run it on the
+    device on every vendor, the host column runs this same function."""
+    comptime ABS = UInt64(0x7FFFFFFFFFFFFFFF)
+    var axb = x & ABS
+    var apb = p & ABS
+    if apb == 0 or x == SF64_ONE:
+        return SF64_ONE
+    if axb > SF64_INF or apb > SF64_INF:
+        return SF64_NAN
+    if apb == SF64_INF:
+        if axb == SF64_ONE:
+            return SF64_ONE
+        if (axb > SF64_ONE) == sf64_gt(p, SF64_ZERO):
+            return SF64_INF
+        return SF64_ZERO
+
+    # Finite exponent classification, including |p| >= 2**53 (all even).
+    var integral = False
+    var odd = False
+    var pe = Int((apb >> 52) & UInt64(0x7FF)) - 1023
+    if pe >= 0:
+        if pe > 52:
+            integral = True
+        else:
+            var fraction = 52 - pe
+            var significand = (apb & SF64_FRAC) | SF64_HIDDEN
+            integral = (significand & ((UInt64(1) << UInt64(fraction)) - UInt64(1))) == 0
+            odd = integral and ((significand >> UInt64(fraction)) & UInt64(1)) != 0
+    var sign = SF64_SIGN if (x & SF64_SIGN) != 0 and odd else UInt64(0)
+    if axb == 0:
+        return sign | (SF64_INF if sf64_lt(p, SF64_ZERO) else UInt64(0))
+    if axb == SF64_INF:
+        return sign | (SF64_INF if sf64_gt(p, SF64_ZERO) else UInt64(0))
+    if (x & SF64_SIGN) != 0 and not integral:
+        return SF64_NAN
+    if p == SF64_ONE:
+        return x
+    if p == _NONE:
+        return sf64_div(SF64_ONE, x)
+    if p == _TWO:
+        return sf64_mul(x, x)
+
+    # Integer powers of binary powers are exact, including overflow and
+    # subnormal ties.
+    var binary_power = (axb & SF64_FRAC) == 0
+    var xe = Int(axb >> 52) - 1023
+    if axb < (UInt64(1) << 52) and (axb & (axb - UInt64(1))) == 0:
+        binary_power = True
+        var shifted_bits = axb
+        xe = -1074
+        while shifted_bits > 1:
+            shifted_bits >>= 1
+            xe += 1
+    if integral and binary_power:
+        var exponent = sf64_mul(p, sf64_from_int(xe))
+        if sf64_gt(exponent, sf64_from_int(1023)):
+            return sign | SF64_INF
+        if sf64_lt(exponent, sf64_from_int(-1074)):
+            return sign
+        var e = sf64_to_int(exponent)
+        var result_bits = UInt64(e + 1023) << 52 if e >= -1022 else UInt64(1) << UInt64(e + 1074)
+        return sign | result_bits
+
+    var power = sf64_mul(p, sf64_log(axb))
+    var magnitude: UInt64
+    if sf64_lt(power, sf64_from_int(-708)):
+        if sf64_lt(power, sf64_from_int(-746)):
+            magnitude = SF64_ZERO
+        else:
+            # exp(power + 512*ln(2)) * 2**-512, the split ln(2) of the exp
+            # reduction (`_NC1`, `_NC2` negated).
+            var five12 = sf64_from_int(512)
+            var shifted = sf64_fma(five12, sf64_neg(_NC1), power)
+            shifted = sf64_fma(five12, sf64_neg(_NC2), shifted)
+            magnitude = sf64_mul(sf64_exp(shifted), UInt64(511) << 52)
+    else:
+        magnitude = sf64_exp(power)
+    return magnitude | sign
 
 
 # ---- the GBDT probability links, one row-element each -------------------

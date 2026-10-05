@@ -149,6 +149,10 @@ from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 
 from core.identity_trace import IdentityTrace
 from core.device_scan import device_first_nonfinite
+from std.gpu import block_idx, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
@@ -274,7 +278,7 @@ def _read_params(params: PythonObject, base: Int, what: String) raises -> List[I
             + String(n)
         )
     var p = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(n: block scalar params, base plus the 17 option tail): validated count of launch parameters, not data
         p.append(Int(py=params[i]))
     return p^
 
@@ -300,7 +304,7 @@ def _read_addrs_tail(
             + String(n)
         )
     var a = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(n: block buffer addresses, base plus the 11 option tail): validated count of tensor addresses, not data
         a.append(Int(py=addrs[i]))
     while len(a) < base + BLOCK_OPTION_ADDRS:
         a.append(0)
@@ -470,7 +474,7 @@ def _load_transformer_weights[wait: Bool = True](
     var it = dims.intermediate
     var hd = dims.head_dim
     var extended = not opts.is_default()
-    for i in range(len(tail)):
+    for i in range(len(tail)):  # small-loop(tail: the 11 optional block addresses): checks address presence, not data
         if tail[i] != 0:
             extended = True
     if not extended:
@@ -562,7 +566,7 @@ def _tail_of(a: List[Int], base: Int) -> List[Int]:
 def _check_base_addrs(a: List[Int], slots: List[Int], what: String) raises:
     """Null refusals for the base slots a caller must fill (the gate slot is
     checked by `_load_transformer_weights` against the MLP form)."""
-    for i in range(len(slots)):
+    for i in range(len(slots)):  # small-loop(slots: a handful of base address slots): null checks on addresses, not data
         if a[slots[i]] == 0:
             raise Error(what + ": null buffer address at slot " + String(slots[i]))
 
@@ -595,7 +599,7 @@ def _workspace_key(
     var key: List[Int] = [b, l, dims.d_model, dims.n_heads, dims.n_kv,
                           dims.head_dim, dims.intermediate, smax, window, Int(lean)]
     var tail = opts.to_params()
-    for i in range(len(tail)):
+    for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
         key.append(tail[i])
     return key^
 
@@ -680,7 +684,7 @@ struct TransformerWorkspace(Movable):
     def matches(self, key: List[Int]) -> Bool:
         if len(key) != len(self.key):
             return False
-        for i in range(len(key)):
+        for i in range(len(key)):  # small-loop(key: shape and option entries of the workspace key): compares cache keys, not data
             if key[i] != self.key[i]:
                 return False
         return True
@@ -705,7 +709,7 @@ struct TransformerBackwardWorkspace(Movable):
     def matches(self, key: List[Int]) -> Bool:
         if len(key) != len(self.key):
             return False
-        for i in range(len(key)):
+        for i in range(len(key)):  # small-loop(key: nine shape entries of the backward key): compares cache keys, not data
             if key[i] != self.key[i]:
                 return False
         return True
@@ -806,7 +810,7 @@ def _weights_key(dims: LlamaDims, opts: BlockOptions) -> List[Int]:
     var key: List[Int] = [dims.d_model, dims.n_heads, dims.n_kv, dims.head_dim,
                           dims.intermediate]
     var tail = opts.to_params()
-    for i in range(len(tail)):
+    for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
         key.append(tail[i])
     return key^
 
@@ -917,7 +921,7 @@ def _session_weights(
     per-call upload as before; nothing is retained for them."""
     ref ctx = session.ctx.value()
     var extended = not opts.is_default()
-    for i in range(len(tail)):
+    for i in range(len(tail)):  # small-loop(tail: the 11 optional block addresses): checks address presence, not data
         if tail[i] != 0:
             extended = True
     # MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS=0: the per-call upload for every
@@ -938,7 +942,7 @@ def _session_weights(
     if session.weights:
         same_key = len(session.weights_key) == len(key)
         if same_key:
-            for i in range(len(key)):
+            for i in range(len(key)):  # small-loop(key: shape and option entries of the weights key): compares cache keys, not data
                 if key[i] != session.weights_key[i]:
                     same_key = False
     if same_key:
@@ -1411,7 +1415,7 @@ def _transformer_run_session_int15(
         pkey.append(a[pbase + i])
     var same = Bool(session.planes) and len(session.planes_key) == len(pkey)
     if same:
-        for i in range(len(pkey)):
+        for i in range(len(pkey)):  # small-loop(pkey: six shapes plus 21 plane addresses): compares cache keys, not data
             if pkey[i] != session.planes_key[i]:
                 same = False
     if not same:
@@ -1486,7 +1490,7 @@ def transformer_session_forward_int15_binding(
     if len(params) != INT15_ENTRY_PARAMS:
         raise Error(what + ": params must contain " + String(INT15_ENTRY_PARAMS) + " values, got " + String(len(params)))
     var a = List[Int]()
-    for i in range(len(addrs)):
+    for i in range(len(addrs)):  # small-loop(addrs: INT15_ENTRY_ADDRS validated tensor addresses): reads pointer list, not data
         a.append(Int(py=addrs[i]))
     _check_base_addrs(a, [0, 1, 2, 10, 11, 12], what)
     var p = _read_params(params, 10, what)
@@ -2229,7 +2233,7 @@ def transformer_decode_session_open_int15_binding(
     if owner[].is_open():
         raise Error("transformer decode session: already open; close it first")
     var raw = List[Int]()
-    for i in range(len(addrs)):
+    for i in range(len(addrs)):  # small-loop(addrs: validated decode tensor addresses, 11 plus 11 plus 21): reads pointer list, not data
         raw.append(Int(py=addrs[i]))
     # into `transformer_forward`'s 13 + 11 layout, then the 21 planes
     var a = List[Int]()
@@ -2237,7 +2241,7 @@ def transformer_decode_session_open_int15_binding(
     for i in range(11):
         a.append(raw[i])
     a.append(0)
-    for i in range(BLOCK_OPTION_ADDRS + 21):
+    for i in range(BLOCK_OPTION_ADDRS + 21):  # small-loop(BLOCK_OPTION_ADDRS: 11 option addresses plus 21 planes): reorders pointer list, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [1, 2, 10, 11], what)
     var p = _read_params(params, 9, what)
@@ -2502,11 +2506,90 @@ struct CausalLMSession(Movable, Writable):
         self.release()
 
 
-def _lm_refuse_nonfinite(name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
-    """`training/samba_ops.mojo::_refuse_nonfinite`, in its words."""
-    for i in range(n):
-        if not isfinite(p.unsafe_load(i)):
-            raise Error("mojolearn samba ops: non-finite " + name + " at flat index " + String(i))
+def _lm_refuse_nonfinite_device(
+    ctx: DeviceContext, name: String, mut buf: DeviceBuffer[DType.float32], n: Int,
+) raises:
+    """The non-finite refusal on the device copy (cpu2-l11-neural): one
+    `device_first_nonfinite` scan, one integer read back, the same message."""
+    var bad = device_first_nonfinite(ctx, buf, n)
+    if bad >= 0:
+        raise Error("mojolearn samba ops: non-finite " + name + " at flat index " + String(bad))
+
+
+comptime _LM_ARGMAX_TPB = 256
+"""Threads per row of the greedy pick: one block per batch row."""
+comptime _LM_ARGMAX_NONE: Int32 = 2147483647
+
+
+@always_inline
+def _lm_order_key(value: Float32) -> UInt32:
+    """An unsigned key whose order is the float order (by bits, never a
+    float compare: Metal flushes compare operands). -0.0 is keyed as +0.0,
+    so equal floats get equal keys and the host loop's `>` is matched for
+    every non-NaN value, subnormals included."""
+    var bits = bitcast[DType.uint32](value)
+    if (bits & UInt32(0x7FFFFFFF)) == UInt32(0):
+        bits = UInt32(0)
+    if (bits & UInt32(0x80000000)) != UInt32(0):
+        return ~bits
+    return bits | UInt32(0x80000000)
+
+
+def _lm_last_argmax_kernel(
+    logits: MutPointer[Float32, MutAnyOrigin],
+    next_ids: MutPointer[Int32, MutAnyOrigin],
+    out_ids: MutPointer[Int32, MutAnyOrigin],
+    cur_l_in: Int32,
+    v_in: Int32,
+    n_steps_in: Int32,
+    step_in: Int32,
+):
+    """cpu2-l11-neural (2026-10-04): the greedy pick of `_lm_run` on the
+    device. Block `r` reads row r's LAST position of `logits` ([b, cur_l,
+    v]) and writes the first (lowest-index) maximum to `next_ids[r]` (the
+    next step's input id) and `out_ids[r * n_steps + step]`. The host loop
+    it replaces kept the lowest index of the maximum under `>`; an integer
+    (key, index) minimum-index reduction picks the same index for every
+    non-NaN row, on every vendor and at any block size."""
+    var keys = stack_allocation[
+        _LM_ARGMAX_TPB, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+    ]()
+    var idxs = stack_allocation[
+        _LM_ARGMAX_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var r = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var v = Int(v_in)
+    var cur_l = Int(cur_l_in)
+    var base = (r * cur_l + cur_l - 1) * v
+    var best_k = UInt32(0)
+    var best_i = _LM_ARGMAX_NONE
+    var c = tid
+    while c < v:
+        var k = _lm_order_key(logits.unsafe_load(base + c))
+        if best_i == _LM_ARGMAX_NONE or k > best_k:
+            best_k = k
+            best_i = Int32(c)
+        c += _LM_ARGMAX_TPB
+    keys.unsafe_store(tid, best_k)
+    idxs.unsafe_store(tid, best_i)
+    barrier()
+    var active = _LM_ARGMAX_TPB // 2
+    while active > 0:
+        if tid < active:
+            var oi = idxs.unsafe_load(tid + active)
+            var ok = keys.unsafe_load(tid + active)
+            var mi = idxs.unsafe_load(tid)
+            var mk = keys.unsafe_load(tid)
+            if oi != _LM_ARGMAX_NONE and (mi == _LM_ARGMAX_NONE or ok > mk or (ok == mk and oi < mi)):
+                keys.unsafe_store(tid, ok)
+                idxs.unsafe_store(tid, oi)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        var best = idxs.unsafe_load(0)
+        next_ids.unsafe_store(r, best)
+        out_ids.unsafe_store(r * Int(n_steps_in) + Int(step_in), best)
 
 
 def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: Int, d: Int, eps: Float32) raises:
@@ -2514,16 +2597,19 @@ def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: I
         raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
     if not isfinite(eps) or eps < Float32(0.0):
         raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
-    _lm_refuse_nonfinite("embedding weight", _f32_ptr(pe), v * d)
-    _lm_refuse_nonfinite("rms_norm weight", _f32_ptr(pn), d)
-    if ph != 0:
-        _lm_refuse_nonfinite("linear weight", _f32_ptr(ph), v * d)
     s.ctx = neural_ctx[_NEURAL_CTX]()
     s.embed = _upload_addr(s.ctx.value(), pe, v * d)
     s.norm = _upload_addr(s.ctx.value(), pn, d)
     s.tied = ph == 0
     if not s.tied:
         s.head = _upload_addr(s.ctx.value(), ph, v * d)
+    # cpu2-l11-neural (2026-10-04): the weight refusals scan the uploaded
+    # copies on the device (same first flat index, same words); the entry
+    # releases the session on the raise.
+    _lm_refuse_nonfinite_device(s.ctx.value(), "embedding weight", s.embed.value(), v * d)
+    _lm_refuse_nonfinite_device(s.ctx.value(), "rms_norm weight", s.norm.value(), d)
+    if not s.tied:
+        _lm_refuse_nonfinite_device(s.ctx.value(), "linear weight", s.head.value(), v * d)
     s.ctx.value().synchronize()
     s.b = b
     s.v = v
@@ -2545,12 +2631,13 @@ def _lm_open_run_int15(
         raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
     if not isfinite(eps) or eps < Float32(0.0):
         raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
-    _lm_refuse_nonfinite("embedding weight", _f32_ptr(pe), v * d)
-    _lm_refuse_nonfinite("rms_norm weight", _f32_ptr(pn), d)
     s.ctx = neural_ctx[_NEURAL_CTX]()
     ref ctx = s.ctx.value()
     s.embed = _upload_addr(ctx, pe, v * d)
     s.norm = _upload_addr(ctx, pn, d)
+    # cpu2-l11-neural: device refusals of the uploaded copies (see `_lm_open_run`).
+    _lm_refuse_nonfinite_device(ctx, "embedding weight", s.embed.value(), v * d)
+    _lm_refuse_nonfinite_device(ctx, "rms_norm weight", s.norm.value(), d)
     s.tied = False
     var a: List[Int] = [planes[0], planes[1], planes[2]]
     s.head15 = _upload_planes_one(ctx, a, 0, v, d, "head")
@@ -2605,18 +2692,22 @@ def _lm_run(
     var emb_cfg = EmbConfig.llama(v, d)
     var ids_i32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=p_ids)
     var out_i32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=p_out)
-    var h_ids = ctx.enqueue_create_host_buffer[DType.int32](b * l)
-    var h_last = ctx.enqueue_create_host_buffer[DType.float32](b * v)
-    ctx.synchronize()
-    for i in range(b * l):
-        h_ids.unsafe_ptr().unsafe_store(i, ids_i32.unsafe_load(i))
+    # cpu2-l11-neural (2026-10-04): the greedy pick runs on the device
+    # (`_lm_last_argmax_kernel`), and its ids feed the next step from
+    # `next_ids` without a host round trip; the [b, n_steps] ids and (when
+    # asked) the last step's last-position logits come down once, at the end.
+    var ids0 = ctx.enqueue_create_buffer[DType.int32](b * l)
+    ctx.enqueue_copy(dst_buf=ids0, src_ptr=ids_i32)
+    var next_ids = ctx.enqueue_create_buffer[DType.int32](b)
+    var out_dev = ctx.enqueue_create_buffer[DType.int32](b * n_steps)
     var cur_l = l
     for step in range(n_steps):
         var m = b * cur_l
-        var ids = ctx.enqueue_create_buffer[DType.int32](m)
-        ctx.enqueue_copy(dst_buf=ids, src_ptr=h_ids.unsafe_ptr())
         var x = ctx.enqueue_create_buffer[DType.float32](m * d)
-        identical_embedding_forward_into(ctx, x, s.embed.value(), ids, m, emb_cfg)
+        if step == 0:
+            identical_embedding_forward_into(ctx, x, s.embed.value(), ids0, m, emb_cfg)
+        else:
+            identical_embedding_forward_into(ctx, x, s.embed.value(), next_ids, m, emb_cfg)
         _lm_layers_run(ctx, layers, x, b, cur_l)
         var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
         var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
@@ -2632,12 +2723,6 @@ def _lm_run(
             identical_gemm_into(ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
         else:
             identical_gemm_into(ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
-        var rows = List[DeviceBuffer[DType.float32]]()
-        for r in range(b):
-            rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
-            ctx.enqueue_copy(dst_ptr=h_last.unsafe_ptr() + r * v, src_buf=rows[r])
-        ctx.synchronize()
-        _ = rows^
         # lane cgr4-download-loop: the two refusals scan on the device (the
         # first index by an integer minimum), not two m x d downloads walked
         # on the host
@@ -2647,31 +2732,30 @@ def _lm_run(
         var bad_hn = device_first_nonfinite(ctx, hn, m * d)
         if bad_hn >= 0:
             raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad_hn))
-        _ = ids^
+        ctx.enqueue_function[_lm_last_argmax_kernel](
+            logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
+            Int32(cur_l), Int32(v), Int32(n_steps), Int32(step),
+            grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
+        )
+        var rows = List[DeviceBuffer[DType.float32]]()
+        if p_logits != 0 and step == n_steps - 1:
+            var lp = _f32_ptr(p_logits)
+            for r in range(b):
+                rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
+                ctx.enqueue_copy(dst_ptr=lp + r * v, src_buf=rows[r])
+        ctx.synchronize()
+        _ = rows^
         _ = x^
         _ = sumsq^
         _ = hn^
         _ = logits^
         _ = ws^
-        var hl = h_last.unsafe_ptr()
-        for r in range(b):
-            var base = r * v
-            var best = 0
-            var best_v = hl.unsafe_load(base)
-            for c in range(1, v):
-                var xv = hl.unsafe_load(base + c)
-                if xv > best_v:
-                    best = c
-                    best_v = xv
-            out_i32.unsafe_store(r * n_steps + step, Int32(best))
-            h_ids.unsafe_ptr().unsafe_store(r, Int32(best))
         cur_l = 1
-    if p_logits != 0:
-        var lp = _f32_ptr(p_logits)
-        for i in range(b * v):
-            lp.unsafe_store(i, h_last.unsafe_ptr().unsafe_load(i))
-    _ = h_ids^
-    _ = h_last^
+    ctx.enqueue_copy(dst_ptr=out_i32, src_buf=out_dev)
+    ctx.synchronize()
+    _ = ids0^
+    _ = next_ids^
+    _ = out_dev^
 
 
 def causal_lm_session_create_binding() raises -> PythonObject:
@@ -2785,7 +2869,7 @@ def causal_lm_session_run_binding(
     var n_layers = Int(py=len(layers))
     if n_layers < 1:
         raise Error("causal_lm_session_run: no layers")
-    for i in range(n_layers):
+    for i in range(n_layers):  # small-loop(n_layers: decoder layers of the model): one session pointer per layer, not data
         var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
         _require_session_open(sp[])
         if sp[].b != owner[].b or sp[].dm != owner[].d:

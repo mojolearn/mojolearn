@@ -78,7 +78,7 @@ def main():
                   started=dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
                   command=f"python -m mojolearn verify --self-test --cpu-threads {args.cpu_threads} --json")
     with log.open("w") as fh:
-        rc = subprocess.run([str(py), "-m", "pip", "install", "--no-cache-dir", str(wheel)],
+        rc = subprocess.run([str(py), "-m", "pip", "install", "--no-cache-dir", str(wheel) + "[verify]"],
                             cwd=out, env=env, stdout=fh, stderr=subprocess.STDOUT).returncode
         record["install_rc"] = rc
         if rc == 0:

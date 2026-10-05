@@ -34,6 +34,7 @@ from checks.soft_f64 import (
 )
 from std.memory import bitcast
 from xtrees.ops import draw, stream_base
+from checks.numerics import ftz, identical_div
 
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
@@ -373,6 +374,94 @@ def pshap_marginal_unit(t: Int, d: Int, k: Int, np: Int, inv: I32P, ey: U64P, ph
         val = sf64_add(val, sf64_sub(e[(o + jj + 1) * k + c], e[(o + jj) * k + c]))
         val = sf64_add(val, sf64_sub(e[(o + d + jj) * k + c], e[(o + d + jj + 1) * k + c]))
     phi[t] = sf64_div(val, sf64_from_int(2 * np))
+
+
+# ------------------------------------------------- the model on the device
+# Lane fam2-forests (2026-10-04, MOJOLEARN_IDN_SHAP_DEVICE_MODEL): when the
+# explained model is one of this library's flat forests, its output on a
+# chunk's synthetic rows is computed here, on the device, straight from x,
+# the background and the chunk's masks or permutations: no synthetic matrix,
+# no download, no model call, no upload. The arithmetic is the forest's own
+# IDENTICAL predict (core/forest_inference.mojo `forest_ordered_kernel`):
+# the same key comparison per node, the leaves added in increasing tree
+# order from +0.0 with `forest_add`, the flushed divide by the tree count.
+# The value a node compares is the one the synthetic matrix would have held
+# (`kshap_synth_unit` / `pshap_synth_unit`: x where the feature is on, else
+# the background row), so every output word is the word the model call
+# returned for that synthetic row.
+@always_inline
+def agn_finite_key(value: Float32) -> UInt32:
+    """core/forest_inference.mojo `finite_key`: the total order of finite
+    Float32 as unsigned keys, the two zeros equal."""
+    var bits = bitcast[DType.uint32](value)
+    if (bits & UInt32(0x7fffffff)) == 0:
+        bits = 0
+    return ~bits if (bits & UInt32(0x80000000)) != 0 else bits ^ UInt32(0x80000000)
+
+
+@always_inline
+def agn_forest_add(a: Float32, b: Float32) -> Float32:
+    """core/forest_inference.mojo `forest_add`."""
+    return ftz(ftz(a) + ftz(b))
+
+
+@always_inline
+def agn_model_unit[RF_INPUT: Bool, PERM: Bool](q: Int, nb: Int, d: Int, mc: Int, k: Int, trees: Int, off: I32P,
+                                               col: I32P, thr: F32P, left: I32P, leaf: F32P, x: F32P, bg: F32P,
+                                               sel: I32P, y: F32P):
+    """q = one synthetic row: y[q, 0..k) = the forest on it.
+    PERM False (Kernel SHAP): q = (row * mc + s) * nb + r, mc = samples per
+    row, sel = the masks ((row, s) x d), feature f on when its mask is set.
+    PERM True (Permutation SHAP): q = ((row * mc + p) * (2d + 1) + o) * nb +
+    r, mc = permutations per row, sel = the inverse permutations ((row, p) x
+    d), feature f on by `pshap_synth_unit`'s rule. RF_INPUT flushes the
+    compared feature value (the random forest's predict; ExtraTrees' does
+    not), as `reached_leaf` does. Nodes: children are local ids, right =
+    left + 1, a leaf has left = -1; leaf values are node x k."""
+    var r = q % nb
+    var s = q // nb
+    var row = 0
+    var selbase = 0
+    var o = 0
+    comptime if PERM:
+        var span = 2 * d + 1
+        var rp = s // span
+        o = s - rp * span
+        row = rp // mc
+        selbase = rp * d
+    else:
+        row = s // mc
+        selbase = s * d
+    var xb = row * d
+    var bb = r * d
+    var yb = q * k
+    for c in range(k):
+        y[yb + c] = Float32(0)
+    for tree in range(trees):
+        var base = Int(off[tree])
+        var node = base
+        var child = Int(left[node])
+        while child != -1:
+            var f = Int(col[node])
+            var on = False
+            comptime if PERM:
+                var pos = Int(sel[selbase + f])
+                on = pos < o if o <= d else pos >= o - d
+            else:
+                on = sel[selbase + f] != 0
+            var value = x[xb + f]
+            if not on:
+                value = bg[bb + f]
+            comptime if RF_INPUT:
+                value = ftz(value)
+            var go_left = agn_finite_key(value) <= agn_finite_key(thr[node])
+            node = base + child + (0 if go_left else 1)
+            child = Int(left[node])
+        for c in range(k):
+            y[yb + c] = agn_forest_add(y[yb + c], leaf[node * k + c])
+    var ft = Float32(trees)
+    for c in range(k):
+        y[yb + c] = ftz(identical_div(ftz(y[yb + c]), ft))
 
 
 # ------------------------------------- Permutation SHAP delta rows (FAST)

@@ -118,11 +118,14 @@ class _BaseMLP:
             self.intercepts_[i] = flat[off:off + b.size].copy()
             off += b.size
 
-    def _fit(self, X, Y, out_act):
+    def _fit(self, X, Y, out_act, n_out=None):
+        """`n_out` (cpu2-l11-neural): `Y` is the (N,) int32 class codes and
+        the binding builds the target on the device: the (N, n_out) one-hot
+        for n_out > 1, the codes as the (N, 1) float target for n_out 1."""
         self._check()
         X = self._X(X)
         N, D = X.shape
-        O = Y.shape[1]
+        O = Y.shape[1] if n_out is None else int(n_out)
         hidden = self._hidden()
         sizes = [D] + hidden + [O]
         from ._buffer import InitStream
@@ -139,9 +142,11 @@ class _BaseMLP:
         ip = [N, D, O, _ACT[self.activation], out_act, self._LOSS_CODE, _SOLVER[self.solver],
               _LR[self.learning_rate], int(bool(self.nesterovs_momentum)), bs, int(self.max_iter),
               int(bool(self.shuffle)), seed, int(self.n_iter_no_change), len(hidden)] + hidden
+        if n_out is not None:
+            ip = ip + [1 if O > 1 else 2]
         fp = [float(self.learning_rate_init), float(self.beta_1), float(self.beta_2), float(self.epsilon),
               float(self.momentum), float(self.power_t), float(self.alpha), float(self.tol)]
-        Y = np.ascontiguousarray(Y, dtype=np.float32)
+        Y = np.ascontiguousarray(Y, dtype=np.float32 if n_out is None else np.int32)
         n_iter = int(self._binding().mlp_fit([X.ctypes.data, Y.ctypes.data, params.ctypes.data,
                                               curve.ctypes.data], ip, fp))
         self._unpack(params)
@@ -153,17 +158,21 @@ class _BaseMLP:
         self.t_ = n_iter * N
         return self
 
-    def _forward(self, X):
+    def _forward(self, X, proba2=False):
         X = self._X(X)
         if X.shape[1] != self.n_features_in_:
             raise ValueError(f"X has {X.shape[1]} features, the model was fitted on {self.n_features_in_}")
         hidden = [w.shape[1] for w in self.coefs_[:-1]]  # glue: hidden width per layer
-        out = np.zeros((X.shape[0], self.n_outputs_), dtype=np.float32)
+        width = 2 if proba2 else self.n_outputs_
+        out = np.zeros((X.shape[0], width), dtype=np.float32)
         params = self._pack()
         out_act = ["identity", "logistic", "tanh", "relu", "softmax"].index(self.out_activation_)
-        self._binding().mlp_predict([X.ctypes.data, params.ctypes.data, out.ctypes.data],
-                                    [X.shape[0], X.shape[1], self.n_outputs_, _ACT[self.activation], out_act,
-                                     4096, len(hidden)] + hidden)
+        ip = [X.shape[0], X.shape[1], self.n_outputs_, _ACT[self.activation], out_act, 4096, len(hidden)] + hidden
+        if proba2:
+            ip = ip + [1]
+        written = int(self._binding().mlp_predict([X.ctypes.data, params.ctypes.data, out.ctypes.data], ip))
+        if written != out.size:
+            raise RuntimeError("mlp_predict: this binding predates the two-column probability; rebuild it")
         return out
 
 
@@ -199,20 +208,20 @@ class MLPClassifier(_BaseMLP):
         k = len(self.classes_)
         if k < 2:
             raise ValueError("MLPClassifier needs at least two classes")
+        # cpu2-l11-neural: the int32 codes go down as they are; the binding
+        # builds the target on the device (`OP_ONE_HOT`).
+        codes = np.ascontiguousarray(inv, dtype=np.int32)
         if k == 2:
             self._LOSS_CODE = 1
-            Y = inv.reshape(-1, 1).astype(np.float32)
-            return self._fit(X, Y, 1)
+            return self._fit(X, codes, 1, n_out=1)
         self._LOSS_CODE = 2
-        Y = np.zeros((len(y), k), dtype=np.float32)
-        Y[np.arange(len(y)), inv] = 1.0
-        return self._fit(X, Y, 4)
+        return self._fit(X, codes, 4, n_out=k)
 
     def predict_proba(self, X):
-        p = self._forward(X)
-        if p.shape[1] == 1:
-            return np.ascontiguousarray(np.hstack([1 - p, p]), dtype=np.float32)
-        return p
+        if self.n_outputs_ == 1:
+            # cpu2-l11-neural: [1 - p, p] written by the binding (`OP_PROBA2`)
+            return self._forward(X, proba2=True)
+        return self._forward(X)
 
     def predict(self, X):
         p = self._forward(X)

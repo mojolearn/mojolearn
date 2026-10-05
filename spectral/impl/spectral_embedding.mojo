@@ -16,15 +16,17 @@ when `drop_first`; that arithmetic belongs to the Python caller and is
 documented in README's HAND-OFF, not performed here.
 """
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     transform_dataset,
+    transform_dense_keep,
     transform_graph,
 )
 from spectral.impl.sparse.coo import CooGraph
+from spectral.impl.spectral_predict_common import SpectralPredictionState
 
 
 @fieldwise_init
@@ -90,3 +92,24 @@ def transform_connectivity(
     var params = to_cuvs(config)
     params.tolerance = tolerance
     return transform_graph(ctx, params, connectivity_graph, embedding, trace)
+
+
+def transform_dense_connectivity(
+    ctx: DeviceContext,
+    config: MLSpectralEmbeddingParams,
+    dense: DeviceBuffer[DType.float32],
+    n: Int,
+    m: Int,
+    var indptr: DeviceBuffer[DType.int32],
+    mut embedding: List[Float32],
+    mut trace: IdentityTrace,
+    tolerance: Float32 = Float32(1e-5),
+) raises -> Int:
+    """`transform_connectivity` on a DENSE device affinity (lane
+    cpu2-l9-neighbors): the diagonal is dropped as the COO route's
+    `coo_remove_diagonal` drops it, then re-inserted as zero by the
+    Laplacian's construction."""
+    var params = to_cuvs(config)
+    params.tolerance = tolerance
+    var state = SpectralPredictionState()
+    return transform_dense_keep(ctx, params, dense, n, m, True, indptr^, embedding, state, False, trace)
