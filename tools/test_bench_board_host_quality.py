@@ -51,3 +51,23 @@ def test_no_loaded_binding_refused():
     from bench_board_host_quality import host_binding_artifacts
     with pytest.raises(RuntimeError, match='no host binding'):
         host_binding_artifacts({})
+
+
+def test_stateful_reference_matches_warmup_and_sample_history():
+    class ClippingRunner:
+        norm = 4096.
+        calls = []
+        def fit(self):
+            self.calls.append('fit'); self.last = self.norm; self.norm = 1.
+        def infer(self): self.calls.append('infer')
+        def outputs(self): return {'norm': np.array([self.last])}
+    runner = ClippingRunner()
+    result = quality.run_reference(runner, 2)
+    assert result['norm'].tolist() == [1.]
+    assert runner.calls == ['fit', 'infer', 'fit', 'infer']
+
+
+@pytest.mark.parametrize('count', [0, -1, True, 1.5])
+def test_invalid_reference_history_refused(count):
+    with pytest.raises(ValueError, match='positive integer'):
+        quality.run_reference(None, count)

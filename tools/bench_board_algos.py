@@ -4878,7 +4878,8 @@ def race(args):
         result["quality"] = quality(lane, D, outs)
         result["host_quality_receipt"] = _tool("bench_board_host_quality").enrich(
             lane, D, outs, result["quality"], args.ours_python,
-            os.path.join(args.work, tag + "-host-quality"), args.round_seconds)
+            os.path.join(args.work, tag + "-host-quality"), args.round_seconds,
+            fit_calls=args.rounds + 1)
     except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
