@@ -190,6 +190,9 @@ comptime OP_MLP_EPOCH_LOSS = 94
 #: lane cpu4-python: p0[t] = t (float32, exact below 2^24): the unshuffled
 #: epoch order of the RNN fit, built on the executor.
 comptime OP_SEQ_IOTA = 95
+#: lane cpu4-python: ProphetForecaster's scaled time and seasonal phases on the
+#: executor (soft binary64, `sequence/prophet.mojo` op_prophet_prep).
+comptime OP_PROPHET_PREP = 96
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

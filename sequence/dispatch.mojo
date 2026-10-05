@@ -44,6 +44,7 @@ from sequence.ops import (
     OP_MLP_PERM,
     OP_MLP_EPOCH_LOSS,
     OP_SEQ_IOTA,
+    OP_PROPHET_PREP,
     OP_L2GRAD,
     OP_DIVS,
     OP_AF_ALPHA,
@@ -123,7 +124,7 @@ from sequence.croston import op_croston
 from sequence.ets import op_ets, op_ets_init, op_ets_lik
 from sequence.garch import op_garch
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
-from sequence.prophet import op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
+from sequence.prophet import op_prophet_prep, op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, op_cell_bwd_scan, op_cell_fwd_scan
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 from sequence.vecar import op_var_resid, op_var_sigma
@@ -216,6 +217,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_mlp_epoch_loss(t, a)
     elif OP == OP_SEQ_IOTA:
         op_seq_iota(t, a)
+    elif OP == OP_PROPHET_PREP:
+        op_prophet_prep(t, a)
     elif OP == OP_L2GRAD:
         op_l2grad(t, a)
     elif OP == OP_DIVS:

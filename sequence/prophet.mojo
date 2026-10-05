@@ -22,6 +22,8 @@ the portable float32 seams, so the features are the same bits everywhere."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_sin, identical_sqrt
 from std.sys.compile import is_defined
+from std.memory import bitcast
+from checks.soft_f64 import SF64_NAN, SF64_ONE, SF64_SIGN, SF64_ZERO, sf64_add, sf64_div, sf64_lt, sf64_sub, sf64_to_f32
 
 comptime TWO_PI: Float32 = 6.283185307179586
 comptime MEM = 5
@@ -693,3 +695,101 @@ def op_prophet_predict(t: Int, a: Args):
     var scale = ld(a.p1, b * 4)
     st(a.p5, t, mul(yh, scale))
     st(a.p6, t, mul(tr, scale))
+
+
+# ---- input preparation on the executor (lane cpu4-python) ------------------
+# `prophet_features` computed t = (days - start) / t_scale and the seasonal
+# phases fmod(days, P) / P (+ 1 when negative) in float64 on the host, one
+# rounding to float32 each. Here every float64 step is soft binary64 over the
+# IEEE words (checks/soft_f64.mojo: correctly rounded, integer instructions
+# only, so Apple without float64 too) and the fmod is the exact integer long
+# division it was: the IEEE results the host float64 unit gave, the same
+# bits, on every column.
+
+
+@always_inline
+def _words64(a: FP, i: Int) -> UInt64:
+    """Float64 i of a buffer holding float64 words as float32 pairs (low
+    word first: the little-endian layout of the caller's float64 array)."""
+    var lo = UInt64(bitcast[DType.uint32](a.unsafe_load(2 * i)))
+    var hi = UInt64(bitcast[DType.uint32](a.unsafe_load(2 * i + 1)))
+    return (hi << 32) | lo
+
+
+@always_inline
+def _arg64(a: Args, at: Int) -> UInt64:
+    """A 64-bit word carried as four 16-bit Int slots i[at..at+3], low first."""
+    var w0: Int
+    var w1: Int
+    var w2: Int
+    var w3: Int
+    if at == 2:
+        w0 = a.i2; w1 = a.i3; w2 = a.i4; w3 = a.i5
+    else:
+        w0 = a.i6; w1 = a.i7; w2 = a.i8; w3 = a.i9
+    return (UInt64(w0 & 0xFFFF) | (UInt64(w1 & 0xFFFF) << 16)
+            | (UInt64(w2 & 0xFFFF) << 32) | (UInt64(w3 & 0xFFFF) << 48))
+
+
+def fmod_exact64_bits(ua: UInt64, ub: UInt64) -> UInt64:
+    """C fmod(a, b) on IEEE words for a finite b > 0, exact (the sign of a),
+    by integer long division of the significands; a NaN or infinite a gives
+    the canonical NaN. `sequence/prophet_prep.mojo::fmod_exact64` on words."""
+    var ea = Int((ua >> 52) & UInt64(0x7FF))
+    var eb = Int((ub >> 52) & UInt64(0x7FF))
+    if ea == 0x7FF:
+        return SF64_NAN
+    if (ua & ~SF64_SIGN) < ub:
+        return ua
+    var ma = ua & UInt64(0xFFFFFFFFFFFFF)
+    var mb = ub & UInt64(0xFFFFFFFFFFFFF)
+    if ea == 0:
+        ea = 1
+    else:
+        ma |= UInt64(1) << 52
+    if eb == 0:
+        eb = 1
+    else:
+        mb |= UInt64(1) << 52
+    var r = ma % mb
+    for _ in range(ea - eb):
+        r = (r << 1) % mb
+    var bits = UInt64(0)
+    if r != 0:
+        var sh = 0
+        while (r << UInt64(sh)) < (UInt64(1) << 52):
+            sh += 1
+        var m = r << UInt64(sh)
+        var E = eb - sh
+        if E >= 1:
+            bits = (UInt64(E) << 52) | (m & UInt64(0xFFFFFFFFFFFFF))
+        else:
+            bits = m >> UInt64(1 - E)
+    return bits | (ua & SF64_SIGN)
+
+
+def op_prophet_prep(t: Int, a: Args):
+    """Element t of an (N, W) grid, W = 1 + max(ns, 1): column 0 writes
+    p2[r] = f32((days[r] - start) / t_scale); column 1 + s writes
+    p3[r, s] = f32(fmod(days[r], P_s) / P_s, + 1 when negative), or 0 when
+    ns == 0. p0: days (N float64 as float32 pairs), p1: periods (ns float64
+    as pairs); i0 = N, i1 = ns; start in i2..i5, t_scale in i6..i9 (16-bit
+    words, low first)."""
+    var ns = a.i1
+    var W = 1 + (ns if ns > 0 else 1)
+    var r = t // W
+    var c = t - r * W
+    var d = _words64(a.p0, r)
+    if c == 0:
+        var v = sf64_div(sf64_sub(d, _arg64(a, 2)), _arg64(a, 6))
+        a.p2.unsafe_store(r, sf64_to_f32(v))
+        return
+    var s = c - 1
+    if ns == 0:
+        a.p3.unsafe_store(r, Float32(0.0))
+        return
+    var P = _words64(a.p1, s)
+    var q = sf64_div(fmod_exact64_bits(d, P), P)
+    if sf64_lt(q, SF64_ZERO):
+        q = sf64_add(q, SF64_ONE)
+    a.p3.unsafe_store(r * ns + s, sf64_to_f32(q))

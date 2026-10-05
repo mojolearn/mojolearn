@@ -162,7 +162,8 @@ def prophet_days_binding(addrs: PythonObject, ip: PythonObject) raises -> Python
 
 
 def prophet_features_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    return prophet_features_py(addrs, ip, fp)
+    var ex = DeviceExec()
+    return prophet_features_py(ex, addrs, ip, fp)
 
 
 def prophet_changepoints_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
