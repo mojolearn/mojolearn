@@ -182,7 +182,7 @@ def nsum_f64_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject
     return PythonObject(total)
 
 
-def class_ratio_f64_binding(
+def class_ratio_f64_host_binding(
     counts_addr: PythonObject, k: PythonObject, n: PythonObject, mode: PythonObject, out_addr: PythonObject,
 ) raises -> PythonObject:
     """Per-class ratios of the k int64 class counts (lane py-runtime-b: the
