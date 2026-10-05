@@ -178,7 +178,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         comptime if TSVD_FAST_CHOLQR3:
             m.def_function[tsvd_cholqr_r_py]("x_decomp_tsvd_cholqr_r")
         # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 1 RSVD_FAST_DEVSCAN,
-        # bit 2 DECOMP_FAST_ORTH_WS (each default off, FAST + Apple)
+        # bit 2 DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT (FAST + Apple defaults, _OFF rollbacks)
         m.def_function[s_flags_py]("x_decomp_s_flags")
         comptime if RSVD_FAST_DEVSCAN:
             m.def_function[dev_upload_scan_py]("x_decomp_dev_upload_scan")

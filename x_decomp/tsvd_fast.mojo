@@ -44,6 +44,9 @@ from x_decomp.device import (
     lu_info_init_kernel, xd_ctx,
 )
 
+#: TSVD_FAST_CHOLQR3 OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, verdicts batch 6): tsvd istella +19.9% slower. DROPPED: stays
+#: off (opt-in only).
 comptime TSVD_FAST_CHOLQR3 = XD_FAST_APPLE and is_defined["MOJOLEARN_TSVD_FAST_CHOLQR3"]()
 #: threads of the n-sized diagonal kernels (n <= TS_MAX_N = 512 columns)
 comptime CQ3_TPB = 256

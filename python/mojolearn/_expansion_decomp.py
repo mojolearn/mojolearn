@@ -1191,7 +1191,7 @@ class _Kit:
         Householder R and a row-parallel A R^-1 (DEVIATION 5309)."""
         if A.r * A.c and self._use(A):
             Q = self._dout(A.r, A.c)
-            # DECOMP_FAST_ORTH_WS (default off, FAST + Apple): the same passes
+            # DECOMP_FAST_ORTH_WS (FAST + Apple default, rollback _OFF): the same passes
             # with pooled device work buffers (x_decomp/s_linalg_fast.mojo)
             fn = self.b.x_decomp_dev_orth_ws if self.s_flags() & 2 else self.b.x_decomp_dev_orth
             fn(self._did(A), Q._d.id, [A.r, A.c])
@@ -3012,7 +3012,7 @@ def lu_factor(a, *, numeric_mode=None):
     info > 0) and warned about, as scipy warns."""
     k = _Kit(_mode(numeric_mode))
     if k.s_flags() & 4 and k.qfix_flags() & 4 and not _is_sparse(a):
-        # LU_FAST_RESIDENT (default off, FAST + Apple; x_decomp/s_linalg_fast.mojo)
+        # LU_FAST_RESIDENT (FAST + Apple default, rollback _OFF; x_decomp/s_linalg_fast.mojo)
         return _lu_factor_resident(k, a)
     A = _M.from_input(a, "a")
     if A.r != A.c:
@@ -3104,7 +3104,7 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     k = _Kit(_mode(numeric_mode))
     dev = getattr(lu_and_piv, "_dev", None)
     if dev is not None and not trans and lu is dev[3] and piv is dev[4] and k.s_flags() & 4:
-        # LU_FAST_RESIDENT (default off, FAST + Apple): the pair's device factor
+        # LU_FAST_RESIDENT (FAST + Apple default, rollback _OFF): the pair's device factor
         X = _lu_solve_resident(k, dev, b)
         if X is not None:
             return X
@@ -3217,7 +3217,7 @@ def _rsvd_direct_input(k, M, transpose):
     if transpose is True or (transpose == "auto" and a.shape[0] < a.shape[1]):
         return None     # `_rsvd_core` transposes on the host: main's route
     if k.s_flags() & 1:
-        # RSVD_FAST_DEVSCAN (default off, FAST + Apple; x_decomp/s_linalg_fast.mojo):
+        # RSVD_FAST_DEVSCAN (FAST + Apple default, rollback _OFF; x_decomp/s_linalg_fast.mojo):
         # upload, then the finiteness scan on the device copy (the same refusal)
         A = _M._on_device(_DevBuf(k._raw(), a.size), a.shape[0], a.shape[1])
         if int(k.b.x_decomp_dev_upload_scan(A._d.id, addr_ro(a, name="M"), a.size)) >= 0:

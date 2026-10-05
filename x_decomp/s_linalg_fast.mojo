@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane/apple-fast-s-linalg (2026-10-04): FAST + Apple speed candidates for
-the kit's device routes, each default OFF behind its own define. Python
-reads which are compiled through `x_decomp_s_flags()`:
+the kit's device routes. Python reads which are compiled through
+`x_decomp_s_flags()`. All three are the FAST + Apple default since
+verdicts batch 6 (2026-10-05), each with an _OFF rollback:
 
-  bit 1  RSVD_FAST_DEVSCAN   (`-D MOJOLEARN_RSVD_FAST_DEVSCAN`)
-  bit 2  DECOMP_FAST_ORTH_WS (`-D MOJOLEARN_DECOMP_FAST_ORTH_WS`)
-  bit 4  LU_FAST_RESIDENT    (`-D MOJOLEARN_LU_FAST_RESIDENT`)
+  bit 1  RSVD_FAST_DEVSCAN   (`-D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`)
+  bit 2  DECOMP_FAST_ORTH_WS (`-D MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF`)
+  bit 4  LU_FAST_RESIDENT    (`-D MOJOLEARN_LU_FAST_RESIDENT_OFF`)
 
 IDENTICAL and every other vendor compile none of this.
 """
@@ -38,7 +39,11 @@ from x_decomp.resident import X_DECOMP_POOL, _id, _n, _ptr
 #: value is not finite. Same words reach the device; no arithmetic changes.
 #: Expect: randomized-svd istella 501 -> ~430-460 ms (the host scan is
 #: ~1 cycle a float), taxi a few ms.
-comptime RSVD_FAST_DEVSCAN = XD_FAST_APPLE and is_defined["MOJOLEARN_RSVD_FAST_DEVSCAN"]()
+#: RSVD_FAST_DEVSCAN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, rab15-rsvdbundle, with DECOMP_FAST_ORTH_WS): randomized-svd
+#: istella 490.1 -> 435.1 ms, taxi 200.5 -> 189.8 ms, error equal to 1e-14.
+#: KEEP: the FAST + Apple default; rollback -D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.
+comptime RSVD_FAST_DEVSCAN = XD_FAST_APPLE and not is_defined["MOJOLEARN_RSVD_FAST_DEVSCAN_OFF"]()
 
 #: What: `Kit.orth` on a device matrix (`x_decomp_dev_orth`, resident.mojo
 #: `dev_orth_py` -> device.mojo `orth_on_device_diag`) copies A into the
@@ -54,7 +59,11 @@ comptime RSVD_FAST_DEVSCAN = XD_FAST_APPLE and is_defined["MOJOLEARN_RSVD_FAST_D
 #: writes the output: the same kernels on the same words, so the same bits.
 #: Every device `Kit.orth` caller takes it (randomized_svd, randomized PCA /
 #: TruncatedSVD, FastICA's whitening, ...).
-comptime DECOMP_FAST_ORTH_WS = XD_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_ORTH_WS"]()
+#: DECOMP_FAST_ORTH_WS OUTCOME (M3 afc_ab_def, full board size, 1 run per
+#: arm, 2026-10-05, rab15-rsvdbundle, with RSVD_FAST_DEVSCAN): randomized-svd
+#: istella 490.1 -> 435.1 ms, taxi 200.5 -> 189.8 ms, error equal to 1e-14.
+#: KEEP: the FAST + Apple default; rollback -D MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF.
+comptime DECOMP_FAST_ORTH_WS = XD_FAST_APPLE and not is_defined["MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF"]()
 
 
 #: What: `lu_factor` + `lu_solve` (the lu-factor / lu-solve rows, 8192 x 8192,
@@ -73,7 +82,11 @@ comptime DECOMP_FAST_ORTH_WS = XD_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FA
 #: (`lu_resid_ff_kernel`), the correction solve and the add on the device.
 #: The same launches on the same words as the host-staged route.
 #: Expect: lu-factor 654 -> ~450-550 ms, lu-solve 734 -> ~480-600 ms.
-comptime LU_FAST_RESIDENT = XD_FAST_APPLE and LU_QFIX and is_defined["MOJOLEARN_LU_FAST_RESIDENT"]()
+#: LU_FAST_RESIDENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
+#: 2026-10-05, rab15-luresident): lu-factor 934.4 -> 608.5 ms, lu-solve
+#: 934.9 -> 608.7 ms, residual identical 3.259e-8, digest same. KEEP: the
+#: FAST + Apple default; rollback -D MOJOLEARN_LU_FAST_RESIDENT_OFF.
+comptime LU_FAST_RESIDENT = XD_FAST_APPLE and LU_QFIX and not is_defined["MOJOLEARN_LU_FAST_RESIDENT_OFF"]()
 
 
 def s_flags_py() raises -> PythonObject:
