@@ -497,6 +497,25 @@ def csb_ss_unit(t: Int, f: FP, q: IP):
     st(f, p(q, 7) + t, ss)
 
 
+@always_inline
+def _csb1_ss_take(
+    x: Float32, k: Int, w: Float32, W: Int,
+    mean: SIMD[DType.float32, CSB1_REG], mut ss: SIMD[DType.float32, CSB1_REG],
+):
+    """One row of csb1_ss's register path: csb_ss's operations on its
+    class's chain (acc_add on the unweighted sum, as csb_ss)."""
+    if W < 0:
+        comptime for u in range(CSB1_REG):
+            if k == u:
+                var e = sub(x, mean[u])
+                ss[u] = acc_add(ss[u], mul(e, e))
+    else:
+        comptime for u in range(CSB1_REG):
+            if k == u:
+                var e = sub(x, mean[u])
+                ss[u] = add(ss[u], mul(w, mul(e, e)))
+
+
 def csb1_ss_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, Y, K, MEAN, CN, PS, nb, W]; t = b*d + c (lane
     fam-prep-metrics, IDN_CLASS_ONEPASS). csb_ss's partials of EVERY class of
@@ -526,20 +545,23 @@ def csb1_ss_unit(t: Int, f: FP, q: IP):
             if u < K:
                 mean[u] = ld(f, MEAN + u * d + c)
                 live[u] = ld(f, CN + u * d + c)
-        for i in range(r[0], r[1]):
-            var x = ld(f, X + i * d + c)
-            var k = Int(ld(f, Y + i))
-            if W < 0:
-                comptime for u in range(CSB1_REG):
-                    if k == u:
-                        var e = sub(x, mean[u])
-                        ss[u] = add(ss[u], mul(e, e))
-            else:
-                var w = ld(f, W + i)
-                comptime for u in range(CSB1_REG):
-                    if k == u:
-                        var e = sub(x, mean[u])
-                        ss[u] = add(ss[u], mul(w, mul(e, e)))
+        # lane idn-regress (2026-10-05): RUN rows' words loaded together
+        # (`run_block`, csb_ss's loads), then taken one row at a time,
+        # ascending: the same operations, the same bits (csb1_part's note)
+        var full = r[0] + (r[1] - r[0]) - (r[1] - r[0]) % RUN
+        for i0 in range(r[0], full, RUN):
+            var bx = run_block[RUN](f, X + i0 * d + c, d)
+            var by = run_block[RUN](f, Y + i0, 1)
+            var bw = SIMD[DType.float32, RUN](0)
+            if W >= 0:
+                bw = run_block[RUN](f, W + i0, 1)
+            comptime for v in range(RUN):
+                _csb1_ss_take(ftz(bx[v]), Int(ftz(by[v])), ftz(bw[v]), W, mean, ss)
+        for i in range(full, r[1]):
+            var w = Float32(0)
+            if W >= 0:
+                w = ld(f, W + i)
+            _csb1_ss_take(ld(f, X + i * d + c), Int(ld(f, Y + i)), w, W, mean, ss)
         comptime for u in range(CSB1_REG):
             if u < K:
                 if live[u] != Float32(0):
