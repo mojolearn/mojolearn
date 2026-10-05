@@ -466,6 +466,16 @@ struct FrontierRecord(ImplicitlyCopyable, Movable):
     """The owning tree. DEVIATION 468's second arm, and DEVIATION 211's
     per-item tree id, which are deliberately the same field."""
 
+    @always_inline
+    def __init__(out self, *, copy: Self):
+        """Metal: an inlined field-by-field copy (see `InstanceRange` in
+        `kernels/builder_kernels.mojo`): the synthesized out-of-line copy
+        crashes Apple's Metal compiler on a whole-record device load."""
+        self.item = copy.item
+        self.split = copy.split
+        self.key = copy.key
+        self.tree_id = copy.tree_id
+
 
 def bestfirst_before(
     a: FrontierRecord, b: FrontierRecord, sabotage: Int32

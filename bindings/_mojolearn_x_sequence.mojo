@@ -10,13 +10,22 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
-from sequence.exec_device import DeviceExec
+from sequence.exec_device import DeviceExec, SEQ_FAST_VAR_NODRAIN
 from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
+from sequence.sched_table import sched_exp_block_py
+from checks.numerics import NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+#: MOJOLEARN_SCHED_FAST_TABLE (FAST + Apple, default off; sequence/sched_table.mojo):
+#: registers `sched_exp_block`, which ExponentialLR uses when present
+comptime SCHED_FAST_TABLE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                             and is_defined["MOJOLEARN_SCHED_FAST_TABLE"]())
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
 
@@ -89,14 +98,26 @@ def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     return stl_py(ex, addrs, ip)
 
 
+def sched_exp_block_binding(addrs: PythonObject, fp: PythonObject, ip: PythonObject) raises -> PythonObject:
+    return sched_exp_block_py(addrs, fp, ip)
+
+
 def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
-    return var_fit_py(ex, addrs, ip)
+    var r = var_fit_py(ex, addrs, ip)
+    comptime if SEQ_FAST_VAR_NODRAIN:
+        # every var_fit_py return follows its final sync (sequence/exec_device.mojo)
+        ex.mark_drained()
+    return r
 
 
 def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
-    return var_forecast_py(ex, addrs, ip)
+    var r = var_forecast_py(ex, addrs, ip)
+    comptime if SEQ_FAST_VAR_NODRAIN:
+        # var_forecast_py returns after its blocking download (a sync)
+        ex.mark_drained()
+    return r
 
 
 def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -224,6 +245,8 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[optimizer_step_binding]("optimizer_step")
         m.def_function[stl_binding]("stl")
         m.def_function[var_fit_binding]("var_fit")
+        comptime if SCHED_FAST_TABLE:
+            m.def_function[sched_exp_block_binding]("sched_exp_block")
         m.def_function[var_forecast_binding]("var_forecast")
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
@@ -236,8 +259,9 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[optimizer_resident_move_binding]("optimizer_resident_move")
         m.def_function[optimizer_resident_step_binding]("optimizer_resident_step")
         m.def_function[lamb_resident_step_binding]("lamb_resident_step")
-        # Adafactor's second moment on the device (-D MOJOLEARN_AF_FAST_RESIDENT,
-        # FAST + Apple; the Python side uses it only when these exist)
+        # Adafactor's second moment on the device (FAST + Apple default, off
+        # under -D MOJOLEARN_AF_FAST_RESIDENT_OFF; the Python side uses it
+        # only when these exist)
         comptime if AF_RESIDENT:
             m.def_function[adafactor_resident_open_binding]("adafactor_resident_open")
             m.def_function[adafactor_resident_step_binding]("adafactor_resident_step")

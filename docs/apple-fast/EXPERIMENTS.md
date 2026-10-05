@@ -1296,3 +1296,43 @@ A (default) = the new general rule; B = the old board-shaped rule behind the def
 | `MOJOLEARN_LEGACY_NARROW_EIGH_TD` | eigh, pca-style callers (binding x_decomp, linalg) | @ 456829d15 | - | - | OWED | tridiagonal route from n >= 64 (two panels) instead of 512 |
 | `MOJOLEARN_LEGACY_NARROW_IVFG_MIN_N` | cagra / taxi, istella (binding x_ann) | @ 78f80f17c | - | - | OWED | IVFG when n >= 2 * PROBES * 384 (half the exact pairs) instead of 65536 |
 | `MOJOLEARN_LEGACY_NARROW_FX_D` | logistic regression (QN) / istella (binding estimators) | @ f9a864c91 | - | - | OWED | fast_xtdz d <= 256 gate removed; wider rows stage fewer rows |
+## lane/apple-fast-general-speed verdicts (2026-10-05, lane/apple-fast-verdicts-5)
+
+M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| LDA fused occupancy tiers (rollback `LEGACY_NARROW_LDA_FUSED_V`) | lda / taxi-zones | lane/apple-fast-general-speed @ 8027147c0, cherry-picked as c4156ee0d | rab11-ldatier (main's rule: rab3-legacylda) | main's general rule 3119 -> tiers 1701 (legacy 320-word window 1512) | ACCEPT (merged via lane/apple-fast-verdicts-5) | perplexity identical; the threadgroup row is sized from runtime v at hardware occupancy tiers (x_decomp/lda_fast.mojo). Still behind the legacy window: follow-up open |
+| SVM working-set rule (`SVM_FAST_WS_SELECT_OFF`, `LEGACY_NARROW_SVM_WS`) | svm / istella, taxi | lane/apple-fast-general-speed @ 79212453b | rab11-svmws | istella: main 210.1, legacy 205.6, new 214.3; taxi: main 1650.7, legacy 1643.4, new 1624.2 | NEUTRAL, not merged | within noise on both datasets; recoverable at 79212453b |
+| `ARD_EQ_ONEPASS` (rollback `ARD_EQ_ONEPASS_OFF`) | ard / board | lane/apple-fast-general-speed @ d42318df5, 7ec8ec5ff | rab11-ardonepass | 1349.6 -> 34.1 | DROPPED-quality | r2 0.327 -> -0.00001; not merged, recoverable at 7ec8ec5ff |
+
+
+## Small launch-bound inputs (lane/apple-fast-s-small, 2026-10-05, READY-AB)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_KM_FAST_RBF_PIPE` | rbf-sampler / istella (kernel_methods/rbf_resident.mojo) | lane/apple-fast-s-small | (owed) | 57.1 -> (owed) | READY-AB | fit_transform pipelined over ~8 MiB row blocks: block k+1's X upload, GEMM and epilogue run on the GPU while the one host thread copies block k out of its pinned stage; main (STAGED) finishes the whole 88 MB upload + GEMM before the first stage copy. GEMM per row block (FAST: bits may move; quality checked by the A/B) |
+| (not written) host indicator for label-binarizer / multilabel-binarizer | label-binarizer taxi, multilabel-binarizer taxi | lane/apple-fast-s-small (dropped before push) | - | - | REFUSED-BY-HOOK | codes down + host writes of POS words into the zero-page output (skips the 1 GB device memset and the 1 GB pinned-stage download) is refused by tools/hooks no_host_routes (host-call / host-threads in GPU code). On Apple the dense output's floor is the single-thread write-combined copy-out (~3 GB/s) plus first-touch faults; no GPU-only lever left after POOL_ARENA / STAGED_OUT / LABEL_DIRECT. Needs an explicit hook allowance (host index map) to go further |
+
+
+## Lane apple-fast-s-ts (round 2 speed, 2026-10-04): READY-AB candidates
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_ARIMA_FAST_GROUPS_CONCURRENT` | autoarima / taxi-hourly, synthetic | lane/apple-fast-s-ts @ b8afe92fc | - | - | READY-AB | arima/impl/fast_order_search.mojo: the grouped search ran its rd = 1..4 Kalman groups one after another to their own convergence; now one round loop advances every live group (one poll wait for all). Per-group rounds/polls/stops unchanged, so same optimum per order; rounds = max over groups instead of sum. Not FIT_GROUPS (refit) or SLAB (allocation) |
+| `MOJOLEARN_ARIMA_FAST_D_CONCURRENT` (with GROUPS_CONCURRENT) | autoarima / taxi-hourly, synthetic | lane/apple-fast-s-ts @ b8afe92fc | - | - | READY-AB | the KPSS d groups (d = 0, 1 on the board) were separate native searches back to back (_x_sequence_autoarima.py d loop); `order_search_multi` runs every d group's (rd, k) groups in the same concurrent loop. Same optimum per order |
+| `MOJOLEARN_ARIMA_FAST_SEARCH_REUSE` | autoarima / taxi-hourly, synthetic | lane/apple-fast-s-ts @ b8afe92fc | - | - | READY-AB | the board search now runs maxiter=1000 (quality fix, tools/bench_board_algos.py:2848), the fit's own; AutoARIMA.fit then refitted every chosen order with the same start, per-series optimizer and maxiter. The search now also returns params/x/x0/fx/n_iter/retcode per order and fit() adopts them (ARIMA._adopt_fit) when maxiter matches: no refit stage. Per-series independence of estimate_x0/L-BFGS => same optimum expected; quality gate = forecast_rmse vs arm A |
+| `MOJOLEARN_SEQ_FAST_VAR_COOP` | var / synthetic, taxi-hourly | lane/apple-fast-s-ts @ b8afe92fc | - | - | READY-AB | sequence/pyapi.mojo `_var_fit_queued`: column scale (2 passes over R), Z^T Z, Z^T Ys and sigma_u were one thread per cell, each an R ~ 1,390-step chain of strided loads. Now one simdgroup per cell (sequence/coop.mojo: coop_dot = same fma chain; column max = same maximum): same words |
+| `MOJOLEARN_SEQ_FAST_VAR_NODRAIN` | var / synthetic, taxi-hourly | lane/apple-fast-s-ts @ b8afe92fc | - | - | READY-AB | DeviceExec.__deinit__ synchronized again after var_fit / var_forecast had already ended on their own wait; both bindings now mark the executor drained: one empty Metal wait fewer per call (two per board fit+forecast). Same words |
+| `MOJOLEARN_SCHED_FAST_TABLE` | lr-exponential / synthetic | lane/apple-fast-s-ts @ b8afe92fc | - | - | READY-AB | 100,000 Python lr_at calls at ~2.25 us (exact enclosure per call). The FAST sequence binding fills 8,192-value blocks (sequence/sched_table.mojo: float64 pow within a 1e-12 enclosure, kept only when both ends round to one normal float32, else NaN -> the exact Python path), lr_at is one list index. Contract bits (DEVIATION 5540) by construction. CPU-only route by nature (a scalar per step; opponent is CPU torch) |
+
+## Verdicts applied on lane/apple-fast-verdicts-5 (2026-10-05)
+
+M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05.
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `AF_FAST_RESIDENT` (rollback `AF_FAST_RESIDENT_OFF`) | adafactor / board | lane/apple-fast-verdicts-5 | rab10-afresident | 392.8 -> 205.2 | KEEP (FAST+Apple default, `_OFF`) | digest identical (sequence/opt_resident.mojo `AF_RESIDENT`) |
+| `AF_FAST_NOFILL` (rollback `AF_FAST_NOFILL_OFF`) | adafactor / board | lane/apple-fast-verdicts-5 | rab10-afnofill | 393.2 -> 380.1 | KEEP (FAST+Apple default, `_OFF`) | digest identical. No code conflict with RESIDENT: the resident step skips `adafactor_step_py`, so with RESIDENT on the Adafactor class no longer reaches NOFILL's path; it covers the direct `adafactor_step` binding and the RESIDENT_OFF rollback (sequence/pyapi.mojo `AF_NOFILL`) |
+| `KM_FAST_RBF_PIPE` (rollback `KM_FAST_RBF_PIPE_OFF`) | rbf-sampler / istella, taxi | lane/apple-fast-verdicts-5 (from lane/apple-fast-s-small) | rab12-rbfpipe | istella 56.7 -> 43.0; taxi 35.6 -> 31.1 | KEEP (FAST+Apple default, `_OFF`) | kernel_rel_error identical (kernel_methods/rbf_resident.mojo) |
+| `MOE_FAST_MMA_KB32 + _WIDE + _PF` (bundle, on top of the default `MOE_FAST_MMA`) | moe / synthetic | main @ 13246c64f | rab10-moemmaall | 71.3 -> 146.8 | DROPPED-slower (bundle), toggles stay opt-in off | 2x slower as a bundle; no single-variant A/B, so no per-variant verdict. Base `MOE_FAST_MMA` stays the default (sequence/moe_mma.mojo) |

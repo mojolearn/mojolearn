@@ -59,7 +59,8 @@ from kernel_methods.checks.random_features import (
     km_weight_sigma,
 )
 from kernel_methods.estimator import _family_ctx
-from core.staged_download import download_f32_into
+from core.staged_download import download_f32_into, DOWNLOAD_CHUNK_FLOATS, _stage_take, _stage_give, _stage_enqueue
+from std.memory import memcpy
 
 
 # KM_FAST_RBF_RESIDENT, DEFAULT in FAST + Apple (lane/apple-fast-w2-kfeat):
@@ -94,6 +95,65 @@ comptime KM_FAST_RBF_RESIDENT = (
 # pinned stage itself would leave the caller reading write-combined memory.
 comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT and not is_defined["MOJOLEARN_KM_FAST_RBF_STAGED_OFF"]()
 comptime _RBF_STAGE_POOL = "MojoKmRbfDownloadStagesFast"
+
+
+#: MOJOLEARN_KM_FAST_RBF_PIPE (lane apple-fast-s-small, 2026-10-05), FAST +
+#: Apple default (needs KM_FAST_RBF_STAGED); rollback -D MOJOLEARN_KM_FAST_RBF_PIPE_OFF.
+#: What: fit_transform as a pipeline over row blocks of ~8 MiB of output
+#: (`_rbf_pipe_rows`): block k's X rows go up, its GEMM and epilogue run, its
+#: projection goes into a pinned stage; while the GPU does block k + 1 the one
+#: host thread copies block k's stage out into the caller's array. The scan
+#: of X, W and b come down behind the last block (one queue, waits only at
+#: the stage boundaries, as `download_f32_into`).
+#: Why: main (STAGED) runs the whole 88 MB X upload, the scan, the GEMM and
+#: the epilogue BEFORE the first stage copy, and only then starts the
+#: download pipeline whose single-thread copy-out (write-combined pinned
+#: reads, ~3 GB/s, and the output's first-touch faults) is the bulk of
+#: rbf-sampler istella's 57.1 ms (sklearn 47.6); here the upload and the
+#: GEMM hide under the copy-out of the previous block.
+#: Bits: the GEMM runs per row block (m = block rows, same n and k, same
+#: operands); FAST needs no same bits, quality is the A/B's check.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
+#: rab12-rbfpipe): rbf-sampler istella 56.7 -> 43.0 ms, taxi 35.6 -> 31.1 ms,
+#: kernel_rel_error identical. KEEP: the FAST + Apple default since then
+#: (the old -D name is harmless).
+comptime KM_FAST_RBF_PIPE = KM_FAST_RBF_STAGED and not is_defined["MOJOLEARN_KM_FAST_RBF_PIPE_OFF"]()
+
+
+def _rbf_pipe_rows(m: Int, q: Int) -> Int:
+    """Rows a pipeline block: DOWNLOAD_CHUNK_FLOATS of output, a multiple of
+    4 rows (16-byte aligned X and output block starts for any d, q), at
+    least 4, at most m."""
+    var r = (DOWNLOAD_CHUNK_FLOATS // max(q, 1)) // 4 * 4
+    return min(max(r, 4), m)
+
+
+def _rbf_pipe_block(
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    mut dw: DeviceBuffer[DType.float32],
+    mut db: DeviceBuffer[DType.float32],
+    mut dz: DeviceBuffer[DType.float32],
+    mut stage: HostBuffer[DType.float32],
+    xaddr: Int,
+    k: Int,
+    rows: Int,
+    m: Int,
+    d: Int,
+    q: Int,
+    scale: Float32,
+) raises:
+    """Block k: X rows up, GEMM, epilogue, projection into `stage`. ASYNCHRONOUS."""
+    var lo = k * rows
+    var r = min(rows, m - lo)
+    var xs = dx.create_sub_buffer[DType.float32](lo * d, r * d)
+    ctx.enqueue_copy(dst_buf=xs, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xaddr) + lo * d)
+    var zs = dz.create_sub_buffer[DType.float32](lo * q, r * q)
+    _rbf_gemm(ctx, zs, xs, dw, r, q, d)
+    km_feature_map_epilogue(ctx, zs, db, r, q, scale, KM_RF_TPB, KMSAB_NONE)
+    _stage_enqueue(ctx, dz, m * q, k, rows * q, stage)
+    _ = xs^
+    _ = zs^
 
 
 struct _RbfStage(Defaultable, Movable):
@@ -132,6 +192,52 @@ def _rbf_gemm(
     identical_gemm_into(ctx, c, a, b, ws, m, n, k, OP_NN)
     ctx.synchronize()
     _ = ws^
+
+
+def _rbf_unpiped(
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    mut dw: DeviceBuffer[DType.float32],
+    mut db: DeviceBuffer[DType.float32],
+    mut dz: DeviceBuffer[DType.float32],
+    xaddr: Int,
+    w_addr: Int,
+    b_addr: Int,
+    z_addr: Int,
+    m: Int,
+    d: Int,
+    q: Int,
+    nx: Int,
+    nz: Int,
+    blocks: Int,
+    scale: Float32,
+) raises:
+    """Main's (STAGED) sequence after the W and b draws: X up, the scan, the
+    GEMM, the epilogue, the small downloads, the projection down; waits."""
+    var st = _RBF_STAGE.get_or_create_ptr()
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xaddr))
+    ctx.enqueue_function[nonfinite_partial_kernel](
+        st[].part.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(nx),
+        grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    # the partials fold on the device into slot SCAN_BLOCKS: one word home
+    ctx.enqueue_function[min_partials_kernel](
+        st[].part.value().unsafe_ptr() + SCAN_BLOCKS, st[].part.value().unsafe_ptr(),
+        Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    _rbf_gemm(ctx, dz, dx, dw, m, q, d)
+    km_feature_map_epilogue(ctx, dz, db, m, q, scale, KM_RF_TPB, KMSAB_NONE)
+    var psub = st[].part.value().create_sub_buffer[DType.int32](SCAN_BLOCKS, 1)
+    ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=psub)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
+    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
+    comptime if KM_FAST_RBF_STAGED:
+        # waits inside (its first wait covers everything queued above)
+        download_f32_into[_RBF_STAGE_POOL](ctx, dz, nz, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=z_addr))
+    else:
+        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=z_addr), src_buf=dz)
+        ctx.synchronize()
+    _ = psub^
 
 
 def rbf_sampler_fit_transform_resident(
@@ -189,30 +295,44 @@ def rbf_sampler_fit_transform_resident(
     var dz = pool_take["MojoKmRbfResZ"](ctx, nz)
     km_random_weights(ctx, dw, seed, d, q, sigma, KM_RF_TPB, KMSAB_NONE)
     km_random_offsets(ctx, db, seed, q, KM_RF_TPB)
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xaddr))
     var blocks = _scan_blocks(nx)
-    ctx.enqueue_function[nonfinite_partial_kernel](
-        st[].part.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(nx),
-        grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
-    )
-    # the partials fold on the device into slot SCAN_BLOCKS: one word home
-    ctx.enqueue_function[min_partials_kernel](
-        st[].part.value().unsafe_ptr() + SCAN_BLOCKS, st[].part.value().unsafe_ptr(),
-        Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
-    )
-    _rbf_gemm(ctx, dz, dx, dw, m, q, d)
-    km_feature_map_epilogue(ctx, dz, db, m, q, scale, KM_RF_TPB, KMSAB_NONE)
-    var psub = st[].part.value().create_sub_buffer[DType.int32](SCAN_BLOCKS, 1)
-    ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=psub)
-    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
-    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
-    comptime if KM_FAST_RBF_STAGED:
-        # waits inside (its first wait covers everything queued above)
-        download_f32_into[_RBF_STAGE_POOL](ctx, dz, nz, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=z_addr))
-    else:
-        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=z_addr), src_buf=dz)
-        ctx.synchronize()
-    _ = psub^
+    var piped = False
+    comptime if KM_FAST_RBF_PIPE:
+        var rows = _rbf_pipe_rows(m, q)
+        var nb = (m + rows - 1) // rows
+        if nb >= 2:
+            piped = True
+            var chunk = rows * q
+            var zp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=z_addr)
+            var stages = List[HostBuffer[DType.float32]]()
+            stages.append(_stage_take[_RBF_STAGE_POOL](ctx, chunk))
+            stages.append(_stage_take[_RBF_STAGE_POOL](ctx, chunk))
+            _rbf_pipe_block(ctx, dx, dw, db, dz, stages[0], xaddr, 0, rows, m, d, q, scale)
+            for k in range(nb):
+                ctx.synchronize()
+                if k + 1 < nb:
+                    _rbf_pipe_block(ctx, dx, dw, db, dz, stages[(k + 1) % 2], xaddr, k + 1, rows, m, d, q, scale)
+                    if k + 2 == nb:
+                        # behind the last block: the scan of the whole X, the partials, W and b
+                        ctx.enqueue_function[nonfinite_partial_kernel](
+                            st[].part.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(nx),
+                            grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+                        )
+                        # the partials fold on the device into slot SCAN_BLOCKS: one word home
+                        ctx.enqueue_function[min_partials_kernel](
+                            st[].part.value().unsafe_ptr() + SCAN_BLOCKS, st[].part.value().unsafe_ptr(),
+                            Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+                        )
+                        var tsub = st[].part.value().create_sub_buffer[DType.int32](SCAN_BLOCKS, 1)
+                        ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=tsub)
+                        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=w_addr), src_buf=dw)
+                        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=b_addr), src_buf=db)
+                        _ = tsub^
+                memcpy(dest=zp + k * chunk, src=stages[k % 2].unsafe_ptr(), count=min(chunk, nz - k * chunk))
+            _stage_give[_RBF_STAGE_POOL](stages.pop())
+            _stage_give[_RBF_STAGE_POOL](stages.pop())
+    if not piped:
+        _rbf_unpiped(ctx, dx, dw, db, dz, xaddr, w_addr, b_addr, z_addr, m, d, q, nx, nz, blocks, scale)
     var best = st[].host.value().unsafe_ptr()[0]
     var bad = -1 if best == NONFINITE_NONE else Int(best)
     var is_nan = False
