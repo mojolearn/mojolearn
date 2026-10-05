@@ -276,7 +276,7 @@ def _block_sum[so: MutOrigin](
 
 
 def ndiffs_kpss_kernel(
-    out: MutPointer[Int32, MutAnyOrigin],
+    d_out: MutPointer[Int32, MutAnyOrigin],
     y: MutPointer[Float32, MutAnyOrigin],
     nobs_in: Int32, d_max_in: Int32,
 ):
@@ -369,7 +369,7 @@ def ndiffs_kpss_kernel(
             break
         dd += 1
     if tid == 0:
-        out.unsafe_store(b, Int32(dd))
+        d_out.unsafe_store(b, Int32(dd))
 
 
 def ndiffs_kpss(
