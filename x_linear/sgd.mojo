@@ -420,9 +420,9 @@ def _sgd_target(k: Int, c: Int, v: Float32) -> Float32:
     return Float32(1) if v == i2f(c) else Float32(-1)
 
 
-#: lane apple-fast-q-clf (2026-10-04), QUALITY-FIX, FAST default (every vendor
-#: and the FAST host column); -D MOJOLEARN_SGD_PERC_QOLD restores the final
-#: iterate. The minibatch Perceptron (constant rate, the batch-SUM step,
+#: lane apple-fast-q-clf (2026-10-04), QUALITY-FIX candidate, REVERTED the
+#: same day (OUTCOME below): opt-in `-D MOJOLEARN_SGD_PERC_AVG` (every vendor
+#: and the FAST host column); the final iterate is the default. The minibatch Perceptron (constant rate, the batch-SUM step,
 #: tol=None never settles on non-separable data) returns the MEAN of its
 #: epoch-end iterates from epoch max_iter // 2 on (weights and intercept),
 #: not the last one. Audit: perceptron taxi FAST accuracy 0.46538 vs
@@ -435,7 +435,12 @@ def _sgd_target(k: Int, c: Int, v: Float32) -> Float32:
 #: is untouched. Applies to loss perceptron at learning_rate 'constant' only,
 #: never the one-class problem; a fit that stops before epoch max_iter // 2
 #: keeps its last iterate.
-comptime SGD_PERC_AVG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_SGD_PERC_QOLD"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab5-perc): perceptron taxi accuracy 0.76219 (last iterate, A) -> 0.74097
+#: (averaged, B), worse; 1401.1 -> 1400.3 ms. REVERTED: the last iterate is
+#: the default again; averaging is opt-in `-D MOJOLEARN_SGD_PERC_AVG` (the old
+#: `-D MOJOLEARN_SGD_PERC_QOLD` is harmless).
+comptime SGD_PERC_AVG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_SGD_PERC_AVG"]()
 
 
 @always_inline

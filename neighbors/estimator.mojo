@@ -128,10 +128,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.math import fma, sqrt
 
 comptime KNN_FAST_REFINE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_KNN_REFINE_QOLD"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_KNN_FAST_REFINE"]()
 )
-"""FAST QUALITY FIX (lane apple-fast-q-misc, 2026-10-04; old behavior
-`-D MOJOLEARN_KNN_REFINE_QOLD`). Euclidean / sqeuclidean
+"""FAST QUALITY FIX candidate (lane apple-fast-q-misc, 2026-10-04), REVERTED
+the same day: opt-in `-D MOJOLEARN_KNN_FAST_REFINE` (the old
+`-D MOJOLEARN_KNN_REFINE_QOLD` is harmless). OUTCOME (M3 afc_ab_def, full
+board size, 1 run per arm, tag rab5-knnref): knn recall_at_k identical
+(istella 0.982434, taxi 0.999773), istella 365.0 -> 378.4 ms (+3.7%), taxi
+-1.5%: no gain. What it did: Euclidean / sqeuclidean
 `knn_search_resident` (what `NearestNeighbors.kneighbors` runs on a GPU)
 selects a pool of `min(n_index, 4 k, KNN_REFINE_POOL_MAX)` candidates by
 the expanded float32 distance |q|^2 + |x|^2 - 2 q.x, then re-ranks the pool
@@ -613,7 +617,7 @@ def knn_search_resident(
     )
     comptime if KNN_FAST_REFINE:
         # FAST quality fix (lane apple-fast-q-misc): pool then exact re-rank;
-        # `-D MOJOLEARN_KNN_REFINE_QOLD` keeps the expanded-form top-k below.
+        # opt-in `-D MOJOLEARN_KNN_FAST_REFINE`; default: the expanded-form top-k below.
         if _knn_refine_applies(plan[0], negate_products, k, n_index):
             return _knn_search_resident_refined(
                 ctx, index, index_ptr, n_index, queries_ptr, n_queries, n_features, k,

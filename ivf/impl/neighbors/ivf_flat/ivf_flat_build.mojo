@@ -149,9 +149,15 @@ gathered on the device (`ivf_gather_rows_kernel`, 2026-10-04); only the
 seeded ids are made on the host. Moves FAST
 bits (another start): paired recall check."""
 
-comptime IVF_COARSE_FAISS_INIT = IVF_FAST_RANDOM_INIT and not is_defined["MOJOLEARN_IVF_COARSE_INIT_QOLD"]()
-"""FAST QUALITY FIX (lane apple-fast-q-misc, 2026-10-04; old behavior
-`-D MOJOLEARN_IVF_COARSE_INIT_QOLD`): the coarse quantizer starts from
+comptime IVF_COARSE_FAISS_INIT = IVF_FAST_RANDOM_INIT and is_defined["MOJOLEARN_IVF_COARSE_FAISS_INIT"]()
+"""FAST QUALITY FIX candidate (lane apple-fast-q-misc, 2026-10-04), REVERTED
+the same day: opt-in `-D MOJOLEARN_IVF_COARSE_FAISS_INIT` (the old
+`-D MOJOLEARN_IVF_COARSE_INIT_QOLD` is harmless). OUTCOME (M3 afc_ab_def,
+full board size, 1 run per arm, tag rab5-ivfinit): ivf-sq recall_at_10
+istella 0.60895 -> 0.51065, taxi 0.83325 -> 0.76685 (worse); ivf-filter /
+ivf-pq istella +0.01, taxi -0.001 to -0.002; time -3% to -21%. The quality
+loss on ivf-sq decides: IVF_FAST_SEED's k-means++ start is the default
+again. What it did: the coarse quantizer starts from
 `IVF_FAST_RANDOM_INIT`'s n_lists distinct seeded training rows (FAISS's
 `Clustering` rule, the board opponent's) and the `IVF_FAST_SEED` k-means++
 seeding is skipped. Before this, `IVF_FAST_SEED` set INIT_ARRAY first, so
