@@ -79,6 +79,8 @@ comptime HP_U8 = 5
 comptime HP_U16 = 6
 comptime HP_I8 = 7
 comptime HP_F16 = 8
+#: equal_elements only (lane py-runtime round 3): a int64, b float64, exact
+comptime HP_I64_F64 = 9
 
 comptime HP_W = 8
 
@@ -476,6 +478,25 @@ def _equal[dt: DType](a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
         _range(0)
 
 
+def _equal_i64_f64(a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
+    """Python's exact `int == float` per element (lane py-runtime round 3):
+    equal iff the float is finite, integral, inside int64 and its integer is
+    the int64 (no rounding of either side, so 2**53 + 1 != 2.0**53)."""
+    var ap = _ptr[DType.int64](a_addr)
+    var bp = _ptr[DType.float64](b_addr)
+    var dp = _ptr[DType.uint8](dst_addr)
+    with GILReleased(Python()):
+        var i = 0
+        while i < n:
+            var f = bp.unsafe_load(i)
+            var one = UInt8(0)
+            if f == f and f >= -9223372036854775808.0 and f < 9223372036854775808.0:
+                var k = Int64(f)
+                if Float64(k) == f and k == ap.unsafe_load(i):
+                    one = UInt8(1)
+            dp.unsafe_store(i, one)
+            i += 1
+
 def equal_elements_binding(
     a_addr: PythonObject, b_addr: PythonObject, code: PythonObject,
     n: PythonObject, dst_addr: PythonObject,
@@ -510,6 +531,8 @@ def equal_elements_binding(
         _equal[DType.int8](a, b, count, d)
     elif c == HP_F16:
         _equal[DType.float16](a, b, count, d)
+    elif c == HP_I64_F64:
+        _equal_i64_f64(a, b, count, d)
     else:
         raise Error("equal_elements: unknown dtype code " + String(c))
     return PythonObject(0)

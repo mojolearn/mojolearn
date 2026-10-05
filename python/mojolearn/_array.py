@@ -80,6 +80,8 @@ for _ts, _c in _CODE.items():
 _NATIVE_CODE = {"<f4": 0, "<f8": 1, "<i4": 2, "<i8": 3, "<u4": 4, "<u1": 5,
                 # lane py-runtime round 2: bf16 bits, int8 and float16 too
                 "<u2": 6, "<i1": 7, "<f2": 8}
+#: equal_elements' exact int64-against-float64 code (lane py-runtime round 3)
+_EQ_I64_F64 = 9
 
 
 def _reference():
@@ -811,6 +813,17 @@ class Array:
             wide = "<i8" if (a_int and b_int) else ("<f8" if "<i8" not in (self.dtype, other.dtype) else None)
             if wide is not None:
                 return self.astype(wide).__eq__(other.astype(wide))
+            # int64 against a float (lane py-runtime round 3): the float side
+            # widened exactly to float64, then the helper's exact int == float
+            fn = _helper("equal_elements", self.size)
+            if fn is None:
+                raise _rebuild("equal_elements")
+            ints, flts = (self, other) if self.dtype in _INT else (other, self)
+            ia = ints.astype("<i8")._as_c() if ints.dtype != "<i8" else ints._as_c()
+            fa = flts.astype("<f8")._as_c() if flts.dtype != "<f8" else flts._as_c()
+            store = array.array("B", bytes(self.size))
+            fn(ia._addr, fa._addr, _EQ_I64_F64, self.size, store.buffer_info()[0])
+            return Array._owned(store, self.shape, "<u1", "C")
         mine = self._as_c()._values()
         if isinstance(other, Array):
             if other.shape != self.shape:
@@ -818,7 +831,7 @@ class Array:
                     f"mojolearn: shapes {self.shape} and {other.shape} differ"
                 )
             theirs = other._as_c()._values()
-            bits = [1 if x == y else 0 for x, y in zip(mine, theirs)]
+            bits = [1 if x == y else 0 for x, y in zip(mine, theirs)]  # cpu-route: the differential test reference arm only
         elif isinstance(other, (int, float, bool)):
             bits = [1 if x == other else 0 for x in mine]  # cpu-route: the differential test's reference arm only
         else:
