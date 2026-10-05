@@ -101,9 +101,12 @@ comptime SVM_WS_MAX = 2048 if (
 """FAST on Apple: a working set of up to 2048 (the grid solve carries it
 over eight blocks of 256, `smoblocksolve.mojo`), half
 the SMO outer iterations of 1024 on a hard problem. Taken from
-SVM_WS_BIG_MIN training rows: below that 1024 is as fast and the solver
-keeps the reference's working set (and every gate fixture's shape)."""
-comptime SVM_WS_BIG_MIN = 8192
+SVM_WS_BIG_MIN training rows: the larger set needs at least SVM_WS_MAX rows
+to fill (kernel limit, not a board window)."""
+#: LEGACY, default OFF: the old floor 8192 rows sat just below the board's
+#: 10k kernel-fit rows. Removed as benchmark-tuned on 2026-10-04; the new
+#: floor (SVM_WS_MAX rows) is UNMEASURED.
+comptime SVM_WS_BIG_MIN = 8192 if is_defined["MOJOLEARN_LEGACY_NARROW_SVM_WS"]() else SVM_WS_MAX
 
 
 def svm_ws_cap(n_train: Int) -> Int:

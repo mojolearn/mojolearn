@@ -21,6 +21,7 @@ are integer adds of per-(row block, column) counts: exact in any order.
 A cell is missing when its exponent is all ones and its mantissa is not
 zero (a NaN), tested on the bits so no fast-math can fold `v != v`."""
 from std.atomic import Atomic, Ordering
+from std.python import PythonObject
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -29,6 +30,7 @@ from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _down_i
 from core.device_fold import device_sum_i32
+from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
@@ -216,12 +218,72 @@ comptime NC_COLMISS_ONLY = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gp
                             and not is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF"]())
 
 
+# FAST Apple default; MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF restores main.
+# M3 w2-knn-lean-gpu-taxi-r1: 2.2 -> 0.8 ms; knn-lean-gpu-v2 quality
+# PASS: 31 arrays exact (transforms/flags/counts/total/empty refusal,
+# wide all-missing/all-present and pool reuse). Measured sourcef9c5887a8.
+# Both column counts and total use parallel GPU integer atomics; host does
+# no count reduction. Synchronize before return/pool reuse. See EXPERIMENTS.
+comptime NC_FIT_LEAN = NC_COLMISS_ONLY and not is_defined["MOJOLEARN_XN_FAST_NAN_FIT_LEAN_GPU_OFF"]()
+
+
+def nan_fit_counts_kernel(x: FP, colmiss: IP, n_: Int64, d_: Int64):
+    """Thread (row block, column): the NaN count of NC_RB rows of one
+    column, added to its count and slot d's overall total (exact integer adds)."""
+    var n = Int(n_)
+    var d = Int(d_)
+    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nrb = (n + NC_RB - 1) // NC_RB
+    if tid >= nrb * d:
+        return
+    var f = tid % d
+    var r0 = (tid // d) * NC_RB
+    var r1 = min(r0 + NC_RB, n)
+    var c = Int32(0)
+    for r in range(r0, r1):
+        if _is_nan(x.unsafe_load(r * d + f)):
+            c += 1
+    if c > 0:
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](colmiss + f, c)
+        _ = Atomic.fetch_add[ordering = Ordering.RELAXED](colmiss + d, c)
+
+
+def nc_fit_lean_binding() raises -> PythonObject:
+    """1 when this binary's fit-time count op ignores the cell list (the
+    Python layer then passes a one-slot one)."""
+    comptime if NC_FIT_LEAN:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
 def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int, colmiss_only: Int = 0) raises:
     """The device op: x (n x d) uploaded once, the three outputs downloaded
     (cells: the first `count` slots)."""
     comptime assert NC_SMEM_FITS, "nan_cells_device: a 1 KB threadgroup page must fit"
     var ctx = xn_ctx()
     var total = n * d
+    comptime if NC_FIT_LEAN:
+        if colmiss_only == 1:
+            var bx = pool_take["MojoXNeighborsNanFitX"](ctx, total)
+            var bc = pool_take["MojoXNeighborsNanFitCmTotal"](ctx, d + 1)
+            if total > 0:
+                ctx.enqueue_copy(dst_buf=bx, src_ptr=FP(unsafe_from_address=x))
+            ctx.enqueue_memset(bc, Float32(0.0))   # the int32 zero's bits
+            if total > 0:
+                var nrb2 = (n + NC_RB - 1) // NC_RB
+                var threads2 = nrb2 * d
+                ctx.enqueue_function[nan_fit_counts_kernel](
+                    FP(unsafe_from_address=Int(bx.unsafe_ptr())), IP(unsafe_from_address=Int(bc.unsafe_ptr())),
+                    Int64(n), Int64(d), grid_dim=(threads2 + NC_TPB - 1) // NC_TPB, block_dim=NC_TPB)
+            if d > 0:
+                ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=colmiss),
+                                 src_buf=bc.create_sub_buffer[DType.int32](0, d))
+            ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=info),
+                             src_buf=bc.create_sub_buffer[DType.int32](d, 1))
+            ctx.synchronize()
+            pool_give["MojoXNeighborsNanFitX"](bx^)
+            pool_give["MojoXNeighborsNanFitCmTotal"](bc^)
+            return
     comptime if NC_COLMISS_ONLY:
         if colmiss_only == 1:
             var d_x1 = ctx.enqueue_create_buffer[DType.float32](max(total, 1))

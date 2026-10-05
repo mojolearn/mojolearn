@@ -638,3 +638,116 @@ def launch_oblivious_apply_four(
         lvl += d0 + d1 + d2 + d3
         leaf += leaves * approx_dim
         t += count
+
+
+# ---------------------------------------------------------------------------
+# lane/apple-fast-sym-feat (2026-10-03): referenced ONLY under the FAST +
+# Apple guard `GBDT_PREDICT_PACKED` (`gbdt/resident_model.mojo`); IDENTICAL
+# never instantiates it.
+# ---------------------------------------------------------------------------
+
+#: the most split LEVELS one staged chunk of trees holds: 5 words a level,
+#: 20 KB of threadgroup memory. The host (`ResidentGbdtModel.__init__`)
+#: cuts the ensemble into chunks of consecutive trees under this bound, so
+#: the shared page always fits.
+comptime PRED_ALL_CHUNK_LEVELS = 1024
+
+
+def compute_bins_and_add_all_kernel(
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    tree_depth: MutPointer[UInt32, MutAnyOrigin],
+    tree_level_start: MutPointer[UInt32, MutAnyOrigin],
+    tree_leaf_start: MutPointer[UInt32, MutAnyOrigin],
+    chunk_tree_start: MutPointer[UInt32, MutAnyOrigin],
+    n_chunks_in: Int32,
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+):
+    """Every oblivious tree of the ensemble in ONE launch, tree order kept.
+
+    `compute_bins_and_add_kernel` per tree, fused: the ensemble is walked
+    in chunks of consecutive trees (`chunk_tree_start[c] .. [c + 1])`,
+    each chunk's level records (offset, shift, mask, bin, take-equal) staged
+    once into threadgroup memory, and every row of the grid-stride adds the
+    chunk's leaf values to its cursor word IN TREE ORDER before the next
+    chunk is staged. The per-tree kernel does `cursor = cursor + leaf` once
+    per tree; this does the same float32 adds in the same order, through a
+    register inside a chunk and the cursor word between chunks, so the
+    cursor leaves bit for bit as it did after the last per-tree launch.
+    `tree_depth[t]`, `tree_level_start[t]` (index of the tree's first
+    level record) and `tree_leaf_start[t]` (index of its first leaf value,
+    bin-major `[leaf * dim + dim]` as the model stores them) describe the
+    trees; `block_idx.y` is the cursor plane as in the per-tree kernel.
+    """
+    var n_rows = Int(n_rows_in)
+    var dim = Int(block_idx.y)
+    var dim_count = Int(dim_count_in)
+    var plane = dim * Int(cursor_stride_in)
+    var n_chunks = Int(n_chunks_in)
+    var meta = stack_allocation[
+        5 * PRED_ALL_CHUNK_LEVELS,
+        Scalar[DType.uint32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    for c in range(n_chunks):
+        var t0 = Int(chunk_tree_start.unsafe_load(c))
+        var t1 = Int(chunk_tree_start.unsafe_load(c + 1))
+        var l0 = Int(tree_level_start.unsafe_load(t0))
+        var l1 = Int(tree_level_start.unsafe_load(t1))
+        var n_lv = l1 - l0
+        var j = tid
+        while j < n_lv:
+            meta.unsafe_store(j, feature_offset.unsafe_load(l0 + j))
+            meta.unsafe_store(
+                PRED_ALL_CHUNK_LEVELS + j, feature_shift.unsafe_load(l0 + j)
+            )
+            meta.unsafe_store(
+                2 * PRED_ALL_CHUNK_LEVELS + j, feature_mask.unsafe_load(l0 + j)
+            )
+            meta.unsafe_store(
+                3 * PRED_ALL_CHUNK_LEVELS + j, split_bin.unsafe_load(l0 + j)
+            )
+            meta.unsafe_store(
+                4 * PRED_ALL_CHUNK_LEVELS + j,
+                UInt32(take_equal.unsafe_load(l0 + j)),
+            )
+            j += Int(block_dim.x)
+        barrier()
+        var i = Int(block_idx.x) * Int(block_dim.x) + tid
+        while i < n_rows:
+            var acc = cursor.unsafe_load(plane + i)
+            for t in range(t0, t1):
+                var depth = Int(tree_depth.unsafe_load(t))
+                var lb = Int(tree_level_start.unsafe_load(t)) - l0
+                var leaf_base = Int(tree_leaf_start.unsafe_load(t))
+                var leaf = 0
+                for level in range(depth):
+                    var k = lb + level
+                    var off = Int(meta.unsafe_load(k))
+                    var shift = meta.unsafe_load(PRED_ALL_CHUNK_LEVELS + k)
+                    var mask = meta.unsafe_load(2 * PRED_ALL_CHUNK_LEVELS + k) << shift
+                    var value = meta.unsafe_load(3 * PRED_ALL_CHUNK_LEVELS + k) << shift
+                    var feature_val = compressed_index.unsafe_load(off + i) & mask
+                    var split: Bool
+                    if meta.unsafe_load(4 * PRED_ALL_CHUNK_LEVELS + k) != UInt32(0):
+                        split = feature_val == value
+                    else:
+                        split = feature_val > value
+                    if split:
+                        leaf += 1 << level
+                acc = acc + leaf_values.unsafe_load(
+                    leaf_base + leaf * dim_count + dim
+                )
+            cursor.unsafe_store(plane + i, acc)
+            i += stride
+        barrier()

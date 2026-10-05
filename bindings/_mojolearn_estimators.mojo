@@ -10,6 +10,11 @@ device buffers and contexts live for one call and no pointer is retained.
 # DEVIATION 2486: shared byte-preserving host copies.
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from std.os import abort
+from experiments.apple_fast.gemm.scoped_dispatch import (
+    AUDIT as SCOPED_AUDIT, GRAM as SCOPED_GRAM, SPLITS as SCOPED_SPLITS,
+    PCA as SCOPED_PCA, TALL as SCOPED_TALL, DENSE as SCOPED_DENSE,
+    NARROW as SCOPED_NARROW, scoped_count, scoped_last,
+)
 from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -20,6 +25,8 @@ from core.py2mojo_rows import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from experiments.apple_fast.gemm.softmax_narrow import SOFTMAX_AUDIT
+from bindings.softmax_g2_observe import softmax_g2_state_binding, softmax_g2_count_binding, softmax_g2_last_binding, softmax_g2_reset_binding
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import NUMERIC_FAST as _OLS_FAST
 from std.sys.compile import is_defined
@@ -72,6 +79,7 @@ from kde.resident_fit import (
     kde_score_samples_resident,
 )
 from decomposition.estimator import (
+    PCA_FAST_POOL,
     inverse_transform_host,
     pca_fit_host,
     pca_fit_full_host,
@@ -284,6 +292,15 @@ def pca_fit_binding(
         )
         ctx.synchronize()
     return PythonObject(noise)
+
+
+def pca_fast_pool_on_binding() raises -> PythonObject:
+    """lane/apple-fast-w4-decomp: 1 when this build compiled
+    PCA_FAST_POOL (decomposition/estimator.mojo), else 0 (a quality
+    capture's proof of which arm is installed)."""
+    comptime if PCA_FAST_POOL:
+        return PythonObject(1)
+    return PythonObject(0)
 
 
 def pca_fit_full_binding(
@@ -1338,6 +1355,18 @@ def dbscan_core_arrays_binding(
     return dbscan_core_arrays_device(ctx, x_addr, labels_addr, core_addr, params)
 
 
+def scoped_gemm_flags_binding() raises -> PythonObject:
+    return PythonObject(Int(SCOPED_TALL) + 2 * Int(SCOPED_DENSE) + 4 * Int(SCOPED_GRAM) + 8 * Int(SCOPED_NARROW) + 16 * Int(SCOPED_SPLITS) + 32 * Int(SCOPED_PCA))
+
+
+def scoped_gemm_count_binding(route: PythonObject, arm: PythonObject) raises -> PythonObject:
+    return PythonObject(scoped_count(Int(py=route), Int(py=arm)))
+
+
+def scoped_gemm_metadata_binding(index: PythonObject) raises -> PythonObject:
+    return PythonObject(scoped_last(Int(py=index)))
+
+
 @export
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
@@ -1360,7 +1389,12 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[kde_fit_prepare_binding]("kde_fit_prepare")
         m.def_function[kde_fit_release_binding]("kde_fit_release")
         m.def_function[kde_score_samples_resident_binding]("kde_score_samples_resident")
+        comptime if SCOPED_AUDIT:
+            m.def_function[scoped_gemm_flags_binding]("scoped_gemm_flags")
+            m.def_function[scoped_gemm_count_binding]("scoped_gemm_count")
+            m.def_function[scoped_gemm_metadata_binding]("scoped_gemm_metadata")
         m.def_function[pca_fit_binding]("pca_fit")
+        m.def_function[pca_fast_pool_on_binding]("pca_fast_pool_on")
         m.def_function[pca_fit_full_binding]("pca_fit_full")
         m.def_function[pca_transform_binding]("pca_transform")
         m.def_function[pca_whiten_transform_binding]("pca_whiten_transform")
@@ -1382,6 +1416,11 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         comptime if MULTIOUT_RIDGE:
             m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
             m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")
+        comptime if SOFTMAX_AUDIT:
+            m.def_function[softmax_g2_state_binding]("softmax_g2_state")
+            m.def_function[softmax_g2_count_binding]("softmax_g2_count")
+            m.def_function[softmax_g2_last_binding]("softmax_g2_last")
+            m.def_function[softmax_g2_reset_binding]("softmax_g2_reset")
         m.def_function[qn_fit_binding]("qn_fit")
         comptime if QN_OVR_ONE_UPLOAD:
             m.def_function[qn_fit_ovr_binding]("qn_fit_ovr")

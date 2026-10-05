@@ -1998,7 +1998,7 @@ move together: the device arms are the FAST Apple ones (the range kernel's
 IDENTICAL arm already folds codes in key space and decodes the borders),
 and the host column (`train_tree_exact`, through `HostBins`) restates the
 same borders, codes, ranges, snap and stored threshold. Gate, per FIT and
-the same on the host: a regressor with `n_cols >= ET_BINNED_MIN_COLS` and
+the same on the host: a regressor with `n_cols >= ET_IDN_BINNED_MIN_COLS` and
 `2k >= n_cols` (`et_identical_bins_wanted`). It turns the tiled search on
 (`ET_RANGE_TILED and ET_SCORE_TILED` include `IDN_ET_BINNED`, bit-inert)
 whatever the vendor tiled-search switches say, so the binning decision is
@@ -2011,7 +2011,8 @@ comptime ET_BINNED_REG = (
 ) or IDN_ET_BINNED
 comptime ET_BINS = ET_QSTRIDE
 comptime ET_CODE = DType.uint16
-#: Binning pays in bytes per row, so it is taken only on wide data: the
+#: IDENTICAL (`et_identical_bins_wanted`, device and host column): binning
+#: pays in bytes per row, so it is taken only on wide data: the
 #: border pass is a fixed cost per column, while the saving (uint16 codes
 #: for float32 values) is per row read; a row of 64 float32 columns is 256 B,
 #: four 64-byte lines, where halving the bytes per row starts to save whole
@@ -2019,7 +2020,15 @@ comptime ET_CODE = DType.uint16
 #: only: NEEDS NEIGHBOR-SHAPE VALIDATION (32, 48, 64, 96, 128 columns). The
 #: device and the host column read this same gate (`et_identical_bins_wanted`),
 #: so moving it moves bits on every vendor and the host together.
-comptime ET_BINNED_MIN_COLS = 64
+#: (2026-10-05 merge: split from the FAST gate below, which main moved to
+#: every width; IDENTICAL keeps 64 so its bits do not move in the merge.)
+comptime ET_IDN_BINNED_MIN_COLS = 64
+#: FAST + Apple: LEGACY, default OFF: binning was taken only at n_cols >= 64, chosen
+#: between taxi (16 columns, slower) and istella (220, faster). Removed as
+#: benchmark-tuned on 2026-10-04: binning now applies at every width;
+#: UNMEASURED.
+comptime ET_BINNED_LEGACY_NARROW = is_defined["MOJOLEARN_LEGACY_NARROW_ET_BINNED"]()
+comptime ET_BINNED_MIN_COLS = 64 if ET_BINNED_LEGACY_NARROW else 1
 comptime ET_CODE_TILE = 8
 """Features per block for the code passes (M4 istellareg: 4 -> 53 s, 8 -> 49 s, 16 -> 67 s, 32 -> 79 s)."""
 
@@ -2037,7 +2046,7 @@ def et_identical_bins_wanted(n_cols: Int, k: Int) -> Bool:
     # differ by vendor under some switch mix. IDN_ET_BINNED forces both
     # tiled passes on (bit-inert) on every device instead, so this gate is
     # one rule on NVIDIA, AMD, Apple and the host column.
-    return n_cols >= ET_BINNED_MIN_COLS and 2 * k >= n_cols
+    return n_cols >= ET_IDN_BINNED_MIN_COLS and 2 * k >= n_cols
 
 
 @fieldwise_init

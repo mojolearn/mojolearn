@@ -24,6 +24,7 @@ from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, 
 from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWTILE, IDN_GRAM_ROWS
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 from x_prep.py2mojo import PY2MOJO_PREP
+from x_prep.proba64 import PROBA64
 from x_prep.prep3 import PREP3_MAXABS, PREP3_MAXABS_POOL
 from x_prep.fastmaxabs import maxabs_fit_direct
 
@@ -117,6 +118,22 @@ def dev_free_binding(id: PythonObject) raises -> PythonObject:
     with GILReleased(Python()):
         X_PREP_STORE.get_or_create_ptr()[].free(x_prep_ctx(), i)
     return PythonObject(None)
+
+
+def dev_take_rows_binding(
+    src_id: PythonObject, row_words: PythonObject, idx_addr: PythonObject, n_idx: PythonObject
+) raises -> PythonObject:
+    """A new resident slot: rows `idx` (n_idx host int64 words) of slot
+    src_id, gathered on the device (core/device_store.mojo `take_rows`,
+    lane cpu4-misc device-rows input); its id."""
+    var s = Int(py=src_id)
+    var w = Int(py=row_words)
+    var a = Int(py=idx_addr)
+    var n = Int(py=n_idx)
+    var id: Int
+    with GILReleased(Python()):
+        id = X_PREP_STORE.get_or_create_ptr()[].take_rows(x_prep_ctx(), s, w, a, n)
+    return PythonObject(id)
 
 
 def dev_live_binding() raises -> PythonObject:
@@ -282,6 +299,13 @@ def calib_folds_binding() raises -> PythonObject:
     return out
 
 
+def proba64_binding() raises -> PythonObject:
+    """Lane apple-fast-q-clf (x_prep/proba64.mojo): registered only under
+    PROBA64 (FAST, not -D MOJOLEARN_PROBA64_QOLD); Python's probe for staging
+    `q64_softmax` (float64 predict_proba)."""
+    return PythonObject(1)
+
+
 def py2mojo_binding() raises -> PythonObject:
     """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF
     (x_prep/py2mojo.mojo); Python then takes its old loops."""
@@ -343,6 +367,7 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[dev_put_binding]("x_prep_dev_put")
         m.def_function[dev_free_binding]("x_prep_dev_free")
         m.def_function[dev_live_binding]("x_prep_dev_live")
+        m.def_function[dev_take_rows_binding]("x_prep_dev_take_rows")
         m.def_function[strat_folds_binding]("x_prep_strat_folds")
         m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         comptime if PREP3_MAXABS:
@@ -373,6 +398,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[calib_folds_binding]("x_prep_calib_folds")
         comptime if PY2MOJO_PREP:
             m.def_function[py2mojo_binding]("x_prep_py2mojo")
+        comptime if PROBA64:
+            m.def_function[proba64_binding]("x_prep_proba64")
         comptime if PTIMPUTE_FLAGS != 0:
             m.def_function[ptimpute_flags_binding]("x_prep_ptimpute_flags")
         return m.finalize()

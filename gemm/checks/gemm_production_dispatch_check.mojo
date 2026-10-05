@@ -7,6 +7,7 @@ NEIGHBORS of the board shapes (640, 767, 769, 896, 1024 around d_model 768;
 k = 640..1024 around 768) and the band edges, not only the board rows."""
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 from std.testing import assert_true
 from gemm.checks.gemm_identical import (
     GEMM_IDENTICAL_MFMA,
@@ -104,24 +105,33 @@ def main() raises:
         assert_true(choose_gemm_plan(768, 768, 2048) == PLAN_TUNED_64_4X4)
         assert_true(choose_gemm_plan(768, 2048, 2048) == PLAN_TUNED_64_4X4)
         assert_true(choose_gemm_plan(768, 3072, 2048) == PLAN_TUNED_64_4X4)
-        # Neighbors of 768 inside the 512..1024 band take it too.
-        assert_true(choose_gemm_plan(2048, 767, 768) == PLAN_TUNED_64_4X4)
-        assert_true(choose_gemm_plan(2048, 769, 769) == PLAN_TUNED_64_4X4)
-        assert_true(choose_gemm_plan(2048, 640, 640) == PLAN_TUNED_64_4X4)
-        assert_true(choose_gemm_plan(4096, 896, 2048) == PLAN_TUNED_64_4X4)
-        assert_true(choose_gemm_plan(2048, 1024, 1024) == PLAN_TUNED_64_4X4)
-        assert_true(choose_gemm_plan(2048, 512, 4096) == PLAN_TUNED_64_4X4)
-        assert_true(choose_gemm_plan(32768, 1024, 769) == PLAN_TUNED_64_4X4)
-        assert_true(choose_gemm_plan(767, 3072, 2048) == PLAN_TUNED_64_4X4)
-        assert_true(choose_gemm_plan(640, 2048, 2048) == PLAN_TUNED_64_4X4)
-        assert_true(choose_gemm_plan(896, 1024, 1024) == PLAN_TUNED_64_4X4)
-        # Outside the band (or too few rows / too short k) keep the 128 tile.
-        assert_true(choose_gemm_plan(511, 3072, 2048) == PLAN_TUNED_128_8X8)
-        assert_true(choose_gemm_plan(768, 3072, 1023) == PLAN_TUNED_128_8X8)
-        assert_true(choose_gemm_plan(1023, 768, 768) == PLAN_TUNED_128_8X8)
-        assert_true(choose_gemm_plan(2048, 511, 768) == PLAN_TUNED_128_8X8)
-        assert_true(choose_gemm_plan(32768, 1100, 1100) == PLAN_TUNED_128_8X8)
-        assert_true(choose_gemm_plan(2048, 1025, 1025) == PLAN_TUNED_128_8X8)
+        comptime if is_defined["MOJOLEARN_LEGACY_SHAPE_APPLE_PLAN64"]():
+            # The removed d_model == 768 rule's boundaries.
+            assert_true(choose_gemm_plan(767, 3072, 2048) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(2048, 767, 768) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(768, 3072, 1023) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(1023, 768, 768) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(32768, 1024, 769) == PLAN_TUNED_128_8X8)
+        else:
+            # merge 2026-10-05: the IDENTICAL lane's narrow-side band rule.
+            # Neighbors of 768 inside the 512..1024 band take it too.
+            assert_true(choose_gemm_plan(2048, 767, 768) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(2048, 769, 769) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(2048, 640, 640) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(4096, 896, 2048) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(2048, 1024, 1024) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(2048, 512, 4096) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(32768, 1024, 769) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(767, 3072, 2048) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(640, 2048, 2048) == PLAN_TUNED_64_4X4)
+            assert_true(choose_gemm_plan(896, 1024, 1024) == PLAN_TUNED_64_4X4)
+            # Outside the band (or too few rows / too short k) keep the 128 tile.
+            assert_true(choose_gemm_plan(511, 3072, 2048) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(768, 3072, 1023) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(1023, 768, 768) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(2048, 511, 768) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(32768, 1100, 1100) == PLAN_TUNED_128_8X8)
+            assert_true(choose_gemm_plan(2048, 1025, 1025) == PLAN_TUNED_128_8X8)
     else:
         assert_true(choose_gemm_plan(32768, 1024, 768) == PLAN_TUNED_128_8X8)
         assert_true(choose_gemm_plan(32768, 2304, 768) == PLAN_TUNED_128_8X8)

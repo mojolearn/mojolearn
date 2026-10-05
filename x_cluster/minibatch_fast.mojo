@@ -48,7 +48,7 @@ from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
 from x_cluster.bodies import FPtr, IPtr, SPLITMIX_GAMMA, SplitMix64, splitmix_at
-from x_cluster.common import weighted_draw
+from checks.soft_f64 import sf64_from_int, sf64_lt, sf64_mul
 
 # Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
 # n=1, Istella): minibatch-kmeans 388 -> 352 ms, silhouette .1167 -> .1182.
@@ -105,7 +105,10 @@ comptime MBF_RG_MAXK = 16
 # w2-mbk-sumcmp-q exact (centers, counts, labels, inertia identical).
 # MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF restores the full-chunk walk.
 comptime MBK_W2_SUMCMP = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"]()
-# lane/apple-fast-w2-clres (2026-10-04), OPEN, opt-in, FAST + Apple only.
+# DROP-speed, 2026-10-04, lane/apple-fast-w2-clres@4d80737b1:
+# w2-mbk-labrg-* quality PASS; istella146.6->144.0ms, taxi45.3->46.3ms.
+# One sample/arm does not establish a useful speed gain; default OFF.
+# See docs/apple-fast/EXPERIMENTS.md (MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG).
 # -D MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG: the fit's last pass (labels and
 # distances of all n rows, x_cluster/minibatch_ptr.mojo) is
 # `DeviceOps.nearest`, a thread per row that walks its 880-byte Istella row k
@@ -522,6 +525,35 @@ def _mbf_draw_kernel(idx: IPtr, m: Int32, n: Int32, state: UInt64):
         idx[t] = Int32(Int(splitmix_at(state, UInt64(t + 1)) % UInt64(Int(n))))
 
 
+# 2^-53 as a binary64 bit pattern: `SplitMix64.unit`'s scale.
+comptime MBF_SF64_2M53 = UInt64(0x3CA0000000000000)
+
+
+def _mbf_wdraw_kernel(idx: IPtr, m: Int32, cum: UPtr, n: Int32, state: UInt64):
+    """idx[t] = `weighted_draw(cum_w, SplitMix64(state))`'s draw t + 1 (one
+    thread a draw), on the device (lane cpu4-misc). `cum` holds the host's
+    ascending Float64 cumulative weights as their bit patterns; the draw
+    `unit() * cum[n - 1]` and the side-left search run in soft binary64
+    (`checks/soft_f64`: integer instructions, correctly rounded), so every
+    vendor, Apple included, writes the host loop's indices exactly."""
+    var t = Int(block_idx.x) * MBF_TPB + Int(thread_idx.x)
+    if t < Int(m):
+        var nn = Int(n)
+        var u = splitmix_at(state, UInt64(t + 1)) >> 11
+        var unit = sf64_mul(sf64_from_int(Int(u)), MBF_SF64_2M53)
+        var v = sf64_mul(unit, cum[nn - 1])
+        var lo = 0
+        var hi = nn
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            # cum[mid] <= v (both non-negative, finite)
+            if not sf64_lt(v, cum[mid]):
+                lo = mid + 1
+            else:
+                hi = mid
+        idx[t] = Int32(lo if lo < nn else nn - 1)
+
+
 def minibatch_fast_steps(
     ctx: DeviceContext, x: FPtr, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
     ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
@@ -567,6 +599,9 @@ def minibatch_fast_steps(
         var use_tol = tol > 0
         var weighted = len(cum_w) > 0
         var d_rng = ctx.enqueue_create_buffer[DType.uint64](1)
+        # the cumulative weights (Float64 bit patterns), resident for the fit
+        var n_cum = len(cum_w)
+        var d_cum = ctx.enqueue_create_buffer[DType.uint64](max(n_cum, 1))
         var d_since = ctx.enqueue_create_buffer[DType.int32](1)
         ctx.enqueue_memset(d_since, Int32(0))
         var h_rng = List[UInt64](length=1, fill=seed ^ UInt64(0x5851F42D4C957F2D))
@@ -575,7 +610,11 @@ def minibatch_fast_steps(
         ctx.enqueue_copy(dst_buf=c0, src_ptr=c.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=w0, src_ptr=w.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=d_rng, src_ptr=h_rng.unsafe_ptr())
+        if weighted:
+            ctx.enqueue_copy(dst_buf=d_cum, src_ptr=cum_w.unsafe_ptr().bitcast[UInt64]())
         ctx.synchronize()
+        _ = len(cum_w)
+        var p_cum = d_cum.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_idx = d_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_lab = d_lab.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_dist = d_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -604,22 +643,22 @@ def minibatch_fast_steps(
             var gsz = n_steps - step0
             if gsz > G:
                 gsz = G
-            var h_idx = List[Int32]()
+            var m = gsz * batch
             if weighted:
-                # the weighted draw searches the host's Float64 cumulative
-                # weights (`weighted_draw`), which Apple GPUs cannot hold
-                h_idx = List[Int32](capacity=gsz * batch)
-                for _s in range(gsz):
-                    for _t in range(batch):
-                        h_idx.append(Int32(weighted_draw(cum_w, rng)))
-                var iv = d_idx.create_sub_buffer[DType.int32](0, gsz * batch)
-                ctx.enqueue_copy(dst_buf=iv, src_ptr=h_idx.unsafe_ptr())
+                # draw t of the group is `weighted_draw`'s draw t + 1 of the
+                # stream, written on the device in soft binary64
+                # (`_mbf_wdraw_kernel`); the host stream skips ahead past
+                # the group's draws (the same words as the host loop)
+                ctx.enqueue_function[_mbf_wdraw_kernel](
+                    p_idx, Int32(m), p_cum, Int32(n_cum), rng.state,
+                    grid_dim=(m + MBF_TPB - 1) // MBF_TPB, block_dim=MBF_TPB,
+                )
+                rng.state = rng.state + UInt64(m) * SPLITMIX_GAMMA
             else:
                 # unit weights: draw t of the group is `rng.below(n)`'s draw
                 # t + 1 of the stream (`splitmix_at`), written on the device
                 # where the batch rows are read; the host stream skips ahead
                 # past the group's draws (the same words as the host loop)
-                var m = gsz * batch
                 ctx.enqueue_function[_mbf_draw_kernel](
                     p_idx, Int32(m), Int32(n), rng.state, grid_dim=(m + MBF_TPB - 1) // MBF_TPB, block_dim=MBF_TPB,
                 )
@@ -668,7 +707,6 @@ def minibatch_fast_steps(
             if use_tol:
                 ctx.enqueue_copy(dst_ptr=h_shift.unsafe_ptr(), src_buf=d_shift)
             ctx.synchronize()
-            _ = h_idx^
             final_slot = gsz
             for g in range(gsz):  # small-loop(gsz: steps in the group): gsz <= MBF_GROUP per-step convergence scalars
                 var step = step0 + g
@@ -721,6 +759,7 @@ def minibatch_fast_steps(
         _ = d_shift^
         _ = h_shift^
         _ = d_rng^
+        _ = d_cum^
         _ = d_since^
         _ = h_rng^
         _ = h_in^

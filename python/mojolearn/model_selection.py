@@ -15,6 +15,7 @@ from . import _portable_math as math
 import numbers
 import os
 import warnings
+from . import _arena_io
 from ._array import Array
 from ._buffer import _materialize, _native, _native_optional, empty
 from ._arrays import _addr, _addr_ro
@@ -568,14 +569,31 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     if isinstance(scoring, str):
         scoring = get_scorer(scoring)
     X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
+    # CV_FAST_SLICE (FAST + Apple build of the resample binding, default ON
+    # since 2026-10-04, rollback -D MOJOLEARN_CV_FAST_SLICE_OFF;
+    # resample/estimator.mojo CV_FAST_SLICE): the native default
+    # folds of a regressor are contiguous ascending row blocks, so each
+    # fold's test rows are a zero-copy view and its training rows two
+    # memcpys (or a view) instead of four `_take_rows` byte gathers. Same
+    # rows in the same order.
+    ranges = None
+    if _cv_fast_on(_CV_SLICE_BIT) and _native_default_cv(cv, groups):
+        ranges = _kfold_ranges(X, y, folds)
+    range_at = iter(ranges or ())
     scores = []
-    # X, y and the fold indices resident on the device for every fold
-    with _FoldRows(X, y, folds) as rows:
+    # X, y and the fold indices resident on the device for every fold; the
+    # CV_FAST_SLICE contiguous-range views above (FAST + Apple) when they apply
+    with _FoldRows(X, y, folds, device_rows=_device_rows_ok(estimator, scoring)) as rows:
         for i in range(len(folds)):  # glue: one fit per fold
             fitted = _clone(estimator)
             try:
-                Xtr, ytr, Xte, yte = rows.take(i)
-                scores.append(_fit_score_fold(fitted, Xtr, ytr, Xte, yte, scoring))
+                if ranges is not None:
+                    a, b = next(range_at)
+                    fold_rows = (_rows_outside(X, a, b), _rows_outside(y, a, b),
+                                 _row_range_view(X, a, b), _row_range_view(y, a, b))
+                else:
+                    fold_rows = rows.take(i)
+                scores.append(_fit_score_fold(fitted, *fold_rows, scoring))
             finally:
                 # Release each fold before constructing the next estimator. Native
                 # contexts retain their own cleanup contract; no forced GPU reset.
@@ -605,6 +623,16 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
     if groups is not None:
         if getattr(groups, "ndim", 1) != 1 or len(groups) != len(X):
             raise ValueError('groups must be 1-D and match X rows')
+    # CV_FAST_TRUST_FOLDS (FAST + Apple build of the resample binding,
+    # default ON since 2026-10-04, rollback -D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF;
+    # resample/estimator.mojo CV_FAST_TRUST_FOLDS): the
+    # native default folds (`fold_ids` + `select_fold_i64`) are a partition
+    # of the rows by construction, so `_indices`' range/duplicate pass and
+    # `_overlap` on every fold's two int64 arrays are skipped. A splitter,
+    # groups, a bool cv or the sabotage control: validated as before.
+    if _cv_fast_on(_CV_TRUST_FOLDS_BIT) and _native_default_cv(cv, groups):
+        # n_splits >= 2 is checked inside, so this is never empty.
+        return X, y, _native_default_folds(y, 5 if cv is None else cv, _classifier(estimator))
     folds = []
     for train, test in _folds(cv, estimator, X, y, groups):
         train = _indices(train, len(X), 'train')
@@ -615,6 +643,83 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
     if not folds:
         raise ValueError('cv must produce at least one fold')
     return X, y, folds
+
+
+# ---------------------------------------------------------------------------
+# FAST + Apple cross-val candidates (recovered from
+# lane/apple-fast-resample@50b96e795, lane apple-fast-rec-resample
+# 2026-10-04). Switched by the resample binding's `resample_fast_defines`
+# mask (build-time defines), never by the environment. Off on every other
+# tier and build.
+# ---------------------------------------------------------------------------
+
+_CV_SLICE_BIT = 32        # CV_FAST_SLICE (default; _OFF rolls back)
+_CV_TRUST_FOLDS_BIT = 64  # CV_FAST_TRUST_FOLDS (default; _OFF rolls back)
+
+
+def _cv_fast_on(bit):
+    from . import resample as _resample
+    return bool(_resample.fast_defines() & bit)
+
+
+def _native_default_cv(cv, groups):
+    """Whether `_folds` takes `_native_default_folds` for this cv: the
+    default (None) or an integer, no groups, no sabotage control."""
+    return (groups is None and (cv is None or isinstance(cv, numbers.Integral))
+            and not is_bool(cv) and not _sabotage_requested())
+
+
+def _row_range_view(arr, a, b):
+    """Rows [a, b) of a C-order Array as a READ-ONLY view over the same
+    memory (no copy; `arr` stays alive through the view's `_base`). Read
+    only so an estimator that asks for a writable address is refused rather
+    than writing into the caller's X or y (`_take_rows` handed out copies)."""
+    if a == 0 and b == arr.shape[0]:
+        return arr
+    per = arr.size // arr.shape[0]
+    view = Array._view_of(arr, arr.shape, 'C')
+    view._mv = arr._mv[a * per:b * per]
+    view._addr = arr._addr + a * per * arr.itemsize
+    view._readonly = True
+    view._set_meta((b - a,) + tuple(arr.shape[1:]), arr.dtype, 'C')
+    return view
+
+
+def _rows_outside(arr, a, b):
+    """Rows [0, a) then [b, n) of a C-order Array: a view when one side is
+    empty, else one new Array filled by two memcpys."""
+    n = arr.shape[0]
+    if a == 0:
+        return _row_range_view(arr, b, n)
+    if b == n:
+        return _row_range_view(arr, 0, a)
+    per = arr.size // n
+    out = empty((n - (b - a),) + tuple(arr.shape[1:]), arr.dtype)
+    out._mv[:a * per] = arr._mv[:a * per]
+    out._mv[a * per:] = arr._mv[b * per:]
+    return out
+
+
+def _kfold_ranges(X, y, folds):
+    """Each fold's test block `(a, b)`, or None unless EVERY fold is a
+    contiguous block. Called only on `_native_default_folds`' folds, whose
+    sides are ascending, duplicate free and a partition of the rows
+    (`select_fold_i64` scans the rows in order), so test == [a, b) exactly
+    when its size is b - a with both ends a and b - 1, and train is then
+    the complement in ascending order."""
+    n = len(X)
+    if not isinstance(y, Array) or X.order != 'C' or y.order != 'C' or n < 2:
+        return None
+    ranges = []
+    for train, test in folds:  # glue: one O(1) endpoint check per fold
+        if not test.size or not train.size:
+            return None
+        a = int(test._mv[0])
+        b = int(test._mv[test.size - 1]) + 1
+        if b - a != test.size or train.size != n - test.size:
+            return None
+        ranges.append((a, b))
+    return ranges
 
 
 def _fit_score_fold(fitted, X_train, y_train, X_test, y_test, scoring):
@@ -1774,12 +1879,34 @@ class _FoldRows:
     (`_Resident`) across every fold and every candidate; each `take` is one
     device gather per piece. A y handed to `take` (a permuted y) is put once
     and replaces the previous such y on the device. Close it (or use it in a
-    `with` block) to free the device copies."""
+    `with` block) to free the device copies.
 
-    def __init__(self, X, y, folds, *, keep_y=True):
+    device_rows (lane cpu4-misc; `_device_rows_ok`): X's fold rows are
+    handed over as `_arena_io.DeviceRows` instead of host Arrays, when X is
+    float32 C-contiguous 2-D. The estimator's arena runner puts X once into
+    its own binding's store (the `resident()` scope opened here, which holds
+    only those bases) and gathers each fold on the device: no per-fold
+    download of X. Every other estimator gets host Arrays as before."""
+
+    def __init__(self, X, y, folds, *, keep_y=True, device_rows=False):
         self.X, self.y, self.folds = X, y, folds
         self._res = _Resident()
         self._extra = None
+        self._dev = (bool(device_rows) and isinstance(X, Array) and X.dtype == '<f4' and X.ndim == 2
+                     and X.size > 0 and X._has_order('C'))
+        self._scope = None
+        if self._dev:
+            # only DeviceRows bases enter this scope (`rows_slot` ignores the
+            # size floor); no other program input is kept across folds
+            self._scope = _arena_io.resident(min_words=1 << 62)
+            self._scope.__enter__()
+
+    def _xrows(self, idx):
+        if not self._dev:
+            return self._rows(self.X, idx)
+        if idx.dtype != '<i8' or not idx._has_order('C'):
+            idx = idx.astype('<i8')._as_c()
+        return _arena_io.DeviceRows(self.X, idx, self._res.take)
 
     def _rows(self, values, idx):
         if isinstance(values, list):
@@ -1790,7 +1917,7 @@ class _FoldRows:
         """(X_train, y_train, X_test, y_test) of fold i; `y` given here (a
         permuted y) stands in for the stored one."""
         train, test = self.folds[i]
-        Xtr, Xte = self._rows(self.X, train), self._rows(self.X, test)
+        Xtr, Xte = self._xrows(train), self._xrows(test)
         if y is None:
             y = self.y
         elif y is not self.y and y is not self._extra:
@@ -1803,7 +1930,12 @@ class _FoldRows:
 
     def close(self):
         self._extra = None
-        self._res.close()
+        scope, self._scope = self._scope, None
+        try:
+            if scope is not None:
+                scope.__exit__(None, None, None)
+        finally:
+            self._res.close()
 
     def __enter__(self):
         return self
@@ -1811,6 +1943,28 @@ class _FoldRows:
     def __exit__(self, *exc):
         self.close()
         return False
+
+
+def _device_rows_ok(estimator, scoring=None):
+    """Whether fold X may go to `estimator` as `_arena_io.DeviceRows` (lane
+    cpu4-misc): its class opts in (`_mojolearn_device_rows = True`; a
+    search candidate's `_Pinned` is unwrapped, a Pipeline or any other
+    estimator is not) and every scorer only calls the estimator's own
+    methods on X (None, a scorer name, or mojolearn's `_Scorer`s; a user
+    callable may read X on the host, so it gets host rows)."""
+    est = estimator
+    while isinstance(est, _Pinned):
+        est = est._est
+    if getattr(type(est), '_mojolearn_device_rows', False) is not True:
+        return False
+    if isinstance(scoring, dict):
+        scoring = list(scoring.values())
+    if not isinstance(scoring, (list, tuple, set)):
+        scoring = [scoring]
+    ok = True
+    for sc in scoring:  # glue: the kind of each scorer (a handful)
+        ok = ok and (sc is None or isinstance(sc, (str, _Scorer)))
+    return ok
 
 
 # ---------------------------------------------------------------- scorers
@@ -2036,7 +2190,7 @@ def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=Fa
     ests, idx = [], {'train': [], 'test': []}
     own = rows is None
     if own:
-        rows = _FoldRows(X, y, folds)
+        rows = _FoldRows(X, y, folds, device_rows=_device_rows_ok(estimator, scoring))
     try:
         return _cross_validate_loop(estimator, y, folds, rows, names, multi, single, out, ests, idx,
                                     return_train_score, return_estimator, return_indices, error_score)
@@ -2118,7 +2272,7 @@ def _cross_val_predict_native(estimator, X, y, folds, n, method):
         keep.append(t)
     if int(_native('check_indices_i64')(held.buffer_info()[0], n, n)) != 0:
         raise ValueError('cross_val_predict only works for partitions')
-    with _FoldRows(X, y, folds) as rows:
+    with _FoldRows(X, y, folds, device_rows=_device_rows_ok(estimator)) as rows:
         preds = []
         for i, t in enumerate(keep):  # glue: one fit per fold
             est = _clone(estimator)
@@ -2315,7 +2469,7 @@ class _BaseSearch:
         Xf, yf, folds = _cv_folds(_Pinned(self.estimator), X, y, self.cv, groups)
         # X, y and the fold indices stay resident on the device for every
         # candidate (lane cpu2-l4-modelsel)
-        with _FoldRows(Xf, yf, folds) as rows:
+        with _FoldRows(Xf, yf, folds, device_rows=_device_rows_ok(self.estimator, scoring)) as rows:
             for params in candidates:
                 est = _clone(self.estimator)
                 if hasattr(est, 'set_params'):
@@ -2454,7 +2608,7 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
     # the folds are drawn ONCE for every parameter value, as scikit-learn does
     Xf, yf, folds = _cv_folds(_Pinned(estimator), X, y, cv, groups)
     tr, te = [], []
-    with _FoldRows(Xf, yf, folds) as rows:
+    with _FoldRows(Xf, yf, folds, device_rows=_device_rows_ok(estimator, scoring)) as rows:
         for v in param_range:
             est = _clone(estimator)
             est.set_params(**{param_name: v})
@@ -2663,7 +2817,7 @@ class _NativePermutation:
         folds0 = self._folds(estimator, base, groups, cv)
         # lane metrics-apple3: X's fold rows are the same for every
         # permutation that runs on folds0 (only y is permuted)
-        rows0 = _FoldRows(self.X, None, folds0, keep_y=False)
+        rows0 = _FoldRows(self.X, None, folds0, keep_y=False, device_rows=_device_rows_ok(estimator, sc))
         try:
             return self._run(estimator, groups, cv, n_permutations, random_state, sc, reuse, folds0, rows0)
         finally:

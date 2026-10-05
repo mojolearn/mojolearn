@@ -116,13 +116,15 @@ def mcd_sort_keys_kernel(v: F32Ptr, n: Int32, keys: U32Ptr, vals: U32Ptr, bad: I
     +0.0), vals[i] = i; a NaN sets bad[0] (`_key`'s refusal)."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
-        var x = v.unsafe_load(i)
-        if x != x:
+        # NaN and the zero test on the bit pattern (lane cpu4-misc review):
+        # no fast-math fold of `x != x` and no flush of a subnormal to the
+        # +0.0 key, so the key is `_key`'s on every vendor
+        var ub = bitcast[DType.uint32](v.unsafe_load(i))
+        var mag = ub & UInt32(0x7FFFFFFF)
+        if mag > UInt32(0x7F800000):
             bad.unsafe_store(0, Int32(1))
-        var w = x
-        if w == Float32(0):
-            w = Float32(0)
-        var ub = bitcast[DType.uint32](w)
+        if mag == UInt32(0):
+            ub = UInt32(0)
         var tw = ub ^ UInt32(0xFFFFFFFF) if (ub >> 31) == UInt32(1) else ub | UInt32(0x80000000)
         keys.unsafe_store(i, tw)
         vals.unsafe_store(i, UInt32(i))
@@ -311,29 +313,6 @@ struct DKit(Movable):
             self.ctx.enqueue_copy(dst_buf=self._sub(out), src_buf=self._sub(A))
         return out^
 
-    def gather_rows(mut self, X: DMat, sel: List[Int]) raises -> DMat:
-        """`take_rows(X, sel)`: exact copies of X's rows in sel's order."""
-        var m = len(sel)
-        var out = DMat(m, X.c)
-        if m * X.c == 0:
-            return out^
-        var idx = List[Int32](capacity=m)
-        for a in range(m):
-            if sel[a] < 0 or sel[a] >= X.r:
-                raise Error("x_decomp: a row index out of range")
-            idx.append(Int32(sel[a]))
-        var iid = pool_alloc(m)
-        var pool = X_DECOMP_POOL.get_or_create_ptr()
-        var sp = F32Ptr(unsafe_from_address=Int(idx.unsafe_ptr()))
-        self.ctx.enqueue_copy(dst_buf=pool[].bufs[iid].create_sub_buffer[DType.float32](0, m), src_ptr=sp)
-        self.ctx.enqueue_function[gather_rows_kernel](
-            X.p(), I32Ptr(unsafe_from_address=Int(_ptr(iid, m))), out.p(), Int32(m), Int32(X.c),
-            grid_dim=_blocks(m * X.c), block_dim=TPB,
-        )
-        pool_free(iid)
-        self.hold_i.append(idx^)
-        return out^
-
     # ---- selections on the device (lane cpu3-core)
     def _sorted_order(mut self, v: DMat, bad: DMat) raises -> DeviceBuffer[DType.uint32]:
         """v's indices in (value, index) order, resident (a stable radix
@@ -347,7 +326,7 @@ struct DKit(Movable):
         if n > 0:
             self.ctx.enqueue_function[mcd_sort_keys_kernel](
                 v.p(), Int32(n), keys.unsafe_ptr(), vals.unsafe_ptr(),
-                I32Ptr(unsafe_from_address=Int(bad.p())), grid_dim=_blocks(n), block_dim=TPB,
+                bad.p().bitcast[Int32](), grid_dim=_blocks(n), block_dim=TPB,
             )
             fast_radix_sort_pairs_u32(self.ctx, n, keys, vals, tk, tv, cnt)
         _ = keys^
@@ -384,7 +363,7 @@ struct DKit(Movable):
         var out = DMat(n, 1)
         if n > 0:
             self.ctx.enqueue_function[u32_to_idx_kernel](
-                order.unsafe_ptr(), Int32(n), I32Ptr(unsafe_from_address=Int(out.p())),
+                order.unsafe_ptr(), Int32(n), out.p().bitcast[Int32](),
                 grid_dim=_blocks(n), block_dim=TPB,
             )
         self._refuse_nan(bad)
@@ -410,7 +389,7 @@ struct DKit(Movable):
             )
             device_exclusive_scan_total_from(self.ctx, flag, scan, n)
             self.ctx.enqueue_function[emit_marked_kernel](
-                flag.unsafe_ptr(), scan.unsafe_ptr(), Int32(n), I32Ptr(unsafe_from_address=Int(out.p())),
+                flag.unsafe_ptr(), scan.unsafe_ptr(), Int32(n), out.p().bitcast[Int32](),
                 grid_dim=_blocks(n), block_dim=TPB,
             )
         self._refuse_nan(bad)
@@ -427,7 +406,7 @@ struct DKit(Movable):
         if m * X.c == 0:
             return out^
         self.ctx.enqueue_function[gather_rows_kernel](
-            X.p(), I32Ptr(unsafe_from_address=Int(idx.p())), out.p(), Int32(m), Int32(X.c),
+            X.p(), idx.p().bitcast[Int32](), out.p(), Int32(m), Int32(X.c),
             grid_dim=_blocks(m * X.c), block_dim=TPB,
         )
         return out^
@@ -564,7 +543,7 @@ struct DKit(Movable):
         var sid = pool_alloc(LU_SCAL_LEN)
         var aid = pool_alloc(max(n, 1))
         launch_lu(
-            self.ctx, lu.p(), I32Ptr(unsafe_from_address=Int(_ptr(pid, max(n, 1)))), _ptr(iid, 1), _ptr(sid, LU_SCAL_LEN),
+            self.ctx, lu.p(), _ptr(pid, max(n, 1)).bitcast[Int32](), _ptr(iid, 1), _ptr(sid, LU_SCAL_LEN),
             _ptr(aid, max(n, 1)), n,
         )
         var diag = DMat(1, n)
@@ -579,8 +558,8 @@ struct DKit(Movable):
         enqueue_fill(self.ctx, sgv, Float32(0))
         if n > 0:
             self.ctx.enqueue_function[logdet_sign_kernel](
-                diag.p(), I32Ptr(unsafe_from_address=Int(_ptr(pid, max(n, 1)))), Int32(n),
-                I32Ptr(unsafe_from_address=Int(sg.p())), grid_dim=_blocks(n), block_dim=TPB,
+                diag.p(), _ptr(pid, max(n, 1)).bitcast[Int32](), Int32(n),
+                sg.p().bitcast[Int32](), grid_dim=_blocks(n), block_dim=TPB,
             )
         var sh = List[Int32](length=2, fill=Int32(0))
         self.ctx.enqueue_copy(
@@ -812,7 +791,7 @@ def fast_mcd_dev(
             var cur = run.k.gather_dev(Xd, rows)
             var got = run.select_random(cur, h_sub, n_trials, 10, 2, False)
             for e in range(len(got)):  # small-loop(got: kept candidates): moves at most ten candidates
-                cands.append(got[e].take())
+                cands.append(Optional(got[e].take()))
         var selection_all = run.k.argsort_dev(run.k.rand(1, n, run.seed, 1000 + run.draws + 1, 0))
         run.draws += 1
         var selection = DMat(rows_of=selection_all, row0=0, rows=n_m)
@@ -820,8 +799,8 @@ def fast_mcd_dev(
         var merged = run.select_init(Xm, h_m, cands, n_best_m, 30, n < 1500)
         if n < 1500:
             ref m0 = merged[0].value()
-            var sp = I32Ptr(unsafe_from_address=Int(sup.p()))
-            var selp = I32Ptr(unsafe_from_address=Int(selection.p()))
+            var sp = sup.p().bitcast[Int32]()
+            var selp = selection.p().bitcast[Int32]()
             if n_m > 0:
                 run.k.ctx.enqueue_function[scatter_rows_kernel](
                     dist.p(), selp, m0.dist.p(), Int32(n_m), grid_dim=_blocks(n_m), block_dim=TPB,
@@ -829,7 +808,7 @@ def fast_mcd_dev(
             var ms = m0.sel.n()
             if ms > 0:
                 run.k.ctx.enqueue_function[mark_rows_of_kernel](
-                    sp, selp, I32Ptr(unsafe_from_address=Int(m0.sel.p())), Int32(ms),
+                    sp, selp, m0.sel.p().bitcast[Int32](), Int32(ms),
                     grid_dim=_blocks(ms), block_dim=TPB,
                 )
             _write_dev(run.k, m0.loc, m0.cov, sup, dist, n, d, loc_out, cov_out, sup_out, dist_out)
@@ -844,7 +823,7 @@ def fast_mcd_dev(
     var bs = best.sel.n()
     if bs > 0:
         run.k.ctx.enqueue_function[mark_rows_kernel](
-            I32Ptr(unsafe_from_address=Int(sup.p())), I32Ptr(unsafe_from_address=Int(best.sel.p())), Int32(bs),
+            sup.p().bitcast[Int32](), best.sel.p().bitcast[Int32](), Int32(bs),
             grid_dim=_blocks(bs), block_dim=TPB,
         )
     _write_dev(run.k, best.loc, best.cov, sup, best.dist, n, d, loc_out, cov_out, sup_out, dist_out)

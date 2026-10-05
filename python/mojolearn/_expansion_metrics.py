@@ -184,8 +184,14 @@ class _Prog:
         return off
 
     def put(self, arr):
-        """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset."""
-        if not (isinstance(arr, Array) and arr.dtype == "<f4" and arr._has_order("C")):
+        """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset.
+        A float32 `_arena_io.DeviceRows` (a fold's rows, lane cpu4-misc) is
+        kept as it is: `_execute` gathers it on the device, or copies its
+        host rows when the binding cannot."""
+        if isinstance(arr, _arena_io.DeviceRows) and arr.dtype != "<f4":
+            arr = arr.materialize()
+        if not (isinstance(arr, _arena_io.DeviceRows)
+                or (isinstance(arr, Array) and arr.dtype == "<f4" and arr._has_order("C"))):
             arr = as_f32_c(arr, ndim=None, name="input")[0]
         off = self.alloc(arr.size)
         self._inputs.append((off, arr))
@@ -311,9 +317,23 @@ def _execute(prog, numeric_mode):
     merged = prog._download()
     run_ranges = _optional_metrics_entry(b, "x_metrics_run_ranges") if _arena_io.ranges_enabled() else None
     spans = []
+    direct, gathered = None, []
     for off, arr in prog._inputs:  # glue: copies each program input once
         if not arr.size:
             continue
+        if isinstance(arr, _arena_io.DeviceRows):
+            # device-rows input (lane cpu4-misc): gathered on the device out
+            # of the base put once into this binding's store
+            slot = None
+            if run_ranges is not None:
+                if direct is None and _arena_io.DeviceCache.supports(b, "x_metrics"):
+                    direct = _arena_io.DeviceCache(b, "x_metrics")
+                slot = _arena_io.rows_slot(b, "x_metrics", arr, direct)
+            if slot is not None:
+                gathered.append(slot)
+                spans.append((off, off + arr.size, slot))
+                continue
+            arr = arr.materialize()
         cache = _arena_io.active_cache(b, "x_metrics", arr.size) if run_ranges is not None else None
         if cache is not None:
             # resident (lane py-shared): the device copies it from the store;
@@ -329,8 +349,14 @@ def _execute(prog, numeric_mode):
         ins = _arena_io.input_ranges(spans)
         outs = [list(r) for r in merged] if merged is not None else [[0, prog.size, -1, 1]]  # glue: the download range descriptors
         ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
-        run_ranges(base, stages.buffer_info()[0], (prog.size, len(prog._stages), len(ins), len(outs)),
-                   ia.buffer_info()[0], oa.buffer_info()[0])
+        try:
+            run_ranges(base, stages.buffer_info()[0], (prog.size, len(prog._stages), len(ins), len(outs)),
+                       ia.buffer_info()[0], oa.buffer_info()[0])
+        finally:
+            for slot in gathered:  # glue: frees each fold-rows slot
+                b.x_metrics_dev_free(slot)
+            if direct is not None:
+                direct.close()
     elif run_out is not None:
         outs = array.array("i", [v for r in merged for v in r] or [0, 0, -1, 1])  # glue: packs the download range descriptors
         run_out(base, prog.size, stages.buffer_info()[0], len(prog._stages), outs.buffer_info()[0], len(merged))

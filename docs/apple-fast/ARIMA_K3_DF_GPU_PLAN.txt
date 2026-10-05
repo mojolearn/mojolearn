@@ -1,0 +1,68 @@
+K3 compensated GPU private-kernel gate, 2026-10-04
+=================================================
+State: source ready for compiler review; UNCOMPILED, GPU quality RUN OWED.
+Base main1d425cb448987e71ef90a6c7e0dd7c39e0cb5a06; kernel checkpoint97512c4e2.
+Reference proposal9723a738309186db66d73e78de238f5a7bd212b5.
+Reconstructed probe/helper REMOTELY on M2; no laptop WIP was read.
+
+Scope
+-----
+MOJOLEARN_ARIMA_FAST_K3_DF_PROBE is default OFF and gated FAST + Apple.
+It adds private _arima_k3_df_probe to the arima binding. Product fit/predict,
+Jones transform, initializer, model ordering, refusals, optimizer and
+existing ew_finish_kernel are untouched. No held SCALAR_LL production
+candidate is restored. This limited kernel gate is not a product speedup.
+
+fast_scalar_df.mojo implements two-word residual/square/division/log,
+two-level256-lane reduction and final LL, then an actual GPU gradient
+keeping LL high/low resident through (perturbed-base)/2^-10/(nobs-1).
+No host candidate arithmetic. Private input layout is model-major with
+4members/model; eventual product integration must explicitly honor its
+member-major layout. Fixed reference state generation remains unchanged.
+
+Log uses exact power-of-two extraction, reduction to [sqrt(.5),sqrt(2)),
+the original odd series through25, and split ln2/log2pi. Only float32 on GPU.
+Multiplication uses pinned_mul_f32; residuals and two-sum additions use
+no-fast-flags llvm.fma.f32. Actual Metal lowering, FTZ, compiler syntax and
+extreme/nonfinite behavior are not certified by CPU-emulation PASS.
+
+Compile contract (manager owns)
+-------------------------------
+Use existing bindings/build_arima.sh on M2, FAST, only binding arima:
+MOJOLEARN_MOJO_BUILD_FLAGS='-D MOJOLEARN_ARIMA_FAST_K3_DF_PROBE'
+Record full source SHA, compiler flags/environment and binary SHA256.
+Also build arima default OFF to check registration isolation. No additional
+core binding is required by the direct extension import. This source agent
+performed no compilation, GPU launch, numerical check or queue action.
+
+Before queue admission
+----------------------
+Prepare verified artifacts/manifests and manager-owned pinned helper/policy;
+stage within an M3 serial transfer window and preflight. Source-ready does
+not imply build-verified or queue-ready. Existing build scripts unchanged.
+
+Run only on M3 Ultra serial queue, with MOJOLEARN_NUMERIC_MODE=fast:
+python tools/arima_k3_df_gpu_quality.py --baseline-report PINNED_REPORT \
+ --binding VERIFIED_ABSOLUTE_ARIMA_SO --binding-sha256 EXACT_SHA256 \
+ --source FULL_SOURCE_SHA --output FRESH_REPORT
+
+Helper requires exact source/binary/report hashes, FAST Metal and ABI3.
+Direct artifact import has no automatic native build/fallback. Report uses
+exclusive creation; no completed runs replayed. An interrupted RUNNING
+report is not evidence. Preserve failures; repair under a fresh explicit tag.
+
+Unchanged quality gate
+----------------------
+Baseline report hash:
+0bb5fa599ca808fd5d51c3dcc854c83edcc411f527e64dbf3744a53a7cf0e4ec
+All13 original lengths,18models/length,base+3perturbations and all4controls.
+Require original labels and generated input hashes, independent FP64
+reference gradients exactly unchanged. Compare each stage per-model and
+each gradient component independently with ZERO degradation allowance.
+No fixture selection, averaging, tolerance expansion or new A arm replay.
+No timing, opponent rerace, promotion or actual initialization claim.
+
+After private kernel PASS only: integrate retained-word scratch/tail with
+actual production eligibility/initializer in another opt-in change, test
+full fit/forecasts and quality, plus FTZ/nonfinite/fallback controls before
+any timing. The original K3 actual-tail HOLD remains preserved separately.

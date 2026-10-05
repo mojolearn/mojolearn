@@ -1088,7 +1088,7 @@ struct _PermPartition(Movable):
         var uniq = List[Int]()
         for i in range(len(bounds)):  # small-loop(bounds: fold prefixes, a handful): the unique sorted prefix list
             var seen = False
-            for j in range(len(uniq)):  # small-loop(uniq: unique fold prefixes, a handful): duplicate test
+            for j in range(len(uniq)):  # small-loop(uniq: unique fold prefixes, a handful): the duplicate prefix test
                 if uniq[j] == bounds[i]:
                     seen = True
             if not seen:
@@ -2199,9 +2199,8 @@ def fit_ordered(
     var fast_est_view = List[DeviceBuffer[DType.float32]]()
     var fast_h_leaves = List[HostBuffer[DType.float32]]()
     # the Apple FAST Ordered bundle (`ORD_ALL`, ordered_fast_switches.mojo):
-    # on only when compiled in AND the index has more than
-    # ORD_ALL_MIN_FEATURES features (istella-wide gains with equal or
-    # better quality; taxi-narrow lost auc, so it keeps main's path). One
+    # on whenever compiled in (any width since 2026-10-04; the old width
+    # gate is MOJOLEARN_LEGACY_NARROW_ORD_ALL, default off). One
     # entry each when `ord_wide`, empty otherwise. `fast_part_off`: the
     # fold layout's partition starts plus `total` for the searcher's
     # one-launch fold bins. `fast_obs`: the searcher's per-level
@@ -2941,7 +2940,7 @@ def fit_ordered(
         if ord_dev_leaves:
             leaves = _ordered_device_leaves(est_pools[ord_dev_slot], n_leaves)
             var weak_dev = weak_later.pop()
-            for leaf in range(n_leaves):
+            for leaf in range(n_leaves):  # small-loop(n_leaves: one oblivious tree, 2^depth leaves): scale the read-back leaf values
                 weak_dev.leaf_values.append(
                     identical_mul(leaves[leaf], opts.learning_rate)
                 )
@@ -2951,7 +2950,7 @@ def fit_ordered(
             comptime if ORDERED_BATCH_EST:
                 leaves = _ord_fast_take_leaves(fast_h_leaves, n_leaves)
                 var weak_fast = weak_later.pop()
-                for leaf in range(n_leaves):
+                for leaf in range(n_leaves):  # small-loop(n_leaves: one oblivious tree, 2^depth leaves): scale the read-back leaf values
                     weak_fast.leaf_values.append(
                         identical_mul(leaves[leaf], opts.learning_rate)
                     )

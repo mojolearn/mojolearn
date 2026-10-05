@@ -1371,6 +1371,30 @@ def rf_device_finite_scan_binding() raises -> PythonObject:
     return PythonObject(1 if FOREST_DEVICE_FINITE else 0)
 
 
+#: QUALITY FIX (lane apple-fast-q-reg, 2026-10-04), FAST on every vendor;
+#: `-D MOJOLEARN_DT_BINS_QOLD` restores 128. Audit (M3 0.8.34, taxi):
+#: decision-tree-reg r2 0.8626 vs scikit-learn 0.8915, bagging-reg 0.9188 vs
+#: 0.9388, voting-reg 0.9192 vs 0.9246, stacking-reg 0.9197 vs 0.9325 (all
+#: four fit DecisionTreeRegressor members; IDENTICAL has the same numbers, so
+#: it is the parameter, not a FAST shortcut). scikit-learn splits on exact
+#: thresholds; ours on n_bins quantile bins, 128 by default, which caps a
+#: deep tree's resolution on taxi's continuous columns. 256 is the largest
+#: count the binned (uint8) path takes, so the kernels stay the same.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab5-dtbins, taxi): decision-tree-reg r2 0.8626 -> 0.8792 at 52.79 -> 53.38
+#: ms (+1.1%); bagging-reg r2 0.9170 -> 0.9233 at 202.06 -> 187.32 ms (-7.3%);
+#: voting/stacking/adaboost-reg errored in both arms (not measured). KEEP.
+comptime RF_DT_DEFAULT_BINS = (
+    256 if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_DT_BINS_QOLD"]() else 128
+)
+
+
+def rf_dt_default_bins_binding() raises -> PythonObject:
+    """The quantile bin count a DecisionTreeRegressor left at n_bins=None
+    fits with in this build (RF_DT_DEFAULT_BINS): 256 FAST, 128 otherwise."""
+    return PythonObject(RF_DT_DEFAULT_BINS)
+
+
 def rf_numeric_mode_binding() raises -> PythonObject:
     """Read the numeric policy compiled into this RF binding."""
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
@@ -1411,6 +1435,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_vendor_binding]("rf_vendor")
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
         m.def_function[rf_device_finite_scan_binding]("rf_device_finite_scan")
+        m.def_function[rf_dt_default_bins_binding]("rf_dt_default_bins")
         m.def_function[rf_fused_bootstrap_gather_binding](
             "rf_fused_bootstrap_gather"
         )

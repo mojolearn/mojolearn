@@ -123,6 +123,9 @@ _OPS = dict(
     c2_gt=255, c2_rfe_step=256, c2_rfe_rank=257, c2_ii_miss=258, c2_ii_pos=259, c2_ii_ord=260, c2_ii_rand=261,
     c2_colmax=262, c2_grid=263, c2_nan_sub=264, c2_nan_rows=265, c2_cnt0=266, c2_mm_keep=267, c2_mm_merge=268,
     c2_add_i64=269, c2_nonfinite=270,
+    # lane apple-fast-q-clf (x_prep/proba64.mojo, in the py2mojo range): staged only when the
+    # binding exports x_prep_proba64 (FAST, not -D MOJOLEARN_PROBA64_QOLD)
+    q64_softmax=213,
 )
 _PARAMS = 14
 _NONE = -1
@@ -449,8 +452,14 @@ class _Prog:
         """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset.
         inout (lane prep-apple3): a stage writes these words and Python reads
         them after the run, so they come back from the device (a plain input
-        never does, and a read of one is refused)."""
-        if not (isinstance(arr, Array) and arr.dtype == "<f4" and arr._has_order("C")):
+        never does, and a read of one is refused). A `_arena_io.DeviceRows`
+        (a fold's rows, lane cpu4-misc) is kept as it is: `run` gathers it
+        on the device, or copies its host rows when the binding cannot."""
+        if isinstance(arr, _arena_io.DeviceRows):
+            if inout or arr.dtype != "<f4":
+                arr = arr.materialize()
+        if not (isinstance(arr, (Array, _arena_io.DeviceRows)) and arr.dtype == "<f4"
+                and (isinstance(arr, _arena_io.DeviceRows) or arr._has_order("C"))):
             arr = as_f32_c(arr, ndim=None, name="input")[0]
         off = self.alloc(arr.size)
         self._inputs.append((off, arr, "f"))
@@ -521,9 +530,24 @@ class _Prog:
                       if (dev_scratch or sc == 0) and _arena_io.ranges_enabled() else None)
         spans = []
         direct = None
+        gathered = []
         for off, arr, _ in self._inputs:
             if not arr.size:
                 continue
+            if isinstance(arr, _arena_io.DeviceRows):
+                # device-rows input (lane cpu4-misc): the fold's rows gathered
+                # on the device out of the base X, put once into this binding's
+                # store; a binding without the gather copies the host rows
+                slot = None
+                if run_ranges is not None:
+                    if direct is None and _arena_io.DeviceCache.supports(binding, "x_prep"):
+                        direct = _arena_io.DeviceCache(binding, "x_prep")
+                    slot = _arena_io.rows_slot(binding, "x_prep", arr, direct)
+                if slot is not None:
+                    gathered.append(slot)
+                    spans.append((off, off + arr.size, slot))
+                    continue
+                arr = arr.materialize()
             inout = (off, off + arr.size) in self._inout
             cache = (_arena_io.active_cache(binding, "x_prep", arr.size)
                      if run_ranges is not None and not inout else None)
@@ -560,6 +584,8 @@ class _Prog:
                            (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
                            (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
             finally:
+                for slot in gathered:  # glue: frees each fold-rows slot
+                    binding.x_prep_dev_free(slot)
                 if direct is not None:
                     direct.close()
             self._out = out
@@ -617,6 +643,15 @@ class _Prog:
     def get_i32(self, off, shape):
         return self._read(off, shape, "i")
 
+    def get_f64(self, off, shape):
+        """An (rows, cols) block of float64 values written as word pairs (low, high) by `q64_softmax`:
+        the 2 * prod(shape) words reinterpreted as bytes (glue: no arithmetic)."""
+        rows, cols = shape
+        words = self._read(off, (2 * rows * cols,), "i")
+        out = array.array("d")
+        out.frombytes(words.tobytes())
+        return Array._owned(out, shape, "<f8", "C")
+
     def values(self, off, n):
         """Python floats of n arena entries (for integer bookkeeping)."""
         self._check(off, n)
@@ -667,7 +702,16 @@ def decode_labels(classes, codes):
 
 
 def _x2d(X, name="X"):
-    arr = as_f32_c(X, ndim=2, name=name)[0]
+    if isinstance(X, _arena_io.DeviceRows):
+        # a fold's rows on the device (lane cpu4-misc): float32 2-D rows of
+        # a C-contiguous base stay a handle for `_Prog.put`; anything else
+        # takes its host rows and the usual conversion
+        if X.dtype == "<f4" and X.ndim == 2:
+            arr = X
+        else:
+            arr = as_f32_c(X.materialize(), ndim=2, name=name)[0]
+    else:
+        arr = as_f32_c(X, ndim=2, name=name)[0]
     if arr.ndim != 2 or arr.shape[0] == 0 or arr.shape[1] == 0:
         raise ValueError(f"mojolearn: {name} must be a nonempty two-dimensional array")
     if arr.size > 2 ** 31 - 1:
@@ -2192,9 +2236,37 @@ class KBinsDiscretizer(_PrepBase):
 
 
 # ---------------------------------------------------------------- naive Bayes
+#: mode -> whether its binding exports `x_prep_proba64` (lane apple-fast-q-clf)
+_PROBA64 = {}
+
+
+def _proba64_on(mode):
+    """predict_proba as float64 (x_prep/proba64.mojo `q64_softmax_unit`): the
+    FAST binding's default (QUALITY-FIX: a float32 probability saturates at
+    exactly 1.0 past a ~16.6-nat gap; Istella log loss gaussian-nb 3.574 vs
+    scikit-learn 3.417, bernoulli-nb 5.351 vs 4.279); a build with
+    -D MOJOLEARN_PROBA64_QOLD (or IDENTICAL) has no export and keeps the
+    float32 `row_softmax` probabilities."""
+    key = str(mode)
+    if key not in _PROBA64:
+        try:
+            _PROBA64[key] = _optional_prep_entry(_prep_binding(mode), "x_prep_proba64") is not None
+        except Exception:  # noqa: BLE001  (no binding: the float32 route)
+            _PROBA64[key] = False
+    return _PROBA64[key]
+
+
 class _Classifier(_PrepBase):
     """predict / predict_proba / predict_log_proba from a subclass's joint
     log likelihood stages (`_jll_stages`), normalised on the device."""
+    #: lane cpu4-misc: fit and every scoring method take a
+    #: `_arena_io.DeviceRows` (a cross-validation fold's X on the device):
+    #: X reaches the arena only through `_x2d` -> `_Prog.put`, so the fold
+    #: rows are gathered on the device and never come to the host. Every
+    #: subclass (GaussianNB, MultinomialNB, BernoulliNB, ComplementNB,
+    #: CategoricalNB, LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis)
+    #: keeps to that; a user covariance_estimator takes host rows.
+    _mojolearn_device_rows = True
 
     def _encode_y(self, y, n):
         classes, codes = encode_labels(y)
@@ -2227,15 +2299,20 @@ class _Classifier(_PrepBase):
         """The scoring program after the joint log likelihood: its softmax
         and argmax stages, the run, the input refusals, the offsets."""
         lp = pr.alloc(n * K) if "log" in want else _NONE
-        pp = pr.alloc(n * K) if "proba" in want else _NONE
+        p64 = "proba" in want and _proba64_on(self.numeric_mode_)
+        pp = pr.alloc((2 if p64 else 1) * n * K) if "proba" in want else _NONE
         am = pr.alloc(n) if "predict" in want else _NONE
-        if lp != _NONE or pp != _NONE:
+        if p64:
+            pr.stage("q64_softmax", n, jll, n, K, pp)
+            if lp != _NONE:
+                pr.stage("row_softmax", n, jll, n, K, lp, _NONE)
+        elif lp != _NONE or pp != _NONE:
             pr.stage("row_softmax", n, jll, n, K, lp, pp)
         if am != _NONE:
             pr.stage("row_argmax", n, jll, n, K, am)
         pr.run(self.numeric_mode_)
         self._score_refusals(pr, d, chk)
-        return pr, n, K, dict(jll=jll, log=lp, proba=pp, predict=am)
+        return pr, n, K, dict(jll=jll, log=lp, proba=pp, predict=am, proba64=p64)
 
     def _score_checks(self, pr, xo, n, d):
         """Stages a subclass adds to check its input in the scoring program
@@ -2251,6 +2328,8 @@ class _Classifier(_PrepBase):
 
     def predict_proba(self, X):
         pr, n, K, o = self._scores(X, ("proba",))
+        if o.get("proba64"):
+            return pr.get_f64(o["proba"], (n, K))
         return pr.get(o["proba"], (n, K))
 
     def predict_log_proba(self, X):
@@ -3081,6 +3160,9 @@ def _estimator_covs(est, arr, codes, K, who):
     for each class k (codes None: every row, one block). `est.fit` runs in
     Python on the class's float32 rows (a mojolearn Array); its covariance_
     is read as float32. Returns the (K, d, d) blocks as one flat list."""
+    if isinstance(arr, _arena_io.DeviceRows):
+        # the user's estimator takes host rows (lane cpu4-misc)
+        arr = arr.materialize()
     n, d = arr.shape
     mode = _mode()
     if codes is not None:

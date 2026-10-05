@@ -20,16 +20,58 @@ device buffer belongs to the context that made it:
 
 and exports `<prefix>_dev_put(addr, n_words) -> id`, `<prefix>_dev_free(id)`
 and `<prefix>_dev_live() -> count` (x_metrics/resident.mojo is the pattern,
-three lines each), which `DeviceCache` calls by that prefix.
+three lines each), which `DeviceCache` calls by that prefix. A binding that
+takes device-rows input (`mojolearn._arena_io.DeviceRows`, lane cpu4-misc)
+also exports `<prefix>_dev_take_rows(src_id, row_words, idx_addr, n_idx) -> id`:
+a new slot gathered on the device out of a resident one (`take_rows`).
 
 FREED DETERMINISTICALLY: `free` waits for the context (so no queued launch
 still reads the slot), then drops the buffer at once (the slot keeps a
 shared one-word placeholder), and the id is reused. Nothing is pooled, so
 live device memory is exactly the live slots. Where bytes live moves no bit.
 """
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.device_zero import enqueue_fill
+
 comptime StoreWP = MutPointer[Float32, MutAnyOrigin]
+comptime _StoreU32 = MutPointer[UInt32, MutAnyOrigin]
+comptime _StoreI64 = MutPointer[Int64, MutAnyOrigin]
+comptime _StoreI32 = MutPointer[Int32, MutAnyOrigin]
+comptime STORE_TPB = 256
+comptime STORE_MAX_BLOCKS = 65535
+
+
+def _store_take_kernel(
+    src: _StoreU32, n_src: Int64, words: Int64, idx: _StoreI64, n_idx: Int64, dst: _StoreU32,
+    status: _StoreI32,
+):
+    """dst[r, :] = src[idx[r], :] over rows of `words` 4-byte words: one
+    thread per output word (grid-stride). A byte copy, so no bit moves; an
+    out-of-range index sets status[0] and leaves its row unwritten."""
+    var w = Int(words)
+    var total = Int(n_idx) * w
+    var step = Int(grid_dim.x) * Int(block_dim.x)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    while t < total:
+        var r = t // w
+        var c = t - r * w
+        var s = Int(idx.unsafe_load(r))
+        if s < 0 or s >= Int(n_src):
+            status.unsafe_store(0, Int32(1))
+        else:
+            dst.unsafe_store(t, src.unsafe_load(s * w + c))
+        t += step
+
+
+def _store_grid(total: Int) -> Int:
+    var b = (total + STORE_TPB - 1) // STORE_TPB
+    if b < 1:
+        return 1
+    if b > STORE_MAX_BLOCKS:
+        return STORE_MAX_BLOCKS
+    return b
 
 
 struct DeviceStore(Defaultable, Movable):
@@ -60,6 +102,10 @@ struct DeviceStore(Defaultable, Movable):
         var buf = ctx.enqueue_create_buffer[DType.float32](n_words)
         ctx.enqueue_copy(dst_buf=buf, src_ptr=StoreWP(unsafe_from_address=src_addr))
         ctx.synchronize()
+        return self._add(buf^, n_words)
+
+    def _add(mut self, var buf: DeviceBuffer[DType.float32], n_words: Int) -> Int:
+        """Files `buf` (n_words words) under a fresh or released id."""
         var id: Int
         if len(self.released) > 0:
             id = self.released.pop()
@@ -71,6 +117,40 @@ struct DeviceStore(Defaultable, Movable):
             id = len(self.words) - 1
         self.live += 1
         return id
+
+    def take_rows(
+        mut self, ctx: DeviceContext, src_id: Int, row_words: Int, idx_addr: Int, n_idx: Int
+    ) raises -> Int:
+        """A new slot holding rows `idx` (the `n_idx` host int64 words at
+        `idx_addr`) of slot `src_id`, read as rows of `row_words` words:
+        one device gather (lane cpu4-misc, device-rows input). Only the
+        index words cross the bus; the rows never visit the host. Raises
+        on an out-of-range index (one status word read back); waits."""
+        if n_idx < 1 or row_words < 1 or idx_addr == 0:
+            raise Error("device store: take_rows needs at least one index and one word a row")
+        self.check(src_id, 0)
+        var n_src = self.words[src_id] // row_words
+        var total = n_idx * row_words
+        var d_idx = ctx.enqueue_create_buffer[DType.int64](n_idx)
+        ctx.enqueue_copy(dst_buf=d_idx, src_ptr=_StoreI64(unsafe_from_address=idx_addr))
+        var d_status = ctx.enqueue_create_buffer[DType.int32](2)
+        enqueue_fill(ctx, d_status, Int32(0))
+        var out = ctx.enqueue_create_buffer[DType.float32](total)
+        ctx.enqueue_function[_store_take_kernel](
+            self.bufs[src_id].unsafe_ptr().bitcast[UInt32](), Int64(n_src), Int64(row_words),
+            d_idx.unsafe_ptr(), Int64(n_idx), out.unsafe_ptr().bitcast[UInt32](), d_status.unsafe_ptr(),
+            grid_dim=_store_grid(total), block_dim=STORE_TPB,
+        )
+        var h = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_status)
+        ctx.synchronize()
+        var bad = Int(h.unsafe_ptr()[0])
+        _ = h^
+        _ = d_idx^
+        _ = d_status^
+        if bad != 0:
+            raise Error("device store: take_rows index out of range")
+        return self._add(out^, total)
 
     def write(mut self, ctx: DeviceContext, id: Int, src_addr: Int, n_words: Int) raises:
         """Overwrite the slot's first `n_words` words from the host; waits."""
