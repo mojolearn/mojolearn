@@ -42610,6 +42610,11 @@
    "ident_sweep": "/Users/andrewhendel/mojolearn-evidence/m3-ident/idn5r-res/race-idn5r-*",
    "head": "391afe03a",
    "updated_cells": 26
+  },
+  {
+   "ident_sweep": "/Users/andrewhendel/mojolearn-evidence/m3-ident/idn5-res/race-idn5-*",
+   "head": "af93ebe0a",
+   "updated_cells": 8
   }
  ],
  "config": {
@@ -110686,14 +110691,14 @@
      "device": "gpu",
      "device_name": "Apple M3 Ultra",
      "family": "algos",
-     "hash": "ddc1cb2ff6a7a382",
+     "hash": null,
      "hash_stable": null,
      "installed_wheel": "wheel",
      "lane": "fastica",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 1588.3502500073519,
-     "median_ms": 1588.3502500073519,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -110704,7 +110709,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 3851.5
      },
-     "min_ms": 1588.3502500073519,
+     "min_ms": null,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -110722,12 +110727,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 4054.6,
-     "quality": {
-      "mean_abs_excess_kurtosis": 356.2888553372582
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
-     "rounds": 1,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -110767,12 +110770,185 @@
       "warmup_rounds": 1
      },
      "shape": "X 900000x220; Xq 100000x220",
-     "status": "ok",
-     "times_ms": [
-      1588.3502500073519
-     ],
+     "status": "stale: latest IDENTICAL sweep error",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 1577.5370839983225
+     "warmup_ms": 1577.5370839983225,
+     "source": {
+      "sweep": "race-idn5-fastica-istella",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T06:58:32Z",
+      "previous_measurement": {
+       "arm": "ours",
+       "comparability": {
+        "span": {
+         "input_home": "host",
+         "inside_clock": "fit(X)",
+         "pre_clock_fit": false,
+         "upload_ms_untimed": null
+        },
+        "span_asymmetry": []
+       },
+       "dataset": "istella",
+       "device": "gpu",
+       "device_name": "Apple M3 Ultra",
+       "family": "algos",
+       "hash": "ddc1cb2ff6a7a382",
+       "hash_stable": null,
+       "installed_wheel": "wheel",
+       "lane": "fastica",
+       "library": "mojolearn",
+       "library_version": "0.8.34",
+       "max_ms": 1588.3502500073519,
+       "median_ms": 1588.3502500073519,
+       "memory": {
+        "children_mb": 1.7,
+        "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+        "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+        "peak_gpu_mb": null,
+        "peak_host_mb": 4054.6,
+        "rounds_sampled": 1,
+        "warmup_gpu_mb": null,
+        "warmup_host_mb": 3851.5
+       },
+       "min_ms": 1588.3502500073519,
+       "mode": "identical",
+       "mode_witness": "identical",
+       "neural_shape": null,
+       "params": {
+        "library": "mojolearn",
+        "params": {
+         "algorithm": "parallel",
+         "max_iter": 200,
+         "n_components": 8,
+         "seed": 7,
+         "tol": 0.0001,
+         "whiten": "unit-variance"
+        },
+        "source": "get_params"
+       },
+       "peak_gpu_mb": null,
+       "peak_host_mb": 4054.6,
+       "quality": {
+        "mean_abs_excess_kurtosis": 356.2888553372582
+       },
+       "ratio_ours_fast_over": null,
+       "ratio_ours_identical_over": null,
+       "rounds": 1,
+       "rows": null,
+       "rows_tag": "full",
+       "settings": {
+        "config": "the board's own settings (no NVIDIA harness entry)",
+        "driver": "tools/bench_board_algos.py",
+        "interleaved": true,
+        "lane_config": {
+         "block": "tsvd",
+         "datasets": [
+          "taxi",
+          "istella"
+         ],
+         "expansion_lane": "decomp",
+         "kind": "est",
+         "mismatches": [],
+         "notes": [],
+         "ours_class": "mojolearn.FastICA",
+         "params": {
+          "algorithm": "parallel",
+          "fun": "logcosh",
+          "max_iter": 200,
+          "n_components": 8,
+          "random_state": 7,
+          "tol": 0.0001,
+          "whiten": "unit-variance",
+          "whiten_solver": "svd"
+         },
+         "quality": "mean |excess kurtosis| of the recovered sources on Xq",
+         "sklearn": "sklearn.decomposition:FastICA",
+         "task": "transform",
+         "timed_fit": "fit(X)",
+         "timed_infer": "transform(Xq)"
+        },
+        "rounds": 1,
+        "rows_cap": null,
+        "seed": 7,
+        "warmup_rounds": 1
+       },
+       "shape": "X 900000x220; Xq 100000x220",
+       "status": "ok",
+       "times_ms": [
+        1588.3502500073519
+       ],
+       "verdict": "LIKE-FOR-LIKE-SPAN",
+       "warmup_ms": 1577.5370839983225
+      },
+      "failure": {
+       "command": [
+        "/Users/ec2-user/board-0834/cache/venv/bin/python",
+        "/Users/ec2-user/mq/wt/freeze_idn-20261005/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "fastica",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/board-0834/cache/algos-data/rows-full"
+       ],
+       "digest_stable": null,
+       "digests": [],
+       "error": {
+        "error": "Exception('eigh: the round-robin Jacobi did not converge in 60 sweeps at n = 220 (off-diagonal mass 6.603381e+31 of inf). An unconverged decomposition is not returned as if it were one (DEVIATION 590).')",
+        "event": "error",
+        "stage": "round 0"
+       },
+       "failed_round": 0,
+       "infer_ms": [],
+       "infer_warmup_ms": null,
+       "info": {
+        "config": "mojolearn.FastICA(algorithm='parallel', fun='logcosh', max_iter=200, n_components=8, random_state=7, tol=0.0001, whiten='unit-variance', whiten_solver='svd')",
+        "device": "gpu",
+        "device_name": "Apple M3 Ultra",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/mq/wt/freeze_idn-20261005/python/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.37"
+       },
+       "median_ms": null,
+       "mem": [],
+       "ms": [],
+       "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+         "algorithm": "parallel",
+         "fun": "logcosh",
+         "fun_args": null,
+         "max_iter": 200,
+         "n_components": 8,
+         "random_state": 7,
+         "tol": 0.0001,
+         "w_init": null,
+         "whiten": "unit-variance",
+         "whiten_solver": "svd"
+        },
+        "source": "get_params"
+       },
+       "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+       },
+       "status": "error",
+       "warmup_ms": null
+      }
+     }
     },
     {
      "arm": "ours-fast",
@@ -110930,7 +111106,7 @@
       "mean_abs_excess_kurtosis": 922.5310765347363
      },
      "ratio_ours_fast_over": 0.08189207030707098,
-     "ratio_ours_identical_over": 0.09456893019417997,
+     "ratio_ours_identical_over": null,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -111391,7 +111567,7 @@
    "wall_s": 9.2,
    "identical_page": {
     "family": "algos",
-    "status": "error"
+    "status": "stale: latest IDENTICAL sweep error"
    }
   },
   "algos/fastica/taxi/rows=full": {
@@ -130272,14 +130448,14 @@
      "device": "gpu",
      "device_name": "Apple M3 Ultra",
      "family": "algos",
-     "hash": "1148569c2418aee0",
+     "hash": null,
      "hash_stable": null,
      "installed_wheel": "wheel",
      "lane": "incremental-pca",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 2905.4652499908116,
-     "median_ms": 2905.4652499908116,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -130290,7 +130466,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 2304.3
      },
-     "min_ms": 2905.4652499908116,
+     "min_ms": null,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -130306,12 +130482,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 2660.4,
-     "quality": {
-      "explained_variance_fraction": 0.9999937855121286
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
-     "rounds": 1,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -130352,12 +130526,177 @@
       "warmup_rounds": 1
      },
      "shape": "X 900000x220; Xq 100000x220",
-     "status": "ok",
-     "times_ms": [
-      2905.4652499908116
-     ],
+     "status": "stale: latest IDENTICAL sweep error",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
-     "warmup_ms": 2973.893541988218
+     "warmup_ms": 2973.893541988218,
+     "source": {
+      "sweep": "race-idn5-incremental-pca-istella",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T07:02:16Z",
+      "previous_measurement": {
+       "arm": "ours",
+       "comparability": {
+        "span": {
+         "input_home": "host",
+         "inside_clock": "fit(X)",
+         "pre_clock_fit": false,
+         "upload_ms_untimed": null
+        },
+        "span_asymmetry": []
+       },
+       "dataset": "istella",
+       "device": "gpu",
+       "device_name": "Apple M3 Ultra",
+       "family": "algos",
+       "hash": "1148569c2418aee0",
+       "hash_stable": null,
+       "installed_wheel": "wheel",
+       "lane": "incremental-pca",
+       "library": "mojolearn",
+       "library_version": "0.8.34",
+       "max_ms": 2905.4652499908116,
+       "median_ms": 2905.4652499908116,
+       "memory": {
+        "children_mb": 1.7,
+        "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+        "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+        "peak_gpu_mb": null,
+        "peak_host_mb": 2660.4,
+        "rounds_sampled": 1,
+        "warmup_gpu_mb": null,
+        "warmup_host_mb": 2304.3
+       },
+       "min_ms": 2905.4652499908116,
+       "mode": "identical",
+       "mode_witness": "identical",
+       "neural_shape": null,
+       "params": {
+        "library": "mojolearn",
+        "params": {
+         "batch_size": 65536,
+         "n_components": 10,
+         "seed": "none (deterministic)",
+         "whiten": false
+        },
+        "source": "get_params"
+       },
+       "peak_gpu_mb": null,
+       "peak_host_mb": 2660.4,
+       "quality": {
+        "explained_variance_fraction": 0.9999937855121286
+       },
+       "ratio_ours_fast_over": null,
+       "ratio_ours_identical_over": null,
+       "rounds": 1,
+       "rows": null,
+       "rows_tag": "full",
+       "settings": {
+        "config": {
+         "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+         "entry": "IncrementalPCA",
+         "harness": "cuML benchmark (RAPIDS)",
+         "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+        },
+        "driver": "tools/bench_board_algos.py",
+        "interleaved": true,
+        "lane_config": {
+         "block": "tsvd",
+         "cuml": "cuml.decomposition:IncrementalPCA",
+         "datasets": [
+          "taxi",
+          "istella"
+         ],
+         "expansion_lane": "decomp",
+         "kind": "est",
+         "mismatches": [],
+         "notes": [],
+         "ours_class": "mojolearn.IncrementalPCA",
+         "params": {
+          "batch_size": 65536,
+          "n_components": 10,
+          "whiten": false
+         },
+         "quality": "explained-variance fraction of the centered rows by the components",
+         "sklearn": "sklearn.decomposition:IncrementalPCA",
+         "task": "transform",
+         "timed_fit": "fit(X)",
+         "timed_infer": "transform(Xq)"
+        },
+        "rounds": 1,
+        "rows_cap": null,
+        "seed": 7,
+        "warmup_rounds": 1
+       },
+       "shape": "X 900000x220; Xq 100000x220",
+       "status": "ok",
+       "times_ms": [
+        2905.4652499908116
+       ],
+       "verdict": "LIKE-FOR-LIKE-SPAN",
+       "warmup_ms": 2973.893541988218
+      },
+      "failure": {
+       "command": [
+        "/Users/ec2-user/board-0834/cache/venv/bin/python",
+        "/Users/ec2-user/mq/wt/freeze_idn-20261005/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "incremental-pca",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/board-0834/cache/algos-data/rows-full"
+       ],
+       "digest_stable": null,
+       "digests": [],
+       "error": {
+        "error": "Exception('eigh: the round-robin Jacobi did not converge in 60 sweeps at n = 220 (off-diagonal mass 5.9260233e+31 of inf). An unconverged decomposition is not returned as if it were one (DEVIATION 590).')",
+        "event": "error",
+        "stage": "round 0"
+       },
+       "failed_round": 0,
+       "infer_ms": [],
+       "infer_warmup_ms": null,
+       "info": {
+        "config": "mojolearn.IncrementalPCA(batch_size=65536, n_components=10, whiten=False)",
+        "device": "gpu",
+        "device_name": "Apple M3 Ultra",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/mq/wt/freeze_idn-20261005/python/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.37"
+       },
+       "median_ms": null,
+       "mem": [],
+       "ms": [],
+       "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+         "batch_size": 65536,
+         "n_components": 10,
+         "whiten": false
+        },
+        "source": "get_params"
+       },
+       "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+       },
+       "status": "error",
+       "warmup_ms": null
+      }
+     }
     },
     {
      "arm": "ours-fast",
@@ -130512,7 +130851,7 @@
       "explained_variance_fraction": 0.9999999761263916
      },
      "ratio_ours_fast_over": 0.3917429858479328,
-     "ratio_ours_identical_over": 0.5057001856910346,
+     "ratio_ours_identical_over": null,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -130958,7 +131297,7 @@
    "wall_s": 14.6,
    "identical_page": {
     "family": "algos",
-    "status": "error"
+    "status": "stale: latest IDENTICAL sweep error"
    }
   },
   "algos/incremental-pca/taxi/rows=full": {
@@ -322598,14 +322937,14 @@
      "device": "gpu",
      "device_name": "Apple M3 Ultra",
      "family": "classical2",
-     "hash": "17200d78b09c6420",
+     "hash": null,
      "hash_stable": null,
      "installed_wheel": "wheel",
      "lane": "tsvd",
      "library": "mojolearn",
      "library_version": "0.8.34",
-     "max_ms": 447.0538749592379,
-     "median_ms": 447.0538749592379,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 1.7,
       "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
@@ -322616,7 +322955,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 3700.6
      },
-     "min_ms": 447.0538749592379,
+     "min_ms": null,
      "mode": "identical",
      "mode_witness": "identical",
      "neural_shape": null,
@@ -322633,13 +322972,10 @@
      },
      "peak_gpu_mb": null,
      "peak_host_mb": 3702.9,
-     "quality": {
-      "explained_variance_ratio_sum": 0.9999921076474112,
-      "relative_reconstruction_error": 0.0025539223380432992
-     },
+     "quality": {},
      "ratio_ours_fast_over": null,
      "ratio_ours_identical_over": null,
-     "rounds": 1,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -322667,20 +323003,176 @@
       "warmup_rounds": 1
      },
      "shape": "X 1000000x220",
-     "status": "ok",
-     "times_ms": [
-      423.69116700137965
-     ],
+     "status": "stale: latest IDENTICAL sweep error",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "warmup_ms": 458.09170897700824,
      "source": {
-      "sweep": "race-ident-tsvd-istella",
-      "head": "cf94a6be6",
-      "finished": "2026-10-04T19:42:22Z",
-      "previous_median_ms": 423.69116700137965,
-      "previous_hash": "17200d78b09c6420"
-     },
-     "quality_text": "explained_variance_ratio_sum=0.999992, relative_reconstruction_error=0.00255392"
+      "sweep": "race-idn5-tsvd-istella",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T08:14:50Z",
+      "previous_measurement": {
+       "arm": "ours",
+       "comparability": {
+        "span": {
+         "input_home": "host",
+         "inside_clock": "fit",
+         "pre_clock_fit": false,
+         "upload_ms_untimed": null
+        },
+        "span_asymmetry": []
+       },
+       "dataset": "istella",
+       "device": "gpu",
+       "device_name": "Apple M3 Ultra",
+       "family": "classical2",
+       "hash": "17200d78b09c6420",
+       "hash_stable": null,
+       "installed_wheel": "wheel",
+       "lane": "tsvd",
+       "library": "mojolearn",
+       "library_version": "0.8.34",
+       "max_ms": 447.0538749592379,
+       "median_ms": 447.0538749592379,
+       "memory": {
+        "children_mb": 1.7,
+        "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+        "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+        "peak_gpu_mb": null,
+        "peak_host_mb": 3702.9,
+        "rounds_sampled": 1,
+        "warmup_gpu_mb": null,
+        "warmup_host_mb": 3700.6
+       },
+       "min_ms": 447.0538749592379,
+       "mode": "identical",
+       "mode_witness": "identical",
+       "neural_shape": null,
+       "params": {
+        "library": "mojolearn",
+        "params": {
+         "algorithm": "covariance_eigh",
+         "n_components": 10,
+         "n_iter": 5,
+         "seed": 7,
+         "tol": 0.0
+        },
+        "source": "get_params"
+       },
+       "peak_gpu_mb": null,
+       "peak_host_mb": 3702.9,
+       "quality": {
+        "explained_variance_ratio_sum": 0.9999921076474112,
+        "relative_reconstruction_error": 0.0025539223380432992
+       },
+       "ratio_ours_fast_over": null,
+       "ratio_ours_identical_over": null,
+       "rounds": 1,
+       "rows": null,
+       "rows_tag": "full",
+       "settings": {
+        "block": "tsvd",
+        "config": {
+         "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+         "entry": "tSVD",
+         "harness": "cuML benchmark (RAPIDS)",
+         "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+        },
+        "driver": "tools/bench_board_more.py",
+        "interleaved": true,
+        "lane_config": {
+         "mismatches": [
+          "algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'"
+         ],
+         "params": "n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7",
+         "quality": "explained-variance ratio sum (TruncatedSVD's definition), relative reconstruction error",
+         "rows": "1000000 stride rows of the train split, raw (sentinel cleaned, not scaled)",
+         "timed": "fit"
+        },
+        "rounds": 1,
+        "rows_cap": null,
+        "seed": 7,
+        "warmup_rounds": 1
+       },
+       "shape": "X 1000000x220",
+       "status": "ok",
+       "times_ms": [
+        423.69116700137965
+       ],
+       "verdict": "LIKE-FOR-LIKE-SPAN",
+       "warmup_ms": 458.09170897700824,
+       "source": {
+        "sweep": "race-ident-tsvd-istella",
+        "head": "cf94a6be6",
+        "finished": "2026-10-04T19:42:22Z",
+        "previous_median_ms": 423.69116700137965,
+        "previous_hash": "17200d78b09c6420"
+       },
+       "quality_text": "explained_variance_ratio_sum=0.999992, relative_reconstruction_error=0.00255392"
+      },
+      "failure": {
+       "command": [
+        "/Users/ec2-user/board-0834/cache/venv/bin/python",
+        "/Users/ec2-user/mq/wt/freeze_idn-20261005/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "tsvd",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/board-0834/cache/more-data/rows-full"
+       ],
+       "digest_stable": null,
+       "digests": [],
+       "error": {
+        "error": "Exception(\"the device Jacobi did not converge in 60 sweeps at n_cols = 220 (round-robin order; off-diagonal mass 3.2571788e+36, or ||A||_F moved) against a tolerance of 1e-07. cuSOLVER's syevj has the same failure mode and the same remedy, which is more sweeps. A non-symmetric covariance produces this too; see check_covariance_is_symmetric.\")",
+        "event": "error",
+        "stage": "round 0"
+       },
+       "failed_round": 0,
+       "info": {
+        "device": "gpu",
+        "device_name": "Apple M3 Ultra",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/mq/wt/freeze_idn-20261005/python/mojolearn/__init__.py",
+        "n_features": 220,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.37"
+       },
+       "median_ms": null,
+       "mem": [],
+       "ms": [],
+       "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+         "algorithm": "covariance_eigh",
+         "n_components": 10,
+         "n_iter": 5,
+         "n_oversamples": 10,
+         "power_iteration_normalizer": "auto",
+         "random_state": 7,
+         "tol": 0.0
+        },
+        "source": "get_params"
+       },
+       "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+       },
+       "status": "error",
+       "warmup_ms": null
+      }
+     }
     },
     {
      "arm": "ours-fast",
@@ -322842,7 +323334,7 @@
       "relative_reconstruction_error": 0.00012198040527534835
      },
      "ratio_ours_fast_over": 0.6542678797397579,
-     "ratio_ours_identical_over": 0.31758196623129575,
+     "ratio_ours_identical_over": null,
      "rounds": 1,
      "rows": null,
      "rows_tag": "full",
@@ -323060,7 +323552,7 @@
    },
    "identical_page": {
     "family": "classical2",
-    "status": "ok"
+    "status": "stale: latest IDENTICAL sweep error"
    }
   },
   "classical2/tsvd/taxi/rows=full": {
@@ -337776,7 +338268,7 @@
   }
  },
  "schema": "mojolearn-bench-board/1",
- "updated": "2026-10-05T08:38:43Z",
+ "updated": "2026-10-05T12:36:10Z",
  "extra_races": {
   "trees/gbdt-depthwise/taxi/page": {
    "id": "trees/gbdt-depthwise/taxi/page",
@@ -338664,8 +339156,8 @@
       "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
       "display_rounded": true
      },
-     "ratio_ours_identical_over": null,
-     "ratio_ours_fast_over": null
+     "ratio_ours_identical_over": 0.398249730296448,
+     "ratio_ours_fast_over": 0.39556168271415143
     },
     {
      "arm": "ours",
@@ -338677,32 +339169,41 @@
      "dataset": "text",
      "family": "algos",
      "status": "ok",
-     "median_ms": 127744.0,
+     "median_ms": 127972.77183400001,
      "quality": {
-      "recall_at_10": 0.548738
+      "recall_at_10": 0.5487382541038487
      },
      "ratio_ours_identical_over": null,
      "ratio_ours_fast_over": null,
-     "min_ms": 127744.0,
-     "max_ms": 127744.0,
+     "min_ms": 127972.77183400001,
+     "max_ms": 127972.77183400001,
      "times_ms": [
-      127744.0
+      127972.77183400001
      ],
      "rounds": 1,
-     "quality_text": "recall_at_10=0.548738",
-     "hash": null,
+     "hash": "9b1794ba947a3406",
      "source": {
-      "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
-      "kind": "refresh",
-      "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
-      "synced": "2026-10-04",
-      "previous_median_ms": null,
-      "previous_quality": {},
-      "previous_status": "no IDENTICAL cell",
+      "sweep": "race-idn5-als-text",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T05:55:16Z",
+      "previous_median_ms": 127744.0,
       "previous_hash": null,
-      "baseline_ms": null,
-      "baseline_quality_text": "-",
-      "display_rounded": true
+      "previous_status": "ok",
+      "history": [
+       {
+        "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
+        "kind": "refresh",
+        "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
+        "synced": "2026-10-04",
+        "previous_median_ms": null,
+        "previous_quality": {},
+        "previous_status": "no IDENTICAL cell",
+        "previous_hash": null,
+        "baseline_ms": null,
+        "baseline_quality_text": "-",
+        "display_rounded": true
+       }
+      ]
      }
     }
    ],
@@ -339443,8 +339944,8 @@
       "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
       "display_rounded": true
      },
-     "ratio_ours_identical_over": null,
-     "ratio_ours_fast_over": null
+     "ratio_ours_identical_over": 0.14810265835724368,
+     "ratio_ours_fast_over": 0.18031674208144796
     },
     {
      "arm": "ours",
@@ -339456,34 +339957,43 @@
      "dataset": "taxi",
      "family": "algos",
      "status": "ok",
-     "median_ms": 77.7,
+     "median_ms": 65.4613749939017,
      "quality": {
-      "finite": 1.0,
-      "r2": 0.0357566,
-      "rmse": 15.6398
+      "finite": true,
+      "r2": 0.03575657622847417,
+      "rmse": 15.639761779788202
      },
      "ratio_ours_identical_over": null,
      "ratio_ours_fast_over": null,
-     "min_ms": 77.7,
-     "max_ms": 77.7,
+     "min_ms": 65.4613749939017,
+     "max_ms": 65.4613749939017,
      "times_ms": [
-      77.7
+      65.4613749939017
      ],
      "rounds": 1,
-     "quality_text": "finite=1, r2=0.0357566, rmse=15.6398",
-     "hash": null,
+     "hash": "95ab86d445ea60da",
      "source": {
-      "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
-      "kind": "refresh",
-      "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
-      "synced": "2026-10-04",
-      "previous_median_ms": null,
-      "previous_quality": {},
-      "previous_status": "no IDENTICAL cell",
+      "sweep": "race-idn5-poisson-taxi",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T08:04:18Z",
+      "previous_median_ms": 77.7,
       "previous_hash": null,
-      "baseline_ms": null,
-      "baseline_quality_text": "-",
-      "display_rounded": true
+      "previous_status": "ok",
+      "history": [
+       {
+        "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
+        "kind": "refresh",
+        "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
+        "synced": "2026-10-04",
+        "previous_median_ms": null,
+        "previous_quality": {},
+        "previous_status": "no IDENTICAL cell",
+        "previous_hash": null,
+        "baseline_ms": null,
+        "baseline_quality_text": "-",
+        "display_rounded": true
+       }
+      ]
      }
     }
    ],
@@ -339813,8 +340323,8 @@
       "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
       "display_rounded": true
      },
-     "ratio_ours_identical_over": null,
-     "ratio_ours_fast_over": null
+     "ratio_ours_identical_over": 0.08472835424135218,
+     "ratio_ours_fast_over": 0.14684684684684685
     },
     {
      "arm": "ours",
@@ -339826,34 +340336,43 @@
      "dataset": "taxi",
      "family": "algos",
      "status": "ok",
-     "median_ms": 45.1,
+     "median_ms": 28.214541962370276,
      "quality": {
-      "finite": 1.0,
-      "r2": -10.0744,
-      "rmse": 53.0026
+      "finite": true,
+      "r2": -10.07440598319966,
+      "rmse": 53.002580118218106
      },
      "ratio_ours_identical_over": null,
      "ratio_ours_fast_over": null,
-     "min_ms": 45.1,
-     "max_ms": 45.1,
+     "min_ms": 28.214541962370276,
+     "max_ms": 28.214541962370276,
      "times_ms": [
-      45.1
+      28.214541962370276
      ],
      "rounds": 1,
-     "quality_text": "finite=1, r2=-10.0744, rmse=53.0026",
-     "hash": null,
+     "hash": "05f991a27ccc1c2a",
      "source": {
-      "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
-      "kind": "refresh",
-      "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
-      "synced": "2026-10-04",
-      "previous_median_ms": null,
-      "previous_quality": {},
-      "previous_status": "no IDENTICAL cell",
+      "sweep": "race-idn5-tweedie-taxi",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T08:14:58Z",
+      "previous_median_ms": 45.1,
       "previous_hash": null,
-      "baseline_ms": null,
-      "baseline_quality_text": "-",
-      "display_rounded": true
+      "previous_status": "ok",
+      "history": [
+       {
+        "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
+        "kind": "refresh",
+        "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
+        "synced": "2026-10-04",
+        "previous_median_ms": null,
+        "previous_quality": {},
+        "previous_status": "no IDENTICAL cell",
+        "previous_hash": null,
+        "baseline_ms": null,
+        "baseline_quality_text": "-",
+        "display_rounded": true
+       }
+      ]
      }
     }
    ],
@@ -340020,8 +340539,8 @@
       "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
       "display_rounded": true
      },
-     "ratio_ours_identical_over": null,
-     "ratio_ours_fast_over": null
+     "ratio_ours_identical_over": 0.10512731387279928,
+     "ratio_ours_fast_over": 0.1325
     },
     {
      "arm": "ours",
@@ -340033,34 +340552,43 @@
      "dataset": "taxi",
      "family": "algos",
      "status": "ok",
-     "median_ms": 52.7,
+     "median_ms": 37.84583299420774,
      "quality": {
-      "finite": 1.0,
-      "r2": -231.912,
-      "rmse": 243.071
+      "finite": true,
+      "r2": -231.91180551880032,
+      "rmse": 243.07066096204156
      },
      "ratio_ours_identical_over": null,
      "ratio_ours_fast_over": null,
-     "min_ms": 52.7,
-     "max_ms": 52.7,
+     "min_ms": 37.84583299420774,
+     "max_ms": 37.84583299420774,
      "times_ms": [
-      52.7
+      37.84583299420774
      ],
      "rounds": 1,
-     "quality_text": "finite=1, r2=-231.912, rmse=243.071",
-     "hash": null,
+     "hash": "139ca0c7d4da8812",
      "source": {
-      "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
-      "kind": "refresh",
-      "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
-      "synced": "2026-10-04",
-      "previous_median_ms": null,
-      "previous_quality": {},
-      "previous_status": "no IDENTICAL cell",
+      "sweep": "race-idn5-gamma-taxi",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T06:58:40Z",
+      "previous_median_ms": 52.7,
       "previous_hash": null,
-      "baseline_ms": null,
-      "baseline_quality_text": "-",
-      "display_rounded": true
+      "previous_status": "ok",
+      "history": [
+       {
+        "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
+        "kind": "refresh",
+        "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
+        "synced": "2026-10-04",
+        "previous_median_ms": null,
+        "previous_quality": {},
+        "previous_status": "no IDENTICAL cell",
+        "previous_hash": null,
+        "baseline_ms": null,
+        "baseline_quality_text": "-",
+        "display_rounded": true
+       }
+      ]
      }
     }
    ],
@@ -340386,8 +340914,8 @@
       "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
       "display_rounded": true
      },
-     "ratio_ours_identical_over": null,
-     "ratio_ours_fast_over": null
+     "ratio_ours_identical_over": 0.023904235518368996,
+     "ratio_ours_fast_over": 0.01964159524542934
     },
     {
      "arm": "ours",
@@ -340399,34 +340927,43 @@
      "dataset": "istella",
      "family": "algos",
      "status": "ok",
-     "median_ms": 2624.0,
+     "median_ms": 2638.501708046533,
      "quality": {
-      "finite": 1.0,
-      "r2": 0.243602,
-      "rmse": 0.7265
+      "finite": true,
+      "r2": 0.2436017933903647,
+      "rmse": 0.7265000908068041
      },
      "ratio_ours_identical_over": null,
      "ratio_ours_fast_over": null,
-     "min_ms": 2624.0,
-     "max_ms": 2624.0,
+     "min_ms": 2638.501708046533,
+     "max_ms": 2638.501708046533,
      "times_ms": [
-      2624.0
+      2638.501708046533
      ],
      "rounds": 1,
-     "quality_text": "finite=1, r2=0.243602, rmse=0.7265",
-     "hash": null,
+     "hash": "c025f9358049c2ff",
      "source": {
-      "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
-      "kind": "refresh",
-      "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
-      "synced": "2026-10-04",
-      "previous_median_ms": null,
-      "previous_quality": {},
-      "previous_status": "no IDENTICAL cell",
+      "sweep": "race-idn5-poisson-istella",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T08:04:17Z",
+      "previous_median_ms": 2624.0,
       "previous_hash": null,
-      "baseline_ms": null,
-      "baseline_quality_text": "-",
-      "display_rounded": true
+      "previous_status": "ok",
+      "history": [
+       {
+        "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
+        "kind": "refresh",
+        "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
+        "synced": "2026-10-04",
+        "previous_median_ms": null,
+        "previous_quality": {},
+        "previous_status": "no IDENTICAL cell",
+        "previous_hash": null,
+        "baseline_ms": null,
+        "baseline_quality_text": "-",
+        "display_rounded": true
+       }
+      ]
      }
     }
    ],
@@ -340510,8 +341047,8 @@
       "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
       "display_rounded": true
      },
-     "ratio_ours_identical_over": null,
-     "ratio_ours_fast_over": null
+     "ratio_ours_identical_over": 0.0174241355036397,
+     "ratio_ours_fast_over": 0.014388022041225254
     },
     {
      "arm": "ours",
@@ -340523,34 +341060,43 @@
      "dataset": "istella",
      "family": "algos",
      "status": "ok",
-     "median_ms": 1889.0,
+     "median_ms": 1878.2869590213522,
      "quality": {
-      "finite": 1.0,
-      "r2": 0.218164,
-      "rmse": 0.738615
+      "finite": true,
+      "r2": 0.21816433760877363,
+      "rmse": 0.7386150725451194
      },
      "ratio_ours_identical_over": null,
      "ratio_ours_fast_over": null,
-     "min_ms": 1889.0,
-     "max_ms": 1889.0,
+     "min_ms": 1878.2869590213522,
+     "max_ms": 1878.2869590213522,
      "times_ms": [
-      1889.0
+      1878.2869590213522
      ],
      "rounds": 1,
-     "quality_text": "finite=1, r2=0.218164, rmse=0.738615",
-     "hash": null,
+     "hash": "39ef58c0cc7069fc",
      "source": {
-      "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
-      "kind": "refresh",
-      "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
-      "synced": "2026-10-04",
-      "previous_median_ms": null,
-      "previous_quality": {},
-      "previous_status": "no IDENTICAL cell",
+      "sweep": "race-idn5-gamma-istella",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T06:58:39Z",
+      "previous_median_ms": 1889.0,
       "previous_hash": null,
-      "baseline_ms": null,
-      "baseline_quality_text": "-",
-      "display_rounded": true
+      "previous_status": "ok",
+      "history": [
+       {
+        "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
+        "kind": "refresh",
+        "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
+        "synced": "2026-10-04",
+        "previous_median_ms": null,
+        "previous_quality": {},
+        "previous_status": "no IDENTICAL cell",
+        "previous_hash": null,
+        "baseline_ms": null,
+        "baseline_quality_text": "-",
+        "display_rounded": true
+       }
+      ]
      }
     }
    ],
@@ -340634,8 +341180,8 @@
       "from": "docs/apple-fast/BOARD_M3_FAST.md (hand-made page, 2026-10-04)",
       "display_rounded": true
      },
-     "ratio_ours_identical_over": null,
-     "ratio_ours_fast_over": null
+     "ratio_ours_identical_over": 0.017268685021308575,
+     "ratio_ours_fast_over": 0.01423314012328641
     },
     {
      "arm": "ours",
@@ -340647,34 +341193,43 @@
      "dataset": "istella",
      "family": "algos",
      "status": "ok",
-     "median_ms": 1886.0,
+     "median_ms": 1876.933374966029,
      "quality": {
-      "finite": 1.0,
-      "r2": -24.4125,
-      "rmse": 4.21099
+      "finite": true,
+      "r2": -24.412547187251317,
+      "rmse": 4.210993070050399
      },
      "ratio_ours_identical_over": null,
      "ratio_ours_fast_over": null,
-     "min_ms": 1886.0,
-     "max_ms": 1886.0,
+     "min_ms": 1876.933374966029,
+     "max_ms": 1876.933374966029,
      "times_ms": [
-      1886.0
+      1876.933374966029
      ],
      "rounds": 1,
-     "quality_text": "finite=1, r2=-24.4125, rmse=4.21099",
-     "hash": null,
+     "hash": "5de7a6bd6674a53d",
      "source": {
-      "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
-      "kind": "refresh",
-      "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
-      "synced": "2026-10-04",
-      "previous_median_ms": null,
-      "previous_quality": {},
-      "previous_status": "no IDENTICAL cell",
+      "sweep": "race-idn5-tweedie-istella",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T08:14:57Z",
+      "previous_median_ms": 1886.0,
       "previous_hash": null,
-      "baseline_ms": null,
-      "baseline_quality_text": "-",
-      "display_rounded": true
+      "previous_status": "ok",
+      "history": [
+       {
+        "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
+        "kind": "refresh",
+        "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
+        "synced": "2026-10-04",
+        "previous_median_ms": null,
+        "previous_quality": {},
+        "previous_status": "no IDENTICAL cell",
+        "previous_hash": null,
+        "baseline_ms": null,
+        "baseline_quality_text": "-",
+        "display_rounded": true
+       }
+      ]
      }
     }
    ],
@@ -340879,34 +341434,43 @@
      "dataset": "istella",
      "family": "algos",
      "status": "ok",
-     "median_ms": 806.0,
+     "median_ms": 859.4587920233607,
      "quality": {
-      "finite": 1.0,
-      "r2": -0.0399981,
-      "rmse": 0.851877
+      "finite": true,
+      "r2": -0.039998076791553316,
+      "rmse": 0.8518766135259177
      },
      "ratio_ours_identical_over": null,
      "ratio_ours_fast_over": null,
-     "min_ms": 806.0,
-     "max_ms": 806.0,
+     "min_ms": 859.4587920233607,
+     "max_ms": 859.4587920233607,
      "times_ms": [
-      806.0
+      859.4587920233607
      ],
      "rounds": 1,
-     "quality_text": "finite=1, r2=-0.0399981, rmse=0.851877",
-     "hash": null,
+     "hash": "f389b08052ec3241",
      "source": {
-      "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
-      "kind": "refresh",
-      "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
-      "synced": "2026-10-04",
-      "previous_median_ms": null,
-      "previous_quality": {},
-      "previous_status": "no IDENTICAL cell",
+      "sweep": "race-idn5-quantile-istella",
+      "head": "af93ebe0a",
+      "finished": "2026-10-05T08:04:52Z",
+      "previous_median_ms": 806.0,
       "previous_hash": null,
-      "baseline_ms": null,
-      "baseline_quality_text": "-",
-      "display_rounded": true
+      "previous_status": "ok",
+      "history": [
+       {
+        "tag": "M3 IDENTICAL refresh (tools/af_board_merge.py runs listed on the page)",
+        "kind": "refresh",
+        "from": "docs/apple-fast/BOARD_M3_IDENTICAL.md (hand-made page, 2026-10-04)",
+        "synced": "2026-10-04",
+        "previous_median_ms": null,
+        "previous_quality": {},
+        "previous_status": "no IDENTICAL cell",
+        "previous_hash": null,
+        "baseline_ms": null,
+        "baseline_quality_text": "-",
+        "display_rounded": true
+       }
+      ]
      }
     }
    ],

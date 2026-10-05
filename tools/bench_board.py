@@ -2580,7 +2580,10 @@ QUALITY_NOTE = {
 
 
 def render_board(result):
-    result = strip_our_cpu(copy.deepcopy(result))
+    result = copy.deepcopy(result)
+    # Historical page-only races are measurements too; include them in the main board.
+    result.setdefault("races", {}).update(result.get("extra_races") or {})
+    result = strip_our_cpu(result)
     box = result.get("box") or {}
     cfg = result.get("config") or {}
     gpu = box.get("gpu") or {}
@@ -2737,7 +2740,7 @@ def render_board(result):
                     rr["lane"], rr["dataset"], _f(rr.get("shape") or "full"), _f(shape)))
             else:
                 L.append("### %s / %s (rows %s, shape %s)" % (rr["lane"], rr["dataset"],
-                                                             rows_tag(rr["rows"]), _f(shape)))
+                                                             rows_tag(rr["rows"]) if "rows" in rr else "unrecorded", _f(shape)))
             L.append("")
             rh = rr.get("host") or {"hostname": (box.get("host") or {}).get("hostname")}
             L.append("race: %s, driver rc %s, log `%s`, ran on %s%s" % (
