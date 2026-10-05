@@ -2253,23 +2253,6 @@ class NMF(_Base):
 
 
 # ================================================================ FastICA
-def _sym_decorrelation(k, W):
-    """sklearn `_fastica.py::_sym_decorrelation`: (W W^T)^(-1/2) W through
-    eigh, eigenvalues clipped at float32 tiny AND at float32 eps times the
-    largest one. sklearn clips at tiny alone; in float32 an eigenvalue below
-    eps * max is rounding noise of the eigh, and 1 / sqrt(tiny) = 9.2e18
-    turns that noise into a W whose next cube overflows to inf - inf = NaN
-    (a fit on duplicated / constant / zero columns: two null directions of
-    the whitened data, the identity reference's `dupes` fixture). The
-    relative floor bounds the gain at 1 / sqrt(eps); a W W^T with no
-    eigenvalue under eps * max is untouched. The floor is a host scalar from
-    the largest eigenvalue (eigh's last, ascending), times 2^-23: exact."""
-    w, u = k.eigh(k.mm(W, W, tb=True))
-    w = k.ew("maxs", w, s=max(1.1754943508222875e-38, float(w.s[w.c - 1]) * _F32_EPS))
-    ui = k.ew("mul", u, k.ew("recip", k.ew("sqrt", w)))
-    return k.mm(k.mm(ui, u, tb=True), W)
-
-
 class FastICA(_Base):
     """sklearn.decomposition.FastICA (reference: scikit-learn
     `decomposition/_fastica.py`: `_fit_transform`, `_ica_par`, `_ica_def`,
@@ -2290,69 +2273,24 @@ class FastICA(_Base):
         self.fun_args, self.max_iter, self.tol, self.w_init = fun_args, max_iter, tol, w_init
         self.whiten_solver, self.random_state, self.numeric_mode = whiten_solver, random_state, numeric_mode
 
-    def _g(self, k, Y):
+    def _solve(self, k, X1, Winit):
+        """`_par` (with `_sym_decorrelation`) or `_def` in ONE binding call
+        (lane py-runtime-b: x_decomp/ica.mojo on the host column,
+        x_decomp/ica_dev.mojo on resident device matrices): the same cells,
+        broadcast modes and float32 scalars as the Python loops it replaces,
+        their float64 limits and norms in the same order. Returns (W, it)."""
+        alpha = 1.0
         if self.fun == "logcosh":
             alpha = (self.fun_args or {}).get("alpha", 1.0)
             if not 1 <= alpha <= 2:
                 raise ValueError("alpha must be in [1,2]")
-            gx = k.ew("tanh", k.ew("scale", Y, s=alpha))
-            gp = k.ew("scale", k.ew("onemsq", gx), s=alpha)
-        elif self.fun == "exp":
-            gx, gp = k.ew("expg", Y), k.ew("expgp", Y)
-        elif self.fun == "cube":
-            gx, gp = k.ew("cube", Y), k.ew("cubep", Y)
-        else:
+        elif self.fun not in ("exp", "cube"):
             raise ValueError("fun must be 'logcosh', 'exp' or 'cube' (a callable is not carried)")
-        return gx, k.ew("scale", k.rowsum(gp), s=1.0 / Y.c)
-
-    def _par(self, k, X1, W):
-        W = _sym_decorrelation(k, W)
-        p = X1.c
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            gx, gp = self._g(k, k.mm(W, X1))
-            W1 = _sym_decorrelation(k, k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p),
-                                            k.ew("mul", W, gp)))
-            dots = k.rowsum(k.ew("mul", W1, W))
-            # lane fix-d1-decomp: one word down; lane cpu2-l8-decomp: in every
-            # mode (the select reduction of x_decomp/select_*.mojo)
-            lim = k.word(k.reduce(k.ew("adds", k.ew("abs", dots), s=-1.0), k._SEL_MAXABS))
-            W = W1
-            if lim < self.tol:
-                break
+        fun = {"logcosh": 0, "exp": 1, "cube": 2}[self.fun]
+        W = Winit.copy()
+        p = [W.r, X1.r, X1.c, 0 if self.algorithm == "parallel" else 1, fun, int(self.max_iter)]
+        it = int(k.b.x_decomp_ica_solve(X1.addr, W.addr, p, [float(alpha), float(self.tol)]))
         return W, it
-
-    def _def(self, k, X1, Winit):
-        # lane cpu2-l8-decomp (re-audit L8, FastICA `_vstack`): the unmixing
-        # rows found so far live in ONE matrix where the kit keeps it (the
-        # device for a GPU kit), row j written in place once it converges;
-        # Wp is a view of its first j rows: the same values as the host stack
-        # of the downloaded rows, with no download
-        nc = Winit.r
-        p = X1.c
-        Wall = k.copy(Winit)
-        its = []
-        for j in range(nc):
-            w = Winit.rows(j, j + 1)
-            Wp = Wall.rows(0, j) if j else None
-            if j:
-                w = k.ew("sub", w, k.mm(k.mm(w, Wp, tb=True), Wp))
-            w = k.ew("scale", w, s=1.0 / _norm(k, w) if _norm(k, w) else 0.0)
-            it = 0
-            for it in range(1, self.max_iter + 1):
-                gx, gp = self._g(k, k.mm(w, X1))
-                w1 = k.ew("sub", k.ew("scale", k.mm(gx, X1, tb=True), s=1.0 / p), k.ew("mul", w, gp))
-                if j:
-                    w1 = k.ew("sub", w1, k.mm(k.mm(w1, Wp, tb=True), Wp))
-                nw = _norm(k, w1)
-                w1 = k.ew("scale", w1, s=1.0 / nw if nw else 0.0)
-                lim = abs(abs(k.total(k.ew("mul", w1, w)).s[0]) - 1)
-                w = w1
-                if lim < self.tol:
-                    break
-            its.append(it)
-            k.place_rows(Wall, w, j)
-        return Wall, max(its)  # glue: the largest of nc iteration counts
 
     def fit_transform(self, X, y=None):
         return self._fit(X, True).out()
@@ -2398,7 +2336,7 @@ class FastICA(_Base):
             Winit = _M.from_input(self.w_init, "w_init")
             if (Winit.r, Winit.c) != (nc, nc):
                 raise ValueError(f"w_init has invalid shape -- should be {(nc, nc)}")
-        W, it = (self._par if self.algorithm == "parallel" else self._def)(k, X1, Winit)
+        W, it = self._solve(k, X1, Winit)
         self.n_iter_ = it
         S = None
         if whiten:

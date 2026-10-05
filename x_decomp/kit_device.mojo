@@ -68,7 +68,7 @@ from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
 from x_decomp.moves import MOVE_TRANSPOSE
 from x_decomp.moves_device import launch_move
-from x_decomp.select_dev import order_small_kernel
+from x_decomp.select_dev import enqueue_sel_reduce, order_small_kernel
 from x_decomp.select_ops import SEL_ORDER_MAX
 
 #: `_expansion_decomp._F64_EPS`, the `adds` of LDA's `norm_phi`
@@ -459,6 +459,26 @@ struct DKit(Movable):
             return out^
         launch_ew(self.ctx, op, A.p(), B.p(), bm, C.p(), cm, out.p(), A.n(), A.c, Float32(s))
         return out^
+
+    def reduce(self, A: DMat, op: Int) raises -> DMat:
+        """`_Kit.reduce` on the device (x_decomp/select_dev.mojo)."""
+        if A.n() == 0:
+            raise Error("x_decomp: reduce of an empty matrix")
+        var out = DMat(1, 1)
+        enqueue_sel_reduce(A.p(), A.n(), op, out.p())
+        return out^
+
+    def place_row(self, D: DMat, V: DMat, row: Int) raises:
+        """`_Kit.place_rows(D, V, row)`: V's words into D from row `row`."""
+        if V.n() == 0:
+            return
+        var view = DMat(rows_of=D, row0=row, rows=V.n() // D.c)
+        self.ctx.enqueue_copy(dst_buf=self._sub(view), src_buf=self._sub(V))
+
+    def rows(self, D: DMat, a: Int, b: Int) raises -> DMat:
+        """`_M.rows(a, b)` as an exact device copy."""
+        var view = DMat(rows_of=D, row0=a, rows=b - a)
+        return self.copy(view)
 
     def word(mut self, A: DMat) raises -> Float64:
         """`A.s[0]` as Python reads it: one word home (a sync)."""

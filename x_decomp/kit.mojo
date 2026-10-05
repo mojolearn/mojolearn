@@ -12,7 +12,7 @@ bits (every x-decomp lane's GPU == CPU claim)."""
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.moves import MOVE_TRANSPOSE, move_src
-from x_decomp.select_ops import SEL_ORDER_MAX, order_rank
+from x_decomp.select_ops import SEL_ORDER_MAX, order_rank, sel_fold
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -35,6 +35,12 @@ comptime OP_SQDIFF = 21
 comptime OP_GTS = 23
 comptime OP_SELECT = 35
 comptime OP_MUZ = 36
+comptime OP_TANH = 11
+comptime OP_ONEMSQ = 12
+comptime OP_EXPG = 25
+comptime OP_EXPGP = 26
+comptime OP_CUBE = 27
+comptime OP_CUBEP = 28
 
 
 struct Mat(Copyable, Movable):
@@ -173,6 +179,21 @@ struct Kit[E: Exec](Movable):
             return out^
         Self.E.ew(op, A.p(), B.p(), B.n(), bm, C.p(), C.n(), cm, out.p(), A.n(), A.c, Float32(s))
         return out^
+
+    def reduce(self, A: Mat, op: Int) raises -> Mat:
+        """`_Kit.reduce`: max |A| (0), max (1) or min (2) as 1 x 1."""
+        if A.n() == 0:
+            raise Error("x_decomp: reduce of an empty matrix")
+        var out = Mat(1, 1)
+        out.d[0] = sel_fold(op, A.p(), 0, A.n())
+        return out^
+
+    @staticmethod
+    def place_row(mut D: Mat, V: Mat, row: Int):
+        """`_Kit.place_rows(D, V, row)`: V's rows copied into D from `row`."""
+        var off = row * D.c
+        for i in range(V.n()):
+            D.d[off + i] = V.d[i]
 
     def word(self, A: Mat) -> Float64:
         """`A.s[0]` as Python reads it (the float32 word, exactly)."""
