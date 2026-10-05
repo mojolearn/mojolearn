@@ -111,6 +111,7 @@ from checks.soft_f64 import (
 )
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_device, center_device, scale_rows_device
+from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 
 
@@ -622,6 +623,43 @@ def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: Py
         var ctx = process_ctx[_DEVCTX_SLOT]()
         col_sums_device(ctx, xa, oa, nr, nc)
     return PythonObject(0)
+
+
+def lm_means_finish_binding(
+    sums_addr: PythonObject, mean64_addr: PythonObject, mean32_addr: PythonObject,
+    params: PythonObject, total: PythonObject,
+) raises -> PythonObject:
+    """Lane py-runtime: the column means from `lm_col_sums`' exact float64
+    sums (glm/impl/lm_finish.mojo; it was Python's `_column_means_f64`,
+    `_column_means` and `_vector_mean`). params: cols, rows, weighted (1:
+    mean * rows / total, cuML's weighted mean). Writes the binary64 means
+    and their float32 roundings. Returns 0."""
+    if len(params) != 3:
+        raise Error("lm_means_finish: params must contain cols, rows, weighted")
+    var nc = Int(py=params[0])
+    var nr = Int(py=params[1])
+    var weighted = Int(py=params[2]) != 0
+    var t = Float64(py=total)
+    if nc <= 0:
+        return PythonObject(0)
+    lm_means_finish(_f64_ptr(Int(py=sums_addr)), _f64_ptr(Int(py=mean64_addr)), _f32_ptr(Int(py=mean32_addr)),
+                    nc, nr, weighted, t)
+    return PythonObject(0)
+
+
+def lm_intercept_binding(
+    xmean_addr: PythonObject, coef_addr: PythonObject, params: PythonObject, y_mean: PythonObject,
+) raises -> PythonObject:
+    """Lane py-runtime: y_mean - math.fsum(xmean_j * coef_j) over float32
+    xmean and coef (glm/impl/lm_finish.mojo; it was Python's
+    `_set_intercept`). params: cols. Returns the binary64 intercept."""
+    if len(params) != 1:
+        raise Error("lm_intercept: params must contain cols")
+    var nc = Int(py=params[0])
+    var ym = Float64(py=y_mean)
+    if nc <= 0:
+        return PythonObject(ym - 0.0)
+    return PythonObject(lm_intercept(_f32_ptr(Int(py=xmean_addr)), _f32_ptr(Int(py=coef_addr)), nc, ym))
 
 
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1407,6 +1445,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[ols_fit_resident_binding]("ols_fit_resident")
         m.def_function[ols_normal_eq_default_binding]("ols_normal_eq_default")
         m.def_function[lm_col_sums_binding]("lm_col_sums")
+        m.def_function[lm_means_finish_binding]("lm_means_finish")
+        m.def_function[lm_intercept_binding]("lm_intercept")
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[ols_predict_binding]("ols_predict")

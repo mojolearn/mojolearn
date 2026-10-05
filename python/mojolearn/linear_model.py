@@ -270,23 +270,33 @@ def _col_sums(b, x, rows, cols):
     """The column sums of a C-contiguous float32 `[rows, cols]` buffer: each
     the EXACT sum rounded once to float64 (round to nearest even), so the
     blocked device fold and the host pass agree on every vendor
-    (glm/impl/center_items.mojo). Returns a Python list of `cols` floats."""
+    (glm/impl/center_items.mojo). Returns a float64 `Array` of `cols`."""
     out = empty((cols,), "<f8")
     b.lm_col_sums(addr_ro(x, name="X"), addr(out, name="column sums"),
                   [int(rows), int(cols)])
-    return out.tolist()
+    return out
 
 
-def _column_means_f64(b, x, rows, cols):
-    """Per-column float64 means: `_col_sums` divided by `rows` (one binary64
-    division). A 1-D vector is a `[rows, 1]` matrix here."""
-    return [v / rows for v in _col_sums(b, x, rows, cols)]
+def _means(b, x, rows, cols, total=None):
+    """(float64 means, float32 means) of the columns of a `[rows, cols]`
+    buffer, as two `Array`s: `_col_sums` finished in Mojo
+    (`lm_means_finish`, glm/impl/lm_finish.mojo): sum / rows (one binary64
+    division), and with a `total` then `* rows / total`; the float32 means
+    are one round-to-nearest-even of the float64 ones. A 1-D vector is a
+    `[rows, 1]` matrix here."""
+    sums = _col_sums(b, x, rows, cols)
+    m64, m32 = empty((cols,), "<f8"), empty((cols,), "<f4")
+    b.lm_means_finish(addr(sums, name="column sums"), addr(m64, name="means"),
+                      addr(m32, name="float32 means"),
+                      [int(cols), int(rows), 0 if total is None else 1],
+                      0.0 if total is None else float(total))
+    return m64, m32
 
 
 def _weight_total(b, weights):
     """`sum(w)`: the exact sum rounded once to float64 (`_col_sums` over a
     `[rows, 1]` view)."""
-    total = _col_sums(b, weights, weights.shape[0], 1)[0]
+    total = float(_col_sums(b, weights, weights.shape[0], 1)[0])
     if total <= 0.0:
         raise ValueError(
             "mojolearn: sample_weight sums to zero, so the weighted mean "
@@ -297,39 +307,48 @@ def _weight_total(b, weights):
 
 def _column_means(b, x, weights):
     """Column means in float64, narrowed to float32 -- weighted when
-    `weights` is not None. Returns a Python list of float32-valued floats.
+    `weights` is not None. Returns a float32 `Array`.
 
-    Unweighted: `_column_means_f64`. Weighted it is cuML's
+    Unweighted: `_means`. Weighted it is cuML's
     `raft::stats::weightedMean`, `sum_i w_i x_ij / sum_i w_i`, in THIS
     ORDER: (1) `wx_ij = fl32(x_ij * w_i)` (`lm_scale_rows`); (2) the
     column means of `wx`; (3) `mean_j * rows / total` in float64, `total`
-    the weights' `_weight_total`; (4) one narrowing to float32. Theirs
-    divides by the SUM OF THE WEIGHTS and not by the row count, so a
-    uniform weight of 2 leaves the mean unchanged.
+    the weights' `_weight_total`; (4) one narrowing to float32 (steps 2-4
+    are `lm_means_finish`). Theirs divides by the SUM OF THE WEIGHTS and
+    not by the row count, so a uniform weight of 2 leaves the mean
+    unchanged.
     """
     rows, cols = x.shape
     if weights is None:
-        mu = _column_means_f64(b, x, rows, cols)
-    else:
-        total = _weight_total(b, weights)
-        wx = _helper_output(x.shape, rows * cols)
-        b.lm_scale_rows(addr_ro(x, name="X"), addr_ro(weights, name="sample_weight"),
-                        addr(wx, name="weighted X"), [int(rows), int(cols)])
-        mu = [m * rows / total for m in _column_means_f64(b, wx, rows, cols)]
-    return [_round_f32(m) for m in mu]
+        return _means(b, x, rows, cols)[1]
+    total = _weight_total(b, weights)
+    wx = _helper_output(x.shape, rows * cols)
+    b.lm_scale_rows(addr_ro(x, name="X"), addr_ro(weights, name="sample_weight"),
+                    addr(wx, name="weighted X"), [int(rows), int(cols)])
+    return _means(b, wx, rows, cols, total)[1]
 
 
 def _vector_mean(b, v, weights):
-    """The scalar float64 mean of the target, weighted when `weights` is
-    not None: the 1-D half of `_column_means`."""
+    """(float64 mean, float32 mean `Array` of one) of the target, weighted
+    when `weights` is not None: the 1-D half of `_column_means`."""
     n = v.shape[0]
     if weights is None:
-        return _column_means_f64(b, v, n, 1)[0]
-    total = _weight_total(b, weights)
-    wy = _helper_output(v.shape, n)
-    b.lm_scale_rows(addr_ro(v, name="y"), addr_ro(weights, name="sample_weight"),
-                    addr(wy, name="weighted y"), [int(n), 1])
-    return _column_means_f64(b, wy, n, 1)[0] * n / total
+        m64, m32 = _means(b, v, n, 1)
+    else:
+        total = _weight_total(b, weights)
+        wy = _helper_output(v.shape, n)
+        b.lm_scale_rows(addr_ro(v, name="y"), addr_ro(weights, name="sample_weight"),
+                        addr(wy, name="weighted y"), [int(n), 1])
+        m64, m32 = _means(b, wy, n, 1, total)
+    return float(m64[0]), m32
+
+
+def _intercept(b, x_mean, coef, cols, y_mean):
+    """`y_mean - math.fsum(x_mean_j * coef_j)` (binary64 products of the
+    float32 words, exactly summed and rounded once) in Mojo
+    (`lm_intercept`, glm/impl/lm_finish.mojo)."""
+    return float(b.lm_intercept(addr_ro(x_mean, name="x mean"), addr_ro(coef, name="coef_"),
+                                [int(cols)], float(y_mean)))
 
 
 def _dims(x):
@@ -353,9 +372,9 @@ def _center(b, x, mu32):
     """`x - mu` in float32 per column (`lm_center`): one binary32
     subtraction per cell, operands and result flushed to signed zero when
     subnormal; `x` is `[rows, cols]` or a vector with `cols == 1`, `mu32` a
-    list of `cols` float32-valued floats."""
+    float32 `Array` of `cols` means."""
     rows, cols = _dims(x)
-    mean = Array.from_list([float(m) for m in mu32], "<f4")
+    mean = mu32
     out = _helper_output(x.shape, rows * cols)
     b.lm_center(addr_ro(x, name="X"), addr_ro(mean, name="column means"),
                 addr(out, name="centered X"), [int(rows), int(cols)])
@@ -363,8 +382,9 @@ def _center(b, x, mu32):
 
 
 def _shift(b, v, mu32):
-    """The 1-D `_center`: `fl32(v_i - mu)`, `mu` already a float32 value."""
-    return _center(b, v, [mu32])
+    """The 1-D `_center`: `fl32(v_i - mu)`, `mu32` the float32 mean as a
+    one-element `Array` (`_vector_mean`'s second result)."""
+    return _center(b, v, mu32)
 
 
 def _sqrt_weights(b, weights):
@@ -672,13 +692,14 @@ class LinearRegression(NumericModeMixin):
             # coefficient enough to notice.
             b = self._bind("_mojolearn_estimators")
             mu32 = _column_means(b, x, weights)
-            self._x_mean = Array.from_list(mu32, "<f4")
-            self._y_mean = _vector_mean(b, target, weights)
+            self._x_mean = mu32
+            self._y_mean, y32 = _vector_mean(b, target, weights)
             # NumPy narrowed the Python-float y mean to float32 BEFORE the
             # float32 subtract (value-based / weak-scalar casting); the
-            # same order here so the centered bits are the same bits.
+            # same order here (`lm_means_finish`' float32 mean) so the
+            # centered bits are the same bits.
             work_x = _center(b, x, mu32)
-            work_y = _shift(b, target, _round_f32(self._y_mean))
+            work_y = _shift(b, target, y32)
         else:
             work_x, work_y = x, target
             self._x_mean = zeros((cols,), "<f4")
@@ -708,11 +729,8 @@ class LinearRegression(NumericModeMixin):
 
     def _set_intercept(self, cols):
         if self.fit_intercept:
-            dot = math.fsum(
-                float(a) * float(b)
-                for a, b in zip(self._x_mean.tolist(), self.coef_.tolist())
-            )
-            self.intercept_ = float(self._y_mean - dot)
+            self.intercept_ = _intercept(self._bind("_mojolearn_estimators"), self._x_mean,
+                                         self.coef_, cols, self._y_mean)
         else:
             self.intercept_ = 0.0
         self.n_features_in_ = cols
@@ -865,10 +883,10 @@ class Ridge(NumericModeMixin):
             # The same centering as LinearRegression, for the same
             # reasons; read that class's fit.
             mu32 = _column_means(b, x, None)
-            self._x_mean = Array.from_list(mu32, "<f4")
-            self._y_mean = _vector_mean(b, target, None)
+            self._x_mean = mu32
+            self._y_mean, y32 = _vector_mean(b, target, None)
             work_x = _center(b, x, mu32)
-            work_y = _shift(b, target, _round_f32(self._y_mean))
+            work_y = _shift(b, target, y32)
         else:
             work_x, work_y = x, target
             self._x_mean = zeros((cols,), "<f4")
@@ -881,11 +899,7 @@ class Ridge(NumericModeMixin):
                 [rows, cols, float(self.alpha)],
             )
         if self.fit_intercept:
-            dot = math.fsum(
-                float(a) * float(b)
-                for a, b in zip(self._x_mean.tolist(), self.coef_.tolist())
-            )
-            self.intercept_ = float(self._y_mean - dot)
+            self.intercept_ = _intercept(b, self._x_mean, self.coef_, cols, self._y_mean)
         else:
             self.intercept_ = 0.0
         self.n_features_in_ = cols
