@@ -62,6 +62,7 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
+from gbdt.data.group_layout import device_group_layout
 from gbdt.gpu_data.kernel.query_helper import (
     launch_compute_group_ids,
     launch_compute_group_means,
@@ -153,33 +154,22 @@ def make_querywise_target_buffers(
     var q_count = len(group_sizes)
     if q_count < 1:
         raise Error("QueryRMSE needs at least one query")
-    var h_offsets = ctx.enqueue_create_host_buffer[DType.uint32](q_count)
-    var h_sizes = ctx.enqueue_create_host_buffer[DType.uint32](q_count)
-    var at = 0
-    for q in range(q_count):
-        var size = Int(group_sizes[q])
-        if size < 1:
-            raise Error("QueryRMSE: query " + String(q) + " has no rows")
-        h_offsets.unsafe_ptr().unsafe_store(q, UInt32(at))
-        h_sizes.unsafe_ptr().unsafe_store(q, UInt32(size))
-        at += size
-    if at != n_rows:
-        raise Error(
-            "QueryRMSE: the query sizes cover " + String(at) + " rows of "
-            + String(n_rows)
-        )
-    var q_offsets = ctx.enqueue_create_buffer[DType.uint32](q_count)
-    var q_sizes = ctx.enqueue_create_buffer[DType.uint32](q_count)
-    ctx.enqueue_copy(dst_buf=q_offsets, src_ptr=h_offsets.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=q_sizes, src_ptr=h_sizes.unsafe_ptr())
+    # lane/cpu3-gbdt-b: offsets formed and the sizes checked on the device
+    # (`gbdt/data/group_layout.mojo`); `q_offsets` holds `q_count + 1`
+    # entries, the first `q_count` being the old exclusive offsets
+    var layout = device_group_layout(
+        ctx, group_sizes, n_rows, "QueryRMSE: query ",
+        "QueryRMSE: the query sizes cover ",
+    )
+    var q_offsets = layout.offsets.copy()
+    var q_sizes = layout.sizes.copy()
+    _ = layout^
     var mse_der = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var query_means = ctx.enqueue_create_buffer[DType.float32](q_count)
     var qids = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var inverse = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var no_indices = ctx.enqueue_create_buffer[DType.uint32](1)
     ctx.synchronize()
-    _ = h_offsets^  # past the drain (step-33 race class)
-    _ = h_sizes^
     return QuerywiseTargetBuffers(
         q_count, n_rows, targets.copy(), weights.copy(), has_weights,
         q_offsets^, q_sizes^, mse_der^, query_means^, qids^, inverse^,

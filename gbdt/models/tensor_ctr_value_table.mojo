@@ -37,8 +37,10 @@ from gbdt.gpu_data.compressed_index_builder import (
     HostCompressedIndex,
     pack_quantized_columns_host,
 )
-from std.memory import bitcast
+from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast, memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
     write_compressed_index_kernel,
@@ -127,7 +129,7 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
         var features = List[Int]()
         var bins = List[Int]()
         var types = List[Int]()
-        for i in range(len(self.splits)):
+        for i in range(len(self.splits)):  # small-loop(splits: one tensor split-history entry): bounded by the tree depth
             features.append(Int(self.splits[i].feature_id))
             bins.append(Int(self.splits[i].bin_idx))
             types.append(Int(self.splits[i].split_type))
@@ -144,13 +146,13 @@ struct TFeatureFreqTensorTable(Copyable, Movable):
         var out = String("feature_freq_tensor 2 hash_hi ") + String(hash_words[0])
         out += " hash_lo " + String(hash_words[1])
         out += " sources " + String(len(self.source_features))
-        for i in range(len(self.source_features)):
+        for i in range(len(self.source_features)):  # small-loop(source_features: one combination source feature): bounded by max_ctr_complexity
             out += " " + String(self.source_features[i])
         out += " cardinalities " + String(len(self.cardinalities))
-        for i in range(len(self.cardinalities)):
+        for i in range(len(self.cardinalities)):  # small-loop(cardinalities: one per combination source feature): bounded by max_ctr_complexity
             out += " " + String(self.cardinalities[i])
         out += " splits " + String(len(self.splits))
-        for i in range(len(self.splits)):
+        for i in range(len(self.splits)):  # small-loop(splits: one tensor split-history entry): bounded by the tree depth
             out += " " + String(Int(self.splits[i].feature_id))
             out += " " + String(Int(self.splits[i].bin_idx))
             out += " " + String(Int(self.splits[i].split_type))
@@ -414,6 +416,106 @@ def stage_tensor_candidate_host(
     return TStagedTensorCandidate(feature_id, candidate^, compressed^)
 
 
+def staged_tensor_prepare_kernel(
+    words: MutPointer[UInt32, MutAnyOrigin],
+    base_in: Int32,
+    shifted_mask: UInt32,
+    clear_in: Int32,
+    bins32: MutPointer[UInt32, MutAnyOrigin],
+    bins8: MutPointer[UInt8, MutAnyOrigin],
+    flag: MutPointer[UInt32, MutAnyOrigin],
+    size_in: Int32,
+):
+    """Per row: clear (or check clear) the candidate's packed bits and narrow
+    its bin to the writer's UInt8 (cpu3-gbdt-b; was a host loop over rows).
+
+    `flag[0] = 1`: a destination bit was set (check mode); `flag[1] = 1`: a
+    bin exceeds 255. Every writer stores the same value, so the unordered
+    stores need no atomic. Integer work only: the same words as the host
+    loop it replaces.
+    """
+    var size = Int(size_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < size:
+        var at = Int(base_in) + i
+        var w = words.unsafe_load(at)
+        if (w & shifted_mask) != UInt32(0):
+            if clear_in != Int32(0):
+                words.unsafe_store(at, w & ~shifted_mask)
+            else:
+                flag.unsafe_store(0, UInt32(1))
+        var b = bins32.unsafe_load(i)
+        if b > UInt32(255):
+            flag.unsafe_store(1, UInt32(1))
+        bins8.unsafe_store(i, b.cast[DType.uint8]())
+
+
+def _insert_staged_tensor_on_device(
+    ctx: DeviceContext,
+    staged: TStagedTensorCandidate,
+    words: List[UInt32],
+    clear_destination: Bool,
+) raises -> DeviceBuffer[DType.uint32]:
+    """Upload `words` and the candidate bins in one bulk copy each, prepare
+    them on the device, read back two flag words, then OR the candidate in.
+    """
+    ref cf = staged.compressed.layout.features[staged.feature_id]
+    var shifted_mask = cf.mask << cf.shift
+    var n_rows = len(staged.candidate.bins)
+    var n_words = len(words)
+    var h_words = ctx.enqueue_create_host_buffer[DType.uint32](n_words)
+    var h_bins = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    var h_flag = ctx.enqueue_create_host_buffer[DType.uint32](2)
+    ctx.synchronize()
+    memcpy(dest=h_words.unsafe_ptr(), src=words.unsafe_ptr(), count=n_words)
+    memcpy(
+        dest=h_bins.unsafe_ptr(),
+        src=staged.candidate.bins.unsafe_ptr(),
+        count=n_rows,
+    )
+    var d_words = ctx.enqueue_create_buffer[DType.uint32](n_words)
+    ctx.enqueue_copy(dst_buf=d_words, src_ptr=h_words.unsafe_ptr())
+    var d_bins32 = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    ctx.enqueue_copy(dst_buf=d_bins32, src_ptr=h_bins.unsafe_ptr())
+    var d_bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
+    var d_flag = ctx.enqueue_create_buffer[DType.uint32](2)
+    enqueue_fill(ctx, d_flag, UInt32(0))
+    var blocks = (n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE
+    if blocks > 0:
+        ctx.enqueue_function[staged_tensor_prepare_kernel](
+            d_words.unsafe_ptr(),
+            Int32(Int(cf.offset) * n_rows),
+            shifted_mask,
+            Int32(1) if clear_destination else Int32(0),
+            d_bins32.unsafe_ptr(),
+            d_bins.unsafe_ptr(),
+            d_flag.unsafe_ptr(),
+            Int32(n_rows),
+            grid_dim=blocks,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+    ctx.enqueue_copy(dst_ptr=h_flag.unsafe_ptr(), src_buf=d_flag)
+    ctx.synchronize()
+    _ = h_words^
+    _ = h_bins^
+    _ = d_bins32^
+    _ = d_flag^
+    if h_flag.unsafe_ptr().unsafe_load(0) != UInt32(0):
+        raise Error("staged tensor destination bits are not zero")
+    if h_flag.unsafe_ptr().unsafe_load(1) != UInt32(0):
+        raise Error("staged tensor bin exceeds UInt8 writer input")
+    if blocks > 0:
+        ctx.enqueue_function[write_compressed_index_kernel](
+            Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+            d_bins.unsafe_ptr(), Int32(n_rows), d_words.unsafe_ptr(),
+            grid_dim=blocks,
+            block_dim=WRITE_BLOCK_SIZE,
+        )
+    ctx.synchronize()
+    _ = d_bins^
+    return d_words^
+
+
 def insert_staged_tensor_candidate_device(
     ctx: DeviceContext,
     staged: TStagedTensorCandidate,
@@ -424,54 +526,24 @@ def insert_staged_tensor_candidate_device(
     This is the exact launch the symmetric searcher needs after repacking its
     standing columns under the extended layout. Candidate bits must be zero;
     the kernel ORs them in and preserves every neighbouring packed feature.
-    The staging buffers are drained here because they are local owners.
+    The zero-bits and UInt8-range checks and the bin narrowing run on the
+    device (`staged_tensor_prepare_kernel`, cpu3-gbdt-b).
     """
     if len(base_words) != len(staged.compressed.words):
         raise Error("staged tensor base compressed-index size mismatch")
-    ref cf = staged.compressed.layout.features[staged.feature_id]
-    var shifted_mask = cf.mask << cf.shift
-    var n_rows = len(staged.candidate.bins)
-    for r in range(n_rows):
-        var at = Int(cf.offset) * n_rows + r
-        if (base_words[at] & shifted_mask) != UInt32(0):
-            raise Error("staged tensor destination bits are not zero")
-        if staged.candidate.bins[r] > UInt32(255):
-            raise Error("staged tensor bin exceeds UInt8 writer input")
-    var h_words = ctx.enqueue_create_host_buffer[DType.uint32](len(base_words))
-    for i in range(len(base_words)):
-        h_words.unsafe_ptr().unsafe_store(i, base_words[i])
-    var d_words = ctx.enqueue_create_buffer[DType.uint32](len(base_words))
-    ctx.enqueue_copy(dst_buf=d_words, src_ptr=h_words.unsafe_ptr())
-    var h_bins = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
-    for r in range(n_rows):
-        h_bins.unsafe_ptr().unsafe_store(r, UInt8(staged.candidate.bins[r]))
-    var d_bins = ctx.enqueue_create_buffer[DType.uint8](n_rows)
-    ctx.enqueue_copy(dst_buf=d_bins, src_ptr=h_bins.unsafe_ptr())
-    ctx.enqueue_function[write_compressed_index_kernel](
-        Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-        d_bins.unsafe_ptr(), Int32(n_rows), d_words.unsafe_ptr(),
-        grid_dim=(n_rows + WRITE_BLOCK_SIZE - 1) // WRITE_BLOCK_SIZE,
-        block_dim=WRITE_BLOCK_SIZE,
-    )
-    ctx.synchronize()
-    _ = h_words^
-    _ = h_bins^
-    _ = d_bins^
-    return d_words^
+    return _insert_staged_tensor_on_device(ctx, staged, base_words, False)
 
 
 def materialize_staged_tensor_cindex_device(
     ctx: DeviceContext, staged: TStagedTensorCandidate
 ) raises -> DeviceBuffer[DType.uint32]:
-    """Upload the staged host reference as the exact searchable cindex."""
-    var base_words = staged.compressed.words.copy()
-    ref cf = staged.compressed.layout.features[staged.feature_id]
-    var shifted_mask = cf.mask << cf.shift
-    var n_rows = len(staged.candidate.bins)
-    for r in range(n_rows):
-        var at = Int(cf.offset) * n_rows + r
-        base_words[at] &= ~shifted_mask
-    return insert_staged_tensor_candidate_device(ctx, staged, base_words^)
+    """Upload the staged host reference as the exact searchable cindex.
+
+    The candidate's own bits are cleared on the device before the insert
+    (cpu3-gbdt-b; was a host loop over the rows)."""
+    return _insert_staged_tensor_on_device(
+        ctx, staged, staged.compressed.words, True
+    )
 
 
 def materialize_tensor_candidate(
@@ -740,12 +812,12 @@ def _same_projection(a: TFeatureFreqTensorTable, b: TFeatureFreqTensorTable) -> 
         return False
     if len(a.splits) != len(b.splits):
         return False
-    for i in range(len(a.source_features)):
+    for i in range(len(a.source_features)):  # small-loop(source_features: one combination source feature): bounded by max_ctr_complexity
         if a.source_features[i] != b.source_features[i]:
             return False
         if a.cardinalities[i] != b.cardinalities[i]:
             return False
-    for i in range(len(a.splits)):
+    for i in range(len(a.splits)):  # small-loop(splits: one tensor split-history entry): bounded by the tree depth
         if (
             a.splits[i].feature_id != b.splits[i].feature_id
             or a.splits[i].bin_idx != b.splits[i].bin_idx
@@ -807,7 +879,7 @@ struct TTensorCtrRegistry(Copyable, Movable):
         mut self, var table: TFeatureFreqTensorTable
     ) raises -> Int:
         """Return the stable model column, deduplicating an exact table."""
-        for i in range(len(self.features)):
+        for i in range(len(self.features)):  # small-loop(features: one registered tensor model column): metadata lookup over model columns
             ref old = self.features[i]
             if old.table.tensor_hash != table.tensor_hash:
                 continue
@@ -901,7 +973,7 @@ struct TTensorCtrRegistry(Copyable, Movable):
         # the body is gbdt/models/tensor_ctr_apply.mojo's, which the forest
         # host binding compiles too (lane/inference-gbdt-ctr-tables)
         var tables = List[TTensorCtrApplyTable]()
-        for i in range(len(self.features)):
+        for i in range(len(self.features)):  # small-loop(features: one registered tensor model column): builds the per-column apply plan
             if self.features[i].model_column != n_raw_features + i:
                 raise Error("tensor CTR registry model columns are not contiguous")
             tables.append(self.features[i].table.apply_table())
@@ -932,14 +1004,14 @@ def persist_ranked_tensor_winners(
     # One feature id must identify one candidate. Search batches that reuse
     # an id are valid only serially; handing such a batch here loses which
     # table the score belonged to and is therefore refused.
-    for i in range(len(staged_candidates)):
-        for j in range(i):
+    for i in range(len(staged_candidates)):  # small-loop(staged_candidates: one search candidate per level): bounded by the tree depth
+        for j in range(i):  # small-loop(i: earlier candidates of this batch): bounded by the tree depth
             if staged_candidates[i].feature_id == staged_candidates[j].feature_id:
                 raise Error("ranked tensor candidate feature ids are ambiguous")
     var columns = List[Int]()
-    for level in range(len(ranked_splits)):
+    for level in range(len(ranked_splits)):  # small-loop(ranked_splits: one accepted split per level): bounded by the tree depth
         var feature_id = Int(ranked_splits[level].feature_id)
-        for i in range(len(staged_candidates)):
+        for i in range(len(staged_candidates)):  # small-loop(staged_candidates: one search candidate per level): bounded by the tree depth
             if staged_candidates[i].feature_id != feature_id:
                 continue
             var column = persist_winning_tensor_candidate(
@@ -966,14 +1038,14 @@ def persist_synchronized_tensor_path(
         raise Error("synchronized tensor winners/candidates length mismatch")
     var original_splits = accepted_splits.copy()
     var columns = List[Int]()
-    for level in range(len(staged_by_level)):
+    for level in range(len(staged_by_level)):  # small-loop(staged_by_level: one staged candidate per level): bounded by the tree depth
         ref staged = staged_by_level[level]
         if Int(original_splits[level].feature_id) != staged.feature_id:
             raise Error("synchronized tensor winner does not name level candidate")
         var table = staged.candidate.table.copy()
-        for s in range(len(table.splits)):
+        for s in range(len(table.splits)):  # small-loop(splits: one tensor split-history entry): bounded by the tree depth
             var remapped = False
-            for prior in range(level):
+            for prior in range(level):  # small-loop(level: earlier accepted levels): bounded by the tree depth
                 if (
                     table.splits[s].feature_id
                     == original_splits[prior].feature_id
@@ -1011,14 +1083,14 @@ def persist_synchronized_mixed_path(
         raise Error("mixed tensor winners/candidates length mismatch")
     var original = accepted_splits.copy()
     var columns = List[Int]()
-    for level in range(len(staged_by_level)):
+    for level in range(len(staged_by_level)):  # small-loop(staged_by_level: one staged candidate per level): bounded by the tree depth
         ref staged = staged_by_level[level]
         if Int(original[level].feature_id) != staged.feature_id:
             columns.append(-1)
             continue
         var table = staged.candidate.table.copy()
-        for s in range(len(table.splits)):
-            for prior in range(level):
+        for s in range(len(table.splits)):  # small-loop(splits: one tensor split-history entry): bounded by the tree depth
+            for prior in range(level):  # small-loop(level: earlier accepted levels): bounded by the tree depth
                 if columns[prior] < 0:
                     continue
                 if (
@@ -1075,7 +1147,7 @@ def regenerate_feature_freq_after_winner(
     """
     var tensor = next_tensor_base_from_winner(staged, winning_split)
     var sources = List[Int]()
-    for i in range(len(tensor.cat_features)):
+    for i in range(len(tensor.cat_features)):  # small-loop(cat_features: one combination source feature): bounded by max_ctr_complexity
         sources.append(Int(tensor.cat_features[i]))
     var table = build_split_feature_freq_tensor_table(
         x_colmajor, extended_cindex, n_rows, n_features,
@@ -1116,7 +1188,7 @@ def stage_next_feature_freq_after_winner(
         raise Error("tensor regeneration base cindex shape mismatch")
     if len(base_columns) != len(base_fold_counts):
         raise Error("tensor regeneration base layout mismatch")
-    for s in range(len(staged.candidate.table.splits)):
+    for s in range(len(staged.candidate.table.splits)):  # small-loop(splits: one tensor split-history entry): bounded by the tree depth
         if Int(staged.candidate.table.splits[s].feature_id) == staged.feature_id:
             raise Error(
                 "tensor regeneration beyond level two needs versioned"
@@ -1133,7 +1205,7 @@ def stage_next_feature_freq_after_winner(
     tensor.add_binary_splits(staged.candidate.table.splits.copy())
     tensor.add_binary_split(winning_split)
     var sources = List[Int]()
-    for i in range(len(tensor.cat_features)):
+    for i in range(len(tensor.cat_features)):  # small-loop(cat_features: one combination source feature): bounded by max_ctr_complexity
         sources.append(Int(tensor.cat_features[i]))
     var table = build_split_feature_freq_tensor_table(
         x_colmajor, extended, n_rows, n_raw_features, sources^,

@@ -822,7 +822,7 @@ struct TBatchFeatureTensorBuilder(Movable):
                     _set_indices(
                         self.ctr_bin_builders[j], base_tensor_indices
                     )
-                    self.ctr_bin_builders[j].add_cat_feature_bins(
+                    self.ctr_bin_builders[j].add_cat_feature_bins_host(
                         self.cat_feature_bins[cat_feature_id],
                         self.cat_feature_bin_counts[cat_feature_id],
                     )

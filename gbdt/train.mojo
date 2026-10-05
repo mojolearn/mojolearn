@@ -31,6 +31,24 @@ from gbdt.gpu_data.kernel.binarize import (
     binarize_float_feature_kernel,
 )
 from gbdt.ctrs.ctr import TCtrConfig, is_permutation_dependent_ctr_type
+from gbdt.models.kernel.resident_link import (
+    LINK_BLOCK,
+    LINK_RAW,
+    LINK_SIGMOID,
+    LINK_SOFTMAX,
+    resident_link_kernel,
+)
+from gbdt.data.group_layout import device_group_layout
+from gbdt.data.cat_code_scan import (
+    cat_column_codes,
+    cat_column_max_code,
+    onehot_column_max_code,
+)
+from gbdt.data.target_prep import (
+    device_all_equal_first,
+    fold_class_weights,
+    upload_and_scan_targets,
+)
 from gbdt.ctrs.ctr_binarization import (
     TBinarizationOptions,
     build_binarized_target,
@@ -489,7 +507,7 @@ def _resolve_column_ptrs(
         var out = List[MutPointer[Float32, MutUntrackedOrigin]](
             capacity=len(columns)
         )
-        for c in range(len(columns)):
+        for c in range(len(columns)):  # small-loop(columns: column pointers): one pointer per column, no element read
             out.append(
                 rebind[MutPointer[Float32, MutUntrackedOrigin]](
                     columns[c].unsafe_ptr()
@@ -593,7 +611,7 @@ def _build_cindex_from_columns(
 
 def generate_seed_for_borders(from_seed: UInt64) -> UInt64:
     """Their `TRandom::GenerateSeed` (`libs/helpers/cpu_random.h:88-94`):
-    five LCG steps. Module level so `sample_indices_for_borders` and the
+    five LCG steps. Module level so `sample_indices_for_borders_reference` and the
     check that gates it use THE SAME derivation, not two copies."""
     var sd = from_seed
     for _ in range(5):
@@ -601,7 +619,7 @@ def generate_seed_for_borders(from_seed: UInt64) -> UInt64:
     return sd
 
 
-def sample_indices_for_borders(
+def sample_indices_for_borders_reference(
     nrr: Int, sn: Int, sd0: UInt64
 ) -> List[UInt32]:
     """`SampleIndices<ui32>(n, k, rand)` -- `libs/helpers/sample.h:20-43`,
@@ -977,11 +995,11 @@ def train(
     var border_type_code = border_type_from_name(feature_border_type)
     check_feature_fraction(feature_fraction)
     if feature_fraction < 1:
-        for flag in cat_features:
-            if flag:
+        for f in range(len(cat_features)):  # small-loop(cat_features: per-feature option flags): option validation, reads no data
+            if cat_features[f]:
                 raise Error("feature_fraction<1 supports numeric features only; categorical/CTR input refused")
-        for flag in one_hot:
-            if flag:
+        for f in range(len(one_hot)):  # small-loop(one_hot: per-feature option flags): option validation, reads no data
+            if one_hot[f]:
                 raise Error("feature_fraction<1 supports numeric features only; one_hot input refused")
     _ = child_hessian_threshold(min_child_hessian, policy, score_function)
     if not isfinite(min_split_gain) or (min_split_gain < 0 and min_split_gain != -1):
@@ -1053,6 +1071,27 @@ def train(
     # rather than carried and ignored. Everything here is decided before a
     # border is computed.
     var objective_code = objective_from_name(loss)
+    # ---- the targets and weights, uploaded ONCE and checked on the device
+    # (lane/cpu3-gbdt-b, `gbdt/data/target_prep.mojo`): every host walk of
+    # `y` and `sample_weight` below reads this scan's five words instead.
+    var use_sample_weight = len(sample_weight) > 0
+    if use_sample_weight and len(sample_weight) != n_rows:
+        raise Error(
+            "sample_weight has " + String(len(sample_weight))
+            + " entries for " + String(n_rows) + " rows"
+        )
+    var labels_multiclass = (
+        loss == "MultiClass" or loss == "MultiClassOneVsAll"
+        or objective_code == OBJECTIVE_MULTICLASS
+        or objective_code == OBJECTIVE_MULTICLASS_OVA
+    )
+    # `target_dim` planes for MultiRMSE, dim-major; one for every other loss
+    var targets = ctx.enqueue_create_buffer[DType.float32](n_rows * target_dim)
+    var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var tscan = upload_and_scan_targets(
+        ctx, y, sample_weight, n_rows, target_dim, labels_multiclass,
+        targets, weights,
+    )
     var is_pair_logit = objective_code == OBJECTIVE_PAIR_LOGIT
     var is_yeti_rank = objective_code == OBJECTIVE_YETI_RANK
     var is_querywise = (
@@ -1073,16 +1112,15 @@ def train(
                 " multiclass_targets.h:167); got target_dim="
                 + String(target_dim)
             )
-        for i in range(n_rows * target_dim):
-            if not isfinite(y[i]):
-                raise Error("MultiRMSE targets must be finite")
+        if tscan.first_nonfinite >= 0:
+            raise Error("MultiRMSE targets must be finite")
         if boosting_type == "Ordered":
             raise Error(
                 "boosting_type='Ordered' with loss='MultiRMSE' is not carried"
                 " here: the Ordered arm (gbdt/methods/ordered_boosting.mojo)"
                 " is one-dimensional"
             )
-        for f in range(len(cat_features)):
+        for f in range(len(cat_features)):  # small-loop(cat_features: per-feature option flags): option validation, reads no data
             if cat_features[f]:
                 raise Error(
                     "loss='MultiRMSE' with cat_features is not carried here:"
@@ -1147,18 +1185,11 @@ def train(
                 " implemented here"
             )
     if len(group_sizes) > 0:
-        var covered = 0
-        for g in range(len(group_sizes)):
-            if group_sizes[g] == UInt32(0):
-                raise Error(
-                    "group_id: group " + String(g) + " has no rows"
-                )
-            covered += Int(group_sizes[g])
-        if covered != n_rows:
-            raise Error(
-                "group_id: the group sizes cover " + String(covered)
-                + " rows of " + String(n_rows)
-            )
+        # checked on the device (`gbdt/data/group_layout.mojo`), same words
+        _ = device_group_layout(
+            ctx, group_sizes, n_rows, "group_id: group ",
+            "group_id: the group sizes cover ",
+        )
         if not is_querywise:
             raise Error(
                 "group_id is read only by the querywise and pairwise losses"
@@ -1193,7 +1224,7 @@ def train(
                 "loss='" + loss + "' with use_pointwise_searcher is not"
                 " implemented here; the greedy subsets searcher only"
             )
-        for f in range(len(cat_features)):
+        for f in range(len(cat_features)):  # small-loop(cat_features: per-feature option flags): option validation, reads no data
             if cat_features[f]:
                 raise Error(
                     "loss='" + loss + "' with cat_features is not implemented"
@@ -1202,7 +1233,7 @@ def train(
                     " GenerateQueryDocsOrder), which this implementation does"
                     " not restate"
                 )
-        for f in range(len(one_hot)):
+        for f in range(len(one_hot)):  # small-loop(one_hot: per-feature option flags): option validation, reads no data
             if one_hot[f]:
                 raise Error(
                     "loss='" + loss + "' with one_hot_features is not implemented"
@@ -1256,12 +1287,10 @@ def train(
     # prediction planes. The later objective check was too late to protect
     # MakeClassificationWeights (reference data_providers.cpp:162-168).
     if loss == "MultiClass" or loss == "MultiClassOneVsAll":
-        for r in range(n_rows):
-            var label = y[r]
-            if not isfinite(label) or label < 0 or label >= Float32(n_rows):
+        if tscan.first_bad_label() >= 0:
+            if tscan.first_bad_label_is_range():
                 raise Error("multiclass labels must be finite dense class codes 0..k-1")
-            if Float32(Int(label)) != label:
-                raise Error("multiclass labels must be integer class codes")
+            raise Error("multiclass labels must be integer class codes")
     if len(cat_features) != 0 and len(cat_features) != n_features:
         raise Error(
             "cat_features has "
@@ -1319,7 +1348,7 @@ def train(
     var dependent_slots = List[Int]()
     var independent_configs = List[TCtrConfig]()
     var dependent_configs = List[TCtrConfig]()
-    for c in range(len(configs)):
+    for c in range(len(configs)):  # small-loop(configs: CTR configs): splits the handful of CTR configs by type
         if is_permutation_dependent_ctr_type(configs[c].ctr_type):
             dependent_slots.append(c)
             dependent_configs.append(configs[c])
@@ -1359,13 +1388,7 @@ def train(
         for f in range(n_features):
             if not (len(cat_features) == n_features and cat_features[f]):
                 continue
-            var maxc = 0
-            for r in range(n_rows):
-                var c = dense_category_code(
-                    x_src.unsafe_load(f * n_rows + r), f, r
-                )
-                if c > maxc:
-                    maxc = c
+            var maxc = cat_column_max_code(ctx, x_src + f * n_rows, n_rows, f)
             if maxc + 1 > cat_params.one_hot_max_size:
                 has_permutation_features = True
                 break
@@ -1375,13 +1398,7 @@ def train(
         for f in range(n_features):
             if not cat_features[f]:
                 continue
-            var maxc_o = 0
-            for r in range(n_rows):
-                var c_o = dense_category_code(
-                    x_src.unsafe_load(f * n_rows + r), f, r
-                )
-                if c_o > maxc_o:
-                    maxc_o = c_o
+            var maxc_o = cat_column_max_code(ctx, x_src + f * n_rows, n_rows, f)
             if maxc_o + 1 > cat_params.one_hot_max_size:
                 ordered_ctr_column = True
                 break
@@ -1422,7 +1439,7 @@ def train(
             + " permutations this fit builds"
         )
 
-    for _ in range(perm_count):
+    for _ in range(perm_count):  # small-loop(perm_count: permutations): one empty list per permutation, no data
         dep_by_perm.append(List[List[Float32]]())
 
     var binarized_target = List[UInt8]()
@@ -1437,7 +1454,7 @@ def train(
     comptime if CTR_TARGET_PREP_NEEDS_CAT_2634:
         ctr_prep_wanted = False
         if len(cat_features) == n_features:
-            for f in range(n_features):
+            for f in range(n_features):  # small-loop(n_features: per-feature option flags): reads the cat flag list only, no data
                 if cat_features[f]:
                     ctr_prep_wanted = True
                     break
@@ -1472,7 +1489,7 @@ def train(
     if getenv(CTR_TRACE_ENV) == "1":
         var cat_columns = 0
         if len(cat_features) == n_features:
-            for f in range(n_features):
+            for f in range(n_features):  # small-loop(n_features: per-feature option flags): trace-only count of cat flags, no data
                 if cat_features[f]:
                     cat_columns += 1
         var prep_state = String("skipped")
@@ -1536,17 +1553,11 @@ def train(
         )
 
         # dense codes: cardinality is max + 1
-        var maxc = 0
-        var seen = List[Bool]()
-        seen.resize(1, False)
+        # validated, converted, maxed and density-checked on the device
+        # (`gbdt/data/cat_code_scan.mojo`)
         var codes = List[UInt32]()
-        for r in range(n_rows):
-            var c = dense_category_code(col[r], f, r)
-            if c > maxc:
-                maxc = c
-                seen.resize(maxc + 1, False)
-            seen[c] = True
-            codes.append(UInt32(c))
+        var cscan = cat_column_codes(ctx, x_src + f * n_rows, n_rows, f, codes)
+        var maxc = cscan.max_code
         var unique_values = maxc + 1
         if unique_values <= 1:
             # their `CB_ENSURE(uniqueValues > 1)`
@@ -1556,13 +1567,12 @@ def train(
                 + String(f)
                 + " has one category)"
             )
-        for c in range(unique_values):
-            if not seen[c]:
-                raise Error(
-                    "cat_features column " + String(f)
-                    + " is not densely coded: category " + String(c)
-                    + " is absent from 0.." + String(maxc)
-                )
+        if cscan.first_absent >= 0:
+            raise Error(
+                "cat_features column " + String(f)
+                + " is not densely coded: category " + String(cscan.first_absent)
+                + " is absent from 0.." + String(maxc)
+            )
 
         if unique_values <= cat_params.one_hot_max_size:
             # `UseForOneHotEncoding` (`binarizations_manager.cpp:106-109`):
@@ -1574,7 +1584,7 @@ def train(
             continue
 
         var ctr_columns = List[List[Float32]]()
-        for _ in range(len(configs)):
+        for _ in range(len(configs)):  # small-loop(configs: CTR configs): one empty column slot per config, no data
             ctr_columns.append(List[Float32]())
 
         if len(independent_configs) > 0:
@@ -1603,8 +1613,9 @@ def train(
                     List[UInt8](),
                     cat_params.counter_calc_method == COUNTER_CALC_FULL,
                 )
-            for c in range(len(independent_slots)):
-                ctr_columns[independent_slots[c]] = indep[c].copy()
+            # moved, not copied (lane/cpu3-gbdt-b): no element is touched
+            for c in range(len(independent_slots)):  # small-loop(independent_slots: CTR config slots): moves one column object per config, no element copy
+                swap(ctr_columns[independent_slots[c]], indep[c])
 
         if len(dependent_configs) > 0:
             # their `writeCtrs(..., permutationDependent)` (`:257`), ONCE
@@ -1622,9 +1633,12 @@ def train(
                     ctr_orders[p],
                 )
                 for c in range(len(dependent_slots)):
-                    dep_by_perm[p].append(dep[c].copy())
                     if p == est_perm:
                         ctr_columns[dependent_slots[c]] = dep[c].copy()
+                    # moved, not copied (lane/cpu3-gbdt-b)
+                    var moved = List[Float32]()
+                    swap(moved, dep[c])
+                    dep_by_perm[p].append(moved^)
         # the APPLY-TIME half of the same statistic: their
         # `CalcFinalCtrs` writes a `TCtrValueTable` beside every CTR the
         # model uses, because the learn column cannot score a new row.
@@ -1643,13 +1657,14 @@ def train(
             f,
             len(columns),
         )
-        for c in range(len(tables)):
-            ctr_tables.append(tables[c].copy())
+        ctr_tables.extend(tables^)
         var base_col = len(columns)
-        for c in range(len(dependent_slots)):
+        for c in range(len(dependent_slots)):  # small-loop(dependent_slots: CTR config slots): one column index per config
             dep_col_index.append(base_col + dependent_slots[c])
-        for c in range(len(ctr_columns)):
-            columns.append(ctr_columns[c].copy())
+        for c in range(len(ctr_columns)):  # small-loop(ctr_columns: CTR config slots): moves one column object and appends plan entries per config, no element copy
+            var moved_col = List[Float32]()
+            swap(moved_col, ctr_columns[c])
+            columns.append(moved_col^)
             column_src_feature.append(-1)
             column_one_hot.append(False)
             ctr_grids.append(cat_params.ctr_binarization_for(configs[c]))
@@ -1662,9 +1677,9 @@ def train(
     # or -1. Built here rather than carried, because the column positions
     # are only final once every feature has been walked.
     var dep_ordinal_of_column = List[Int]()
-    for _ in range(n_columns):
+    for _ in range(n_columns):  # small-loop(n_columns: column plan entries): one -1 per column, no data
         dep_ordinal_of_column.append(-1)
-    for k in range(len(dep_col_index)):
+    for k in range(len(dep_col_index)):  # small-loop(dep_col_index: dependent column plan): one ordinal per dependent column, no data
         dep_ordinal_of_column[dep_col_index[k]] = k
 
     # DEVIATION 2550: one read pointer per column, into `x_src` for a
@@ -1673,7 +1688,7 @@ def train(
     var column_ptrs = List[MutPointer[Float32, MutUntrackedOrigin]](
         capacity=n_columns
     )
-    for c in range(n_columns):
+    for c in range(n_columns):  # small-loop(n_columns: column pointers): one pointer per column, no element read
         if column_src_feature[c] >= 0:
             column_ptrs.append(x_src + column_src_feature[c] * n_rows)
         else:
@@ -1725,7 +1740,7 @@ def train(
     # than the dependent slice of one. DEVIATION 89.
     var cindexes = List[DeviceBuffer[DType.uint32]]()
     var any_dep = False
-    for c in range(n_columns):
+    for c in range(n_columns):  # small-loop(n_columns: column plan entries): one flag per column, no data
         if dep_ordinal_of_column[c] >= 0:
             any_dep = True
     for p in range(perm_count):
@@ -1741,21 +1756,32 @@ def train(
                 )
             )
             continue
-        var flat = List[Float32]()
-        for c in range(n_columns):
+        # lane/cpu3-gbdt-b: the dependent columns are read IN PLACE from this
+        # permutation's CTR lists, every other column from `column_ptrs`,
+        # through the same in-place builder as above (its docstring: same
+        # kernels, same borders, same writes, so the same bits as the flat
+        # pack this replaces, without the host copy of every column)
+        var perm_ptrs = List[MutPointer[Float32, MutUntrackedOrigin]](
+            capacity=n_columns
+        )
+        for c in range(n_columns):  # small-loop(n_columns: column pointers): one pointer per column, no data read
             var ord = dep_ordinal_of_column[c]
             if ord >= 0:
-                for r in range(n_rows):
-                    flat.append(dep_by_perm[p][ord][r])
+                perm_ptrs.append(
+                    rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                        dep_by_perm[p][ord].unsafe_ptr()
+                    )
+                )
             else:
-                for r in range(n_rows):
-                    flat.append(column_ptrs[c].unsafe_load(r))
+                perm_ptrs.append(column_ptrs[c])
         cindexes.append(
-            _build_cindex_from_floats(
-                ctx, flat, n_rows, borders, fold_counts,
+            _build_cindex_from_columns(
+                ctx, columns, n_rows, borders, fold_counts,
                 column_nan_treatment,
+                column_ptrs=perm_ptrs,
             )
         )
+        _ = len(dep_by_perm)
     var cindex = cindexes[est_perm].copy()
     # DEVIATION 2550: `column_ptrs` points into `columns`; hold both to here
     _ = len(columns)
@@ -1773,11 +1799,7 @@ def train(
             "class weights take effect only with a classification loss,"
             " their option check's words (catboost_options.cpp:617)"
         )
-    # `target_dim` planes for MultiRMSE, dim-major; one for every other loss
-    var targets = ctx.enqueue_create_buffer[DType.float32](n_rows * target_dim)
-    var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var ht = ctx.enqueue_create_host_buffer[DType.float32](n_rows * target_dim)
-    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    # `targets` and `weights` were uploaded and scanned at entry (`tscan`).
 
     # THEIR COMBINATION IS A PRODUCT (`private/libs/target/
     # data_providers.cpp:168`):
@@ -1787,24 +1809,13 @@ def train(
     # `rawGroupWeights` is the querywise family's and is 1 here -- this
     # implementation carries no `group_id`, so there is nothing to weight by. The
     # other two multiply, and a caller may pass either, both, or neither.
-    var use_sample_weight = len(sample_weight) > 0
-    if use_sample_weight and len(sample_weight) != n_rows:
-        raise Error(
-            "sample_weight has " + String(len(sample_weight))
-            + " entries for " + String(n_rows) + " rows"
-        )
 
     # `classWeights[(size_t)targetClassesArray[i]]` indexes by the TARGET
     # CLASS, so how many entries it needs depends on the loss: two for the
     # binarized classification targets, `numClasses` for MultiClass.
     var n_class_slots = 2
     if loss == "MultiClass" or loss == "MultiClassOneVsAll":
-        var mxc = -1
-        for r in range(n_rows):
-            var iv = Int(y[r])
-            if iv > mxc:
-                mxc = iv
-        n_class_slots = mxc + 1
+        n_class_slots = tscan.max_label + 1
     var use_class_weights = len(class_weights) > 0
     if use_class_weights and len(class_weights) != n_class_slots:
         raise Error(
@@ -1813,29 +1824,18 @@ def train(
             + String(len(class_weights))
         )
 
-    for r in range(n_rows):
-        ht.unsafe_ptr().unsafe_store(r, y[r])
-        var w = Float32(1.0)
-        if use_sample_weight:
-            if sample_weight[r] < Float32(0.0):
-                raise Error(
-                    "sample_weight at row " + String(r)
-                    + " is negative"
-                )
-            w = sample_weight[r]
-        if use_class_weights:
-            # their `targetClassesArray`: the dense class code for
-            # MultiClass, the binarized target otherwise
-            var cls: Int
-            if loss == "MultiClass" or loss == "MultiClassOneVsAll":
-                cls = Int(y[r])
-            else:
-                cls = 1 if y[r] > Float32(0.5) else 0
-            w = w * class_weights[cls]
-        hw.unsafe_ptr().unsafe_store(r, w)
-    # MultiRMSE's planes past the first, in the caller's dim-major order
-    for i in range(n_rows, n_rows * target_dim):
-        ht.unsafe_ptr().unsafe_store(i, y[i])
+    if tscan.first_negative_weight >= 0:
+        raise Error(
+            "sample_weight at row " + String(tscan.first_negative_weight)
+            + " is negative"
+        )
+    if use_class_weights:
+        # their `targetClassesArray`: the dense class code for MultiClass,
+        # the binarized target otherwise; the one product on the device
+        fold_class_weights(
+            ctx, targets, weights, class_weights, n_rows,
+            loss == "MultiClass" or loss == "MultiClassOneVsAll",
+        )
     if is_pair_logit:
         comptime if PAIRLOGIT_GROUP_FUSED:
             # generated pairs (empty list): the device setup rewrites the
@@ -1845,8 +1845,11 @@ def train(
                 var pair_prep = prepare_pairs(
                     pair_list.winners, pair_list.losers, pair_list.weights, n_rows
                 )
-                for r in range(n_rows):
-                    hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
+                ctx.enqueue_copy(
+                    dst_buf=weights, src_ptr=pair_prep.row_weights.unsafe_ptr()
+                )
+                ctx.synchronize()
+                _ = len(pair_prep.row_weights)
         else:
             # `InitPairLogit` (`targets/querywise_targets_impl.h:326-346`): the
             # target weights become the per-row sums of the pair weights, folded
@@ -1854,14 +1857,11 @@ def train(
             var pair_prep = prepare_pairs(
                 pair_list.winners, pair_list.losers, pair_list.weights, n_rows
             )
-            for r in range(n_rows):
-                hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
-    ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
-    ctx.synchronize()
-    # past the drain (step-33 race class)
-    _ = ht^
-    _ = hw^
+            ctx.enqueue_copy(
+                dst_buf=weights, src_ptr=pair_prep.row_weights.unsafe_ptr()
+            )
+            ctx.synchronize()
+            _ = len(pair_prep.row_weights)
     host_times.stop_host("train_targets_upload", t_phase)
     t_phase = host_times.start()
 
@@ -1950,23 +1950,16 @@ def train(
         objective == OBJECTIVE_MULTICLASS
         or objective == OBJECTIVE_MULTICLASS_OVA
     ):
-        var mx = -1
-        for r in range(n_rows):
-            var v = y[r]
-            if v < Float32(0.0):
-                raise Error(
-                    "MultiClass label at row " + String(r)
-                    + " is negative; labels are dense class codes 0..k-1"
-                )
-            var iv = Int(v)
-            if Float32(iv) != v:
-                raise Error(
-                    "MultiClass label at row " + String(r)
-                    + " is not an integer; labels are dense class codes"
-                    " 0..k-1"
-                )
-            if iv > mx:
-                mx = iv
+        # the entry scan's words (`tscan`): the lowest row that is not a
+        # dense class code is refused, the largest code sets the count
+        var bad_label = tscan.first_bad_label()
+        if bad_label >= 0:
+            raise Error(
+                "MultiClass label at row " + String(bad_label)
+                + " is not a dense class code 0..k-1 (negative, non-integer"
+                " or non-finite)"
+            )
+        var mx = tscan.max_label
         num_classes = mx + 1
         if num_classes < 2:
             raise Error(
@@ -2072,11 +2065,21 @@ def train(
     # whose target never varies cannot rank iterations, so they leave the
     # default off rather than shrink on a flat curve. `hasTestPairs` is
     # theirs and not ours -- this implementation carries no pairwise loss.
+    var t_rows = eval_rows if eval_rows > 0 else 1
+    var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
+    # the caller's eval targets straight into the device buffer (one H2D),
+    # or the one-row zero placeholder
+    if eval_rows > 0:
+        ctx.enqueue_copy(dst_buf=test_targets, src_ptr=eval_y.unsafe_ptr())
+    else:
+        enqueue_fill(ctx, test_targets, Float32(0.0))
+    ctx.synchronize()
+    _ = len(eval_y)  # past the drain (step-33 race class)
+    # `eval_y[r] != eval_y[0]` for some row, decided on the device (one
+    # word back); NaN compares unequal as on the host
     var eval_const_target = True
-    for r in range(1, eval_rows):
-        if eval_y[r] != eval_y[0]:
-            eval_const_target = False
-            break
+    if eval_rows > 1:
+        eval_const_target = device_all_equal_first(ctx, test_targets, eval_rows)
     var want_best_model = use_best_model
     if want_best_model == -1:
         want_best_model = (
@@ -2104,7 +2107,6 @@ def train(
             + String(best_model_min_trees)
         )
 
-    var t_rows = eval_rows if eval_rows > 0 else 1
     var eval_expanded: List[Float32]
     if eval_rows > 0 and ctr_column_count != 0:
         eval_expanded = expand_raw_columns(
@@ -2114,22 +2116,13 @@ def train(
         eval_expanded = eval_x_colmajor.copy()
     else:
         eval_expanded = List[Float32]()
-        for _ in range(len(fold_counts)):
+        for _ in range(len(fold_counts)):  # small-loop(fold_counts: features of the one-row placeholder): one zero per feature for an empty eval set
             eval_expanded.append(Float32(0.0))
 
     var test_cindex = _build_cindex_from_floats(
         ctx, eval_expanded, t_rows, borders, fold_counts,
         column_nan_treatment,
     )
-    var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
-    var h_ty = ctx.enqueue_create_host_buffer[DType.float32](t_rows)
-    for r in range(t_rows):
-        h_ty.unsafe_ptr().unsafe_store(
-            r, eval_y[r] if eval_rows > 0 else Float32(0.0)
-        )
-    ctx.enqueue_copy(dst_buf=test_targets, src_ptr=h_ty.unsafe_ptr())
-    ctx.synchronize()
-    _ = h_ty^  # past the drain (step-33 race class)
 
     var approx_dim = 1
     if objective == OBJECTIVE_MULTICLASS:
@@ -2192,7 +2185,7 @@ def train(
         if want_best_model == 1 and len(o_out.test_losses) > 0:
             var o_min_best = -1
             var o_min_err = Float64(0.0)
-            for i in range(len(o_out.test_losses)):
+            for i in range(len(o_out.test_losses)):  # small-loop(test_losses: boosting iterations): argmin over the per-tree loss list the fit returned
                 if i + 1 < best_model_min_trees:
                     continue
                 if o_min_best < 0 or o_out.test_losses[i] < o_min_err:
@@ -2293,7 +2286,7 @@ def train(
     if want_best_model == 1 and len(t_losses) > 0:
         var min_trees_best = -1
         var min_trees_err = Float64(0.0)
-        for i in range(len(t_losses)):
+        for i in range(len(t_losses)):  # small-loop(t_losses: boosting iterations): argmin over the per-tree loss list the fit returned
             if i + 1 < best_model_min_trees:
                 continue
             # their strict `<` (`error_tracker.h:58-64`), so the FIRST of
@@ -2430,7 +2423,7 @@ def _quantize_training_columns(
 
     var n_float_prescan = 0
     var float_idx = List[Int]()
-    for f in range(n_columns):
+    for f in range(n_columns):  # small-loop(n_columns: column plan entries): lists the float columns by flag, no data
         if not column_one_hot[f] and column_ctr_grid[f] < 0:
             float_idx.append(f)
             n_float_prescan += 1
@@ -2451,7 +2444,7 @@ def _quantize_training_columns(
         var dcols = List[MutPointer[Float32, MutUntrackedOrigin]](
             capacity=n_float_prescan
         )
-        for k in range(n_float_prescan):
+        for k in range(n_float_prescan):  # small-loop(n_float_prescan: column pointers): one pointer per float column, no element read
             dcols.append(cps[float_idx[k]])
         var got = device_float_borders(
             ctx, dcols, n_rows, border_sample_n, border_count, nan_mode_opt_early,
@@ -2466,23 +2459,19 @@ def _quantize_training_columns(
     # column holds a computed statistic, and a NaN in either is a caller
     # error rather than a value to bin.
     var column_nan_treatment = List[Int]()
-    for _ in range(n_columns):
+    for _ in range(n_columns):  # small-loop(n_columns: column plan entries): one AsIs code per column, no data
         column_nan_treatment.append(NAN_TREATMENT_AS_IS)
     for f in range(n_columns):
         var flagged = column_one_hot[f]
         if flagged:
-            var maxc = 0
-            for r in range(n_rows):
-                var c = Int(cps[f].unsafe_load(r))
-                if c > maxc:
-                    maxc = c
+            var maxc = onehot_column_max_code(ctx, cps[f], n_rows, f)
             if maxc > 254:
                 raise Error("one-hot feature " + String(f)
                             + " has more than 255 categories")
             # synthetic integer 'borders' 0.5, 1.5, ... so the SAME
             # quantize kernel maps code k to bin k
             var bs = List[Float32]()
-            for c in range(maxc):
+            for c in range(maxc):  # small-loop(maxc: one-hot categories, at most 254): synthetic borders, refused above 254 just before
                 bs.append(Float32(c) + Float32(0.5))
             fold_counts.append(len(bs) + 1 if len(bs) > 0 else 0)
             borders.append(bs^)
@@ -2568,82 +2557,21 @@ def train_ordered_rmse(
     missing values and early stopping use distinct APIs; this entry does
     not silently interpret those options as supported Ordered features.
     """
-    from std.math import isfinite
-    from max.gpu.host.device_attribute import DeviceAttribute
-    from gbdt.methods.dynamic_boosting import fit_ordered_rmse
-
     if n_rows != len(y) or n_features < 1 or len(x_colmajor) != n_rows * n_features:
         raise Error("train_ordered_rmse input shape mismatch")
-    if border_count < 1 or border_count > 255:
-        raise Error("train_ordered_rmse supports 1..255 borders")
-    var borders = List[List[Float32]]()
-    var fold_counts = List[Int]()
-    var one_hot = List[Bool]()
-    var nan_treatment = List[Int]()
-    comptime if IDN_ORDERED_RMSE_DEVICE_GRID:
-        # lane/fam-gbdt: the grid on the device, over every row (see the
-        # constant in `gbdt/grid_creator/binarization.mojo`). The finite
-        # check keeps this entry's refusal and its sentence.
-        for i in range(n_rows * n_features):
-            if not isfinite(x_colmajor[i]):
-                raise Error("train_ordered_rmse requires finite numeric features")
-        var grid_cols = List[MutPointer[Float32, MutUntrackedOrigin]](
-            capacity=n_features
-        )
-        for f in range(n_features):
-            grid_cols.append(
-                rebind[MutPointer[Float32, MutUntrackedOrigin]](
-                    x_colmajor.unsafe_ptr()
-                )
-                + f * n_rows
-            )
-        var got = device_float_borders(
-            ctx, grid_cols, n_rows, n_rows, border_count, NAN_MODE_FORBIDDEN,
-            generate_seed_for_borders(UInt64(0)),
-        )
-        var dev_grids = got[0].copy()
-        if len(dev_grids) != n_features:
-            raise Error(
-                "train_ordered_rmse: the device border build returned "
-                + String(len(dev_grids)) + " grids for "
-                + String(n_features) + " features"
-            )
-        for f in range(n_features):
-            fold_counts.append(len(dev_grids[f]))
-            borders.append(dev_grids[f].copy())
-            one_hot.append(False)
-            nan_treatment.append(NAN_TREATMENT_AS_IS)
-    else:
-        for f in range(n_features):
-            var column = List[Float32]()
-            for r in range(n_rows):
-                var value = x_colmajor[f * n_rows + r]
-                if not isfinite(value):
-                    raise Error("train_ordered_rmse requires finite numeric features")
-                column.append(value)
-            var grid = best_split(column^, border_count)
-            fold_counts.append(len(grid))
-            borders.append(grid^)
-            one_hot.append(False)
-            nan_treatment.append(NAN_TREATMENT_AS_IS)
-    var layout = build_layout(fold_counts)
-    var cindex = _build_cindex_from_floats(ctx, x_colmajor, n_rows, borders, fold_counts)
-    var result = fit_ordered_rmse(
-        ctx, layout, cindex, y, sample_weight, permutation,
-        n_estimators, max_depth,
-        ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
-        learning_rate, l2_leaf_reg,
+    # lane/cpu3-gbdt-b: ONE route, the resident one. X goes up once, is
+    # refused for NaN / infinity on the device and quantized from the
+    # resident buffer (`train_ordered_rmse_ptr`); the host finiteness walk,
+    # the host grid arm and the per-column host staging are gone. Same
+    # grid, same kernels: the bits this list route returned under
+    # `IDN_ORDERED_RMSE_DEVICE_GRID`.
+    var model = train_ordered_rmse_ptr(
+        ctx, Int(x_colmajor.unsafe_ptr()), y, n_rows, n_features, permutation,
+        n_estimators, max_depth, border_count, learning_rate, l2_leaf_reg,
+        sample_weight,
     )
-    # Keep the aggregate intact while its fold/device cursors are destroyed.
-    # Moving this nested field alone leaves a partially consumed result in
-    # Mojo; the exported host model copy has no device-buffer ownership.
-    var exported_model = result.model.copy()
-    return TrainedModel(
-        exported_model^, fold_counts^, one_hot^, borders^, nan_treatment^,
-        List[Float64](), List[Float64](), -1, False, 0,
-        List[TCtrValueTable](), TTensorCtrRegistry(n_features),
-    )
-
+    _ = len(x_colmajor)
+    return model^
 
 
 def _build_cindex_from_device_floats(
@@ -2673,7 +2601,7 @@ def _build_cindex_from_device_floats(
     var hb = ctx.enqueue_create_host_buffer[DType.float32](max(1, n_features) * SLAB)
     var db = ctx.enqueue_create_buffer[DType.float32](max(1, n_features) * SLAB)
     ctx.synchronize()
-    for f in range(n_features):
+    for f in range(n_features):  # small-loop(n_features: per-feature border slabs): packs the fitted borders, at most 255 a feature, for one upload; no row data
         if len(borders[f]) + 1 > SLAB:
             raise Error("_build_cindex_from_device_floats: more than 255 borders")
         hb.unsafe_ptr().unsafe_store(f * SLAB, Float32(len(borders[f])))
@@ -2714,77 +2642,69 @@ def train_ordered_rmse_ptr(
     back) and is quantized from the resident buffer; no host List copy of
     X, no host finiteness walk, no per-column host staging. The grid comes
     from the same device border build over the caller's columns, so the
-    model is the list route's bits. Without `IDN_ORDERED_RMSE_DEVICE_GRID`
-    (its `_OFF` arm builds the grid on the host) this takes the list
-    route."""
+    model is the list route's bits. lane/cpu3-gbdt-b: this is now the ONLY
+    route (`train_ordered_rmse` delegates here); the host-grid `_OFF` arm is
+    gone from the GPU path, in every mode."""
     from gbdt.methods.dynamic_boosting import fit_ordered_rmse
 
     if x_addr == 0:
         raise Error("train_ordered_rmse: null X address")
     var xp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_addr)
-    comptime if not IDN_ORDERED_RMSE_DEVICE_GRID:
-        var xs = List[Float32](capacity=n_rows * n_features)
-        for i in range(n_rows * n_features):
-            xs.append(xp.unsafe_load(i))
-        return train_ordered_rmse(
-            ctx, xs, y, n_rows, n_features, permutation, n_estimators,
-            max_depth, border_count, learning_rate, l2_leaf_reg, sample_weight,
+    if n_rows != len(y) or n_features < 1 or n_rows < 1:
+        raise Error("train_ordered_rmse input shape mismatch")
+    if border_count < 1 or border_count > 255:
+        raise Error("train_ordered_rmse supports 1..255 borders")
+    var n_cells = n_rows * n_features
+    var d_x = ctx.enqueue_create_buffer[DType.float32](n_cells)
+    ctx.enqueue_copy(
+        dst_buf=d_x,
+        src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr),
+    )
+    if device_first_nonfinite(ctx, d_x, n_cells) >= 0:
+        raise Error("train_ordered_rmse requires finite numeric features")
+    var grid_cols = List[MutPointer[Float32, MutUntrackedOrigin]](
+        capacity=n_features
+    )
+    for f in range(n_features):  # small-loop(n_features: column pointers): one pointer per column for the border build, no element read
+        grid_cols.append(xp + f * n_rows)
+    var got = device_float_borders(
+        ctx, grid_cols, n_rows, n_rows, border_count, NAN_MODE_FORBIDDEN,
+        generate_seed_for_borders(UInt64(0)),
+    )
+    var dev_grids = got[0].copy()
+    if len(dev_grids) != n_features:
+        raise Error(
+            "train_ordered_rmse: the device border build returned "
+            + String(len(dev_grids)) + " grids for "
+            + String(n_features) + " features"
         )
-    else:
-        if n_rows != len(y) or n_features < 1 or n_rows < 1:
-            raise Error("train_ordered_rmse input shape mismatch")
-        if border_count < 1 or border_count > 255:
-            raise Error("train_ordered_rmse supports 1..255 borders")
-        var n_cells = n_rows * n_features
-        var d_x = ctx.enqueue_create_buffer[DType.float32](n_cells)
-        ctx.enqueue_copy(
-            dst_buf=d_x,
-            src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr),
-        )
-        if device_first_nonfinite(ctx, d_x, n_cells) >= 0:
-            raise Error("train_ordered_rmse requires finite numeric features")
-        var grid_cols = List[MutPointer[Float32, MutUntrackedOrigin]](
-            capacity=n_features
-        )
-        for f in range(n_features):
-            grid_cols.append(xp + f * n_rows)
-        var got = device_float_borders(
-            ctx, grid_cols, n_rows, n_rows, border_count, NAN_MODE_FORBIDDEN,
-            generate_seed_for_borders(UInt64(0)),
-        )
-        var dev_grids = got[0].copy()
-        if len(dev_grids) != n_features:
-            raise Error(
-                "train_ordered_rmse: the device border build returned "
-                + String(len(dev_grids)) + " grids for "
-                + String(n_features) + " features"
-            )
-        var borders = List[List[Float32]]()
-        var fold_counts = List[Int]()
-        var one_hot = List[Bool]()
-        var nan_treatment = List[Int]()
-        for f in range(n_features):
-            fold_counts.append(len(dev_grids[f]))
-            borders.append(dev_grids[f].copy())
-            one_hot.append(False)
-            nan_treatment.append(NAN_TREATMENT_AS_IS)
-        var layout = build_layout(fold_counts)
-        var cindex = _build_cindex_from_device_floats(
-            ctx, d_x, n_rows, borders, fold_counts
-        )
-        _ = d_x^
-        var result = fit_ordered_rmse(
-            ctx, layout, cindex, y, sample_weight, permutation,
-            n_estimators, max_depth,
-            ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
-            learning_rate, l2_leaf_reg,
-        )
-        var exported_model = result.model.copy()
-        return TrainedModel(
-            exported_model^, fold_counts^, one_hot^, borders^, nan_treatment^,
-            List[Float64](), List[Float64](), -1, False, 0,
-            List[TCtrValueTable](), TTensorCtrRegistry(n_features),
-        )
+    var borders = List[List[Float32]]()
+    var fold_counts = List[Int]()
+    var one_hot = List[Bool]()
+    var nan_treatment = List[Int]()
+    for f in range(n_features):  # small-loop(n_features: model plan entries): per-feature border list, fold count and flags of the fitted grid, no row data
+        fold_counts.append(len(dev_grids[f]))
+        borders.append(dev_grids[f].copy())
+        one_hot.append(False)
+        nan_treatment.append(NAN_TREATMENT_AS_IS)
+    var layout = build_layout(fold_counts)
+    var cindex = _build_cindex_from_device_floats(
+        ctx, d_x, n_rows, borders, fold_counts
+    )
+    _ = d_x^
+    var result = fit_ordered_rmse(
+        ctx, layout, cindex, y, sample_weight, permutation,
+        n_estimators, max_depth,
+        ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
+        learning_rate, l2_leaf_reg,
+    )
+    var exported_model = result.model.copy()
+    return TrainedModel(
+        exported_model^, fold_counts^, one_hot^, borders^, nan_treatment^,
+        List[Float64](), List[Float64](), -1, False, 0,
+        List[TCtrValueTable](), TTensorCtrRegistry(n_features),
+    )
+
 
 def model_input_features(tm: TrainedModel) raises -> Int:
     """How many RAW input columns `predict_floats` expects for this model.
@@ -2889,13 +2809,13 @@ def predict_floats(
         tm.model, ctx, n_rows, tm.fold_counts, cindex, cursor,
         one_hot=tm.one_hot,
     )
-    var hc = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cursor)
+    # the cursor straight into the returned list (lane/cpu3-gbdt-b): no
+    # host staging buffer, no per-row host copy
+    var out = List[Float32](length=n_rows, fill=Float32(0.0))
+    if n_rows > 0:
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=cursor)
     ctx.synchronize()
     _ = cursor^  # past the drain (step-33 race class, device side)
-    var out = List[Float32]()
-    for r in range(n_rows):
-        out.append(hc.unsafe_ptr().unsafe_load(r))
     return out^
 
 
@@ -2922,6 +2842,38 @@ def predict_multi_floats(
     without a `prediction_type`.
     """
     var approx_dim = model_approx_dim(tm.model)
+    var out = List[Float32](length=n_rows * approx_dim, fill=Float32(0.0))
+    _ = predict_multi_linked_into(
+        ctx, tm, x_colmajor, n_rows, LINK_RAW,
+        rebind[MutPointer[Float32, MutUntrackedOrigin]](out.unsafe_ptr()),
+    )
+    return out^
+
+
+def predict_multi_linked_into(
+    ctx: DeviceContext,
+    tm: TrainedModel,
+    x_colmajor: List[Float32],
+    n_rows: Int,
+    link_mode: Int,
+    out: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """lane/cpu3-gbdt-b: `predict_multi_floats` with the row-major reshape
+    and the probability link ON THE DEVICE, written straight into `out`.
+    `link_mode` is `LINK_RAW` (`approx_dim` wide, the reshape the host loop
+    did), `LINK_SOFTMAX` (`approx_dim + 1` wide, `multiclass_probabilities`'
+    words) or `LINK_SIGMOID` (`approx_dim` wide, `one_vs_all_probabilities`'
+    words); `resident_link_kernel` computes them in soft binary64 exactly as
+    the host functions do, so the bits are theirs. Returns the width."""
+    var approx_dim = model_approx_dim(tm.model)
+    var width = approx_dim
+    if link_mode == LINK_SOFTMAX:
+        width = approx_dim + 1
+    elif link_mode != LINK_RAW and link_mode != LINK_SIGMOID:
+        raise Error(
+            "predict_multi_linked_into: link mode " + String(link_mode)
+            + " is not RAW, SOFTMAX or SIGMOID"
+        )
     var expanded_x: List[Float32]
     if len(tm.tensor_ctr_registry.features) != 0 and len(tm.ctr_tables) != 0:
         raise Error(
@@ -2943,26 +2895,40 @@ def predict_multi_floats(
         tm.nan_treatment,
     )
     var cursor = ctx.enqueue_create_buffer[DType.float32](
-        approx_dim * n_rows
+        max(1, approx_dim * n_rows)
     )
     predict(
         tm.model, ctx, n_rows, tm.fold_counts, cindex, cursor,
         one_hot=tm.one_hot,
     )
-    var hc = ctx.enqueue_create_host_buffer[DType.float32](
-        approx_dim * n_rows
+    if n_rows <= 0:
+        ctx.synchronize()
+        return width
+    var d_out = ctx.enqueue_create_buffer[DType.float32](n_rows * width)
+    var d_u64 = ctx.enqueue_create_buffer[DType.uint64](1)
+    var d_i64 = ctx.enqueue_create_buffer[DType.int64](1)
+    var link_blocks = min((n_rows + LINK_BLOCK - 1) // LINK_BLOCK, 65535)
+    ctx.enqueue_function[resident_link_kernel](
+        cursor.unsafe_ptr(),
+        d_out.unsafe_ptr(),
+        d_u64.unsafe_ptr(),
+        d_i64.unsafe_ptr(),
+        Int32(n_rows), Int32(approx_dim), Int32(link_mode),
+        Int32(0), Int32(0),
+        grid_dim=link_blocks, block_dim=LINK_BLOCK,
     )
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=cursor)
+    ctx.enqueue_copy(dst_ptr=out, src_buf=d_out)
     ctx.synchronize()
-    _ = cursor^  # past the drain (step-33 race class, device side)
-    var out = List[Float32]()
-    for r in range(n_rows):
-        for d in range(approx_dim):
-            out.append(hc.unsafe_ptr().unsafe_load(d * n_rows + r))
-    return out^
+    # past the drain (step-33 race class)
+    _ = cursor^
+    _ = d_out^
+    _ = d_u64^
+    _ = d_i64^
+    _ = len(expanded_x)
+    return width
 
 
-def one_vs_all_probabilities(
+def one_vs_all_probabilities_reference(
     approxes: List[Float32], n_rows: Int, num_classes: Int
 ) raises -> List[Float32]:
     """Their `MultiProbability` transform (`eval_processing.h:222-226`):
@@ -2998,7 +2964,7 @@ def one_vs_all_probabilities(
     return out^
 
 
-def multiclass_probabilities(
+def multiclass_probabilities_reference(
     approxes: List[Float32], n_rows: Int, num_classes: Int
 ) raises -> List[Float32]:
     """The softmax their `prediction_type='Probability'` applies.

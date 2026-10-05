@@ -128,7 +128,7 @@ def device_float_borders(
     var h_mode = ctx.enqueue_create_host_buffer[DType.int32](chunk)
     ctx.synchronize()
     var hs = h_seg.unsafe_ptr()
-    for c in range(chunk):
+    for c in range(chunk):  # small-loop(chunk: columns of the chunk): two segment words per column, launch arguments
         hs[c] = UInt32(c * sn)
         hs[chunk + c] = UInt32(sn)
     ctx.enqueue_copy(
@@ -196,7 +196,7 @@ def device_float_borders(
         ctx.enqueue_copy(dst_ptr=h_counts.unsafe_ptr(), src_buf=d_counts)
         ctx.enqueue_copy(dst_ptr=h_mode.unsafe_ptr(), src_buf=d_mode)
         ctx.synchronize()
-        for c in range(width):
+        for c in range(width):  # small-loop(width: columns of the chunk): collects each column's fitted borders (at most out_cap) and mode, model parameters, no row data
             var m = Int(h_mode.unsafe_ptr()[c])
             if m == Int(GLS_MODE_REFUSED):
                 raise Error(
@@ -207,7 +207,7 @@ def device_float_borders(
             var bs = List[Float32](capacity=nb + 1)
             if m == NAN_MODE_MIN:
                 bs.append(Float32(-3.4028234663852886e38))
-            for j in range(nb):
+            for j in range(nb):  # small-loop(nb: borders of one column): copies one column's fitted borders (at most out_cap), model parameters
                 bs.append(h_out.unsafe_ptr()[c * out_cap + j])
             if m == NAN_MODE_MAX:
                 bs.append(Float32(3.4028234663852886e38))

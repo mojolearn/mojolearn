@@ -74,6 +74,7 @@ from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
+from gbdt.data.group_layout import device_group_layout
 from gbdt.data.pairs import MAX_PAIR_COUNT_ON_GPU, prepare_pairs
 from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
 from gbdt.targets.kernel.pointwise_targets import (
@@ -257,22 +258,14 @@ def make_pairwise_group_buffers(
         var n_groups = len(group_sizes)
         if n_groups < 1:
             raise Error("Cannot generate pairs for data without groups")
-        var h_off = ctx.enqueue_create_host_buffer[DType.uint32](n_groups + 1)
-        var at = 0
-        h_off.unsafe_ptr().unsafe_store(0, UInt32(0))
-        for q in range(n_groups):
-            var size = Int(group_sizes[q])
-            if size < 1:
-                raise Error("PairLogit: query " + String(q) + " has no rows")
-            at += size
-            h_off.unsafe_ptr().unsafe_store(q + 1, UInt32(at))
-        if at != n_rows:
-            raise Error(
-                "PairLogit: the query sizes cover " + String(at) + " rows of "
-                + String(n_rows)
-            )
-        var d_off = ctx.enqueue_create_buffer[DType.uint32](n_groups + 1)
-        ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
+        # lane/cpu3-gbdt-b: the `n_groups + 1` offsets formed and the sizes
+        # checked on the device (`gbdt/data/group_layout.mojo`)
+        var layout = device_group_layout(
+            ctx, group_sizes, n_rows, "PairLogit: query ",
+            "PairLogit: the query sizes cover ",
+        )
+        var d_off = layout.offsets.copy()
+        _ = layout^
         var d_acc = ctx.enqueue_create_buffer[DType.float32](
             2 * n_groups + 2 * n_rows
         )
@@ -315,8 +308,7 @@ def make_pairwise_group_buffers(
                 "Observation weights should be greater or equal zero. Total"
                 " weight should be greater, than zero"
             )
-        _ = h_off^  # past the drain (step-33 race class)
-        _ = h_gp^
+        _ = h_gp^  # past the drain (step-33 race class)
         _ = h_gw^
         _ = d_gp^
         _ = d_gw^

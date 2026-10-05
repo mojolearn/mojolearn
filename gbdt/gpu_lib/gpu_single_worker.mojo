@@ -266,7 +266,7 @@ struct TGpuOneDeviceWorker(Movable):
     def check_running_tasks(mut self) -> Bool:
         """Their `CheckRunningTasks` (`gpu_single_worker.h:202-213`)."""
         var has_running = False
-        for i in range(len(self.streams)):
+        for i in range(len(self.streams)):  # small-loop(streams: streams): polls the few device streams, no data
             if self.streams[i].is_active():
                 if self.streams[i].has_tasks():
                     has_running = True
@@ -292,7 +292,7 @@ struct TGpuOneDeviceWorker(Movable):
         row costs one drain, not two.
         """
         var first = 1 if skip_default else 0
-        for i in range(first, len(self.streams)):
+        for i in range(first, len(self.streams)):  # small-loop(streams: streams): drains the few active device streams, no data
             if self.streams[i].is_active():
                 self.sync_stream(Int32(i))
 
@@ -415,7 +415,7 @@ struct TGpuOneDeviceWorker(Movable):
         the check sits where the list is read. The value refused is the same.
         """
         self.wait_all_task_to_submit()
-        for i in range(len(ids)):
+        for i in range(len(ids)):  # small-loop(ids: stream ids): frees the few listed streams, no data
             var id = ids[i]
             if id == 0:
                 raise Error("Error: can't free the default stream")

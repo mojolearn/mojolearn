@@ -69,13 +69,12 @@ from checks.numerics import (
 #: GPU-free and both sides import it.
 #: `-D MOJOLEARN_IDN_GBDT_ORDERED_RMSE_DEVICE_GRID_OFF` (or the master
 #: `-D MOJOLEARN_IDN_ALL_OFF`) restores the host `best_split` on both sides.
-comptime IDN_ORDERED_RMSE_DEVICE_GRID = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GBDT_ORDERED_RMSE_DEVICE_GRID_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: lane/cpu3-gbdt-b (2026-10-04): ALWAYS ON, every mode. The host-grid arm
+#: was CPU work inside the GPU fit, so `train_ordered_rmse` no longer has it
+#: (no `_OFF`); the host column keeps reading this constant so it builds the
+#: same grid. `MOJOLEARN_IDN_GBDT_ORDERED_RMSE_DEVICE_GRID_OFF` and
+#: `MOJOLEARN_IDN_ALL_OFF` no longer move it.
+comptime IDN_ORDERED_RMSE_DEVICE_GRID = True
 
 comptime LINEAR_BOUNDS_2635 = is_defined["MOJOLEARN_2635_LINEAR_BOUNDS"]()
 """DEVIATION 2635: `-D MOJOLEARN_2635_LINEAR_BOUNDS=1` restores the linear

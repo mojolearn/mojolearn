@@ -79,6 +79,7 @@ the same `cub::DeviceScan::ExclusiveSum` over a different input iterator.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.memory import memcpy
 from max.gpu.primitives.block import prefix_sum
 
 from gbdt.gpu_util.copy import COPY_BLOCK, copy_u32_kernel
@@ -284,6 +285,30 @@ def launch_radix_sort_bins(
         )
 
 
+def float_sort_key_kernel(
+    keys: MutPointer[UInt32, MutAnyOrigin], n_in: Int32, forward: Int32
+):
+    """`DeviceFloatSorter`'s order-preserving float key map, one thread per
+    element: forward flips every bit of a negative and sets the sign of a
+    non-negative; the inverse undoes it."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var w = keys.unsafe_load(i)
+    var out: UInt32
+    if forward != 0:
+        if w & UInt32(0x80000000) != UInt32(0):
+            out = ~w
+        else:
+            out = w | UInt32(0x80000000)
+    else:
+        if w & UInt32(0x80000000) != UInt32(0):
+            out = w ^ UInt32(0x80000000)
+        else:
+            out = ~w
+    keys.unsafe_store(i, out)
+
+
 struct DeviceFloatSorter(Movable):
     """Their `RadixSort(sortedFeature)` over float columns -- the device
     half of `ComputeBorders` (`gpu_data/gpu_binarization_helpers.cpp:
@@ -355,20 +380,24 @@ struct DeviceFloatSorter(Movable):
                 + String(n)
             )
         if n > 1:
+            # lane/cpu3-gbdt-b: the raw bits go up and the order-preserving
+            # twiddle (and its inverse after the sort) runs on the device;
+            # the same map, so the same sorted words
             var hp = self.host.unsafe_ptr()
             var vbits = values.unsafe_ptr().unsafe_bitcast[UInt32]()
-            for i in range(n):
-                var bits = vbits.unsafe_load(i)
-                var key: UInt32
-                if bits & UInt32(0x80000000) != UInt32(0):
-                    key = ~bits
-                else:
-                    key = bits | UInt32(0x80000000)
-                hp.unsafe_store(i, key)
-            ctx.enqueue_copy(dst_buf=self.keys, src_ptr=hp)
+            ctx.enqueue_copy(dst_buf=self.keys, src_ptr=vbits)
+            var tw_blocks = (n + COPY_BLOCK - 1) // COPY_BLOCK
+            ctx.enqueue_function[float_sort_key_kernel](
+                self.keys.unsafe_ptr(), Int32(n), Int32(1),
+                grid_dim=tw_blocks, block_dim=COPY_BLOCK,
+            )
             launch_radix_sort_bins(
                 ctx, n, 0, 32, self.keys, self.vals, self.tkeys,
                 self.tvals, self.offsets, self.bsums,
+            )
+            ctx.enqueue_function[float_sort_key_kernel](
+                self.keys.unsafe_ptr(), Int32(n), Int32(0),
+                grid_dim=tw_blocks, block_dim=COPY_BLOCK,
             )
             ctx.enqueue_copy(dst_ptr=hp, src_buf=self.keys)
         self.pending = values^
@@ -386,16 +415,10 @@ struct DeviceFloatSorter(Movable):
         var n = len(values)
         if n > 1:
             ctx.synchronize()
+            # the device already untwiddled the keys: one bulk host copy
             var hp = self.host.unsafe_ptr()
             var vbits = values.unsafe_ptr().unsafe_bitcast[UInt32]()
-            for i in range(n):
-                var key = hp.unsafe_load(i)
-                var bits: UInt32
-                if key & UInt32(0x80000000) != UInt32(0):
-                    bits = key ^ UInt32(0x80000000)
-                else:
-                    bits = ~key
-                vbits.unsafe_store(i, bits)
+            memcpy(dest=vbits, src=hp, count=n)
         return values^
 
     def sort(
