@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Borrowed Float32 arrays; GPU arithmetic; no context or pointer retained."""
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, read_f32, copy_f32
+from bindings.hostptr import f32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host_into, validate_standard, standard_fit_host, standard_transform_host_into, minmax_fit_direct, standard_fit_direct, minmax_transform_direct, standard_transform_direct
+from preprocessing.estimator import validate_dimensions, validate_standard, minmax_fit_refusing, minmax_transform_refusing, standard_fit_refusing, standard_transform_refusing, minmax_fit_direct, standard_fit_direct, minmax_transform_direct, standard_transform_direct
 from preprocessing.minmax import PREP_FAST_MINMAX
 
 
@@ -17,11 +17,6 @@ def ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("preprocessing: null Float32 pointer")
     return f32_ptr(addr)
-
-
-def load(addr: Int, n: Int) raises -> List[Float32]:
-    _ = ptr(addr)  # Preserve this surface's null-pointer refusal.
-    return read_f32(addr, max(0, n))
 
 
 def fit_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -33,11 +28,12 @@ def fit_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObje
     var lower = Float32(Float64(py=params[2]))
     var upper = Float32(Float64(py=params[3]))
     validate_dimensions(n,d,lower,upper)
-    var x = load(Int(py=x_addr),n*d)
+    # lane cpu4-python: the device route (X from the caller's buffer, every
+    # scan on the device), no host List copy or host walk of X
+    var x = ptr(Int(py=x_addr))
     var output = ptr(Int(py=out_addr))
     with GILReleased(Python()):
-        var result = minmax_fit_host(x,n,d,lower,upper)
-        copy_f32(result.unsafe_ptr(), output, 5*d)
+        minmax_fit_refusing(x,n,d,lower,upper,output)
     return PythonObject(5*d)
 
 
@@ -55,12 +51,12 @@ def transform_binding(
     var lower = Float32(Float64(py=params[4]))
     var upper = Float32(Float64(py=params[5]))
     validate_dimensions(n,d,lower,upper)
-    var x = load(Int(py=x_addr),n*d)
-    var scale = load(Int(py=scale_addr),d)
-    var offset = load(Int(py=min_addr),d)
+    var x = ptr(Int(py=x_addr))
+    var scale = ptr(Int(py=scale_addr))
+    var offset = ptr(Int(py=min_addr))
     var output = ptr(Int(py=out_addr))
     with GILReleased(Python()):
-        minmax_transform_host_into(x,scale,offset,output,n,d,inverse,clip,lower,upper)
+        minmax_transform_refusing(x,scale,offset,output,n,d,inverse,clip,lower,upper)
     return PythonObject(n*d)
 
 
@@ -73,11 +69,10 @@ def standard_fit_binding(x_addr: PythonObject, out_addr: PythonObject, params: P
     var with_mean = Int(py=params[2])
     var with_std = Int(py=params[3])
     validate_standard(n,d,with_mean,with_std)
-    var x = load(Int(py=x_addr),n*d)
+    var x = ptr(Int(py=x_addr))
     var output = ptr(Int(py=out_addr))
     with GILReleased(Python()):
-        var result = standard_fit_host(x,n,d,with_mean,with_std)
-        copy_f32(result.unsafe_ptr(), output, 3*d)
+        standard_fit_refusing(x,n,d,with_mean,with_std,output)
     return PythonObject(3*d)
 
 
@@ -94,12 +89,12 @@ def standard_transform_binding(
     var with_mean = Int(py=params[3])
     var with_std = Int(py=params[4])
     validate_standard(n,d,with_mean,with_std)
-    var x = load(Int(py=x_addr),n*d)
-    var mean = load(Int(py=mean_addr),d)
-    var scale = load(Int(py=scale_addr),d)
+    var x = ptr(Int(py=x_addr))
+    var mean = ptr(Int(py=mean_addr))
+    var scale = ptr(Int(py=scale_addr))
     var output = ptr(Int(py=out_addr))
     with GILReleased(Python()):
-        standard_transform_host_into(x,mean,scale,output,n,d,inverse,with_mean,with_std)
+        standard_transform_refusing(x,mean,scale,output,n,d,inverse,with_mean,with_std)
     return PythonObject(n*d)
 
 
