@@ -1274,10 +1274,138 @@ def mamba3_angle_reduce_kernel(
         d_dt.unsafe_store(cell,accdt)
 
 
+# ---------------------------------------------------------------------------
+# lane nr-mamba (2026-10-04, roadmap B3 as the review corrected it)
+# IDN_M3_ANGLE_DT_SUFFIX (default ON; `-D MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF`
+# or `-D MOJOLEARN_IDN_ALL_OFF` restores main). Every numeric mode on every
+# column but the Apple FAST chunk arm (AFN_M3_BWD_CHUNK keeps its own).
+#
+# Main folded, for each (token, head, angle), the suffix d_theta[li..L-1]
+# ascending from +0.0 in one thread: O(L^2) adds per (head, angle). Here
+# each (batch, head, angle) chain's reverse cumulative sum is computed ONCE
+# and every token reads its own entry:
+#   carry(t) = sum over u >= t of d_theta(u), as fixed chunks of
+#   M3_ANGLE_SUFFIX_CHUNK tokens pinned to absolute position t (chunk k is
+#   tokens [64k, 64k + 64)): each chunk's total folds descending from +0.0;
+#   a token's carry is (the totals of the later chunks, folded descending
+#   from +0.0) seeded into its own chunk's descending walk.
+# d_rate = carry * dt (main's theta_reverse product) and
+# d_dt = fold over the 32 angles ascending of fma(carry, rate, acc) (main's
+# chain over r, from the new carry). The chunk is a constant, not a shape
+# rule, and no fold depends on the launch.
+# BITS CHANGE: d_rate and d_dt, so d_angle, d_dt_bias, d_dt_raw, the in_proj
+# dt and angle columns, d_W_in and through d_x every upstream gradient and
+# the optimizer state. One source serves the device columns (NVIDIA, AMD,
+# Metal; IDENTICAL and FAST on NVIDIA/AMD), the generated host column and the
+# backward checks generated from it; both prefill-backward call sites and the
+# tail dump pass the chunk-sum scratch.
+# ---------------------------------------------------------------------------
+comptime IDN_M3_ANGLE_DT_SUFFIX = (
+    not is_defined["MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime M3_ANGLE_SUFFIX_CHUNK = 64
+
+
+def mamba3_angle_suffix_sums_cells(b: Int, l: Int, nh: Int) -> Int:
+    """Floats of the chunk-sum scratch `mamba3_backward_angle_into` takes."""
+    var k = (l + M3_ANGLE_SUFFIX_CHUNK - 1) // M3_ANGLE_SUFFIX_CHUNK
+    if k < 1:
+        k = 1
+    return b * nh * M3_NUM_ROPE_ANGLES * k
+
+
+def mamba3_angle_chunk_sum_kernel(
+    sums: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,
+):
+    """One thread per (chain, chunk): the chunk's d_theta total, descending
+    from +0.0. sums[chain * K + k], chain = (b * nh + h) * R + r."""
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in)
+    var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=b*nh*M3_NUM_ROPE_ANGLES*nk:return
+    var k=cell%nk;var chain=cell//nk
+    var r=chain%M3_NUM_ROPE_ANGLES;var bh=chain//M3_NUM_ROPE_ANGLES
+    var h=bh%nh;var bb=bh//nh
+    var t0=k*M3_ANGLE_SUFFIX_CHUNK;var t1=t0+M3_ANGLE_SUFFIX_CHUNK
+    if t1>l:t1=l
+    var s=Float32(0.0)
+    var t=t1-1
+    while t>=t0:
+        s=ftz(s+ftz(d_theta.unsafe_load(((bb*l+t)*nh+h)*M3_NUM_ROPE_ANGLES+r)))
+        t-=1
+    sums.unsafe_store(cell,s)
+
+
+def mamba3_angle_suffix_kernel(
+    carry_out: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
+    sums: MutPointer[Float32, MutAnyOrigin], b_in:Int32,l_in:Int32,nh_in:Int32,
+):
+    """One thread per (chain, chunk): seed = the later chunks' totals
+    folded descending from +0.0, then the chunk walked descending; each
+    token's carry lands in carry_out (the d_rate buffer, [B, L, H, R])."""
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in)
+    var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=b*nh*M3_NUM_ROPE_ANGLES*nk:return
+    var k=cell%nk;var chain=cell//nk
+    var r=chain%M3_NUM_ROPE_ANGLES;var bh=chain//M3_NUM_ROPE_ANGLES
+    var h=bh%nh;var bb=bh//nh
+    var carry=Float32(0.0)
+    var kk=nk-1
+    while kk>k:
+        carry=ftz(carry+ftz(sums.unsafe_load(chain*nk+kk)))
+        kk-=1
+    var t0=k*M3_ANGLE_SUFFIX_CHUNK;var t1=t0+M3_ANGLE_SUFFIX_CHUNK
+    if t1>l:t1=l
+    var t=t1-1
+    while t>=t0:
+        var idx=((bb*l+t)*nh+h)*M3_NUM_ROPE_ANGLES+r
+        carry=ftz(carry+ftz(d_theta.unsafe_load(idx)))
+        carry_out.unsafe_store(idx,carry)
+        t-=1
+
+
+def mamba3_angle_suffix_dt_kernel(
+    d_dt: MutPointer[Float32, MutAnyOrigin], d_rate: MutPointer[Float32, MutAnyOrigin],
+    angle_raw: MutPointer[Float32, MutAnyOrigin], dt: MutPointer[Float32, MutAnyOrigin],
+    m_in:Int32,nh_in:Int32,dip_in:Int32,col_angle_in:Int32,
+):
+    """One thread per (token, head): d_dt = fold over r ascending of
+    fma(carry, rate, acc) from +0.0, then the row's carries become
+    d_rate = carry * dt in place (this thread alone reads and writes them)."""
+    var m=Int(m_in);var nh=Int(nh_in);var dip=Int(dip_in);var ca=Int(col_angle_in)
+    var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell>=m*nh:return
+    var token=cell//nh
+    var dtv=ftz(dt.unsafe_load(cell))
+    var accdt=Float32(0.0)
+    for r in range(M3_NUM_ROPE_ANGLES):
+        var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var rate=ftz(identical_mul(ftz(identical_tanh(raw)),M3_PI))
+        var carry=ftz(d_rate.unsafe_load(cell*M3_NUM_ROPE_ANGLES+r))
+        accdt=ftz(identical_mul_add(carry,rate,accdt))
+        d_rate.unsafe_store(cell*M3_NUM_ROPE_ANGLES+r,ftz(identical_mul(carry,dtv)))
+    d_dt.unsafe_store(cell,accdt)
+
+
 def mamba3_backward_angle_into(
     ctx:DeviceContext,mut d_rate:DeviceBuffer[DType.float32],mut d_angle:DeviceBuffer[DType.float32],mut d_dt:DeviceBuffer[DType.float32],
     mut d_theta:DeviceBuffer[DType.float32],mut dt:DeviceBuffer[DType.float32],mut in_proj:DeviceBuffer[DType.float32],b:Int,l:Int,dims:Mamba3Dims,
+    mut sums:DeviceBuffer[DType.float32],
 ) raises:
+    """`sums` holds `mamba3_angle_suffix_sums_cells(b, l, nh)` floats (read
+    only under IDN_M3_ANGLE_DT_SUFFIX)."""
+    comptime if IDN_M3_ANGLE_DT_SUFFIX:
+        var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
+        var work=b*dims.nheads*M3_NUM_ROPE_ANGLES*nk
+        ctx.enqueue_function[mamba3_angle_chunk_sum_kernel](sums.unsafe_ptr(),d_theta.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
+        ctx.enqueue_function[mamba3_angle_suffix_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),sums.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
+        var m=b*l
+        ctx.enqueue_function[mamba3_angle_suffix_dt_kernel](d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(_grid(m*dims.nheads),1,1),block_dim=(M3_BWD_TPB,1,1))
+        # d_angle half only (do_dt = 0): it reads the finished d_rate.
+        ctx.enqueue_function[mamba3_angle_reduce_kernel](d_angle.unsafe_ptr(),d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),Int32(0),grid_dim=(_grid(m*M3_NUM_ROPE_ANGLES),1,1),block_dim=(M3_BWD_TPB,1,1))
+        return
     var chains=b*dims.nheads*M3_NUM_ROPE_ANGLES
     ctx.enqueue_function[mamba3_theta_reverse_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(chains),1,1),block_dim=(M3_BWD_TPB,1,1))
     var m=b*l;var cells=m*M3_NUM_ROPE_ANGLES if m*M3_NUM_ROPE_ANGLES>m*dims.nheads else m*dims.nheads
@@ -2190,6 +2318,187 @@ def mamba3_s17_tail_shared_kernel(
         d_dacs_rec.unsafe_store(th,ftz(d_dacs_rec.unsafe_load(th)+add))
 
 
+#: Default-OFF tail candidates, ported by hand from lane/neural-pass5
+#: (0dcfceabd, fefa1db0d) onto the current tile (M3_S17_TP per column).
+#: Both walk the shared kernel's chain over the same pairs in the same
+#: order (j, then p, then n; then p, n for the state term): same bits.
+#:   -D MOJOLEARN_IDN_M3_S17_TAIL_DBUF: two half tiles resident, every
+#:      thread stages tile t while thread 0 folds tile t - 1, one barrier a
+#:      tile.
+#:   -D MOJOLEARN_IDN_M3_S17_TAIL_PIPE: each step's operands stored as an
+#:      adjacent pair and prefetched a group of M3_S17_PIPE_GROUP ahead into
+#:      thread 0's registers. MEASURED SLOWER on the L4 (8.46 against 7.27
+#:      ms at the board shape, the same bits).
+#: Both defined: DBUF runs (PIPE is the measured loser). Neither runs under
+#: MOJOLEARN_IDN_ALL_OFF, under MOJOLEARN_MAMBA3_S17_TAIL_NAIVE (the shared
+#: tail must be the active arm), or where the page does not fit the column;
+#: then the shared kernel runs. The page is the shared kernel's (two
+#: M3_S17_TP x M3_D_STATE float tiles) on both arms.
+comptime M3_S17_TAIL_PAGE_BYTES = 2 * M3_S17_TP * M3_D_STATE * 4
+comptime M3_S17_TAIL_ALT_FITS = lib_smem_page_fits_for[TARGET_COLUMN, M3_S17_TAIL_PAGE_BYTES]()
+comptime M3_S17_TAIL_DBUF = (
+    M3_S17_TAIL_SHARED
+    and M3_S17_TAIL_ALT_FITS
+    and is_defined["MOJOLEARN_IDN_M3_S17_TAIL_DBUF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime M3_S17_TAIL_PIPE = (
+    M3_S17_TAIL_SHARED
+    and M3_S17_TAIL_ALT_FITS
+    and not M3_S17_TAIL_DBUF
+    and is_defined["MOJOLEARN_IDN_M3_S17_TAIL_PIPE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime M3_S17_PIPE_GROUP = 16
+#: dbuf: two tiles of M3_S17_DB_TP value columns are the shared kernel's
+#: one tile of M3_S17_TP (the same page).
+comptime M3_S17_DB_TP = M3_S17_TP // 2
+
+
+def mamba3_s17_tail_dbuf_kernel(
+    d_dacs_rec:MutPointer[Float32,MutAnyOrigin],k:MutPointer[Float32,MutAnyOrigin],v:MutPointer[Float32,MutAnyOrigin],
+    dacs:MutPointer[Float32,MutAnyOrigin],states:MutPointer[Float32,MutAnyOrigin],d_states:MutPointer[Float32,MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,qs_in:Int32,
+):
+    """`mamba3_s17_tail_shared_kernel` double buffered (M3_S17_TAIL_DBUF).
+    Tiles t = 0 .. ntiles - 1: the chain tiles first, `TPJ` a token in token
+    order (tile t is token j = t // TPJ, columns (t % TPJ) * TPD ..), then the
+    `TPJ` state tiles. At step t every thread stages tile t into page t % 2
+    and thread 0 folds tile t - 1 from page (t - 1) % 2; one barrier a step.
+    Thread 0 walks the same pairs in the same order as the shared kernel."""
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var qs=Int(qs_in);var nc=(l+qs-1)//qs
+    comptime TPD=M3_S17_DB_TP
+    comptime TILE=TPD*M3_D_STATE
+    comptime TPJ=M3_HEADDIM//TPD
+    var cs=stack_allocation[2*TILE,Scalar[DType.float32],address_space=AddressSpace.SHARED]()
+    var ts=stack_allocation[2*TILE,Scalar[DType.float32],address_space=AddressSpace.SHARED]()
+    var blk=Int(block_idx.x);var n=Int(thread_idx.x)
+    if blk>=b*nc*nh:return
+    var h=blk%nh;var c=(blk//nh)%nc;var bb=blk//(nh*nc)
+    var token=c*qs+qs-1
+    if token>l-1:token=l-1
+    var th=(bb*l+token)*nh+h
+    var last=ftz(dacs.unsafe_load(((bb*nh+h)*nc+c)*qs+(qs-1)))
+    var el=ftz(identical_exp(last))
+    var jn=qs
+    if c*qs+qs>l:jn=l-c*qs
+    var ntiles=jn*TPJ+TPJ
+    var add=Float32(0.0)
+    for t in range(ntiles+1):
+        if t<ntiles:
+            var page=(t%2)*TILE
+            if t<jn*TPJ:
+                var j=t//TPJ;var pp0=(t%TPJ)*TPD;var tj=c*qs+j
+                var idx=((bb*nh+h)*nc+c)*qs+j;var de=ftz(identical_exp(ftz(last-ftz(dacs.unsafe_load(idx)))))
+                for pp in range(TPD):
+                    var p=pp0+pp
+                    var carry=Float32(0.0)
+                    if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+                    cs[page+pp*M3_D_STATE+n]=carry
+                    ts[page+pp*M3_D_STATE+n]=ftz(identical_mul(ftz(identical_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)))),de))
+            else:
+                var pp0=(t-jn*TPJ)*TPD
+                for pp in range(TPD):
+                    var p=pp0+pp
+                    var carry=Float32(0.0)
+                    if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+                    var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+                    cs[page+pp*M3_D_STATE+n]=carry
+                    ts[page+pp*M3_D_STATE+n]=ftz(identical_mul(hs,el))
+        if n==0 and t>=1:
+            var page=((t-1)%2)*TILE
+            for e in range(TILE):
+                add=ftz(identical_mul_add(cs[page+e],ts[page+e],add))
+        barrier()
+    if n==0:
+        d_dacs_rec.unsafe_store(th,ftz(d_dacs_rec.unsafe_load(th)+add))
+
+
+def mamba3_s17_tail_pipe_kernel(
+    d_dacs_rec:MutPointer[Float32,MutAnyOrigin],k:MutPointer[Float32,MutAnyOrigin],v:MutPointer[Float32,MutAnyOrigin],
+    dacs:MutPointer[Float32,MutAnyOrigin],states:MutPointer[Float32,MutAnyOrigin],d_states:MutPointer[Float32,MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,qs_in:Int32,
+):
+    """`mamba3_s17_tail_shared_kernel` with the chain's operand pairs adjacent
+    in threadgroup memory and prefetched a group ahead (M3_S17_TAIL_PIPE).
+    Thread n stages the shared kernel's expressions into `cts[2 e]`,
+    `cts[2 e + 1]` for its step index `e = pp * M3_D_STATE + n`; thread 0
+    folds the tile in `e` order."""
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var qs=Int(qs_in);var nc=(l+qs-1)//qs
+    comptime STEPS = M3_S17_TP * M3_D_STATE
+    comptime G = M3_S17_PIPE_GROUP
+    comptime GROUPS = STEPS // G
+    var cts=stack_allocation[2*STEPS,Scalar[DType.float32],alignment=16,address_space=AddressSpace.SHARED]()
+    var blk=Int(block_idx.x);var n=Int(thread_idx.x)
+    if blk>=b*nc*nh:return
+    var h=blk%nh;var c=(blk//nh)%nc;var bb=blk//(nh*nc)
+    var token=c*qs+qs-1
+    if token>l-1:token=l-1
+    var th=(bb*l+token)*nh+h
+    var last=ftz(dacs.unsafe_load(((bb*nh+h)*nc+c)*qs+(qs-1)))
+    var add=Float32(0.0)
+    for j in range(qs):
+        var tj=c*qs+j
+        if tj<l:
+            var idx=((bb*nh+h)*nc+c)*qs+j;var de=ftz(identical_exp(ftz(last-ftz(dacs.unsafe_load(idx)))))
+            var p0=0
+            while p0<M3_HEADDIM:
+                for pp in range(M3_S17_TP):
+                    var p=p0+pp
+                    var carry=Float32(0.0)
+                    if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+                    var e=pp*M3_D_STATE+n
+                    cts[2*e]=carry
+                    cts[2*e+1]=ftz(identical_mul(ftz(identical_mul(ftz(v.unsafe_load(((bb*l+tj)*nh+h)*M3_HEADDIM+p)),ftz(k.unsafe_load(((bb*l+tj)*nh+h)*M3_D_STATE+n)))),de))
+                barrier()
+                if n==0:
+                    var cur=InlineArray[Float32,2*G](fill=Float32(0))
+                    comptime for i in range(G):
+                        var pr=cts.unsafe_load[width=2,alignment=8](2*i)
+                        cur[2*i]=pr[0];cur[2*i+1]=pr[1]
+                    for g in range(GROUPS):
+                        var nxt=InlineArray[Float32,2*G](fill=Float32(0))
+                        if g+1<GROUPS:
+                            comptime for i in range(G):
+                                var pr=cts.unsafe_load[width=2,alignment=8](2*((g+1)*G+i))
+                                nxt[2*i]=pr[0];nxt[2*i+1]=pr[1]
+                        comptime for i in range(G):
+                            add=ftz(identical_mul_add(cur[2*i],cur[2*i+1],add))
+                        cur=nxt^
+                barrier()
+                p0+=M3_S17_TP
+    var el=ftz(identical_exp(last))
+    var p1=0
+    while p1<M3_HEADDIM:
+        for pp in range(M3_S17_TP):
+            var p=p1+pp
+            var carry=Float32(0.0)
+            if c+1<nc:carry=ftz(d_states.unsafe_load((((bb*nc+c+1)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+            var hs=ftz(states.unsafe_load((((bb*nc+c)*nh+h)*M3_HEADDIM+p)*M3_D_STATE+n))
+            var e=pp*M3_D_STATE+n
+            cts[2*e]=carry
+            cts[2*e+1]=ftz(identical_mul(hs,el))
+        barrier()
+        if n==0:
+            var cur=InlineArray[Float32,2*G](fill=Float32(0))
+            comptime for i in range(G):
+                var pr=cts.unsafe_load[width=2,alignment=8](2*i)
+                cur[2*i]=pr[0];cur[2*i+1]=pr[1]
+            for g in range(GROUPS):
+                var nxt=InlineArray[Float32,2*G](fill=Float32(0))
+                if g+1<GROUPS:
+                    comptime for i in range(G):
+                        var pr=cts.unsafe_load[width=2,alignment=8](2*((g+1)*G+i))
+                        nxt[2*i]=pr[0];nxt[2*i+1]=pr[1]
+                comptime for i in range(G):
+                    add=ftz(identical_mul_add(cur[2*i],cur[2*i+1],add))
+                cur=nxt^
+        barrier()
+        p1+=M3_S17_TP
+    if n==0:
+        d_dacs_rec.unsafe_store(th,ftz(d_dacs_rec.unsafe_load(th)+add))
+
+
 def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DType.float32],mut ddr:DeviceBuffer[DType.float32],mut dk:DeviceBuffer[DType.float32],mut dv:DeviceBuffer[DType.float32],mut ddc:DeviceBuffer[DType.float32],mut dy:DeviceBuffer[DType.float32],mut q:DeviceBuffer[DType.float32],mut k:DeviceBuffer[DType.float32],mut v:DeviceBuffer[DType.float32],mut dacs:DeviceBuffer[DType.float32],mut states:DeviceBuffer[DType.float32],mut dstates:DeviceBuffer[DType.float32],b:Int,l:Int,dims:Mamba3Dims,qs:Int) raises:
     var cells=b*l*dims.nheads
     comptime if M3_S17_OPERANDS_SHARED:
@@ -2201,7 +2510,12 @@ def mamba3_backward_s17_operands_into(ctx:DeviceContext,mut dq:DeviceBuffer[DTyp
             ctx.enqueue_function[mamba3_s17_operands_kernel](dq.unsafe_ptr(),ddr.unsafe_ptr(),dk.unsafe_ptr(),dv.unsafe_ptr(),ddc.unsafe_ptr(),dy.unsafe_ptr(),q.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
     comptime if M3_S17_TAIL_SHARED:
         var nc=(l+qs-1)//qs
-        ctx.enqueue_function[mamba3_s17_tail_shared_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
+        comptime if M3_S17_TAIL_DBUF:
+            ctx.enqueue_function[mamba3_s17_tail_dbuf_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
+        elif M3_S17_TAIL_PIPE:
+            ctx.enqueue_function[mamba3_s17_tail_pipe_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
+        else:
+            ctx.enqueue_function[mamba3_s17_tail_shared_kernel](ddc.unsafe_ptr(),k.unsafe_ptr(),v.unsafe_ptr(),dacs.unsafe_ptr(),states.unsafe_ptr(),dstates.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(qs),grid_dim=(b*nc*dims.nheads,1,1),block_dim=(M3_D_STATE,1,1))
 
 
 def mamba3_join_two_kernel(dst:MutPointer[Float32,MutAnyOrigin],a:MutPointer[Float32,MutAnyOrigin],b:MutPointer[Float32,MutAnyOrigin],n_in:Int32):

@@ -1,0 +1,4082 @@
+{
+  "schema": 1,
+  "description": "Source references to IDENTICAL candidate flags, including comments. This is an inventory, not proof of coverage or switch semantics. Consult defining expressions and route gates.",
+  "flags": {
+    "MOJOLEARN_IDN_ADAPT_BWD_BOUNDED_OFF": [
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 49
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 50
+      }
+    ],
+    "MOJOLEARN_IDN_ADAPT_M_OFF": [
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1862
+      },
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1863
+      }
+    ],
+    "MOJOLEARN_IDN_ADA_SESSION_OFF": [
+      {
+        "path": "xtrees/api.mojo",
+        "line": 887
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 890
+      }
+    ],
+    "MOJOLEARN_IDN_AF_RESIDENT_OFF": [
+      {
+        "path": "sequence/opt_resident.mojo",
+        "line": 96
+      },
+      {
+        "path": "sequence/opt_resident.mojo",
+        "line": 100
+      }
+    ],
+    "MOJOLEARN_IDN_ALL_OFF": [
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 175
+      },
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 180
+      },
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 184
+      },
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 190
+      },
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 201
+      },
+      {
+        "path": "arima/impl/fast_lbfgs_async.mojo",
+        "line": 79
+      },
+      {
+        "path": "arima/impl/fast_order_search.mojo",
+        "line": 12
+      },
+      {
+        "path": "arima/impl/fast_order_search.mojo",
+        "line": 71
+      },
+      {
+        "path": "arima/impl/fast_order_state.mojo",
+        "line": 43
+      },
+      {
+        "path": "arima/impl/idn_ls_math.mojo",
+        "line": 25
+      },
+      {
+        "path": "arima/impl/idn_ls_math.mojo",
+        "line": 39
+      },
+      {
+        "path": "bindings/_mojolearn.mojo",
+        "line": 122
+      },
+      {
+        "path": "bindings/_mojolearn_arima_host.mojo",
+        "line": 130
+      },
+      {
+        "path": "bindings/_mojolearn_embedding.mojo",
+        "line": 147
+      },
+      {
+        "path": "bindings/_mojolearn_embedding.mojo",
+        "line": 148
+      },
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 16
+      },
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 103
+      },
+      {
+        "path": "cholesky/estimator.mojo",
+        "line": 233
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 152
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 173
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 196
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 838
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 865
+      },
+      {
+        "path": "core/ctx_key.mojo",
+        "line": 8
+      },
+      {
+        "path": "core/ctx_key.mojo",
+        "line": 20
+      },
+      {
+        "path": "core/host_tile_fold.mojo",
+        "line": 18
+      },
+      {
+        "path": "core/host_tile_fold.mojo",
+        "line": 44
+      },
+      {
+        "path": "core/xtdz_coalesced.mojo",
+        "line": 144
+      },
+      {
+        "path": "dbscan/estimator.mojo",
+        "line": 147
+      },
+      {
+        "path": "dbscan/estimator.mojo",
+        "line": 160
+      },
+      {
+        "path": "dbscan/impl/dbscan.mojo",
+        "line": 77
+      },
+      {
+        "path": "dbscan/impl/dbscan.mojo",
+        "line": 86
+      },
+      {
+        "path": "dbscan/impl/runner.mojo",
+        "line": 215
+      },
+      {
+        "path": "dbscan/impl/runner.mojo",
+        "line": 240
+      },
+      {
+        "path": "dbscan/impl/runner.mojo",
+        "line": 255
+      },
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 106
+      },
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 160
+      },
+      {
+        "path": "decomposition/estimator.mojo",
+        "line": 302
+      },
+      {
+        "path": "decomposition/mean_switch.mojo",
+        "line": 10
+      },
+      {
+        "path": "decomposition/pca_rr_switch.mojo",
+        "line": 21
+      },
+      {
+        "path": "decomposition/pca_rr_switch.mojo",
+        "line": 45
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 128
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 910
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 929
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 933
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 467
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 541
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 2587
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 2859
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/quantiles.mojo",
+        "line": 544
+      },
+      {
+        "path": "ensemble/host/rf_oracle.mojo",
+        "line": 1088
+      },
+      {
+        "path": "ensemble/host/rf_oracle.mojo",
+        "line": 1091
+      },
+      {
+        "path": "ensemble/host/rf_oracle.mojo",
+        "line": 1312
+      },
+      {
+        "path": "ensemble/oob_device.mojo",
+        "line": 19
+      },
+      {
+        "path": "ensemble/oob_device.mojo",
+        "line": 31
+      },
+      {
+        "path": "ensemble/randomforest.mojo",
+        "line": 136
+      },
+      {
+        "path": "ensemble/randomforest.mojo",
+        "line": 150
+      },
+      {
+        "path": "ensemble/weighted_bootstrap_device.mojo",
+        "line": 36
+      },
+      {
+        "path": "ensemble/weighted_bootstrap_device.mojo",
+        "line": 53
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 1987
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 1990
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 2085
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 3034
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 3138
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 3176
+      },
+      {
+        "path": "gaussian_process/estimator.mojo",
+        "line": 559
+      },
+      {
+        "path": "gaussian_process/estimator.mojo",
+        "line": 568
+      },
+      {
+        "path": "gaussian_process/gp_grad_items.mojo",
+        "line": 33
+      },
+      {
+        "path": "gaussian_process/gpc_ovr.mojo",
+        "line": 37
+      },
+      {
+        "path": "gaussian_process/gpc_ovr.mojo",
+        "line": 113
+      },
+      {
+        "path": "gaussian_process/gpc_ovr.mojo",
+        "line": 121
+      },
+      {
+        "path": "gaussian_process/gpr_resident.mojo",
+        "line": 30
+      },
+      {
+        "path": "gaussian_process/gpr_resident.mojo",
+        "line": 93
+      },
+      {
+        "path": "gbdt/ctrs/ctr_binarization.mojo",
+        "line": 103
+      },
+      {
+        "path": "gbdt/data/pairs.mojo",
+        "line": 42
+      },
+      {
+        "path": "gbdt/data/pairs.mojo",
+        "line": 47
+      },
+      {
+        "path": "gbdt/gpu_util/kernel/bootstrap.mojo",
+        "line": 113
+      },
+      {
+        "path": "gbdt/gpu_util/kernel/bootstrap.mojo",
+        "line": 118
+      },
+      {
+        "path": "gbdt/grid_creator/binarization.mojo",
+        "line": 71
+      },
+      {
+        "path": "gbdt/grid_creator/binarization.mojo",
+        "line": 76
+      },
+      {
+        "path": "gbdt/methods/doc_parallel_boosting.mojo",
+        "line": 159
+      },
+      {
+        "path": "gbdt/methods/doc_parallel_boosting.mojo",
+        "line": 165
+      },
+      {
+        "path": "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+        "line": 299
+      },
+      {
+        "path": "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+        "line": 304
+      },
+      {
+        "path": "gbdt/methods/leaves_estimation/leaves_estimation.mojo",
+        "line": 99
+      },
+      {
+        "path": "gbdt/methods/leaves_estimation/leaves_estimation.mojo",
+        "line": 104
+      },
+      {
+        "path": "gbdt/methods/leaves_estimation/pointwise_oracle.mojo",
+        "line": 1369
+      },
+      {
+        "path": "gbdt/methods/leaves_estimation/pointwise_oracle.mojo",
+        "line": 1375
+      },
+      {
+        "path": "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo",
+        "line": 263
+      },
+      {
+        "path": "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo",
+        "line": 268
+      },
+      {
+        "path": "gbdt/models/kernel/add_bin_values.mojo",
+        "line": 44
+      },
+      {
+        "path": "gbdt/models/kernel/add_bin_values.mojo",
+        "line": 50
+      },
+      {
+        "path": "gbdt/models/kernel/add_bin_values.mojo",
+        "line": 65
+      },
+      {
+        "path": "gbdt/targets/kernel/yeti_rank.mojo",
+        "line": 169
+      },
+      {
+        "path": "gbdt/targets/kernel/yeti_rank.mojo",
+        "line": 176
+      },
+      {
+        "path": "gbdt/train.mojo",
+        "line": 146
+      },
+      {
+        "path": "gbdt/train.mojo",
+        "line": 151
+      },
+      {
+        "path": "glm/estimator.mojo",
+        "line": 699
+      },
+      {
+        "path": "glm/estimator.mojo",
+        "line": 702
+      },
+      {
+        "path": "glm/estimator.mojo",
+        "line": 903
+      },
+      {
+        "path": "glm/estimator.mojo",
+        "line": 907
+      },
+      {
+        "path": "glm/impl/qn/glm_base.mojo",
+        "line": 1011
+      },
+      {
+        "path": "glm/impl/qn/glm_base.mojo",
+        "line": 1014
+      },
+      {
+        "path": "glm/impl/qn/glm_base.mojo",
+        "line": 1191
+      },
+      {
+        "path": "glm/impl/qn/glm_base.mojo",
+        "line": 1196
+      },
+      {
+        "path": "glm/impl/qn/qn_tiled_rule.mojo",
+        "line": 13
+      },
+      {
+        "path": "glm/impl/qn/qn_tiled_rule.mojo",
+        "line": 22
+      },
+      {
+        "path": "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo",
+        "line": 874
+      },
+      {
+        "path": "hdbscan/impl/detail/idn_switches.mojo",
+        "line": 7
+      },
+      {
+        "path": "hdbscan/impl/detail/idn_switches.mojo",
+        "line": 22
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 70
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 87
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 107
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/single_linkage.mojo",
+        "line": 64
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/single_linkage.mojo",
+        "line": 82
+      },
+      {
+        "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "line": 62
+      },
+      {
+        "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "line": 66
+      },
+      {
+        "path": "holtwinters/estimator.mojo",
+        "line": 67
+      },
+      {
+        "path": "holtwinters/estimator.mojo",
+        "line": 70
+      },
+      {
+        "path": "holtwinters/estimator.mojo",
+        "line": 79
+      },
+      {
+        "path": "holtwinters/estimator.mojo",
+        "line": 82
+      },
+      {
+        "path": "isolation_forest/impl/isolation_forest.mojo",
+        "line": 514
+      },
+      {
+        "path": "isolation_forest/impl/isolation_forest.mojo",
+        "line": 528
+      },
+      {
+        "path": "isolation_forest/impl/isolation_forest.mojo",
+        "line": 543
+      },
+      {
+        "path": "ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo",
+        "line": 101
+      },
+      {
+        "path": "ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo",
+        "line": 104
+      },
+      {
+        "path": "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+        "line": 202
+      },
+      {
+        "path": "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+        "line": 204
+      },
+      {
+        "path": "kde/impl/neighbors/kernel_density.mojo",
+        "line": 3435
+      },
+      {
+        "path": "kde/impl/neighbors/kernel_density.mojo",
+        "line": 3439
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 186
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 258
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 271
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 432
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 446
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1233
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1365
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1676
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1824
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1836
+      },
+      {
+        "path": "kernel_methods/host/km_host_oracle.mojo",
+        "line": 217
+      },
+      {
+        "path": "kernel_methods/host/km_host_oracle.mojo",
+        "line": 526
+      },
+      {
+        "path": "kernel_methods/host/km_host_oracle.mojo",
+        "line": 533
+      },
+      {
+        "path": "mamba/host/gen/mamba3_siso.mojo",
+        "line": 491
+      },
+      {
+        "path": "mamba/host/gen/mamba3_siso.mojo",
+        "line": 531
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 59
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 68
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 77
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 80
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 92
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 102
+      },
+      {
+        "path": "mamba/impl/modules/idn_gemm_ws.mojo",
+        "line": 25
+      },
+      {
+        "path": "mamba/impl/modules/idn_gemm_ws.mojo",
+        "line": 45
+      },
+      {
+        "path": "mamba/impl/ops/mamba3_siso.mojo",
+        "line": 489
+      },
+      {
+        "path": "mamba/impl/ops/mamba3_siso.mojo",
+        "line": 529
+      },
+      {
+        "path": "metrics/impl/stats/detail/sf_epilogue_core.mojo",
+        "line": 13
+      },
+      {
+        "path": "metrics/impl/stats/detail/sf_epilogue_core.mojo",
+        "line": 52
+      },
+      {
+        "path": "metrics/impl/stats/detail/trustworthiness_score.mojo",
+        "line": 94
+      },
+      {
+        "path": "metrics/impl/stats/detail/trustworthiness_score.mojo",
+        "line": 97
+      },
+      {
+        "path": "mixture/chol_order.mojo",
+        "line": 44
+      },
+      {
+        "path": "mixture/chol_order.mojo",
+        "line": 68
+      },
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 689
+      },
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 701
+      },
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 713
+      },
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 728
+      },
+      {
+        "path": "mixture/nk_order.mojo",
+        "line": 19
+      },
+      {
+        "path": "mixture/nk_order.mojo",
+        "line": 33
+      },
+      {
+        "path": "neighbors/impl/knn/knn.mojo",
+        "line": 48
+      },
+      {
+        "path": "neighbors/impl/knn/knn.mojo",
+        "line": 50
+      },
+      {
+        "path": "neighbors/impl/selection/knn.mojo",
+        "line": 97
+      },
+      {
+        "path": "neighbors/impl/selection/knn.mojo",
+        "line": 100
+      },
+      {
+        "path": "neighbors/impl/selection/knn.mojo",
+        "line": 111
+      },
+      {
+        "path": "neighbors/impl/selection/knn.mojo",
+        "line": 113
+      },
+      {
+        "path": "sequence/exec_device.mojo",
+        "line": 87
+      },
+      {
+        "path": "sequence/exec_device.mojo",
+        "line": 90
+      },
+      {
+        "path": "sequence/layernorm.mojo",
+        "line": 22
+      },
+      {
+        "path": "sequence/moe_reg.mojo",
+        "line": 60
+      },
+      {
+        "path": "sequence/opt_resident.mojo",
+        "line": 69
+      },
+      {
+        "path": "sequence/opt_resident.mojo",
+        "line": 72
+      },
+      {
+        "path": "sequence/opt_resident.mojo",
+        "line": 100
+      },
+      {
+        "path": "sequence/prophet.mojo",
+        "line": 41
+      },
+      {
+        "path": "sequence/prophet.mojo",
+        "line": 44
+      },
+      {
+        "path": "solver/impl/cd_gram_rule.mojo",
+        "line": 9
+      },
+      {
+        "path": "solver/impl/cd_gram_rule.mojo",
+        "line": 19
+      },
+      {
+        "path": "spectral/impl/labels_device.mojo",
+        "line": 11
+      },
+      {
+        "path": "spectral/impl/labels_device.mojo",
+        "line": 26
+      },
+      {
+        "path": "spectral/impl/preprocessing/detail/fast_graph.mojo",
+        "line": 68
+      },
+      {
+        "path": "spectral/impl/sparse/linalg/detail/laplacian.mojo",
+        "line": 88
+      },
+      {
+        "path": "spectral/impl/sparse/linalg/detail/symmetrize.mojo",
+        "line": 66
+      },
+      {
+        "path": "spectral/impl/sparse/solver/detail/lanczos.mojo",
+        "line": 1892
+      },
+      {
+        "path": "spectral/impl/sparse/solver/detail/lanczos.mojo",
+        "line": 2190
+      },
+      {
+        "path": "spectral/spmv_order.mojo",
+        "line": 18
+      },
+      {
+        "path": "spectral/spmv_order.mojo",
+        "line": 32
+      },
+      {
+        "path": "svm/impl/distance/kernel_matrices.mojo",
+        "line": 390
+      },
+      {
+        "path": "svm/impl/distance/kernel_matrices.mojo",
+        "line": 394
+      },
+      {
+        "path": "svm/impl/smosolver.mojo",
+        "line": 158
+      },
+      {
+        "path": "svm/impl/smosolver.mojo",
+        "line": 163
+      },
+      {
+        "path": "svm/impl/smosolver.mojo",
+        "line": 175
+      },
+      {
+        "path": "svm/impl/smosolver.mojo",
+        "line": 179
+      },
+      {
+        "path": "training/dev_tensors.mojo",
+        "line": 22
+      },
+      {
+        "path": "training/dev_tensors.mojo",
+        "line": 43
+      },
+      {
+        "path": "training/estimator.mojo",
+        "line": 418
+      },
+      {
+        "path": "training/estimator.mojo",
+        "line": 689
+      },
+      {
+        "path": "training/estimator.mojo",
+        "line": 715
+      },
+      {
+        "path": "training/estimator.mojo",
+        "line": 1303
+      },
+      {
+        "path": "training/samba_ops.mojo",
+        "line": 98
+      },
+      {
+        "path": "transformer/impl/llama/fused_attention.mojo",
+        "line": 2253
+      },
+      {
+        "path": "transformer/impl/llama/fused_attention.mojo",
+        "line": 8895
+      },
+      {
+        "path": "transformer/impl/llama/modeling_llama.mojo",
+        "line": 3683
+      },
+      {
+        "path": "tsa/impl/select_d_fast.mojo",
+        "line": 52
+      },
+      {
+        "path": "tsa/impl/select_d_fast.mojo",
+        "line": 55
+      },
+      {
+        "path": "tsa/impl/select_d_fast.mojo",
+        "line": 62
+      },
+      {
+        "path": "tsa/impl/select_d_fast.mojo",
+        "line": 65
+      },
+      {
+        "path": "tsa/impl/timeSeries/stationarity.mojo",
+        "line": 250
+      },
+      {
+        "path": "tsa/impl/timeSeries/stationarity.mojo",
+        "line": 253
+      },
+      {
+        "path": "umap/optimizer_identical_device.mojo",
+        "line": 553
+      },
+      {
+        "path": "umap/optimizer_identical_device.mojo",
+        "line": 556
+      },
+      {
+        "path": "x_ann/tsne_core.mojo",
+        "line": 59
+      },
+      {
+        "path": "x_ann/tsne_core.mojo",
+        "line": 62
+      },
+      {
+        "path": "x_cluster/bisect.mojo",
+        "line": 46
+      },
+      {
+        "path": "x_cluster/bodies.mojo",
+        "line": 486
+      },
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 595
+      },
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 667
+      },
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 1606
+      },
+      {
+        "path": "x_cluster/device_post.mojo",
+        "line": 317
+      },
+      {
+        "path": "x_cluster/minibatch.mojo",
+        "line": 69
+      },
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 583
+      },
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1860
+      },
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1861
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 44
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 47
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 50
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 874
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 1034
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 1488
+      },
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 545
+      },
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 546
+      },
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 553
+      },
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 560
+      },
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 568
+      },
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 173
+      },
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 189
+      },
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 207
+      },
+      {
+        "path": "x_decomp/lu_fast.mojo",
+        "line": 54
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 517
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 520
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 560
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 563
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 605
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 608
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 682
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 721
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 724
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 795
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 798
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 859
+      },
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 55
+      },
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 68
+      },
+      {
+        "path": "x_decomp/tsqr_device.mojo",
+        "line": 95
+      },
+      {
+        "path": "x_decomp/tsqr_device.mojo",
+        "line": 96
+      },
+      {
+        "path": "x_linear/device.mojo",
+        "line": 741
+      },
+      {
+        "path": "x_linear/device.mojo",
+        "line": 755
+      },
+      {
+        "path": "x_linear/device.mojo",
+        "line": 829
+      },
+      {
+        "path": "x_linear/device.mojo",
+        "line": 1016
+      },
+      {
+        "path": "x_linear/device.mojo",
+        "line": 1020
+      },
+      {
+        "path": "x_linear/device.mojo",
+        "line": 2145
+      },
+      {
+        "path": "x_linear/finite_device.mojo",
+        "line": 17
+      },
+      {
+        "path": "x_linear/finite_device.mojo",
+        "line": 31
+      },
+      {
+        "path": "x_linear/glm_ydom.mojo",
+        "line": 22
+      },
+      {
+        "path": "x_linear/glm_ydom.mojo",
+        "line": 32
+      },
+      {
+        "path": "x_metrics/cls_epi.mojo",
+        "line": 23
+      },
+      {
+        "path": "x_metrics/cls_epi.mojo",
+        "line": 35
+      },
+      {
+        "path": "x_neighbors/items.mojo",
+        "line": 55
+      },
+      {
+        "path": "x_neighbors/items.mojo",
+        "line": 58
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 623
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 624
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 1485
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 2497
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 2500
+      },
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 92
+      },
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 93
+      },
+      {
+        "path": "x_neighbors/ocsvm_init.mojo",
+        "line": 38
+      },
+      {
+        "path": "x_neighbors/ocsvm_init.mojo",
+        "line": 42
+      },
+      {
+        "path": "x_neighbors/ocsvm_init.mojo",
+        "line": 117
+      },
+      {
+        "path": "x_neighbors/ocsvm_init.mojo",
+        "line": 120
+      },
+      {
+        "path": "x_neighbors/svgp_ff.mojo",
+        "line": 62
+      },
+      {
+        "path": "x_neighbors/svgp_ff.mojo",
+        "line": 64
+      },
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 43
+      },
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 62
+      },
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 75
+      },
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 601
+      },
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 8
+      },
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 63
+      },
+      {
+        "path": "x_prep/fastnb.mojo",
+        "line": 34
+      },
+      {
+        "path": "x_prep/fastnb_csr.mojo",
+        "line": 65
+      },
+      {
+        "path": "x_prep/gram_blocked.mojo",
+        "line": 35
+      },
+      {
+        "path": "x_prep/gram_blocked.mojo",
+        "line": 49
+      },
+      {
+        "path": "x_prep/host/rr_eigh_host.mojo",
+        "line": 49
+      },
+      {
+        "path": "x_prep/label_fast.mojo",
+        "line": 31
+      },
+      {
+        "path": "x_prep/prep3.mojo",
+        "line": 32
+      },
+      {
+        "path": "x_prep/pt_blocked.mojo",
+        "line": 50
+      },
+      {
+        "path": "x_prep/select_blocked.mojo",
+        "line": 33
+      },
+      {
+        "path": "xtrees/agnostic_device.mojo",
+        "line": 50
+      },
+      {
+        "path": "xtrees/agnostic_device.mojo",
+        "line": 55
+      },
+      {
+        "path": "xtrees/agnostic_device.mojo",
+        "line": 71
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 821
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 824
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 890
+      },
+      {
+        "path": "xtrees/dart_device.mojo",
+        "line": 64
+      },
+      {
+        "path": "xtrees/dart_units.mojo",
+        "line": 38
+      },
+      {
+        "path": "xtrees/dart_units.mojo",
+        "line": 41
+      },
+      {
+        "path": "xtrees/shap_device.mojo",
+        "line": 40
+      }
+    ],
+    "MOJOLEARN_IDN_AP_CONV_CHUNK16": [
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 673
+      }
+    ],
+    "MOJOLEARN_IDN_AP_CONV_CHUNK32": [
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 674
+      }
+    ],
+    "MOJOLEARN_IDN_AP_CONV_CHUNK4": [
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 662
+      },
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 671
+      }
+    ],
+    "MOJOLEARN_IDN_AP_DEVICE_CONV_OFF": [
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 660
+      },
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 666
+      }
+    ],
+    "MOJOLEARN_IDN_AP_R_TOP2_OFF": [
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 589
+      },
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 594
+      }
+    ],
+    "MOJOLEARN_IDN_ARIMA_ASYNC_OFF": [
+      {
+        "path": "arima/impl/fast_lbfgs_async.mojo",
+        "line": 78
+      },
+      {
+        "path": "arima/impl/fast_lbfgs_async.mojo",
+        "line": 86
+      }
+    ],
+    "MOJOLEARN_IDN_ARIMA_EVAL_WS_EXOG_OFF": [
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 200
+      },
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 202
+      }
+    ],
+    "MOJOLEARN_IDN_ARIMA_EVAL_WS_OFF": [
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 190
+      },
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 277
+      },
+      {
+        "path": "bindings/_mojolearn_arima_host.mojo",
+        "line": 131
+      }
+    ],
+    "MOJOLEARN_IDN_ARIMA_FUSED_TAIL_OFF": [
+      {
+        "path": "arima/impl/fast_eval_ws.mojo",
+        "line": 65
+      },
+      {
+        "path": "arima/impl/fast_eval_ws.mojo",
+        "line": 71
+      }
+    ],
+    "MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF": [
+      {
+        "path": "arima/impl/fast_order_search.mojo",
+        "line": 38
+      },
+      {
+        "path": "arima/impl/fast_order_search.mojo",
+        "line": 79
+      },
+      {
+        "path": "bindings/_mojolearn_arima_host.mojo",
+        "line": 136
+      }
+    ],
+    "MOJOLEARN_IDN_ARIMA_LLONLY_OFF": [
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 184
+      },
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 255
+      },
+      {
+        "path": "bindings/_mojolearn_arima_host.mojo",
+        "line": 132
+      }
+    ],
+    "MOJOLEARN_IDN_ARIMA_ORDER_BATCH_OFF": [
+      {
+        "path": "arima/impl/fast_order_state.mojo",
+        "line": 42
+      },
+      {
+        "path": "arima/impl/fast_order_state.mojo",
+        "line": 49
+      },
+      {
+        "path": "bindings/_mojolearn_arima_host.mojo",
+        "line": 133
+      }
+    ],
+    "MOJOLEARN_IDN_ARIMA_ORDER_CAP_OFF": [
+      {
+        "path": "arima/impl/fast_order_search.mojo",
+        "line": 14
+      },
+      {
+        "path": "arima/impl/fast_order_search.mojo",
+        "line": 73
+      }
+    ],
+    "MOJOLEARN_IDN_ARIMA_ORDER_DEVICE_OFF": [
+      {
+        "path": "arima/impl/fast_order_search.mojo",
+        "line": 23
+      },
+      {
+        "path": "arima/impl/fast_order_search.mojo",
+        "line": 74
+      },
+      {
+        "path": "bindings/_mojolearn_arima_host.mojo",
+        "line": 135
+      }
+    ],
+    "MOJOLEARN_IDN_ARIMA_ORDER_SEASONAL_OFF": [
+      {
+        "path": "arima/impl/fast_order_search.mojo",
+        "line": 33
+      },
+      {
+        "path": "arima/impl/fast_order_search.mojo",
+        "line": 76
+      }
+    ],
+    "MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF": [
+      {
+        "path": "transformer/impl/llama/fused_attention.mojo",
+        "line": 2253
+      },
+      {
+        "path": "transformer/impl/llama/fused_attention.mojo",
+        "line": 2265
+      }
+    ],
+    "MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF": [
+      {
+        "path": "transformer/impl/llama/fused_attention.mojo",
+        "line": 8895
+      },
+      {
+        "path": "transformer/impl/llama/fused_attention.mojo",
+        "line": 8905
+      }
+    ],
+    "MOJOLEARN_IDN_AVGPOOL_BWD_TILE_OFF": [
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 43
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 44
+      }
+    ],
+    "MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF": [
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 1600
+      },
+      {
+        "path": "x_cluster/device_ops.mojo",
+        "line": 1605
+      }
+    ],
+    "MOJOLEARN_IDN_BGMM_NK_LEVELS_OFF": [
+      {
+        "path": "x_cluster/bodies.mojo",
+        "line": 480
+      },
+      {
+        "path": "x_cluster/bodies.mojo",
+        "line": 485
+      }
+    ],
+    "MOJOLEARN_IDN_BISECT_DEVICE_SCORES_OFF": [
+      {
+        "path": "x_cluster/bisect.mojo",
+        "line": 40
+      },
+      {
+        "path": "x_cluster/bisect.mojo",
+        "line": 45
+      }
+    ],
+    "MOJOLEARN_IDN_CACHE_CTX_KEY_OFF": [
+      {
+        "path": "core/ctx_key.mojo",
+        "line": 7
+      },
+      {
+        "path": "core/ctx_key.mojo",
+        "line": 20
+      }
+    ],
+    "MOJOLEARN_IDN_CD_RESIDENT_OFF": [
+      {
+        "path": "bindings/_mojolearn_x_decomp.mojo",
+        "line": 132
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 516
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 520
+      }
+    ],
+    "MOJOLEARN_IDN_CE_PIPE_UP_OFF": [
+      {
+        "path": "training/estimator.mojo",
+        "line": 1300
+      },
+      {
+        "path": "training/estimator.mojo",
+        "line": 1303
+      }
+    ],
+    "MOJOLEARN_IDN_CLASS_ONEPASS_OFF": [
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 72
+      },
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 75
+      }
+    ],
+    "MOJOLEARN_IDN_CLS_EPI_OFF": [
+      {
+        "path": "x_metrics/cls_epi.mojo",
+        "line": 22
+      },
+      {
+        "path": "x_metrics/cls_epi.mojo",
+        "line": 35
+      },
+      {
+        "path": "x_metrics/units.mojo",
+        "line": 30
+      }
+    ],
+    "MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF": [
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 1487
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 1490
+      }
+    ],
+    "MOJOLEARN_IDN_CODE_RESIDENT_OFF": [
+      {
+        "path": "bindings/_mojolearn_x_decomp.mojo",
+        "line": 145
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 721
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 724
+      }
+    ],
+    "MOJOLEARN_IDN_DART_DEVICE_OFF": [
+      {
+        "path": "xtrees/dart_device.mojo",
+        "line": 6
+      },
+      {
+        "path": "xtrees/dart_device.mojo",
+        "line": 64
+      },
+      {
+        "path": "xtrees/dart_device.mojo",
+        "line": 345
+      },
+      {
+        "path": "xtrees/dart_device.mojo",
+        "line": 392
+      },
+      {
+        "path": "xtrees/dart_device.mojo",
+        "line": 449
+      },
+      {
+        "path": "xtrees/dart_device.mojo",
+        "line": 464
+      },
+      {
+        "path": "xtrees/dart_host.mojo",
+        "line": 134
+      },
+      {
+        "path": "xtrees/dart_host.mojo",
+        "line": 182
+      },
+      {
+        "path": "xtrees/dart_host.mojo",
+        "line": 231
+      },
+      {
+        "path": "xtrees/dart_host.mojo",
+        "line": 245
+      },
+      {
+        "path": "xtrees/dart_units.mojo",
+        "line": 38
+      },
+      {
+        "path": "xtrees/dart_units.mojo",
+        "line": 41
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF": [
+      {
+        "path": "dbscan/impl/runner.mojo",
+        "line": 250
+      },
+      {
+        "path": "dbscan/impl/runner.mojo",
+        "line": 254
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_CC_CHUNK16": [
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 115
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_CC_CHUNK32": [
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 116
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_CC_CHUNK4": [
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 111
+      },
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 113
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_CC_GATED_OFF": [
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 101
+      },
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 105
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_CC_SHORTCUT_OFF": [
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 154
+      },
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 159
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_CC_SPLIT16": [
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 133
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_CC_SPLIT4": [
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 127
+      },
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 130
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_CC_SPLIT8": [
+      {
+        "path": "dbscan/impl/sparse/detail/csr.mojo",
+        "line": 132
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF": [
+      {
+        "path": "dbscan/estimator.mojo",
+        "line": 142
+      },
+      {
+        "path": "dbscan/estimator.mojo",
+        "line": 146
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF": [
+      {
+        "path": "dbscan/estimator.mojo",
+        "line": 154
+      },
+      {
+        "path": "dbscan/estimator.mojo",
+        "line": 159
+      },
+      {
+        "path": "dbscan/impl/dbscan.mojo",
+        "line": 76
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF": [
+      {
+        "path": "dbscan/impl/runner.mojo",
+        "line": 209
+      },
+      {
+        "path": "dbscan/impl/runner.mojo",
+        "line": 214
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF": [
+      {
+        "path": "dbscan/impl/runner.mojo",
+        "line": 234
+      },
+      {
+        "path": "dbscan/impl/runner.mojo",
+        "line": 239
+      }
+    ],
+    "MOJOLEARN_IDN_DBSCAN_RBC_ONE_BATCH_OFF": [
+      {
+        "path": "dbscan/impl/dbscan.mojo",
+        "line": 69
+      },
+      {
+        "path": "dbscan/impl/dbscan.mojo",
+        "line": 85
+      }
+    ],
+    "MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF": [
+      {
+        "path": "decomposition/estimator.mojo",
+        "line": 301
+      },
+      {
+        "path": "decomposition/mean_switch.mojo",
+        "line": 9
+      }
+    ],
+    "MOJOLEARN_IDN_DENDRO_HOOK_CHUNK": [
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 98
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 102
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 454
+      }
+    ],
+    "MOJOLEARN_IDN_DENDRO_HOOK_CHUNK_OFF": [
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 100
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 106
+      }
+    ],
+    "MOJOLEARN_IDN_DENDRO_RADIX_SORT_OFF": [
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 64
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 69
+      }
+    ],
+    "MOJOLEARN_IDN_DENDRO_UNION_OFF": [
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 82
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/dendrogram_device.mojo",
+        "line": 86
+      }
+    ],
+    "MOJOLEARN_IDN_EIGH_BLOCK_B32": [
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 59
+      },
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 70
+      }
+    ],
+    "MOJOLEARN_IDN_EIGH_BLOCK_B8": [
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 58
+      },
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 72
+      }
+    ],
+    "MOJOLEARN_IDN_EIGH_BLOCK_MIN128": [
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 60
+      },
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 76
+      }
+    ],
+    "MOJOLEARN_IDN_EIGH_BLOCK_OFF": [
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 54
+      },
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 68
+      }
+    ],
+    "MOJOLEARN_IDN_EIGH_BLOCK_ON": [
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 53
+      },
+      {
+        "path": "x_decomp/rr_block.mojo",
+        "line": 68
+      }
+    ],
+    "MOJOLEARN_IDN_EIGH_RESIDENT_OFF": [
+      {
+        "path": "bindings/_mojolearn_x_decomp.mojo",
+        "line": 148
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 795
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 798
+      }
+    ],
+    "MOJOLEARN_IDN_EIGH_SMALL_N128": [
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 193
+      },
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 196
+      }
+    ],
+    "MOJOLEARN_IDN_EIGH_SMALL_N64": [
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 192
+      },
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 197
+      }
+    ],
+    "MOJOLEARN_IDN_EIGH_SMALL_OFF": [
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 188
+      },
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 189
+      }
+    ],
+    "MOJOLEARN_IDN_ET_BINNED_U16": [
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 1986
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 1990
+      }
+    ],
+    "MOJOLEARN_IDN_ET_PART_ROWS_OFF": [
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 3133
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 3137
+      }
+    ],
+    "MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF": [
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 2084
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 2104
+      }
+    ],
+    "MOJOLEARN_IDN_ET_STAGE_LIVE_OFF": [
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 3171
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 3175
+      }
+    ],
+    "MOJOLEARN_IDN_ET_TILED_SEARCH_OFF": [
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 3033
+      },
+      {
+        "path": "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 3044
+      }
+    ],
+    "MOJOLEARN_IDN_GATES_OFF": [
+      {
+        "path": "cholesky/estimator.mojo",
+        "line": 228
+      },
+      {
+        "path": "cholesky/estimator.mojo",
+        "line": 233
+      },
+      {
+        "path": "sequence/moe_reg.mojo",
+        "line": 55
+      },
+      {
+        "path": "sequence/moe_reg.mojo",
+        "line": 60
+      },
+      {
+        "path": "x_decomp/lu_fast.mojo",
+        "line": 49
+      },
+      {
+        "path": "x_decomp/lu_fast.mojo",
+        "line": 54
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 857
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 859
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 1483
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 1485
+      },
+      {
+        "path": "x_prep/prep3.mojo",
+        "line": 30
+      },
+      {
+        "path": "x_prep/prep3.mojo",
+        "line": 32
+      },
+      {
+        "path": "xtrees/shap_device.mojo",
+        "line": 35
+      },
+      {
+        "path": "xtrees/shap_device.mojo",
+        "line": 40
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_APPLY_WIDE": [
+      {
+        "path": "gbdt/models/kernel/add_bin_values.mojo",
+        "line": 55
+      },
+      {
+        "path": "gbdt/models/kernel/add_bin_values.mojo",
+        "line": 64
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_BOOT_SEEDS_DEVICE_OFF": [
+      {
+        "path": "gbdt/gpu_util/kernel/bootstrap.mojo",
+        "line": 112
+      },
+      {
+        "path": "gbdt/gpu_util/kernel/bootstrap.mojo",
+        "line": 117
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_CTR_BORDERS_DEVICE": [
+      {
+        "path": "gbdt/ctrs/ctr_binarization.mojo",
+        "line": 87
+      },
+      {
+        "path": "gbdt/ctrs/ctr_binarization.mojo",
+        "line": 102
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_CTR_FREQ_DEVICE_OFF": [
+      {
+        "path": "gbdt/train.mojo",
+        "line": 145
+      },
+      {
+        "path": "gbdt/train.mojo",
+        "line": 150
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF": [
+      {
+        "path": "gbdt/methods/doc_parallel_boosting.mojo",
+        "line": 158
+      },
+      {
+        "path": "gbdt/methods/doc_parallel_boosting.mojo",
+        "line": 164
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF": [
+      {
+        "path": "gbdt/methods/leaves_estimation/leaves_estimation.mojo",
+        "line": 98
+      },
+      {
+        "path": "gbdt/methods/leaves_estimation/leaves_estimation.mojo",
+        "line": 103
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF": [
+      {
+        "path": "gbdt/methods/leaves_estimation/pointwise_oracle.mojo",
+        "line": 1368
+      },
+      {
+        "path": "gbdt/methods/leaves_estimation/pointwise_oracle.mojo",
+        "line": 1374
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF": [
+      {
+        "path": "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo",
+        "line": 262
+      },
+      {
+        "path": "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo",
+        "line": 267
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF": [
+      {
+        "path": "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+        "line": 298
+      },
+      {
+        "path": "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+        "line": 303
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_ORDERED_RMSE_DEVICE_GRID_OFF": [
+      {
+        "path": "gbdt/grid_creator/binarization.mojo",
+        "line": 70
+      },
+      {
+        "path": "gbdt/grid_creator/binarization.mojo",
+        "line": 75
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF": [
+      {
+        "path": "gbdt/data/pairs.mojo",
+        "line": 41
+      },
+      {
+        "path": "gbdt/data/pairs.mojo",
+        "line": 46
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF": [
+      {
+        "path": "gbdt/models/kernel/add_bin_values.mojo",
+        "line": 44
+      },
+      {
+        "path": "gbdt/models/kernel/add_bin_values.mojo",
+        "line": 49
+      }
+    ],
+    "MOJOLEARN_IDN_GBDT_YETI_BLOCK_AMD_OFF": [
+      {
+        "path": "gbdt/targets/kernel/yeti_rank.mojo",
+        "line": 168
+      },
+      {
+        "path": "gbdt/targets/kernel/yeti_rank.mojo",
+        "line": 175
+      }
+    ],
+    "MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF": [
+      {
+        "path": "mixture/chol_order.mojo",
+        "line": 42
+      },
+      {
+        "path": "mixture/chol_order.mojo",
+        "line": 67
+      }
+    ],
+    "MOJOLEARN_IDN_GMM_INIT_DEVICE_OFF": [
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 684
+      },
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 688
+      }
+    ],
+    "MOJOLEARN_IDN_GMM_NK_LEVELS_OFF": [
+      {
+        "path": "mixture/nk_order.mojo",
+        "line": 17
+      },
+      {
+        "path": "mixture/nk_order.mojo",
+        "line": 32
+      }
+    ],
+    "MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF": [
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 723
+      },
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 727
+      }
+    ],
+    "MOJOLEARN_IDN_GMM_PROBA_DEVICE_OFF": [
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 696
+      },
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 700
+      }
+    ],
+    "MOJOLEARN_IDN_GMM_SCORE_DEVICE_OFF": [
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 708
+      },
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 712
+      }
+    ],
+    "MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF": [
+      {
+        "path": "gaussian_process/gpc_ovr.mojo",
+        "line": 41
+      },
+      {
+        "path": "gaussian_process/gpc_ovr.mojo",
+        "line": 117
+      },
+      {
+        "path": "gaussian_process/gpc_ovr.mojo",
+        "line": 121
+      }
+    ],
+    "MOJOLEARN_IDN_GPC_OVR_OFF": [
+      {
+        "path": "bindings/_mojolearn_gp.mojo",
+        "line": 1237
+      },
+      {
+        "path": "gaussian_process/gpc_ovr.mojo",
+        "line": 38
+      },
+      {
+        "path": "gaussian_process/gpc_ovr.mojo",
+        "line": 111
+      },
+      {
+        "path": "gaussian_process/gpc_ovr.mojo",
+        "line": 113
+      }
+    ],
+    "MOJOLEARN_IDN_GPR_PTR_OFF": [
+      {
+        "path": "gaussian_process/gpr_resident.mojo",
+        "line": 31
+      },
+      {
+        "path": "gaussian_process/gpr_resident.mojo",
+        "line": 90
+      },
+      {
+        "path": "gaussian_process/gpr_resident.mojo",
+        "line": 93
+      }
+    ],
+    "MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF": [
+      {
+        "path": "gaussian_process/estimator.mojo",
+        "line": 554
+      },
+      {
+        "path": "gaussian_process/estimator.mojo",
+        "line": 559
+      }
+    ],
+    "MOJOLEARN_IDN_GP_GRAD_ROWFOLD_OFF": [
+      {
+        "path": "gaussian_process/gp_grad_items.mojo",
+        "line": 21
+      },
+      {
+        "path": "gaussian_process/gp_grad_items.mojo",
+        "line": 33
+      }
+    ],
+    "MOJOLEARN_IDN_GP_GRAD_ROWS4": [
+      {
+        "path": "gaussian_process/gp_grad_items.mojo",
+        "line": 30
+      },
+      {
+        "path": "gaussian_process/gp_grad_items.mojo",
+        "line": 35
+      }
+    ],
+    "MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF": [
+      {
+        "path": "gaussian_process/estimator.mojo",
+        "line": 563
+      },
+      {
+        "path": "gaussian_process/estimator.mojo",
+        "line": 568
+      }
+    ],
+    "MOJOLEARN_IDN_GRAM_BLOCKED_OFF": [
+      {
+        "path": "x_prep/gram_blocked.mojo",
+        "line": 34
+      },
+      {
+        "path": "x_prep/gram_blocked.mojo",
+        "line": 49
+      }
+    ],
+    "MOJOLEARN_IDN_GRAM_ROWS_512": [
+      {
+        "path": "x_prep/gram_blocked.mojo",
+        "line": 37
+      },
+      {
+        "path": "x_prep/gram_blocked.mojo",
+        "line": 53
+      }
+    ],
+    "MOJOLEARN_IDN_GRAM_ROWS_8192": [
+      {
+        "path": "x_prep/gram_blocked.mojo",
+        "line": 53
+      }
+    ],
+    "MOJOLEARN_IDN_GRAM_ROWTILE": [
+      {
+        "path": "x_prep/gram_blocked.mojo",
+        "line": 36
+      },
+      {
+        "path": "x_prep/gram_blocked.mojo",
+        "line": 51
+      }
+    ],
+    "MOJOLEARN_IDN_GRAPH_M_OFF": [
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1864
+      },
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1865
+      }
+    ],
+    "MOJOLEARN_IDN_GROUP_M_OFF": [
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1868
+      },
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1869
+      }
+    ],
+    "MOJOLEARN_IDN_HDB_CONDENSE_TWO_READS_OFF": [
+      {
+        "path": "hdbscan/impl/detail/idn_switches.mojo",
+        "line": 33
+      }
+    ],
+    "MOJOLEARN_IDN_HDB_MR_FUSED_GUARD_OFF": [
+      {
+        "path": "hdbscan/impl/detail/idn_switches.mojo",
+        "line": 47
+      }
+    ],
+    "MOJOLEARN_IDN_HDB_ONE_SYNC_OFF": [
+      {
+        "path": "hdbscan/impl/detail/idn_switches.mojo",
+        "line": 26
+      }
+    ],
+    "MOJOLEARN_IDN_HDB_PREDICT_DEVICE_CAST_OFF": [
+      {
+        "path": "hdbscan/impl/detail/idn_switches.mojo",
+        "line": 64
+      }
+    ],
+    "MOJOLEARN_IDN_HDB_SELECT_ONE_READ_OFF": [
+      {
+        "path": "hdbscan/impl/detail/idn_switches.mojo",
+        "line": 40
+      }
+    ],
+    "MOJOLEARN_IDN_HDB_SOFT_LEAN_OFF": [
+      {
+        "path": "hdbscan/impl/detail/idn_switches.mojo",
+        "line": 56
+      }
+    ],
+    "MOJOLEARN_IDN_HDB_SPARSE_MIN_ROWS": [
+      {
+        "path": "hdbscan/impl/cluster/detail/single_linkage.mojo",
+        "line": 200
+      },
+      {
+        "path": "hdbscan/impl/detail/idn_switches.mojo",
+        "line": 70
+      },
+      {
+        "path": "hdbscan/impl/detail/idn_switches.mojo",
+        "line": 78
+      }
+    ],
+    "MOJOLEARN_IDN_HPDEV_": [
+      {
+        "path": "bindings/_mojolearn.mojo",
+        "line": 122
+      }
+    ],
+    "MOJOLEARN_IDN_HPDEV_CAST_F64": [
+      {
+        "path": "bindings/_mojolearn.mojo",
+        "line": 991
+      },
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 33
+      },
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 110
+      },
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 114
+      }
+    ],
+    "MOJOLEARN_IDN_HPDEV_ELEM_OFF": [
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 18
+      },
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 105
+      }
+    ],
+    "MOJOLEARN_IDN_HPDEV_FOLDS_OFF": [
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 24
+      },
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 107
+      }
+    ],
+    "MOJOLEARN_IDN_HPDEV_INIT_OFF": [
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 32
+      },
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 109
+      }
+    ],
+    "MOJOLEARN_IDN_HPDEV_LABELS_OFF": [
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 22
+      },
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 106
+      }
+    ],
+    "MOJOLEARN_IDN_HPDEV_REDUCE_OFF": [
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 29
+      },
+      {
+        "path": "bindings/hotpath_device.mojo",
+        "line": 108
+      }
+    ],
+    "MOJOLEARN_IDN_HW_FIT_DIRECT_OFF": [
+      {
+        "path": "holtwinters/estimator.mojo",
+        "line": 67
+      },
+      {
+        "path": "holtwinters/estimator.mojo",
+        "line": 70
+      }
+    ],
+    "MOJOLEARN_IDN_HW_FORECAST_DIRECT_OFF": [
+      {
+        "path": "holtwinters/estimator.mojo",
+        "line": 79
+      },
+      {
+        "path": "holtwinters/estimator.mojo",
+        "line": 82
+      }
+    ],
+    "MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF": [
+      {
+        "path": "isolation_forest/impl/isolation_forest.mojo",
+        "line": 540
+      },
+      {
+        "path": "isolation_forest/impl/isolation_forest.mojo",
+        "line": 542
+      }
+    ],
+    "MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF": [
+      {
+        "path": "isolation_forest/impl/isolation_forest.mojo",
+        "line": 511
+      },
+      {
+        "path": "isolation_forest/impl/isolation_forest.mojo",
+        "line": 513
+      }
+    ],
+    "MOJOLEARN_IDN_IF_RESIDENT_OFF": [
+      {
+        "path": "isolation_forest/impl/isolation_forest.mojo",
+        "line": 524
+      },
+      {
+        "path": "isolation_forest/impl/isolation_forest.mojo",
+        "line": 527
+      }
+    ],
+    "MOJOLEARN_IDN_IVF_DEVICE_SCALE_OFF": [
+      {
+        "path": "ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo",
+        "line": 101
+      },
+      {
+        "path": "ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo",
+        "line": 104
+      }
+    ],
+    "MOJOLEARN_IDN_IVF_DEVICE_SQRT_OFF": [
+      {
+        "path": "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+        "line": 201
+      },
+      {
+        "path": "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+        "line": 204
+      }
+    ],
+    "MOJOLEARN_IDN_KALMAN_RD_OFF": [
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 180
+      },
+      {
+        "path": "arima/impl/batched_kalman.mojo",
+        "line": 1198
+      }
+    ],
+    "MOJOLEARN_IDN_KDE_CHUNK_LSE_OFF": [
+      {
+        "path": "kde/impl/neighbors/kernel_density.mojo",
+        "line": 3435
+      },
+      {
+        "path": "kde/impl/neighbors/kernel_density.mojo",
+        "line": 3439
+      }
+    ],
+    "MOJOLEARN_IDN_KMEANS_BLOCK_ACC_AMD_OFF": [
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 145
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 151
+      }
+    ],
+    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1": [
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 200
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 203
+      }
+    ],
+    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_16": [
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 209
+      }
+    ],
+    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_2": [
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 205
+      }
+    ],
+    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_32": [
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 211
+      }
+    ],
+    "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_4": [
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 207
+      }
+    ],
+    "MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF": [
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 189
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 195
+      }
+    ],
+    "MOJOLEARN_IDN_KMEANS_FOLD_STORE_OFF": [
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 166
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 172
+      }
+    ],
+    "MOJOLEARN_IDN_KMEANS_INCR_INIT_OFF": [
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 831
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 837
+      }
+    ],
+    "MOJOLEARN_IDN_KMEANS_INIT_PSI_DEVICE_OFF": [
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 860
+      },
+      {
+        "path": "cluster/impl/detail/kmeans.mojo",
+        "line": 864
+      }
+    ],
+    "MOJOLEARN_IDN_KM_BULK_DOWNLOAD_OFF": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 267
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 271
+      }
+    ],
+    "MOJOLEARN_IDN_KM_PTR_IN_OFF": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 253
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 258
+      }
+    ],
+    "MOJOLEARN_IDN_KM_RBF_CELL": [
+      {
+        "path": "kernel_methods/host/km_host_oracle.mojo",
+        "line": 216
+      }
+    ],
+    "MOJOLEARN_IDN_KM_RBF_CELL_D16": [
+      {
+        "path": "kernel_methods/host/km_host_oracle.mojo",
+        "line": 219
+      }
+    ],
+    "MOJOLEARN_IDN_KNN_DEVICE_WEIGHTS_OFF": [
+      {
+        "path": "neighbors/impl/selection/knn.mojo",
+        "line": 111
+      },
+      {
+        "path": "neighbors/impl/selection/knn.mojo",
+        "line": 113
+      }
+    ],
+    "MOJOLEARN_IDN_KNN_DIRECT_RELABEL_OFF": [
+      {
+        "path": "neighbors/impl/selection/knn.mojo",
+        "line": 97
+      },
+      {
+        "path": "neighbors/impl/selection/knn.mojo",
+        "line": 100
+      }
+    ],
+    "MOJOLEARN_IDN_KNN_VOTE_CACHE_OFF": [
+      {
+        "path": "neighbors/impl/knn/knn.mojo",
+        "line": 48
+      },
+      {
+        "path": "neighbors/impl/knn/knn.mojo",
+        "line": 50
+      }
+    ],
+    "MOJOLEARN_IDN_KPSS_ONE_WAIT_OFF": [
+      {
+        "path": "tsa/estimator.mojo",
+        "line": 133
+      },
+      {
+        "path": "tsa/impl/select_d_fast.mojo",
+        "line": 62
+      },
+      {
+        "path": "tsa/impl/select_d_fast.mojo",
+        "line": 65
+      }
+    ],
+    "MOJOLEARN_IDN_KPSS_SCAN_OFF": [
+      {
+        "path": "tsa/impl/timeSeries/stationarity.mojo",
+        "line": 250
+      },
+      {
+        "path": "tsa/impl/timeSeries/stationarity.mojo",
+        "line": 253
+      }
+    ],
+    "MOJOLEARN_IDN_KRR_DEV_SCALE_OFF": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 425
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 432
+      }
+    ],
+    "MOJOLEARN_IDN_KRR_PTR_IN_OFF": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 436
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 446
+      }
+    ],
+    "MOJOLEARN_IDN_LABEL_INV_OFF": [
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 39
+      },
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 68
+      }
+    ],
+    "MOJOLEARN_IDN_LABEL_OFF": [
+      {
+        "path": "x_prep/label_fast.mojo",
+        "line": 30
+      },
+      {
+        "path": "x_prep/label_fast.mojo",
+        "line": 31
+      }
+    ],
+    "MOJOLEARN_IDN_LANCZOS_POOL_OFF": [
+      {
+        "path": "spectral/impl/sparse/solver/detail/lanczos.mojo",
+        "line": 1886
+      },
+      {
+        "path": "spectral/impl/sparse/solver/detail/lanczos.mojo",
+        "line": 1891
+      }
+    ],
+    "MOJOLEARN_IDN_LAYER_DEV_IO_OFF": [
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1871
+      },
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1872
+      }
+    ],
+    "MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF": [
+      {
+        "path": "transformer/impl/llama/modeling_llama.mojo",
+        "line": 3683
+      },
+      {
+        "path": "transformer/impl/llama/modeling_llama.mojo",
+        "line": 3694
+      }
+    ],
+    "MOJOLEARN_IDN_LLE_DEV_F0_OFF": [
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 551
+      },
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 553
+      }
+    ],
+    "MOJOLEARN_IDN_LP_RESIDENT_OFF": [
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 2497
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 2500
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 2734
+      }
+    ],
+    "MOJOLEARN_IDN_LU_GESV_OFF": [
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 541
+      },
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 546
+      }
+    ],
+    "MOJOLEARN_IDN_LU_RESIDENT_OFF": [
+      {
+        "path": "bindings/_mojolearn_x_decomp.mojo",
+        "line": 138
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 605
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 608
+      }
+    ],
+    "MOJOLEARN_IDN_M3_ANGLE_BLOCK_128": [
+      {
+        "path": "mamba/host/gen/mamba3_siso.mojo",
+        "line": 538
+      },
+      {
+        "path": "mamba/impl/ops/mamba3_siso.mojo",
+        "line": 536
+      }
+    ],
+    "MOJOLEARN_IDN_M3_ANGLE_BLOCK_32": [
+      {
+        "path": "mamba/host/gen/mamba3_siso.mojo",
+        "line": 537
+      },
+      {
+        "path": "mamba/impl/ops/mamba3_siso.mojo",
+        "line": 535
+      }
+    ],
+    "MOJOLEARN_IDN_M3_ANGLE_PARALLEL": [
+      {
+        "path": "mamba/host/gen/mamba3_siso.mojo",
+        "line": 490
+      },
+      {
+        "path": "mamba/host/gen/mamba3_siso.mojo",
+        "line": 526
+      },
+      {
+        "path": "mamba/impl/ops/mamba3_siso.mojo",
+        "line": 488
+      },
+      {
+        "path": "mamba/impl/ops/mamba3_siso.mojo",
+        "line": 524
+      }
+    ],
+    "MOJOLEARN_IDN_M3_SESSION_STAGE_REUSE_OFF": [
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 102
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 108
+      }
+    ],
+    "MOJOLEARN_IDN_MAMBA3_REPORTS_ON_REQUEST_OFF": [
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 92
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 99
+      }
+    ],
+    "MOJOLEARN_IDN_MAMBA_ALLOC_NOWAIT_OFF": [
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 79
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 89
+      }
+    ],
+    "MOJOLEARN_IDN_MAMBA_ARENA_OFF": [
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 58
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 110
+      }
+    ],
+    "MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF": [
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 68
+      },
+      {
+        "path": "mamba/impl/modules/afn_defines.mojo",
+        "line": 112
+      }
+    ],
+    "MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF": [
+      {
+        "path": "mamba/impl/modules/idn_gemm_ws.mojo",
+        "line": 25
+      },
+      {
+        "path": "mamba/impl/modules/idn_gemm_ws.mojo",
+        "line": 45
+      }
+    ],
+    "MOJOLEARN_IDN_MAXIMIZE_DEV_OFF": [
+      {
+        "path": "training/estimator.mojo",
+        "line": 685
+      },
+      {
+        "path": "training/estimator.mojo",
+        "line": 689
+      }
+    ],
+    "MOJOLEARN_IDN_METRIC_EPI_OFF": [
+      {
+        "path": "metrics/impl/stats/detail/sf_epilogue_core.mojo",
+        "line": 13
+      },
+      {
+        "path": "metrics/impl/stats/detail/sf_epilogue_core.mojo",
+        "line": 52
+      }
+    ],
+    "MOJOLEARN_IDN_MINIBATCH_GROUP32": [
+      {
+        "path": "x_cluster/minibatch.mojo",
+        "line": 75
+      }
+    ],
+    "MOJOLEARN_IDN_MINIBATCH_GROUP64": [
+      {
+        "path": "x_cluster/minibatch.mojo",
+        "line": 76
+      }
+    ],
+    "MOJOLEARN_IDN_MINIBATCH_GROUP8": [
+      {
+        "path": "x_cluster/minibatch.mojo",
+        "line": 64
+      },
+      {
+        "path": "x_cluster/minibatch.mojo",
+        "line": 73
+      }
+    ],
+    "MOJOLEARN_IDN_MINIBATCH_GROUP_OFF": [
+      {
+        "path": "x_cluster/minibatch.mojo",
+        "line": 61
+      },
+      {
+        "path": "x_cluster/minibatch.mojo",
+        "line": 68
+      }
+    ],
+    "MOJOLEARN_IDN_MST_LABEL_JUMP_OFF": [
+      {
+        "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "line": 77
+      },
+      {
+        "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "line": 79
+      }
+    ],
+    "MOJOLEARN_IDN_MST_PAR_COMPACT_OFF": [
+      {
+        "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "line": 100
+      },
+      {
+        "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "line": 102
+      }
+    ],
+    "MOJOLEARN_IDN_MST_ROUNDS_DEVICE_OFF": [
+      {
+        "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "line": 90
+      },
+      {
+        "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "line": 94
+      }
+    ],
+    "MOJOLEARN_IDN_MST_SCAN_LANES": [
+      {
+        "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "line": 108
+      },
+      {
+        "path": "hierarchy/impl/sparse/solver/detail/mst_kernels.mojo",
+        "line": 110
+      }
+    ],
+    "MOJOLEARN_IDN_NB_CAT_ATOMIC_OFF": [
+      {
+        "path": "x_prep/fastnb.mojo",
+        "line": 31
+      },
+      {
+        "path": "x_prep/fastnb.mojo",
+        "line": 34
+      }
+    ],
+    "MOJOLEARN_IDN_NB_CSR_DENSE_OFF": [
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 598
+      },
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 601
+      }
+    ],
+    "MOJOLEARN_IDN_NB_CSR_OFF": [
+      {
+        "path": "bindings/_mojolearn_x_prep.mojo",
+        "line": 329
+      },
+      {
+        "path": "x_prep/fastnb_csr.mojo",
+        "line": 55
+      },
+      {
+        "path": "x_prep/fastnb_csr.mojo",
+        "line": 65
+      }
+    ],
+    "MOJOLEARN_IDN_NB_ONEPASS_OFF": [
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 41
+      },
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 43
+      }
+    ],
+    "MOJOLEARN_IDN_NC_CHUNKED_OFF": [
+      {
+        "path": "x_neighbors/items.mojo",
+        "line": 55
+      },
+      {
+        "path": "x_neighbors/items.mojo",
+        "line": 58
+      }
+    ],
+    "MOJOLEARN_IDN_NYS_DEV_BASIS_OFF": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1828
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1836
+      }
+    ],
+    "MOJOLEARN_IDN_NYS_DEV_ORDER_OFF": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1661
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1676
+      }
+    ],
+    "MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1816
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1824
+      }
+    ],
+    "MOJOLEARN_IDN_NYS_RR_DEV_STOP": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1365
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1379
+      }
+    ],
+    "MOJOLEARN_IDN_NYS_RR_DEV_STOP_B4": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1376
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1381
+      }
+    ],
+    "MOJOLEARN_IDN_NYS_RR_EIGH_OFF": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1219
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 1233
+      },
+      {
+        "path": "kernel_methods/host/km_host_oracle.mojo",
+        "line": 526
+      }
+    ],
+    "MOJOLEARN_IDN_OCSVM_2L": [
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 87
+      }
+    ],
+    "MOJOLEARN_IDN_OCSVM_2L_OFF": [
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 87
+      },
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 97
+      }
+    ],
+    "MOJOLEARN_IDN_OCSVM_CHUNK256": [
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 89
+      },
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 90
+      },
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 100
+      }
+    ],
+    "MOJOLEARN_IDN_OCSVM_DEV_INIT_OFF": [
+      {
+        "path": "x_neighbors/ocsvm_init.mojo",
+        "line": 38
+      },
+      {
+        "path": "x_neighbors/ocsvm_init.mojo",
+        "line": 42
+      }
+    ],
+    "MOJOLEARN_IDN_OCSVM_RES": [
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 84
+      }
+    ],
+    "MOJOLEARN_IDN_OCSVM_RES_OFF": [
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 84
+      },
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 94
+      },
+      {
+        "path": "x_neighbors/ocsvm_dev.mojo",
+        "line": 634
+      }
+    ],
+    "MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF": [
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 541
+      },
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 545
+      }
+    ],
+    "MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF": [
+      {
+        "path": "x_cluster/device_post.mojo",
+        "line": 312
+      },
+      {
+        "path": "x_cluster/device_post.mojo",
+        "line": 316
+      }
+    ],
+    "MOJOLEARN_IDN_OPT_PARAMS_RESIDENT_OFF": [
+      {
+        "path": "training/estimator.mojo",
+        "line": 676
+      },
+      {
+        "path": "training/estimator.mojo",
+        "line": 715
+      }
+    ],
+    "MOJOLEARN_IDN_OPT_PIPE_DOWN_OFF": [
+      {
+        "path": "sequence/opt_resident.mojo",
+        "line": 65
+      },
+      {
+        "path": "sequence/opt_resident.mojo",
+        "line": 69
+      }
+    ],
+    "MOJOLEARN_IDN_OPT_SCRATCH_POOL_OFF": [
+      {
+        "path": "training/estimator.mojo",
+        "line": 413
+      },
+      {
+        "path": "training/estimator.mojo",
+        "line": 418
+      }
+    ],
+    "MOJOLEARN_IDN_OPT_ZERO_OPEN_OFF": [
+      {
+        "path": "sequence/opt_resident.mojo",
+        "line": 66
+      },
+      {
+        "path": "sequence/opt_resident.mojo",
+        "line": 72
+      }
+    ],
+    "MOJOLEARN_IDN_PAD_BWD_BOUNDED_OFF": [
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 46
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 47
+      }
+    ],
+    "MOJOLEARN_IDN_PAD_M_OFF": [
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1866
+      },
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1867
+      }
+    ],
+    "MOJOLEARN_IDN_PARTIAL_CODES_OFF": [
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 33
+      },
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 67
+      }
+    ],
+    "MOJOLEARN_IDN_PERM_DRAW_OFF": [
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 20
+      },
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 65
+      }
+    ],
+    "MOJOLEARN_IDN_PIN_WEIGHTS_OFF": [
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1875
+      },
+      {
+        "path": "x_cnn/device.mojo",
+        "line": 1876
+      }
+    ],
+    "MOJOLEARN_IDN_PROPHET_COOP_OFF": [
+      {
+        "path": "sequence/prophet.mojo",
+        "line": 40
+      },
+      {
+        "path": "sequence/prophet.mojo",
+        "line": 44
+      },
+      {
+        "path": "sequence/prophet_coop.mojo",
+        "line": 53
+      }
+    ],
+    "MOJOLEARN_IDN_PT_BLOCKED_OFF": [
+      {
+        "path": "x_prep/pt_blocked.mojo",
+        "line": 37
+      },
+      {
+        "path": "x_prep/pt_blocked.mojo",
+        "line": 50
+      }
+    ],
+    "MOJOLEARN_IDN_QR_R_DIRECT_OFF": [
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 206
+      },
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 207
+      }
+    ],
+    "MOJOLEARN_IDN_QR_R_RESIDENT_OFF": [
+      {
+        "path": "bindings/_mojolearn_x_decomp.mojo",
+        "line": 142
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 682
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 684
+      }
+    ],
+    "MOJOLEARN_IDN_RAND_RESIDENT_OFF": [
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 559
+      },
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 560
+      }
+    ],
+    "MOJOLEARN_IDN_RBF_FUSED_OFF": [
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 172
+      },
+      {
+        "path": "kernel_methods/estimator.mojo",
+        "line": 186
+      },
+      {
+        "path": "kernel_methods/host/km_host_oracle.mojo",
+        "line": 533
+      }
+    ],
+    "MOJOLEARN_IDN_RES_MOVES_OFF": [
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 567
+      },
+      {
+        "path": "x_decomp/api.mojo",
+        "line": 568
+      }
+    ],
+    "MOJOLEARN_IDN_RF_COLS40_OFF": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 122
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 127
+      }
+    ],
+    "MOJOLEARN_IDN_RF_DEVICE_LOOP": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 917
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 932
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 3059
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/level_loop_kernels.mojo",
+        "line": 4
+      }
+    ],
+    "MOJOLEARN_IDN_RF_DEVICE_LOOP_K1": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 928
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 936
+      }
+    ],
+    "MOJOLEARN_IDN_RF_DEVICE_LOOP_K2": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 937
+      }
+    ],
+    "MOJOLEARN_IDN_RF_DEVICE_LOOP_K8": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 938
+      }
+    ],
+    "MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 903
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "line": 909
+      }
+    ],
+    "MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 2850
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 2857
+      }
+    ],
+    "MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 2586
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 2596
+      }
+    ],
+    "MOJOLEARN_IDN_RF_HIST_ZERO_OFF": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 540
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 547
+      }
+    ],
+    "MOJOLEARN_IDN_RF_OOB_DEVICE_OFF": [
+      {
+        "path": "ensemble/oob_device.mojo",
+        "line": 19
+      },
+      {
+        "path": "ensemble/oob_device.mojo",
+        "line": 30
+      }
+    ],
+    "MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/quantiles.mojo",
+        "line": 541
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/quantiles.mojo",
+        "line": 543
+      },
+      {
+        "path": "ensemble/host/rf_oracle.mojo",
+        "line": 1087
+      },
+      {
+        "path": "ensemble/host/rf_oracle.mojo",
+        "line": 1090
+      }
+    ],
+    "MOJOLEARN_IDN_RF_ROWS_SORTED": [
+      {
+        "path": "ensemble/randomforest.mojo",
+        "line": 125
+      },
+      {
+        "path": "ensemble/randomforest.mojo",
+        "line": 135
+      }
+    ],
+    "MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF": [
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 466
+      },
+      {
+        "path": "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+        "line": 473
+      }
+    ],
+    "MOJOLEARN_IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE_OFF": [
+      {
+        "path": "ensemble/host/rf_oracle.mojo",
+        "line": 1311
+      },
+      {
+        "path": "ensemble/weighted_bootstrap_device.mojo",
+        "line": 35
+      },
+      {
+        "path": "ensemble/weighted_bootstrap_device.mojo",
+        "line": 52
+      }
+    ],
+    "MOJOLEARN_IDN_RF_WEIGHT_ROWS_DEVICE_OFF": [
+      {
+        "path": "ensemble/randomforest.mojo",
+        "line": 145
+      },
+      {
+        "path": "ensemble/randomforest.mojo",
+        "line": 149
+      }
+    ],
+    "MOJOLEARN_IDN_RR_EIGH_OFF": [
+      {
+        "path": "x_prep/device.mojo",
+        "line": 121
+      },
+      {
+        "path": "x_prep/host/rr_eigh_host.mojo",
+        "line": 35
+      },
+      {
+        "path": "x_prep/host/rr_eigh_host.mojo",
+        "line": 49
+      }
+    ],
+    "MOJOLEARN_IDN_RR_MIN_16": [
+      {
+        "path": "x_prep/host/rr_eigh_host.mojo",
+        "line": 61
+      }
+    ],
+    "MOJOLEARN_IDN_RR_MIN_48": [
+      {
+        "path": "x_prep/host/rr_eigh_host.mojo",
+        "line": 62
+      }
+    ],
+    "MOJOLEARN_IDN_RR_MIN_8": [
+      {
+        "path": "x_prep/host/rr_eigh_host.mojo",
+        "line": 53
+      },
+      {
+        "path": "x_prep/host/rr_eigh_host.mojo",
+        "line": 60
+      }
+    ],
+    "MOJOLEARN_IDN_RR_MIN_96": [
+      {
+        "path": "x_prep/host/rr_eigh_host.mojo",
+        "line": 62
+      }
+    ],
+    "MOJOLEARN_IDN_SAMBA_DEV_REFUSE_OFF": [
+      {
+        "path": "training/samba_ops.mojo",
+        "line": 96
+      },
+      {
+        "path": "training/samba_ops.mojo",
+        "line": 98
+      }
+    ],
+    "MOJOLEARN_IDN_SELECT_BLOCKED_OFF": [
+      {
+        "path": "x_prep/select_blocked.mojo",
+        "line": 20
+      },
+      {
+        "path": "x_prep/select_blocked.mojo",
+        "line": 33
+      }
+    ],
+    "MOJOLEARN_IDN_SELECT_D_OFF": [
+      {
+        "path": "tsa/impl/auto_arima.mojo",
+        "line": 65
+      },
+      {
+        "path": "tsa/impl/select_d_fast.mojo",
+        "line": 52
+      },
+      {
+        "path": "tsa/impl/select_d_fast.mojo",
+        "line": 55
+      }
+    ],
+    "MOJOLEARN_IDN_SEQ_PIPE_DOWN_OFF": [
+      {
+        "path": "sequence/exec_device.mojo",
+        "line": 83
+      },
+      {
+        "path": "sequence/exec_device.mojo",
+        "line": 90
+      }
+    ],
+    "MOJOLEARN_IDN_SEQ_PIPE_UP_OFF": [
+      {
+        "path": "sequence/exec_device.mojo",
+        "line": 82
+      },
+      {
+        "path": "sequence/exec_device.mojo",
+        "line": 87
+      }
+    ],
+    "MOJOLEARN_IDN_SHAP_DEVICE_MODEL": [
+      {
+        "path": "xtrees/agnostic.mojo",
+        "line": 380
+      },
+      {
+        "path": "xtrees/agnostic_device.mojo",
+        "line": 56
+      },
+      {
+        "path": "xtrees/agnostic_device.mojo",
+        "line": 558
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 895
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 915
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 1273
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 1287
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 1292
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 1302
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 1318
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 1323
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 1334
+      }
+    ],
+    "MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF": [
+      {
+        "path": "xtrees/agnostic_device.mojo",
+        "line": 54
+      },
+      {
+        "path": "xtrees/agnostic_device.mojo",
+        "line": 71
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 896
+      }
+    ],
+    "MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS": [
+      {
+        "path": "hierarchy/impl/cluster/detail/single_linkage.mojo",
+        "line": 78
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/single_linkage.mojo",
+        "line": 85
+      }
+    ],
+    "MOJOLEARN_IDN_SL_SPARSE_MST": [
+      {
+        "path": "hierarchy/impl/cluster/detail/single_linkage.mojo",
+        "line": 63
+      },
+      {
+        "path": "hierarchy/impl/cluster/detail/single_linkage.mojo",
+        "line": 81
+      }
+    ],
+    "MOJOLEARN_IDN_SMR_RADIX_RANK_OFF": [
+      {
+        "path": "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo",
+        "line": 869
+      },
+      {
+        "path": "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo",
+        "line": 873
+      }
+    ],
+    "MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF": [
+      {
+        "path": "spectral/impl/preprocessing/detail/fast_graph.mojo",
+        "line": 62
+      },
+      {
+        "path": "spectral/impl/preprocessing/detail/fast_graph.mojo",
+        "line": 67
+      }
+    ],
+    "MOJOLEARN_IDN_SPECTRAL_LABELS_DEVICE_OFF": [
+      {
+        "path": "spectral/impl/labels_device.mojo",
+        "line": 10
+      },
+      {
+        "path": "spectral/impl/labels_device.mojo",
+        "line": 25
+      }
+    ],
+    "MOJOLEARN_IDN_SPECTRAL_LAP_DEVICE_OFF": [
+      {
+        "path": "spectral/impl/sparse/linalg/detail/laplacian.mojo",
+        "line": 82
+      },
+      {
+        "path": "spectral/impl/sparse/linalg/detail/laplacian.mojo",
+        "line": 87
+      }
+    ],
+    "MOJOLEARN_IDN_SPECTRAL_VECS_DEVICE_OFF": [
+      {
+        "path": "spectral/impl/sparse/solver/detail/lanczos.mojo",
+        "line": 2184
+      },
+      {
+        "path": "spectral/impl/sparse/solver/detail/lanczos.mojo",
+        "line": 2189
+      }
+    ],
+    "MOJOLEARN_IDN_SPMV_LANES_OFF": [
+      {
+        "path": "spectral/spmv_order.mojo",
+        "line": 16
+      },
+      {
+        "path": "spectral/spmv_order.mojo",
+        "line": 31
+      }
+    ],
+    "MOJOLEARN_IDN_STATS_BLOCKED_OFF": [
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 59
+      },
+      {
+        "path": "x_prep/blocked.mojo",
+        "line": 62
+      }
+    ],
+    "MOJOLEARN_IDN_SVD_RESIDENT_OFF": [
+      {
+        "path": "bindings/_mojolearn_x_decomp.mojo",
+        "line": 135
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 560
+      },
+      {
+        "path": "x_decomp/resident.mojo",
+        "line": 563
+      }
+    ],
+    "MOJOLEARN_IDN_SVGP_DOT2_OFF": [
+      {
+        "path": "x_neighbors/svgp_ff.mojo",
+        "line": 61
+      },
+      {
+        "path": "x_neighbors/svgp_ff.mojo",
+        "line": 64
+      }
+    ],
+    "MOJOLEARN_IDN_SYMMETRIZE_SORTED_OFF": [
+      {
+        "path": "spectral/impl/sparse/linalg/detail/symmetrize.mojo",
+        "line": 59
+      },
+      {
+        "path": "spectral/impl/sparse/linalg/detail/symmetrize.mojo",
+        "line": 65
+      }
+    ],
+    "MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF": [
+      {
+        "path": "training/dev_tensors.mojo",
+        "line": 22
+      },
+      {
+        "path": "training/dev_tensors.mojo",
+        "line": 43
+      }
+    ],
+    "MOJOLEARN_IDN_TREE_SHAPE_NATIVE_OFF": [
+      {
+        "path": "xtrees/api.mojo",
+        "line": 821
+      },
+      {
+        "path": "xtrees/api.mojo",
+        "line": 824
+      }
+    ],
+    "MOJOLEARN_IDN_TRUST_DEV_OFF": [
+      {
+        "path": "metrics/impl/stats/detail/trustworthiness_score.mojo",
+        "line": 94
+      },
+      {
+        "path": "metrics/impl/stats/detail/trustworthiness_score.mojo",
+        "line": 97
+      }
+    ],
+    "MOJOLEARN_IDN_TSNE_LANE_FOLD_OFF": [
+      {
+        "path": "x_ann/tsne_core.mojo",
+        "line": 59
+      },
+      {
+        "path": "x_ann/tsne_core.mojo",
+        "line": 62
+      }
+    ],
+    "MOJOLEARN_IDN_TSQR_GRID_OFF": [
+      {
+        "path": "x_decomp/tsqr_device.mojo",
+        "line": 80
+      },
+      {
+        "path": "x_decomp/tsqr_device.mojo",
+        "line": 95
+      }
+    ],
+    "MOJOLEARN_IDN_TSQR_NORM_OFF": [
+      {
+        "path": "x_decomp/tsqr_device.mojo",
+        "line": 87
+      },
+      {
+        "path": "x_decomp/tsqr_device.mojo",
+        "line": 96
+      }
+    ],
+    "MOJOLEARN_IDN_UMAP_DEVICE_CSR_OFF": [
+      {
+        "path": "umap/optimizer_identical_device.mojo",
+        "line": 553
+      },
+      {
+        "path": "umap/optimizer_identical_device.mojo",
+        "line": 556
+      }
+    ],
+    "MOJOLEARN_IDN_WDRAW_OFF": [
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 10
+      },
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 64
+      }
+    ],
+    "MOJOLEARN_IDN_WPICK_OFF": [
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 27
+      },
+      {
+        "path": "x_prep/fam2.mojo",
+        "line": 66
+      }
+    ],
+    "MOJOLEARN_IDN_X0_PAR_LS": [
+      {
+        "path": "arima/impl/idn_arma_ls.mojo",
+        "line": 5
+      },
+      {
+        "path": "arima/impl/idn_ls_math.mojo",
+        "line": 24
+      },
+      {
+        "path": "arima/impl/idn_ls_math.mojo",
+        "line": 38
+      }
+    ],
+    "MOJOLEARN_IDN_X0_PAR_LS_MIN256": [
+      {
+        "path": "arima/impl/idn_ls_math.mojo",
+        "line": 27
+      },
+      {
+        "path": "arima/impl/idn_ls_math.mojo",
+        "line": 41
+      }
+    ],
+    "MOJOLEARN_IDN_XD_SWEEP_OFF": [
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 162
+      },
+      {
+        "path": "x_decomp/device.mojo",
+        "line": 173
+      }
+    ],
+    "MOJOLEARN_IDN_XENT_DEV_FOLD_OFF": [
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 1477
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 1489
+      }
+    ],
+    "MOJOLEARN_IDN_XENT_FOLD_BLOCK_256": [
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 1491
+      },
+      {
+        "path": "x_cnn/ops.mojo",
+        "line": 1496
+      }
+    ],
+    "MOJOLEARN_IDN_XN_KNN_LEAN_OFF": [
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 606
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 625
+      }
+    ],
+    "MOJOLEARN_IDN_XN_KNN_PRUNE_OFF": [
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 616
+      },
+      {
+        "path": "x_neighbors/iter_device.mojo",
+        "line": 626
+      }
+    ],
+    "MOJOLEARN_IDN_XN_UNIT_DEV_OFF": [
+      {
+        "path": "x_neighbors/ocsvm_init.mojo",
+        "line": 117
+      },
+      {
+        "path": "x_neighbors/ocsvm_init.mojo",
+        "line": 120
+      }
+    ],
+    "MOJOLEARN_IDN_XTY_TILED_OFF": [
+      {
+        "path": "core/host_tile_fold.mojo",
+        "line": 18
+      },
+      {
+        "path": "core/host_tile_fold.mojo",
+        "line": 43
+      },
+      {
+        "path": "core/xtdz_coalesced.mojo",
+        "line": 143
+      }
+    ],
+    "MOJOLEARN_IDN_XTY_TILE_1024": [
+      {
+        "path": "core/host_tile_fold.mojo",
+        "line": 21
+      },
+      {
+        "path": "core/host_tile_fold.mojo",
+        "line": 50
+      }
+    ],
+    "MOJOLEARN_IDN_XTY_TILE_64": [
+      {
+        "path": "core/host_tile_fold.mojo",
+        "line": 21
+      },
+      {
+        "path": "core/host_tile_fold.mojo",
+        "line": 49
+      }
+    ]
+  }
+}

@@ -333,7 +333,7 @@ for _p in ${PLUGINS[@]+"${PLUGINS[@]}"}; do
     _p=$(cd "$(dirname "$_p")" && pwd)/$(basename "$_p")
     _b=$(basename "$_p")
     case "$_b" in
-        "mojolearn_nvidia-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_amd-$VERSION-"*-manylinux*_x86_64.whl) ;;
+        "mojolearn_nvidia-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_amd-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_nvidia_sm89-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_nvidia_sm90-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_amd_gfx942-$VERSION-"*-manylinux*_x86_64.whl) ;;
         *) die "$_b is not a mojolearn_nvidia/mojolearn_amd $VERSION manylinux x86_64 plugin (the $_pfx plugin of --vendor $VENDOR is required)" ;;
     esac
     case " $PLUGIN_BASES " in *" ${_b%%-*}-"*) die "two --plugin wheels of ${_b%%-*}" ;; esac
@@ -649,12 +649,12 @@ echo "== release_wheel_smoke: $([ -n "$SSH_GIVEN" ] && echo "EXISTING BOX $SSH_G
 if [ -n "$FROM_INDEX" ]; then
 echo "  index    $FROM_INDEX  version $VERSION  vendor $VENDOR  commit ${COMMIT:-not pinned, the installed package records its own}"
 echo "  install  pip install --report $RDIR/pip_report.json $INDEX_ARGS 'mojolearn==$VERSION' (fresh venv, no local wheel)"
-echo "  judges   tools/index_release_check.py verify: all three at $VERSION, each from its index host, the $VENDOR set loaded from its plugin"
+echo "  judges   tools/index_release_check.py verify: all release projects at $VERSION, each from its index host, the $VENDOR set loaded from its plugin"
 echo "  ships    tools/qualify_verifier_wheel.py (sha256 $(printf %s "$QUALIFY_SHA" | cut -c1-16)...) + tools/index_release_check.py (sha256 $(printf %s "$INDEX_CHECK_SHA" | cut -c1-16)...), no wheel"
 echo "  smoke    qualify_verifier_wheel.py --installed-python --scope expanded, bounded ${SMOKE_SECONDS}s"
 [ -z "$LANES" ] || echo "  column   $LANES from the installed package; references: ${#REFS[@]}"
 echo "  out      $OUT"
-# BEFORE ANYTHING IS RENTED: the index serves all three projects at V.
+# BEFORE ANYTHING IS RENTED: the index serves all release projects at V.
 python3 "$INDEX_CHECK" precheck --index "$FROM_INDEX" --version "$VERSION" \
     || die "the index precheck refused (above): pip install mojolearn==$VERSION cannot resolve from $FROM_INDEX; nothing was rented"
 else
@@ -744,7 +744,7 @@ if [ "$RENT" = 0 ] && [ -z "$SSH_GIVEN" ]; then
 fi
 
 # ---------------------------------------------------------------- the run
-POD_ID=""; POD_TERMINATED=0; DEADMAN_PID=""; DEADMAN_DIR=""; SSH_TARGET="$SSH_GIVEN"; COST_HR=""; T_POST=""
+RP_CREATE_ATTEMPTED=0; POD_ID=""; POD_TERMINATED=0; DEADMAN_PID=""; DEADMAN_DIR=""; SSH_TARGET="$SSH_GIVEN"; COST_HR=""; T_POST=""
 DROPLET_ID=""; DO_CREATE_ATTEMPTED=0; DO_GONE=0; DO_DEADMAN_PID=""; DO_DEADMAN_DIR=""; DO_LOCK_HELD=0
 DO_LOCK_NONCE="$$-$STAMP"; DO_COST_HR=""; DO_T_POST=""; DO_REGION=""; PROVIDER_USED=""
 bssh() {  # shellcheck disable=SC2086
@@ -756,7 +756,7 @@ teardown() {
     if [ -n "$POD_ID" ]; then
         echo; echo "== teardown (exit $_rc) =="
         delete_pod "$POD_ID"
-        if verify_gone "$POD_ID"; then POD_TERMINATED=1; fi
+        if verify_gone "$POD_ID"; then POD_TERMINATED=1; else _rc=1; fi
         _t=$(now)
         { echo "pod=$POD_ID"; echo "name=$POD_NAME"; echo "terminated_verified=$POD_TERMINATED"; echo "exit=$_rc"
           echo "at=$(date -u +%FT%TZ)"
@@ -787,13 +787,15 @@ teardown() {
         sed 's/^/  /' "$OUT/teardown.txt"
     fi
     if [ -n "$DEADMAN_PID" ]; then
-        if [ -z "$POD_ID" ] || [ "$POD_TERMINATED" = 1 ]; then
+        if [ "$RP_CREATE_ATTEMPTED" = 0 ] || [ "$POD_TERMINATED" = 1 ]; then
             pkill -P "$DEADMAN_PID" 2>/dev/null || true
             kill "$DEADMAN_PID" 2>/dev/null && echo "  dead-man cancelled (pid $DEADMAN_PID)"
             rm -rf "$DEADMAN_DIR"
         else
             echo "  ##########################################################"
-            echo "  # $POD_ID WAS NOT CONFIRMED GONE. The dead-man stays armed"
+            echo "  # ${POD_ID:-unknown id named $POD_NAME} WAS NOT CONFIRMED GONE. The dead-man stays armed"
+            _rc=1
+            printf 'create_attempted=%s\npod=%s\nterminated_verified=0\n' "$RP_CREATE_ATTEMPTED" "${POD_ID:-unknown}" >> "$OUT/teardown.txt"
             echo "  # (pid $DEADMAN_PID) and the on-pod watchdog fires at the lease."
             echo "  # End it by hand:  sh tools/runpod_guard.sh reap --force $POD_ID"
             echo "  ##########################################################"
@@ -842,6 +844,7 @@ rent_runpod() {  # sets POD_ID and SSH_TARGET; 1 (nothing created) when RunPod h
     cp "$CREATE" "$OUT/create_request.json"
     rp_call GET "$RP/pods"
     case "$RP_CODE" in 2*) ;; *) die "pod listing HTTP $RP_CODE; a runner that cannot list cannot verify a delete" ;; esac
+    [ "$(rp_py listingvalid)" = yes ] || die "pod listing schema invalid; nothing created"
     DEADMAN_DIR="${TMPDIR:-/tmp}/mojolearn-smoke-deadman-$$"
     _dm_secs=$(( READY_TIMEOUT + LEASE * 60 + 600 ))
     write_deadman "$DEADMAN_DIR" "$_dm_secs" || die "the dead-man did not compose; nothing created"
@@ -853,6 +856,7 @@ rent_runpod() {  # sets POD_ID and SSH_TARGET; 1 (nothing created) when RunPod h
 
     say "creating $POD_NAME ($GPU) on RunPod. THE BILL STARTS HERE."
     T_POST=$(now)
+    RP_CREATE_ATTEMPTED=1
     rp_call POST "$RP/pods" "$CREATE"
     _ccode=$RP_CODE     # the listing below overwrites RP_CODE
     cp "$TMPD/rp.body" "$OUT/create_response.json"
@@ -862,7 +866,24 @@ rent_runpod() {  # sets POD_ID and SSH_TARGET; 1 (nothing created) when RunPod h
         rp_call GET "$RP/pods"
         POD_ID=$(rp_py byname "$POD_NAME" | awk '{print $1}')
         [ -n "$POD_ID" ] && { printf '%s\n' "$POD_ID" > "$DEADMAN_DIR/pod_id.txt"; die "create response unparsed but $POD_ID exists by name; tearing it down"; }
-        if [ "$PROVIDER" = auto ] && printf '%s' "$_body" | grep -qi 'no instances currently available'; then
+        # Only an explicit parsed refusal plus a successful, valid listing can
+        # establish that no pod was created; transport errors are ambiguous.
+        _refused=0
+        if [ "$_ccode" = 200 ] && [ "$RP_CODE" = 200 ] && [ "$(rp_py listingvalid)" = yes ] &&
+           python3 - "$OUT/create_response.json" <<'PYREFUSAL'
+import json, sys
+try:
+    response = json.load(open(sys.argv[1]))
+    error = response.get("error") if isinstance(response, dict) else None
+    sys.exit(0 if isinstance(error, str) and "no instances currently available" in error.lower() else 1)
+except (OSError, ValueError):
+    sys.exit(1)
+PYREFUSAL
+        then
+            _refused=1
+            RP_CREATE_ATTEMPTED=0
+        fi
+        if [ "$PROVIDER" = auto ] && [ "$_refused" = 1 ]; then
             # THE FALLBACK DECISION (0.8.16, 2026-09-23). RunPod answered HTTP 200 with
             # {"error":"create pod: There are no instances currently available"}: no
             # MI300X to give, nothing created (the listing has no pod by this name).
@@ -1142,9 +1163,11 @@ for _f in pip_report.json index_check.json dists.txt install.log; do
 done
 [ -f "$OUT/remote/install.log" ] && tail -5 "$OUT/remote/install.log" | sed 's/^/  install: /'
 [ -f "$OUT/remote/index_check.log" ] && sed 's/^/  index: /' "$OUT/remote/index_check.log"
-python3 - "$OUT" "$FROM_INDEX" "$VERSION" "$VENDOR" "$COMMIT" <<'PY' | tee -a "$OUT/smoke.txt"
+python3 - "$OUT" "$FROM_INDEX" "$VERSION" "$VENDOR" "$COMMIT" "$ROOT/tools" <<'PY' | tee -a "$OUT/smoke.txt"
 import json, pathlib, sys
-out, index, version, vendor, commit = sys.argv[1:]
+out, index, version, vendor, commit, tools_dir = sys.argv[1:]
+sys.path.insert(0, tools_dir)
+from index_release_check import PROJECTS
 out = pathlib.Path(out)
 problems = []
 try:
@@ -1174,7 +1197,7 @@ if d:
     if d.get('scope') != 'expanded': problems.append('scope %s' % d.get('scope'))
     if src.get('expected_version') != version: problems.append('receipt is about version %s' % src.get('expected_version'))
     dists = src.get('distributions') or {}
-    if dists != {'mojolearn': version, 'mojolearn-nvidia': version, 'mojolearn-amd': version}:
+    if dists != {project: version for project in PROJECTS}:
         problems.append('receipt distributions %s' % dists)
     if commit and d.get('source_commit') != commit: problems.append('receipt names commit %s' % d.get('source_commit'))
     got = (d.get('installed') or {}).get('vendor')

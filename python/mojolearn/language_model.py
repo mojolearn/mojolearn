@@ -2,9 +2,11 @@
 """Configured FP32 decoder language-model training and compatibility aliases.
 
 `LanguageModelTrainer(parameters, *, data_schedule, lr, betas, eps,
-weight_decay, shape=None, resident=False, step_result='full')`. With
-`resident=True` the state lives on the device between steps (DEVIATION
-2514): `train_step` returns the full dict or, with `step_result='lean'`,
+weight_decay, shape=None, resident=None, step_result=None)`. On a GPU
+install `resident` defaults to True and the state lives on the device between
+steps (DEVIATION 2514; default since cpu2-l11-neural); `resident=False` is the
+stateless path (the CPU-only install's route). `train_step` returns the full
+dict or, with `step_result='lean'`,
 only the loss, step and flags; `export_state()`, `export_gradients()` and
 `export_checkpoint()` copy the device state out on demand.
 

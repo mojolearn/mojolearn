@@ -6,8 +6,8 @@ the minibatch Perceptron's mean of its epoch-end iterates (x_linear/sgd.mojo
 `_sgd_mb_grid` launches `sgd_avg_acc_kernel` after each epoch from
 `sgd_perc_avg_from(max_iter)` on and `sgd_avg_fin_kernel` once before the
 result words. One thread a weight (and one for the intercept): a grid, no
-host step. FAST only; nothing launches them under IDENTICAL or with
--D MOJOLEARN_SGD_PERC_QOLD."""
+host step. FAST only, and since 2026-10-04 (rab5-perc: accuracy 0.76219 ->
+0.74097, worse) only with the opt-in -D MOJOLEARN_SGD_PERC_AVG."""
 from std.gpu import block_idx, block_dim, thread_idx
 from x_linear.ops import FP, ld, st, fa, fm
 

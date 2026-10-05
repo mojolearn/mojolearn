@@ -115,10 +115,11 @@ def standard_transform_kernel(
         output.unsafe_store(i,value)
 
 
-def standard_fit(
+def standard_fit_dev(
     ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
     with_mean: Int, with_std: Int,
-) raises -> List[Float32]:
+) raises -> DeviceBuffer[DType.float32]:
+    """`standard_fit`'s three rows of d, left on the device."""
     var output = ctx.enqueue_create_buffer[DType.float32](3*d)
     ctx.enqueue_function[standard_initialize_kernel](output.unsafe_ptr(),Int32(d),grid_dim=(d+255)//256,block_dim=256)
     if with_mean != 0 or with_std != 0:
@@ -145,6 +146,14 @@ def standard_fit(
         ctx.synchronize()
         _ = differences^
         _ = partials^
+    return output^
+
+
+def standard_fit(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
+    with_mean: Int, with_std: Int,
+) raises -> List[Float32]:
+    var output = standard_fit_dev(ctx,x,n,d,with_mean,with_std)
     var result = download_f32(ctx,output,3*d)
     _ = output^
     return result^

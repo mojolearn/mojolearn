@@ -29,6 +29,7 @@ from std.gpu.primitives.warp import shuffle_idx
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
+from sequence.coop_lane import coop_src
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from sequence.theta import (
     DOTM, DSTM, OTM, STM, THETA_REG, THETA_SNAP, _acf_decide, _decompose, div, theta_forecast_reg,
@@ -145,7 +146,7 @@ def nm_spec(
     var r0 = lane if lane <= k else 0
     var f0 = ev.ev(_row(S, r0, 0, k), _row(S, r0, 1, k), _row(S, r0, 2, k))
     for i in range(4):
-        var v = shuffle_idx(f0, UInt32(i))
+        var v = shuffle_idx(f0, coop_src(lane, i))
         if i <= k:
             F[i] = ftz(v)
     var nf = Float32(k)
@@ -253,10 +254,10 @@ def nm_spec(
             c1 = _co(xr, 1, k)
             c2 = _co(xr, 2, k)
         var fl = ev.ev(c0, c1, c2)
-        var fr = shuffle_idx(fl, UInt32(0))
-        var fe = shuffle_idx(fl, UInt32(1))
-        var fc = shuffle_idx(fl, UInt32(2))
-        var fi = shuffle_idx(fl, UInt32(3))
+        var fr = shuffle_idx(fl, coop_src(lane, 0))
+        var fe = shuffle_idx(fl, coop_src(lane, 1))
+        var fc = shuffle_idx(fl, coop_src(lane, 2))
+        var fi = shuffle_idx(fl, coop_src(lane, 3))
         if F[best] <= fr and fr < F[second]:
             for j in range(k):
                 changed |= _put(S, worst * k + j, xr[j])
@@ -298,7 +299,7 @@ def nm_spec(
             var rs = lane if lane <= k else best
             var fs = ev.ev(_row(S, rs, 0, k), _row(S, rs, 1, k), _row(S, rs, 2, k))
             for i in range(4):
-                var v = shuffle_idx(fs, UInt32(i))
+                var v = shuffle_idx(fs, coop_src(lane, i))
                 if i <= k and i != best:
                     changed |= _putf(F, i, v)
         it += 1

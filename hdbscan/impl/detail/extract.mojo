@@ -59,6 +59,10 @@ from hdbscan.impl.detail.stabilities import (
     get_stability_scores_device,
 )
 from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC, HDB_SELECT_DEVICE
+from hdbscan.impl.detail.idn_switches import (
+    IDN_HDB_ONE_SYNC,
+    IDN_HDB_SELECT_ONE_READ,
+)
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_EOM_NO_UPDATE
 from hdbscan.impl.detail.select import (
     CLUSTER_SELECTION_EOM,
@@ -179,7 +183,7 @@ def get_probabilities_host(
     return out^
 
 
-def probabilities_from_labels(
+def probabilities_from_labels_host(
     tree: CondensedHierarchy,
     labels: List[Int32],
     inverse_label_map: List[Int32],
@@ -770,7 +774,9 @@ def extract_clusters(
     probabilities, all on the device over `tree`."""
     # lane af-hdbscan2 (-D MOJOLEARN_HDB_SELECT_DEVICE): the same passes
     # with no wait between them and one readback (epsilon 0 only).
-    comptime if HDB_SELECT_DEVICE:
+    # fam2-cluster: the same route under IDENTICAL on every vendor
+    # (IDN_HDB_SELECT_ONE_READ).
+    comptime if HDB_SELECT_DEVICE or IDN_HDB_SELECT_ONE_READ:
         if cluster_selection_epsilon == Float32(0.0):
             return _extract_one_read(
                 ctx, tree, cluster_selection_method, allow_single_cluster,
@@ -849,7 +855,7 @@ def extract_clusters(
     # lane af-hdbscan2 (FAST on Apple, -D MOJOLEARN_HDB_ONE_SYNC): the seven
     # downloads and the scalar staged, ONE wait, then taken; main's route
     # below waits eight times.
-    comptime if HDB_ONE_SYNC:
+    comptime if HDB_ONE_SYNC or IDN_HDB_ONE_SYNC:
         var s_raw = td_stage_i32(ctx, raw)
         var s_final = td_stage_i32(ctx, final)
         var s_isc = td_stage_i32(ctx, is_cluster)

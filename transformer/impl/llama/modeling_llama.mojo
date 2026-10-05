@@ -342,8 +342,11 @@ from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
     ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
+    AttnFwdScan,
     FUSED_RAN,
     FUSED_SKIPPED_STICKY,
+    attention_fwd_scan_clear,
+    attention_fwd_scan_take,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
     fused_attention_arm_from_env,
@@ -362,7 +365,9 @@ from transformer.impl.llama.afn_apple_fast import (
     AFN_ATTN_NORM_SG,
     AFN_ATTN_ROPE_CACHE,
     afn_flash_forward,
+    afn_flash_head_class,
     afn_gemm_ok,
+    afn_pre_head_ok,
     afn_proj_plain,
     afn_proj_qkv_rope_cache,
     afn_proj_residual,
@@ -373,6 +378,8 @@ from transformer.impl.llama.afn_apple_fast import (
 )
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     identical_mul,
     ftz,
     identical_cos,
@@ -880,16 +887,16 @@ def _plant_bits(
             + String(len(plant_bits))
             + " bit patterns"
         )
-    var n = len(buf)
+    # cpu3-seq: each planted cell goes up on its own (a one-float copy into
+    # the cell), no download and re-upload of the whole buffer and no host
+    # walk over it. Same cells, same bits, same order (a repeated index:
+    # the later plant wins, as before).
+    var np = len(plant_idx)
     step_count_host_alloc()
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](np)
     step_count_sync()
     ctx.synchronize()
-    step_count_d2h()
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    step_count_sync()
-    ctx.synchronize()
-    for i in range(len(plant_idx)):
+    for i in range(np):  # small-loop(np: planted cells of one gate case, a handful): one-cell copies
         var j = plant_idx[i]
         if j < 0 or j >= count:
             raise Error(
@@ -900,11 +907,10 @@ def _plant_bits(
                 + " used cells REFUSED (a plant that misses is worse than"
                 + " no plant: the gate goes green and proves nothing)"
             )
-        host.unsafe_ptr().unsafe_store(
-            j, bitcast[DType.float32](plant_bits[i])
-        )
-    step_count_h2d()
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+        host.unsafe_ptr().unsafe_store(i, bitcast[DType.float32](plant_bits[i]))
+        var cell = buf.create_sub_buffer[DType.float32](j, 1)
+        step_count_h2d()
+        ctx.enqueue_copy(dst_buf=cell, src_ptr=host.unsafe_ptr() + i)
     step_count_sync()
     ctx.synchronize()
     _ = host^
@@ -1427,7 +1433,7 @@ struct LlamaDeviceWeights(Movable):
         opt_lens.append(len(self.b_gate))
         opt_lens.append(len(self.qn_w))
         opt_lens.append(len(self.kn_w))
-        for i in range(len(flags)):
+        for i in range(len(flags)):  # small-loop(flags: the 11 optional block tensors): scan lengths of the present ones
             if flags[i]:
                 lens.append(opt_lens[i])
         var batch = DeviceNonfiniteBatch(ctx, lens)
@@ -1704,6 +1710,15 @@ struct LlamaDeviceStages(Movable):
     shipped build reads). `llama_decoder_layer_backward_device` hands it
     with `aexp` to `fused_backward_launch_estash_ran`, which runs the
     DEVIATION 2650 backward only when it equals this call's cell count."""
+    var attn_fwd_scan: AttnFwdScan
+    """IDN_ATTN_BWD_SCAN_REUSE (lane/nr-attn): the LAST call's fused forward
+    regime-scan maxima of `q_rope`, `k_cache` and `v_cache`, keyed by their
+    addresses and lengths; empty when the last call ran no fused scan.
+    Cleared at the start of every `eager_attention_forward` (the attention
+    forward of every layer call, which follows the only writes of those
+    three buffers) and on the AFN flash path; set after a fused forward.
+    The fused backward takes the three maxima from it instead of scanning
+    the three buffers again."""
 
     def __init__(
         out self,
@@ -1797,6 +1812,7 @@ struct LlamaDeviceStages(Movable):
         self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
+        self.attn_fwd_scan = AttnFwdScan()
 
         # All 30 buffers are owned by self through this fence. Preserve every
         # zero fill, but submit them together instead of waiting per buffer.
@@ -1876,6 +1892,7 @@ struct LlamaDeviceStages(Movable):
         self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
+        self.attn_fwd_scan = AttnFwdScan()
         step_count_sync()
         ctx.synchronize()
 
@@ -2058,13 +2075,33 @@ def residual_rms_norm_kernel(
         )
 
 
+# The fused residual + RMSNorm kernel and the unfused pair compute the same
+# bits (one row owner, S1's serial ascending fold either way); this only picks
+# which launch plan runs. The fusion saves one launch and one reread of the
+# residual, which pays while the residual working set is small; as M * d_model
+# grows the extra serial pass per row thread costs more than the launch it
+# saves. Measured on Apple at d_model 768 (evidence
+# 2026-09-20_residual_rmsnorm_fusion.md): faster at 1.6 M f32 elements,
+# neutral at 3.1 M and 6.3 M, 10.7% slower at 25.2 M. The cut is a working-set
+# RANGE between the last neutral and the first slower point (2^23 elements,
+# 32 MiB f32), so it scales with d_model and is not tied to one row count.
+# Needs neighbor-shape validation (d_model 512 / 1024, M around the cut).
+comptime RESIDUAL_NORM_FUSE_MAX_ELEMS = 1 << 23
+
+
+def residual_norm_fusion_size_ok(m: Int, dm: Int) -> Bool:
+    """True while the [m, dm] residual is within the fusion's working set."""
+    return m * dm <= RESIDUAL_NORM_FUSE_MAX_ELEMS
+
+
 def residual_next_norm_fusion_enabled(
-    m: Int, norm_kind: Int, norm_bias: Bool
+    m: Int, dm: Int, norm_kind: Int, norm_bias: Bool
 ) -> Bool:
     """The measured cross-block residual2 -> norm1 route."""
     return (
         not is_defined["MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM"]()
-        and TARGET_COLUMN == COLUMN_APPLE and m <= 2048
+        and TARGET_COLUMN == COLUMN_APPLE
+        and residual_norm_fusion_size_ok(m, dm)
         and norm_kind == NORM_RMSNORM and not norm_bias
     )
 
@@ -2350,7 +2387,7 @@ def llama_refuse_rope_angle_domain(
     this is `positions > 8192` exactly. REFUSED BY NAME; never clamped."""
     var worst = Float32(0.0)
     var worst_i = 0
-    for i in range(len(inv_freq)):
+    for i in range(len(inv_freq)):  # small-loop(inv_freq: head_dim/2 rotary columns): angle-domain refusal of the table, once per table
         var angle = ftz(identical_mul(Float32(positions - 1), ftz(inv_freq[i])))
         if angle > worst:
             worst = angle
@@ -3597,7 +3634,7 @@ def bias_silu_kernel(
 # ===========================================================================
 
 
-def _refuse_nonfinite_named(name: String, values: List[Float32]) raises:
+def _refuse_nonfinite_named_host(name: String, values: List[Float32]) raises:
     """Contract section 8 / IDENTITY_PATHS row 39, the device path's copy of
     the oracle's `refuse_nonfinite`. Tested BY BITS, not by compares: **Metal
     FLUSHES COMPARE OPERANDS** (row 49), so `-subnormal < 0.0` is FALSE
@@ -3631,7 +3668,7 @@ def _refuse_nonfinite_device(
     mut buf: DeviceBuffer[DType.float32],
     n: Int,
 ) raises:
-    """`_refuse_nonfinite_named` over a DEVICE buffer: the scan runs on
+    """`_refuse_nonfinite_named_host` over a DEVICE buffer: the scan runs on
     the device (`device_first_nonfinite`) and only the offending element is
     brought back to classify it, so the message is character for character
     the host loop's message at the same flat index."""
@@ -3677,6 +3714,36 @@ def _refuse_nonfinite_at(
     )
 
 
+comptime IDN_LLAMA_REFUSE_BATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/fam-lm (2026-10-04), default ON under IDENTICAL: the per-call
+refusal scans of `llama_refuse_bad_call` (hidden states, rotary inv_freq
+and, on a decode step, the key and value caches) are enqueued together on
+one `DeviceNonfiniteBatch` and read with ONE wait and one pair of
+allocations, where each scan had its own partials buffer, pinned host
+buffer and wait (two per layer per forward, four on a decode step). Same
+kernel, same geometry, same integer first-index fold; the names are tested
+in the same order, so the refusal raised is the one the separate scans
+raised. No float is produced: no bit moves on any column.
+`-D MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF` restores the separate scans."""
+
+comptime IDN_ATTN_CACHE_NOWAIT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF"]()
+    or is_defined["MOJOLEARN_ATTN_CACHE_WAIT"]()
+    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+"""lane/nr-attn (2026-10-04), default ON under IDENTICAL; ported from
+lane/neural-pass67 087231ba3 (`MOJOLEARN_ATTN_CACHE_WAIT`). The per-layer
+hard wait after the KV cache update in `llama_attention_forward` is compiled
+out: every reader of the caches is a launch on the same in-order context,
+so the wait ordered nothing (one wait per layer per forward; 0.54 ms a
+layer on the M3, 0.05 ms on the MI325X when measured on 2026-10-01). No
+arithmetic moves: same bits on every column. `-D
+MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF` (or the old `-D
+MOJOLEARN_ATTN_CACHE_WAIT=1`) restores the wait."""
+
+
 def llama_refuse_bad_call(
     ctx: DeviceContext,
     mut w: LlamaDeviceWeights,
@@ -3706,6 +3773,30 @@ def llama_refuse_bad_call(
     var dims = w.dims.copy()
     var dm = dims.d_model
     var hd = dims.head_dim
+    comptime if IDN_LLAMA_REFUSE_BATCH:
+        var has_kv = kv.s > 0
+        var kv_used = kv.s
+        if kv.window > 0:
+            kv_used = kv.cap
+        var lens = List[Int]()
+        lens.append(b * l * dm)
+        lens.append(rope.half)
+        if has_kv:
+            lens.append(b * dims.n_kv * kv_used * hd)
+            lens.append(b * dims.n_kv * kv_used * hd)
+        var batch = DeviceNonfiniteBatch(ctx, lens)
+        batch.enqueue(ctx, 0, x)
+        batch.enqueue(ctx, 1, rope.inv_freq)
+        if has_kv:
+            batch.enqueue(ctx, 2, kv.k)
+            batch.enqueue(ctx, 3, kv.v)
+        var hits = batch.finish(ctx)
+        _refuse_nonfinite_at(ctx, "hidden_states", x, hits[0])
+        _refuse_nonfinite_at(ctx, "rotary_emb.inv_freq", rope.inv_freq, hits[1])
+        if has_kv:
+            _refuse_nonfinite_at(ctx, "past_key_values.key_cache", kv.k, hits[2])
+            _refuse_nonfinite_at(ctx, "past_key_values.value_cache", kv.v, hits[3])
+        return
     # ON THE DEVICE (2026-09-09): the download-and-walk of the block input
     # was 65 ms per call at the Samba shape, a fifth of the forward.
     _refuse_nonfinite_device(ctx, "hidden_states", x, b * l * dm)
@@ -3752,33 +3843,33 @@ def llama_refuse_bad_inputs(
     var kw = dims.kv_width()
     var it = dims.intermediate
     var hd = dims.head_dim
-    _refuse_nonfinite_named("hidden_states", _download(ctx, x, b * l * dm))
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host("hidden_states", _download(ctx, x, b * l * dm))
+    _refuse_nonfinite_named_host(
         "input_layernorm.weight", _download(ctx, w.norm1_w, dm)
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "post_attention_layernorm.weight", _download(ctx, w.norm2_w, dm)
     )
-    _refuse_nonfinite_named("q_proj.weight", _download(ctx, w.w_q, qw * dm))
-    _refuse_nonfinite_named("k_proj.weight", _download(ctx, w.w_k, kw * dm))
-    _refuse_nonfinite_named("v_proj.weight", _download(ctx, w.w_v, kw * dm))
-    _refuse_nonfinite_named("o_proj.weight", _download(ctx, w.w_o, dm * qw))
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host("q_proj.weight", _download(ctx, w.w_q, qw * dm))
+    _refuse_nonfinite_named_host("k_proj.weight", _download(ctx, w.w_k, kw * dm))
+    _refuse_nonfinite_named_host("v_proj.weight", _download(ctx, w.w_v, kw * dm))
+    _refuse_nonfinite_named_host("o_proj.weight", _download(ctx, w.w_o, dm * qw))
+    _refuse_nonfinite_named_host(
         "gate_proj.weight", _download(ctx, w.w_gate, it * dm)
     )
-    _refuse_nonfinite_named("up_proj.weight", _download(ctx, w.w_up, it * dm))
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host("up_proj.weight", _download(ctx, w.w_up, it * dm))
+    _refuse_nonfinite_named_host(
         "down_proj.weight", _download(ctx, w.w_down, dm * it)
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "rotary_emb.inv_freq", _download(ctx, rope.inv_freq, dims.half())
     )
     if kv.s > 0:
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "past_key_values.key_cache",
             _download(ctx, kv.k, b * dims.n_kv * kv.s * hd),
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "past_key_values.value_cache",
             _download(ctx, kv.v, b * dims.n_kv * kv.s * hd),
         )
@@ -3914,6 +4005,8 @@ def eager_attention_forward(
     var status = -1
     # DEVIATION 2652: nothing kept until this call keeps it.
     stages.attn_estash_cells = 0
+    # IDN_ATTN_BWD_SCAN_REUSE: no forward scan recorded until this call's.
+    stages.attn_fwd_scan.clear()
     if need_eager:
         attention_eager_core(
             ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
@@ -3941,6 +4034,7 @@ def eager_attention_forward(
                 plant_idx, plant_bits, trace, prefix, softcap,
             )
     elif choice != ATTN_PATH_EAGER:
+        attention_fwd_scan_clear()
         var kept_estash = False
         comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm,
@@ -3968,6 +4062,13 @@ def eager_attention_forward(
                 dims.head_dim, s, pos0, key_lo, window,
                 llama_attention_scale(dims.head_dim),
             )
+        # IDN_ATTN_BWD_SCAN_REUSE: keep this call's forward scan (empty
+        # unless it was taken over exactly these three buffers).
+        stages.attn_fwd_scan = attention_fwd_scan_take(
+            ctx, Int(stages.q_rope.unsafe_ptr()), b * l * dims.n_heads * dims.head_dim,
+            Int(stages.k_cache.unsafe_ptr()), Int(stages.v_cache.unsafe_ptr()),
+            b * dims.n_kv * s * dims.head_dim,
+        )
         if status != FUSED_RAN and not need_eager:
             stages.attn_fused_off = True
         if status != FUSED_RAN and not need_eager:
@@ -4722,8 +4823,15 @@ def llama_attention_forward(
             grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
-    step_count_sync()
-    ctx.synchronize()
+    # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
+    # 087231ba3): the hard wait after the cache update ordered nothing.
+    # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
+    # or copy on the same in-order context, and the host reads none of them
+    # before its own later wait (the fused forward's regime scan or flag
+    # read, or the next call's). No buffer local to this call is freed here.
+    comptime if not IDN_ATTN_CACHE_NOWAIT:
+        step_count_sync()
+        ctx.synchronize()
     kv.s = s_old + l
     timing_tick(ctx, ton, tk, "attn.rope_and_cache")
 
@@ -5045,10 +5153,12 @@ def _afn_block_ok(
 
 def _afn_pre_ok(stages: LlamaDeviceStages, kv: LlamaKVCache, rope: LlamaRopeTable) -> Bool:
     """The fused QKV launch (FUSE_PRE): a fresh full-causal prefill with
-    head_dim 64 rotated fully and whole GEMM K windows."""
+    the head rotated fully (`rope_dim == head_dim`) and whole GEMM K windows.
+    lane/no-bench-tuning-2: every head size that fits one GEMM column tile
+    (`afn_pre_head_ok`), not head_dim 64 only."""
     return (
-        kv.window == 0 and kv.s == 0 and stages.dims.head_dim == 64
-        and rope.rope_dim == 64
+        kv.window == 0 and kv.s == 0 and afn_pre_head_ok(stages.dims.head_dim)
+        and rope.rope_dim == stages.dims.head_dim
         and afn_gemm_ok(stages.b * stages.l, stages.dims.q_width(), stages.dims.d_model)
     )
 
@@ -5154,7 +5264,7 @@ def _afn_attention_forward(
                     _afn_p(kv.v), _afn_p(stages.norm1_out), _afn_p(w.w_q), _afn_p(w.w_k),
                     _afn_p(w.w_v), _afn_p(stages.norm1_sumsq), _afn_p(w.norm1_w),
                     _afn_p(rope.cos), _afn_p(rope.sin), m, dm, w.eps, l, nh, nkv, pos0,
-                    False,
+                    False, hd,
                 )
             else:
                 afn_proj_qkv_rope_cache(
@@ -5163,7 +5273,7 @@ def _afn_attention_forward(
                     _afn_p(kv.v), _afn_p(x), _afn_p(w.w_q), _afn_p(w.w_k),
                     _afn_p(w.w_v), _afn_p(stages.norm1_sumsq), _afn_p(w.norm1_w),
                     _afn_p(rope.cos), _afn_p(rope.sin), m, dm, w.eps, l, nh, nkv, pos0,
-                    True,
+                    True, hd,
                 )
             pre_done = True
     if not pre_done:
@@ -5252,12 +5362,15 @@ def _afn_attention_forward(
     # ---- the attention core.
     var core_done = False
     comptime if AFN_ATTN_FLASH:
-        if hd == 64:
+        # lane/no-bench-tuning-2: every head size with a padded head class
+        # (hd <= 80, hd % 4 == 0; `afn_flash_head_class`), not hd == 64 only.
+        if afn_flash_head_class(hd) != 0:
             stages.attn_estash_cells = 0
+            stages.attn_fwd_scan.clear()
             afn_flash_forward(
                 ctx, _afn_p(stages.ctxv), _afn_p(stages.amax), _afn_p(stages.denom),
                 _afn_p(stages.q_rope), _afn_p(stages.k_cache), _afn_p(stages.v_cache),
-                b, l, nh, nkv, s, pos0, key_lo, window, llama_attention_scale(hd),
+                b, l, nh, nkv, s, pos0, key_lo, window, llama_attention_scale(hd), hd,
             )
             stages.attn_materialized = False
             stages.attn_forward_status = FUSED_RAN
@@ -5439,7 +5552,7 @@ def _afn_mlp_and_residual2(
         return True
     # main's residual2 launches.
     var fuse_next_norm = (
-        want_next and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
+        want_next and residual_next_norm_fusion_enabled(m, dm, NORM_RMSNORM, False)
     )
     step_count_launch()
     if fuse_next_norm:
@@ -5724,7 +5837,8 @@ def llama_decoder_layer_forward_planted(
     var fused_residual_norm = (
         fuse_residual_norm and w.opts.norm_kind == NORM_RMSNORM
         and not w.opts.norm_bias and (
-            is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]() or m <= 2048
+            is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]()
+            or residual_norm_fusion_size_ok(m, dm)
         )
     )
     comptime if AFN_ATTN_ANY:
@@ -5818,7 +5932,7 @@ def llama_decoder_layer_forward_planted(
             var fuse_next_norm = (
                 next_norm_sumsq and next_norm_out and next_norm_weight
                 and next_norm_eps
-                and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
+                and residual_next_norm_fusion_enabled(m, dm, NORM_RMSNORM, False)
             )
             step_count_launch()
             if fuse_next_norm:
@@ -5843,7 +5957,7 @@ def llama_decoder_layer_forward_planted(
         var fuse_next_norm = (
             next_norm_sumsq and next_norm_out and next_norm_weight
             and next_norm_eps
-            and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
+            and residual_next_norm_fusion_enabled(m, dm, NORM_RMSNORM, False)
         )
         step_count_launch()
         if fuse_next_norm:

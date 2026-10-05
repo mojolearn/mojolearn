@@ -18,7 +18,8 @@ Seams (DEVIATION numbers, lane sequence 5500-5599):
   5502 LSTM cell state: c = fma(f, c_prev, i*g)                     alt: fma(i, g, f*c_prev)
   5503 GRU update: h = n + z (h_prev - n), one fma                  alt: (1 - z) n + z h_prev
   5504 BPTT weight gradient: ONE fold over (step, batch) rows
-       ascending after the reverse sweep                            alt: per-step, steps descending
+       ascending after the reverse sweep (IDENTICAL, K > 512: the
+       blocked order of sequence/recurrent.mojo)                     alt: per-step, steps descending
   5505 softmax cross entropy: the exp-sum in column order           alt: reversed
   5506 Adam denominator: sqrt(v) / sqrt(1 - b2^t) + eps (torch)     alt: sqrt(v / (1 - b2^t)) + eps
   5507 torch.lerp: two branches at w = 0.5 (Adamax, NAdam, Adafactor) alt: s + w (e - s) always
@@ -64,6 +65,8 @@ from checks.numerics import (
     identical_tanh,
 )
 from checks.fixture_rng import splitmix64_next
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 
 
 @always_inline
@@ -180,11 +183,41 @@ def o_gru(gx: List[Float32], gh: List[Float32], h_prev: List[Float32], B: Int, H
 
 
 # ---------------------------------------------------------------- 5504
+def _o_wgrad_block(K: Int) -> Int:
+    """Restated (sequence/recurrent.mojo `wgrad_block`): K itself when the
+    blocked order is off, else the smallest power of two R >= 512 with
+    R R >= K."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+        return K
+    var r = 512
+    while r * r < K:
+        r *= 2
+    return r
+
+
 def o_bptt_dw(dgx: List[Float32], x: List[Float32], T: Int, B: Int, GH: Int, D: Int, alt: Bool) -> List[Float32]:
     """dW_ih [GH, D] = sum over rows r = s B + b of dgx[r, g] x[r, d]:
-    pinned, r ascending in one fold; alt, the steps descending (the order a
-    per-step accumulation during the reverse sweep folds them)."""
+    pinned, r ascending in one fold (under IDENTICAL since nr-small D3:
+    the blocked order, blocks of `_o_wgrad_block(T B)` rows each folded
+    from zero, the partials added ascending from zero; one block is the one
+    fold); alt, the steps descending (the order a per-step accumulation
+    during the reverse sweep folds them)."""
     var out = List[Float32](capacity=GH * D)
+    var K = T * B
+    var KB = _o_wgrad_block(K)
+    if not alt and KB < K:
+        for g in range(GH):
+            for d in range(D):
+                var tot = Float32(0.0)
+                var lo = 0
+                while lo < K:
+                    var part = Float32(0.0)
+                    for r in range(lo, min(lo + KB, K)):
+                        part = _f(dgx[r * GH + g], x[r * D + d], part)
+                    tot = _a(tot, part)
+                    lo += KB
+                out.append(tot)
+        return out^
     for g in range(GH):
         for d in range(D):
             var acc = Float32(0.0)
@@ -1301,4 +1334,50 @@ def o_prophet_features(frac: List[Float32], orders: List[Int], hol: List[Float32
                 out.append(_z(identical_cos(c)))
         for h in range(nh):
             out.append(_z(hol[t * nh + h]))
+    return out^
+
+
+def _o_fmix32(x: UInt32) -> UInt32:
+    """murmur3's 32-bit finalizer."""
+    var z = x ^ (x >> 16)
+    z = z * UInt32(0x85EBCA6B)
+    z = z ^ (z >> 13)
+    z = z * UInt32(0xC2B2AE35)
+    return z ^ (z >> 16)
+
+
+def o_mlp_perm(n: Int, seed: UInt64, epoch: Int, alt: Bool) -> List[Float32]:
+    """Seam 5545 (lane cpu3-python): the MLP device epoch order (roadmap D13,
+    `sequence/mlp.mojo::op_mlp_perm`) restated: the epoch key is splitmix64's
+    output at state seed + (epoch + 1) * golden; position t maps through six
+    Feistel rounds on two h-bit halves (h = ceil(bits / 2), 2^bits >= n),
+    round key fmix32(k0 + round * 0x9E3779B9) ^ k1, then cycle-walks until
+    the value is below n. alt: five rounds (a dropped round)."""
+    var z = seed + UInt64(epoch + 1) * UInt64(0x9E3779B97F4A7C15)
+    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+    var key = z ^ (z >> 31)
+    var k0 = UInt32(key & UInt64(0xFFFFFFFF))
+    var k1 = UInt32(key >> UInt64(32))
+    var bits = 1
+    while (1 << bits) < n:
+        bits += 1
+    var h = UInt32((bits + 1) // 2)
+    var mask = (UInt32(1) << h) - UInt32(1)
+    var rounds = 5 if alt else 6
+    var out = List[Float32]()
+    for t in range(n):
+        var x = UInt32(t)
+        while True:
+            var l = (x >> h) & mask
+            var r = x & mask
+            for rd in range(rounds):
+                var f = _o_fmix32(r + (_o_fmix32(k0 + UInt32(rd) * UInt32(0x9E3779B9)) ^ k1)) & mask
+                var nl = r
+                r = l ^ f
+                l = nl
+            x = (l << h) | r
+            if Int(x) < n:
+                break
+        out.append(Float32(Int(x)))
     return out^

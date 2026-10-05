@@ -73,10 +73,14 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA2_SSD_MMA`
 #: runs S12, S13/S14 and S15/S16 on simdgroup 8x8 tiles (afn_ssd_mma.mojo);
 #: every other build takes the three cell kernels below unchanged.
-from mamba.impl.modules.afn_defines import AFN_MAMBA2_SSD_MMA
+from mamba.impl.modules.afn_defines import AFN_MAMBA2_SSD_MMA, IDN_M2_SSD_TILES
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from mamba.impl.modules.afn_ssd_mma import (
     afn_m2_cb_g_mma,
     afn_m2_cstate_mma,
@@ -112,6 +116,19 @@ comptime SAB_FOLD_SERIAL_ZERO_SEED = is_defined[
     "MOJOLEARN_MAMBA2_SABOTAGE_FOLD_SERIAL_ZERO_SEED"
 ]()
 
+#: lane nr-mamba (2026-10-04, roadmap B9) IDN_M2_CB_LOWER (IDENTICAL, default
+#: ON; `-D MOJOLEARN_IDN_M2_CB_LOWER_OFF` or `-D MOJOLEARN_IDN_ALL_OFF`
+#: restores main): S12's G = C.B folds only j <= i and writes an explicit
+#: +0.0 above the diagonal (never leaves the cell unwritten: cb.G is a
+#: recorded, arena-allocated stage). Every reader (S13's M = G o L, the
+#: backward's ydiag and cb gradients) reads j <= i only, so no output bit
+#: moves; the RECORDED cb.G stage changes above the diagonal, on every column
+#: together with the oracle (mamba/checks/mamba2_oracle.mojo, same define).
+comptime IDN_M2_CB_LOWER = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_IDN_M2_CB_LOWER_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime SSD_ANY_SABOTAGE = (
     SAB_SEGSUM_DESCENDING
     or SAB_CHUNK_SIZE_128
@@ -381,7 +398,11 @@ def m2_cb_g_kernel(
     if real > qv:
         real = qv
     var acc = Float32(0.0)
-    if i < real and j < real:
+    var live = i < real and j < real
+    comptime if IDN_M2_CB_LOWER:
+        # B9: above the diagonal is never read; explicit +0.0 (below).
+        live = live and j <= i
+    if live:
         var ti = bb * t_work + c0 + i
         var tj = bb * t_work + c0 + j
         for n in range(M2_D_STATE):
@@ -627,6 +648,245 @@ def m2_cstate_kernel(
         else:
             out = ftz(leaf0)
     cstate.unsafe_store(cell, out)
+
+
+# ===========================================================================
+# lane nr-mamba (2026-10-04, roadmap B1): the S13/S14 and S16 cells as
+# threadgroup tiles (IDN_M2_SSD_TILES in afn_defines.mojo; device columns
+# only, the host column keeps the cell kernels above). Same chains, same
+# leaves, same order, so the same bits. Every sabotage arm takes the cell
+# kernels.
+# ===========================================================================
+
+comptime M2_SSD_TILED = (
+    IDN_M2_SSD_TILES
+    and not SAB_PAIR_DT_B
+    and not SAB_FOLD_SERIAL_ZERO_SEED
+    and not SAB_2712_UNBOUNDED
+)
+#: Y_diag tile: YD_ROWS rows i of one (b, c, h), all 64 p; X_d staged
+#: YD_JC rows at a time. Page: (4 * 256 + 64 * 64) * 4 = 20,480 bytes.
+comptime M2_YD_ROWS = 4
+comptime M2_YD_JC = 64
+comptime M2_YD_QMAX = 256
+comptime M2_YD_THREADS = M2_YD_ROWS * M2_HEADDIM
+#: C_state tile: one (b, c, h) and CS_PT columns p, all 128 n (one thread
+#: per n); B * decay staged CS_IC rows at a time. Page: (32 * 128 + 32 * 8)
+#: * 4 = 17,408 bytes.
+comptime M2_CS_PT = 8
+comptime M2_CS_IC = 32
+
+
+def m2_ydiag_tile_kernel(
+    ydiag: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
+    cb_g: MutPointer[Float32, MutAnyOrigin],  # [B, C, Q, Q]
+    seg_l: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, Q, Q]
+    xd: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
+    b_in: Int32,
+    t_in: Int32,
+    nh_in: Int32,
+    nc_in: Int32,
+    q_in: Int32,
+):
+    """`m2_ydiag_kernel`'s cells for M2_YD_ROWS rows of one (b, c, h): the
+    rows of M formed once in shared memory, X_d staged once per tile."""
+    var t_work = Int(t_in)
+    var nh = Int(nh_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var n_it = (qv + M2_YD_ROWS - 1) // M2_YD_ROWS
+    var blk = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var it = blk % n_it
+    var r = blk // n_it
+    var hh = r % nh
+    r = r // nh
+    var c = r % nc
+    var bb = r // nc
+    var c0 = c * qv
+    var real = t_work - c0
+    if real > qv:
+        real = qv
+    if it * M2_YD_ROWS >= real:
+        return  # uniform over the block: no row of this tile is real
+    var m_s = stack_allocation[
+        M2_YD_ROWS * M2_YD_QMAX, Scalar[DType.float32],
+        address_space=AddressSpace.SHARED,
+    ]()
+    var x_s = stack_allocation[
+        M2_YD_JC * M2_HEADDIM, Scalar[DType.float32],
+        address_space=AddressSpace.SHARED,
+    ]()
+    # The tile's rows of M = G o L: the PRODUCT at j <= i, the structural
+    # +0.0 above the diagonal; a row past the sequence is never stored.
+    var e = tid
+    while e < M2_YD_ROWS * qv:
+        var rr = e // qv
+        var jj = e - rr * qv
+        var ii = it * M2_YD_ROWS + rr
+        var mv = Float32(0.0)
+        if ii < real and jj <= ii:
+            mv = ftz(
+                identical_mul(
+                    ftz(cb_g.unsafe_load(((bb * nc + c) * qv + ii) * qv + jj)),
+                    ftz(
+                        seg_l.unsafe_load(
+                            (((bb * nc + c) * nh + hh) * qv + ii) * qv + jj
+                        )
+                    ),
+                )
+            )
+        m_s[rr * M2_YD_QMAX + jj] = mv
+        e += M2_YD_THREADS
+    var ri = tid // M2_HEADDIM
+    var p = tid - ri * M2_HEADDIM
+    var i = it * M2_YD_ROWS + ri
+    var active = i < real
+    var leaf_len = qv
+    if qv > 128:
+        leaf_len = qv // 2
+    var leaf0 = Float32(0.0)
+    var leaf1 = Float32(0.0)
+    var j0 = 0
+    while j0 < qv:
+        barrier()
+        var ex = tid
+        while ex < M2_YD_JC * M2_HEADDIM:
+            var jr = ex // M2_HEADDIM
+            var pp = ex - jr * M2_HEADDIM
+            var jj = j0 + jr
+            var xv = Float32(0.0)
+            if jj < qv and c0 + jj < t_work:
+                xv = ftz(
+                    xd.unsafe_load(
+                        (((bb * t_work) + (c0 + jj)) * nh + hh) * M2_HEADDIM + pp
+                    )
+                )
+            x_s[ex] = xv
+            ex += M2_YD_THREADS
+        barrier()
+        if active:
+            for jr in range(M2_YD_JC):
+                var jj = j0 + jr
+                if jj < qv:
+                    # every step, the j > i +0.0 ones included (the -0 rule)
+                    var m_ij = m_s[ri * M2_YD_QMAX + jj]
+                    var xv = x_s[jr * M2_HEADDIM + p]
+                    if jj < leaf_len:
+                        leaf0 = ftz(identical_mul_add(m_ij, xv, leaf0))
+                    else:
+                        leaf1 = ftz(identical_mul_add(m_ij, xv, leaf1))
+        j0 += M2_YD_JC
+    if active:
+        var out: Float32
+        if leaf_len < qv:
+            out = ftz(ftz(leaf0) + ftz(leaf1))
+        else:
+            out = ftz(leaf0)
+        ydiag.unsafe_store(
+            (((bb * t_work) + (c0 + i)) * nh + hh) * M2_HEADDIM + p, out
+        )
+
+
+def m2_cstate_tile_kernel(
+    cstate: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, P, N]
+    xbc: MutPointer[Float32, MutAnyOrigin],  # [B, T, CD]
+    decay: MutPointer[Float32, MutAnyOrigin],  # [B, H, C, Q]
+    xd: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
+    b_in: Int32,
+    t_in: Int32,
+    nh_in: Int32,
+    di_in: Int32,
+    cd_in: Int32,
+    nc_in: Int32,
+    q_in: Int32,
+):
+    """`m2_cstate_kernel`'s cells for one (b, c, h) and M2_CS_PT columns p:
+    B * decay formed once per (i, n) in shared memory, one thread per n
+    carrying the M2_CS_PT chains."""
+    comptime n_state = M2_D_STATE
+    var t_work = Int(t_in)
+    var nh = Int(nh_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    comptime n_pt = M2_HEADDIM // M2_CS_PT
+    var blk = Int(block_idx.x)
+    var n = Int(thread_idx.x)
+    var pt = blk % n_pt
+    var r = blk // n_pt
+    var hh = r % nh
+    r = r // nh
+    var c = r % nc
+    var bb = r // nc
+    var pbase = pt * M2_CS_PT
+    var c0 = c * qv
+    var real = t_work - c0
+    if real > qv:
+        real = qv
+    var bd_s = stack_allocation[
+        M2_CS_IC * n_state, Scalar[DType.float32],
+        address_space=AddressSpace.SHARED,
+    ]()
+    var xv_s = stack_allocation[
+        M2_CS_IC * M2_CS_PT, Scalar[DType.float32],
+        address_space=AddressSpace.SHARED,
+    ]()
+    var leaf_len = qv
+    if qv > 128:
+        leaf_len = qv // 2
+    var leaf0 = SIMD[DType.float32, M2_CS_PT](0.0)
+    var leaf1 = SIMD[DType.float32, M2_CS_PT](0.0)
+    var i0 = 0
+    while i0 < qv:
+        barrier()
+        # B * decay for rows i0 .. i0 + IC, this thread's n (+0.0 padded).
+        for ir in range(M2_CS_IC):
+            var i = i0 + ir
+            var bd = Float32(0.0)
+            if i < real:
+                var ti = bb * t_work + c0 + i
+                var dec = ftz(
+                    decay.unsafe_load(((bb * nh + hh) * nc + c) * qv + i)
+                )
+                bd = ftz(
+                    identical_mul(ftz(xbc.unsafe_load(ti * cd + di + n)), dec)
+                )
+            bd_s[ir * n_state + n] = bd
+        var ex = n
+        while ex < M2_CS_IC * M2_CS_PT:
+            var ir = ex // M2_CS_PT
+            var q = ex - ir * M2_CS_PT
+            var i = i0 + ir
+            var xv = Float32(0.0)
+            if i < real:
+                var ti = bb * t_work + c0 + i
+                xv = ftz(xd.unsafe_load((ti * nh + hh) * M2_HEADDIM + pbase + q))
+            xv_s[ex] = xv
+            ex += n_state
+        barrier()
+        for ir in range(M2_CS_IC):
+            var i = i0 + ir
+            if i < qv:
+                var bd = bd_s[ir * n_state + n]
+                comptime for q in range(M2_CS_PT):
+                    var xv = xv_s[ir * M2_CS_PT + q]
+                    if i < leaf_len:
+                        leaf0[q] = ftz(identical_mul_add(xv, bd, leaf0[q]))
+                    else:
+                        leaf1[q] = ftz(identical_mul_add(xv, bd, leaf1[q]))
+        i0 += M2_CS_IC
+    comptime for q in range(M2_CS_PT):
+        var out: Float32
+        if leaf_len < qv:
+            out = ftz(ftz(leaf0[q]) + ftz(leaf1[q]))
+        else:
+            out = ftz(leaf0[q])
+        cstate.unsafe_store(
+            ((((bb * nc + c) * nh + hh) * M2_HEADDIM + pbase + q) * n_state) + n,
+            out,
+        )
 
 
 # ===========================================================================
@@ -915,20 +1175,36 @@ def ssd_forward(
             grid_dim=(_grid(b * nc * qv * qv), 1, 1),
             block_dim=(MAMBA2_TPB, 1, 1),
         )
-        ctx.enqueue_function[m2_ydiag_kernel](
-            ydiag.unsafe_ptr(),
-            cb_g.unsafe_ptr(),
-            seg_l.unsafe_ptr(),
-            xd.unsafe_ptr(),
-            dt_work.unsafe_ptr(),
-            Int32(b),
-            Int32(t_work),
-            Int32(nh),
-            Int32(nc),
-            Int32(qv),
-            grid_dim=(_grid(b * t_work * nh * M2_HEADDIM), 1, 1),
-            block_dim=(MAMBA2_TPB, 1, 1),
-        )
+        comptime if M2_SSD_TILED:
+            var n_it = (qv + M2_YD_ROWS - 1) // M2_YD_ROWS
+            ctx.enqueue_function[m2_ydiag_tile_kernel](
+                ydiag.unsafe_ptr(),
+                cb_g.unsafe_ptr(),
+                seg_l.unsafe_ptr(),
+                xd.unsafe_ptr(),
+                Int32(b),
+                Int32(t_work),
+                Int32(nh),
+                Int32(nc),
+                Int32(qv),
+                grid_dim=(b * nc * nh * n_it, 1, 1),
+                block_dim=(M2_YD_THREADS, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[m2_ydiag_kernel](
+                ydiag.unsafe_ptr(),
+                cb_g.unsafe_ptr(),
+                seg_l.unsafe_ptr(),
+                xd.unsafe_ptr(),
+                dt_work.unsafe_ptr(),
+                Int32(b),
+                Int32(t_work),
+                Int32(nh),
+                Int32(nc),
+                Int32(qv),
+                grid_dim=(_grid(b * t_work * nh * M2_HEADDIM), 1, 1),
+                block_dim=(MAMBA2_TPB, 1, 1),
+            )
     ctx.enqueue_function[m2_decay_kernel](
         decay.unsafe_ptr(),
         dacs.unsafe_ptr(),
@@ -942,22 +1218,39 @@ def ssd_forward(
             ctx, cstate, xbc_work, decay, xd, b, t_work, nh, di, cd, nc, qv
         )
     else:
-        ctx.enqueue_function[m2_cstate_kernel](
-            cstate.unsafe_ptr(),
-            xbc_work.unsafe_ptr(),
-            decay.unsafe_ptr(),
-            xd.unsafe_ptr(),
-            dt_work.unsafe_ptr(),
-            Int32(b),
-            Int32(t_work),
-            Int32(nh),
-            Int32(di),
-            Int32(cd),
-            Int32(nc),
-            Int32(qv),
-            grid_dim=(_grid(b * nc * nh * M2_HEADDIM * M2_D_STATE), 1, 1),
-            block_dim=(MAMBA2_TPB, 1, 1),
-        )
+        comptime if M2_SSD_TILED:
+            ctx.enqueue_function[m2_cstate_tile_kernel](
+                cstate.unsafe_ptr(),
+                xbc_work.unsafe_ptr(),
+                decay.unsafe_ptr(),
+                xd.unsafe_ptr(),
+                Int32(b),
+                Int32(t_work),
+                Int32(nh),
+                Int32(di),
+                Int32(cd),
+                Int32(nc),
+                Int32(qv),
+                grid_dim=(b * nc * nh * (M2_HEADDIM // M2_CS_PT), 1, 1),
+                block_dim=(M2_D_STATE, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[m2_cstate_kernel](
+                cstate.unsafe_ptr(),
+                xbc_work.unsafe_ptr(),
+                decay.unsafe_ptr(),
+                xd.unsafe_ptr(),
+                dt_work.unsafe_ptr(),
+                Int32(b),
+                Int32(t_work),
+                Int32(nh),
+                Int32(di),
+                Int32(cd),
+                Int32(nc),
+                Int32(qv),
+                grid_dim=(_grid(b * nc * nh * M2_HEADDIM * M2_D_STATE), 1, 1),
+                block_dim=(MAMBA2_TPB, 1, 1),
+            )
     ctx.enqueue_function[m2_statepass_kernel](
         pass_states.unsafe_ptr(),
         h_last.unsafe_ptr(),

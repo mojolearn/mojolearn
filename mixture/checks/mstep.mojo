@@ -129,6 +129,16 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_TN
+from mixture.chol_order import (
+    GMM_IDN_CHOL_TPB,
+    IDN_GMM_FUSED_CHOL,
+    gmm_idn_chol_applies,
+)
+from mixture.nk_order import (
+    GMM_NK_CHUNK,
+    IDN_GMM_NK_LEVELS,
+    gmm_nk_levels_floats,
+)
 from mixture.checks.estep import (
     GMM_COMP_TPB,
     GMM_ELEM_TPB,
@@ -158,6 +168,8 @@ from checks.numerics import (
     identical_exp,
     identical_log,
     identical_mul,
+    identical_mul_add,
+    identical_sqrt,
 )
 
 
@@ -301,6 +313,139 @@ def nk_t_kernel(
         acc = ftz(acc + ftz(row.unsafe_load(i)))
         i += 1
     nk.unsafe_store(k, ftz(acc + ten_eps))
+
+
+# fam-cluster (2026-10-04): nk in chunked levels (`mixture/nk_order.mojo`),
+# one thread a chunk of GMM_NK_CHUNK rows a component per level, then one
+# thread a component folds the last <= GMM_NK_CHUNK partials and adds 10 eps.
+# The host columns fold the same levels.
+def nk_level1_kernel(
+    resp: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    dst_off: Int32,
+    n_in: Int32,
+    ncomp_in: Int32,
+):
+    """Level one: thread `(chunk b, component k)` folds rows `[b * CHUNK,
+    ...)` of column k of the row-major `resp` into `dst[dst_off + k * p +
+    b]`, `p` the chunk count. Neighbouring threads read neighbouring
+    components of the same rows."""
+    var n = Int(n_in)
+    var ncomp = Int(ncomp_in)
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var b = gid // ncomp
+    var k = gid - b * ncomp
+    var lo = b * GMM_NK_CHUNK
+    if lo >= n:
+        return
+    var hi = min(lo + GMM_NK_CHUNK, n)
+    var p = (n + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+    var acc = Float32(0.0)
+    for i in range(lo, hi):
+        acc = ftz(acc + ftz(resp.unsafe_load(i * ncomp + k)))
+    dst.unsafe_store(Int(dst_off) + k * p + b, acc)
+
+
+def nk_level_kernel(
+    buf: MutPointer[Float32, MutAnyOrigin],
+    src_off: Int32,
+    dst_off: Int32,
+    cnt_in: Int32,
+    ncomp_in: Int32,
+):
+    """A later level, inside the scratch: thread `(component k, chunk b)`
+    folds `buf[src_off + k * cnt + ...]` into `buf[dst_off + k * p + b]`."""
+    var cnt = Int(cnt_in)
+    var ncomp = Int(ncomp_in)
+    var p = (cnt + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var k = gid // p
+    var b = gid - k * p
+    if k >= ncomp:
+        return
+    var lo = b * GMM_NK_CHUNK
+    var hi = min(lo + GMM_NK_CHUNK, cnt)
+    var base = Int(src_off) + k * cnt
+    var acc = Float32(0.0)
+    for i in range(lo, hi):
+        acc = ftz(acc + ftz(buf.unsafe_load(base + i)))
+    buf.unsafe_store(Int(dst_off) + k * p + b, acc)
+
+
+def nk_finish_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    src_off: Int32,
+    cnt_in: Int32,
+    row_major: Int32,
+    nk: MutPointer[Float32, MutAnyOrigin],
+    ncomp_in: Int32,
+    ten_eps: Float32,
+):
+    """The last level (cnt <= GMM_NK_CHUNK values a component) and the
+    `+ 10 eps`. `row_major != 0` reads `resp` itself (`src[i * ncomp + k]`,
+    n within one chunk); otherwise the scratch's `src[src_off + k * cnt +
+    i]`."""
+    var cnt = Int(cnt_in)
+    var ncomp = Int(ncomp_in)
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if k >= ncomp:
+        return
+    var acc = Float32(0.0)
+    if Int(row_major) != 0:
+        for i in range(cnt):
+            acc = ftz(acc + ftz(src.unsafe_load(i * ncomp + k)))
+    else:
+        var base = Int(src_off) + k * cnt
+        for i in range(cnt):
+            acc = ftz(acc + ftz(src.unsafe_load(base + i)))
+    nk.unsafe_store(k, ftz(acc + ten_eps))
+
+
+def gmm_nk_levels_launch(
+    ctx: DeviceContext,
+    mut resp: DeviceBuffer[DType.float32],
+    mut nk: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    n: Int,
+    ncomp: Int,
+) raises:
+    """`nk` in the chunked levels. `scratch` holds at least
+    `gmm_nk_levels_floats(n, ncomp)` floats that nothing in the stream still
+    reads. Asynchronous: `scratch` must outlive the caller's next drain."""
+    if len(scratch) < gmm_nk_levels_floats(n, ncomp):
+        raise Error("gmm_nk_levels_launch: scratch below gmm_nk_levels_floats")
+    var grid_k = (ncomp + 255) // 256
+    if n <= GMM_NK_CHUNK:
+        ctx.enqueue_function[nk_finish_kernel](
+            resp.unsafe_ptr(), Int32(0), Int32(n), Int32(1), nk.unsafe_ptr(),
+            Int32(ncomp), gmm_ten_eps(),
+            grid_dim=(grid_k, 1, 1), block_dim=(256, 1, 1),
+        )
+        return
+    var p1 = (n + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+    ctx.enqueue_function[nk_level1_kernel](
+        resp.unsafe_ptr(), scratch.unsafe_ptr(), Int32(0), Int32(n),
+        Int32(ncomp),
+        grid_dim=((p1 * ncomp + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    var src_off = 0
+    var off = p1 * ncomp
+    var cnt = p1
+    while cnt > GMM_NK_CHUNK:
+        var p = (cnt + GMM_NK_CHUNK - 1) // GMM_NK_CHUNK
+        ctx.enqueue_function[nk_level_kernel](
+            scratch.unsafe_ptr(), Int32(src_off), Int32(off), Int32(cnt),
+            Int32(ncomp),
+            grid_dim=((p * ncomp + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        src_off = off
+        off += p * ncomp
+        cnt = p
+    ctx.enqueue_function[nk_finish_kernel](
+        scratch.unsafe_ptr(), Int32(src_off), Int32(cnt), Int32(0),
+        nk.unsafe_ptr(), Int32(ncomp), gmm_ten_eps(),
+        grid_dim=(grid_k, 1, 1), block_dim=(256, 1, 1),
+    )
 
 
 def nk_kernel(
@@ -991,6 +1136,132 @@ def gmm_big_chol_kernel(
         log_det_chol[k] = -sl
 
 
+def idn_precision_cholesky_kernel(
+    cov: MutPointer[Float32, MutAnyOrigin],
+    chol_l: MutPointer[Float32, MutAnyOrigin],
+    linv: MutPointer[Float32, MutAnyOrigin],
+    prec: MutPointer[Float32, MutAnyOrigin],
+    log_det_chol: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    d_in: Int32,
+):
+    """fam2-cluster, `IDN_GMM_FUSED_CHOL` (IDENTICAL, every column): block k
+    = component k, the working matrix in `chol_l[k]` and the inverse built
+    in `linv[k]` (device memory, so d may reach the block size), every
+    operation and its order as `mixture/chol_order.mojo` states them. Launch
+    `grid_dim = ncomp`, `block_dim = GMM_IDN_CHOL_TPB`.
+
+    Each trailing cell `(r, c)` is owned by one thread per column step and
+    takes ONE pinned fma per step, so its chain is ascending in j whatever
+    the thread count; the three phases of a step are separated by block
+    barriers that order device memory (`_gmm_dev_barrier`)."""
+    var d = Int(d_in)
+    var dd = d * d
+    var k = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var base = k * dd
+    var flag = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var e = t
+    while e < dd:
+        var v = cov.unsafe_load(base + e)
+        if e // d == e % d:
+            v = ftz(ftz(v) + GMM_CHOL_JITTER)
+        chol_l.unsafe_store(base + e, v)
+        e += GMM_IDN_CHOL_TPB
+    if t == 0:
+        flag[0] = Int32(0)
+    _gmm_dev_barrier()
+    for j in range(d):
+        if t == 0:
+            var pv = chol_l.unsafe_load(base + j * d + j)
+            if pv > Float32(0.0):
+                chol_l.unsafe_store(
+                    base + j * d + j, ftz(identical_sqrt(pv))
+                )
+            else:
+                flag[0] = Int32(j + 1)
+        _gmm_dev_barrier()
+        if flag[0] != Int32(0):
+            break
+        var pj = chol_l.unsafe_load(base + j * d + j)
+        var i = j + 1 + t
+        while i < d:
+            chol_l.unsafe_store(
+                base + i * d + j,
+                ftz(identical_div(chol_l.unsafe_load(base + i * d + j), pj)),
+            )
+            i += GMM_IDN_CHOL_TPB
+        _gmm_dev_barrier()
+        # trailing update of the lower triangle, cells (r, c), j < c <= r
+        var m = d - 1 - j
+        var cell = t
+        while cell < m * m:
+            var r = j + 1 + cell // m
+            var c = j + 1 + cell % m
+            if c <= r:
+                chol_l.unsafe_store(
+                    base + r * d + c,
+                    ftz(
+                        identical_mul_add(
+                            -chol_l.unsafe_load(base + r * d + j),
+                            chol_l.unsafe_load(base + c * d + j),
+                            chol_l.unsafe_load(base + r * d + c),
+                        )
+                    ),
+                )
+            cell += GMM_IDN_CHOL_TPB
+        _gmm_dev_barrier()
+    var bad = flag[0]
+    if t == 0:
+        info.unsafe_store(k, bad)
+    if bad != Int32(0):
+        return
+    if t < d:
+        # column t of L^{-1} by forward substitution; this thread alone
+        # writes and reads its column of `linv`
+        var c = t
+        for i in range(d):
+            var v = Float32(0.0)
+            if i == c:
+                v = ftz(
+                    identical_div(
+                        Float32(1.0), chol_l.unsafe_load(base + i * d + i)
+                    )
+                )
+            elif i > c:
+                for m2 in range(c, i):
+                    v = ftz(
+                        identical_mul_add(
+                            -chol_l.unsafe_load(base + i * d + m2),
+                            linv.unsafe_load(base + m2 * d + c),
+                            v,
+                        )
+                    )
+                v = ftz(
+                    identical_div(v, chol_l.unsafe_load(base + i * d + i))
+                )
+            linv.unsafe_store(base + i * d + c, v)
+    _gmm_dev_barrier()
+    e = t
+    while e < dd:
+        var r = e // d
+        var c = e - r * d
+        if c > r:
+            chol_l.unsafe_store(base + e, Float32(0.0))
+        prec.unsafe_store(base + c * d + r, linv.unsafe_load(base + e))
+        e += GMM_IDN_CHOL_TPB
+    if t == 0:
+        var sl = Float32(0.0)
+        for j in range(d):
+            sl = ftz(
+                sl
+                + ftz(identical_log(chol_l.unsafe_load(base + j * d + j)))
+            )
+        log_det_chol.unsafe_store(k, -sl)
+
+
 def center_sqrt_scale_kernel(
     x: MutPointer[Float32, MutAnyOrigin],
     means: MutPointer[Float32, MutAnyOrigin],
@@ -1251,6 +1522,58 @@ def gmm_precision_cholesky(
 
     var grid_dd = (dd + elem_tpb - 1) // elem_tpb
 
+    comptime if IDN_GMM_FUSED_CHOL:
+        # fam2-cluster: every component in one launch, one readback of the
+        # pivot flags (`mixture/chol_order.mojo`). The sabotage arms keep the
+        # per-component chain they were written against.
+        if sabotage == GMM_SAB_NONE and gmm_idn_chol_applies(d):
+            var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
+            var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
+            ctx.enqueue_function[idn_precision_cholesky_kernel](
+                cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                d_info.unsafe_ptr(), Int32(d),
+                grid_dim=(ncomp, 1, 1), block_dim=(GMM_IDN_CHOL_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=d_info)
+            ctx.synchronize()
+            var fail_k = -1
+            var fail_info = 0
+            for kc in range(ncomp):
+                var inf_k = Int(h_info.unsafe_ptr().unsafe_load(kc))
+                if inf_k != 0 and fail_k < 0:
+                    fail_k = kc
+                    fail_info = inf_k
+            _ = d_info^
+            _ = h_info^
+            _ = identity^
+            _ = scal^
+            _ = work^
+            if trace.enabled:
+                # The per-component chain's tags, in its order: the
+                # components before the first failure, then the log
+                # determinants when none failed.
+                var upto = ncomp if fail_k < 0 else fail_k
+                for kc in range(upto):
+                    var ldst = chol_l.create_sub_buffer[DType.float32](
+                        kc * dd, dd
+                    )
+                    trace.record_device(
+                        ctx, gmm_comp_tag(tag, kc, "cholesky"), ldst, dd
+                    )
+                    var prec_k = prec.create_sub_buffer[DType.float32](
+                        kc * dd, dd
+                    )
+                    trace.record_device(
+                        ctx, gmm_comp_tag(tag, kc, "precchol"), prec_k, dd
+                    )
+                    _ = ldst^
+                    _ = prec_k^
+                if fail_k < 0:
+                    trace.record_device(
+                        ctx, tag + ".logdet", log_det_chol, ncomp
+                    )
+            return GmmMStepRun(fail_info, fail_k)
     comptime if GMM_FUSED_CHOL:
         if sabotage == GMM_SAB_NONE and not trace.enabled and d <= GMM_CHOL_MAX_D:
             var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
@@ -1594,6 +1917,17 @@ def gmm_m_step(
             grid_dim=(grid_comp, 1, 1),
             block_dim=(comp_tpb, 1, 1),
         )
+    elif IDN_GMM_NK_LEVELS:
+        # `scaled` is free until the covariance loop below writes it; a
+        # shape whose levels do not fit it gets its own scratch and a drain.
+        var nk_need = gmm_nk_levels_floats(n, ncomp)
+        if nk_need <= n * d:
+            gmm_nk_levels_launch(ctx, resp, nk, scaled, n, ncomp)
+        else:
+            var nk_scratch = ctx.enqueue_create_buffer[DType.float32](nk_need)
+            gmm_nk_levels_launch(ctx, resp, nk, nk_scratch, n, ncomp)
+            ctx.synchronize()
+            _ = nk_scratch^
     elif GMM_NK_T:
         var resp_t = ctx.enqueue_create_buffer[DType.float32](n * ncomp)
         ctx.enqueue_function[resp_transpose_kernel](

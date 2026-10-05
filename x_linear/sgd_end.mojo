@@ -108,7 +108,9 @@ def sgd_mb_end_kernel(
 def sgd_mb_res_kernel(w: FP, bias: FP, res: FP, c: Int32, d: Int32, problems: Int32, one_class: Int32,
                       failed: Int32):
     """Problem c's result words: coef row c, the intercept (one-class: the
-    offset 1 - intercept); zeros on a non-finite fit."""
+    offset 1 - intercept); zeros on a non-finite fit. one_class 2: the
+    intercept is the float-float (bias[0], bias[1]) of the one-class
+    minibatch (x_linear/sgd.mojo SGD_OC_MB_IMPLICIT), the offset `oc_offset`."""
     var j = Int(block_idx.x) * SGD_END_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var cc = Int(c)
@@ -116,7 +118,15 @@ def sgd_mb_res_kernel(w: FP, bias: FP, res: FP, c: Int32, d: Int32, problems: In
         st(res, cc * dd + j, Float32(0) if failed != 0 else ld(w, j))
     elif j == dd:
         var b = ld(bias, 0)
-        var v = (fs(Float32(1), b) if one_class != 0 else b) if failed == 0 else Float32(0)
+        var v: Float32
+        if failed != 0:
+            v = Float32(0)
+        elif one_class == 2:
+            v = oc_offset(b, ld(bias, 1))
+        elif one_class != 0:
+            v = fs(Float32(1), b)
+        else:
+            v = b
         st(res, Int(problems) * dd + cc, v)
 
 

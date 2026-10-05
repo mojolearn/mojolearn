@@ -15,7 +15,7 @@ def test_forward_and_ties():
     rng = np.random.default_rng(0)
     x = rng.standard_normal((20, 8)).astype(np.float32)
     m = ml.MoEBlock(8, 12, num_experts=4, top_k=2, random_state=1)
-    m.router *= 30
+    m.router = m.router * 30
     y = m(x)
     xd = x.astype(np.float64)
     logits = xd @ m.router.T.astype(np.float64)
@@ -30,7 +30,7 @@ def test_forward_and_ties():
             ref[t] += w[j] * (m.down_proj[e].astype(np.float64) @ (_silu(g) * u))
     np.testing.assert_allclose(y, ref, atol=2e-5)
     t = ml.MoEBlock(8, 4, num_experts=3, top_k=1, random_state=2)
-    t.router[:] = 0.0                      # every probability ties
+    t.router = np.zeros_like(t.router)     # every probability ties
     t(x)
     assert np.all(t.selected_experts_[:, 0] == 0)
 

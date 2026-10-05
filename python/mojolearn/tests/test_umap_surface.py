@@ -9,34 +9,35 @@ import numpy as np
 from mojolearn import UMAP
 
 
-# These pins come from the retained 2026-09-10 native identity captures,
-# not from the Python wrapper under test. Every layout word agrees between
-# apple/ and linux-h100/ in bench/results/umap_portable_host_math_2026-09-10/.
-# The earlier 2026-09-05 pins predated the IDENTICAL device optimizer
-# (86b9cec5); the Python surface had not followed that source transition.
-# See comparison.json there for all-stage cross-host checks. AMD is not
-# certified by these captures. Keep literal pins so installed-wheel tests
-# do not depend on a repository/evidence checkout.
+# Literal pins follow the shared round-robin projected eigensolve introduced
+# by 844929695/a97730465. The September10 pins used cyclic Jacobi; retained
+# stage captures locate the first changed stage at spectral initialization.
+# Exact inputs and all64 layout words agree across Apple Metal, AMD gfx942,
+# NVIDIA Ada native and experimental PTX (each repeat-stable). This two-case
+# evidence does not qualify unmeasured devices or the broader PTX surface.
+# Old/new words, source SHAs and raw evidence hashes are retained in
+# bench/results/umap_round_robin_pins_2026-10-04/comparison.json.
+# Keep literals so installed-wheel tests need no repository/evidence files.
 LAYOUT_BITS = np.array([
-    3245070127, 1074041914, 3228888277, 3239233534,
-    3237928445, 3203993852, 3215931711, 1091897538,
-    1068472055, 1091895758, 1090606105, 3207501407,
-    1092535954, 3235377206, 1091864361, 3227045131,
+    3245070127, 1074041940, 3228888229, 3239233542,
+    3237928437, 3203993864, 3215931676, 1091897537,
+    1068472046, 1091895757, 1090606104, 3207501342,
+    1092535949, 3235377203, 1091864368, 3227045136,
 ], dtype=np.uint32).reshape(8, 2)
 
 BROADER_LAYOUT_BITS = np.array([
-    3226496972, 1086260800, 3227178549, 1036433136,
-    1089708092, 3216624968, 1082121398, 1082849706,
-    3221162147, 3238030930, 3230010873, 3201815036,
-    1069619787, 1091856905, 3196773278, 3238703747,
-    3227505849, 3205230566, 1062341170, 1091962548,
-    3206499130, 1085703253, 3229833415, 1071494797,
-    3236548430, 3229965542, 1050598045, 1086962188,
-    3219069802, 3204772706, 3235819470, 3232329010,
-    3168047036, 1082114657, 3219719233, 1059509093,
-    1089551538, 3231064606, 1052606481, 3225822969,
-    1074975842, 1093105332, 1088974099, 3224322659,
-    3203894671, 3223456741, 1081193691, 1092231400,
+    3226496988, 1086260803, 3227178532, 1036433636,
+    1089708082, 3216624980, 1082121428, 1082849707,
+    3221162148, 3238030950, 3230010804, 3201814643,
+    1069619607, 1091856918, 3196773142, 3238703784,
+    3227505642, 3205230108, 1062341049, 1091962552,
+    3206498967, 1085703270, 3229833403, 1071494349,
+    3236548492, 3229965442, 1050598591, 1086962241,
+    3219069718, 3204772983, 3235819352, 3232328960,
+    3168034018, 1082114460, 3219719116, 1059509386,
+    1089551542, 3231064595, 1052606214, 3225822996,
+    1074975848, 1093105330, 1088974171, 3224322694,
+    3203894955, 3223456843, 1081193603, 1092231418,
 ], dtype=np.uint32).reshape(16, 3)
 
 class UMAPSurfaceTests(unittest.TestCase):

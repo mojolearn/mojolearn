@@ -108,11 +108,17 @@ def refuse_nan_distances(
     """DEVIATION 623: raise by name if any of the first `n` cells is NaN."""
     var n_nan = count_nan_cells(ctx, data, n)
     if n_nan != 0:
-        raise Error(
-            where + ": " + String(n_nan) + " of " + String(n)
-            + " distance cells are NaN (a non-finite input row, or two rows"
-            " whose squared norms overflow Float32 so the expanded identity"
-            " is inf - inf); refused by name (DEVIATION 623, IDENTITY_PATHS"
-            " row 39): a computed NaN's payload is the vendor's and cannot"
-            " sit in a recorded stage"
-        )
+        raise Error(nan_distances_message(n_nan, n, where))
+
+
+def nan_distances_message(n_nan: Int, n: Int, where: String) -> String:
+    """DEVIATION 623's refusal text, for a caller that took the count in a
+    pass of its own (fam2-cluster, hdbscan's fused guard)."""
+    return (
+        where + ": " + String(n_nan) + " of " + String(n)
+        + " distance cells are NaN (a non-finite input row, or two rows"
+        " whose squared norms overflow Float32 so the expanded identity"
+        " is inf - inf); refused by name (DEVIATION 623, IDENTITY_PATHS"
+        " row 39): a computed NaN's payload is the vendor's and cannot"
+        " sit in a recorded stage"
+    )

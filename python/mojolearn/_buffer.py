@@ -570,8 +570,10 @@ def _convert(a, dtype, order):
     """`a` itself when it already has `dtype` and `order`, else a converted
     copy. Returns `(Array, copied)`.
 
-    A conversion to float32 goes through the base binding's host
-    converters (DEVIATION 2470-2472): the flat float64 cast, ONE fused
+    A conversion to float32 goes through the base binding's converters
+    (DEVIATION 2470-2472; on the device in the GPU base binding since lane
+    cpu2-l1-input, the host loops being the host column): the flat float64
+    cast, ONE fused
     cast-and-transpose when a float64 block wants the other layout, or the
     tiled float32 transpose when only the layout changes.
     `tests/test_native_convert.py` holds them to byte equality with
@@ -819,7 +821,10 @@ def all_finite(arr):
     """True when every element of a float32/float64 Array is finite.
 
     The base binding's `all_finite_f32` / `all_finite_f64` (DEVIATION
-    2303's helpers). The `math.fsum` fallback of DEVIATION 2307 was
+    2303's helpers). In the GPU base binding the scan runs on the device
+    and one status word comes back (lane cpu2-l1-input,
+    `core/input_device.mojo`); the host loop is the host column (CPU-only
+    installs) and the fallback. The `math.fsum` fallback of DEVIATION 2307 was
     removed 2026-09-10 with every other Python copy of a native helper.
     """
     if not isinstance(arr, Array) or arr.dtype not in ("<f4", "<f8"):
@@ -874,7 +879,9 @@ def _native(key):
 
     ALWAYS THE IDENTICAL BINARY, WHATEVER TIER THE CALLER RUNS. These
     helpers are a float64-to-float32 cast, a transpose and a finiteness
-    predicate: byte copies with no tier semantics, and every estimator in
+    predicate: byte copies with no tier semantics (on the device in the GPU
+    base binding since lane cpu2-l1-input: bit moves and the soft-f64
+    narrowing, the same bytes on every vendor), and every estimator in
     every tier funnels its input through them. Since DEVIATION 2490
     (2026-09-10) the base binding is built in the identical tier alone
     (only the tree lanes have a fast or deterministic binary), so
@@ -892,7 +899,8 @@ def _native(key):
         return fn
     from . import _backend
     try:
-        fn = getattr(_backend.binding("_mojolearn", mode="identical"), key)
+        with _backend.host_helper_scope():
+            fn = getattr(_backend.binding("_mojolearn", mode="identical"), key)
     except Exception as exc:
         fn = _host_native(key)
         if fn is None:

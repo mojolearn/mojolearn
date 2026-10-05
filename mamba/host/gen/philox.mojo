@@ -203,7 +203,7 @@ comptime RNG_GRID_BLOCKS = 4 * 108
 comptime RNG_STRIDE = RNG_GRID_BLOCKS * RNG_BLOCK_THREADS  # 110592
 
 
-def uniform_int_kernel(gid_: Int, 
+def uniform_int_kernel(gid_: Int,
     ptr: MutPointer[Int32, MutAnyOrigin],
     n: Int32,
     start: Int32,

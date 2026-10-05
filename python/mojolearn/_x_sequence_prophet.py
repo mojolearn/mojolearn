@@ -142,7 +142,7 @@ class ProphetForecaster:
             hist = int(math.floor(N * self.changepoint_range))
             n_cp = max(min(self.n_changepoints, hist - 1), 0)
         cpt = np.zeros(max(n_user, n_cp, 1), dtype=np.float32)
-        S = _bind(self.numeric_mode).prophet_changepoints(
+        S = _bind(self.numeric_mode).prophet_changepoints(  # cpu-route: changepoint plan over a handful of changepoints
             [days.ctypes.data, user.ctypes.data, cpt.ctypes.data], [N, n_user, hist, n_cp],
             [self.start_, self.t_scale_])
         if S < 0:

@@ -81,7 +81,7 @@ from ._labels import (
 from ._mode import NumericModeMixin
 from ._forest_protocol import (ForestProtocol, forest_estimator,
                                _forest_fit_function, _forest_fit_arrays,
-                               _rowmajor_fit_function)
+                               _rowmajor_fit_function, _export_fit_result)
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
@@ -312,13 +312,16 @@ def _max_leaves_slot(max_leaves):
     )
 
 
-def _class_weight_rows(class_weight, classes, codes):
+def _class_weight_rows(class_weight, classes, codes, xbind=None):
     """cuML 26.08 process_class_weight shape, bounded Float32 weights.
 
-    The per-class counts (`bincount_i64`) and the per-row weights
-    (`gather_rows_bytes`) are the core helpers'; Python touches only the
-    k class weights. Unlike cuML RF's Float64 weights, this engine narrows
-    to Float32. `codes` is an int32/int64 Array (or a list of ints).
+    Python touches only the k class weights. With `xbind` (the estimator's
+    x_trees binding) and int32 codes, the per-class counts and the per-row
+    weights are the binding's (`x_trees_code_counts`, `x_trees_class_rows`:
+    device kernels on a GPU build, cpu2-l5-trees); otherwise the core host
+    helpers `bincount_i64` / `gather_rows_bytes` (CPU-only callers). Unlike
+    cuML RF's Float64 weights, this engine narrows to Float32. `codes` is an
+    int32/int64 Array (or a list of ints).
     """
     if class_weight is None:
         return None
@@ -328,10 +331,15 @@ def _class_weight_rows(class_weight, classes, codes):
     codes = codes._as_c()
     n = codes.size
     k = len(classes)
+    on_binding = xbind is not None and codes.dtype == "<i4"
     if isinstance(class_weight, str):
-        counts = Array((k,), "<i8")
-        _native("bincount_i64")(codes._addr, 2 if codes.dtype == "<i4" else 3, n, k, counts._addr, 0)
-        counts = counts.tolist()
+        if on_binding:
+            counts = Array((k,), "<i4")
+            xbind.x_trees_code_counts(codes._addr if n else 0, counts._addr, [n, k])
+        else:
+            counts = Array((k,), "<i8")
+            _native("bincount_i64")(codes._addr, 2 if codes.dtype == "<i4" else 3, n, k, counts._addr, 0)
+        counts = counts.tolist()  # glue: k class counts
         values = [n / (k * counts[i]) for i in range(k)]
     else:
         unknown = set(class_weight).difference(classes)
@@ -350,11 +358,16 @@ def _class_weight_rows(class_weight, classes, codes):
         raise ValueError("class weights must remain finite and nonzero when positive in Float32")
     if narrowed.max() <= 0:
         raise ValueError("class weights must have positive total")
+    out = Array((n,), "<f4")
+    if on_binding:
+        # the per-row weight of each row's class: one gather in the binding
+        if n:
+            xbind.x_trees_class_rows(codes._addr, narrowed._addr, out._addr, [n, k])
+        return out
     # the per-row weight of each row's class: one byte-row gather in Mojo
     rows = codes if codes.dtype == "<i8" else codes.astype("<i8")
-    out = Array((n,), "<f4")
     if n:
-        _native("gather_rows_bytes")(narrowed._addr, out._addr, rows._addr, k, n, 4)
+        _native("gather_rows_bytes")(narrowed._addr, out._addr, rows._addr, k, n, 4)  # cpu-route: callers without the trees binding (CPU-only, tests); GPU callers take x_trees_class_rows
     return out
 
 
@@ -677,7 +690,8 @@ class RandomForestClassifier(_RandomForestBase):
         if self.n_classes_ < 2:
             raise ValueError("y has fewer than 2 classes")
         weights = (None if self.class_weight is None else
-                   _class_weight_rows(self.class_weight, self.classes_, y32))
+                   _class_weight_rows(self.class_weight, self.classes_, y32,
+                                      self._bind("_mojolearn_x_trees")))
         binding = self._bind("_mojolearn_rf")
         fit_fn = _forest_fit_function(binding, "rf_classifier_fit")
         rowmajor_fn = _rowmajor_fit_function(binding, "rf_classifier_fit")
@@ -831,6 +845,34 @@ class RandomForestRegressor(_RandomForestBase):
         (self._offsets, self._colid, self._quesval, self._left_child,
          self._leaves, meta) = _forest_fit_arrays(out)
         self.n_features_in_ = int(n_features)
+        self._n_trees = int(meta[0])
+        self._num_outputs = int(meta[1])
+        return self
+
+    def _fit_in_dart(self, handle, cls, n_rows, n_features, rows=None, cols=None):
+        """The squared-error member fit of a DART round on the DART
+        session's device buffers (cpu4-forest): X and class `cls`'s fit
+        target stay where `x_trees_dart_step` left them; `rows` (int32 bag
+        rows) and `cols` (int32 sampled columns) select them on the device.
+        Same params and model export as `fit(X[rows][:, cols], target)`."""
+        self._refresh_config()
+        self._capture_fit_mode()
+        code = self._cfg["criterion"]
+        if code != _REG_CRITERIA["squared_error"]:
+            raise ValueError("a DART member fits squared_error")
+        binding = self._bind("_mojolearn_rf")
+        entry = getattr(binding, "rf_regressor_fit_dart_export", None)
+        if not callable(entry):
+            raise RuntimeError("rebuild the forest binding for DART member fits on the device")
+        m = int(n_rows) if rows is None else len(rows)
+        dc = int(n_features) if cols is None else len(cols)
+        params = self._fit_params(m, dc, 0)
+        out = _export_fit_result(binding, entry(
+            int(handle), int(cls), 0 if rows is None else addr_ro(rows, name="rows"),
+            0 if cols is None else addr_ro(cols, name="cols"), params, code))
+        (self._offsets, self._colid, self._quesval, self._left_child,
+         self._leaves, meta) = _forest_fit_arrays(out)
+        self.n_features_in_ = int(dc)
         self._n_trees = int(meta[0])
         self._num_outputs = int(meta[1])
         return self

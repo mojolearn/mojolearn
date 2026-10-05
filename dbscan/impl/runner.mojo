@@ -125,6 +125,7 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
 )
 from dbscan.impl.label.classlabels import make_monotonic
 from dbscan.impl.sparse.detail.csr import (
+    DBSCAN_CC_FLAG_CELLS,
     MAX_LABEL,
     weak_cc_batched,
 )
@@ -203,10 +204,58 @@ from neighbors.impl.ball_cover.scan import (
 #: from loop 1 and loop 2 scans them instead of re-running the count pass,
 #: so a fit walks the dataset twice instead of three times. The counts are
 #: the same kernel's output on the same rows, so the CSR is the same.
+#: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns keeps
+#: the counts too (it was Apple only), so a fit the edge cap splits into
+#: several batches does not re-run the count pass in loop 2. Same counts, so
+#: the same CSR. `-D MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF=1` re-counts there.
+comptime IDN_DBSCAN_KEEP_COUNTS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_KEEP_COUNTS_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 comptime DBSCAN_RBC_KEEP_COUNTS = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
+    (
+        (
+            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+            and has_apple_gpu_accelerator()
+        )
+        or IDN_DBSCAN_KEEP_COUNTS
+    )
     and not is_defined["MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF"]()
+)
+
+#: fam-cluster (2026-10-04), IDENTICAL: on the ball-cover arm loop 1 no
+#: longer reads back two scalars nothing uses. `vd[n_points]` is overwritten
+#: by the exact 64-bit count (`adjlen_here = nnz1`), and the per-batch
+#: maximum degree feeds only `rbc_dbscan_take_one_pass`, which returns False
+#: unconditionally. Three drains and one launch per batch; no value any
+#: kernel reads changes. `-D MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF=1`
+#: restores them.
+comptime IDN_DBSCAN_RBC_DEAD_READS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_RBC_DEAD_READS_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+#: fam2-cluster (2026-10-04), IDENTICAL, every column: the border pass
+#: decides on the device which batches hold a labelled non-core row. One
+#: small launch per batch writes one Int32 cell and `n_batches` cells come
+#: back, in place of downloading the core mask and the labels (5 bytes per
+#: row) and walking them on the host. Same predicate on the same values, so
+#: the same batches take the pass.
+#: cpu3-neighbors (2026-10-04): the device decision is now the only route in
+#: every mode; the host walk and this define's off arm are gone from the fit.
+comptime IDN_DBSCAN_BORDER_NEEDS_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_BORDER_NEEDS_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
 )
 
 comptime EPS_NN_BRUTE_FORCE = 0
@@ -286,6 +335,25 @@ def relabel_for_skl_kernel(
             labels.unsafe_store(tid, Int32(-1))
         else:
             labels.unsafe_store(tid, labels.unsafe_load(tid) - Int32(1))
+
+
+def border_needs_kernel(
+    needs: MutPointer[Int32, MutAnyOrigin],
+    core: MutPointer[UInt8, MutAnyOrigin],
+    labels: MutPointer[Int32, MutAnyOrigin],
+    cell_in: Int32,
+    start_in: Int32,
+    n_points_in: Int32,
+):
+    """`needs[cell] = 1` when rows `start .. start + n_points` hold a
+    non-core row with a label (`IDN_DBSCAN_BORDER_NEEDS_DEVICE`). Every
+    writer stores the same 1, so the cell does not depend on thread order.
+    """
+    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if tid < Int(n_points_in):
+        var r = tid + Int(start_in)
+        if core.unsafe_load(r) == 0 and labels.unsafe_load(r) != MAX_LABEL:
+            needs.unsafe_store(Int(cell_in), Int32(1))
 
 
 def border_pull_kernel(
@@ -422,8 +490,12 @@ their code branches on is this Bool.
         batch = n_rows
     var n_batches = (n_rows + batch - 1) // batch
 
-    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
-    var h_flag = ctx.enqueue_create_host_buffer[DType.int32](1)
+    # `DBSCAN_CC_FLAG_CELLS` is 1 unless `IDN_DBSCAN_CC_GATED` keeps the
+    # convergence cells of a whole chunk of passes on the device.
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](DBSCAN_CC_FLAG_CELLS)
+    var h_flag = ctx.enqueue_create_host_buffer[DType.int32](
+        DBSCAN_CC_FLAG_CELLS
+    )
     var h_adjlen = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.synchronize()
 
@@ -614,7 +686,7 @@ their code branches on is this Bool.
     var maxklen = List[Int]()
     var pend_start = List[Int]()
     var pend_rows = List[Int]()
-    for b0 in range(n_batches):
+    for b0 in range(n_batches):  # small-loop(n_batches: one pending range per row batch): builds the batch plan, a launch-argument list
         pend_start.append(b0 * batch)
         pend_rows.append(min(n_rows - b0 * batch, batch))
     var n_splits = 0
@@ -737,15 +809,20 @@ their code branches on is this Bool.
                 ),
                 src_buf=vd.create_sub_buffer[DType.int32](0, n_points),
             )
-        var vd_last = vd.create_sub_buffer[DType.int32](n_points, 1)
-        ctx.enqueue_copy(dst_ptr=h_adjlen.unsafe_ptr(), src_buf=vd_last)
-        ctx.synchronize()
-        # The ball-cover arm keeps the EXACT count: `vd[n_points]` is the
-        # int32 scan's tail, equal to it only because the split above has
-        # already brought it under `edge_cap`.
-        var adjlen_here = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
-        if sparse_rbc_mode:
-            adjlen_here = nnz1
+        var skip_dead_reads = False
+        comptime if IDN_DBSCAN_RBC_DEAD_READS:
+            skip_dead_reads = sparse_rbc_mode
+        var adjlen_here = nnz1
+        if not skip_dead_reads:
+            var vd_last = vd.create_sub_buffer[DType.int32](n_points, 1)
+            ctx.enqueue_copy(dst_ptr=h_adjlen.unsafe_ptr(), src_buf=vd_last)
+            ctx.synchronize()
+            # The ball-cover arm keeps the EXACT count: `vd[n_points]` is the
+            # int32 scan's tail, equal to it only because the split above has
+            # already brought it under `edge_cap`.
+            adjlen_here = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
+            if sparse_rbc_mode:
+                adjlen_here = nnz1
 
         # `runner.cuh:287-293`: `maxklen.at(i) = thrust::reduce(vd, vd +
         # n_points, 0, maximum{})` -- the longest row in this batch, measured
@@ -753,7 +830,7 @@ their code branches on is this Bool.
         # form. The reduce runs on the DEVICE as thrust's does; only the
         # scalar comes back. It sits inside the mask.vertexdeg window below
         # exactly as it sits inside their nvtx VertexDeg range (:255-296).
-        if sparse_rbc_mode:
+        if sparse_rbc_mode and not skip_dead_reads:
             rbc_max_reduce_launch(
                 ctx, rbc_mk_scratch, vd, n_points
             )
@@ -815,7 +892,7 @@ their code branches on is this Bool.
 
     # `Index_ maxadjlen = *std::max_element(...); adj_graph.resize(maxadjlen)`
     var maxadjlen = 1
-    for b in range(n_batches):
+    for b in range(n_batches):  # small-loop(n_batches: one adjacency count per row batch): max of the plan's per-batch counts, shapes one buffer
         if batchadjlen[b] > maxadjlen:
             maxadjlen = batchadjlen[b]
     var col_ind = ctx.enqueue_create_buffer[DType.int32](maxadjlen)
@@ -846,7 +923,7 @@ their code branches on is this Bool.
         # `registers.cuh:1431` allocates the `n x max_k` scratch inside
         # each max_k call; `maxklen` is fully known here, so ours is one
         # buffer at the largest size any one-pass batch will ask for.
-        for b1 in range(1, n_batches):
+        for b1 in range(1, n_batches):  # small-loop(n_batches: one plan entry per row batch): sizes the max-k scratch from the plan, no row data
             var np_b = plan_rows[b1]
             if np_b <= 0:
                 break
@@ -1063,23 +1140,29 @@ their code branches on is this Bool.
         # label: a non-core row still at MAX_LABEL after the merges has no
         # core neighbour (its own batch pulls from every core neighbour, the
         # core mask being global), so it is noise in every batching.
-        var h_core = ctx.enqueue_create_host_buffer[DType.uint8](n_rows)
-        var h_lab = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
-        ctx.enqueue_copy(dst_ptr=h_core.unsafe_ptr(), src_buf=core)
-        ctx.enqueue_copy(dst_ptr=h_lab.unsafe_ptr(), src_buf=labels)
+        # cpu3-neighbors: the device decision is the only route (every mode
+        # and column); the host walk over the downloaded core mask and
+        # labels is gone from the GPU fit.
+        var d_needs = ctx.enqueue_create_buffer[DType.int32](n_batches)
+        var h_needs = ctx.enqueue_create_host_buffer[DType.int32](n_batches)
+        ctx.enqueue_memset(d_needs, Int32(0))
+        for nb2 in range(n_batches):
+            var np_n = plan_rows[nb2]
+            if np_n > 0:
+                ctx.enqueue_function[border_needs_kernel](
+                    d_needs.unsafe_ptr(), core.unsafe_ptr(),
+                    labels.unsafe_ptr(), Int32(nb2),
+                    Int32(plan_start[nb2]), Int32(np_n),
+                    grid_dim=((np_n + TPB - 1) // TPB, 1, 1),
+                    block_dim=(TPB, 1, 1),
+                )
+        ctx.enqueue_copy(dst_ptr=h_needs.unsafe_ptr(), src_buf=d_needs)
         ctx.synchronize()
         var bb = n_batches - 1
         while bb >= 0:
             var start_b = plan_start[bb]
             var np_b = plan_rows[bb]
-            var needs = False
-            for r in range(start_b, start_b + max(np_b, 0)):
-                if (
-                    h_core.unsafe_ptr().unsafe_load(r) == 0
-                    and h_lab.unsafe_ptr().unsafe_load(r) != MAX_LABEL
-                ):
-                    needs = True
-                    break
+            var needs = h_needs.unsafe_ptr().unsafe_load(bb) != Int32(0)
             if not needs:
                 bb -= 1
                 continue
@@ -1130,8 +1213,8 @@ their code branches on is this Bool.
                 )
                 ctx.synchronize()
             bb -= 1
-        _ = h_core^
-        _ = h_lab^
+        _ = d_needs^
+        _ = h_needs^
         if phase_timing:
             print(
                 "PHASE border_pass batches " + String(n_batches) + " "

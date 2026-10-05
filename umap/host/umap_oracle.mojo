@@ -17,7 +17,7 @@ file is a SECOND spelling of that path in the device's order, so the metrics
 CPU host binding can serve `UMAP` on a CPU-only install.
 
 THE HOST LOOP IS NOT THE CONTRACT. `umap/sparse_optimizer.mojo::
-optimize_sparse_layout_identical` is a Gauss-Seidel sweep; the device fold is
+optimize_sparse_layout_identical_reference` is a Gauss-Seidel sweep; the device fold is
 Jacobi over an epoch snapshot and produces DIFFERENT bits
 (`checks/kernel_matrix.mojo::umap_device_optimizer_for`). The IDENTICAL
 contract on every GPU column is the device fold, so `host_umap_vertex` below
@@ -61,12 +61,13 @@ THE STAGES, EACH WITH THE DEVICE CODE IT MIRRORS
                         kernel-matrix row)
     negatives           core/philox.mojo:19-51 (philox4x32_10), counter
                         (e lo, e hi, epoch, slot // 4), key (seed lo, seed hi)
-    transform           umap/transform.mojo:33-228 (the host k-NN above for
-                        knn_search, then transform_memberships,
-                        initialize_transform, the epoch count, the curve and
-                        refine_transform, which are host code in that file
-                        and are restated here verbatim because the file
-                        imports max.gpu.host)
+    transform           umap/transform.mojo (the host k-NN above for
+                        knn_search_resident; the per-row statements of the
+                        device prepare and epoch kernels are
+                        umap/transform_rows.mojo, which this column calls
+                        itself: tr_row_memberships, tr_row_initialize,
+                        tr_row_refine_prep, tr_row_refine_epoch; the epoch
+                        count and the curve as in transform())
 
 THE SABOTAGE (-D MOJOLEARN_HOST_SABOTAGE=1, the routed set's negative
 control). Every negative draw keys its Philox counter with `epoch + 1`
@@ -100,12 +101,29 @@ from spectral.impl.sparse.coo import CooGraph
 from umap.curve import fit_umap_curve
 from umap.graph import canonicalize_self_neighbors
 from umap.params import UMAPParams
-from umap.sparse_graph import (
-    SparseFuzzySimplicialGraph,
-    categorical_intersection,
-    general_intersection,
+from umap.sparse_graph import SparseFuzzySimplicialGraph
+from umap.host.sparse_graph_host import (
+    host_categorical_intersection,
+    host_general_intersection,
+    sparse_fuzzy_simplicial_graph,
 )
-from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
+from umap.host.spectral_post_pass_host import host_spectral_post_pass
+from umap.transform_rows import (
+    TR_F32P,
+    TR_FLAGS,
+    TR_OK,
+    TR_U32P,
+    TR_U64P,
+    tr_alpha,
+    tr_neg2ab,
+    tr_raise,
+    tr_rep2b,
+    tr_row_initialize,
+    tr_row_memberships,
+    tr_row_refine_epoch,
+    tr_row_refine_prep,
+    tr_target,
+)
 
 
 #: The gate's negative control (module docstring). Read back by
@@ -289,24 +307,9 @@ def host_umap_spectral_initialize(
         embedding.append(res.embedding[i])
     if n_out != n_components or len(embedding) != n_samples * n_components:
         raise Error("UMAP spectral solver returned the wrong shape")
-    for c in range(n_components):
-        var pivot = 0
-        var peak = Float32(0.0)
-        for i in range(n_samples):
-            var value = embedding[i * n_components + c]
-            if not _finite(value):
-                raise Error("UMAP spectral solver returned a non-finite value")
-            var magnitude = value if value >= Float32(0.0) else -value
-            if magnitude > peak:
-                peak = magnitude
-                pivot = i
-        if not (peak > Float32(0.0)):
-            raise Error("UMAP spectral solver returned a zero component")
-        var scale = Float32(10.0) / peak
-        if embedding[pivot * n_components + c] < Float32(0.0):
-            scale = -scale
-        for i in range(n_samples):
-            embedding[i * n_components + c] *= scale
+    # The device post-pass's host column (identical_div / identical_mul + ftz,
+    # lane cpu4-umap 2026-10-04): umap/host/spectral_post_pass_host.mojo.
+    host_spectral_post_pass(embedding, n_samples, n_components)
     return embedding^
 
 
@@ -676,15 +679,17 @@ def host_supervise_graph(
     target_kind: Int, target_dims: Int, target_n_neighbors: Int, target_weight: Float32, seed: UInt64,
 ) raises -> SparseFuzzySimplicialGraph:
     """`supervise_graph`, `sparse_estimator.mojo`, with the target's k-NN on
-    the host (the set operations are the shared host code)."""
+    the host (the set operations are the host column's `host_*` in
+    `umap/host/sparse_graph_host.mojo`, over the per-cell statements the
+    device kernels share)."""
     if target_kind == 1:
         var far = Float64(1.0e12)
         if target_weight < Float32(1.0):
             far = Float64(2.5) * (Float64(1.0) / (Float64(1.0) - Float64(target_weight)))
-        return categorical_intersection(graph, target, far)
+        return host_categorical_intersection(graph, target, far)
     var tp = UMAPParams(n_neighbors=target_n_neighbors, n_components=2, random_seed=seed)
     var tgraph = host_umap_fuzzy_graph(target, n_samples, target_dims, tp)
-    return general_intersection(graph, tgraph, target_weight)
+    return host_general_intersection(graph, tgraph, target_weight)
 
 
 def host_umap_fit_transform(
@@ -735,51 +740,22 @@ def host_umap_fit_transform(
 
 
 def host_transform_memberships(distances: List[Float32], rows: Int, k: Int) raises -> List[Float32]:
-    """`transform_memberships`, `transform.mojo:33-75`, verbatim."""
+    """The transform's memberships, `umap/transform_rows.mojo::tr_row_memberships`
+    per row (the statements the device prepare kernel runs). The lowest
+    refusal code over the rows raises, the device's flag order."""
     if rows < 1 or k < 2 or len(distances) != rows * k:
         raise Error("UMAP transform neighbor shape mismatch")
-    for i in range(len(distances)):
-        if not isfinite(distances[i]) or distances[i] < Float32(0):
-            raise Error("UMAP transform neighbor distances must be finite and nonnegative")
-        if i % k > 0 and distances[i] < distances[i - 1]:
-            raise Error("UMAP transform neighbors must be distance-sorted")
-    var target = identical_log2_64(Float64(k))
-    var weights = List[Float32]()
+    var weights = List[Float32](length=rows * k, fill=Float32(0.0))
+    var dp = rebind[TR_F32P](distances.unsafe_ptr())
+    var wp = rebind[TR_F32P](weights.unsafe_ptr())
+    var target = tr_target(k)
+    var worst = TR_FLAGS
     for row in range(rows):
-        # BATCH INVARIANCE. The sigma floor's mean is THIS ROW's own k
-        # neighbor distances and never the whole request's, so a batch of N
-        # is the concatenation of N batches of one. Measured effectively
-        # inert on ordinary data by lane/umap-batch-determinism, and
-        # repaired anyway, because an inert coupling is still a coupling.
-        var mean = Float64(0)
-        for j in range(k):
-            mean += Float64(distances[row * k + j])
-        mean /= Float64(k)
-        var lo = Float64(0)
-        var hi = Float64(-1)
-        var sigma = Float64(1)
-        for iteration in range(64):
-            var total = Float64(0)
-            for j in range(1, k):
-                var distance = Float64(distances[row * k + j])
-                total += Float64(1) if distance == 0 else identical_exp64(-distance / sigma)
-            if abs(total - target) <= Float64(1.0e-5):
-                continue
-            if total > target:
-                hi = sigma
-                sigma = (lo + hi) * Float64(0.5)
-            else:
-                lo = sigma
-                sigma = sigma * Float64(2) if hi < 0 else (lo + hi) * Float64(0.5)
-        sigma = max(sigma, Float64(0.001) * mean)
-        var row_sum = Float32(0)
-        for j in range(k):
-            var distance = distances[row * k + j]
-            var weight = Float32(1) if distance == Float32(0) else Float32(identical_exp64(-Float64(distance) / sigma))
-            weights.append(weight)
-            row_sum += weight
-        if not isfinite(row_sum) or row_sum <= Float32(0):
-            raise Error("UMAP transform query has no positive memberships")
+        var status = tr_row_memberships(dp, wp, row, k, target)
+        if status != TR_OK and status < worst:
+            worst = status
+    if worst < TR_FLAGS:
+        tr_raise(worst)
     return weights^
 
 
@@ -787,7 +763,8 @@ def host_initialize_transform(
     indices: List[UInt32], weights: List[Float32], training: List[Float32],
     rows: Int, n_train: Int, k: Int, components: Int,
 ) raises -> List[Float32]:
-    """`initialize_transform`, `transform.mojo:78-114`, verbatim."""
+    """The starting coordinates, `transform_rows.mojo::tr_row_initialize` per
+    row (the device prepare kernel's statements)."""
     if rows < 1 or n_train < 2 or k < 2 or k > n_train or components < 1 or components > 32:
         raise Error("UMAP transform initialization dimensions are unsupported")
     if len(indices) != rows * k or len(weights) != rows * k or len(training) != n_train * components:
@@ -795,34 +772,18 @@ def host_initialize_transform(
     for value in training:
         if not isfinite(value):
             raise Error("UMAP transform training embedding must be finite")
-    for i in range(rows * k):
-        if indices[i] >= UInt32(n_train) or not isfinite(weights[i]) or weights[i] < Float32(0) or weights[i] > Float32(1):
-            raise Error("UMAP transform membership or neighbor index is invalid")
-    var result = List[Float32]()
+    var result = List[Float32](length=rows * components, fill=Float32(0.0))
+    var ip = rebind[TR_U32P](indices.unsafe_ptr())
+    var wp = rebind[TR_F32P](weights.unsafe_ptr())
+    var ep = rebind[TR_F32P](training.unsafe_ptr())
+    var op = rebind[TR_F32P](result.unsafe_ptr())
+    var worst = TR_FLAGS
     for row in range(rows):
-        var total = Float32(0)
-        var exact = -1
-        for j in range(k):
-            var w = weights[row * k + j]
-            total += w
-            if exact < 0 and w == Float32(1):
-                exact = Int(indices[row * k + j])
-        if not isfinite(total) or total <= Float32(0):
-            raise Error("UMAP transform query has no positive memberships")
-        for c in range(components):
-            var value = Float32(0)
-            if exact >= 0:
-                value = training[exact * components + c]
-            else:
-                for j in range(k):
-                    var tail = Int(indices[row * k + j])
-                    # ONE rounding: the default (contract=fast) build fused this
-                    # product into the accumulate; explicit so no build mode can
-                    # change it (lane/explicit-fma-contract-proof, 2026-09-26)
-                    value = identical_mul_add(weights[row * k + j] / total, training[tail * components + c], value)
-            if not isfinite(value):
-                raise Error("UMAP transform initialization is not finite")
-            result.append(value)
+        var status = tr_row_initialize(ip, wp, ep, op, row, k, n_train, components)
+        if status != TR_OK and status < worst:
+            worst = status
+    if worst < TR_FLAGS:
+        tr_raise(worst)
     return result^
 
 
@@ -830,10 +791,14 @@ def host_refine_transform(
     initial: List[Float32], training: List[Float32], indices: List[UInt32],
     weights: List[Float32], rows: Int, n_train: Int, k: Int, components: Int,
     epochs: Int, a: Float32, b: Float32, seed: UInt64,
-    learning_rate: Float32, repulsion_strength: Float32, negative_sample_rate: Int,
+    learning_rate: Float32 = Float32(1),
+    repulsion_strength: Float32 = Float32(1),
+    negative_sample_rate: Int = 5,
 ) raises -> List[Float32]:
-    """`refine_transform`, `transform.mojo:117-178`, verbatim but for the
-    sabotage arm's counter epoch."""
+    """The refinement, `transform_rows.mojo::tr_row_refine_prep` and
+    `tr_row_refine_epoch` per row (the device kernels' statements), epochs
+    outermost as the device launches them; but for the sabotage arm's
+    counter epoch."""
     if epochs < 1 or not isfinite(a) or not isfinite(b) or a <= Float32(0) or b <= Float32(0):
         raise Error("UMAP transform refinement requires positive finite parameters")
     if not isfinite(learning_rate) or learning_rate <= Float32(0) or (
@@ -847,68 +812,40 @@ def host_refine_transform(
     for value in result:
         if not isfinite(value):
             raise Error("UMAP transform refinement initialization must be finite")
-    # BATCH INVARIANCE, the two couplings that lived in this function. Each
-    # row's edge schedule is scaled by THAT ROW's largest membership rather
-    # than by the whole request's, and each row's negative-sample counter is
-    # keyed on a hash of that row's own k neighbor INDICES rather than on
-    # `row * k + j`, which was a position in the request and not a property
-    # of the query. The memberships are deliberately NOT in the key: hashing
-    # them was tried and made a 4-ULP change to one input feature move the
-    # output by 0.146 where the shipped code needed 16,384 ULPs to move it by
-    # 0.005, which trades a batch coupling for an input discontinuity. The
-    # indices are integers and do not wobble. Both are precomputed once per
-    # row, so the epoch loop below is otherwise unchanged.
-    var row_max = List[Float32]()
-    var row_key = List[UInt64]()
+    var scaled = List[UInt64](length=rows * k, fill=UInt64(0))
+    var keys = List[UInt64](length=rows, fill=UInt64(0))
+    var ip = rebind[TR_U32P](indices.unsafe_ptr())
+    var wp = rebind[TR_F32P](weights.unsafe_ptr())
+    var ep = rebind[TR_F32P](training.unsafe_ptr())
+    var rp = rebind[TR_F32P](result.unsafe_ptr())
+    var sp = rebind[TR_U64P](scaled.unsafe_ptr())
+    var kp = rebind[TR_U64P](keys.unsafe_ptr())
+    var worst = TR_FLAGS
     for row in range(rows):
-        var maximum = Float32(0)
-        var key = UInt64(0x9E3779B97F4A7C15)
-        for j in range(k):
-            var edge = row * k + j
-            maximum = max(maximum, weights[edge])
-            key = _splitmix64(key ^ UInt64(indices[edge]))
-        if not isfinite(maximum) or maximum <= Float32(0):
-            raise Error("UMAP transform query has no positive memberships")
-        row_max.append(maximum)
-        row_key.append(key)
+        var status = tr_row_refine_prep(ip, wp, sp, kp, row, k)
+        if status != TR_OK and status < worst:
+            worst = status
+    if worst < TR_FLAGS:
+        tr_raise(worst)
+    var b_word = bitcast[DType.uint64](Float64(b))
+    var neg2ab = tr_neg2ab(a, b)
+    var rep2b = tr_rep2b(repulsion_strength, b)
     for epoch in range(epochs):
-        var alpha = (Float32(0.25) * learning_rate) * Float32(Float64(epochs - epoch) / Float64(epochs))
+        var alpha = tr_alpha(epoch, epochs, learning_rate)
         var draw_epoch = epoch
         comptime if UMAP_ORACLE_HOST_SABOTAGE:
             # THE SABOTAGE ARM, as in host_umap_vertex.
             draw_epoch = epoch + 1
         for row in range(rows):
-            for j in range(k):
-                var edge = row * k + j
-                var edge_key = row_key[row] ^ (UInt64(j) * UInt64(0x9E3779B97F4A7C15))
-                var scaled = Float64(weights[edge]) / Float64(row_max[row])
-                if Int(Float64(epoch + 1) * scaled) <= Int(Float64(epoch) * scaled):
-                    continue
-                var tail = Int(indices[edge])
-                for slot in range(negative_sample_rate + 1):
-                    var other = tail
-                    if slot > 0:
-                        var counter = seed ^ (UInt64(draw_epoch) * UInt64(0xD1B54A32D192ED03)) ^ (edge_key * UInt64(0x94D049BB133111EB)) ^ UInt64(slot - 1)
-                        other = Int(_splitmix64(counter) % UInt64(n_train))
-                    var distance = Float32(0)
-                    for c in range(components):
-                        var delta = result[row * components + c] - training[other * components + c]
-                        distance = identical_mul_add(delta, delta, distance)
-                    if not isfinite(distance):
-                        raise Error("UMAP transform refinement distance is not finite")
-                    if distance <= Float32(0):
-                        continue
-                    var powered = Float32(identical_pow64(Float64(distance), Float64(b)))
-                    var coeff = Float32(0)
-                    if slot == 0:
-                        coeff = -Float32(2) * a * b * (powered / distance) / identical_mul_add(a, powered, Float32(1))
-                    else:
-                        coeff = Float32(2) * repulsion_strength * b / ((Float32(0.001) + distance) * identical_mul_add(a, powered, Float32(1)))
-                    if not isfinite(coeff):
-                        raise Error("UMAP transform gradient is not finite")
-                    for c in range(components):
-                        var delta = result[row * components + c] - training[other * components + c]
-                        result[row * components + c] = identical_mul_add(alpha, _clip(coeff * delta), result[row * components + c])
+            var status = tr_row_refine_epoch(
+                rp, ep, ip, sp, keys[row], row, k, components, n_train,
+                epoch, draw_epoch, alpha, a, b_word, neg2ab, rep2b, seed,
+                negative_sample_rate,
+            )
+            if status != TR_OK and status < worst:
+                worst = status
+    if worst < TR_FLAGS:
+        tr_raise(worst)
     for value in result:
         if not isfinite(value):
             raise Error("UMAP transform returned non-finite coordinates")

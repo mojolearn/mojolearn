@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Dense Euclidean query-to-training UMAP transform, 2D/3D.
+"""Dense query-to-training UMAP transform, on the device.
 
 Reference structure: umap-learn umap_.py smooth_knn_dist, transform and
 init_graph_transform (https://github.com/lmcinnes/umap/blob/master/umap/umap_.py).
@@ -9,208 +9,148 @@ query*k indices/weights, without a fuzzy union or query-query edges.
 With supported local_connectivity=1, transform rho is zero. Sigma search
 skips slot zero; memberships include it, including a zero-distance edge.
 
-Numerical contract: 64 ordered Float64 sigma iterations, ascending neighbor
-initialization and serial Float32 coordinate updates. Unlike umap-learn's
-RNG and epochs-per-sample implementation, refinement uses this repository's
-SplitMix64 counter and floor-difference schedule. No reference byte-parity
-claim. IDENTICAL host pow/exp/log2 use the portable binary64 seams; other modes
-retain stdlib arithmetic. Cross-host certification requires matching captures. Query batching does
-NOT change results: the sigma floor's mean, the edge-weight scale and the
-negative-sample counter are all per row, and the refinement epoch count no
-longer reads the request size, so a batch of N is the concatenation of N
-batches of one, bitwise. Measured by `umap/checks/batch_determinism_check.mojo`
-and `umap/checks/batch_epoch_cliff_check.mojo`.
-No existing fit code is called or modified by this module.
+DEVICE ROUTE (lane cpu4-umap, 2026-10-04). Until this lane the whole
+transform after the k-NN ran on the host in Float64 (memberships, the
+initialization, every refinement epoch), a host route inside a GPU
+transform. Now: the inputs go up once and are checked for finiteness on
+the device; the k-NN runs over the uploaded training block
+(`knn_search_resident`); its n x k result goes up once; ONE launch (one
+thread per query row) computes the memberships, the starting coordinates,
+the per-edge schedule ratios and the row keys; then one launch per epoch
+(one thread per row, in place: rows are independent) refines; the result
+comes back once. Refusals are flags on the device, read back as a handful
+of words at three points, and raised with the old messages.
+
+Numerical contract: the per-row statements are `umap/transform_rows.mojo`,
+shared with the host column (`umap/host/umap_oracle.mojo::host_umap_transform`),
+so every column computes the same words: binary64 steps in the portable soft
+arithmetic (`checks/soft_f64.mojo`; the Apple GPU has no float64), float32
+steps through the pinned seams under the flush model. Refinement uses this
+repository's SplitMix64 counter and floor-difference schedule, not umap-learn's
+RNG and epochs-per-sample. Query batching does NOT change results: the sigma
+floor's mean, the edge-weight scale and the negative-sample counter are all
+per row, and the refinement epoch count does not read the request size, so a
+batch of N is the concatenation of N batches of one, bitwise
+(`umap/checks/batch_determinism_check.mojo`, `batch_epoch_cliff_check.mojo`).
+
+Residual (neighbors family): `knn_search_resident` writes its result to host
+pointers, so the n x k distances and indices make one host round trip, and
+the queries are uploaded twice (once for the finiteness check, once by the
+k-NN). A k-NN entry that leaves its result on the device removes both.
 """
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
-from checks.numerics import identical_exp64, identical_log2_64, identical_mul_add, identical_pow64
-
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
+from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
-from neighbors.estimator import knn_search
-from umap.curve import fit_umap_curve
-from umap.optimizer import _clip, _splitmix64
+from std.memory import bitcast
+from neighbors.estimator import knn_search_resident
 from umap.params import UMAPParams
+from umap.transform_rows import (
+    TR_EMBED_NONFINITE,
+    TR_F32P,
+    TR_FLAGS,
+    TR_OK,
+    TR_OUT_NONFINITE,
+    TR_QUERY_NONFINITE,
+    TR_TRAIN_NONFINITE,
+    TR_U32P,
+    TR_U64P,
+    tr_alpha,
+    tr_finite,
+    tr_neg2ab,
+    tr_raise,
+    tr_rep2b,
+    tr_row_initialize,
+    tr_row_memberships,
+    tr_row_refine_epoch,
+    tr_row_refine_prep,
+    tr_target,
+)
 
 
-def transform_memberships(distances: List[Float32], rows: Int, k: Int) raises -> List[Float32]:
-    """Local-connectivity-zero bipartite strengths; no self-edge removal."""
-    if rows < 1 or k < 2 or len(distances) != rows * k:
-        raise Error("UMAP transform neighbor shape mismatch")
-    for i in range(len(distances)):
-        if not isfinite(distances[i]) or distances[i] < Float32(0):
-            raise Error("UMAP transform neighbor distances must be finite and nonnegative")
-        if i % k > 0 and distances[i] < distances[i - 1]:
-            raise Error("UMAP transform neighbors must be distance-sorted")
-    var target = identical_log2_64(Float64(k))
-    var weights = List[Float32]()
-    for row in range(rows):
-        # BATCH INVARIANCE. The sigma floor's mean is THIS ROW's own k
-        # neighbor distances and never the whole request's, so a batch of N
-        # is the concatenation of N batches of one. Measured effectively
-        # inert on ordinary data by lane/umap-batch-determinism, and
-        # repaired anyway, because an inert coupling is still a coupling.
-        var mean = Float64(0)
-        for j in range(k):
-            mean += Float64(distances[row * k + j])
-        mean /= Float64(k)
-        var lo = Float64(0)
-        var hi = Float64(-1)
-        var sigma = Float64(1)
-        for iteration in range(64):
-            var total = Float64(0)
-            for j in range(1, k):
-                var distance = Float64(distances[row * k + j])
-                total += Float64(1) if distance == 0 else identical_exp64(-distance / sigma)
-            # Keep the converged value, while retaining a fixed iteration
-            # count instead of a mode-dependent early exit.
-            if abs(total - target) <= Float64(1.0e-5):
-                continue
-            if total > target:
-                hi = sigma
-                sigma = (lo + hi) * Float64(0.5)
-            else:
-                lo = sigma
-                sigma = sigma * Float64(2) if hi < 0 else (lo + hi) * Float64(0.5)
-        sigma = max(sigma, Float64(0.001) * mean)
-        var row_sum = Float32(0)
-        for j in range(k):
-            var distance = distances[row * k + j]
-            var weight = Float32(1) if distance == Float32(0) else Float32(identical_exp64(-Float64(distance) / sigma))
-            weights.append(weight)
-            row_sum += weight
-        if not isfinite(row_sum) or row_sum <= Float32(0):
-            raise Error("UMAP transform query has no positive memberships")
-    return weights^
+comptime TR_TPB = 128
+comptime _TR_I32P = MutPointer[Int32, MutAnyOrigin]
 
 
-def initialize_transform(
-    indices: List[UInt32], weights: List[Float32], training: List[Float32],
-    rows: Int, n_train: Int, k: Int, components: Int,
-) raises -> List[Float32]:
-    if rows < 1 or n_train < 2 or k < 2 or k > n_train or components < 1 or components > 32:
-        raise Error("UMAP transform initialization dimensions are unsupported")
-    if len(indices) != rows * k or len(weights) != rows * k or len(training) != n_train * components:
-        raise Error("UMAP transform initialization shape mismatch")
-    for value in training:
-        if not isfinite(value):
-            raise Error("UMAP transform training embedding must be finite")
-    for i in range(rows * k):
-        if indices[i] >= UInt32(n_train) or not isfinite(weights[i]) or weights[i] < Float32(0) or weights[i] > Float32(1):
-            raise Error("UMAP transform membership or neighbor index is invalid")
-    var result = List[Float32]()
-    for row in range(rows):
-        var total = Float32(0)
-        var exact = -1
-        for j in range(k):
-            var w = weights[row * k + j]
-            total += w
-            if exact < 0 and w == Float32(1):
-                exact = Int(indices[row * k + j])
-        if not isfinite(total) or total <= Float32(0):
-            raise Error("UMAP transform query has no positive memberships")
-        for c in range(components):
-            var value = Float32(0)
-            if exact >= 0:
-                value = training[exact * components + c]
-            else:
-                for j in range(k):
-                    var tail = Int(indices[row * k + j])
-                    # ONE rounding: the default (contract=fast) build fused this
-                    # product into the accumulate; explicit so no build mode can
-                    # change it (lane/explicit-fma-contract-proof, 2026-09-26)
-                    value = identical_mul_add(weights[row * k + j] / total, training[tail * components + c], value)
-            if not isfinite(value):
-                raise Error("UMAP transform initialization is not finite")
-            result.append(value)
-    return result^
+@always_inline
+def _tr_gid() -> Int:
+    return Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
 
 
-def refine_transform(
-    initial: List[Float32], training: List[Float32], indices: List[UInt32],
-    weights: List[Float32], rows: Int, n_train: Int, k: Int, components: Int,
-    epochs: Int, a: Float32, b: Float32, seed: UInt64,
-    learning_rate: Float32 = Float32(1),
-    repulsion_strength: Float32 = Float32(1),
-    negative_sample_rate: Int = 5,
-) raises -> List[Float32]:
-    # The public transform validates all shapes and inputs before this helper.
-    if epochs < 1 or not isfinite(a) or not isfinite(b) or a <= Float32(0) or b <= Float32(0):
-        raise Error("UMAP transform refinement requires positive finite parameters")
-    if not isfinite(learning_rate) or learning_rate <= Float32(0) or (
-        not isfinite(repulsion_strength) or repulsion_strength < Float32(0)
-    ) or negative_sample_rate < 0 or negative_sample_rate > 2147483647:
-        raise Error("UMAP transform optimizer controls are invalid")
-    if len(initial) != rows * components:
-        raise Error("UMAP transform refinement initialization shape mismatch")
-    _ = initialize_transform(indices, weights, training, rows, n_train, k, components)
-    var result = initial.copy()
-    for value in result:
-        if not isfinite(value):
-            raise Error("UMAP transform refinement initialization must be finite")
-    # BATCH INVARIANCE, the two couplings that lived in this function. Each
-    # row's edge schedule is scaled by THAT ROW's largest membership rather
-    # than by the whole request's, and each row's negative-sample counter is
-    # keyed on a hash of that row's own k neighbor INDICES rather than on
-    # `row * k + j`, which was a position in the request and not a property
-    # of the query. The memberships are deliberately NOT in the key: hashing
-    # them was tried and made a 4-ULP change to one input feature move the
-    # output by 0.146 where the shipped code needed 16,384 ULPs to move it by
-    # 0.005, which trades a batch coupling for an input discontinuity. The
-    # indices are integers and do not wobble. Both are precomputed once per
-    # row, so the epoch loop below is otherwise unchanged.
-    var row_max = List[Float32]()
-    var row_key = List[UInt64]()
-    for row in range(rows):
-        var maximum = Float32(0)
-        var key = UInt64(0x9E3779B97F4A7C15)
-        for j in range(k):
-            var edge = row * k + j
-            maximum = max(maximum, weights[edge])
-            key = _splitmix64(key ^ UInt64(indices[edge]))
-        if not isfinite(maximum) or maximum <= Float32(0):
-            raise Error("UMAP transform query has no positive memberships")
-        row_max.append(maximum)
-        row_key.append(key)
-    for epoch in range(epochs):
-        var alpha = (Float32(0.25) * learning_rate) * Float32(Float64(epochs - epoch) / Float64(epochs))
-        for row in range(rows):
-            for j in range(k):
-                var edge = row * k + j
-                var edge_key = row_key[row] ^ (UInt64(j) * UInt64(0x9E3779B97F4A7C15))
-                var scaled = Float64(weights[edge]) / Float64(row_max[row])
-                if Int(Float64(epoch + 1) * scaled) <= Int(Float64(epoch) * scaled):
-                    continue
-                var tail = Int(indices[edge])
-                for slot in range(negative_sample_rate + 1):
-                    var other = tail
-                    if slot > 0:
-                        var counter = seed ^ (UInt64(epoch) * UInt64(0xD1B54A32D192ED03)) ^ (edge_key * UInt64(0x94D049BB133111EB)) ^ UInt64(slot - 1)
-                        other = Int(_splitmix64(counter) % UInt64(n_train))
-                    var distance = Float32(0)
-                    for c in range(components):
-                        var delta = result[row * components + c] - training[other * components + c]
-                        distance = identical_mul_add(delta, delta, distance)
-                    if not isfinite(distance):
-                        raise Error("UMAP transform refinement distance is not finite")
-                    if distance <= Float32(0):
-                        continue
-                    var powered = Float32(identical_pow64(Float64(distance), Float64(b)))
-                    var coeff = Float32(0)
-                    if slot == 0:
-                        coeff = -Float32(2) * a * b * (powered / distance) / identical_mul_add(a, powered, Float32(1))
-                    else:
-                        coeff = Float32(2) * repulsion_strength * b / ((Float32(0.001) + distance) * identical_mul_add(a, powered, Float32(1)))
-                    if not isfinite(coeff):
-                        raise Error("UMAP transform gradient is not finite")
-                    for c in range(components):
-                        var delta = result[row * components + c] - training[other * components + c]
-                        result[row * components + c] = identical_mul_add(alpha, _clip(coeff * delta), result[row * components + c])
-    for value in result:
-        if not isfinite(value):
-            raise Error("UMAP transform returned non-finite coordinates")
-    return result^
+@always_inline
+def _tr_blocks(n: Int) -> Int:
+    return max(1, (n + TR_TPB - 1) // TR_TPB)
+
+
+def umap_transform_nonfinite_kernel(v: TR_F32P, flags: _TR_I32P, slot: Int32, n_in: Int32):
+    """`flags[slot] = 1` on a NaN or infinity (every writer stores the same 1)."""
+    var i = _tr_gid()
+    if i >= Int(n_in):
+        return
+    if not tr_finite(v[i]):
+        flags[Int(slot)] = Int32(1)
+
+
+def umap_transform_prepare_kernel(
+    dist: TR_F32P, idx: TR_U32P, weights: TR_F32P, emb: TR_F32P, coords: TR_F32P,
+    scaled: TR_U64P, keys: TR_U64P, flags: _TR_I32P,
+    rows_in: Int32, k_in: Int32, n_train_in: Int32, comps_in: Int32, target: UInt64,
+):
+    """One thread per query row: memberships, starting coordinates, schedule
+    ratios and row key (`transform_rows.mojo`); a refusal sets its flag."""
+    var row = _tr_gid()
+    if row >= Int(rows_in):
+        return
+    var k = Int(k_in)
+    var status = tr_row_memberships(dist, weights, row, k, target)
+    if status == TR_OK:
+        status = tr_row_initialize(idx, weights, emb, coords, row, k, Int(n_train_in), Int(comps_in))
+    if status == TR_OK:
+        status = tr_row_refine_prep(idx, weights, scaled, keys, row, k)
+    if status != TR_OK:
+        flags[status] = Int32(1)
+
+
+def umap_transform_epoch_kernel(
+    coords: TR_F32P, emb: TR_F32P, idx: TR_U32P, scaled: TR_U64P, keys: TR_U64P,
+    flags: _TR_I32P, rows_in: Int32, k_in: Int32, comps_in: Int32, n_train_in: Int32,
+    epoch_in: Int32, alpha: Float32, a: Float32, b_word: UInt64,
+    neg2ab: Float32, rep2b: Float32, seed: UInt64, negative_rate_in: Int32,
+):
+    """One refinement epoch, one thread per query row, in place."""
+    var row = _tr_gid()
+    if row >= Int(rows_in):
+        return
+    var epoch = Int(epoch_in)
+    var status = tr_row_refine_epoch(
+        coords, emb, idx, scaled, keys[row], row, Int(k_in), Int(comps_in),
+        Int(n_train_in), epoch, epoch, alpha, a, b_word, neg2ab, rep2b, seed,
+        Int(negative_rate_in),
+    )
+    if status != TR_OK:
+        flags[status] = Int32(1)
+
+
+def _tr_check(ctx: DeviceContext, flags: DeviceBuffer[DType.int32]) raises:
+    """The refusal flags back (TR_FLAGS words); the lowest set one raises."""
+    var words = List[Int32](length=TR_FLAGS, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=words.unsafe_ptr(), src_buf=flags)
+    ctx.synchronize()
+    comptime for s in range(TR_FLAGS):
+        if words[s] != Int32(0):
+            tr_raise(s)
+
+
+def _tr_flag_nonfinite(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int,
+    mut flags: DeviceBuffer[DType.int32], slot: Int,
+) raises:
+    if n > 0:
+        ctx.enqueue_function[umap_transform_nonfinite_kernel](
+            buf.unsafe_ptr(), flags.unsafe_ptr(), Int32(slot), Int32(n),
+            grid_dim=_tr_blocks(n), block_dim=TR_TPB,
+        )
 
 
 def transform(
@@ -223,42 +163,79 @@ def transform(
         raise Error("UMAP transform supports nonempty dense queries and 1 to 32 output dimensions")
     if len(training_data) != n_train * n_features or len(queries) != n_queries * n_features or len(training_embedding) != n_train * params.n_components:
         raise Error("UMAP transform input shape mismatch")
-    for value in training_data:
-        if not isfinite(value):
-            raise Error("UMAP transform training input must be finite")
-    for value in queries:
-        if not isfinite(value):
-            raise Error("UMAP transform queries must be finite")
-    for value in training_embedding:
-        if not isfinite(value):
-            raise Error("UMAP transform training embedding must be finite")
     var k = params.n_neighbors
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](len(training_data))
-    var hq = ctx.enqueue_create_host_buffer[DType.float32](len(queries))
+    var comps = params.n_components
+    if n_queries < 1 or n_train < 2 or k < 2 or k > n_train:
+        raise Error("UMAP transform initialization dimensions are unsupported")
+    if n_train >= 2147483647 or n_queries * k >= 2147483647 or n_queries * comps >= 2147483647:
+        raise Error("UMAP transform: sizes are past the Int32 launch arguments")
+
+    # The inputs up once (bulk copies through pinned staging, which the
+    # k-NN's host-pointer interface also reads); finiteness checked on the
+    # device.
+    var n_x = len(training_data)
+    var n_q = len(queries)
+    var n_e = len(training_embedding)
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n_x)
+    var hq = ctx.enqueue_create_host_buffer[DType.float32](n_q)
+    var he = ctx.enqueue_create_host_buffer[DType.float32](n_e)
     var hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
     ctx.synchronize()
-    copy_f32(training_data.unsafe_ptr(), hx.unsafe_ptr(), len(training_data))
-    copy_f32(queries.unsafe_ptr(), hq.unsafe_ptr(), len(queries))
+    copy_f32(training_data.unsafe_ptr(), hx.unsafe_ptr(), n_x)
+    copy_f32(queries.unsafe_ptr(), hq.unsafe_ptr(), n_q)
+    copy_f32(training_embedding.unsafe_ptr(), he.unsafe_ptr(), n_e)
+    var flags = ctx.enqueue_create_buffer[DType.int32](TR_FLAGS)
+    ctx.enqueue_memset(flags, Int32(0))
+    var dx = ctx.enqueue_create_buffer[DType.float32](n_x)
+    var dq = ctx.enqueue_create_buffer[DType.float32](n_q)
+    var de = ctx.enqueue_create_buffer[DType.float32](n_e)
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dq, src_ptr=hq.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=de, src_ptr=he.unsafe_ptr())
+    _tr_flag_nonfinite(ctx, dx, n_x, flags, TR_TRAIN_NONFINITE)
+    _tr_flag_nonfinite(ctx, dq, n_q, flags, TR_QUERY_NONFINITE)
+    _tr_flag_nonfinite(ctx, de, n_e, flags, TR_EMBED_NONFINITE)
+    _tr_check(ctx, flags)
+    _ = dq^
+    _ = he^
+
+    # The k-NN over the uploaded training block (host query pointer and
+    # host result pointers: the neighbors family's interface).
     if params.metric == -1:
-        _ = knn_search(ctx, hx.unsafe_ptr(), n_train, hq.unsafe_ptr(), n_queries,
-                       n_features, k, hd.unsafe_ptr(), hi.unsafe_ptr())
+        _ = knn_search_resident(ctx, dx, hx.unsafe_ptr(), n_train, hq.unsafe_ptr(), n_queries,
+                                n_features, k, hd.unsafe_ptr(), hi.unsafe_ptr())
     else:
-        _ = knn_search(ctx, hx.unsafe_ptr(), n_train, hq.unsafe_ptr(), n_queries,
-                       n_features, k, hd.unsafe_ptr(), hi.unsafe_ptr(),
-                       metric=params.metric, metric_arg=params.metric_arg)
+        _ = knn_search_resident(ctx, dx, hx.unsafe_ptr(), n_train, hq.unsafe_ptr(), n_queries,
+                                n_features, k, hd.unsafe_ptr(), hi.unsafe_ptr(),
+                                metric=params.metric, metric_arg=params.metric_arg)
     ctx.synchronize()
-    var distances = List[Float32]()
-    var indices = List[UInt32]()
-    for i in range(n_queries * k):
-        distances.append(hd.unsafe_ptr().unsafe_load(i))
-        indices.append(hi.unsafe_ptr().unsafe_load(i))
+    var edges = n_queries * k
+    var dd = ctx.enqueue_create_buffer[DType.float32](edges)
+    var di = ctx.enqueue_create_buffer[DType.uint32](edges)
+    ctx.enqueue_copy(dst_buf=dd, src_ptr=hd.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=di, src_ptr=hi.unsafe_ptr())
+    _ = dx^
     _ = hx^
     _ = hq^
+
+    # Memberships, starting coordinates, schedule ratios, row keys.
+    var dw = ctx.enqueue_create_buffer[DType.float32](edges)
+    var dc = ctx.enqueue_create_buffer[DType.float32](n_queries * comps)
+    var ds = ctx.enqueue_create_buffer[DType.uint64](edges)
+    var dk = ctx.enqueue_create_buffer[DType.uint64](n_queries)
+    var rg = _tr_blocks(n_queries)
+    ctx.enqueue_function[umap_transform_prepare_kernel](
+        dd.unsafe_ptr(), di.unsafe_ptr(), dw.unsafe_ptr(), de.unsafe_ptr(), dc.unsafe_ptr(),
+        ds.unsafe_ptr(), dk.unsafe_ptr(), flags.unsafe_ptr(),
+        Int32(n_queries), Int32(k), Int32(n_train), Int32(comps), tr_target(k),
+        grid_dim=rg, block_dim=TR_TPB,
+    )
+    _tr_check(ctx, flags)
     _ = hd^
     _ = hi^
-    var weights = transform_memberships(distances, n_queries, k)
-    var initial = initialize_transform(indices, weights, training_embedding, n_queries, n_train, k, params.n_components)
+    _ = dd^
+
     var epochs = max(1, params.n_epochs // 3)
     if params.n_epochs == 0:
         # BATCH INVARIANCE. This read `100 if n_queries <= 10000 else 30`, so
@@ -269,6 +246,40 @@ def transform(
         # size. The cost of that was measured, not asserted.
         epochs = 100
     var ab = params.curve()
-    return refine_transform(initial, training_embedding, indices, weights, n_queries,
-                            n_train, k, params.n_components, epochs, ab[0], ab[1], params.random_seed,
-                            params.learning_rate, params.repulsion_strength, params.negative_sample_rate)
+    var a = ab[0]
+    var b = ab[1]
+    var lr = params.learning_rate
+    var gamma = params.repulsion_strength
+    var rate = params.negative_sample_rate
+    if not isfinite(a) or not isfinite(b) or a <= Float32(0) or b <= Float32(0):
+        raise Error("UMAP transform refinement requires positive finite parameters")
+    if not isfinite(lr) or lr <= Float32(0) or (
+        not isfinite(gamma) or gamma < Float32(0)
+    ) or rate < 0 or rate > 2147483647:
+        raise Error("UMAP transform optimizer controls are invalid")
+    var b_word = bitcast[DType.uint64](Float64(b))
+    var neg2ab = tr_neg2ab(a, b)
+    var rep2b = tr_rep2b(gamma, b)
+    for epoch in range(epochs):
+        ctx.enqueue_function[umap_transform_epoch_kernel](
+            dc.unsafe_ptr(), de.unsafe_ptr(), di.unsafe_ptr(), ds.unsafe_ptr(), dk.unsafe_ptr(),
+            flags.unsafe_ptr(), Int32(n_queries), Int32(k), Int32(comps), Int32(n_train),
+            Int32(epoch), tr_alpha(epoch, epochs, lr), a, b_word, neg2ab, rep2b,
+            params.random_seed, Int32(rate),
+            grid_dim=rg, block_dim=TR_TPB,
+        )
+    _tr_flag_nonfinite(ctx, dc, n_queries * comps, flags, TR_OUT_NONFINITE)
+    _tr_check(ctx, flags)
+
+    # The result back once.
+    var result = List[Float32](length=n_queries * comps, fill=Float32(0.0))
+    ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=dc)
+    ctx.synchronize()
+    _ = flags^
+    _ = de^
+    _ = di^
+    _ = dw^
+    _ = dc^
+    _ = ds^
+    _ = dk^
+    return result^

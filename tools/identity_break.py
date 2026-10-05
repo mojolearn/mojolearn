@@ -5920,9 +5920,10 @@ def _(ml, X, yc, yr, Xh=None):
     assignment BY ARGUMENT; what it cannot do is say so anywhere a reader can
     check, because it needs a GPU or a host binding to produce a cell at all
     and reads REFUSED on a CPU-only install (`gather_rows_bytes`, measured
-    2026-09-16). This lane is pure Python over the labels and the split count:
-    no RNG, no seed, no native call, nothing to key. It produces a cell on
-    EVERY column, including a CPU-only wheel.
+    2026-09-16). The fold-reference arm is Python over labels and split count.
+    The descriptor arm now uses core's native CPU fold helpers through
+    split_descriptor; it therefore needs a core host binding on a CPU-only
+    wheel. Neither arm exercises GPU arithmetic.
 
     `partition` is a HASHED part and not an assertion, for the tokenizer lane's
     reason: a raise reads REFUSED, which the owed check does not count as a

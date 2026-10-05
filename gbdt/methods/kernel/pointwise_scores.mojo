@@ -245,6 +245,7 @@ is not expressible; the loop is written out as a Mojo `comptime for` over
 
 from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -846,7 +847,7 @@ def find_optimal_split_single_fold_kernel[
     lambda_l2: Float32,
     meta_exponent: Float32,
     normalize_in: Int32,
-    score_std_dev: Float32,
+    score_std_dev_p: MutPointer[Float32, MutAnyOrigin],
     global_seed: UInt64,
     result_ids: MutPointer[UInt32, MutAnyOrigin],
     result_scores: MutPointer[Float32, MutAnyOrigin],
@@ -886,6 +887,9 @@ def find_optimal_split_single_fold_kernel[
     on the device, so the kernel loads it instead of receiving it. Every
     thread loads the same word; the value and the arithmetic are unchanged.
     """
+    # T5 drain (cpu3-gbdt-a): the score-noise std dev is a device word
+    # (the ordered fit forms it on the device); every thread loads it
+    var score_std_dev = score_std_dev_p.unsafe_load(0)
     var bin_feature_count = Int(bin_feature_count_in)
     var p_count = Int(p_count_in)
     var score_before_split = score_before.unsafe_load(0)
@@ -995,7 +999,7 @@ def find_optimal_split_cosine_kernel[
     score_before: MutPointer[Float32, MutAnyOrigin],
     l2: Float32,
     normalize_in: Int32,
-    score_std_dev: Float32,
+    score_std_dev_p: MutPointer[Float32, MutAnyOrigin],
     global_seed: UInt64,
     result_ids: MutPointer[UInt32, MutAnyOrigin],
     result_scores: MutPointer[Float32, MutAnyOrigin],
@@ -1020,6 +1024,9 @@ def find_optimal_split_cosine_kernel[
     (`:324`), rather than a comptime switch -- their host does not
     specialize on it and neither does this.
     """
+    # T5 drain (cpu3-gbdt-a): the score-noise std dev is a device word
+    # (the ordered fit forms it on the device); every thread loads it
+    var score_std_dev = score_std_dev_p.unsafe_load(0)
     var bin_feature_count = Int(bin_feature_count_in)
     var p_count = Int(p_count_in)
     var fold_count = Int(fold_count_in)
@@ -1513,7 +1520,7 @@ def find_optimal_split_dynamic(
     score_function: Int,
     l2: Float32,
     normalize: Bool,
-    score_std_dev: Float32,
+    score_std_dev: MutPointer[Float32, MutAnyOrigin],
     seed: UInt64,
 ) raises:
     """`FindOptimalSplitDynamic` (`:443-473`).
@@ -1610,7 +1617,7 @@ def find_optimal_split_plain[
     meta_l2_exponent: Float32,
     meta_frequency: Float32,
     normalize: Bool,
-    score_std_dev: Float32,
+    score_std_dev: MutPointer[Float32, MutAnyOrigin],
     seed: UInt64,
 ) raises:
     """`FindOptimalSplitPlain<TLoader>` (`:475-527`), their five-arm switch.
@@ -1705,7 +1712,7 @@ def _launch_single_fold[
     l2: Float32,
     meta_exponent: Float32,
     normalize: Bool,
-    score_std_dev: Float32,
+    score_std_dev: MutPointer[Float32, MutAnyOrigin],
     seed: UInt64,
     mut result_ids: DeviceBuffer[DType.uint32],
     mut result_scores: DeviceBuffer[DType.float32],
@@ -1763,6 +1770,50 @@ def find_optimal_split(
     meta_l2_frequency: Float32,
     normalize: Bool,
     score_std_dev: Float32,
+    seed: UInt64,
+    gathered_by_leaves: Bool,
+) raises:
+    """The host-scalar form of `find_optimal_split_dev` (the checks, the
+    other searcher): T5 drain (lane cpu3-gbdt-a), the kernels read the
+    score-noise std dev from a device word, so this form stages it with an
+    enqueued fill (no drain) on a one-float buffer held past the launch.
+    Same value, same arithmetic."""
+    var std_word = ctx.enqueue_create_buffer[DType.float32](1)
+    enqueue_fill(ctx, std_word, score_std_dev)
+    find_optimal_split_dev(
+        ctx, binary_features, binary_feature_count, cat_features_weights,
+        bin_features_weights, binary_feature_weights_count, splits, parts,
+        p_count, fold_count, score_before, result_ids, result_scores,
+        result_size, score_function, l2, meta_l2_exponent,
+        meta_l2_frequency, normalize, rebind[MutPointer[Float32, MutAnyOrigin]](
+            std_word.unsafe_ptr()
+        ), seed,
+        gathered_by_leaves,
+    )
+    _ = std_word^
+
+
+def find_optimal_split_dev(
+    ctx: DeviceContext,
+    mut binary_features: DeviceBuffer[DType.uint32],
+    binary_feature_count: Int,
+    mut cat_features_weights: DeviceBuffer[DType.float32],
+    mut bin_features_weights: DeviceBuffer[DType.float32],
+    binary_feature_weights_count: Int,
+    mut splits: DeviceBuffer[DType.float32],
+    mut parts: DeviceBuffer[DType.float32],
+    p_count: Int,
+    fold_count: Int,
+    mut score_before: DeviceBuffer[DType.float32],
+    mut result_ids: DeviceBuffer[DType.uint32],
+    mut result_scores: DeviceBuffer[DType.float32],
+    result_size: Int,
+    score_function: Int,
+    l2: Float32,
+    meta_l2_exponent: Float32,
+    meta_l2_frequency: Float32,
+    normalize: Bool,
+    score_std_dev: MutPointer[Float32, MutAnyOrigin],
     seed: UInt64,
     gathered_by_leaves: Bool,
 ) raises:

@@ -88,13 +88,17 @@ column and a column constant after one difference; both report
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceil, isfinite
+from std.memory import stack_allocation
+from std.sys.compile import is_defined
 
 from core.column_stats import STATS_TPB
 from core.device_scan import device_first_nonfinite
 from core.pinned_reduce import pinned_block_sum
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 
 
@@ -235,6 +239,71 @@ def cumsum_by_series_kernel(
     for t in range(n):
         acc = ftz(acc + ftz(data.unsafe_load(base + t)))
         accumulator.unsafe_store(base + t, acc)
+
+
+#: lane/fam-timeseries (2026-10-04), IDENTICAL on every vendor and in the
+#: host column (`tsa/checks/kpss_oracle.mojo::kpss_host_f32`, the same
+#: switch): the inclusive scan of the centred series is a BLOCKED scan, one
+#: block of KPSS_SCAN_TPB threads per series, instead of one thread walking
+#: the whole series. THE BITS OF `cumsum`, `eta` AND THE STATISTIC CHANGE
+#: (a different association of the same sums), on all four columns together.
+#: `-D MOJOLEARN_IDN_KPSS_SCAN_OFF=1` (or MOJOLEARN_IDN_ALL_OFF) restores the
+#: serial scan on the device and in the host column. FAST is unchanged.
+comptime KPSS_SCAN_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KPSS_SCAN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+#: threads of the one block per series; part of the fold's definition (the
+#: chunk width is `ceil(n / KPSS_SCAN_TPB)`), never launch geometry
+comptime KPSS_SCAN_TPB = 256
+
+
+def cumsum_blocked_kernel(
+    accumulator: MutPointer[Float32, MutAnyOrigin],
+    data: MutPointer[Float32, MutAnyOrigin],
+    n_obs_in: Int32,
+):
+    """The inclusive scan of one series by one block (`grid_dim ==
+    batch_size`, `block_dim == KPSS_SCAN_TPB`). THE ASSOCIATION, which the
+    host column spells again (`kpss_oracle.mojo::cumsum_blocked_host`):
+
+      per = ceil(n / KPSS_SCAN_TPB); chunk c is [c * per, min((c + 1) * per, n))
+      total[c]  = the chunk folded ascending from +0.0
+      offset[c] = total[0], ..., total[c - 1] folded ascending from +0.0
+                  (every chunk below c, the empty ones' +0.0 included)
+      cumsum[t] = offset[c] then the chunk's values up to t, ascending
+
+    Thread c owns chunk c. The longest chain is `2 * per + KPSS_SCAN_TPB`
+    additions where the serial scan's is `n`."""
+    var n = Int(n_obs_in)
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var base = b * n
+    var tot = stack_allocation[
+        KPSS_SCAN_TPB,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var per = (n + KPSS_SCAN_TPB - 1) // KPSS_SCAN_TPB
+    var begin = min(tid * per, n)
+    var end = min(begin + per, n)
+    var local = Float32(0.0)
+    var i = begin
+    while i < end:
+        local = ftz(local + ftz(data.unsafe_load(base + i)))
+        i += 1
+    tot[tid] = local
+    barrier()
+    var running = Float32(0.0)
+    var c = 0
+    while c < tid:
+        var below: Float32 = tot[c]
+        running = ftz(running + ftz(below))
+        c += 1
+    i = begin
+    while i < end:
+        running = ftz(running + ftz(data.unsafe_load(base + i)))
+        accumulator.unsafe_store(base + i, running)
+        i += 1
 
 
 def kpss_stationarity_check_kernel(
@@ -413,11 +482,19 @@ def _kpss_test(
     # Cumulative sum (inclusive scan with + operator), recycling `accumulator`
     # as theirs does: a second buffer is not needed because the scan reads
     # `y_cent` and the previous contents are dead after the s2B fold.
-    ctx.enqueue_function[cumsum_by_series_kernel](
-        sc.accumulator.unsafe_ptr(), sc.y_cent.unsafe_ptr(), Int32(n_obs),
-        Int32(batch_size),
-        grid_dim=(series_grid, 1, 1), block_dim=(elem_tpb, 1, 1),
-    )
+    comptime if KPSS_SCAN_BLOCKED:
+        # IDENTICAL: the blocked scan, one block per series (its own fixed
+        # width; `elem_tpb` does not reach it)
+        ctx.enqueue_function[cumsum_blocked_kernel](
+            sc.accumulator.unsafe_ptr(), sc.y_cent.unsafe_ptr(), Int32(n_obs),
+            grid_dim=(batch_size, 1, 1), block_dim=(KPSS_SCAN_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[cumsum_by_series_kernel](
+            sc.accumulator.unsafe_ptr(), sc.y_cent.unsafe_ptr(), Int32(n_obs),
+            Int32(batch_size),
+            grid_dim=(series_grid, 1, 1), block_dim=(elem_tpb, 1, 1),
+        )
     # Eq. 11 (eta)
     ctx.enqueue_function[sumsq_kernel](
         sc.eta.unsafe_ptr(), sc.accumulator.unsafe_ptr(), Int32(n_obs),

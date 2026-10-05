@@ -5,13 +5,16 @@ time (lane/py-decomp-nbrs, 2026-09-28): gathers and scatters by an int32
 index list, the nonzero upper triangle of a square matrix, and the
 (value, index) and (x, y, index) orders of Python's stable `sorted`.
 Exact copies and compares only: no float arithmetic, so nothing here can
-move a bit. Host code, compiled into both x_decomp bindings."""
+move a bit (except `dsum_sq`, software binary64 in a fixed chunked order
+shared with the device form, lane cpu3-python). Host code, compiled into
+both x_decomp bindings; the per-element helpers are also the device
+kernels' bodies (x_decomp/select_dev.mojo)."""
 from std.memory import bitcast
 from std.builtin.sort import sort
 from std.math import trunc
 from std.sys.compile import is_defined
 
-from checks.numerics import pinned_mul_f64
+from checks.soft_f64 import SF64_ZERO, sf64_add, sf64_from_f32, sf64_mul
 
 from x_decomp.cells import F32Ptr, I32Ptr
 
@@ -105,6 +108,11 @@ comptime MOVE_TAKE_ROWS = 0
 comptime MOVE_TRANSPOSE = 1
 comptime MOVE_PLACE_COLS = 2
 comptime MOVE_FILL0 = 3
+#: TAKE_COLS (lane fam2-decomp, 2026-10-04): dst (r x w) column b = src (r x c)
+#: column Int(idx[b]) (a1 = w, a2 = c; idx holds w exact floats).
+comptime MOVE_TAKE_COLS = 4
+#: the highest op (the entries' range check)
+comptime MOVE_LAST = MOVE_TAKE_COLS
 
 
 @always_inline
@@ -117,6 +125,8 @@ def move_src(op: Int, t: Int, idx: F32Ptr, a1: Int, a2: Int, ist: Int, ioff: Int
         return (t % a1) * a2 + t // a1
     if op == MOVE_PLACE_COLS:
         return t
+    if op == MOVE_TAKE_COLS:
+        return (t // a1) * a2 + Int(idx.unsafe_load(t % a1))
     return -1
 
 
@@ -135,7 +145,7 @@ def move_host(
     nsrc: Int, ndst: Int,
 ) raises:
     """`move` on host buffers, every index checked against the buffer lengths."""
-    if op < MOVE_TAKE_ROWS or op > MOVE_FILL0:
+    if op < MOVE_TAKE_ROWS or op > MOVE_LAST:
         raise Error("x_decomp: unknown move op")
     if op != MOVE_FILL0 and a1 <= 0 and count > 0:
         raise Error("x_decomp: move needs a positive width")
@@ -144,6 +154,10 @@ def move_host(
             var v = idx.unsafe_load(t // a1 * ist + ioff)
             if not (v >= Float32(0) and v < Float32(16777216)):
                 raise Error("x_decomp: take_rows index out of range")
+        if op == MOVE_TAKE_COLS:
+            var vc = idx.unsafe_load(t % a1)
+            if not (vc >= Float32(0) and vc < Float32(a2)):
+                raise Error("x_decomp: take_cols index out of range")
         var s = move_src(op, t, idx, a1, a2, ist, ioff)
         var d = move_dst(op, t, a1, a2, a3)
         if s >= nsrc or d < 0 or d >= ndst:
@@ -154,14 +168,79 @@ def move_host(
             dst.unsafe_store(d, Float32(0))
 
 
-def dsum_sq(x: F32Ptr, m: Int) -> Float64:
-    """`_dsum(v * v for v in x)`: float64 squares of the float32 values added
-    in order, the product pinned (never fused into the add)."""
-    var t = Float64(0)
-    for i in range(m):
-        var v = Float64(x.unsafe_load(i))
-        t += pinned_mul_f64(v, v)
-    return t
+#: values per first-level partial of `dsum_sq` (and per later fold)
+comptime DSUM_CHUNK = 256
+
+
+@always_inline
+def dsum_ld(f: F32Ptr, at: Int) -> UInt64:
+    """A binary64 word stored as two float32 words, low first."""
+    return (UInt64(bitcast[DType.uint32](f.unsafe_load(at + 1))) << UInt64(32)) | UInt64(
+        bitcast[DType.uint32](f.unsafe_load(at))
+    )
+
+
+@always_inline
+def dsum_st(f: F32Ptr, at: Int, v: UInt64):
+    f.unsafe_store(at, bitcast[DType.float32](UInt32(v & UInt64(0xFFFFFFFF))))
+    f.unsafe_store(at + 1, bitcast[DType.float32](UInt32(v >> UInt64(32))))
+
+
+@always_inline
+def dsum_sq_chunk(x: F32Ptr, lo: Int, hi: Int) -> UInt64:
+    """Software-binary64 sum, ascending, of x[lo:hi]^2 (each square of a
+    float32 is exact in binary64)."""
+    var acc = SF64_ZERO
+    for i in range(lo, hi):
+        var v = sf64_from_f32(x.unsafe_load(i))
+        acc = sf64_add(acc, sf64_mul(v, v))
+    return acc
+
+
+@always_inline
+def dsum_fold_chunk(p: F32Ptr, lo: Int, hi: Int) -> UInt64:
+    """Software-binary64 sum, ascending, of the binary64 words p[lo:hi]."""
+    var acc = SF64_ZERO
+    for i in range(lo, hi):
+        acc = sf64_add(acc, dsum_ld(p, 2 * i))
+    return acc
+
+
+def dsum_sq_host(x: F32Ptr, m: Int) -> UInt64:
+    """The host column of the device `dsum_sq` (lane cpu3-python): the sum
+    of squares in software binary64, DSUM_CHUNK values per partial
+    (ascending), then the partials folded DSUM_CHUNK at a time, ascending,
+    until one is left. Every vendor and this column add the same pairs."""
+    if m <= 0:
+        return SF64_ZERO
+    var nb = (m + DSUM_CHUNK - 1) // DSUM_CHUNK
+    var cur = List[Float32](length=2 * nb, fill=Float32(0))
+    var pc = F32Ptr(unsafe_from_address=Int(cur.unsafe_ptr()))
+    for b in range(nb):
+        dsum_st(pc, 2 * b, dsum_sq_chunk(x, b * DSUM_CHUNK, min((b + 1) * DSUM_CHUNK, m)))
+    while nb > 1:
+        var nn = (nb + DSUM_CHUNK - 1) // DSUM_CHUNK
+        var nxt = List[Float32](length=2 * nn, fill=Float32(0))
+        var pn = F32Ptr(unsafe_from_address=Int(nxt.unsafe_ptr()))
+        for b in range(nn):
+            dsum_st(pn, 2 * b, dsum_fold_chunk(pc, b * DSUM_CHUNK, min((b + 1) * DSUM_CHUNK, nb)))
+        cur = nxt^
+        pc = F32Ptr(unsafe_from_address=Int(cur.unsafe_ptr()))
+        nb = nn
+    var r = dsum_ld(pc, 0)
+    _ = cur^
+    return r
+
+
+@always_inline
+def order_key(v: Float32, neg: Bool) -> UInt32:
+    """`f32_key(-v if neg else v)` for a non-NaN v, without the refusal
+    (the device form's callers refuse NaN before they launch)."""
+    var w = -v if neg else v
+    if w == Float32(0):
+        w = Float32(0)
+    var ub = bitcast[DType.uint32](w)
+    return ub ^ UInt32(0xFFFFFFFF) if (ub >> 31) == 1 else ub | UInt32(0x80000000)
 
 
 def order_f(x: F32Ptr, m: Int, dst: F32Ptr) raises:
@@ -198,6 +277,12 @@ def argmin_all(x: F32Ptr, m: Int, dst: F32Ptr) -> Int:
     values, and `==` makes -0.0 and +0.0 one value."""
     if m <= 0:
         return 0
+    # lane cpu3-python: a NaN anywhere gives no positions, as the device
+    # form's min (a NaN anywhere is the min) compares equal to nothing
+    for i in range(m):
+        var q = x.unsafe_load(i)
+        if q != q:
+            return 0
     var dmin = x.unsafe_load(0)
     for i in range(1, m):
         var v = x.unsafe_load(i)
@@ -218,6 +303,7 @@ def sign_labels(x: F32Ptr, m: Int, dst: I32Ptr):
 
 
 comptime F64Ptr = MutPointer[Float64, MutAnyOrigin]
+comptime U32Ptr = MutPointer[UInt32, MutAnyOrigin]
 
 
 def accuracy(y: F64Ptr, pred: I32Ptr, w: F64Ptr, weighted: Bool, m: Int) raises -> Tuple[Float64, Float64]:
@@ -242,30 +328,6 @@ def accuracy(y: F64Ptr, pred: I32Ptr, w: F64Ptr, weighted: Bool, m: Int) raises 
     if not weighted:
         return (Float64(cnt), Float64(m))
     return (hit, tw)
-
-
-def pca_mle_terms(sp: F64Ptr, d: Int, rank: Int, v: Float64, dst: F32Ptr) -> Int:
-    """`[(sp[i] - sp[j]) * (1.0 / spv[j] - 1.0 / spv[i]) for i in range(rank)
-    for j in range(i + 1, d)]` with spv = sp[:rank] + [v] * (d - rank), each
-    term rounded to float32 (as `_M.of` stores it); returns the count."""
-    var c = 0
-    for i in range(rank):
-        var si = sp.unsafe_load(i)
-        var ivi = Float64(1) / si
-        for j in range(i + 1, d):
-            var sj = sp.unsafe_load(j)
-            var vj = sj if j < rank else v
-            dst.unsafe_store(c, Float32(pinned_mul_f64(si - sj, Float64(1) / vj - ivi)))
-            c += 1
-    return c
-
-
-def pca_mle_pa(lt: F32Ptr, m: Int, logn: Float64) -> Float64:
-    """`pa = 0.0; for t in lt: pa += t + logn` (IEEE double, in order)."""
-    var pa = Float64(0)
-    for a in range(m):
-        pa += Float64(lt.unsafe_load(a)) + logn
-    return pa
 
 
 def topn_desc(x: F32Ptr, m: Int, skip: F32Ptr, has_skip: Bool, n: Int, dst: I32Ptr) raises -> Int:

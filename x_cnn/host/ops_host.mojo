@@ -20,7 +20,7 @@ from core.host_parallel import host_parallelize
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
 from checks.numerics import ftz
-from bindings.hostptr import i32_ptr
+from bindings.hostptr import i32_ptr, f32_ptr
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from x_cnn.ops import (
@@ -33,9 +33,15 @@ from x_cnn.ops import (
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
+    BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
+    bn_blk_red_at, bn_blk_red_fin_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
     sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at,
 )
+# lane fam2-neural (2026-10-04): the blocked loss fold (the device's `blk_fold_at`)
+from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
+# lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
+from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, adapt_avg_fin_at
 
 #: The host family's negative control (host_surface sabotage_define): the
 #: host col2im gathers in reversed (kh) order.
@@ -737,12 +743,50 @@ def linear_backward_host(x: List[Float32], w: List[Float32], g: List[Float32], n
     return r^
 
 
+def blocked_mean(values: List[Float32], n: Int) -> Float32:
+    """lane fam2-neural: the mean of values[0:n] (n >= 1) by the device's
+    blocked fold: `blk_fold_at` over the levels of `fold_plan`, the level
+    sums ping-ponging between two buffers as on the device."""
+    var a = values.copy()
+    var b = zeros((n + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK)
+    var red = zeros(1)
+    var prm = fold_plan(n, n, 0)
+    var pp = hi(prm)
+    var src = hp(a)
+    var dst = hp(b)
+    var fin = hp(red)
+    var c = n
+    var lvl = 0
+    while True:
+        var nb = (c + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK
+        var lp_ = pp + 3 * lvl
+        if nb <= 1:
+            blk_fold_at(0, src, fin, fin, fin, lp_, lp_)
+            break
+        for t in range(nb):
+            blk_fold_at(t, src, dst, dst, dst, lp_, lp_)
+        var sw = src
+        src = dst
+        dst = sw
+        c = nb
+        lvl += 1
+    var out = red[0]
+    _ = a^
+    _ = b^
+    _ = red^
+    _ = prm^
+    return out
+
+
 def softmax_xent_into(logits: FP, labels: IP, grad: FP, proba: FP, n: Int, k: Int) -> Float32:
     """grad and proba [n x k] written in place; returns the mean loss."""
     var prm: List[Int32] = [Int32(n), Int32(k)]
     var rl = zeros(n)
     run[softmax_xent_row_at](logits, grad, proba, hp(rl), labels, hi(prm), n)
     _ = prm^
+    comptime if IDN_XENT_DEV_FOLD:
+        if n > 0:
+            return blocked_mean(rl, n)
     return seq_mean(rl, n)
 
 
@@ -785,14 +829,25 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, dst: FP, prm: List[Int32
     var C = Int(prm[1])
     var total = Int(prm[0]) * C * Int(prm[2])
     var ps = prm.copy()
+    # lane idn-loss-norm-folds: the device's blocked folds (x_cnn/ops.mojo
+    # BN_FOLD_BLOCK), the same element functions
+    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    var part = zeros(nblk)
     if training:
-        run[bn_stats_at](x, aux, aux, aux, hi(ps), hi(ps), C)
+        comptime if BN_FOLD_BLOCK:
+            run[bn_blk_sum_at](x, hp(part), hp(part), hp(part), hi(ps), hi(ps), nblk)
+            run[bn_blk_mean_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+            run[bn_blk_sq_at](x, hp(part), aux, aux, hi(ps), hi(ps), nblk)
+            run[bn_blk_var_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+        else:
+            run[bn_stats_at](x, aux, aux, aux, hi(ps), hi(ps), C)
     else:
         run[bn_eval_stats_at](running, aux, aux, aux, hi(ps), hi(ps), C)
     run[bn_apply_at](x, aux, dst, dst, hi(ps), hi(ps), total)
     if training:
         run[bn_running_at](running, aux, aux, aux, hi(ps), hi(ps), C)
     _ = ps^
+    _ = part^
 
 
 def batchnorm_backward_into(x: FP, g: FP, aux: FP, dst: FP, prm: List[Int32], training: Bool):
@@ -800,12 +855,19 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, dst: FP, prm: List[Int32], tr
     var C = Int(prm[1])
     var total = Int(prm[0]) * C * Int(prm[2])
     var ps = prm.copy()
-    run[bn_bwd_red_at](x, g, aux, aux, hi(ps), hi(ps), C)
+    var nblk = C * bn_fold_blocks(Int(prm[0]) * Int(prm[2])) if BN_FOLD_BLOCK else 1
+    var part = zeros(2 * nblk)
+    comptime if BN_FOLD_BLOCK:
+        run[bn_blk_red_at](x, g, aux, hp(part), hi(ps), hi(ps), nblk)
+        run[bn_blk_red_fin_at](hp(part), aux, aux, aux, hi(ps), hi(ps), C)
+    else:
+        run[bn_bwd_red_at](x, g, aux, aux, hi(ps), hi(ps), C)
     if training:
         run[bn_bwd_dx_at](x, g, aux, dst, hi(ps), hi(ps), total)
     else:
         run[bn_bwd_eval_dx_at](x, g, aux, dst, hi(ps), hi(ps), total)
     _ = ps^
+    _ = part^
 
 
 def batchnorm_forward_host(
@@ -920,6 +982,21 @@ def adaptive_pool_host(x: List[Float32], idx: List[Int32], prm: List[Int32], kin
     var nin = nc * Int(prm[2]) * Int(prm[3])
     var nout = nc * Int(prm[4]) * Int(prm[5])
     if kind == 0:
+        comptime if IDN_GAP_BLOCK_FOLD:
+            var nb = gap_fold_blocks(Int(prm[2]), Int(prm[3]), Int(prm[4]), Int(prm[5]))
+            if nb > 1:
+                # lane fix-n1-lm-neural: the device's two launches, the same words
+                var sa = x.copy()
+                var ps = prm.copy()
+                idx_out = idx.copy()
+                var part = zeros(nout * nb)
+                var out = zeros(nout)
+                run[adapt_avg_blk_at](hp(sa), hp(sa), hp(part), hp(part), hi(idx_out), hi(ps), nout * nb)
+                run[adapt_avg_fin_at](hp(part), hp(part), hp(out), hp(out), hi(idx_out), hi(ps), nout)
+                _ = sa^
+                _ = ps^
+                _ = part^
+                return out^
         return adaptive_host[adapt_avg_fwd_at](x, idx, nout, prm, idx_out)
     if kind == 1:
         return adaptive_host[adapt_avg_bwd_at](x, idx, nin, prm, idx_out)
@@ -1027,3 +1104,46 @@ def csr_build_host_binding(rows_addr: PythonObject, cols_addr: PythonObject, csr
     with GILReleased(Python()):
         csr_build_host(rows, cols, nnz, n, pc, order)
     return PythonObject(n + 1 + 2 * nnz)
+
+
+def gcn_loops_host(src: IP, dst: IP, w: FP, nnz: Int, n: Int, fill: Float32, src_out: IP, dst_out: IP, w_out: FP) -> Int:
+    """`x_cnn/device.mojo::gcn_loops_device` on the host (lane
+    fix-n1-lm-neural, IDN_GCN_LOOPS_DEV): the kept (non-loop) edges in edge
+    order, then one loop per node i with the weight of node i's last loop in
+    edge order, else `fill`. Returns the kept count K. Copies only: the
+    device's words exactly."""
+    var k = 0
+    for e in range(nnz):
+        if src[e] != dst[e]:
+            src_out[k] = src[e]
+            dst_out[k] = dst[e]
+            w_out[k] = w[e]
+            k += 1
+    for i in range(n):
+        src_out[k + i] = Int32(i)
+        dst_out[k + i] = Int32(i)
+        w_out[k + i] = fill
+    for e in range(nnz):
+        if src[e] == dst[e]:
+            w_out[k + Int(src[e])] = w[e]
+    return k
+
+
+def gcn_loops_host_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`x_cnn_gcn_loops` for the host binding (`bindings/_mojolearn_x_cnn.mojo`'s
+    `gcn_loops_binding`, same arguments, same words)."""
+    var n = Int(py=params[0])
+    var nnz = Int(py=params[1])
+    var fill = Float32(2.0) if Int(py=params[2]) != 0 else Float32(1.0)
+    if n <= 0 or nnz < 0 or Int(py=len(addrs)) != 6:
+        raise Error("x_cnn gcn_loops: addrs [src, dst, w, src_out, dst_out, w_out], positive n and nnz >= 0 required")
+    var so = i32_ptr(Int(py=addrs[3])).unsafe_origin_cast[MutAnyOrigin]()
+    var dso = i32_ptr(Int(py=addrs[4])).unsafe_origin_cast[MutAnyOrigin]()
+    var wo = f32_ptr(Int(py=addrs[5])).unsafe_origin_cast[MutAnyOrigin]()
+    var src = i32_ptr(Int(py=addrs[0])).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else so
+    var dst = i32_ptr(Int(py=addrs[1])).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else so
+    var w = f32_ptr(Int(py=addrs[2])).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else wo
+    var k = 0
+    with GILReleased(Python()):
+        k = gcn_loops_host(src, dst, w, nnz, n, fill, so, dso, wo)
+    return PythonObject(k)

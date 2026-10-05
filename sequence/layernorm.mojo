@@ -9,6 +9,25 @@ reference's closed form dx = rstd (g - mean(g) - xhat mean(g xhat)) with
 g = dy w."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_rsqrt
+from std.sys.compile import is_defined
+
+#: lane idn-loss-norm-folds (2026-10-04): under IDENTICAL the dweight / dbias
+#: column folds are BLOCKED on every column (device and host run this same
+#: op): rows are cut into consecutive blocks of ln_fold_rows(M) rows, one
+#: thread per (block, column) folds its rows ascending from +0.0, then one
+#: thread per column adds the block partials ascending from +0.0. The block
+#: size is a function of M alone. One block (M <= 64) is the single chain.
+#: It replaced one M-term chain per column.
+#: `-D MOJOLEARN_LN_FOLD_BLOCK_OFF` restores the single chain.
+comptime LN_FOLD_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_LN_FOLD_BLOCK_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+
+
+def ln_fold_rows(M: Int) -> Int:
+    """Rows per block: the smallest power of two R >= 64 with R * R >= M."""
+    var r = 64
+    while r * r < M:
+        r *= 2
+    return r
 
 
 @always_inline
@@ -108,11 +127,11 @@ def _ln_w_fold(a: Args, col: Int, r0: Int, r1: Int) -> Tuple[Float32, Float32]:
 def op_ln_bwd_w(t: Int, a: Args):
     """Column t: dw p2[t] = sum_r dy xhat, db p3[t] = sum_r dy, rows
     ascending. p0 dy, p1 x, p4 mean, p5 rstd; i0 D, i1 M.
-    FAST split (i2 = S > 0, i3 rows per split): thread t is split t // D of
+    Split (FAST, and IDENTICAL's blocked fold; i2 = S > 0, i3 rows per split): thread t is split t // D of
     column t % D and writes its partials to p6 / p7 [S, D]; with i4 != 0 the
     thread (one per column) adds the S partials in order into p2 / p3."""
     var D = a.i0
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or LN_FOLD_BLOCK:
         if a.i4 != 0:
             var sw = Float32(0.0)
             var sb = Float32(0.0)

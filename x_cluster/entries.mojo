@@ -251,6 +251,27 @@ def _f32_of(v: List[Float64]) -> List[Float32]:
     return out^
 
 
+def _by_cov_type(full: List[Float64], kc: Int, d: Int, ct: Int) -> List[Float32]:
+    """`full` (kc x d x d) in the covariance type's shape: 0 full as it is,
+    1 tied the first d x d, 2 diag the diagonals (kc x d), 3 spherical each
+    component's [0, 0] (kc). Fewer words than kc x d x d: as it is."""
+    var out = List[Float32]()
+    if len(full) < kc * d * d or ct == 0:
+        for t in range(len(full)):
+            out.append(Float32(full[t]))
+    elif ct == 1:
+        for t in range(d * d):
+            out.append(Float32(full[t]))
+    elif ct == 2:
+        for c in range(kc):
+            for r in range(d):
+                out.append(Float32(full[c * d * d + r * d + r]))
+    else:
+        for c in range(kc):
+            out.append(Float32(full[c * d * d]))
+    return out^
+
+
 def bgmm_entry[O: ClusterOps](
     mut ops: O, x: List[Float32], a: List[Float32], ip: List[Int], fp: List[Float64]
 ) raises -> ClusterOut:
@@ -280,7 +301,22 @@ def bgmm_entry[O: ClusterOps](
             mean_prior.append(Float64(a[f]))
         off = d
     var cov_prior = List[Float64]()
-    if ip[9] != 0:
+    # the words of the covariance prior in `a` (fam2-cluster: ip[9] == 2 is
+    # the diag prior's d values, 3 the spherical prior's one, expanded to
+    # the full d x d here and no longer in the Python glue)
+    var cpl = 0
+    if ip[9] == 2:
+        cpl = d
+        for r in range(d):
+            for c in range(d):
+                cov_prior.append(Float64(a[off + r]) if r == c else Float64(0))
+    elif ip[9] == 3:
+        cpl = 1
+        for r in range(d):
+            for c in range(d):
+                cov_prior.append(Float64(a[off]) if r == c else Float64(0))
+    elif ip[9] != 0:
+        cpl = d * d
         for t in range(d * d):
             cov_prior.append(Float64(a[off + t]))
     var cov_type = ip[10] if len(ip) > 10 else 0
@@ -298,7 +334,7 @@ def bgmm_entry[O: ClusterOps](
         # the previous fit's state after the priors in `a`: nk, wc0, wc1,
         # mean_precision (k each), means (k x d), dof (k), cov and pchol
         # (k x d x d, full), then the lower bound (fp[5])
-        var o = (d if ip[8] != 0 else 0) + (d * d if ip[9] != 0 else 0)
+        var o = (d if ip[8] != 0 else 0) + cpl
         for t in range(kc):
             best.nk.append(Float64(a[o + t]))
             best.wc0.append(Float64(a[o + kc + t]))
@@ -319,7 +355,7 @@ def bgmm_entry[O: ClusterOps](
         warm_lb = fp[5]
     # GaussianMixture's weights_init, means_init, precisions_init (full
     # d x d per component), after the priors and any warm state
-    var o2 = (d if ip[8] != 0 else 0) + (d * d if ip[9] != 0 else 0)
+    var o2 = (d if ip[8] != 0 else 0) + cpl
     if warm:
         o2 += 4 * kc + kc * d + kc + 2 * kc * d * d
     var w_init = List[Float64]()
@@ -334,8 +370,21 @@ def bgmm_entry[O: ClusterOps](
             m_init.append(Float64(a[o2 + t]))
         o2 += kc * d
     if len(ip) > 15 and ip[15] != 0:
-        for t in range(kc * d * d):
-            p_init.append(Float64(a[o2 + t]))
+        # fam2-cluster: ip[15] == 2 is the tied precision (one d x d), 3 the
+        # diag precisions (k x d), 4 the spherical ones (k), expanded to the
+        # full d x d per component here and no longer in the Python glue
+        var pm = ip[15]
+        for c in range(kc):
+            for r in range(d):
+                for q in range(d):
+                    if pm == 2:
+                        p_init.append(Float64(a[o2 + r * d + q]))
+                    elif pm == 3:
+                        p_init.append(Float64(a[o2 + c * d + r]) if r == q else Float64(0))
+                    elif pm == 4:
+                        p_init.append(Float64(a[o2 + c]) if r == q else Float64(0))
+                    else:
+                        p_init.append(Float64(a[o2 + c * d * d + r * d + q]))
     var labels = List[Int32]()
     var r = bgmm_fit(
         ops, x, n, d, pr, Float32(fp[3]), fp[4], ip[4], ip[5], ip[6], UInt64(ip[7]), best, labels, warm, warm_lb,
@@ -364,6 +413,12 @@ def bgmm_entry[O: ClusterOps](
             acc += portable_log64(best.pchol[c * d * d + j * d + j])
         ld.append(Float32(acc))
     out.f.append(ld^)
+    # f[13], f[14], f[15] (fam2-cluster): the covariances, the precision
+    # factors and the covariance prior in the covariance type's own shape
+    # (the Python glue picked the diagonals out of the full matrices)
+    out.f.append(_by_cov_type(best.cov, kc, d, cov_type))
+    out.f.append(_by_cov_type(best.pchol, kc, d, cov_type))
+    out.f.append(_by_cov_type(best.cov_prior, 1, d, cov_type))
     out.i.append(labels^)
     out.s.append(r.lower_bound)
     out.s.append(Float64(r.n_iter))

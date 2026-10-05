@@ -1,0 +1,347 @@
+{
+  "status": "PASS_TARGETED_NVIDIA_AMD_HOST_IDENTITY",
+  "timing_samples": 0,
+  "opponents_executed": 0,
+  "scope": "Small and medium untimed current-version gates. Each ON/OFF arm compared across NVIDIA Blackwell sm_120, AMD gfx942, and Linux CPU; independent CPU results on both GPU boxes also match. No speed or broad estimator-quality promotion claim.",
+  "apple": "Deferred by explicit user instruction; no Apple checks in this report.",
+  "numerical_source_shas": {
+    "small_cnn": "be33488600e71ac49f6a42c364d6e45895fad7d3",
+    "small_sgd_and_medium": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed"
+  },
+  "harness_commits": [
+    "8992752a9b950048799f57988d58d2dcce5569b7",
+    "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+    "f6c21288f4e3918814787656d630e0b713731e19"
+  ],
+  "coverage": {
+    "cases_per_arm_per_column": 25,
+    "arms": [
+      "on",
+      "off"
+    ],
+    "distinct_columns": [
+      "cuda",
+      "hip",
+      "cpu"
+    ],
+    "small_cnn_primitives": "XENT rows33/1024/1025, epoch permutations1/2/3/1000/65537 at2epochs,2Adam beta configurations at7sampled steps through100000",
+    "small_cnn_training": "65images1x4x4, batch33,2epochs,SGD+Adam; losses, probabilities, weights and optimizer buffers",
+    "small_sgd": "513x17,weighted3class SGD/Perceptron/PA; coefficients/intercepts/iterations/predictions; NaN and arithmetic-overflow refusal",
+    "medium_cnn_training": "257images1x16x16,4convchannels,batch128,2epochs,SGD+Adam",
+    "medium_sgd": "4097x65,weighted3class SGD/Perceptron/PA plus SGD batch4096 fused multiblock and1rowtail; NaN/overflow refusal"
+  },
+  "cross_arm_sgd": "All small and medium SGD case digests additionally match ON versus OFF in cuda,hip,cpu; CNN cross-arm identity is not required.",
+  "fixes": [
+    {
+      "commit": "be33488600e71ac49f6a42c364d6e45895fad7d3",
+      "problem": "GPU linear binding compiled but PyInit was not exported; export decorator was attached to GLM helper.",
+      "change": "Move export decorator to module initializer."
+    },
+    {
+      "commit": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+      "problem": "Blackwell ON1024-thread SGD chunk kernels failed with CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES.",
+      "change": "Declare actualSGD_CHUNK_TPB launch bound for register allocation on both chunk kernels; arithmetic/order/launch width and OFF toggles preserved."
+    }
+  ],
+  "preserved_failures": [
+    "*/lq/cnn-sgd-7cc7c7b37-{on,off}/import-x_linear.log",
+    "*/lq/cnn-7cc7c7b37-pipeline/ (startup import and host proxy provenance failures)",
+    "*/lq/cnn-sgd-be3348860-gates/on-cuda-sgd/ (launch-resource failure)",
+    "*/lq/cnn-sgd-be3348860-gates/*-sgd/ (harness expected ValueError; actual finite refusal used genericMojo Exception)"
+  ],
+  "artifact_provenance": "Isolated exact numerical worktrees; five unchanged modules reused only with independently reviewable module import graph and compiler-input fingerprints, donor receipts/binary hashes, and repeated native import checks; affectedGPUx_linear rebuilt. Sidecars include producer-attestation.json, artifact-inventory.json, reuse-*.json and graph/input manifests.",
+  "harvest_roots": [
+    "identical-blackwell/nv/lq",
+    "identical-all/amd/lq"
+  ],
+  "r2_prefixes": [
+    "measurements/2026-10-04/identical-blackwell",
+    "measurements/2026-10-04/identical-all"
+  ],
+  "comparisons": [
+    {
+      "evidence_path": "identical-all/cnn-compare-on-cnn-primitives.json",
+      "sha256": "8e015aa659273d9499193c7486d67120efcafc46d8684a905c9df0468a5777a5",
+      "status": "PASS",
+      "identity": {
+        "sha": "be33488600e71ac49f6a42c364d6e45895fad7d3",
+        "arm": "on",
+        "suite": "cnn-primitives",
+        "harness_sha256": "e6681bda78e9acfe247925dc3bb8721b6d754f760f38c81bed1cb462299a389e"
+      },
+      "digests": {
+        "xent-33": "ac51c8154351f13e14b396a619f3d6bdf999a2c3c6e876876555790640f7ff93",
+        "xent-1024": "a4a76de00840f3405d010190579d80d7d181a2bb5a7cf5e561a3863b2f738e1d",
+        "xent-1025": "7d098ffccdbca65a2cfeda5941805d22f6fec63eb6a03689fe2be4c9a901b09a",
+        "epoch-1": "354f8eed2c4c9bb9fc36e078c7d7fa43abc4120d9617de3c153d3f78ab6bab5a",
+        "epoch-2": "0d4f797bdf82f5fc8b2b61e73c77cb5e8c5c726fa6719ec14b1a4df885d996ea",
+        "epoch-3": "55763cf802d30a07e9910a1abeaff25d75c9096eb0c7d36e39480f94b35bd87a",
+        "epoch-1000": "cce705bc432be2f7c1300daa81b1a14551679427e9f988492a5b48d165a32ed7",
+        "epoch-65537": "c488fa62e4f18d50fb8078db774662410d3892e4859cb0dc5aa44bcdf58d9c53",
+        "adam-hyper-0": "5e02a40e74a123188d01e59569e2bb99c9c89089d1e8f8a023adfc87369ce234",
+        "adam-hyper-1": "3364a6d45dc8e13a8bb4c6d5c373c1ca5a9b9b02213f58a738d8649b8a020f42"
+      },
+      "required_vendors": [
+        "cpu",
+        "cuda",
+        "hip"
+      ],
+      "receipt_sha256": {
+        "cuda": "13ee0a3af3d1f1868d8254c127f0feb708a09bb5890bd4ab8156800357fcb320",
+        "hip": "c5def4d39bf3b8ed9eb2ef53db3007d68e60c6b5fd68738650e08a9923717573",
+        "cpu": "aae8fd3a530817e4a7c30ba0175d2910cfc7e79537e3fd4a4eafc1a5c981266d"
+      }
+    },
+    {
+      "evidence_path": "identical-all/cnn-compare-on-cnn-training.json",
+      "sha256": "36f005f56c261667f5cc1b52627adda21f3938667fdb61a5554836e6a3adebf5",
+      "status": "PASS",
+      "identity": {
+        "sha": "be33488600e71ac49f6a42c364d6e45895fad7d3",
+        "arm": "on",
+        "suite": "cnn-training",
+        "harness_sha256": "e6681bda78e9acfe247925dc3bb8721b6d754f760f38c81bed1cb462299a389e"
+      },
+      "digests": {
+        "cnn-sgd": "0cc383ecad9fb9bdbb007a064991bc7833a999a033206006c9ebaaeb3d0b8bdf",
+        "cnn-adam": "1cd68aadeb539714210356926908ad569349a86e094f0e73cc98b3415ba7fd72"
+      },
+      "required_vendors": [
+        "cpu",
+        "cuda",
+        "hip"
+      ],
+      "receipt_sha256": {
+        "cuda": "75b55e0ea63d12f1f10d04d29a71d1cde43f7cde84ce8091211e2ba8c8edb56a",
+        "hip": "ee09c66e6326dbc18bc6584abda4518afce0c7d4fd04d7bff41898f8685882db",
+        "cpu": "27f6bff9ba42fce3cc5e05610b6a69210b559efb35cb4483d36ee45736addb44"
+      }
+    },
+    {
+      "evidence_path": "identical-all/cnn-compare-off-cnn-primitives.json",
+      "sha256": "1c8d29f05a5900546c81ef0ceed2160eec3a710512f2811ebfa4b2ac10d7837e",
+      "status": "PASS",
+      "identity": {
+        "sha": "be33488600e71ac49f6a42c364d6e45895fad7d3",
+        "arm": "off",
+        "suite": "cnn-primitives",
+        "harness_sha256": "e6681bda78e9acfe247925dc3bb8721b6d754f760f38c81bed1cb462299a389e"
+      },
+      "digests": {
+        "xent-33": "ac51c8154351f13e14b396a619f3d6bdf999a2c3c6e876876555790640f7ff93",
+        "xent-1024": "cd75393faac9b4ae81860ce57ec8f65a8648910872efcac44026c236f1865925",
+        "xent-1025": "9ebf94685b772be800163efd7a861cb5275520b99cbcd4187df1c322fe8aa612",
+        "epoch-1": "354f8eed2c4c9bb9fc36e078c7d7fa43abc4120d9617de3c153d3f78ab6bab5a",
+        "epoch-2": "0d4f797bdf82f5fc8b2b61e73c77cb5e8c5c726fa6719ec14b1a4df885d996ea",
+        "epoch-3": "55763cf802d30a07e9910a1abeaff25d75c9096eb0c7d36e39480f94b35bd87a",
+        "epoch-1000": "cce705bc432be2f7c1300daa81b1a14551679427e9f988492a5b48d165a32ed7",
+        "epoch-65537": "c488fa62e4f18d50fb8078db774662410d3892e4859cb0dc5aa44bcdf58d9c53",
+        "adam-hyper-0": "5e02a40e74a123188d01e59569e2bb99c9c89089d1e8f8a023adfc87369ce234",
+        "adam-hyper-1": "3364a6d45dc8e13a8bb4c6d5c373c1ca5a9b9b02213f58a738d8649b8a020f42"
+      },
+      "required_vendors": [
+        "cpu",
+        "cuda",
+        "hip"
+      ],
+      "receipt_sha256": {
+        "cuda": "d8563e32775fc64c67b5e64706a56da7a23577934ffc7c84ed0627a18f0012ee",
+        "hip": "f4d90505c97d3ed1fbdf26d80c757c8053604b70a4a9bcb3186fe369519165f5",
+        "cpu": "22dceff8d621e13b593916a0f7e038feca077f2160aedd632b08d81ce4093bb2"
+      }
+    },
+    {
+      "evidence_path": "identical-all/cnn-compare-off-cnn-training.json",
+      "sha256": "730e4930277596147301d47ed26fb93446221ab8b739fb0fb6b7c4e7adc2eaa6",
+      "status": "PASS",
+      "identity": {
+        "sha": "be33488600e71ac49f6a42c364d6e45895fad7d3",
+        "arm": "off",
+        "suite": "cnn-training",
+        "harness_sha256": "e6681bda78e9acfe247925dc3bb8721b6d754f760f38c81bed1cb462299a389e"
+      },
+      "digests": {
+        "cnn-sgd": "a503741c783a5fa192158424b8b477f2ceb3c3a3786b3df2f9c3f7a7ed675448",
+        "cnn-adam": "04d31a0ee37051c4c5eed4454329a82f2410e6341951223c7a099215e1c52e54"
+      },
+      "required_vendors": [
+        "cpu",
+        "cuda",
+        "hip"
+      ],
+      "receipt_sha256": {
+        "cuda": "3cec6f0f46f2b86cec5104dba10a200f7f1b4b100b1b067436ba8c67678d2e14",
+        "hip": "3f822bf588646924b9d169fc0201058038a4cacfc7277dfcb7cae8697c0f86ea",
+        "cpu": "be7db36ec677d607564c80b25d4639a9baa0edeaea5e1d1902a1eea098823f97"
+      }
+    },
+    {
+      "evidence_path": "identical-all/sgd-compare-on-a4d.json",
+      "sha256": "d169014cda5479db9ec43f5c5e08636a11e0e79a511d6ebc1dd64797edeb1b50",
+      "status": "PASS",
+      "identity": {
+        "sha": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+        "arm": "on",
+        "suite": "sgd",
+        "harness_sha256": "5431d5fbae4dfa4e4d4594eacfbbf9c9bacd499d88b2b013cfd5e8b7b86849cc"
+      },
+      "digests": {
+        "sgd-ovr-sgd": "063c2592a3c73137e4c984af112c9370e1101a56c485e528fba082fe9c85fd58",
+        "sgd-ovr-perceptron": "5a6e7f72696a3567e876e4b1143cbc3adb752d52fa21627696383ae83111d208",
+        "sgd-ovr-pa": "d8404e210dcaed2c58aa3398548713fc1ade4108f9ee2f8c96df0ddd8643c94a",
+        "sgd-nan-refusal": "72ea69ded3c8ef308a30cb752d03d6f533de80681f4f8a05b0af803f6b0e6b18",
+        "sgd-overflow-refusal": "72ea69ded3c8ef308a30cb752d03d6f533de80681f4f8a05b0af803f6b0e6b18"
+      },
+      "required_vendors": [
+        "cpu",
+        "cuda",
+        "hip"
+      ],
+      "receipt_sha256": {
+        "cuda": "9f1cb571dadb882b343de6ea6a9b3281883bfdcebbc16abafdbc611ef53a7c6e",
+        "hip": "c606fe1191c49df6d9f6f043ae2deca372adccc3672278778ee07e1371fcce1e",
+        "cpu": "5c51f56a3828ba97251a3b7c4d9733ea5049f4b61c0d5197e8480e49e092808d"
+      }
+    },
+    {
+      "evidence_path": "identical-all/sgd-compare-off-a4d.json",
+      "sha256": "d73446c8f742f0a7f3a4513803d41f5b07951f73b7d99bb2d04cfc328b4c2794",
+      "status": "PASS",
+      "identity": {
+        "sha": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+        "arm": "off",
+        "suite": "sgd",
+        "harness_sha256": "5431d5fbae4dfa4e4d4594eacfbbf9c9bacd499d88b2b013cfd5e8b7b86849cc"
+      },
+      "digests": {
+        "sgd-ovr-sgd": "063c2592a3c73137e4c984af112c9370e1101a56c485e528fba082fe9c85fd58",
+        "sgd-ovr-perceptron": "5a6e7f72696a3567e876e4b1143cbc3adb752d52fa21627696383ae83111d208",
+        "sgd-ovr-pa": "d8404e210dcaed2c58aa3398548713fc1ade4108f9ee2f8c96df0ddd8643c94a",
+        "sgd-nan-refusal": "72ea69ded3c8ef308a30cb752d03d6f533de80681f4f8a05b0af803f6b0e6b18",
+        "sgd-overflow-refusal": "72ea69ded3c8ef308a30cb752d03d6f533de80681f4f8a05b0af803f6b0e6b18"
+      },
+      "required_vendors": [
+        "cpu",
+        "cuda",
+        "hip"
+      ],
+      "receipt_sha256": {
+        "cuda": "7a78a6459db136c50e7d95dd50fae99ff27dda104c1f680068fd872931562656",
+        "hip": "e2d22d58417e7c1e370aae0ea16de5929142084cfb34e152e3b2b0d9954ba40f",
+        "cpu": "5abcaa2742675691c6bef65c1f038ee4015eebe970c065ddb012ab4f419ef239"
+      }
+    },
+    {
+      "evidence_path": "identical-all/cnn-sgd-medium-compare-on-cnn-training.json",
+      "sha256": "5ac3252487468d8c9dbab3bbe6d86e93db4588d535dfbd4bd9dec673323a968b",
+      "status": "PASS",
+      "identity": {
+        "sha": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+        "arm": "on",
+        "suite": "cnn-training",
+        "harness_sha256": "8aefa85f61ecda2ba38ea36ba8eae5af3bdbcf78cf215ed3f961b8b9e0ec2b0b",
+        "fixture_profile": "medium"
+      },
+      "digests": {
+        "cnn-sgd": "461846bed84f5a932f7d8ec0806109e7431bd70ed751581456e9dc31933c96c0",
+        "cnn-adam": "9088a0e52a34ea3ae1cab1fb592d21772076b4d17fc1eec682b4f42a9f1afcd6"
+      },
+      "required_vendors": [
+        "cpu",
+        "cuda",
+        "hip"
+      ],
+      "receipt_sha256": {
+        "cuda": "d6a10445f405fd5328f8a831b1a695ee3be0b46e10ba2e94001473464a244e9c",
+        "hip": "a339d9fc9d7542d4542d4edf2cf1041582f8dec7e6d10e16bf99f3a0bde58e4d",
+        "cpu": "063ebee17ce5203412a6a6fc3c560ee9557a81bc3608aa0618cae4c881e48fd7"
+      }
+    },
+    {
+      "evidence_path": "identical-all/cnn-sgd-medium-compare-on-sgd.json",
+      "sha256": "a67c0d521a93851dfefada17e9ca17952d9b52c64cdd80c5c059889884234753",
+      "status": "PASS",
+      "identity": {
+        "sha": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+        "arm": "on",
+        "suite": "sgd",
+        "harness_sha256": "8aefa85f61ecda2ba38ea36ba8eae5af3bdbcf78cf215ed3f961b8b9e0ec2b0b",
+        "fixture_profile": "medium"
+      },
+      "digests": {
+        "sgd-ovr-sgd": "3aff4c996d7bb4977f7950564ce75ed5667924a8fcc788f8bd0325cead899a1a",
+        "sgd-ovr-perceptron": "ce0e38202a8214efed4d18f6919e66a868713c50fb31488a7e433965ae369ba6",
+        "sgd-ovr-pa": "fce763ac5a01f712e352d7f2fc61f6d9d57b2124bde6f6f6b0e047d3ae63ba6b",
+        "sgd-ovr-sgd-largebatch": "1573580eebdd0f8ef1991457e5ae7631c079dfd106bc6a525e2ec2cf5817be56",
+        "sgd-nan-refusal": "72ea69ded3c8ef308a30cb752d03d6f533de80681f4f8a05b0af803f6b0e6b18",
+        "sgd-overflow-refusal": "72ea69ded3c8ef308a30cb752d03d6f533de80681f4f8a05b0af803f6b0e6b18"
+      },
+      "required_vendors": [
+        "cpu",
+        "cuda",
+        "hip"
+      ],
+      "receipt_sha256": {
+        "cuda": "cf1f62f80dc4be5c7585c62cd26d0e1850778bc78e79a7e7b0911290ab8099c8",
+        "hip": "abad8275cd472df426fadc43ede5c85eca87a4ced2fe96e77bbe399715b89010",
+        "cpu": "b98669068eeb30e94f1a4ec4296cac72cbadd32dd168e2b7610f31bebba0a184"
+      }
+    },
+    {
+      "evidence_path": "identical-all/cnn-sgd-medium-compare-off-cnn-training.json",
+      "sha256": "5688dcaed710f233c7d7879afd3126917ed4914dc51e023f75cbfae31f590a93",
+      "status": "PASS",
+      "identity": {
+        "sha": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+        "arm": "off",
+        "suite": "cnn-training",
+        "harness_sha256": "8aefa85f61ecda2ba38ea36ba8eae5af3bdbcf78cf215ed3f961b8b9e0ec2b0b",
+        "fixture_profile": "medium"
+      },
+      "digests": {
+        "cnn-sgd": "8cc7cdfa4a8d64cd3b92ce26d326fcbe31a243cddd503b303f21459686556d38",
+        "cnn-adam": "acd0d663103f6382a4865863caccc38008d9ef2e102e57c32ef5164268c7a7c2"
+      },
+      "required_vendors": [
+        "cpu",
+        "cuda",
+        "hip"
+      ],
+      "receipt_sha256": {
+        "cuda": "b1d2cbd36593cc553c7adf96bb4c79fe1d9db6e7f724d120ab5b640b2ac31fe1",
+        "hip": "860dcaf896f4eb177d036973e305ef72ffb1ff749bc9c7c0c010bfa1b3d7fa7a",
+        "cpu": "bf29ebaad6a3f856e461fa427aab7f6623244fc946dfa3394416f70b559f4773"
+      }
+    },
+    {
+      "evidence_path": "identical-all/cnn-sgd-medium-compare-off-sgd.json",
+      "sha256": "49c5090a98cba460e406d806cd5a3bbefa63402794f2ffcdf0e985fc68563c93",
+      "status": "PASS",
+      "identity": {
+        "sha": "a4d01a130c8d05ff0208a39989d36b86b69aa0ed",
+        "arm": "off",
+        "suite": "sgd",
+        "harness_sha256": "8aefa85f61ecda2ba38ea36ba8eae5af3bdbcf78cf215ed3f961b8b9e0ec2b0b",
+        "fixture_profile": "medium"
+      },
+      "digests": {
+        "sgd-ovr-sgd": "3aff4c996d7bb4977f7950564ce75ed5667924a8fcc788f8bd0325cead899a1a",
+        "sgd-ovr-perceptron": "ce0e38202a8214efed4d18f6919e66a868713c50fb31488a7e433965ae369ba6",
+        "sgd-ovr-pa": "fce763ac5a01f712e352d7f2fc61f6d9d57b2124bde6f6f6b0e047d3ae63ba6b",
+        "sgd-ovr-sgd-largebatch": "1573580eebdd0f8ef1991457e5ae7631c079dfd106bc6a525e2ec2cf5817be56",
+        "sgd-nan-refusal": "72ea69ded3c8ef308a30cb752d03d6f533de80681f4f8a05b0af803f6b0e6b18",
+        "sgd-overflow-refusal": "72ea69ded3c8ef308a30cb752d03d6f533de80681f4f8a05b0af803f6b0e6b18"
+      },
+      "required_vendors": [
+        "cpu",
+        "cuda",
+        "hip"
+      ],
+      "receipt_sha256": {
+        "cuda": "c43e400eb7da7c4ac407bf9eac108f7b1064a1a2a938e2485c9f1a82cedf7ad7",
+        "hip": "da38eab14e55c50954f3d8c143f990911fdc52a68f10ec86c94b178afecda612",
+        "cpu": "3686a227b86edece1bb9a17534c3f30955a4c672af807fefab644faaeb2f0b09"
+      }
+    }
+  ]
+}

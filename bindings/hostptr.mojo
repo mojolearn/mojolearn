@@ -103,3 +103,35 @@ def read_i8(addr: Int, n: Int) raises -> List[Int8]:
     if n > 0:
         memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
+
+
+def list_f32(src: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> List[Float32]:
+    """One memcpy of n borrowed float32 words into an owned List (no
+    per-element host loop); the List then goes to one device upload."""
+    var out = List[Float32](length=max(n, 0), fill=Float32(0))
+    if n > 0:
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+    return out^
+
+
+def list_i32(src: MutPointer[Int32, MutUntrackedOrigin], n: Int) -> List[Int32]:
+    """One memcpy of n borrowed int32 words into an owned List."""
+    var out = List[Int32](length=max(n, 0), fill=Int32(0))
+    if n > 0:
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+    return out^
+
+
+def store_f32(dst: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32], n: Int):
+    """One memcpy of the first n words of `values` into a borrowed output."""
+    if n > 0:
+        memcpy(dest=dst, src=values.unsafe_ptr(), count=n)
+    _ = len(values)
+
+
+def list_u32(src: MutPointer[UInt32, MutUntrackedOrigin], n: Int) -> List[UInt32]:
+    """One memcpy of n borrowed uint32 words into an owned List."""
+    var out = List[UInt32](length=max(n, 0), fill=UInt32(0))
+    if n > 0:
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+    return out^

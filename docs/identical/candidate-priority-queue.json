@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "scope": "First three meaningful opt-in candidates after core wave, not75blind builds. No jobs queued by this plan.",
+  "queue": [
+    {
+      "priority": 1,
+      "recipe": "gmm_estep_stack/1",
+      "lane": "gmm",
+      "fixture": {
+        "block": "reg-taxi.npz",
+        "fit_rows": 50000,
+        "features": 11,
+        "n_components": 4,
+        "max_iter": 20,
+        "random_state": 7
+      },
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_GMM_ESTEP_STACK=1"
+      ],
+      "builders": [
+        "base",
+        "base_host",
+        "mixture",
+        "mixture_host"
+      ],
+      "eligibility": "8,800,000-byte stacked n*K*d float32 operand is below the 1GiB source cap; all four component blocks are nonempty.",
+      "required_targeted_gate": "Read back GMM_ESTEP_STACK and actual stack dispatch. Compare means, covariances, weights, per-row likelihood/responsibilities and finite/convergence state with host; means_ alone is insufficient.",
+      "reason": "Fixed launch/iteration savings; same arithmetic; existing canonical medium fixture and mixture host twin.",
+      "status": "READY_FOR_ROOT_SELECTED_TARGETED_COMPILE_AND_IDENTITY; NOT_READY_FOR_TIMING",
+      "timing_condition": "Core wave green; eligible route and targeted same-version NVIDIA/AMD/host identity plus quality pass. Then one baseline and one candidate measurement only; both recipe roles use master armON."
+    },
+    {
+      "priority": 2,
+      "recipe": "kmeans_accumulator_rows/256",
+      "lane": "kmeans",
+      "fixture": {
+        "block": "reg-taxi.npz",
+        "fit_rows": 50000,
+        "features": 11,
+        "n_clusters": 8,
+        "n_init": 1,
+        "random_state": 7
+      },
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256=1"
+      ],
+      "builders": [
+        "base",
+        "base_host",
+        "estimators",
+        "estimators_host"
+      ],
+      "eligibility": "50k rows spans196 candidate accumulator chunks versus49 default1024-row chunks; skinny11-feature data matches the candidate rationale.",
+      "required_targeted_gate": "Read actual accumulator block rows256 versus1024. Compare centers, labels, inertia and iteration state across GPU/host and validate unchanged integer-total range.",
+      "reason": "Simple integer regrouping, small bounded memory footprint, existing classical driver and host identity path.",
+      "status": "READY_FOR_ROOT_SELECTED_TARGETED_COMPILE_AND_IDENTITY; NOT_READY_FOR_TIMING",
+      "timing_condition": "Core wave green; eligible route and targeted same-version NVIDIA/AMD/host identity plus quality pass. Then one baseline and one candidate measurement only; both recipe roles use master armON."
+    },
+    {
+      "priority": 3,
+      "recipe": "ocsvm_chunk256/256",
+      "lane": "ocsvm",
+      "fixture": {
+        "block": "cls-taxi.npz",
+        "fit_rows": 10000,
+        "query_rows": 10000,
+        "features": 11,
+        "gamma": "scale",
+        "max_iter": -1
+      },
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_OCSVM_CHUNK256=1"
+      ],
+      "builders": [
+        "base",
+        "base_host",
+        "x_neighbors",
+        "x_neighbors_host"
+      ],
+      "eligibility": "Board SUB[quad]=10000 on canonical50k source. Resident Gram about400MB fits both rented devices; candidate is active with IDENTICAL resident/default2-launch solver.",
+      "required_targeted_gate": "Read OCSVM_CHUNK_RUN256 versus64; record actual iteration count. Compare dual coefficients, intercept, decision scores and labels; include a convergence-boundary fixture. If all fixtures stop<=64 iterations, skip candidate timing rather than claiming a useful comparison.",
+      "reason": "Targets fixed host-poll overhead in an already resident algorithm; use existing exact medium row and refuse timing if iteration eligibility is not demonstrated.",
+      "status": "READY_FOR_ROOT_SELECTED_TARGETED_COMPILE_AND_IDENTITY; NOT_READY_FOR_TIMING",
+      "timing_condition": "Core wave green; eligible route and targeted same-version NVIDIA/AMD/host identity plus quality pass. Then one baseline and one candidate measurement only; both recipe roles use master armON."
+    }
+  ],
+  "deferred": {
+    "rf_device_level_loop": "Promising but requires explicit max_leaves=-1, single sampling round and dedicated queue/tail state gate; DART255-leaf fixture is ineligible.",
+    "extra_trees_u16_bins": "Taxi11features is ineligible; requires wide canonical fixture and model-changing predictive-quality gate.",
+    "block_eigh": "Quarantined after strict convergence failure; no timing until algorithm repaired."
+  }
+}

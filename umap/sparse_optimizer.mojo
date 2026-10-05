@@ -12,7 +12,10 @@ from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.optimizer import _finite, _clip, _splitmix64
-from umap.optimizer_identical_device import optimize_sparse_layout_identical_device
+from umap.optimizer_identical_device import (
+    optimize_sparse_layout_identical_device,
+    umap_sparse_graph_to_device,
+)
 from umap.optimizer_fast import (
     FAST_OPT_TPB,
     UMAP_FUSED_EPOCH,
@@ -62,7 +65,7 @@ def sparse_weight_at(graph: SparseFuzzySimplicialGraph, row: Int, col: Int) -> F
     return Float32(0.0)
 
 
-def optimize_sparse_layout_identical(
+def optimize_sparse_layout_identical_reference(
     initial_embedding: List[Float32],
     graph: SparseFuzzySimplicialGraph,
     n_samples: Int,
@@ -205,15 +208,11 @@ def optimize_sparse_layout_identical_on_device(
         raise Error("UMAP optimizer negative sampling parameters are invalid")
     if not (a > Float32(0.0)) or not (b > Float32(0.0)):
         raise Error("UMAP optimizer curve parameters must be positive")
-    var max_weight = validate_sparse_weights(graph)
-    if not (max_weight > Float32(0.0)):
-        raise Error("UMAP optimizer graph has no positive edges")
-    for i in range(len(initial_embedding)):
-        if not _finite(initial_embedding[i]):
-            raise Error("UMAP optimizer initialization is not finite")
+    # The graph's validation, the positive-edge check and the init check run
+    # on the device, in this order (`umap_sparse_graph_to_device`).
     return optimize_sparse_layout_identical_device(
         ctx, initial_embedding, graph.offsets, graph.indices, graph.values,
-        max_weight, n_samples, n_components, n_epochs, initial_learning_rate,
+        n_samples, n_components, n_epochs, initial_learning_rate,
         negative_sample_rate, repulsion_strength, a, b, seed,
     )
 
@@ -290,58 +289,19 @@ def optimize_sparse_layout_fast(
         raise Error("UMAP FAST optimizer parameters are invalid")
     if not (a > Float32(0.0)) or not (b > Float32(0.0)):
         raise Error("UMAP FAST optimizer curve parameters are invalid")
-    # Filter explicit zero candidates while keeping row/column order.
-    # Positive CSR positions equal the dense reference's edge ordinals.
-    var row_offsets = List[UInt32]()
-    var tails = List[UInt32]()
-    var edge_weights = List[Float32]()
-    row_offsets.append(UInt32(0))
-    var max_weight = validate_sparse_weights(graph)
-    for head in range(n_samples):
-        for edge in range(graph.offsets[head], graph.offsets[head + 1]):
-            var tail = Int(graph.indices[edge])
-            var weight = graph.values[edge]
-            if not isfinite(weight) or weight < Float32(0.0):
-                raise Error("UMAP FAST optimizer graph weight is invalid")
-            if weight > max_weight:
-                max_weight = weight
-            if weight != sparse_weight_at(graph, tail, head):
-                raise Error("UMAP FAST optimizer requires symmetric weights")
-            if head != tail and weight > Float32(0.0):
-                tails.append(UInt32(tail))
-                edge_weights.append(weight)
-        row_offsets.append(UInt32(len(tails)))
-    if not (max_weight > Float32(0.0)):
-        raise Error("UMAP FAST optimizer graph has no positive edges")
-    if len(edge_weights) == 0:
-        raise Error("UMAP FAST optimizer graph has no non-self edges")
-    for i in range(len(initial)):
-        if not isfinite(initial[i]):
-            raise Error("UMAP FAST optimizer initialization is invalid")
-    var h_initial = ctx.enqueue_create_host_buffer[DType.float32](len(initial))
-    var h_offsets = ctx.enqueue_create_host_buffer[DType.uint32](
-        len(row_offsets)
+    # The graph's validation, the kept-edge compaction (positive CSR
+    # positions equal the dense reference's edge ordinals), the symmetry
+    # refusal and the init check run on the device, in the host walk's
+    # refusal order (`umap_sparse_graph_to_device`, lane cpu3-neighbors).
+    var g = umap_sparse_graph_to_device(
+        ctx, initial, graph.offsets, graph.indices, graph.values, n_samples, True
     )
-    var h_tails = ctx.enqueue_create_host_buffer[DType.uint32](len(tails))
-    var h_weights = ctx.enqueue_create_host_buffer[DType.float32](
-        len(edge_weights)
-    )
-    for i in range(len(initial)):
-        h_initial.unsafe_ptr().unsafe_store(i, initial[i])
-    for i in range(len(row_offsets)):
-        h_offsets.unsafe_ptr().unsafe_store(i, row_offsets[i])
-    for i in range(len(tails)):
-        h_tails.unsafe_ptr().unsafe_store(i, tails[i])
-        h_weights.unsafe_ptr().unsafe_store(i, edge_weights[i])
-    var first = ctx.enqueue_create_buffer[DType.float32](len(initial))
+    var max_weight = g.max_weight
+    var g_first = g.first^
+    var g_offsets = g.offsets^
+    var g_tails = g.tails^
+    var g_weights = g.weights^
     var second = ctx.enqueue_create_buffer[DType.float32](len(initial))
-    var d_offsets = ctx.enqueue_create_buffer[DType.uint32](len(row_offsets))
-    var d_tails = ctx.enqueue_create_buffer[DType.uint32](len(tails))
-    var d_weights = ctx.enqueue_create_buffer[DType.float32](len(edge_weights))
-    ctx.enqueue_copy(dst_buf=first, src_ptr=h_initial.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_offsets, src_ptr=h_offsets.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_tails, src_ptr=h_tails.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=d_weights, src_ptr=h_weights.unsafe_ptr())
     # the fused kernel is 2D/3D; other dimensions take the per-component
     # kernel, which reads the dimension at run time
     var fused = UMAP_FUSED_EPOCH and (n_components == 2 or n_components == 3)
@@ -349,21 +309,21 @@ def optimize_sparse_layout_fast(
         for epoch in range(n_epochs if fused else 0):
             if n_components == 2:
                 _fused_epoch[2](
-                    ctx, first, second, d_offsets, d_tails, d_weights,
+                    ctx, g_first, second, g_offsets, g_tails, g_weights,
                     epoch, n_samples, n_epochs, learning_rate, negative_rate,
                     repulsion, a, b, max_weight, seed,
                 )
             else:
                 _fused_epoch[3](
-                    ctx, first, second, d_offsets, d_tails, d_weights,
+                    ctx, g_first, second, g_offsets, g_tails, g_weights,
                     epoch, n_samples, n_epochs, learning_rate, negative_rate,
                     repulsion, a, b, max_weight, seed,
                 )
     for epoch in range(n_epochs if not fused else 0):
         if epoch % 2 == 0:
             ctx.enqueue_function[umap_jacobi_epoch_kernel](
-                first.unsafe_ptr(), d_offsets.unsafe_ptr(),
-                d_tails.unsafe_ptr(), d_weights.unsafe_ptr(),
+                g_first.unsafe_ptr(), g_offsets.unsafe_ptr(),
+                g_tails.unsafe_ptr(), g_weights.unsafe_ptr(),
                 second.unsafe_ptr(),
                 Int32(n_samples), Int32(n_components), Int32(epoch),
                 Int32(n_epochs), learning_rate, Int32(negative_rate),
@@ -373,34 +333,26 @@ def optimize_sparse_layout_fast(
             )
         else:
             ctx.enqueue_function[umap_jacobi_epoch_kernel](
-                second.unsafe_ptr(), d_offsets.unsafe_ptr(),
-                d_tails.unsafe_ptr(), d_weights.unsafe_ptr(),
-                first.unsafe_ptr(),
+                second.unsafe_ptr(), g_offsets.unsafe_ptr(),
+                g_tails.unsafe_ptr(), g_weights.unsafe_ptr(),
+                g_first.unsafe_ptr(),
                 Int32(n_samples), Int32(n_components), Int32(epoch),
                 Int32(n_epochs), learning_rate, Int32(negative_rate),
                 repulsion, a, b, max_weight, seed,
                 grid_dim=((n_samples + FAST_OPT_TPB - 1) // FAST_OPT_TPB, 1, 1),
                 block_dim=(FAST_OPT_TPB, 1, 1),
             )
-    var host_out = ctx.enqueue_create_host_buffer[DType.float32](len(initial))
+    var out = List[Float32](length=len(initial), fill=Float32(0.0))
     if n_epochs % 2 == 0:
-        ctx.enqueue_copy(dst_ptr=host_out.unsafe_ptr(), src_buf=first)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=g_first)
     else:
-        ctx.enqueue_copy(dst_ptr=host_out.unsafe_ptr(), src_buf=second)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=second)
     ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(len(initial)):
-        out.append(host_out.unsafe_ptr().unsafe_load(i))
-    _ = h_initial^
-    _ = h_offsets^
-    _ = h_tails^
-    _ = h_weights^
-    _ = first^
     _ = second^
-    _ = d_offsets^
-    _ = d_tails^
-    _ = d_weights^
-    _ = host_out^
+    _ = g_first^
+    _ = g_offsets^
+    _ = g_tails^
+    _ = g_weights^
     return out^
 
 

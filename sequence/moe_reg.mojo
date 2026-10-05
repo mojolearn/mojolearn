@@ -39,7 +39,7 @@ from max.gpu.sync import barrier
 
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_exp, identical_silu
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_exp, identical_silu
 from sequence.ops import FP, add, fma3, ld, mul, st, sub
 
 # FAST + Apple default since the M3 A/B (lane/apple-fast-moespeed 2813b2dff,
@@ -48,9 +48,17 @@ from sequence.ops import FP, add, fma3, ld, mul, st, sub
 # round trip. MOJOLEARN_MOE_REGTILE_OFF turns both off (DEVGROUP needs
 # REGTILE); MOJOLEARN_MOE_DEVGROUP_OFF turns DEVGROUP alone off. The old
 # -D MOJOLEARN_MOE_REGTILE / MOJOLEARN_MOE_DEVGROUP names are harmless.
+# lane/idn-gates (2026-10-04): REGTILE (and DEVGROUP with it) is also the
+# IDENTICAL default on every vendor: every cell's chain is the item's (the
+# same flushed operands, ascending, through the same fma3 from +0.0) and the
+# route tail is the item's statements on the stored logits.
+# -D MOJOLEARN_IDN_GATES_OFF (or MOJOLEARN_MOE_REGTILE_OFF) restores
+# sequence/moe_tiled.mojo in IDENTICAL.
 comptime MOE_REGTILE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    (
+        (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator())
+        or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()))
+    )
     and not is_defined["MOJOLEARN_MOE_REGTILE_OFF"]()
 )
 comptime MOE_DEVGROUP = MOE_REGTILE and not is_defined["MOJOLEARN_MOE_DEVGROUP_OFF"]()

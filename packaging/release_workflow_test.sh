@@ -63,7 +63,9 @@ no(){ echo "  FAIL  $1  ($2)"; FAIL=$((FAIL+1)); }
 
 mkbox(){ # $1=version ; builds a fake workspace (a git checkout, as the job's is), echoes its path
   local V="$1" B; B="$(mktemp -d "$SP/box.XXXXXX")"
-  mkdir -p "$B/python/dist" "$B/stage/qualification" "$B/tools" "$B/tmp"
+  mkdir -p "$B/python/dist" "$B/python/mojolearn" "$B/stage/qualification" "$B/tools" "$B/tmp"
+  cp "$REPO/tools/gpu_release_projects.py" "$B/tools/"
+  cp "$REPO/python/mojolearn/gpu_plugins.py" "$B/python/mojolearn/"
   printf 'version = "%s"\n' "$V" > "$B/python/pyproject.toml"
   : > "$B/python/dist/mojolearn-$V-py3-none-macosx_11_0_arm64.whl"
   echo "macos body $V" > "$B/python/dist/mojolearn-$V-py3-none-macosx_11_0_arm64.whl"
@@ -107,22 +109,39 @@ SPLIT_STUB
 }
 stage(){ # $1=box $2=filename [$3=BAD to corrupt the sidecar]
   local B="$1" N="$2"
-  echo "linux body" > "$B/stage/$N"
+  stage_payloads "$B"
+  stage_zip "$B" "$N" 1
+  rm -f "$B/stage/$N.sha256"
   if [ "${3:-}" = BAD ]; then echo "0000000000000000000000000000000000000000000000000000000000000000  $N" > "$B/stage/$N.sha256"
   elif [ "${3:-}" = NOSIDE ]; then :
   else shasum -a 256 "$B/stage/$N" | sed "s#$B/stage/##" > "$B/stage/$N.sha256"; fi
 }
 stage_zip(){ # $1=box $2=filename [$3=split marker: 1] ; a real zip, as the split detection reads it
   python3 - "$1/stage/$2" "${3:-0}" <<'ZIP'
-import sys, zipfile
+import sys, zipfile, json, importlib.util
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("fixture_registry", Path(sys.argv[1]).parents[1] / "python/mojolearn/gpu_plugins.py")
+gp = importlib.util.module_from_spec(spec); spec.loader.exec_module(gp)
 path, marker = sys.argv[1], sys.argv[2] == '1'
 name = path.rsplit('/', 1)[-1]
 with zipfile.ZipFile(path, 'w') as z:
-    z.writestr(name.split('-')[0] + '-' + name.split('-')[1] + '.dist-info/METADATA', 'fixture')
+    z.writestr(name.split('-')[0] + '-' + name.split('-')[1] + '.dist-info/METADATA',
+               'Metadata-Version: 2.4\nName: ' + name.split('-')[0].replace('_', '-') +
+               '\nVersion: ' + name.split('-')[1] + '\n')
     if marker:
-        z.writestr(name.split('-')[0] + '-' + name.split('-')[1] + '.dist-info/gpu_plugins.json', '{}')
+        z.writestr(name.split('-')[0] + '-' + name.split('-')[1] + '.dist-info/gpu_plugins.json', json.dumps(gp.core_marker(name.split('-')[1])))
 ZIP
   ( cd "$1/stage" && shasum -a 256 "$2" > "$2.sha256" ); }
+stage_payloads(){
+  local profile
+  for profile in nvidia amd nvidia_sm89 nvidia_sm90 amd_gfx942; do
+    stage_zip "$1" "mojolearn_${profile}-0.3.0-py3-none-manylinux_2_35_x86_64.whl"
+  done
+}
+stage_complete(){
+  stage_zip "$1" "mojolearn-0.3.0-py3-none-manylinux_2_35_x86_64.whl" 1
+  stage_payloads "$1"
+}
 run_admit(){ ( cd "$1" && MOJOLEARN_LINUX_WHEEL_DIR="$1/stage" GITHUB_WORKSPACE="$1" GITHUB_OUTPUT="$1/gho.txt" RUNNER_TEMP="$1/tmp" bash "$SP/admit.sh" ) >"$1/admit.out" 2>&1; }
 run_digest(){ ( cd "$1" && GITHUB_OUTPUT="$1/gho2.txt" bash "$SP/digest.sh" ) >"$1/digest.out" 2>&1; }
 
@@ -147,13 +166,13 @@ B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl
 refuses "$B" "a wheel with no sidecar is REFUSED" "has no .sha256 sidecar"
 
 B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.2.0-py3-none-manylinux_2_28_x86_64.whl"
-refuses "$B" "a wheel of the WRONG VERSION is REFUSED" "is not version"
+refuses "$B" "a wheel of the WRONG VERSION is REFUSED" "expected version"
 
 B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.3.0-py3-none-linux_x86_64.whl"
 refuses "$B" "an UNAUDITED linux_x86_64 tag is REFUSED" "carries no manylinux tag"
 
 B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"; stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_34_x86_64.whl"
-refuses "$B" "TWO staged wheels is REFUSED rather than guessed" "stage exactly one"
+refuses "$B" "TWO staged wheels is REFUSED rather than guessed" "complete Linux release"
 
 B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"
 : > "$B/refuse-qualification"
@@ -167,36 +186,36 @@ echo "== admit: the split Linux set (core + plugins) =="
 CORE=mojolearn-0.3.0-py3-none-manylinux_2_35_x86_64.whl
 NVIDIA=mojolearn_nvidia-0.3.0-py3-none-manylinux_2_35_x86_64.whl
 AMD=mojolearn_amd-0.3.0-py3-none-manylinux_2_35_x86_64.whl
-B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$NVIDIA"; stage_zip "$B" "$AMD"
+B=$(mkbox 0.3.0); stage_complete "$B"
 run_admit "$B" && [ -f "$B/python/dist/$CORE" ] && [ -f "$B/python/dist/$NVIDIA" ] && [ -f "$B/python/dist/$AMD" ] \
   && grep -q '"release-split"' "$B/verifier-invocation.json" && grep -q "$AMD" "$B/split-audit-invocation.txt" \
-  && grep -qx 'plugins=\["amd", "nvidia"\]' "$B/gho.txt" \
+  && grep -qx 'plugins=\["amd","nvidia"\]' "$B/gho.txt" \
   && ok "the split set is admitted, split-audited and qualified as a set" || no "split set admitted" "$(tail -3 "$B/admit.out")"
 
-B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$NVIDIA"; stage_zip "$B" "$AMD"; rmdir "$B/stage/qualification"
-run_admit "$B" && [ -f "$B/python/dist/$AMD" ] && grep -qx 'plugins=\["amd", "nvidia"\]' "$B/gho.txt" \
+B=$(mkbox 0.3.0); stage_complete "$B"; rmdir "$B/stage/qualification"
+run_admit "$B" && [ -f "$B/python/dist/$AMD" ] && grep -qx 'plugins=\["amd","nvidia"\]' "$B/gho.txt" \
   && ok "the split set is admitted with no qualification staged" || no "split set, no qualification" "$(tail -3 "$B/admit.out")"
 
 # the split core REQUIRES both plugins at its version: it never stages without both
 B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1
-refuses "$B" "a split core with no plugin is REFUSED" "the split core requires mojolearn-nvidia"
+refuses "$B" "a split core with no plugin is REFUSED" "complete Linux release"
 
 B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$NVIDIA"
-refuses "$B" "a split core without the AMD plugin is REFUSED" "the split core requires mojolearn-amd"
+refuses "$B" "a split core without the AMD plugin is REFUSED" "complete Linux release"
 
 B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$AMD"
-refuses "$B" "a split core without the NVIDIA plugin is REFUSED" "the split core requires mojolearn-nvidia"
+refuses "$B" "a split core without the NVIDIA plugin is REFUSED" "complete Linux release"
 
 B=$(mkbox 0.3.0); stage_zip "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"; stage_zip "$B" "$NVIDIA"
-refuses "$B" "a plugin beside a COMBINED wheel is REFUSED" "a combined wheel ships alone"
+refuses "$B" "a plugin beside a COMBINED wheel is REFUSED" "split-package marker"
 
 B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "mojolearn_vulkan-0.3.0-py3-none-manylinux_2_35_x86_64.whl"
-refuses "$B" "a wheel of no known project is REFUSED" "is not version 0.3.0 of mojolearn"
+refuses "$B" "a wheel of no known project is REFUSED" "unknown GPU release project"
 
 B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$AMD"; stage_zip "$B" "mojolearn_nvidia-0.2.0-py3-none-manylinux_2_35_x86_64.whl"
-refuses "$B" "a plugin of the WRONG VERSION is REFUSED" "is not version 0.3.0"
+refuses "$B" "a plugin of the WRONG VERSION is REFUSED" "expected version 0.3.0"
 
-B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$NVIDIA"; stage_zip "$B" "$AMD"; : > "$B/refuse-split"
+B=$(mkbox 0.3.0); stage_complete "$B"; : > "$B/refuse-split"
 refuses "$B" "a split set failing split_audit is REFUSED" "TEST SPLIT AUDIT: refused"
 [ ! -e "$B/python/dist/$CORE" ] && ok "a refused split set is never copied" || no "refused split set copied" "copied"
 
@@ -209,17 +228,17 @@ B=$(mkbox 0.3.0); run_digest "$B" \
 B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"
 run_admit "$B" && run_digest "$B" \
   && [ -s "$B/verifier-invocation.json" ] \
-  && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 2 ] \
+  && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 7 ] \
   && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -n 'macosx' | cut -d: -f1)" = 2 ] \
-  && ok "two wheels, macOS FIRST in the manifest" \
+  && ok "seven wheels, macOS FIRST in the manifest" \
   || no "two-wheel manifest" "$(sed -n '/wheel_manifest/,/MANIFEST_EOF/p' "$B/gho2.txt")"
 
-B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$NVIDIA"; stage_zip "$B" "$AMD"
+B=$(mkbox 0.3.0); stage_complete "$B"
 run_admit "$B" && run_digest "$B" \
-  && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 4 ] \
+  && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 7 ] \
   && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -n 'macosx' | cut -d: -f1)" = 2 ] \
   && sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -q "  $AMD\$" \
-  && ok "the split set's four wheels, macOS FIRST, plugins in the manifest" \
+  && ok "the split set's seven wheels, macOS FIRST, plugins in the manifest" \
   || no "split manifest" "$(sed -n '/wheel_manifest/,/MANIFEST_EOF/p' "$B/gho2.txt")"
 
 echo "== publish =="

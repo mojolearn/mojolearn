@@ -44,7 +44,8 @@ GPU_PLUGINS = load_gpu_plugins()
 SPLIT_PROFILE = 'release-split'
 #: wheel-name prefix -> (distribution, vendor directory or None for the core)
 DISTRIBUTIONS = {'mojolearn': ('mojolearn', None),
-                 **{row['wheel_name']: (row['distribution'], vendor) for vendor, row in GPU_PLUGINS.PLUGINS.items()}}
+                 **{row['wheel_name']: (row['distribution'], row['profile'])
+                    for row in GPU_PLUGINS.distribution_rows(include_experimental=True)}}
 
 
 def released_version(source_root=None):
@@ -138,7 +139,7 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
         split_core = plugin_vendor is None and dist + GPU_PLUGINS.CORE_MARKER in files
         if plugin_vendor is not None or split_core:
             verify_split_wheel(path, version, released, release_profile, qualification_root, plugin_vendor,
-                               distribution, dist, files, metadata, small)
+                               distribution, dist, files, metadata, small, macos_smoke_source)
             return sorted(tags)
         overlay_present = dist + 'ALPHA_PROVENANCE.json' in files
         if version == released and ('linux' in parts[-1]) and not overlay_present:
@@ -263,64 +264,38 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
     return sorted(tags)
 
 
-def verify_split_wheel(path, version, released, release_profile, qualification_root, vendor,
-                       distribution, dist, files, metadata, small):
-    """One wheel of the split Linux set, file checks only: a fresh payload of
-    the split packer profile, the exact version pins both ways, the marker
-    documents gpu_plugins.py writes, and each wheel's ownership (the core no
-    GPU set, a plugin only its own vendor's directory and no Python). The
-    set-level partition proof is tools/wheel_api_audit.py --split, run by the
-    packer; installed qualification of a split set is admitted on the whole
-    set (tools/check_linux_release_qualification.py --profile release-split),
-    never on one wheel of it, so a qualification archive bound to one split
-    wheel is refused here."""
-    role = GPU_PLUGINS.CORE_PROFILE if vendor is None else GPU_PLUGINS.PLUGINS[vendor]['profile']
-    require(version == released and release_profile == 'alpha-api' and path.name[:-4].split('-')[-1].startswith('manylinux_')
+def verify_split_wheel(path, version, released, release_profile, qualification_root, profile,
+                       distribution, dist, files, metadata, small, expected_source=None):
+    """Admit released architecture packaging without inventing GPU qualification."""
+    role = GPU_PLUGINS.CORE_PROFILE if profile is None else profile
+    require(version == released and release_profile == 'alpha-api'
+            and path.name[:-4].split('-')[-1].startswith('manylinux_')
             and path.name.endswith('_x86_64.whl'),
-            'a split Linux wheel is admitted only as the released alpha-api version with a manylinux x86_64 tag')
-    require(qualification_root is None,
-            'installed qualification of a split set is admitted on the whole set, not on one wheel of it')
+            'a split Linux wheel requires the released alpha version and manylinux tag')
+    require(qualification_root is None, 'split qualification must cover the complete installed set')
+    if profile is not None:
+        require(GPU_PLUGINS.package(profile)['release_enabled'],
+                'experimental PTX payload is not admitted for publication')
     require(dist + 'ALPHA_PROVENANCE.json' not in files and dist + 'LINUX_PAYLOAD.json' in files,
-            'a split Linux wheel needs a fresh payload inventory, not an inherited overlay')
+            'a split wheel requires a fresh payload inventory')
     payload = decode(small(dist + 'LINUX_PAYLOAD.json'))
     split = payload.get('split') if isinstance(payload, dict) else None
-    require(payload.get('schema') == 'mojolearn.linux-payload.v1' and payload.get('version') == version
-            and payload.get('release_profile') == 'alpha-api' and payload.get('assembly_profile') == SPLIT_PROFILE
-            and isinstance(split, dict) and split.get('role') == role and split.get('distribution') == distribution,
+    require(payload.get('schema') == 'mojolearn.linux-payload.v1'
+            and payload.get('version') == version and payload.get('release_profile') == 'alpha-api'
+            and payload.get('assembly_profile') == SPLIT_PROFILE
+            and isinstance(split, dict) and split.get('role') == role
+            and split.get('distribution') == distribution,
             'split Linux payload profile/role mismatch')
-    requires = metadata.get_all('Requires-Dist', [])
-    payload_members = [n for n in files if not n.startswith(dist)]
-    if vendor is None:
-        stray = [n for n in payload_members if GPU_PLUGINS.member_vendor(n)]
-        require(not stray, 'the split core carries a GPU set member: ' + (stray[0] if stray else ''))
-        # `pip install mojolearn` WORKS FOR EVERYONE (2026-09-26): the core
-        # requires EVERY plugin at its own version exactly (no marker, no
-        # GPU extra); the numpy and verify extras are allowed. Each plugin pins the core back
-        # (checked below on the plugin)
-        plugin_names = {r['distribution'] for r in GPU_PLUGINS.PLUGINS.values()}
-        on_plugin = [r for r in requires
-                     if r.split(';')[0].split('=')[0].split('[')[0].split('<')[0].split('>')[0]
-                     .split('!')[0].split('~')[0].strip().lower().replace('_', '-') in plugin_names]
-        want = GPU_PLUGINS.core_requirements(version)
-        require(not (set(metadata.get_all('Provides-Extra', [])) - {'numpy', 'verify'})
-                and sorted(on_plugin) == sorted(want) and len(on_plugin) == len(set(on_plugin)),
-                'the split core must declare no extras other than numpy and verify and require exactly ' + ', '.join(want)
-                + ' (found ' + repr(on_plugin) + ')')
-        require(decode(small(dist + GPU_PLUGINS.CORE_MARKER)) == GPU_PLUGINS.core_marker(version),
-                'split core marker disagrees with gpu_plugins.py')
-        require(small('mojolearn/identity_columns/COMMIT').decode().strip() == payload.get('source_commit'),
+    require(re.fullmatch('[0-9a-f]{40}', payload.get('source_commit', '')) is not None,
+            'split wheel requires a full source commit')
+    if expected_source is not None:
+        require(payload['source_commit'] == expected_source, 'split wheel differs from frozen source')
+    from wheel_api_audit import split_audit
+    problems = split_audit([path])['problems']
+    require(not problems, '; '.join(problems))
+    if profile is None:
+        require(small('mojolearn/identity_columns/COMMIT').decode().strip() == payload['source_commit'],
                 'split core source witness differs from its payload')
-        return
-    stray = [n for n in payload_members if GPU_PLUGINS.member_vendor(n) != vendor]
-    require(not stray, distribution + ' carries a member outside mojolearn/' + vendor + '/: '
-            + (stray[0] if stray else ''))
-    require(any(n.endswith('.so') for n in payload_members) and not any(n.endswith('.py') for n in payload_members),
-            distribution + ' must carry binaries and no Python')
-    require(requires == ['mojolearn==' + version] and not metadata.get_all('Provides-Extra', []),
-            distribution + ' must require exactly mojolearn==' + version)
-    arches = {n.split('/')[2] for n in payload_members}
-    require(decode(small(dist + GPU_PLUGINS.PLUGIN_MARKER)) == GPU_PLUGINS.plugin_marker(vendor, version, arches),
-            distribution + ' marker disagrees with its payload or gpu_plugins.py')
 
 
 def extract_qualification(path, expected_sha, output):

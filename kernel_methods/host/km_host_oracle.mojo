@@ -72,6 +72,7 @@ from std.sys.compile import is_defined
 
 from core.host_parallel import host_parallelize
 
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.numerics import (
     ftz,
     identical_cos,
@@ -95,6 +96,7 @@ from decomposition.host.pca_oracle import (
     host_sign_flip,
 )
 from gemm.host.identical_gemm import OP_NN, OP_NT, gemm_oracle
+from x_decomp.rr import RR_EIGH_SWEEPS, host_eigh_rr
 from core.host_gemm_simd import host_gemm_identical
 from kernel_methods.checks.random_features import (
     km_basis_indices,
@@ -206,6 +208,25 @@ def kmh_validate_kernel(
         )
 
 
+#: fam2-kernel-gp (2026-10-04): the host column of
+#: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_RBF_CELL` (a candidate
+#: arm, OFF by default), the same defines and the same feature bound.
+comptime KMH_RBF_CELL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_KM_RBF_CELL"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime KMH_RBF_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_RBF_CELL_D16"]() else 64
+
+#: fix-kg1-kernel (audit B11): the host column of
+#: `kernel_methods/checks/kernel_matrix.mojo::KM_IDN_DOT_CELL` (ON by
+#: default), the same defines and the same feature bound.
+comptime KMH_DOT_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_KM_DOT_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime KMH_DOT_CELL_MAX_D = 16 if is_defined["MOJOLEARN_IDN_KM_DOT_CELL_D16"]() else 64
+
+
 def kmh_row_norms(x: List[Float32], n_rows: Int, k: Int) -> List[Float32]:
     """`svm row_norm_l2sq_kernel`: one ascending chain per row."""
     var out = List[Float32]()
@@ -302,6 +323,75 @@ def kmh_kernel_matrix(
     if kernel == KMH_KERNEL_COSINE:
         # cosine_rows_kernel on both operands, then the pinned GEMM
         return gemm_oracle(_kmh_cosine_rows(a, m, k), _kmh_cosine_rows(b, n, k), OP_NT, m, n, k)
+    comptime if KMH_RBF_CELL:
+        if kernel == KMH_KERNEL_RBF and k <= KMH_RBF_CELL_MAX_D:
+            # `km_rbf_cell_kernel`, cell by cell, the same lines
+            var outc = List[Float32](length=m * n, fill=Float32(0.0))
+            var opc = host_list_ptr(outc)
+            var neg_gamma = -Float32(gamma)
+            var tasks_c = host_predict_task_count(m)
+            if m * n * k < 32768:
+                tasks_c = 1
+            var chunk_c = host_predict_chunk(m, tasks_c)
+
+            def _cell_rows(task: Int) {imm a, imm b, imm m, imm n, imm k, imm neg_gamma, imm chunk_c, imm opc}:
+                var lo = task * chunk_c
+                var hi = min(lo + chunk_c, m)
+                for i in range(lo, hi):
+                    for j in range(n):
+                        var acc = Float32(0.0)
+                        for c in range(k):
+                            var d = ftz(ftz(a[i * k + c]) - ftz(b[j * k + c]))
+                            acc = ftz(identical_mul_add(d, d, acc))
+                        opc.unsafe_store(
+                            i * n + j,
+                            ftz(identical_exp(ftz(identical_mul(neg_gamma, acc)))),
+                        )
+
+            if tasks_c == 1:
+                _cell_rows(0)
+            else:
+                host_parallelize(_cell_rows, tasks_c)
+            return outc^
+    comptime if KMH_DOT_CELL:
+        if (
+            kernel == KMH_KERNEL_POLYNOMIAL or kernel == KMH_KERNEL_SIGMOID
+        ) and k <= KMH_DOT_CELL_MAX_D:
+            # `km_dot_cell_kernel`, cell by cell, the same lines
+            var outd = List[Float32](length=m * n, fill=Float32(0.0))
+            var opd = host_list_ptr(outd)
+            var gain_d = Float32(gamma)
+            var offset_d = Float32(coef0)
+            var poly_d = kernel == KMH_KERNEL_POLYNOMIAL
+            var tasks_d = host_predict_task_count(m)
+            if m * n * k < 32768:
+                tasks_d = 1
+            var chunk_d = host_predict_chunk(m, tasks_d)
+
+            def _dot_rows(task: Int) {imm a, imm b, imm m, imm n, imm k, imm gain_d, imm offset_d, imm degree, imm poly_d, imm chunk_d, imm opd}:
+                var lo = task * chunk_d
+                var hi = min(lo + chunk_d, m)
+                for i in range(lo, hi):
+                    for j in range(n):
+                        var dd = Float32(0.0)
+                        for c in range(k):
+                            dd = ftz(identical_mul_add(ftz(a[i * k + c]), ftz(b[j * k + c]), dd))
+                        var base_d = ftz(identical_mul_add(gain_d, dd, offset_d))
+                        var v: Float32
+                        if poly_d:
+                            var acc_d = Float32(1.0)
+                            for _ in range(degree):
+                                acc_d = ftz(identical_mul(acc_d, base_d))
+                            v = acc_d
+                        else:
+                            v = ftz(identical_tanh(base_d))
+                        opd.unsafe_store(i * n + j, v)
+
+            if tasks_d == 1:
+                _dot_rows(0)
+            else:
+                host_parallelize(_dot_rows, tasks_d)
+            return outd^
     var dot = host_gemm_identical(a, b, OP_NT, m, n, k)
     if kernel == KMH_KERNEL_LINEAR:
         return dot^
@@ -477,6 +567,21 @@ struct KmhNystroem(Movable):
     var sweeps: Int
 
 
+#: fam-kernel-gp (2026-10-04): the host column of
+#: `kernel_methods/estimator.mojo::NYS_IDN_RR_EIGH`, the same two defines.
+comptime KMH_NYS_RR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_NYS_RR_EIGH_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: fam-kernel-gp (2026-10-04): the host column of
+#: `kernel_methods/estimator.mojo::RBF_IDN_FUSED`, the same two defines and
+#: the same feature bound (`kernel_methods/rbf_fused.mojo::RBF_FUSED_MAX_D`).
+comptime KMH_RBF_FUSED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_RBF_FUSED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime KMH_RBF_FUSED_MAX_D = 64
+
+
 def _kmh_singular_value(lam: Float32) -> Float32:
     """`estimator.mojo::_singular_value_f32`: `|lambda|` by bits."""
     return bitcast[DType.float32](
@@ -529,21 +634,37 @@ def kmh_nystroem_fit(
             comp.append(x[srow * d + f])
 
     var raw = kmh_kernel_matrix(kernel, degree, gamma, coef0, comp, comp, q, q, d)
-    var jac = host_jacobi_eigh(raw, q, JACOBI_SWEEPS, Float32(JACOBI_TOL))
-    var vecs = jac.vectors.copy()
-    host_sign_flip(vecs, q)
-    if not jac.converged:
-        raise Error(
-            "nystroem_fit_host: the device Jacobi did not converge in "
-            + String(JACOBI_SWEEPS)
-            + " sweeps at n_components = "
-            + String(q)
-            + "; ||offdiag(A)||_F / ||A||_F is still "
-            + String(jac.rel)
-            + " against a tolerance of "
-            + String(JACOBI_TOL)
-        )
-    var sweeps = jac.executed
+    var vecs = List[Float32]()
+    var sweeps = 0
+    comptime if KMH_NYS_RR:
+        # `_nystroem_rr_eigh_idn`: the round-robin rounds, test and budget
+        vecs = List[Float32](length=q * q, fill=Float32(0.0))
+        var rr = host_eigh_rr(raw, vecs, q, RR_EIGH_SWEEPS, Float32(JACOBI_TOL))
+        if not rr[0]:
+            raise Error(
+                "nystroem_fit_host: the device Jacobi did not converge in "
+                + String(RR_EIGH_SWEEPS)
+                + " sweeps at n_components = "
+                + String(q)
+            )
+        host_sign_flip(vecs, q)
+        sweeps = rr[1]
+    else:
+        var jac = host_jacobi_eigh(raw, q, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+        vecs = jac.vectors.copy()
+        host_sign_flip(vecs, q)
+        if not jac.converged:
+            raise Error(
+                "nystroem_fit_host: the device Jacobi did not converge in "
+                + String(JACOBI_SWEEPS)
+                + " sweeps at n_components = "
+                + String(q)
+                + "; ||offdiag(A)||_F / ||A||_F is still "
+                + String(jac.rel)
+                + " against a tolerance of "
+                + String(JACOBI_TOL)
+            )
+        sweeps = jac.executed
 
     var values_raw = List[Float32]()
     var mags = List[Float32]()
@@ -586,7 +707,6 @@ def kmh_nystroem_fit(
         norm = host_gemm_identical(z, vecs_ord, OP_NT, q, q, q)
 
     _ = raw^
-    _ = jac^
     return KmhNystroem(comp^, basis^, norm^, values^, vecs_ord^, sweeps)
 
 
@@ -664,7 +784,34 @@ def kmh_rbf_sampler_transform(
     """`rbf_sampler_transform_host`: the dot at OP_NN, then
     `feature_map_epilogue_kernel`'s add, cos and multiply in their order."""
     kmh_validate_matrix(x, m, d, "rbf_sampler transform X")
-    var p = host_gemm_identical(x, weights, OP_NN, m, q, d)
+    var p = List[Float32]()
+    var chain = False
+    comptime if KMH_RBF_FUSED:
+        chain = d <= KMH_RBF_FUSED_MAX_D
+    if chain:
+        # rbf_fused_transform_kernel / rbf_fused_project_kernel: one chain
+        # per cell over the features ascending
+        p = List[Float32](length=m * q, fill=Float32(0.0))
+        var pp = host_list_ptr(p)
+        var tasks = host_predict_task_count(m)
+        var chunk = host_predict_chunk(m, tasks)
+
+        def _proj_rows(task: Int) {imm x, imm weights, imm m, imm q, imm d, imm chunk, imm pp}:
+            var lo = task * chunk
+            var hi = min(lo + chunk, m)
+            for i in range(lo, hi):
+                for jc in range(q):
+                    var acc = Float32(0.0)
+                    for f in range(d):
+                        acc = ftz(identical_mul_add(ftz(x[i * d + f]), ftz(weights[f * q + jc]), acc))
+                    pp.unsafe_store(i * q + jc, acc)
+
+        if tasks == 1:
+            _proj_rows(0)
+        else:
+            host_parallelize(_proj_rows, tasks)
+    else:
+        p = host_gemm_identical(x, weights, OP_NN, m, q, d)
     for t in range(m * q):
         var j = t % q
         var pv = ftz(p[t])

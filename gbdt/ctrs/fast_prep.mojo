@@ -5,7 +5,8 @@
 Every entry point here is reached from `gbdt/train.mojo` only under a
 `comptime if` on one of the four flags below, each of which is
 `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()` and its
-own `-D MOJOLEARN_...` define (or `-D MOJOLEARN_SYM_CTR_ALL`). IDENTICAL and
+own `-D MOJOLEARN_...` define (or SYM_CTR_ALL, the FAST + Apple default since
+2026-10-04; rollback `-D MOJOLEARN_SYM_CTR_ALL_OFF`). IDENTICAL and
 every non-Apple build compile main's CTR prep unchanged
 (`ctrs/ctr_calcers.mojo`, `ctrs/ctr_bins_builder.mojo`); nothing in this file
 runs for them.
@@ -103,7 +104,15 @@ comptime _SYM_CTR_FAST_APPLE = (
 #: never timed. Umbrella: the four CTR prep switches
 #: (SYM_CTR_PERM_BATCH is not ported: recorded DROP-speed, EXPERIMENTS.md
 #: sym-ctr-perm-batch-taxicat-x 27,161 -> 27,196 ms).
-comptime SYM_CTR_ALL = is_defined["MOJOLEARN_SYM_CTR_ALL"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab4-symctr): gbdt-categorical taxi 27731.03 -> 25520.14 ms (-8.0%); auc
+#: 0.631129 -> 0.630830 (noise), logloss 0.528503 -> 0.528440 (better). KEEP:
+#: the umbrella is the FAST + Apple default since then (each flag below
+#: still ANDs _SYM_CTR_FAST_APPLE, so IDENTICAL and non-Apple are
+#: unchanged); rollback -D MOJOLEARN_SYM_CTR_ALL_OFF, after which the single
+#: defines select flags one by one again. Per-flag rab7 rows:
+#: CTR_INDEX_FUSED -6.4%, CTR_SORT_ONCE -4.7% (covered by this umbrella).
+comptime SYM_CTR_ALL = not is_defined["MOJOLEARN_SYM_CTR_ALL_OFF"]()
 
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two

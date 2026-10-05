@@ -8,11 +8,12 @@ forward stages. This trades transfers/recomputation for device capacity.
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.device_scan import DeviceScanScratch
 from training.byte_lm import (
-    byte_validate_state, byte_validate_optimizer, byte_validate_tokens,
+    byte_validate_state, byte_validate_optimizer, byte_validate_tokens, byte_require_tokens_device,
     _require_profile, _byte_validate_allocations, _require_device_finite,
     _require_finite, byte_glue_update_launch, _FAULT_NAN, _FAULT_INF, _FAULT_MINUS_ONE,
 )
 from training.byte_lm_optimizer_pool import pool_maybe_fault
+from training.byte_lm_afn import afn_upload_ids
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_layer_pool import ByteLayerPool
 from training.byte_lm_pooled_head import BytePooledHead
@@ -31,20 +32,37 @@ from training.checks.loss_contract import CeConfig
 from core.identity_trace import IdentityTrace
 from training.byte_lm import byte_dims
 from training.byte_lm_layer_pool import ByteOwnedLayer
-from training.byte_lm_model_pool import ByteModelChunk, _host_range
+from training.byte_lm_model_pool import ByteModelChunk
 from transformer.impl.llama.modeling_llama import LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward
 from transformer.checks.transformer_backward import llama_decoder_layer_backward_device
 
 
-def _write_range(mut target: List[Float32], first: Int, source: List[Float32]):
-    for i in range(len(source)):
-        target[first+i] = source[i]
+def _download_range(ctx: DeviceContext, mut target: List[Float32], first: Int,
+                    mut source: DeviceBuffer[DType.float32], n: Int) raises:
+    """cpu3-seq: `source[0:n]` goes down by DMA straight into
+    `target[first:first+n]` (the host state this replay keeps by design), no
+    staging List and no element-by-element copy loop."""
+    if first < 0 or n < 0 or first + n > len(target) or n > len(source):
+        raise Error("byte offloaded replay: range outside the host state")
+    if n < 1:
+        return
+    if n == len(source):
+        ctx.enqueue_copy(dst_ptr=target.unsafe_ptr()+first,src_buf=source)
+    else:
+        var view = source.create_sub_buffer[DType.float32](0,n)
+        ctx.enqueue_copy(dst_ptr=target.unsafe_ptr()+first,src_buf=view)
+        _ = view^
+    ctx.synchronize()
 
 
 def _load_range(ctx: DeviceContext, mut target: DeviceBuffer[DType.float32],
                 values: List[Float32], first: Int) raises:
-    var source = _upload(ctx,_host_range(values,first,len(target)))
-    _copy_into(ctx,target,source,0,0,len(target))
+    """cpu3-seq: `values[first:first+len(target)]` goes up by DMA straight
+    into `target`, no host slice copy and no second device copy."""
+    var n = len(target)
+    if first < 0 or first + n > len(values):
+        raise Error("byte offloaded replay: range outside the host state")
+    ctx.enqueue_copy(dst_buf=target,src_ptr=values.unsafe_ptr()+first)
     ctx.synchronize()
 
 
@@ -54,13 +72,14 @@ def _fold_host(ctx: DeviceContext, mut total: List[Float32], first: Int,
     var scan = DeviceScanScratch(ctx)
     _require_device_finite(ctx,scan,source,n,"offloaded gradients")
     if logical == 0:
-        _write_range(total,first,download_f32(ctx,source,n))
+        _download_range(ctx,total,first,source,n)
     else:
-        var previous = _upload(ctx,_host_range(total,first,n))
+        var previous = ctx.enqueue_create_buffer[DType.float32](n)
+        _load_range(ctx,previous,total,first)
         ctx.enqueue_function[_ordered_add_kernel](previous,source,Int32(n),grid_dim=(n+255)//256,block_dim=256)
         ctx.synchronize()
         _require_device_finite(ctx,scan,previous,n,"offloaded gradient sum")
-        _write_range(total,first,download_f32(ctx,previous,n))
+        _download_range(ctx,total,first,previous,n)
 
 
 def _replay_layer(ctx: DeviceContext, p: List[Float32], shape: ByteConfig,
@@ -114,9 +133,9 @@ def _replay_update(ctx: DeviceContext, first: Int, n: Int,
     pool_maybe_fault(ctx,chunk.v,"after_nonfinite",min(3,n-1),_FAULT_INF,first)
     pool_maybe_fault(ctx,chunk.v,"after_negative",min(3,n-1),_FAULT_MINUS_ONE,first)
     chunk.validate(ctx)
-    _write_range(next_p,first,download_f32(ctx,chunk.p,n))
-    _write_range(next_m,first,download_f32(ctx,chunk.m,n))
-    _write_range(next_v,first,download_f32(ctx,chunk.v,n))
+    _download_range(ctx,next_p,first,chunk.p,n)
+    _download_range(ctx,next_m,first,chunk.m,n)
+    _download_range(ctx,next_v,first,chunk.v,n)
 
 
 struct ByteOffloadedReplay(Movable, Writable):
@@ -233,18 +252,11 @@ struct ByteOffloadedReplay(Movable, Writable):
         var M = config.batch*config.length
         ref ctx = self.context.value()
         ref h = self.head.value()
-        var hi = ctx.enqueue_create_host_buffer[DType.int32](M)
-        var ht = ctx.enqueue_create_host_buffer[DType.int32](M)
-        ctx.synchronize()
-        for b in range(config.batch):
-            for l in range(config.length):
-                hi.unsafe_ptr().unsafe_store(b*config.length+l,ids[b*(config.length+1)+l])
-                ht.unsafe_ptr().unsafe_store(b*config.length+l,ids[b*(config.length+1)+l+1])
-        ctx.enqueue_copy(dst_buf=h.ids,src_ptr=hi.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=h.targets,src_ptr=ht.unsafe_ptr())
-        ctx.synchronize()
-        _ = hi^
-        _ = ht^
+        # cpu3-seq: the rows go straight from `ids` into the device input and
+        # target buffers (no host split/staging loop), then the token-range
+        # refusal on the device, whose wait also completes the uploads.
+        afn_upload_ids(ctx,h.ids,h.targets,ids,config.batch,config.length)
+        byte_require_tokens_device(ctx,h.ids,h.targets,config)
         var emb = EmbConfig.llama(config.vocab_size,config.d_model)
         var ce = CeConfig.causal_lm(config.vocab_size)
         identical_embedding_forward_into(ctx,h.x,h.emb_w,h.ids,M,emb)
@@ -310,14 +322,14 @@ struct ByteOffloadedReplay(Movable, Writable):
             var o = self.config.offsets()
             _load_range(self.context.value(),self.head.value().emb_w,self.p,0)
             _load_range(self.context.value(),self.head.value().lm_w,self.p,o[len(o)-2])
-            for i in range(len(shards)):
+            for i in range(len(shards)):  # small-loop(shards: logical shards): one whole device gradient per shard
                 losses.append(self.gradient(shards[i],i))
             # Stage all updates on the host. No canonical state is changed until
             # every chunk has completed and passed its original device scans.
             var next_p = self.p.copy()
             var next_m = self.m.copy()
             var next_v = self.v.copy()
-            for i in range(self.config.n_layers+2):
+            for i in range(self.config.n_layers+2):  # small-loop(n_layers: model layers plus embedding and head): one device optimizer chunk each
                 var first = 0 if i == 0 else o[1+9*(i-1)]
                 var end = o[1] if i == 0 else (o[len(o)-1] if i == self.config.n_layers+1 else o[1+9*i])
                 _replay_update(self.context.value(),first,end-first,self.p,self.m,self.v,self.g,

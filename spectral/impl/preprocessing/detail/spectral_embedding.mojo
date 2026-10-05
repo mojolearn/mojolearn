@@ -62,9 +62,11 @@ from spectral.impl.sparse.linalg.detail.laplacian import (
     DeviceCoo,
     LAPLACIAN_TPB,
     compute_graph_laplacian,
+    compute_graph_laplacian_device_input,
     laplacian_normalize_device,
     laplacian_normalized,
 )
+from spectral.impl.sparse.linalg.detail.dense_graph import dense_graph_laplacian
 from spectral.impl.preprocessing.detail.fast_graph import (
     fast_graph_eligible,
     fast_knn_graph,
@@ -72,10 +74,12 @@ from spectral.impl.preprocessing.detail.fast_graph import (
 from spectral.impl.sparse.linalg.detail.symmetrize import coo_symmetrize
 from spectral.impl.sparse.op.coo_ops import coo_remove_scalar, coo_sort
 from spectral.impl.sparse.solver.detail.lanczos import (
+    IDN_SPECTRAL_VECS_DEVICE,
     LANCZOS_TPB,
     SAB_MAXITER,
     SAB_NCV,
     lanczos_compute_eigenpairs,
+    lanczos_compute_eigenpairs_dev,
 )
 from spectral.impl.sparse.solver.lanczos_types import (
     LANCZOS_LA,
@@ -238,13 +242,15 @@ def create_laplacian(
     graph: CooGraph,
     mut diagonal: DeviceBuffer[DType.float32],
     tpb: Int = LAPLACIAN_TPB,
+    check_values: Bool = False,
 ) raises -> DeviceCoo:
-    """`create_laplacian` (`:31-52`): normalized or plain, then negated."""
+    """`create_laplacian` (`:31-52`): normalized or plain, then negated.
+    `check_values` adds the value refusal (finite, non-negative)."""
     var lap: DeviceCoo
     if params.norm_laplacian:
-        lap = laplacian_normalized(ctx, graph, diagonal, tpb)
+        lap = laplacian_normalized(ctx, graph, diagonal, tpb, check_values)
     else:
-        lap = compute_graph_laplacian(ctx, graph, tpb)
+        lap = compute_graph_laplacian(ctx, graph, tpb, check_values)
     ctx.enqueue_function[negate_kernel](
         lap.vals.unsafe_ptr(),
         Int32(lap.nnz),
@@ -289,7 +295,41 @@ def compute_eigenpairs_keep(
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
 ) raises -> Int:
-    """`compute_eigenpairs` (`:54-116`). `embedding` comes back `n_samples x
+    """`compute_eigenpairs_keep_device`, then ONE download of the embedding
+    (`n_samples x n_out` row-major). Returns `n_out`."""
+    var d_emb = ctx.enqueue_create_buffer[DType.float32](1)
+    var n_out = compute_eigenpairs_keep_device(
+        ctx, params, n_samples, laplacian, diagonal, d_emb, state, keep, trace,
+        lanczos_tpb, scratch_pad, scratch_poison,
+    )
+    embedding.clear()
+    if n_out > 0:
+        embedding = download_f32(ctx, d_emb, n_samples * n_out)
+    _ = d_emb^
+    trace.record_list_f32("spectral.embedding", embedding)
+    return n_out
+
+
+def compute_eigenpairs_keep_device(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    n_samples: Int,
+    mut laplacian: DeviceCoo,
+    mut diagonal: DeviceBuffer[DType.float32],
+    mut d_embedding: DeviceBuffer[DType.float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+    lanczos_tpb: Int = LANCZOS_TPB,
+    scratch_pad: Int = 0,
+    scratch_poison: Float32 = 0.0,
+) raises -> Int:
+    """`compute_eigenpairs` (`:54-116`) leaving the embedding ON THE DEVICE
+    (lane cpu4-umap, 2026-10-04): `d_embedding` is replaced by an
+    `n_samples x n_out` row-major buffer (a 1-word placeholder when
+    `n_out == 0`), the same words `compute_eigenpairs_keep` downloads; the
+    queue is drained before return. The embedding is not traced here (the
+    callers record it). `embedding` comes back `n_samples x
     n_out` row-major with `n_out = n_components - 1` when `drop_first`.
     Returns `n_out`.
 
@@ -352,13 +392,25 @@ def compute_eigenpairs_keep(
     var eigenvalues = List[Float32]()
     var eigenvectors = List[Float32]()
     var no_v0 = List[Float32]()
-    _ = lanczos_compute_eigenpairs(
-        ctx, config, laplacian, no_v0, False, eigenvalues, eigenvectors, trace,
-        lanczos_tpb, scratch_pad, scratch_poison,
-    )
-    trace.record_list_f32("spectral.ritz", eigenvalues)
-    trace.record_list_f32("spectral.ritz.vectors", eigenvectors)
-    var d_vecs = upload_f32(ctx, eigenvectors)
+    # IDN_SPECTRAL_VECS_DEVICE: an untraced run draws the start vector on
+    # the device and leaves the Ritz vectors there for the gather below.
+    var vecs_on_device = False
+    comptime if IDN_SPECTRAL_VECS_DEVICE:
+        vecs_on_device = not trace.enabled
+    var d_vecs = ctx.enqueue_create_buffer[DType.float32](k * n_samples if vecs_on_device else 1)
+    if vecs_on_device:
+        _ = lanczos_compute_eigenpairs_dev(
+            ctx, config, laplacian, eigenvalues, d_vecs, trace, lanczos_tpb,
+            scratch_pad, scratch_poison,
+        )
+    else:
+        _ = lanczos_compute_eigenpairs(
+            ctx, config, laplacian, no_v0, False, eigenvalues, eigenvectors, trace,
+            lanczos_tpb, scratch_pad, scratch_poison,
+        )
+        trace.record_list_f32("spectral.ritz", eigenvalues)
+        trace.record_list_f32("spectral.ritz.vectors", eigenvectors)
+        d_vecs = upload_f32(ctx, eigenvectors)
     if keep:
         # The prediction state in embedding column order (the reversed
         # gather of the undivided Ritz vectors), formed on the device.
@@ -384,12 +436,11 @@ def compute_eigenpairs_keep(
     # eigenvector column n_out - 1 - c_out; with drop_first the LAST
     # (trivial) column is dropped.
     var n_out = k - 1 if params.drop_first else k
-    embedding.clear()
+    d_embedding = ctx.enqueue_create_buffer[DType.float32](n_samples * n_out if n_out > 0 else 1)
     if n_out > 0:
-        var d_emb = ctx.enqueue_create_buffer[DType.float32](n_samples * n_out)
         var divide = Int32(1) if params.norm_laplacian else Int32(0)
         ctx.enqueue_function[embedding_gather_kernel](
-            d_emb.unsafe_ptr(),
+            d_embedding.unsafe_ptr(),
             d_vecs.unsafe_ptr(),
             diagonal.unsafe_ptr(),
             Int32(n_samples),
@@ -398,10 +449,9 @@ def compute_eigenpairs_keep(
             grid_dim=((n_out * n_samples + lanczos_tpb - 1) // lanczos_tpb, 1, 1),
             block_dim=(lanczos_tpb, 1, 1),
         )
-        embedding = download_f32(ctx, d_emb, n_samples * n_out)
-        _ = d_emb^
+    # The gather reads `d_vecs`: drain before it is released.
+    ctx.synchronize()
     _ = d_vecs^
-    trace.record_list_f32("spectral.embedding", embedding)
     return n_out
 
 
@@ -440,25 +490,195 @@ def transform_graph_keep(
     """`transform` on a COO (`:118-131`): `create_laplacian` then
     `compute_eigenpairs`. The values of the graph are validated first
     (finite, non-negative: a negative affinity makes `sqrt(degree)` a NaN in
-    theirs and no NaN may reach a card). Returns `n_out`."""
+    theirs and no NaN may reach a card). Returns `n_out`.
+
+    `transform_graph_keep_device`, then ONE download of the embedding."""
+    var d_emb = ctx.enqueue_create_buffer[DType.float32](1)
+    var n_out = transform_graph_keep_device(
+        ctx, params, connectivity_graph, d_emb, state, keep, trace,
+        laplacian_tpb, lanczos_tpb, scratch_pad, scratch_poison,
+    )
+    embedding.clear()
+    if n_out > 0:
+        embedding = download_f32(ctx, d_emb, connectivity_graph.n * n_out)
+    _ = d_emb^
+    trace.record_list_f32("spectral.embedding", embedding)
+    return n_out
+
+
+def transform_graph_device(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    connectivity_graph: CooGraph,
+    mut d_embedding: DeviceBuffer[DType.float32],
+    mut trace: IdentityTrace,
+    laplacian_tpb: Int = LAPLACIAN_TPB,
+    lanczos_tpb: Int = LANCZOS_TPB,
+) raises -> Int:
+    """`transform_graph` leaving the embedding ON THE DEVICE (lane
+    cpu4-umap, 2026-10-04): `d_embedding` receives the `n x n_out`
+    row-major words `transform_graph` would download; nothing is read back
+    and the embedding is not traced. Returns `n_out`."""
+    var state = SpectralPredictionState()
+    return transform_graph_keep_device(
+        ctx, params, connectivity_graph, d_embedding, state, False, trace,
+        laplacian_tpb, lanczos_tpb,
+    )
+
+
+def transform_graph_keep_device(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    connectivity_graph: CooGraph,
+    mut d_embedding: DeviceBuffer[DType.float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+    laplacian_tpb: Int = LAPLACIAN_TPB,
+    lanczos_tpb: Int = LANCZOS_TPB,
+    scratch_pad: Int = 0,
+    scratch_poison: Float32 = 0.0,
+) raises -> Int:
+    """`transform_graph_keep`'s body with the embedding left on the device
+    (`compute_eigenpairs_keep_device`). Returns `n_out`."""
     var n = connectivity_graph.n
     if n <= 0:
         raise Error("spectral: connectivity_graph must have n > 0")
-    for i in range(connectivity_graph.nnz()):
-        var v = connectivity_graph.vals[i]
-        if not isfinite(v):
-            raise Error(
-                "spectral: connectivity_graph has a non-finite value at entry "
-                + String(i) + " -- refused by name"
-            )
-        if v < Float32(0.0):
-            raise Error(
-                "spectral: connectivity_graph has a negative value at entry "
-                + String(i) + " -- refused by name (sqrt of a negative degree is NaN in theirs)"
-            )
+    # The value refusal (finite, non-negative) is raised inside
+    # `compute_graph_laplacian`, first, from a device flag (the host walk
+    # only names the entry once the flag is set).
     var diagonal = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.synchronize()
-    var lap = create_laplacian(ctx, params, connectivity_graph, diagonal, laplacian_tpb)
+    var lap = create_laplacian(ctx, params, connectivity_graph, diagonal, laplacian_tpb, True)
+    trace.record_device[DType.int32](ctx, "spectral.L.indptr", lap.indptr, n + 1)
+    trace.record_device[DType.int32](ctx, "spectral.L.cols", lap.cols, lap.nnz)
+    trace.record_device[DType.float32](ctx, "spectral.L.vals", lap.vals, lap.nnz)
+    if params.norm_laplacian:
+        trace.record_device[DType.float32](ctx, "spectral.diag", diagonal, n)
+    var n_out = compute_eigenpairs_keep_device(
+        ctx, params, n, lap, diagonal, d_embedding, state, keep, trace, lanczos_tpb,
+        scratch_pad, scratch_poison,
+    )
+    _ = diagonal^
+    _ = lap^
+    return n_out
+
+
+def transform_device_coo(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    n: Int,
+    nnz: Int,
+    var rows: DeviceBuffer[DType.int32],
+    var cols: DeviceBuffer[DType.int32],
+    var vals: DeviceBuffer[DType.float32],
+    mut embedding: List[Float32],
+    mut trace: IdentityTrace,
+    laplacian_tpb: Int = LAPLACIAN_TPB,
+    lanczos_tpb: Int = LANCZOS_TPB,
+) raises -> Int:
+    """`transform_graph` over a COO already on the device (lane
+    cpu3-neighbors, 2026-10-04: the UMAP spectral init builds its positive
+    edges on the device instead of a host COO). The same Laplacian (the
+    device-input core of `compute_graph_laplacian`, value refusal on), the
+    same negation and eigenpairs, keeping nothing. Returns `n_out`.
+
+    `transform_device_coo_device`, then ONE download of the embedding."""
+    var d_emb = ctx.enqueue_create_buffer[DType.float32](1)
+    var n_out = transform_device_coo_device(
+        ctx, params, n, nnz, rows^, cols^, vals^, d_emb, trace,
+        laplacian_tpb, lanczos_tpb,
+    )
+    embedding.clear()
+    if n_out > 0:
+        embedding = download_f32(ctx, d_emb, n * n_out)
+    _ = d_emb^
+    trace.record_list_f32("spectral.embedding", embedding)
+    return n_out
+
+
+def transform_device_coo_device(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    n: Int,
+    nnz: Int,
+    var rows: DeviceBuffer[DType.int32],
+    var cols: DeviceBuffer[DType.int32],
+    var vals: DeviceBuffer[DType.float32],
+    mut d_embedding: DeviceBuffer[DType.float32],
+    mut trace: IdentityTrace,
+    laplacian_tpb: Int = LAPLACIAN_TPB,
+    lanczos_tpb: Int = LANCZOS_TPB,
+) raises -> Int:
+    """`transform_device_coo` leaving the embedding ON THE DEVICE (lane
+    cpu4-umap, 2026-10-04): `d_embedding` receives the `n x n_out`
+    row-major words `transform_device_coo` would download; nothing is read
+    back and the embedding is not traced (`transform_device_coo` records its
+    List). Returns `n_out`."""
+    if n <= 0:
+        raise Error("spectral: connectivity_graph must have n > 0")
+    var diagonal = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.synchronize()
+    var lap = compute_graph_laplacian_device_input(
+        ctx, n, nnz, rows^, cols^, vals^, True, laplacian_tpb
+    )
+    if params.norm_laplacian:
+        lap = laplacian_normalize_device(ctx, lap^, diagonal, laplacian_tpb)
+    ctx.enqueue_function[negate_kernel](
+        lap.vals.unsafe_ptr(),
+        Int32(lap.nnz),
+        grid_dim=((lap.nnz + laplacian_tpb - 1) // laplacian_tpb, 1, 1),
+        block_dim=(laplacian_tpb, 1, 1),
+    )
+    ctx.synchronize()
+    trace.record_device[DType.int32](ctx, "spectral.L.indptr", lap.indptr, n + 1)
+    trace.record_device[DType.int32](ctx, "spectral.L.cols", lap.cols, lap.nnz)
+    trace.record_device[DType.float32](ctx, "spectral.L.vals", lap.vals, lap.nnz)
+    if params.norm_laplacian:
+        trace.record_device[DType.float32](ctx, "spectral.diag", diagonal, n)
+    var state = SpectralPredictionState()
+    var n_out = compute_eigenpairs_keep_device(
+        ctx, params, n, lap, diagonal, d_embedding, state, False, trace, lanczos_tpb,
+    )
+    _ = diagonal^
+    _ = lap^
+    return n_out
+
+
+def transform_dense_keep(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    dense: DeviceBuffer[DType.float32],
+    n: Int,
+    m: Int,
+    drop_diag: Bool,
+    var indptr: DeviceBuffer[DType.int32],
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+    laplacian_tpb: Int = LAPLACIAN_TPB,
+    lanczos_tpb: Int = LANCZOS_TPB,
+) raises -> Int:
+    """`transform_graph_keep` on a DENSE device affinity (lane
+    cpu2-l9-neighbors): the row-sorted COO with its diagonal is compacted on
+    the device (`dense_graph.mojo`) from the row offsets `dense_graph_scan`
+    left in `indptr`, then the same Laplacian, negation, records and
+    eigenpairs. The caller has already refused a non-finite or negative
+    value from the scan's flags. Returns `n_out`."""
+    if n <= 0:
+        raise Error("spectral: connectivity_graph must have n > 0")
+    var diagonal = ctx.enqueue_create_buffer[DType.float32](n)
+    var lap = dense_graph_laplacian(ctx, dense, n, m, drop_diag, indptr^, laplacian_tpb)
+    if params.norm_laplacian:
+        lap = laplacian_normalize_device(ctx, lap^, diagonal, laplacian_tpb)
+    ctx.enqueue_function[negate_kernel](
+        lap.vals.unsafe_ptr(),
+        Int32(lap.nnz),
+        grid_dim=((lap.nnz + laplacian_tpb - 1) // laplacian_tpb, 1, 1),
+        block_dim=(laplacian_tpb, 1, 1),
+    )
+    ctx.synchronize()
     trace.record_device[DType.int32](ctx, "spectral.L.indptr", lap.indptr, n + 1)
     trace.record_device[DType.int32](ctx, "spectral.L.cols", lap.cols, lap.nnz)
     trace.record_device[DType.float32](ctx, "spectral.L.vals", lap.vals, lap.nnz)
@@ -466,7 +686,6 @@ def transform_graph_keep(
         trace.record_device[DType.float32](ctx, "spectral.diag", diagonal, n)
     var n_out = compute_eigenpairs_keep(
         ctx, params, n, lap, diagonal, embedding, state, keep, trace, lanczos_tpb,
-        scratch_pad, scratch_poison,
     )
     _ = diagonal^
     _ = lap^

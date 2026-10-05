@@ -64,7 +64,7 @@ from std.memory import bitcast
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from hdbscan.checks.hdbscan_sabotage import mr_max3, mr_scale
 from hierarchy.checks.edge_order import weight_order_key
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index_host
 
 
 @always_inline
@@ -180,12 +180,12 @@ def sort_edges_total_order(
     for i in range(n):
         k1.append(UInt64(Int(hi[i])) & UInt64(0xFFFFFFFF))
         idx.append(i)
-    merge_sort_u64_with_index(k1, idx)
+    merge_sort_u64_with_index_host(k1, idx)
     var k2 = List[UInt64](capacity=n)
     for t in range(n):
         var i = idx[t]
         # DEVIATION 624's signed-to-unsigned flip, as `pack_edge_key`.
         var wkey = UInt64(Int(bitcast[DType.uint32](weight_order_key(w[i])) ^ UInt32(0x80000000)))
         k2.append((wkey << UInt64(32)) | (UInt64(Int(lo[i])) & UInt64(0xFFFFFFFF)))
-    merge_sort_u64_with_index(k2, idx)
+    merge_sort_u64_with_index_host(k2, idx)
     return idx^

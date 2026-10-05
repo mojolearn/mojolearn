@@ -66,7 +66,7 @@ from std.math import log
 from gbdt.models.cuda.evaluator import pack_model_for_evaluator
 from gbdt.models.model_text import load_model_text, model_text
 from gbdt.train import (
-    multiclass_probabilities,
+    multiclass_probabilities_reference,
     predict_multi_floats,
     train,
 )
@@ -173,7 +173,7 @@ def check_one_vs_all_train(ctx: DeviceContext) raises -> Int:
         prediction rather than leaving it alone. A check that asserted
         shift-invariance here would be asserting something false.
       * The probabilities are `numClasses` INDEPENDENT sigmoids and do NOT
-        sum to one. `multiclass_probabilities`' softmax is MultiClass's
+        sum to one. `multiclass_probabilities_reference`' softmax is MultiClass's
         and must not be applied to this model.
     """
     var bad = 0
@@ -293,7 +293,7 @@ def check_multiclass_train(ctx: DeviceContext) raises:
             failures += 1
 
         var ap = predict_multi_floats(ctx, tm, x, N_ROWS)
-        var pr = multiclass_probabilities(ap, N_ROWS, nc)
+        var pr = multiclass_probabilities_reference(ap, N_ROWS, nc)
 
         # GATE 1: probabilities sum to one, every row
         var worst_sum = Float64(0.0)
@@ -350,7 +350,7 @@ def check_multiclass_train(ctx: DeviceContext) raises:
             loss="MultiClass", learning_rate=Float32(0.3),
         )
         var apr = predict_multi_floats(ctx, tmr, x, N_ROWS)
-        var prr = multiclass_probabilities(apr, N_ROWS, nc)
+        var prr = multiclass_probabilities_reference(apr, N_ROWS, nc)
         var accr = accuracy(prr, yr, nc)
         # 20 trees at depth 4 can memorise some of 4,096 rows, so the bar
         # is "not close to the learnable case" rather than "at chance"

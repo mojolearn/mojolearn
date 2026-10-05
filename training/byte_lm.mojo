@@ -39,7 +39,7 @@ from core.step_glue import (
     step_glue_arm_from_env,
     step_glue_blocks,
 )
-from core.device_scan import DeviceScanScratch
+from core.device_scan import DeviceScanScratch, device_first_token_oob
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
@@ -63,8 +63,8 @@ from gemm.checks.gemm_backward import (
 )
 from gemm.contract import OP_NT, OP_NN
 from embedding.checks.embedding_identical import (
-    ANY_EMB_SABOTAGE, emb_run_scratch_ints, identical_embedding_forward_into,
-    identical_embedding_backward_into,
+    ANY_EMB_SABOTAGE, EMB_AUTO_SORT_MIN_CELLS, emb_run_scratch_ints,
+    identical_embedding_forward_into, identical_embedding_backward_into,
 )
 from embedding.checks.embedding_oracle import EmbConfig
 from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
@@ -146,7 +146,7 @@ def byte_offsets(config: ByteConfig = ByteConfig()) raises -> List[Int]:
 
 def byte_names(config: ByteConfig = ByteConfig()) raises -> List[String]:
     var result = List[String]()
-    for j in range(config.n_tensors()):
+    for j in range(config.n_tensors()):  # small-loop(n_tensors: parameter tensors, 9 per layer plus 2): name strings only, no data
         result.append(byte_param_name(j, config))
     return result^
 
@@ -372,9 +372,24 @@ def byte_validate_tokens(ids: List[Int32], config: ByteConfig = ByteConfig()) ra
     config.validate()
     if len(ids) != config.batch * (config.length + 1):
         raise Error("byte LM: token count differs from row-major [batch,length+1]")
-    for i in range(len(ids)):
-        if ids[i] < 0 or ids[i] >= Int32(config.vocab_size):
-            raise Error("byte LM: token ID outside configured vocabulary")
+    # cpu3-seq: the per-token range refusal runs on the device after the
+    # upload (`byte_require_tokens_device`, same message), before the
+    # embedding gather reads the ids. Only the shape is checked here.
+
+
+def byte_require_tokens_device(ctx: DeviceContext, mut ids_dev: DeviceBuffer[DType.int32],
+                               mut targets_dev: DeviceBuffer[DType.int32],
+                               config: ByteConfig) raises:
+    """cpu3-seq: the token-range refusal of `byte_validate_tokens` on the
+    uploaded inputs and targets (`[b, 0:L]` and `[b, 1:L+1]` cover every
+    token of the row-major `[batch, length+1]` ids). Two device scans, one
+    partials readback and one wait each; the first wait also completes the
+    uploads queued before it on the same context."""
+    var m = config.batch * config.length
+    if device_first_token_oob(ctx, ids_dev, m, config.vocab_size) >= 0:
+        raise Error("byte LM: token ID outside configured vocabulary")
+    if device_first_token_oob(ctx, targets_dev, m, config.vocab_size) >= 0:
+        raise Error("byte LM: token ID outside configured vocabulary")
 
 
 def _require_profile() raises:
@@ -516,13 +531,18 @@ struct ByteBuffers(Movable):
         self.param = _upload(ctx, initial_params)
         self.grad = _zeros(ctx, n)
         if self.optimizer_pooled:
-            var local_m = List[Float32]()
-            var local_v = List[Float32]()
-            for i in range(optimizer_first, optimizer_first + owned):
-                local_m.append(initial_m[i])
-                local_v.append(initial_v[i])
-            self.m_state = _upload(ctx, local_m)
-            self.v_state = _upload(ctx, local_v)
+            # cpu3-seq: the owned moment range goes up straight from the
+            # caller's Lists (one DMA each), no host slice copy.
+            if len(initial_m) < optimizer_first + owned or len(initial_v) < optimizer_first + owned:
+                raise Error("byte LM: optimizer moments shorter than the owned range")
+            self.m_state = ctx.enqueue_create_buffer[DType.float32](owned)
+            self.v_state = ctx.enqueue_create_buffer[DType.float32](owned)
+            step_count_h2d()
+            ctx.enqueue_copy(dst_buf=self.m_state, src_ptr=initial_m.unsafe_ptr() + optimizer_first)
+            step_count_h2d()
+            ctx.enqueue_copy(dst_buf=self.v_state, src_ptr=initial_v.unsafe_ptr() + optimizer_first)
+            step_count_sync()
+            ctx.synchronize()
         else:
             self.m_state = _upload(ctx, initial_m)
             self.v_state = _upload(ctx, initial_v)
@@ -650,22 +670,65 @@ struct ByteBuffers(Movable):
 
 
 
-def _param_slice(values: List[Float32], j: Int, config: ByteConfig) raises -> List[Float32]:
-    var offsets = byte_offsets(config)
-    var result = List[Float32]()
-    for i in range(offsets[j], offsets[j + 1]):
-        result.append(values[i])
-    return result^
+def _param_upload(ctx: DeviceContext, values: List[Float32], offsets: List[Int], j: Int) raises -> DeviceBuffer[DType.float32]:
+    """cpu3-seq: parameter tensor `j` uploaded straight from its offset in
+    the flat parameter List (one DMA), no host slice copy. The caller waits
+    before `values` may be released."""
+    var lo = offsets[j]
+    var n = offsets[j + 1] - lo
+    if lo < 0 or n < 0 or lo + n > len(values):
+        raise Error("byte LM: parameter tensor outside the flat parameter list")
+    if n < 1:
+        return _zeros(ctx, 1)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    step_count_h2d()
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr() + lo)
+    return buf^
 
 
 def _block_weights(ctx: DeviceContext, params: List[Float32], block: Int, config: ByteConfig) raises -> LlamaDeviceWeights:
     var base = 1 + 9 * block
+    var o = byte_offsets(config)
+    var w = LlamaDeviceWeights(ctx, byte_dims(config), Float32(1e-6),
+        _param_upload(ctx, params, o, base), _param_upload(ctx, params, o, base + 5),
+        _param_upload(ctx, params, o, base + 1), _param_upload(ctx, params, o, base + 2),
+        _param_upload(ctx, params, o, base + 3), _param_upload(ctx, params, o, base + 4),
+        _param_upload(ctx, params, o, base + 6), _param_upload(ctx, params, o, base + 7),
+        _param_upload(ctx, params, o, base + 8))
+    step_count_sync()
+    ctx.synchronize()
+    return w^
+
+
+def _param_dev_copy(ctx: DeviceContext, mut flat: DeviceBuffer[DType.float32], lo: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """cpu3-seq: `flat[lo:lo+n]` copied device to device into its own buffer
+    (no host slice). Enqueue only; the in-order context orders its readers."""
+    if lo < 0 or n < 0 or lo + n > len(flat):
+        raise Error("byte LM: parameter tensor outside the flat device parameters")
+    if n < 1:
+        return _zeros(ctx, 1)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n)
+    var view = flat.create_sub_buffer[DType.float32](lo, n)
+    ctx.enqueue_copy(dst_buf=buf, src_buf=view)
+    _ = view^
+    return buf^
+
+
+def _block_weights_dev(ctx: DeviceContext, mut flat: DeviceBuffer[DType.float32], block: Int, config: ByteConfig) raises -> LlamaDeviceWeights:
+    """`_block_weights` from the flat parameters already on the device: the
+    nine tensors in the same constructor order, copied device to device."""
+    var base = 1 + 9 * block
+    var o = byte_offsets(config)
     return LlamaDeviceWeights(ctx, byte_dims(config), Float32(1e-6),
-        _param_slice(params, base, config), _param_slice(params, base + 5, config),
-        _param_slice(params, base + 1, config), _param_slice(params, base + 2, config),
-        _param_slice(params, base + 3, config), _param_slice(params, base + 4, config),
-        _param_slice(params, base + 6, config), _param_slice(params, base + 7, config),
-        _param_slice(params, base + 8, config))
+        _param_dev_copy(ctx, flat, o[base], o[base + 1] - o[base]),
+        _param_dev_copy(ctx, flat, o[base + 5], o[base + 6] - o[base + 5]),
+        _param_dev_copy(ctx, flat, o[base + 1], o[base + 2] - o[base + 1]),
+        _param_dev_copy(ctx, flat, o[base + 2], o[base + 3] - o[base + 2]),
+        _param_dev_copy(ctx, flat, o[base + 3], o[base + 4] - o[base + 3]),
+        _param_dev_copy(ctx, flat, o[base + 4], o[base + 5] - o[base + 4]),
+        _param_dev_copy(ctx, flat, o[base + 6], o[base + 7] - o[base + 6]),
+        _param_dev_copy(ctx, flat, o[base + 7], o[base + 8] - o[base + 7]),
+        _param_dev_copy(ctx, flat, o[base + 8], o[base + 9] - o[base + 8]))
 
 
 def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
@@ -952,7 +1015,7 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     var n_fwd = len(tr.forward)
     var n_bwd = len(tr.backward)
     var n = n_fwd if n_fwd < n_bwd else n_bwd
-    for layer in range(n):
+    for layer in range(n):  # small-loop(n: layers): per layer eager cell counts, no data
         fwd_eager += len(tr.forward[layer].scores)
         fwd_eager += len(tr.forward[layer].masked)
         fwd_eager += len(tr.forward[layer].weights)
@@ -979,7 +1042,7 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(n_fwd)
     out.append(n_bwd)
     # Triples in layer order: actual launch statuses and current materialization.
-    for layer in range(n):
+    for layer in range(n):  # small-loop(n: layers): per layer eager cell counts, no data
         out.append(tr.forward[layer].attn_forward_status)
         out.append(tr.backward[layer].attn_backward_status)
         out.append(Int(tr.forward[layer].attn_materialized))
@@ -987,10 +1050,10 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(Int(BYTE_LM_RELEASE_EAGER))
     out.append(tr.released_eager_cells)
     out.append(Int(BYTE_LM_STICKY_EAGER))
-    for layer in range(n):
+    for layer in range(n):  # small-loop(n: layers): per layer eager cell counts, no data
         out.append(Int(tr.forward[layer].attn_prefer_eager))
     out.append(Int(ATTN_REPAIR_MASKED_TAIL))
-    for layer in range(n):
+    for layer in range(n):  # small-loop(n: layers): per layer eager cell counts, no data
         out.append(tr.backward[layer].attn_repaired)
     return out^
 
@@ -1051,6 +1114,7 @@ def byte_train_step(ctx: DeviceContext, mut trainer: ByteTrainer,
     timing_tick(ctx, ton, tk, "step.mirror_download_before")
     timing_bytes(ton, "step.mirror_download_before_bytes", 3 * config.n_total() * 4)
     byte_validate_state(before_p, before_m, before_v, before_flags, trainer.completed_steps, config)
+    _byte_admit_tokens(ctx, trainer, token_ids)
     timing_tick(ctx, ton, tk, "step.validate_before")
     trainer.healthy = False
     trainer.shadow_valid = False
@@ -1090,6 +1154,17 @@ struct ByteLeanResult(Movable):
     var loss: Float32
     var completed_steps: Int
     var flags: List[Bool]
+
+
+def _byte_admit_tokens(ctx: DeviceContext, mut tr: ByteTrainer, ids: List[Int32]) raises:
+    """cpu3-seq: the token admission of the non-resident step and eval,
+    BEFORE they mark the trainer unhealthy (as the host walk did): the ids
+    go up into the scratch input/target buffers and are range-checked on
+    the device. Writes only those scratch buffers, which the forward
+    rewrites with the same bytes."""
+    var config = tr.config.copy()
+    afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
+    byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
 
 
 def _byte_recover(ctx: DeviceContext, mut tr: ByteTrainer, message: String) raises:
@@ -1198,33 +1273,16 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     var M = config.batch * config.length
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
-    comptime if AFN_LM_NOSYNC and deferred:
-        afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
-    else:
-        var inputs = List[Int32]()
-        var targets = List[Int32]()
-        for b in range(config.batch):
-            for l in range(config.length):
-                inputs.append(ids[b * (config.length + 1) + l])
-                targets.append(ids[b * (config.length + 1) + l + 1])
-        step_count_host_alloc()
-        var hi = ctx.enqueue_create_host_buffer[DType.int32](M)
-        step_count_host_alloc()
-        var ht = ctx.enqueue_create_host_buffer[DType.int32](M)
-        step_count_sync()
-        ctx.synchronize()
-        for i in range(M):
-            hi.unsafe_ptr().unsafe_store(i, inputs[i])
-            ht.unsafe_ptr().unsafe_store(i, targets[i])
-        step_count_h2d()
-        ctx.enqueue_copy(dst_buf=tr.buffers.ids, src_ptr=hi.unsafe_ptr())
-        step_count_h2d()
-        ctx.enqueue_copy(dst_buf=tr.buffers.targets, src_ptr=ht.unsafe_ptr())
-        step_count_sync()
-        ctx.synchronize()
-        _ = hi
-        _ = ht
-        # The wait above completes both uploads: host split, staging, H2D.
+    # cpu3-seq: no host split or staging loop on any path. The rows of `ids`
+    # go straight into the device input/target buffers (two DMA copies per
+    # row, the same bytes the old host split produced), then the token-range
+    # refusal runs on the device (`byte_require_tokens_device`, the message
+    # `byte_validate_tokens` raised) before the embedding gather reads them;
+    # its wait also completes the uploads, so `ids` may be released after.
+    # Under AFN NOSYNC this adds the scan's wait to the step (the host walk
+    # it replaces was data-sized CPU work on the GPU route).
+    afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
+    byte_require_tokens_device(ctx, tr.buffers.ids, tr.buffers.targets, config)
     timing_tick(ctx, ton, tk, "step.upload_inputs")
     timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
     for layer in range(config.n_layers):
@@ -1254,10 +1312,10 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
         tr.prefill_cache.s = 0
         var prefix = String("byte.block") + String(layer) + ".forward"
         var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
-            M, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
+            M, config.d_model, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
         )
         var fuse_next = layer + 1 < config.n_layers and residual_next_norm_fusion_enabled(
-            M, tr.weights[layer + 1].opts.norm_kind,
+            M, config.d_model, tr.weights[layer + 1].opts.norm_kind,
             tr.weights[layer + 1].opts.norm_bias,
         )
         if layer == 0:
@@ -1614,11 +1672,19 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
         tr.forward.insert(layer, stages^)
     # Envelope of the whole backward loop (the blocks print `bwd.*`).
     timing_tick(ctx, ton, tk, "envelope.blocks_backward")
-    # PLAN_SCAN performs vocab*positions integer probes before the identical
-    # row fold.  At large token batches the stable total-key sort builds the
-    # same ascending-position runs much more cheaply; keep small calls on the
-    # zero-allocation scan path.
-    var emb_plan = PLAN_SORT if M >= 16384 else PLAN_SCAN
+    # PLAN_SCAN performs 2 * vocab * positions integer probes before the
+    # identical row fold; PLAN_SORT is a total-key sort over the positions
+    # alone and builds the same ascending-position runs (contract 6 clause (d):
+    # bit-identical on every vendor and the host column, so the pick moves no
+    # bit). The scan cost grows with V * M, so the pick keys on V * M with the
+    # embedding lane's own EMB_AUTO_SORT_MIN_CELLS (2^26), not on a token
+    # count (the old `M >= 16384` sat one doubling below the one measured
+    # GPT-3 row and ignored V). Tier-independent here, as before. Needs
+    # neighbor-shape validation (V 256 and 50,257; M 4,096 to 65,536).
+    var emb_plan = (
+        PLAN_SORT if config.vocab_size * M >= EMB_AUTO_SORT_MIN_CELLS
+        else PLAN_SCAN
+    )
     identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
         tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
         tr.buffers.emb_perm, M, emb, emb_plan)
@@ -1950,6 +2016,7 @@ def byte_eval_loss(ctx: DeviceContext, mut trainer: ByteTrainer,
     var m = download_f32(ctx, trainer.buffers.m_state, config.n_total())
     var v = download_f32(ctx, trainer.buffers.v_state, config.n_total())
     byte_validate_state(p, m, v, trainer.buffers.buf_initialized, trainer.completed_steps, config)
+    _byte_admit_tokens(ctx, trainer, token_ids)
     trainer.healthy = False
     var trace = IdentityTrace.disabled()
     var loss = _byte_forward_loss(ctx, trainer, token_ids, trace)

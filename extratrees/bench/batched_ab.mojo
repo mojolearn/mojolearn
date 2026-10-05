@@ -34,7 +34,8 @@ from extratrees.bench.bench_data import (
     read_column_prefix,
     read_f32,
 )
-from extratrees.estimator import resolve_max_features, quantize_labels
+from extratrees.estimator import resolve_max_features
+from extratrees.host_estimator import quantize_labels_host
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_MSE,
     DecisionTreeParams,
@@ -46,7 +47,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     DeviceDataset,
 )
 from extratrees.impl.decisiontree.flatnode import TreeMetaDataNode
-from extratrees.impl.randomforest.randomforest import class_ids_for
+from extratrees.impl.randomforest.randomforest import class_ids_for_host
 
 
 def forest_digest(trees: List[TreeMetaDataNode[DType.float32]]) -> UInt64:
@@ -163,7 +164,7 @@ def main() raises:
         for c in range(n_feat):
             for r in range(n_rows):
                 xcols[c * n_rows + r] = x[(c + 1) * n_rows + r]
-        var ql = quantize_labels(target, Int32(n_rows))
+        var ql = quantize_labels_host(target, Int32(n_rows))
         scale = ql[1]
         dev = upload_dataset(
             ctx, xcols, ql[0], Int32(n_rows), Int32(n_feat), 1
@@ -176,7 +177,7 @@ def main() raises:
         var lf = List[Float32]()
         for r in range(n_rows):
             lf.append(Float32(Int(labels[r])))
-        var ids = class_ids_for(lf, Int32(n_rows), Int32(n_classes))
+        var ids = class_ids_for_host(lf, Int32(n_rows), Int32(n_classes))
         dev = upload_dataset(
             ctx, x, ids, Int32(n_rows), Int32(n_feat), Int32(n_classes)
         )

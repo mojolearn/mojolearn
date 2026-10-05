@@ -5,21 +5,23 @@ both executors: `bindings/_mojolearn_x_decomp.mojo` registers `*_py[DevExec]`,
 `bindings/_mojolearn_x_decomp_host.mojo` registers `*_py[HostExec]` under the
 same names, so the GPU binding and the CPU host binding share the address
 contract by construction. Every address is a host buffer the caller owns."""
+from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import mat_from
 from x_decomp.mcd import fast_mcd
 from x_decomp.lda_online import lda_online_pass
 from x_decomp.moves import (
-    F64Ptr, PY2MOJO_DECOMP, accuracy, argmin_all, argsort_f32, dsum_sq, gather, iso_order, move_host, order_f, pca_mle_pa,
-    pca_mle_terms, scatter, select_smallest, sign_labels, topn_desc, triu_nonzero,
+    F64Ptr, PY2MOJO_DECOMP, accuracy, argmin_all, argsort_f32, dsum_sq_host, gather, iso_order, move_host, order_f,
+    scatter, select_smallest, sign_labels, topn_desc, triu_nonzero,
 )
 from x_decomp.tsqr_core import TS_MAX_N
+from x_decomp.pca_mle import mle_scratch_words, pca_mle_rank_host
 
 
 def _f(addr: PythonObject) raises -> F32Ptr:
@@ -536,6 +538,135 @@ def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: Pyt
     return PythonObject(n)
 
 
+# lane idn-dense-linalg (2026-10-04): the one-entry routes Python takes when
+# `idn_flags_py` says so (both bindings; the same words as the calls they
+# replace). -D MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF / -D MOJOLEARN_IDN_LU_GESV_OFF
+# clear the bit, and Python keeps the old call sequence. IDENTICAL builds
+# only: a FAST build's bits are 0 and its routes are as they were.
+comptime _API_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime IDN_OLS_ONE_ENTRY = _API_IDN and not (is_defined["MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime IDN_LU_GESV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LU_GESV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# lane fam-decomp (2026-10-04): LLE builds F0 = [F^ | u] in three cells and
+# takes F^ X as F0 [X; 0] on every column of an IDENTICAL build (device and
+# host binding alike, so the four agree), instead of downloading F, slicing
+# its columns in Python and uploading F^ again.
+# -D MOJOLEARN_IDN_LLE_DEV_F0_OFF clears the bit: Python keeps the host
+# F.cols + _hstack route.
+comptime IDN_LLE_DEV_F0 = _API_IDN and not (is_defined["MOJOLEARN_IDN_LLE_DEV_F0_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# lane fam-decomp (2026-10-04): the kit's `rand` draws into a device matrix
+# on the GPU binding (`dev_rand_py`, the kernel `DevExec.rand` launches: the
+# same Philox words) and downloads it only if Python reads it, instead of
+# downloading every draw and uploading it again for the first product (NMF's
+# n x k init, randomized_svd's d x l test matrix, ALS's factors, MDS's
+# starts). -D MOJOLEARN_IDN_RAND_RESIDENT_OFF clears the bit.
+comptime IDN_RAND_RESIDENT = _API_IDN and not (is_defined["MOJOLEARN_IDN_RAND_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# lane fam2-decomp (2026-10-04): a device-resident matrix's transpose, column
+# selection and row range stay on the device (`x_decomp_dev_move`: TRANSPOSE,
+# the new TAKE_COLS, TAKE_ROWS; one thread a moved value) when the result
+# has at least 16,384 values, instead of downloading the operand (which then
+# lives on the host) and uploading the result at its next product: NMF's
+# W^T and H^T, FactorAnalysis, PLS, the svd tail's column selections, LLE.
+# Copies only: the same words. -D MOJOLEARN_IDN_RES_MOVES_OFF clears the bit.
+comptime IDN_RES_MOVES = _API_IDN and not (is_defined["MOJOLEARN_IDN_RES_MOVES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# lane fix-d1-decomp (2026-10-04, audit F7/B7): the decomp Python leftovers.
+# IDN_NMF_L2_CELL (bit 5): NMF's coordinate descent adds l2 to H H^T's
+# diagonal with one `axpy` cell against the identity mask on EVERY column of
+# an IDENTICAL build (device and host binding alike), instead of a host copy
+# of H H^T and a Python loop. Bits move on all four together: l2 is rounded
+# to float32 and added in the cell's fused step, and an off-diagonal -0.0
+# becomes +0.0. -D MOJOLEARN_IDN_NMF_L2_CELL_OFF keeps the Python loop.
+comptime IDN_NMF_L2_CELL = _API_IDN and not (is_defined["MOJOLEARN_IDN_NMF_L2_CELL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# IDN_ICA_LIM_DEV (bit 6): FastICA's parallel convergence scalar
+# max |abs(diag(W1 W^T)) - 1| is reduced on the device (`x_decomp_dev_maxabs`)
+# and one word comes down, instead of k words and a Python max. A max is
+# exact: the same value. -D MOJOLEARN_IDN_ICA_LIM_DEV_OFF.
+comptime IDN_ICA_LIM_DEV = _API_IDN and not (is_defined["MOJOLEARN_IDN_ICA_LIM_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# IDN_POLAR_MAX_DEV (bit 7): varimax/quartimax `_polar`'s max |A| (it picks
+# an exact power-of-two scale) is reduced on the device, one word down,
+# instead of the k x k matrix and a Python max. The same value.
+# -D MOJOLEARN_IDN_POLAR_MAX_DEV_OFF.
+comptime IDN_POLAR_MAX_DEV = _API_IDN and not (is_defined["MOJOLEARN_IDN_POLAR_MAX_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+# IDN_LLE_PAD_DEV (bit 8): LLE's shift-invert loop pads its resident X
+# ((n - 1) x p) with a zero row on the device (PLACE_COLS + FILL0 moves),
+# instead of downloading X and uploading [X; 0] twice per iteration. Copies
+# only: the same words. -D MOJOLEARN_IDN_LLE_PAD_DEV_OFF.
+comptime IDN_LLE_PAD_DEV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LLE_PAD_DEV_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+#: the binding exports `x_decomp_dev_maxabs` (GPU binding) when a user is on
+comptime IDN_DEV_MAXABS = IDN_ICA_LIM_DEV or IDN_POLAR_MAX_DEV
+
+
+def idn_flags_py() raises -> PythonObject:
+    """Bit 0: LinearRegression takes `ols_tsqr_r_py`; bit 1: solve takes
+    `lu_gesv_py`; bit 2: LLE builds F0 in cells (IDN_LLE_DEV_F0); bit 3: the
+    kit's `rand` stays on the device (IDN_RAND_RESIDENT); bit 4: resident
+    transpose / take_cols / rows (IDN_RES_MOVES); bit 5: NMF l2 by a cell
+    (IDN_NMF_L2_CELL); bit 6: FastICA's limit on the device
+    (IDN_ICA_LIM_DEV); bit 7: `_polar`'s max on the device
+    (IDN_POLAR_MAX_DEV); bit 8: LLE's zero-row pad on the device
+    (IDN_LLE_PAD_DEV)."""
+    var bits = 0
+    comptime if IDN_NMF_L2_CELL:
+        bits |= 32
+    comptime if IDN_ICA_LIM_DEV:
+        bits |= 64
+    comptime if IDN_POLAR_MAX_DEV:
+        bits |= 128
+    comptime if IDN_LLE_PAD_DEV:
+        bits |= 256
+    comptime if IDN_RES_MOVES:
+        bits |= 16
+    comptime if IDN_RAND_RESIDENT:
+        bits |= 8
+    comptime if IDN_LLE_DEV_F0:
+        bits |= 4
+    comptime if IDN_OLS_ONE_ENTRY:
+        bits |= 1
+    comptime if IDN_LU_GESV:
+        bits |= 2
+    return PythonObject(bits)
+
+
+def ols_tsqr_r_py[E: Exec](
+    a: PythonObject, b: PythonObject, r: PythonObject, mu: PythonObject, ymean: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """r ((d + 1) x (d + 1)) = R of the blocked TSQR of [a - mu | b - ymean]
+    (a m x d, b m), mu (float32 [d]) and ymean (float64 [1]) written: X and
+    y cross to the device once (Exec.ols_tsqr_factor). p = [m, d]."""
+    var m = _n(p, 0)
+    var d = _n(p, 1)
+    var n = d + 1
+    if d < 1 or n > TS_MAX_N or m < n:
+        raise Error("x_decomp: ols_tsqr_r needs 1 <= d, d + 1 <= " + String(TS_MAX_N) + " and m >= d + 1")
+    if m * n > 2147483647:
+        raise Error("x_decomp: ols_tsqr_r exceeds the Int32 index bound")
+    var pa = _f(a)
+    var pb = _f(b)
+    var pr = _f(r)
+    var pm = _f(mu)
+    var ya = Int(py=ymean)
+    if ya == 0:
+        raise Error("x_decomp: null float64 buffer address")
+    var py = MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=ya)
+    with GILReleased(Python()):
+        E.ols_tsqr_factor(pa, pb, pr, pm, py, m, d)
+    return PythonObject(n)
+
+
+def lu_gesv_py[E: Exec](a: PythonObject, b: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
+    """b (n x nrhs) = the solution of a x = b through `lu` then `lu_solve`
+    with the factor resident (Exec.lu_gesv); info (1) is `lu`'s. p = [n, nrhs]."""
+    var n = _n(p, 0)
+    var nrhs = _n(p, 1)
+    if n >= 1 << 24:
+        raise Error("x_decomp: lu_gesv row numbers exceed float32's exact integers")
+    var pa = _f(a)
+    var pb = _f(b)
+    var pi = _f(info)
+    with GILReleased(Python()):
+        E.lu_gesv(pa, pb, pi, n, nrhs)
+    return PythonObject(n)
+
+
 def tsqr_q_py[E: Exec](c: PythonObject, q: PythonObject, p: PythonObject) raises -> PythonObject:
     """q (m x k) = Q c (c n x k) for the factorization `tsqr_r_py` kept,
     which is then released; p = [m, n, k], k == 0 releases it only."""
@@ -765,15 +896,16 @@ def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonOb
 
 
 def dsum_sq_py(x: PythonObject, m: PythonObject) raises -> PythonObject:
-    """The in-order float64 sum of the squares of m float32 values."""
+    """The binary64 sum of the squares of m float32 values in the device
+    form's chunked order (`dsum_sq_host`): the host column."""
     var n = Int(py=m)
     if n <= 0:
         return PythonObject(Float64(0))
     var px = _f(x)
-    var t = Float64(0)
+    var t = UInt64(0)
     with GILReleased(Python()):
-        t = dsum_sq(px, n)
-    return PythonObject(t)
+        t = dsum_sq_host(px, n)
+    return PythonObject(bitcast[DType.float64](t))
 
 
 def order_f_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
@@ -822,21 +954,18 @@ def accuracy_py(y: PythonObject, pred: PythonObject, w: PythonObject, m: PythonO
     return Python.tuple(r[0], r[1])
 
 
-def pca_mle_rank_terms_py(sp: PythonObject, p: PythonObject, v: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """p = [d, rank]: the float32 cross terms of Minka's rank `rank`; their count."""
+def pca_mle_rank_host_py(sp: PythonObject, p: PythonObject) raises -> PythonObject:
+    """The host column of `x_decomp_dev_pca_mle_rank` (x_decomp/pca_mle.mojo):
+    sp = the address of d binary64 spectrum values, p = [d, n_samples]; the
+    Minka MLE rank (0 when d < 2)."""
     var d = _n(p, 0)
-    var rank = _n(p, 1)
-    if rank < 1 or rank >= d:
-        raise Error("x_decomp: pca_mle rank out of range")
-    return PythonObject(pca_mle_terms(_d(sp), d, rank, Float64(py=v), _f(dst)))
-
-
-def pca_mle_pa_py(lt: PythonObject, m: PythonObject, logn: PythonObject) raises -> PythonObject:
-    """sum over t of (t + logn) in order, float64."""
-    var n = Int(py=m)
-    if n <= 0:
-        return PythonObject(Float64(0))
-    return PythonObject(pca_mle_pa(_f(lt), n, Float64(py=logn)))
+    var n = _n(p, 1)
+    if d < 2:
+        return PythonObject(0)
+    var scratch = List[Float32](length=mle_scratch_words(d), fill=Float32(0))
+    var r = pca_mle_rank_host(_f(sp), d, n, F32Ptr(unsafe_from_address=Int(scratch.unsafe_ptr())))
+    _ = scratch^
+    return PythonObject(r)
 
 
 def topn_desc_py(x: PythonObject, p: PythonObject, skip: PythonObject, dst: PythonObject) raises -> PythonObject:

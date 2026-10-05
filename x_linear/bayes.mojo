@@ -702,6 +702,10 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
 #: lambda), factored, and on a non-positive pivot refactored with a ridge
 #: of dk * eps32 on A~'s diagonal (x10 a retry, ARD_EQ_TRIES); sigma =
 #: S inv(A~) S. Same team split as before; no host step.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab5-ard): ard istella r2 0.2826 -> 0.3270 (scikit-learn 0.3274) BUT
+#: 67.2 -> 1348.1 ms. KEPT for correctness; the speed fix is owed in lane
+#: apple-fast-general-speed.
 comptime ARD_FAST_EQ = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_ARD_SIGMA_QOLD"]()
 comptime ARD_EQ_TRIES = 8
 

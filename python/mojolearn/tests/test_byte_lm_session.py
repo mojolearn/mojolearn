@@ -226,7 +226,7 @@ def test_checkpoint_restores_resident_preference_without_serializing_device_stat
     assert len(created) == 2 and restored.step_ == 2
 
 
-@pytest.mark.parametrize('value', [1, 'yes', np.bool_(True), None])
+@pytest.mark.parametrize('value', [1, 'yes', np.bool_(True)])  # None is AUTO (cpu2-l11-neural)
 def test_resident_requires_boolean(host, value):
     with pytest.raises(TypeError, match='resident'):
         Trainer(initial(), data_schedule={'dataset': 'test'}, resident=value)
@@ -243,6 +243,7 @@ def test_lean_requires_resident_and_the_result_kind_is_checked(host, kwargs):
 
 def test_default_step_result_is_lean_for_resident_and_full_for_stateless(host):
     # DEVIATION 2514 step 9: the default flipped on gate G5 (H100, 2026-09-11).
+    # cpu2-l11-neural: resident=None is AUTO and keeps the full result.
     assert Trainer(initial(), data_schedule={'dataset': 'test'}).run_metadata()['step_result'] == 'full'
     assert Trainer(initial(), data_schedule={'dataset': 'test'},
                    resident=True).run_metadata()['step_result'] == 'lean'

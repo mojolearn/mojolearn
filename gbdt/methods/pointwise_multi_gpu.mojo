@@ -145,7 +145,7 @@ def pointwise_feature_shards(ctx: DeviceContext, policy: Int,
         except:
             fp[rank] = 1
     host_parallelize(task,count)
-    for rank in range(count):
+    for rank in range(count):  # small-loop(count: devices, at most eight): per-device failure check that only raises
         if failed[rank] != 0:
             raise Error("pointwise feature shard failed: " + String(rank))
     # Each bin is an interleaved (weight, target) pair, not two bin planes.

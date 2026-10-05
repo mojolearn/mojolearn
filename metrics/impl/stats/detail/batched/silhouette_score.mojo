@@ -86,7 +86,24 @@ from metrics.checks.pinned_sum import (
 )
 from metrics.impl.stats.detail.scores import sum_chunks_kernel
 from metrics.impl.stats.detail.silhouette_score import count_labels, sil_op
-from checks.numerics import ftz
+from metrics.impl.stats.detail.histogram import HIST_TPB, gmem_hist_kernel
+from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
+
+#: lane fix-c1-cluster (2026-10-04), IDENTICAL, ON by default: `countLabels`
+#: is enqueued (memset + `gmem_hist_kernel`, the kernel `histogram` launches)
+#: without `histogram`'s trailing host wait, and the wait between the row
+#: kernel and the score sum goes too; the stream orders all of it and the one
+#: wait left is the mean's readback. Integer counts, the same kernels on the
+#: same bytes: no bit moves. -D MOJOLEARN_IDN_SIL_NO_WAIT_OFF (or
+#: MOJOLEARN_IDN_ALL_OFF) restores both waits.
+comptime IDN_SIL_NO_WAIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_SIL_NO_WAIT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 
 
 #: `ML::distance::DistanceType` (cuml/common/distance_type.hpp): the one
@@ -245,7 +262,22 @@ def silhouette_score_launch[
         raise Error("silhouette_score: scores holds fewer than n_rows floats")
     # get_cluster_counts (:109-124) -> countLabels
     var cluster_counts = ctx.enqueue_create_buffer[DType.int32](n_labels)
-    count_labels(ctx, y, cluster_counts, n_rows, n_labels)
+    comptime if IDN_SIL_NO_WAIT:
+        # MOJOLEARN_IDN_SIL_NO_WAIT: `histogram`'s statements, no host wait
+        var hist_grid = ceildiv(n_rows, HIST_TPB)
+        if hist_grid < 1:
+            hist_grid = 1
+        ctx.enqueue_memset(cluster_counts, Int32(0))
+        ctx.enqueue_function[gmem_hist_kernel](
+            cluster_counts.unsafe_ptr(),
+            y.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(0),
+            grid_dim=(hist_grid, 1, 1),
+            block_dim=(HIST_TPB, 1, 1),
+        )
+    else:
+        count_labels(ctx, y, cluster_counts, n_rows, n_labels)
     var a = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var b = ctx.enqueue_create_buffer[DType.float32](n_rows * n_labels)
     var gx = n_rows if grid_x_override <= 0 else grid_x_override
@@ -263,7 +295,8 @@ def silhouette_score_launch[
         grid_dim=(gx, gy, 1),
         block_dim=(block_size, 1, 1),
     )
-    ctx.synchronize()
+    comptime if not IDN_SIL_NO_WAIT:
+        ctx.synchronize()
     # `thrust::reduce(a_ptr, a_ptr + n_rows, 0) / n_rows` (:265): the
     # DEVIATION 653 tree over the scores, then one division.
     var chunks = chunk_count(n_rows)

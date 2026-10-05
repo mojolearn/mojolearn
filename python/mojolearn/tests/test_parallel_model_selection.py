@@ -54,6 +54,28 @@ def setup(monkeypatch):
         for output, source in enumerate((ctypes.c_int64 * output_rows).from_address(indices)):
             ctypes.memmove(dst + output * row_bytes, src + source * row_bytes, row_bytes)
     monkeypatch.setitem(_buffer._NATIVE, 'gather_rows_bytes', gather)
+    # the resident fold store (lane cpu2-l4-modelsel): put/take/free over
+    # host bytes, the contract of bindings/msel_host.mojo
+    store = {}
+
+    def msel_put(src, nbytes):
+        key = len(store)
+        while key in store:
+            key += 1
+        store[key] = ctypes.string_at(src, nbytes)
+        return key
+
+    def msel_take_rows(sid, source_rows, row_bytes, iid, output_rows, dst):
+        rows = (ctypes.c_int64 * output_rows).from_buffer_copy(store[iid][:8 * output_rows])
+        for output, source in enumerate(rows):
+            assert 0 <= source < source_rows
+            ctypes.memmove(dst + output * row_bytes, store[sid][source * row_bytes:(source + 1) * row_bytes],
+                           row_bytes)
+        return 0
+
+    monkeypatch.setitem(_buffer._NATIVE, 'msel_put', msel_put)
+    monkeypatch.setitem(_buffer._NATIVE, 'msel_take_rows', msel_take_rows)
+    monkeypatch.setitem(_buffer._NATIVE, 'msel_free', lambda sid: store.pop(sid) and 0)
     monkeypatch.setattr(_backend, 'vendor', lambda: 'cuda')
     # THE PRETENDED INSTALL MUST BE CONSISTENT WITH THE PRETENDED VENDOR
     # (lane/cpu-routes-gpu-only-four, 2026-09-20). This fixture emulates a

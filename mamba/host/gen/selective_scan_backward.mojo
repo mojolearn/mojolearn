@@ -369,7 +369,7 @@ def mamba_backward_scan_sabotage_name() -> String:
 
 def selective_scan_checkpoint_kernel[
     DSTATE: Int
-](gid_: Int, 
+](gid_: Int,
     hck_ptr: MutPointer[Float32, MutAnyOrigin],
     h_in_ptr: MutPointer[Float32, MutAnyOrigin],
     u_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -567,7 +567,7 @@ def selective_scan_checkpoint_fn(
 
 def selective_scan_bwd_scan_kernel[
     DSTATE: Int
-](gid_: Int, 
+](gid_: Int,
     dh_ptr: MutPointer[Float32, MutAnyOrigin],
     du_s_ptr: MutPointer[Float32, MutAnyOrigin],
     ddelta_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -881,7 +881,7 @@ def selective_scan_bwd_scan_into(
 
 def mamba_bwd_dbc_kernel[
     DSTATE: Int
-](gid_: Int, 
+](gid_: Int,
     dcm_ptr: MutPointer[Float32, MutAnyOrigin],
     dbm_ptr: MutPointer[Float32, MutAnyOrigin],
     dy_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -968,7 +968,7 @@ def mamba_bwd_dbc_kernel[
 
 def mamba_bwd_dbc_atomic_kernel[
     DSTATE: Int
-](gid_: Int, 
+](gid_: Int,
     dcm_ptr: MutPointer[Float32, MutAnyOrigin],
     dbm_ptr: MutPointer[Float32, MutAnyOrigin],
     dy_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -1122,7 +1122,7 @@ def mamba_bwd_dbc_into(
 
 def mamba_bwd_da_partial_kernel[
     DSTATE: Int
-](gid_: Int, 
+](gid_: Int,
     dap_ptr: MutPointer[Float32, MutAnyOrigin],
     dh_ptr: MutPointer[Float32, MutAnyOrigin],
     delta_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -1251,7 +1251,7 @@ def mamba_bwd_da_partial_kernel[
         dap_ptr.unsafe_store((bb * dim + d) * DSTATE + n, acc[n])
 
 
-def mamba_bwd_param_fold_kernel(gid_: Int, 
+def mamba_bwd_param_fold_kernel(gid_: Int,
     out_ptr: MutPointer[Float32, MutAnyOrigin],
     partial_ptr: MutPointer[Float32, MutAnyOrigin],
     batch_in: Int32,
@@ -1430,7 +1430,7 @@ def mamba_bwd_param_fold_into(
 # ===========================================================================
 
 
-def mamba_bwd_da_log_kernel(gid_: Int, 
+def mamba_bwd_da_log_kernel(gid_: Int,
     dalog_ptr: MutPointer[Float32, MutAnyOrigin],
     da_ptr: MutPointer[Float32, MutAnyOrigin],
     a_ptr: MutPointer[Float32, MutAnyOrigin],

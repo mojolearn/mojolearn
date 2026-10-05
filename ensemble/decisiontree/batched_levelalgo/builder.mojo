@@ -5,6 +5,7 @@
 from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
+from std.memory import memcpy
 from std.sys.info import has_apple_gpu_accelerator, size_of
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -51,7 +52,28 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     launch_gather_sampled_order_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
+    launch_finalize_pure_splits_kernel,
     launch_phase_setup_kernel,
+)
+from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import (
+    LOOP_HDR_WORDS,
+    LOOP_H_DEPTH,
+    LOOP_H_HEAD,
+    LOOP_H_NODES,
+    LOOP_H_OVERFLOW,
+    LOOP_H_TAIL,
+    LOOP_NODE_INTS,
+    LOOP_QUEUE_INTS,
+    launch_loop_finalize,
+    launch_loop_pop,
+    launch_loop_push,
+    launch_loop_retry_finish,
+    launch_loop_retry_merge,
+    launch_loop_retry_next,
+    launch_loop_tree,
+    loop_retry_words,
+    loop_root_words,
+    loop_scan_words,
 )
 from ensemble.decisiontree.decisiontree import (
     CRITERION_END,
@@ -97,13 +119,33 @@ comptime TPB_DEFAULT = 128
 # the M4 Pro measures RandomForestRegressor Istella-S 49.53 s at 10, 47.84
 # s at 20, 47.14 s at 40, the same hash 3a5e8c09dd0d5fc7 (steward
 # 1790612032193); the 91 s above was an older tree.
+#
+# fam-forests (2026-10-04), IDENTICAL on NVIDIA and AMD: 40 columns per pass
+# there too (`IDN_RF_COLS40`). A wide forest (Istella regression samples 220
+# of 220) otherwise runs 22 histogram + split passes per sampling round and
+# now runs 6; the pass width only regroups (node, column) blocks into
+# launches, every histogram cell and candidate is the same integer, and Apple
+# IDENTICAL already runs 40 against the others 10 with equal forests, so no
+# bit moves. `-D MOJOLEARN_IDN_RF_COLS40_OFF` restores 10.
+comptime IDN_RF_COLS40 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and not (
+        is_defined["MOJOLEARN_IDN_RF_COLS40_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
 comptime N_BLKS_FOR_COLS = 40 if (
     (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        (
+            GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+            or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        )
+        and has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_RF_COLS10"]()
     )
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_RF_COLS10"]()
+    or IDN_RF_COLS40
 ) else (
     # trial arms (trees-apple2): the columns per pass under IDENTICAL
     20 if is_defined["MOJOLEARN_RF_TRIAL_COLS20"]() else (
@@ -335,7 +377,7 @@ struct NodeQueue[dtype: DType, sabotage: Int = 0](Copyable, Movable):
             return False
         return True
 
-    def push(
+    def push_replay(
         mut self,
         work_items: List[NodeWorkItem],
         h_splits: List[SplitSummary[Self.dtype]],
@@ -539,7 +581,7 @@ too: their Gini gain is not exactly 0 in the objective's arithmetic, and a
 retry with the right column "splits" them into two pure children of the
 same class. scikit-learn leafs a pure node before it looks for a split;
 this flag restores that rule. `find_best_splits_kernel` writes the node's
-purity into the slot's `pure` field and `_read_splits` reports it as
+purity into the slot's `pure` field and `_read_splits_host` reports it as
 `terminal`: the node is a leaf regardless of any candidate and is never
 retried.
 
@@ -556,7 +598,7 @@ rf-clf fingerprints move under the opt-in
 Regression never marks a node (one histogram plane shows no purity), so
 rf-reg forests are unchanged either way."""
 
-def update_workload_info[
+def update_workload_info_host[
     o: MutOrigin, //, sabotage: Int = 0
 ](
     work_items: List[NodeWorkItem],
@@ -616,11 +658,11 @@ def update_workload_info[
     return n_blocks_dimx
 
 
-def workload_blocks_for(work_items: List[NodeWorkItem]) -> Int:
+def workload_blocks_for_host(work_items: List[NodeWorkItem]) -> Int:
     """`updateWorkloadInfo`'s running total WITHOUT its writes -- the same
     `max(ceildiv(count, TPB_DEFAULT), 1)` sum, so a caller that can prove
     the staged map is already on the device (DEVIATION 1919) can size the
-    grid without restaging. Any edit to `update_workload_info`'s block
+    grid without restaging. Any edit to `update_workload_info_host`'s block
     arithmetic must land here in the same commit; the two must agree or
     the partition grid is short.
 
@@ -634,6 +676,16 @@ def workload_blocks_for(work_items: List[NodeWorkItem]) -> Int:
             ceildiv(work_items[i].instances.count, TPB_DEFAULT), 1
         )
     return n_blocks_dimx
+
+
+def _small_batch_host(work_items: List[NodeWorkItem]) -> Bool:
+    """The host-queue replay's small-node test: every node of the host
+    batch list holds at most `SMALL_NODE_ROWS` rows. The device loop
+    (`dev_n >= 0`) never asks."""
+    for i in range(len(work_items)):
+        if Int(work_items[i].instances.count) > SMALL_NODE_ROWS:
+            return False
+    return True
 
 
 def max_blocks_dimx_for(max_batch_size: Int32, n_sampled_rows: Int) -> Int:
@@ -854,12 +906,68 @@ def compute_shared_memory_config(
 # ===========================================================================
 
 
+# fam2-forests (2026-10-04), IDENTICAL, every vendor: the partition rides the
+# SAME drain as round zero's split search (`IDN_RF_FUSED_PARTITION`). Before,
+# every batch paid two host round trips: download the candidate splits, read
+# them, re-upload them, partition, download again. Now `begin_batch_replay` enqueues
+# search -> `finalize_pure_splits_kernel` -> partition and one download brings
+# back splits that already carry `local_nLeft`. A node that found no split is
+# skipped by the partition's own `IsValid()` guards exactly as before; such
+# nodes (when more sampling rounds remain) are retried on the old path and
+# then partitioned as a subset, which is the same stable partition of the same
+# disjoint row ranges, only later. No arithmetic or order inside any node
+# changes, so no bit moves and the host column is untouched.
+# `-D MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF` restores the two-drain batch.
+# Off under an identity trace (the trace records the candidate round) and
+# under any check sabotage hook.
+comptime IDN_RF_FUSED_PARTITION = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+# The level loop's control plane ON THE DEVICE (fam2-forests' candidate
+# `IDN_RF_DEVICE_LOOP`; the only GPU route since cpu4-forest, 2026-10-04, in
+# IDENTICAL and FAST on every vendor, no off switch). The queue
+# (`NodeQueue::Pop`/`Push`), the block maps (`updateWorkloadInfo`), the
+# sampling rounds' retry sets (`doSplit`, `:452-458`) and the `max_leaves`
+# budget run as kernels (`kernels/level_loop_kernels.mojo`), so a tree
+# enqueues `LOOP_K` whole batches -- pop, every sampling round's split
+# search, finalize, partition, push -- and the host drains once per
+# `LOOP_K` batches to read a 16-word header; the finished tree's nodes and
+# leaf values cross once, as two bulk copies. The host launches at proven
+# bounds (batch b holds at most `min(max_batch_size, 2^b)` items, every
+# sampling round runs) and the device makes the excess inert. Same node
+# ids, same queue order, same retry sets, same row kernels: the tree is the
+# one the host queue builds (`ensemble/host/rf_oracle.mojo`, the host
+# column, is untouched), on every vendor. The host queue below
+# (`NodeQueue`, `begin_batch_replay`/`advance_batch_replay`) is reached only by the
+# check sabotage instantiations (`sabotage != 0`, ensemble/checks) and an
+# identity trace (which records per-round host split summaries); a fit
+# never builds it.
+# `-D MOJOLEARN_IDN_RF_DEVICE_LOOP_K1` / `_K2` / `_K8` pick the batches per
+# drain (default 4).
+comptime LOOP_K = 1 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K1"]() else (
+    2 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K2"]() else (
+        8 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K8"]() else 4
+    )
+)
+
+
 @fieldwise_init
 struct BatchState[O: ObjectiveLike](Movable):
     """One batch of `doSplit` (`builder.cuh:410-482`), suspended at a sync
     point. `phase` 0 means a best-splits download is pending; 1 means the
     node-split download is. `do_split` drives this serially and is
-    bit-identical to the pre-pipeline transcription."""
+    bit-identical to the pre-pipeline transcription.
+
+    `IDN_RF_FUSED_PARTITION` adds two phases: 2 means round zero's search
+    AND its partition share the pending download; 3 means the partition
+    of the retried subset (`fused_retry`, original batch indices) is
+    pending. `fused_retry` is empty on every other path."""
 
     var work_items: List[NodeWorkItem]
     var active_items: List[NodeWorkItem]
@@ -869,6 +977,7 @@ struct BatchState[O: ObjectiveLike](Movable):
     var max_rounds: Int
     var phase: Int
     var result: List[SplitSummary[Self.O.DataT]]
+    var fused_retry: List[Int]
 
 
 @fieldwise_init
@@ -894,7 +1003,7 @@ struct _DevPrefixView(Movable):
     count-parameterized APIs, so no per-level object is ever created.
     `enqueue_copy`/`enqueue_memset` here are buffer-shaped (the byte
     count IS the buffer), so the live-prefix byte counts -- which are
-    THEIRS, see e.g. `_stage_work_items` -- need a view object; this
+    THEIRS, see e.g. `_stage_work_items_host` -- need a view object; this
     cache recreates that view only when the byte count actually moves
     (level to level it is usually pinned at `max_batch_size`'s worth once
     the frontier saturates). Replacing a view whose enqueue is still in
@@ -1022,7 +1131,7 @@ def flush_splits_downloads[
     enqueues and before its synchronize -- the queue is in-order, so the
     copy lands after every kernel that writes a slot's splits."""
     var extent = 0
-    for k in range(len(builders)):
+    for k in range(len(builders)):  # small-loop(builders: pipelined tree slots, k_streams): one copy extent from per-slot byte counts
         var pending = builders[k].pending_splits_bytes
         if pending > 0:
             builders[k].pending_splits_bytes = 0
@@ -1094,7 +1203,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     # DEVIATION 401 -- the 0-based index of the batch within the current
     # tree, for identity-trace tags ("treeT.batchB.roundR..."). A POSITION
     # IN THE ALGORITHM (the queue pops in deterministic order), never a
-    # machine property. -1 between trees; `begin_batch` pre-increments.
+    # machine property. -1 between trees; `begin_batch_replay` pre-increments.
     var trace_batch: Int
     var seed: UInt64
     var n_sampled_rows: Int
@@ -1153,6 +1262,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     # live workload now stages here, at `cur_wl_rel` -- the next 512-byte
     # boundary past the phase's live work items.
     var h_phase: HostBuffer[DType.uint8]
+    # Fused partition can queue a second phase before histogram DMA has
+    # consumed h_phase. Keep both pinned upload sources alive until the
+    # existing batch completion; device queue ordering does not protect
+    # a host source from being overwritten before its queued copy.
+    var h_phase_spare: HostBuffer[DType.uint8]
     var phase_view: _DevPrefixView
     var cur_wl_rel: Int
 
@@ -1241,6 +1355,32 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     var leaf_h_ranges: HostBuffer[DType.uint8]
     var leaf_d_leaves: DeviceBuffer[Self.O.DataT]
     var leaf_h_leaves: HostBuffer[Self.O.DataT]
+
+    # The device level loop's state. Layouts:
+    # `kernels/level_loop_kernels.mojo`.
+    var loop_hdr: DeviceBuffer[DType.int32]
+    var loop_h_hdr: HostBuffer[DType.int32]
+    var loop_queue: DeviceBuffer[DType.int32]
+    var loop_nodes_i: DeviceBuffer[DType.int32]
+    var loop_nodes_f: DeviceBuffer[Self.O.DataT]
+    var loop_scan: DeviceBuffer[DType.int32]
+    # the root's initial control words (pinned, written once: they depend
+    # only on `n_sampled_rows`) and the two device views they upload into
+    var loop_h_root: HostBuffer[DType.int32]
+    var loop_root_queue: DeviceBuffer[DType.int32]
+    var loop_root_node: DeviceBuffer[DType.int32]
+    # the sampling rounds' scratch (`loop_retry_words`), the compacted
+    # retry items (`max_batch` NodeWorkItem) and the batch's final splits
+    # (`max_batch` Split), used when `max_sampling_rounds_for(...) > 1`
+    var loop_retry: DeviceBuffer[DType.int32]
+    var loop_items_s: DeviceBuffer[DType.uint8]
+    var loop_final: DeviceBuffer[DType.uint8]
+    # node capacity of the tables above; 0 = no tree to grow (no rows)
+    var loop_cap: Int
+    # batches enqueued for the tree in flight (bounds the batch width)
+    var loop_batch: Int
+    # the tree in flight runs on the device queue
+    var loop_active: Bool
 
     def __init__(
         out self,
@@ -1386,6 +1526,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.h_phase = ctx.enqueue_create_host_buffer[DType.uint8](
             wi_span + size_of[WorkloadInfo]() * max_blocks
         )
+        comptime if IDN_RF_FUSED_PARTITION and HIST_ITEMS_PER_THREAD != 1:
+            self.h_phase_spare = ctx.enqueue_create_host_buffer[DType.uint8](
+                wi_span + size_of[WorkloadInfo]() * max_blocks
+            )
+        else:
+            self.h_phase_spare = ctx.enqueue_create_host_buffer[DType.uint8](1)
         self.phase_view = _DevPrefixView(
             self.d_buff,
             wi_span + size_of[WorkloadInfo]() * max_blocks,
@@ -1477,6 +1623,73 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         )
         self.leaf_h_leaves = ctx.enqueue_create_host_buffer[Self.O.DataT](
             self.leaf_capacity * n_out
+        )
+
+        # The device queue's tables. Node capacity is the dense bound for
+        # the depth, capped by 2 * rows + 1 (every split leaves two
+        # non-empty children) and by `2 * max_leaves - 1`; the push kernel
+        # refuses to write past it and flags the header, and the host
+        # raises.
+        self.loop_cap = 0
+        self.loop_batch = 0
+        self.loop_active = False
+        var cap = 2 * n_sampled_rows + 1
+        if Int(params.max_depth) < 29:
+            var dense = (1 << (Int(params.max_depth) + 1)) - 1
+            if dense < cap:
+                cap = dense
+        if params.max_leaves != Int32(-1) and Int(params.max_leaves) > 0:
+            var by_leaves = 2 * Int(params.max_leaves) - 1
+            if by_leaves < cap:
+                cap = by_leaves
+        if cap < 3:
+            cap = 3
+        if cap >= (1 << 31) - 1:
+            raise Error(
+                "RandomForest: the tree's node bound "
+                + String(cap)
+                + " does not fit the device node table's Int32 ids"
+            )
+        if n_sampled_rows > 0:
+            self.loop_cap = cap
+        self.loop_hdr = ctx.enqueue_create_buffer[DType.int32](
+            LOOP_HDR_WORDS
+        )
+        self.loop_h_hdr = ctx.enqueue_create_host_buffer[DType.int32](
+            LOOP_HDR_WORDS
+        )
+        self.loop_queue = ctx.enqueue_create_buffer[DType.int32](
+            cap * LOOP_QUEUE_INTS
+        )
+        self.loop_nodes_i = ctx.enqueue_create_buffer[DType.int32](
+            cap * LOOP_NODE_INTS
+        )
+        self.loop_nodes_f = ctx.enqueue_create_buffer[Self.O.DataT](cap * 2)
+        self.loop_scan = ctx.enqueue_create_buffer[DType.int32](
+            loop_scan_words(max_batch)
+        )
+        self.loop_h_root = ctx.enqueue_create_host_buffer[DType.int32](
+            LOOP_HDR_WORDS + LOOP_QUEUE_INTS + LOOP_NODE_INTS
+        )
+        loop_root_words(self.loop_h_root.unsafe_ptr(), n_sampled_rows)
+        self.loop_root_queue = self.loop_queue.create_sub_buffer[DType.int32](
+            0, LOOP_QUEUE_INTS
+        )
+        self.loop_root_node = self.loop_nodes_i.create_sub_buffer[
+            DType.int32
+        ](0, LOOP_NODE_INTS)
+        var multi_round = max_sampling_rounds_for(
+            n_cols, self.original_n_sampled_cols
+        ) > 1
+        var retry_slots = max_batch if multi_round else 1
+        self.loop_retry = ctx.enqueue_create_buffer[DType.int32](
+            loop_retry_words(retry_slots)
+        )
+        self.loop_items_s = ctx.enqueue_create_buffer[DType.uint8](
+            size_of[NodeWorkItem]() * retry_slots
+        )
+        self.loop_final = ctx.enqueue_create_buffer[DType.uint8](
+            size_of[Split[Self.O.DataT]]() * retry_slots
         )
 
         ctx.enqueue_memset(self.mutex, Int32(0))
@@ -1660,7 +1873,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         """DEVIATION 1908: the CURRENT phase's workload map, which the
         packed upload put at `cur_wl_rel` bytes past the work items --
         inside the `d_work_items`/`workload_info` arena stretch, at a
-        512-byte boundary. Valid between `_stage_work_items` and the next
+        512-byte boundary. Valid between `_stage_work_items_host` and the next
         phase's staging; every launch captures the value by then."""
         return (
             self.d_work_items.unsafe_ptr()
@@ -1720,7 +1933,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             self.scales,
         )
 
-    def _stage_work_items(mut self, items: List[NodeWorkItem]):
+    def _stage_work_items_host(mut self, items: List[NodeWorkItem]):
         """The pinned half of `raft::update_device(d_work_items,
         work_items.data(), work_items.size(), stream)` (`:466`, `:492`).
         DEVIATION 1908: the copy itself is deferred to
@@ -1742,10 +1955,10 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     def _h_workload_ptr(
         mut self,
     ) -> MutPointer[WorkloadInfo, MutUntrackedOrigin]:
-        """The pinned array `update_workload_info` fills in place --
+        """The pinned array `update_workload_info_host` fills in place --
         the reference's `h_workload_info` member (`builder.cuh:198`).
         DEVIATION 1908: it lives in the packed phase span, directly after
-        this phase's work items; call only after `_stage_work_items` has
+        this phase's work items; call only after `_stage_work_items_host` has
         set `cur_wl_rel`."""
         return (
             self.h_phase.unsafe_ptr()
@@ -1803,7 +2016,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 return
             self._copy_splits_now(ctx, nbytes)
 
-    def _read_splits(
+    def _read_splits_host(
         mut self, n: Int
     ) raises -> List[SplitSummary[Self.O.DataT]]:
         """The host read that follows the sync -- what `NodeQueue::Push`
@@ -1853,7 +2066,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             self.pending_splits_bytes = 0
             self._copy_splits_now(ctx, nbytes)
         ctx.synchronize()
-        return self._read_splits(n)
+        return self._read_splits_host(n)
 
     # `Builder::sampleFeatures` (`:505-520`) no longer has a method of its
     # own: DEVIATION 1916 fused it with `:489`'s initSplit and `:490`'s
@@ -2036,13 +2249,23 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         smem_config: SharedMemoryConfig,
         mut instr: FitInstruments,
         tag_prefix: String,
+        dev_n: Int = -1,
+        dev_blocks: Int = 0,
     ) raises:
-        """`Builder::computeBestSplits`, `:485-503`, in their order --
+        """The device level loop: `dev_n >= 0` says the device already
+        holds this batch's work items and block map (`launch_loop_pop`),
+        `dev_n` items and `dev_blocks` map entries wide; nothing is staged,
+        uploaded or downloaded here and `work_items` is not read. The
+        default (-1) is the host path, unchanged.
+
+        `Builder::computeBestSplits`, `:485-503`, in their order --
         MINUS the trailing sync, which belongs to the caller so the
         pipelined forest loop (DEVIATION 117) can share one synchronize
         across every in-flight tree. `_compute_best_splits` below is the
         serial composition."""
         var n = len(work_items)
+        if dev_n >= 0:
+            n = dev_n
         # DEVIATION 1916: `:489`'s initSplit, `:490`'s mutex re-zero and
         # `:505-520`'s sampleFeatures now ride ONE fused launch, enqueued
         # below AFTER the phase upload (the feature sample reads the
@@ -2051,20 +2274,22 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # old one for every reader on the in-order queue).
         # DEVIATION 1908: stage both, then ONE packed upload.
         var t_h = instr.times.start()
-        self._stage_work_items(work_items)
-        # `:393-407` -- straight into the pinned array, as theirs.
-        # DEVIATION 2011: the granularity constant folds to TPB_DEFAULT
-        # under the default flag, i.e. this line IS theirs until the
-        # flag flips; under R > 1 the table is coarser and its only
-        # reader on this phase is the histogram launch (see the
-        # deviation block by the flag).
-        var n_blocks_dimx = update_workload_info(
-            work_items, self._h_workload_ptr(), HIST_WORKLOAD_GRANULARITY
-        )
-        instr.times.stop_host("host_stage_items", t_h)
-        t_h = instr.times.start()
-        self._enqueue_phase_upload(ctx, n_blocks_dimx)
-        instr.times.stop_host("host_phase_upload", t_h)
+        var n_blocks_dimx = dev_blocks
+        if dev_n < 0:
+            self._stage_work_items_host(work_items)
+            # `:393-407` -- straight into the pinned array, as theirs.
+            # DEVIATION 2011: the granularity constant folds to TPB_DEFAULT
+            # under the default flag, i.e. this line IS theirs until the
+            # flag flips; under R > 1 the table is coarser and its only
+            # reader on this phase is the histogram launch (see the
+            # deviation block by the flag).
+            n_blocks_dimx = update_workload_info_host(
+                work_items, self._h_workload_ptr(), HIST_WORKLOAD_GRANULARITY
+            )
+            instr.times.stop_host("host_stage_items", t_h)
+            t_h = instr.times.start()
+            self._enqueue_phase_upload(ctx, n_blocks_dimx)
+            instr.times.stop_host("host_phase_upload", t_h)
 
         # DEVIATION 1893/1909: the two split kernels' argument blobs are
         # a pure function of this tree's dataset and the round's
@@ -2165,16 +2390,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         instr.times.stop_host("host_launch_setup", t_h)
         var small_batch = False
         comptime if SMALL_NODE_FUSED_DEFAULT:
-            if dataset.has_bins and not instr.trace.enabled and Int(
+            if dev_n < 0 and dataset.has_bins and not instr.trace.enabled and Int(
                 self.params.max_n_bins
             ) * Int(
                 self.num_outputs
             ) <= SMALL_NODE_SLOTS:
-                small_batch = True
-                for i in range(n):
-                    if Int(work_items[i].instances.count) > SMALL_NODE_ROWS:
-                        small_batch = False
-                        break
+                small_batch = _small_batch_host(work_items)
         var c = 0
         while c < n_sampled_cols:
             if small_batch:
@@ -2204,6 +2425,8 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                     hist_argsp, find_argsp,
                 )
             c += N_BLKS_FOR_COLS
+        if dev_n >= 0:
+            return
         t_h = instr.times.start()
         self._enqueue_splits_download(ctx, n)
         instr.times.stop_host("host_splits_download", t_h)
@@ -2232,7 +2455,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             n_sampled_cols, smem_config, instr, String("untraced"),
         )
         ctx.synchronize()
-        return self._read_splits(len(work_items))
+        return self._read_splits_host(len(work_items))
 
     def _enqueue_round[
         sabotage: Int = 0
@@ -2283,7 +2506,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             n_sampled_cols, smem_config, instr, tag_prefix,
         )
 
-    def _record_splits(
+    def _record_splits_host(
         self,
         mut instr: FitInstruments,
         tag: String,
@@ -2321,7 +2544,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # otherwise be `flat`'s last use, freeing it under the hash.
         _ = flat^
 
-    def begin_batch[
+    def begin_batch_replay[
         sabotage: Int = 0
     ](
         mut self,
@@ -2363,13 +2586,20 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             max_rounds,
             0,
             List[SplitSummary[Self.O.DataT]](),
+            List[Int](),
         )
         self._enqueue_round[sabotage](
             ctx, dataset, quantiles, smem_config, st, instr
         )
+        comptime if IDN_RF_FUSED_PARTITION and sabotage == 0:
+            if not instr.trace.enabled:
+                var t_fp = instr.times.start()
+                self._enqueue_fused_node_split(ctx, dataset, st.work_items)
+                instr.times.stop_host("host_enq_partition", t_fp)
+                st.phase = 2
         return st^
 
-    def advance_batch[
+    def advance_batch_replay[
         sabotage: Int = 0
     ](
         mut self,
@@ -2387,13 +2617,13 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         splits in `st.result`."""
         if st.phase == 1:
             var t_rd = instr.times.start()
-            st.result = self._read_splits(len(st.work_items))
+            st.result = self._read_splits_host(len(st.work_items))
             instr.times.stop_host("host_read_splits", t_rd)
             # DEVIATION 401 -- the batch's splits as the PARTITION read
             # them back: chosen column, threshold bits, child counts.
             # This is "after split selection" for the whole batch.
             if instr.trace.enabled:
-                self._record_splits(
+                self._record_splits_host(
                     instr,
                     "tree"
                     + String(self.treeid)
@@ -2403,14 +2633,55 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                     st.result,
                 )
             return True
+        if st.phase == 2:
+            # `IDN_RF_FUSED_PARTITION`: one read serves the candidate
+            # round AND the partition. A valid slot already carries the
+            # `local_nLeft` the partition published; an invalid one was
+            # skipped by the partition's `IsValid()` guards.
+            var t_rf = instr.times.start()
+            var hf = self._read_splits_host(len(st.work_items))
+            instr.times.stop_host("host_read_splits", t_rf)
+            var retry_f = List[NodeWorkItem]()
+            var retry_f_orig = List[Int]()
+            for i in range(len(st.work_items)):
+                st.final_splits[i] = hf[i]
+                if not hf[i].is_valid and not hf[i].terminal:
+                    retry_f.append(st.work_items[i])
+                    retry_f_orig.append(i)
+            if len(retry_f) == 0 or st.round + 1 >= st.max_rounds:
+                st.result = hf^
+                return True
+            # Retry the nodes that found no split on the two-drain path
+            # (rounds 1..), then partition that subset alone (phase 3).
+            st.fused_retry = retry_f_orig.copy()
+            st.active_items = retry_f^
+            st.active_to_original = retry_f_orig^
+            st.round += 1
+            st.phase = 0
+            var t_rt2 = instr.times.start()
+            self._enqueue_round[sabotage](
+                ctx, dataset, quantiles, smem_config, st, instr
+            )
+            instr.times.stop_host("host_enq_hist_retry", t_rt2)
+            return False
+        if st.phase == 3:
+            # The retried subset's partition has drained: merge its
+            # `local_nLeft`-carrying splits into the batch's answer.
+            var t_r3 = instr.times.start()
+            var h3 = self._read_splits_host(len(st.fused_retry))
+            instr.times.stop_host("host_read_splits", t_r3)
+            for j in range(len(st.fused_retry)):
+                st.final_splits[st.fused_retry[j]] = h3[j]
+            st.result = st.final_splits.copy()
+            return True
         var t_rd = instr.times.start()
-        var h = self._read_splits(len(st.active_items))
+        var h = self._read_splits_host(len(st.active_items))
         instr.times.stop_host("host_read_splits", t_rd)
         # DEVIATION 401 -- the round's CANDIDATE splits, before the retry
         # dispatch, so a divergence is pinned to a sampling round rather
         # than to the batch's final answer.
         if instr.trace.enabled:
-            self._record_splits(
+            self._record_splits_host(
                 instr,
                 "tree"
                 + String(self.treeid)
@@ -2453,7 +2724,22 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # (priced in the 2011 block). Comptime-folds to `st.round == 0`
         # under the default flag.
         var t_ns = instr.times.start()
-        self.enqueue_node_split(
+        if len(st.fused_retry) > 0:
+            # `IDN_RF_FUSED_PARTITION`: every node outside `fused_retry`
+            # was partitioned with round zero; only the retried subset is
+            # left, and its row ranges are disjoint from the others.
+            var sub_items = List[NodeWorkItem]()
+            var sub_splits = List[SplitSummary[Self.O.DataT]]()
+            for j in range(len(st.fused_retry)):
+                sub_items.append(st.work_items[st.fused_retry[j]])
+                sub_splits.append(st.final_splits[st.fused_retry[j]])
+            self.enqueue_node_split_replay(
+                ctx, dataset, sub_items, sub_splits, reuse_phase_span=False
+            )
+            instr.times.stop_host("host_enq_partition", t_ns)
+            st.phase = 3
+            return False
+        self.enqueue_node_split_replay(
             ctx,
             dataset,
             st.work_items,
@@ -2478,7 +2764,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
 
         See the module docstring for why the rounds exist. Since the
         pipelined forest loop (DEVIATION 117) this is the SERIAL DRIVE of
-        `begin_batch`/`advance_batch` -- same operations, same order, same
+        `begin_batch_replay`/`advance_batch_replay` -- same operations, same order, same
         sync count (one per round plus one for the partition), verified
         bit-identical by the fingerprint probe when the split was made.
         Instruments are DISABLED (DEVIATION 401): this arm serves checks,
@@ -2488,18 +2774,18 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # never trust an earlier drive's cached blobs.
         self._invalidate_args_cache()
         var instr = FitInstruments.disabled()
-        var st = self.begin_batch[sabotage](
+        var st = self.begin_batch_replay[sabotage](
             ctx, dataset, quantiles, work_items, smem_config, instr
         )
         while True:
             ctx.synchronize()
-            if self.advance_batch[sabotage](
+            if self.advance_batch_replay[sabotage](
                 ctx, dataset, quantiles, smem_config, st, instr
             ):
                 var out = st.result.copy()
                 return out^
 
-    def enqueue_node_split(
+    def enqueue_node_split_replay(
         mut self,
         ctx: DeviceContext,
         dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
@@ -2515,8 +2801,8 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         packed [items | workload] span ALREADY holds exactly this
         `work_items` list's staging, so the restage and its
         `xfer_phase_upload` are skipped. The ONE caller that may pass
-        True is `advance_batch`, and only when `st.round == 0`: round
-        zero staged `st.active_items`, which `begin_batch` made a copy
+        True is `advance_batch_replay`, and only when `st.round == 0`: round
+        zero staged `st.active_items`, which `begin_batch_replay` made a copy
         of this very `st.work_items`, and no retry round restaged a
         subset in between -- so the span's bytes, `cur_wl_rel`, and the
         block map are byte-for-byte what restaging would produce (and
@@ -2524,7 +2810,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         the splits upload and 1916's fused setup write other regions).
         Any retry (`st.round > 0`) restages, because the last staging
         was the shrunken active set. The grid size is recomputed by
-        `workload_blocks_for`, the same arithmetic `update_workload_info`
+        `workload_blocks_for_host`, the same arithmetic `update_workload_info_host`
         runs, sans writes."""
         var n = len(work_items)
         # `:458` -- `dataset.n_sampled_cols = original_n_sampled_cols;`
@@ -2563,11 +2849,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # docstring).
         var n_partition_blocks: Int
         if reuse_phase_span:
-            n_partition_blocks = workload_blocks_for(work_items)
+            n_partition_blocks = workload_blocks_for_host(work_items)
         else:
-            self._stage_work_items(work_items)
+            self._stage_work_items_host(work_items)
             # `:393-407` -- straight into the pinned array, as theirs.
-            n_partition_blocks = update_workload_info(
+            n_partition_blocks = update_workload_info_host(
                 work_items, self._h_workload_ptr()
             )
             self._enqueue_phase_upload(ctx, n_partition_blocks)
@@ -2595,6 +2881,392 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             argsp,
         )
         self._enqueue_splits_download(ctx, n)
+
+    def _enqueue_fused_node_split(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        work_items: List[NodeWorkItem],
+    ) raises:
+        """`IDN_RF_FUSED_PARTITION`: `enqueue_node_split_replay` WITHOUT the host
+        splits upload. Call directly after round zero's
+        `enqueue_best_splits` over the same `work_items`: the device
+        `splits` region then holds this batch's candidates in batch
+        order, `finalize_pure_splits_kernel` turns each pure slot into a
+        leaf (DEVIATION 2502, what `_read_splits_host` did on the host), and
+        the partition reads the slots where they are. The staged
+        [items | workload] span is reused under the same condition
+        DEVIATION 1919 states (round zero staged this very list at TPB
+        granularity); otherwise it is restaged from the host list, which
+        is control data the host already owns."""
+        var n = len(work_items)
+        if n == 0:
+            return
+        var ds = dataset.copy()
+        ds.n_sampled_cols = Int32(self.original_n_sampled_cols)
+        comptime if not RETRY_PURE_NODES:
+            launch_finalize_pure_splits_kernel[Self.O.DataT](
+                ctx, self._splits_ptr(), n
+            )
+        var n_partition_blocks: Int
+        comptime if HIST_ITEMS_PER_THREAD == 1:
+            n_partition_blocks = workload_blocks_for_host(work_items)
+        else:
+            # Histogram and partition use different workload granularities.
+            # The earlier histogram upload may still be reading its pinned
+            # source; stage this upload into the other persistent span.
+            swap(self.h_phase, self.h_phase_spare)
+            self._stage_work_items_host(work_items)
+            n_partition_blocks = update_workload_info_host(
+                work_items, self._h_workload_ptr()
+            )
+            self._enqueue_phase_upload(ctx, n_partition_blocks)
+        if not self.node_split_args_ready:
+            _ = self.node_split_args.upload(ctx, NodeSplitArgs(ds.copy()))
+            self.node_split_args_ready = True
+        var argsp = self.node_split_args.device_ptr()
+        launch_node_split_kernel(
+            ctx,
+            ds,
+            self._work_items_ptr(),
+            self._splits_ptr(),
+            self._workload_ptr(),
+            n_partition_blocks,
+            n,
+            self.partition_row_ids.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self.node_split_scratch,
+            argsp,
+        )
+        self._enqueue_splits_download(ctx, n)
+
+    def _enqueue_loop_batches(
+        mut self,
+        ctx: DeviceContext,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+        quantiles: Quantiles[Self.O.DataT],
+        smem_config: SharedMemoryConfig,
+        mut instr: FitInstruments,
+    ) raises:
+        """Enqueue `LOOP_K` whole batches of `Builder::train`'s loop
+        (`:375-389`) with no host readback between them, then the header
+        download the next `advance_tree` reads.
+
+        Batch `b` of a tree holds at most `min(max_batch_size, 2^b)` items
+        (the queue at most doubles per batch and a pop takes at most
+        `max_batch_size`), and its block map at most
+        `1 + n_bound + n_sampled_rows / TPB` entries (`max_blocks_dimx_for`
+        with the batch bound); every launch uses those two bounds and the
+        device makes the excess inert. The block map sits at the aligned
+        end of `n_bound` work items, a host-known offset inside the
+        `d_work_items`/`workload_info` arena stretch (never past the
+        capacity span: `n_bound <= max_batch_size`, `blocks_bound <=
+        max_blocks`). A batch enqueued after the queue emptied pops
+        nothing and is inert end to end.
+
+        Per batch, in `doSplit`'s order (`:410-482`):
+          1. pop at histogram granularity (`HIST_WORKLOAD_GRANULARITY`);
+          2. sampling round 0's split search; then, for every further
+             round `r < max_sampling_rounds` (their `:420-458`), the
+             merge of the round's candidates into the batch's final
+             splits, the compaction of the nodes still without a split
+             (and not pure) into the next round's batch, and that round's
+             split search over its narrowed column window. Every round is
+             enqueued; a round with nothing to retry is inert;
+          3. the final splits back into the split slots, the batch popped
+             again at partition granularity (`TPB_DEFAULT`: the pop does
+             not move the head, so items and map are rebuilt as they were),
+             finalize, partition, push."""
+        var max_batch = Int(self.params.max_batch_size)
+        var max_rounds = max_sampling_rounds_for(
+            self.n_cols, self.original_n_sampled_cols
+        )
+        var ds_split = dataset.copy()
+        ds_split.n_sampled_cols = Int32(self.original_n_sampled_cols)
+        var no_items = List[NodeWorkItem]()
+        var hdrp = self.loop_hdr.unsafe_ptr().unsafe_origin_cast[
+            MutUntrackedOrigin
+        ]()
+        var queuep = self.loop_queue.unsafe_ptr().unsafe_origin_cast[
+            MutUntrackedOrigin
+        ]()
+        var scanp = self.loop_scan.unsafe_ptr().unsafe_origin_cast[
+            MutUntrackedOrigin
+        ]()
+        var retryp = self.loop_retry.unsafe_ptr().unsafe_origin_cast[
+            MutUntrackedOrigin
+        ]()
+        var items_sp = (
+            self.loop_items_s.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[NodeWorkItem]()
+        )
+        var finalp = (
+            self.loop_final.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[Split[Self.O.DataT]]()
+        )
+        comptime hist_scale = HIST_WORKLOAD_GRANULARITY // TPB_DEFAULT
+        for _ in range(LOOP_K):
+            var b = self.loop_batch
+            var n_bound = max_batch
+            if b < 30 and (1 << b) < max_batch:
+                n_bound = 1 << b
+            var blocks_bound = 1 + n_bound + self.n_sampled_rows // TPB_DEFAULT
+            self.cur_wl_rel = calculate_aligned_bytes(
+                n_bound * size_of[NodeWorkItem]()
+            )
+            # 1. pop + the histogram's block map
+            launch_loop_pop(
+                ctx,
+                hdrp,
+                queuep,
+                self._work_items_ptr(),
+                self._workload_ptr(),
+                scanp,
+                max_batch,
+                n_bound,
+                blocks_bound,
+                HIST_WORKLOAD_GRANULARITY,
+                hist_scale,
+            )
+            # 2. every sampling round
+            for r in range(max_rounds):
+                if r > 0:
+                    launch_loop_retry_next[
+                        Self.O.DataT, RETRY_PURE_NODES
+                    ](
+                        ctx,
+                        hdrp,
+                        self._splits_ptr(),
+                        self._work_items_ptr(),
+                        self._workload_ptr(),
+                        items_sp,
+                        retryp,
+                        scanp,
+                        max_batch,
+                        n_bound,
+                        blocks_bound,
+                        HIST_WORKLOAD_GRANULARITY,
+                        hist_scale,
+                        r == 1,
+                    )
+                var n_sampled_cols = sampled_cols_in_round(
+                    self.n_cols, self.original_n_sampled_cols, r
+                )
+                var ds_round = dataset.copy()
+                ds_round.n_sampled_cols = Int32(n_sampled_cols)
+                self.enqueue_best_splits(
+                    ctx, ds_round, quantiles, no_items,
+                    r * self.original_n_sampled_cols, n_sampled_cols,
+                    smem_config, instr, String(""),
+                    dev_n=n_bound, dev_blocks=blocks_bound,
+                )
+                if max_rounds > 1:
+                    launch_loop_retry_merge[Self.O.DataT, RETRY_PURE_NODES](
+                        ctx,
+                        hdrp,
+                        self._splits_ptr(),
+                        finalp,
+                        retryp,
+                        max_batch,
+                        n_bound,
+                        r == 0,
+                    )
+            # 3. the batch's answer, the partition map, finalize, partition
+            if max_rounds > 1:
+                launch_loop_retry_finish[Self.O.DataT](
+                    ctx, self._splits_ptr(), finalp, n_bound
+                )
+            launch_loop_pop(
+                ctx,
+                hdrp,
+                queuep,
+                self._work_items_ptr(),
+                self._workload_ptr(),
+                scanp,
+                max_batch,
+                n_bound,
+                blocks_bound,
+                TPB_DEFAULT,
+                1,
+            )
+            launch_loop_finalize[Self.O.DataT, not RETRY_PURE_NODES](
+                ctx,
+                self._splits_ptr(),
+                hdrp,
+                n_bound,
+            )
+            if not self.node_split_args_ready:
+                _ = self.node_split_args.upload(
+                    ctx, NodeSplitArgs(ds_split.copy())
+                )
+                self.node_split_args_ready = True
+            var argsp = self.node_split_args.device_ptr()
+            launch_node_split_kernel(
+                ctx,
+                ds_split,
+                self._work_items_ptr(),
+                self._splits_ptr(),
+                self._workload_ptr(),
+                blocks_bound,
+                n_bound,
+                self.partition_row_ids.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin](),
+                self.node_split_scratch,
+                argsp,
+            )
+            launch_loop_push[Self.O.DataT](
+                ctx,
+                hdrp,
+                queuep,
+                self.loop_nodes_i.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin](),
+                self.loop_nodes_f.unsafe_ptr()
+                .unsafe_origin_cast[MutUntrackedOrigin](),
+                self._work_items_ptr(),
+                self._splits_ptr(),
+                scanp,
+                max_batch,
+                n_bound,
+                Int(self.params.max_depth),
+                Int(self.params.min_samples_split),
+                self.loop_cap,
+                Int(self.params.max_leaves),
+            )
+            self.loop_batch += 1
+        log_launch_ctx(ctx, "xfer_loop_header")
+        ctx.enqueue_copy(dst_buf=self.loop_h_hdr, src_buf=self.loop_hdr)
+
+    def _loop_advance(
+        mut self,
+        ctx: DeviceContext,
+        quantiles: Quantiles[Self.O.DataT],
+        mut ts: TreeState[Self.O],
+        mut instr: FitInstruments,
+    ) raises -> Bool:
+        """The device loop's consume step. Call ONLY after a synchronize
+        covering `_enqueue_loop_batches`' header download. Queue not
+        empty: enqueue the next `LOOP_K` batches. Empty: finish the tree on
+        the device (`_finish_tree_device`)."""
+        var hp = self.loop_h_hdr.unsafe_ptr()
+        var head = Int(hp.unsafe_load(LOOP_H_HEAD))
+        var tail = Int(hp.unsafe_load(LOOP_H_TAIL))
+        var n_nodes = Int(hp.unsafe_load(LOOP_H_NODES))
+        if hp.unsafe_load(LOOP_H_OVERFLOW) != Int32(0):
+            raise Error(
+                "RandomForest device level loop: the tree outgrew the"
+                + " device node table ("
+                + String(self.loop_cap)
+                + " nodes, a proven bound; this is a bug)"
+            )
+        if head != tail:
+            self._enqueue_loop_batches(
+                ctx, ts.ds, quantiles, ts.smem_config, instr
+            )
+            return False
+        if n_nodes < 1 or n_nodes > self.loop_cap:
+            raise Error(
+                "RandomForest device level loop: device header reports "
+                + String(n_nodes)
+                + " nodes"
+            )
+        self.loop_active = False
+        self._finish_tree_device(ctx, ts, n_nodes, instr)
+        return True
+
+    def _finish_tree_device(
+        mut self,
+        ctx: DeviceContext,
+        mut ts: TreeState[Self.O],
+        n_nodes: Int,
+        mut instr: FitInstruments,
+    ) raises:
+        """`train`'s tail (`GetTree` + `SetLeafPredictions`, `:386-388`)
+        for a device-loop tree: the node table becomes the leaf pass's
+        `SparseTreeNode` + `InstanceRange` arrays ON THE DEVICE
+        (`loop_tree_kernel`), the leaf kernels run over them, and the
+        finished model -- nodes in node-id order (the order
+        `NodeQueue::Push` appends in) and the leaf values -- crosses to
+        the host once, as bulk copies into the tree's own lists.
+        `leaf_counter` is 1 plus one per split (`:111`, every split adds
+        two nodes); `depth_counter` is the deepest child's depth
+        (`:133-134`), which is the LAST node's: the FIFO hands out ids in
+        non-decreasing depth."""
+        var n_out = Int(ts.ds.num_outputs)
+        var t0 = instr.times.start()
+        self._ensure_leaf_capacity(ctx, n_nodes, n_out)
+        launch_loop_tree[Self.O.DataT](
+            ctx,
+            self.loop_nodes_i.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self.loop_nodes_f.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin](),
+            self.leaf_d_tree.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[SparseTreeNode[Self.O.DataT]](),
+            self.leaf_d_ranges.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[InstanceRange](),
+            n_nodes,
+        )
+        self._enqueue_leaf_pass(ctx, n_nodes, ts.ds)
+        var dt = self.leaf_d_tree.create_sub_buffer[DType.uint8](
+            0, size_of[SparseTreeNode[Self.O.DataT]]() * n_nodes
+        )
+        var ht = self.leaf_h_tree.create_sub_buffer[DType.uint8](
+            0, size_of[SparseTreeNode[Self.O.DataT]]() * n_nodes
+        )
+        var dl = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
+            0, n_nodes * n_out
+        )
+        var hl = self.leaf_h_leaves.create_sub_buffer[Self.O.DataT](
+            0, n_nodes * n_out
+        )
+        var d_depth = self.loop_nodes_i.create_sub_buffer[DType.int32](
+            (n_nodes - 1) * LOOP_NODE_INTS + 5, 1
+        )
+        var h_depth = self.loop_h_hdr.create_sub_buffer[DType.int32](
+            LOOP_H_DEPTH, 1
+        )
+        log_launch_ctx(ctx, "xfer_loop_tree")
+        ctx.enqueue_copy(dst_buf=ht, src_buf=dt)
+        log_launch_ctx(ctx, "xfer_leaf_download")
+        ctx.enqueue_copy(dst_buf=hl, src_buf=dl)
+        ctx.enqueue_copy(dst_buf=h_depth, src_buf=d_depth)
+        ctx.synchronize()
+        var tree = TreeMetaDataNode[Self.O.DataT](
+            self.treeid,
+            self.loop_h_hdr.unsafe_ptr().unsafe_load(LOOP_H_DEPTH),
+            Int32(1 + (n_nodes - 1) // 2),
+            Float64(0),
+            List[Scalar[Self.O.DataT]](),
+            List[SparseTreeNode[Self.O.DataT]](),
+            ts.queue.tree.num_outputs,
+        )
+        tree.sparsetree.resize(n_nodes, SparseTreeNode[Self.O.DataT]())
+        tree.vector_leaf.resize(n_nodes * n_out, Scalar[Self.O.DataT](0))
+        memcpy(
+            dest=tree.sparsetree.unsafe_ptr(),
+            src=self.leaf_h_tree.unsafe_ptr().unsafe_bitcast[
+                SparseTreeNode[Self.O.DataT]
+            ](),
+            count=n_nodes,
+        )
+        memcpy(
+            dest=tree.vector_leaf.unsafe_ptr(),
+            src=self.leaf_h_leaves.unsafe_ptr(),
+            count=n_nodes * n_out,
+        )
+        _ = dt^
+        _ = ht^
+        _ = dl^
+        _ = hl^
+        _ = d_depth^
+        _ = h_depth^
+        instr.times.stop(ctx, "leaf_values", t0)
+        ts.tree = tree^
+        ts.done = True
 
     def shared_memory_config(self) raises -> SharedMemoryConfig:
         """`Builder::computeSharedMemoryConfig`, `:522-551`, with this
@@ -2627,63 +3299,26 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             WARP_SIZE,
         )
 
-    def set_leaf_predictions(
-        mut self,
-        ctx: DeviceContext,
-        mut tree: TreeMetaDataNode[Self.O.DataT],
-        instance_ranges: List[InstanceRange],
-        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+    def _ensure_leaf_capacity(
+        mut self, ctx: DeviceContext, n_nodes: Int, n_out: Int
     ) raises:
-        """`Builder::SetLeafPredictions`, `:630-687`.
-
-        Their comment at `:636`: "do this in batch to reduce peak memory
-        usage in extreme cases", with `max_batch_size = min(100000,
-        sparsetree.size())` (`:637`). Transcribed, including the batching,
-        because a tree with more nodes than that is exactly the case the
-        batching exists for.
-
-        Note their `leafKernel` runs over EVERY node in the batch and
-        returns immediately for the ones that are not leaves (`:225`), so
-        the launch is sized by node count and not by leaf count. The zero
-        fill at `:659-660` is what leaves the internal nodes' slots at 0.
-        """
-        var n_nodes = len(tree.sparsetree)
-        var n_out = Int(dataset.num_outputs)
-        if n_nodes != len(instance_ranges):
-            raise Error(
-                "Expected instance range for each node; "
-                + String(n_nodes)
-                + " nodes vs "
-                + String(len(instance_ranges))
-                + " ranges"
-            )
-        tree.vector_leaf = List[Scalar[Self.O.DataT]]()
-        tree.vector_leaf.resize(n_nodes * n_out, Scalar[Self.O.DataT](0))
-
-        var batch = min(100000, n_nodes)
-        if batch == 0:
-            return
-        # DEVIATION 313: the staging is pooled on the builder and grows
-        # only when a tree outgrows every earlier one. At entry the
-        # previous tree's leaf pass has drained (its own final
-        # `synchronize` below), so reassigning the buffers cannot free
-        # memory under an in-flight launch. The DEVICE trio is
-        # batch-sized, as their `d_tree`/`d_instance_ranges`/`d_leaves`
-        # are (`builder.cuh:638-641`); the HOST trio is tree-sized,
-        # because the reference stages every batch out of the FULL-SIZE host
-        # vectors (`:648-651`, `:663-666`) -- that per-batch-disjoint
-        # host staging is what lets the batches below enqueue with no
-        # sync between them.
-        if batch > self.leaf_capacity:
-            self.leaf_capacity = batch
+        """DEVIATION 313's pooled leaf-pass staging, grown only when a tree
+        outgrows every earlier one. Device and pinned host trios are both
+        TREE-sized (cpu4-forest): the device loop's tree is assembled in
+        place on the device, and the batches below index one array. At
+        entry the previous tree's leaf pass has drained (its own final
+        `synchronize`), so reassigning cannot free memory under an
+        in-flight launch."""
+        if n_nodes > self.leaf_capacity:
+            self.leaf_capacity = n_nodes
             self.leaf_d_tree = ctx.enqueue_create_buffer[DType.uint8](
-                size_of[SparseTreeNode[Self.O.DataT]]() * batch
+                size_of[SparseTreeNode[Self.O.DataT]]() * n_nodes
             )
             self.leaf_d_ranges = ctx.enqueue_create_buffer[DType.uint8](
-                size_of[InstanceRange]() * batch
+                size_of[InstanceRange]() * n_nodes
             )
             self.leaf_d_leaves = ctx.enqueue_create_buffer[Self.O.DataT](
-                batch * n_out
+                n_nodes * n_out
             )
         if n_nodes > self.leaf_host_capacity:
             self.leaf_host_capacity = n_nodes
@@ -2696,119 +3331,136 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             self.leaf_h_leaves = ctx.enqueue_create_host_buffer[
                 Self.O.DataT
             ](n_nodes * n_out)
+
+    def _enqueue_leaf_pass(
+        mut self,
+        ctx: DeviceContext,
+        n_nodes: Int,
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+    ) raises:
+        """`SetLeafPredictions`' kernels (`:643-667`) over the device tree
+        `leaf_d_tree` / `leaf_d_ranges` (`n_nodes` entries), into
+        `leaf_d_leaves`. Their batching (`min(100000, n)` nodes per launch,
+        `:636-637`) is kept as launch windows over the one array; no sync.
+
+        DEVIATION 1918 -- their zero fill at `:659-660` is fused into the
+        leaf kernel: each block zeroes its OWN node's slot before the
+        IsLeaf early-return, so internal nodes' slots end 0."""
+        var n_out = Int(dataset.num_outputs)
+        var batch = min(100000, n_nodes)
+        if batch == 0:
+            return
         var objective = self._leaf_objective()
         # `:652` -- their smem is `sizeof(BinT) * num_outputs`.
         var smem_size = size_of[Self.O.BinT]() * n_out
-
-        # Stage EVERY node once -- the pinned trio plays their full-size
-        # host vectors' part, so each batch's H2D reads a disjoint
-        # region and no batch waits for an earlier one's copy to drain.
-        var tp = self.leaf_h_tree.unsafe_ptr().unsafe_bitcast[
-            SparseTreeNode[Self.O.DataT]
-        ]()
-        var rp = (
-            self.leaf_h_ranges.unsafe_ptr().unsafe_bitcast[InstanceRange]()
-        )
-        for i in range(n_nodes):
-            tp[unsafe_offset=i] = tree.sparsetree[i]
-            rp[unsafe_offset=i] = instance_ranges[i]
-
         # DEVIATION 1893: the leaf args blob (objective + dataset),
         # staged once per tree and shared by every batch's launch.
         var leaf_argsp = self.leaf_args.upload(
             ctx, LeafArgs[Self.O](objective.copy(), dataset.copy())
         )
-
-        # Per-batch views, kept alive past the drain below.
-        var d_views = List[DeviceBuffer[DType.uint8]]()
-        var l_views = List[DeviceBuffer[Self.O.DataT]]()
-        var h_views = List[HostBuffer[Self.O.DataT]]()
-
+        var tp = (
+            self.leaf_d_tree.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[SparseTreeNode[Self.O.DataT]]()
+        )
+        var rp = (
+            self.leaf_d_ranges.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[InstanceRange]()
+        )
+        var lp = self.leaf_d_leaves.unsafe_ptr().unsafe_origin_cast[
+            MutUntrackedOrigin
+        ]()
         var begin = 0
         while begin < n_nodes:
             var end = min(begin + batch, n_nodes)
-            var size = end - begin
-            # Prefix views keep the copied and zeroed byte counts at
-            # THEIRS -- `update_device(..., batch size)` at `:655-658` and
-            # `sizeof(DataT) * d_leaves.size()` at `:652-653` -- now that
-            # the pooled buffers can be larger than the live batch. The
-            # device trio is REUSED by every batch with no sync: the
-            # queue is in-order, so batch N+1's uploads execute after
-            # batch N's kernel and download, exactly the stream ordering
-            # their reuse of `d_tree` relies on.
-            var dt = self.leaf_d_tree.create_sub_buffer[DType.uint8](
-                0, size_of[SparseTreeNode[Self.O.DataT]]() * size
-            )
-            log_launch_ctx(ctx, "xfer_leaf_tree")
-            ctx.enqueue_copy(
-                dst_buf=dt,
-                src_ptr=self.leaf_h_tree.unsafe_ptr().unsafe_offset(
-                    begin * size_of[SparseTreeNode[Self.O.DataT]]()
-                ),
-            )
-            var dr = self.leaf_d_ranges.create_sub_buffer[DType.uint8](
-                0, size_of[InstanceRange]() * size
-            )
-            log_launch_ctx(ctx, "xfer_leaf_ranges")
-            ctx.enqueue_copy(
-                dst_buf=dr,
-                src_ptr=self.leaf_h_ranges.unsafe_ptr().unsafe_offset(
-                    begin * size_of[InstanceRange]()
-                ),
-            )
-            # DEVIATION 1918 -- their zero fill at `:659-660` (this used
-            # to be an `enqueue_memset` over the batch's slots) is fused
-            # into the leaf kernel: each block zeroes its OWN node's slot
-            # before the IsLeaf early-return, so internal nodes' slots
-            # end 0 exactly as the memset left them and a leaf's zeros
-            # are overwritten under the block's own barriers. One block
-            # owns one slot; no cross-block order exists.
             launch_leaf_kernel[
                 Self.O, zero_fill=True, sampled_labels = Self.sampled_labels
             ](
                 ctx,
-                self.leaf_d_tree.unsafe_ptr()
-                .unsafe_origin_cast[MutUntrackedOrigin]()
-                .unsafe_bitcast[SparseTreeNode[Self.O.DataT]](),
-                self.leaf_d_ranges.unsafe_ptr()
-                .unsafe_origin_cast[MutUntrackedOrigin]()
-                .unsafe_bitcast[InstanceRange](),
-                self.leaf_d_leaves.unsafe_ptr()
-                .unsafe_origin_cast[MutUntrackedOrigin](),
-                size,
+                tp.unsafe_offset(begin),
+                rp.unsafe_offset(begin),
+                lp.unsafe_offset(begin * n_out),
+                end - begin,
                 smem_size,
                 leaf_argsp,
             )
-            # `:663-666` -- downloaded to THIS batch's slice of the
-            # host staging (their `tree->vector_leaf.data() +
-            # batch_begin * num_outputs`), so no batch overwrites
-            # another's landing zone.
-            var hl = self.leaf_h_leaves.create_sub_buffer[Self.O.DataT](
-                begin * n_out, size * n_out
-            )
-            var dls = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
-                0, size * n_out
-            )
-            log_launch_ctx(ctx, "xfer_leaf_download")
-            ctx.enqueue_copy(dst_buf=hl, src_buf=dls)
-            d_views.append(dt^)
-            d_views.append(dr^)
-            l_views.append(dls^)
-            h_views.append(hl^)
             begin = end
 
-        # RESTORES the reference: their `SetLeafPredictions` carries NO sync
-        # inside the batch loop (`builder.cuh:643-667`); this used to
-        # drain the whole device -- all K pipelined trees -- once per
-        # batch. One drain covers every batch, then the host reads.
-        ctx.synchronize()
-        _ = d_views^
-        _ = l_views^
-        _ = h_views^
-        for i in range(n_nodes * n_out):
-            tree.vector_leaf[i] = (
-                self.leaf_h_leaves.unsafe_ptr().unsafe_load(i)
+    def set_leaf_predictions(
+        mut self,
+        ctx: DeviceContext,
+        mut tree: TreeMetaDataNode[Self.O.DataT],
+        instance_ranges: List[InstanceRange],
+        dataset: DatasetView[Self.O.DataT, Self.O.LabelT],
+    ) raises:
+        """`Builder::SetLeafPredictions`, `:630-687`, for a tree the HOST
+        queue built (check sabotage instantiations and identity traces
+        only; a fit's tree is finished by `_finish_tree_device`).
+
+        Their `leafKernel` runs over EVERY node and returns immediately for
+        the ones that are not leaves (`:225`), so the launch is sized by
+        node count and not by leaf count. The node and range lists cross
+        as two bulk copies and the leaf values come back as one; no
+        per-node host work."""
+        var n_nodes = len(tree.sparsetree)
+        var n_out = Int(dataset.num_outputs)
+        if n_nodes != len(instance_ranges):
+            raise Error(
+                "Expected instance range for each node; "
+                + String(n_nodes)
+                + " nodes vs "
+                + String(len(instance_ranges))
+                + " ranges"
             )
+        tree.vector_leaf = List[Scalar[Self.O.DataT]]()
+        tree.vector_leaf.resize(n_nodes * n_out, Scalar[Self.O.DataT](0))
+        if n_nodes == 0:
+            return
+        self._ensure_leaf_capacity(ctx, n_nodes, n_out)
+        memcpy(
+            dest=self.leaf_h_tree.unsafe_ptr().unsafe_bitcast[
+                SparseTreeNode[Self.O.DataT]
+            ](),
+            src=tree.sparsetree.unsafe_ptr(),
+            count=n_nodes,
+        )
+        memcpy(
+            dest=self.leaf_h_ranges.unsafe_ptr().unsafe_bitcast[
+                InstanceRange
+            ](),
+            src=instance_ranges.unsafe_ptr(),
+            count=n_nodes,
+        )
+        var dt = self.leaf_d_tree.create_sub_buffer[DType.uint8](
+            0, size_of[SparseTreeNode[Self.O.DataT]]() * n_nodes
+        )
+        var dr = self.leaf_d_ranges.create_sub_buffer[DType.uint8](
+            0, size_of[InstanceRange]() * n_nodes
+        )
+        log_launch_ctx(ctx, "xfer_leaf_tree")
+        ctx.enqueue_copy(dst_buf=dt, src_ptr=self.leaf_h_tree.unsafe_ptr())
+        log_launch_ctx(ctx, "xfer_leaf_ranges")
+        ctx.enqueue_copy(dst_buf=dr, src_ptr=self.leaf_h_ranges.unsafe_ptr())
+        self._enqueue_leaf_pass(ctx, n_nodes, dataset)
+        var hl = self.leaf_h_leaves.create_sub_buffer[Self.O.DataT](
+            0, n_nodes * n_out
+        )
+        var dl = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
+            0, n_nodes * n_out
+        )
+        log_launch_ctx(ctx, "xfer_leaf_download")
+        ctx.enqueue_copy(dst_buf=hl, src_buf=dl)
+        ctx.synchronize()
+        memcpy(
+            dest=tree.vector_leaf.unsafe_ptr(),
+            src=self.leaf_h_leaves.unsafe_ptr(),
+            count=n_nodes * n_out,
+        )
+        _ = dt^
+        _ = dr^
+        _ = hl^
+        _ = dl^
 
     def train[
         sabotage: Int = 0
@@ -2901,6 +3553,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 0,
                 0,
                 List[SplitSummary[Self.O.DataT]](),
+                List[Int](),
             ),
             TreeMetaDataNode[Self.O.DataT](
                 Int32(-1),
@@ -2913,9 +3566,45 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             ),
             False,
         )
+        self.loop_active = False
+        comptime if sabotage == 0:
+            # A fit's tree with an expandable root runs its queue on the
+            # device (the block above `LOOP_K`). The host queue below
+            # serves only the check sabotage instantiations and an
+            # identity trace.
+            if (
+                self.loop_cap > 0
+                and ts.queue.has_work()
+                and not instr.trace.enabled
+            ):
+                self.loop_active = True
+                self.loop_batch = 0
+                # The root: header, queue item 0, node 0 (control words
+                # fixed at construction, `loop_root_words`).
+                log_launch_ctx(ctx, "xfer_loop_root")
+                ctx.enqueue_copy(
+                    dst_buf=self.loop_hdr,
+                    src_ptr=self.loop_h_root.unsafe_ptr(),
+                )
+                ctx.enqueue_copy(
+                    dst_buf=self.loop_root_queue,
+                    src_ptr=self.loop_h_root.unsafe_ptr().unsafe_offset(
+                        LOOP_HDR_WORDS
+                    ),
+                )
+                ctx.enqueue_copy(
+                    dst_buf=self.loop_root_node,
+                    src_ptr=self.loop_h_root.unsafe_ptr().unsafe_offset(
+                        LOOP_HDR_WORDS + LOOP_QUEUE_INTS
+                    ),
+                )
+                self._enqueue_loop_batches(
+                    ctx, ts.ds, quantiles, ts.smem_config, instr
+                )
+                return ts^
         if ts.queue.has_work():
             var work_items = ts.queue.pop()
-            ts.batch = self.begin_batch[sabotage](
+            ts.batch = self.begin_batch_replay[sabotage](
                 ctx, ts.ds, quantiles, work_items, ts.smem_config, instr
             )
         else:
@@ -2937,23 +3626,25 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         step and carries its own syncs, exactly as the serial train did."""
         if ts.done:
             return True
+        if self.loop_active:
+            return self._loop_advance(ctx, quantiles, ts, instr)
         # DEVIATION 2510 -- this step's HOST work, stamped piecewise with
-        # no drain so the stage table can split `other`: `advance_batch`
+        # no drain so the stage table can split `other`: `advance_batch_replay`
         # stamps its own readback decode and enqueues; here the queue
         # push (child nodes into the tree) and the next batch's pop plus
         # histogram-round enqueue. Off unless MOJOLEARN_STAGE_TIMES=1;
         # changes no arithmetic.
-        if not self.advance_batch[sabotage](
+        if not self.advance_batch_replay[sabotage](
             ctx, ts.ds, quantiles, ts.smem_config, ts.batch, instr
         ):
             return False
         var t_host = instr.times.start()
-        ts.queue.push(ts.batch.work_items, ts.batch.result)
+        ts.queue.push_replay(ts.batch.work_items, ts.batch.result)
         instr.times.stop_host("host_queue_push", t_host)
         if ts.queue.has_work():
             t_host = instr.times.start()
             var work_items = ts.queue.pop()
-            ts.batch = self.begin_batch[sabotage](
+            ts.batch = self.begin_batch_replay[sabotage](
                 ctx, ts.ds, quantiles, work_items, ts.smem_config, instr
             )
             instr.times.stop_host("host_enq_hist", t_host)

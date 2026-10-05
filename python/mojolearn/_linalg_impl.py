@@ -1184,7 +1184,10 @@ def _tsvd_cholqr_r(k, x, rows, cols):
 
 def _tsvd_tsqr_components(x, nc, mode):
     """lane/apple-fast-q-linalg TSVD_QFIX (x_decomp/qfix.mojo bit 2; FAST
-    default, -D MOJOLEARN_TSVD_QOLD restores the Gram route): TruncatedSVD's
+    default, -D MOJOLEARN_TSVD_QOLD restores the Gram route; KEPT for quality
+    2026-10-04, rab8-tsvd: istella reconstruction 2.554e-3 -> 1.219e-4 vs
+    sklearn 1.22e-4 at 362.9 -> 864.1 ms, speed follow-up in lane
+    apple-fast-s-linalg): TruncatedSVD's
     (components (nc, d), singular values (nc,)) of a tall x as the top right
     singular vectors of its TSQR R (the one-sided Jacobi of R, `Kit.svd`),
     each row signed so its largest-|.| entry (first on a tie) is positive
@@ -1425,8 +1428,10 @@ def _svd_stage_timer():
     return tick
 
 
-#: lane/apple-fast-q-linalg SVD_QFIX (x_decomp/qfix.mojo bit 1; FAST default,
-#: -D MOJOLEARN_SVD_QOLD restores _SVD_NULL_RTOL and the orth route): the
+#: lane/apple-fast-q-linalg SVD_QFIX (x_decomp/qfix.mojo bit 1; REVERTED
+#: 2026-10-04 to opt-in -D MOJOLEARN_SVD_QFIX: rab5-svd showed no quality
+#: gain and taxi +13.2%, so _SVD_NULL_RTOL and the orth route are the
+#: default again; this cut applies only when the bit is set): the
 #: null cut for U_R on the TSQR route. Directions with 2^-40 s_0 < s_j were
 #: replaced by arbitrary complement columns under the 2^-20 cut, up to 2 s_j
 #: of error each in U S V^T. #: audit 2026-10-04 svd istella

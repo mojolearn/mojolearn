@@ -85,6 +85,7 @@ from arima.impl.timeSeries.arima_helpers import (
     finalize_forecast,
     prepare_future_data,
 )
+from arima.impl.lbfgs_device import arima_mark_infeasible_kernel
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from std.sys.compile import is_defined
@@ -622,6 +623,54 @@ def grad_kernel(
     d_grad.unsafe_store(Int(N_in) * bid + Int(i_in), ftz(diff / h))
 
 
+def ll_select_infeasible_kernel(
+    d_out: MutPointer[Float32, MutAnyOrigin],
+    d_ll: MutPointer[Float32, MutAnyOrigin],
+    d_bad: MutPointer[Int32, MutAnyOrigin],
+    batch_size_in: Int32,
+):
+    """`out[b] = -inf` when series `b` is infeasible at the base or at any
+    forward-difference point (`d_bad`, set by `arima_mark_infeasible_kernel`),
+    else the base log-likelihood `ll[b]` unchanged (an assignment, no bit
+    moves). Replaces the host walk over the read-back log-likelihoods (lane
+    cpu3-seq, 2026-10-04)."""
+    var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if bid >= Int(batch_size_in):
+        return
+    if d_bad.unsafe_load(bid) != Int32(0):
+        d_out.unsafe_store(bid, -inf[DType.float32]())
+    else:
+        d_out.unsafe_store(bid, d_ll.unsafe_load(bid))
+
+
+def _ll_finish(
+    ctx: DeviceContext,
+    d_ll: MutPointer[Float32, MutAnyOrigin],
+    mut d_bad: DeviceBuffer[DType.int32],
+    batch_size: Int,
+) raises -> List[Float32]:
+    """The base log-likelihoods with the infeasible series at -inf, selected
+    on the device and read back ONCE into the returned list (no host walk)."""
+    comptime TPB = 128
+    var grid = (batch_size + TPB - 1) // TPB
+    var d_out = ctx.enqueue_create_buffer[DType.float32](max(1, batch_size))
+    var ll = List[Float32](length=max(1, batch_size), fill=Float32(0.0))
+    if batch_size > 0:
+        ctx.enqueue_function[ll_select_infeasible_kernel](
+            d_out.unsafe_ptr(), d_ll, d_bad.unsafe_ptr(), Int32(batch_size),
+            grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
+        )
+        ctx.enqueue_copy(
+            dst_ptr=ll.unsafe_ptr(),
+            src_buf=d_out.create_sub_buffer[DType.float32](0, batch_size),
+        )
+    ctx.synchronize()
+    _ = d_out^
+    if batch_size == 0:
+        return List[Float32]()
+    return ll^
+
+
 def batched_loglike_grad(
     ctx: DeviceContext,
     mut d_y: DeviceBuffer[DType.float32],
@@ -728,14 +777,18 @@ def _batched_loglike_grad_stacked(
         dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, nb_x),
         src_buf=d_x.create_sub_buffer[DType.float32](0, nb_x),
     )
-    ctx.synchronize()
-    var ll = List[Float32](capacity=batch_size)
-    for b in range(batch_size):
-        ll.append(r.loglike[b])
-    # infeasible at the base OR at any forward-difference point
-    for j in range(batch_size, eb):
-        if isinf(r.loglike[j]) and r.loglike[j] < Float32(0.0):
-            ll[j % batch_size] = -inf[DType.float32]()
+    # infeasible at the base OR at any forward-difference point: a Kalman
+    # refusal code or a -inf log-likelihood in any of the M1 members, marked
+    # and selected on the device
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](max(1, batch_size))
+    ctx.enqueue_memset(d_bad, Int32(0))
+    ctx.enqueue_function[arima_mark_infeasible_kernel](
+        d_bad.unsafe_ptr(), r.ws.loglike.unsafe_ptr(), r.ws.info_init.unsafe_ptr(),
+        r.ws.info_loop.unsafe_ptr(), Int32(batch_size), Int32(M1),
+        grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
+    )
+    var ll = _ll_finish(ctx, r.ws.loglike.unsafe_ptr(), d_bad, batch_size)
+    _ = d_bad^
     _ = y_ext^
     _ = x_ext^
     _ = p_ext^
@@ -893,9 +946,17 @@ def batched_loglike_grad_x(
     var base = batched_loglike_packed_x(
         ctx, d_y, d_exog, batch_size, n_obs, order, d_x, trans, params, check_finite, True
     )
-    var bad = List[Bool](length=batch_size, fill=False)
     comptime TPB = 128
     var grid = (batch_size + TPB - 1) // TPB
+    # infeasible at the base or any forward-difference point, marked on the
+    # device (`arima_mark_infeasible_kernel`, as `eval_batch_device` does)
+    var d_bad = ctx.enqueue_create_buffer[DType.int32](max(1, batch_size))
+    ctx.enqueue_memset(d_bad, Int32(0))
+    ctx.enqueue_function[arima_mark_infeasible_kernel](
+        d_bad.unsafe_ptr(), base.ws.loglike.unsafe_ptr(), base.ws.info_init.unsafe_ptr(),
+        base.ws.info_loop.unsafe_ptr(), Int32(batch_size), Int32(1),
+        grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
+    )
     for i in range(N):
         ctx.enqueue_function[perturb_kernel](
             d_x_pert.unsafe_ptr(), d_x.unsafe_ptr(), Int32(batch_size), Int32(N), Int32(i), h,
@@ -904,9 +965,11 @@ def batched_loglike_grad_x(
         var pert = batched_loglike_packed_x(
             ctx, d_y, d_exog, batch_size, n_obs, order, d_x_pert, trans, params, check_finite, True
         )
-        for b in range(batch_size):
-            if isinf(pert.loglike[b]) and pert.loglike[b] < Float32(0.0):
-                bad[b] = True
+        ctx.enqueue_function[arima_mark_infeasible_kernel](
+            d_bad.unsafe_ptr(), pert.ws.loglike.unsafe_ptr(), pert.ws.info_init.unsafe_ptr(),
+            pert.ws.info_loop.unsafe_ptr(), Int32(batch_size), Int32(1),
+            grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
+        )
         ctx.enqueue_function[grad_kernel](
             d_grad.unsafe_ptr(), pert.ws.loglike.unsafe_ptr(), base.ws.loglike.unsafe_ptr(),
             Int32(batch_size), Int32(N), Int32(i), h,
@@ -918,11 +981,7 @@ def batched_loglike_grad_x(
         )
         ctx.synchronize()
         _ = pert^
-    ctx.synchronize()
-    var ll = base.loglike.copy()
-    # infeasible at the base or any forward-difference point: -inf
-    for b in range(batch_size):
-        if bad[b]:
-            ll[b] = -inf[DType.float32]()
+    var ll = _ll_finish(ctx, base.ws.loglike.unsafe_ptr(), d_bad, batch_size)
+    _ = d_bad^
     _ = base^
     return ll^

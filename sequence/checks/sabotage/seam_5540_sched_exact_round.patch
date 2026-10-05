@@ -1,13 +1,18 @@
 diff --git a/python/mojolearn/_x_sequence_sched.py b/python/mojolearn/_x_sequence_sched.py
-index 2bb7f3f9b..d457b6f5b 100644
+index 33f5dec67..95952b4d7 100644
 --- a/python/mojolearn/_x_sequence_sched.py
 +++ b/python/mojolearn/_x_sequence_sched.py
-@@ -250,7 +250,7 @@ class ExponentialLR(_PowSched):
+@@ -266,12 +266,7 @@ class ExponentialLR(_PowSched):
          self._init_pow()
  
      def lr_at(self, t):
+-        if self._walk:
+-            e = int(t) - 1
+-            pw = self._pow
+-            if e == pw.e + 1 and e > 0:
+-                return self._walk_value(e, pw)
 -        return self._pow_value(self._t(t))
 +        return _f32_round(Fraction(self.base_lr * self.gamma ** self._t(t)))
  
-     def _exact_lr_at(self, t):
-         return _f32_round(_q(self.base_lr, "base_lr") * _q(self.gamma, "gamma") ** self._t(t))
+     def _walk_value(self, e, pw):
+         """MOJOLEARN_SCHED_FAST_INLINE: `_pow_value(e)` for e = the carried

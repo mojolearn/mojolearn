@@ -1,14 +1,14 @@
 diff --git a/sequence/ops.mojo b/sequence/ops.mojo
-index f2d5d61cf..5b6c746e3 100644
 --- a/sequence/ops.mojo
 +++ b/sequence/ops.mojo
-@@ -439,7 +439,8 @@ def op_ce(t: Int, a: Args):
-         if v > m:
-             m = v
-     var s = Float32(0.0)
--    for c in range(C):
-+    for cc in range(C):
-+        var c = C - 1 - cc
-         s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
-     var ls = ftz(identical_log(s))
-     var y = Int(a.p1.unsafe_load(t))
+@@ -695,7 +695,9 @@ def op_ce(t: Int, a: Args):
+         for c in range(C):
+             var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
+             st(a.p2, base + c, e)
+-            s = add(s, e)
++        for cc in range(C):
++            var c = C - 1 - cc
++            s = add(s, ld(a.p2, base + c))
+         var ls = ftz(identical_log(s))
+         st(a.p3, t, sub(ls, sub(zy, m)))
+         for c in range(C):

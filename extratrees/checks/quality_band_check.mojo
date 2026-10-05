@@ -55,8 +55,8 @@ from extratrees.checks.fixtures import (
 from extratrees.checks.fixture_parity_check import const_heavy_shapes
 from extratrees.impl.decisiontree.decisiontree import DecisionTreeParams
 from extratrees.impl.randomforest.randomforest import (
-    predict_class_forest,
-    predict_regression_forest,
+    predict_class_forest_host,
+    predict_regression_forest_host,
 )
 from extratrees.impl.randomforest.host_forest import (
     fit_classification,
@@ -292,7 +292,7 @@ def main() raises:
             var row = List[Float32]()
             for c in range(Int(hold.n_cols)):
                 row.append(hold.x[c * Int(hold.n_rows) + i])
-            if predict_class_forest(forest, row, 0) == Int(hold.y[i]):
+            if predict_class_forest_host(forest, row, 0) == Int(hold.y[i]):
                 correct += 1
         var acc = Float64(correct) / Float64(Int(hold.n_rows))
 
@@ -395,7 +395,7 @@ def main() raises:
             var row = List[Float32]()
             for c in range(Int(hold.n_cols)):
                 row.append(hold.x[c * Int(hold.n_rows) + i])
-            var d = Float64(predict_regression_forest(forest, row, 0)) - Float64(
+            var d = Float64(predict_regression_forest_host(forest, row, 0)) - Float64(
                 hold.y[i]
             )
             se += d * d

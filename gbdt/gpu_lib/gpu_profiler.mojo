@@ -351,7 +351,7 @@ struct TProfilerState(Movable):
             # insertion sort on `operator<`, which compares Timestamp
             # (`cuda_profiler.h:127-129`)
             var pos = len(keys)
-            for i in range(len(keys)):
+            for i in range(len(keys)):  # small-loop(keys: profiler labels): sorts the handful of timing labels for a printout
                 if entry.value.timestamp_ns < stamps[i]:
                     pos = i
                     break

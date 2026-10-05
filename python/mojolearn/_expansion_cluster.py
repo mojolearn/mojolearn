@@ -675,33 +675,37 @@ class BayesianGaussianMixture(_XCluster):
             raise ValueError(f"Expected n_samples >= n_components but got n_components = {k}, n_samples = {n}")
         if int(self.n_init) < 1 or int(self.max_iter) < 1:
             raise ValueError("n_init and max_iter must be >= 1")
-        aux = []
+        # glue: the priors and any warm state as byte copies (`_aux`); the
+        # binding expands a diag or spherical covariance prior to d x d
+        # (`x_cluster/entries.mojo::bgmm_entry`, ip[9] = 2 or 3)
+        parts = []
+        cov_mode = 0
         if self.mean_prior is not None:
-            mp = [float(v) for v in self.mean_prior]
-            if len(mp) != d:
+            mp = _buffer.as_f32_c(self.mean_prior, ndim=None, name="mean_prior")[0]
+            if mp.size != d:
                 raise ValueError(f"The parameter 'means' should have the shape of ({d},)")
-            aux += mp
+            parts.append(mp)
         if self.covariance_prior is not None:
             if ct in (0, 1):
                 cp = _f32(self.covariance_prior, "covariance_prior")
                 if cp.shape != (d, d):
                     raise ValueError(f"The parameter '{self.covariance_type} covariance prior' should have the "
                                      f"shape of ({d}, {d})")
-                full = [float(v) for v in _buffer.flat_bytes(cp).cast("f")]
+                cov_mode = 1
             elif ct == 2:
-                v = [float(t) for t in self.covariance_prior]
-                if len(v) != d:
+                cp = _buffer.as_f32_c(self.covariance_prior, ndim=None, name="covariance_prior")[0]
+                if cp.size != d:
                     raise ValueError(f"The parameter 'diag covariance prior' should have the shape of ({d},)")
-                full = [v[a] if a == b else 0.0 for a in range(d) for b in range(d)]
+                cov_mode = 2
             else:
-                v = float(self.covariance_prior)
-                full = [v if a == b else 0.0 for a in range(d) for b in range(d)]
-            aux += full
+                cp = _buffer.as_f32_c([float(self.covariance_prior)], ndim=None, name="covariance_prior")[0]
+                cov_mode = 3
+            parts.append(cp)
         prev = getattr(self, "_warm", None)
         warm = bool(self.warm_start) and prev is not None and prev[0] == (k, d, self.covariance_type)
         if warm:
-            aux += self._warm[1]
-        a = _f32([aux], "priors") if aux else None
+            parts.append(self._warm[1])
+        a = _aux(*parts)
         none = -1.0
         fp = [none if self.weight_concentration_prior is None else float(self.weight_concentration_prior),
               none if self.mean_precision_prior is None else float(self.mean_precision_prior),
@@ -710,13 +714,14 @@ class BayesianGaussianMixture(_XCluster):
         ip = [n, d, k, 1 if self.weight_concentration_prior_type == "dirichlet_process" else 0,
               int(self.max_iter), int(self.n_init), inits[self.init_params],
               _seed(self.random_state), 1 if self.mean_prior is not None else 0,
-              1 if self.covariance_prior is not None else 0, ct, 1 if warm else 0]
+              cov_mode, ct, 1 if warm else 0]
         f, i, s = self._call(_E_BGMM, x, a, ip, fp)
         self.weights_ = Array._from_flat(f[0], (k,), "<f4")
         self.means_ = Array._from_flat(f[1], (k, d), "<f4")
         self._full_pchol = Array._from_flat(f[3], (k, d, d), "<f4")
-        self.covariances_ = self._by_type(f[2], k, d, ct)
-        self.precisions_cholesky_ = self._by_type(f[3], k, d, ct)
+        # f[13], f[14], f[15]: the binding's by-type forms (bgmm_entry)
+        self.covariances_ = self._by_type(f[13], k, d, ct)
+        self.precisions_cholesky_ = self._by_type(f[14], k, d, ct)
         if self.weight_concentration_prior_type == "dirichlet_process":
             self.weight_concentration_ = (Array._from_flat(f[4], (k,), "<f4"), Array._from_flat(f[5], (k,), "<f4"))
         else:
@@ -725,9 +730,9 @@ class BayesianGaussianMixture(_XCluster):
         self.degrees_of_freedom_ = (float(f[7][0]) if ct == 1 else Array._from_flat(f[7], (k,), "<f4"))
         self._log_consts = Array._from_flat(f[8], (k,), "<f4")
         self.mean_prior_ = Array._from_flat(f[9], (d,), "<f4")
-        cpf = f[10]
+        cpf = f[15]
         if ct == 2:
-            self.covariance_prior_ = Array._from_flat([cpf[a * d + a] for a in range(d)], (d,), "<f4")
+            self.covariance_prior_ = Array._from_flat(cpf, (d,), "<f4")
         elif ct == 3:
             self.covariance_prior_ = float(cpf[0])
         else:
@@ -747,26 +752,25 @@ class BayesianGaussianMixture(_XCluster):
 
     @staticmethod
     def _by_type(flat, k, d, ct):
-        """The full per-component d x d matrices the fit returns, in the
-        covariance type's own shape (as scikit-learn's attributes)."""
+        """The binding's by-type values (`bgmm_entry` f[13], f[14]: full
+        k x d x d, tied d x d, diag k x d, spherical k) under the covariance
+        type's shape (as scikit-learn's attributes). Shapes only."""
         if ct == 0:
             return Array._from_flat(flat, (k, d, d), "<f4")
         if ct == 1:
-            return Array._from_flat(flat[:d * d], (d, d), "<f4")
+            return Array._from_flat(flat, (d, d), "<f4")
         if ct == 2:
-            return Array._from_flat([flat[c * d * d + a * d + a] for c in range(k) for a in range(d)], (k, d), "<f4")
-        return Array._from_flat([flat[c * d * d] for c in range(k)], (k,), "<f4")
+            return Array._from_flat(flat, (k, d), "<f4")
+        return Array._from_flat(flat, (k,), "<f4")
 
     def _score(self, X, flags=0):
         self._check_fitted("means_")
         x = self._input_like_fit(X)
         n, d = x.shape
         k = self.means_.shape[0]
-        vals = []
-        for arr in (self.means_, self._full_pchol, self._log_consts):
-            vals += [float(v) for v in _buffer.flat_bytes(arr).cast("f")]
         ip = [n, d, k, flags] if flags else [n, d, k]
-        f, i, sc = self._call(_E_BGMM_SCORE, x, _f32([vals], "model"), ip)
+        # glue: the model block as byte copies (`_aux`)
+        f, i, sc = self._call(_E_BGMM_SCORE, x, _aux(self.means_, self._full_pchol, self._log_consts), ip)
         if flags:
             return f, sc, n, k, i[0]
         return f[0], f[1], n, k, i[0]
@@ -826,45 +830,39 @@ def _gmm_ext_fit(est, X):
         raise ValueError(f"Expected n_samples >= n_components but got n_components = {k}, n_samples = {n}")
     ct = _GMM_CTYPES[est.covariance_type]
     call = _GmmExtCall(getattr(est, "numeric_mode", None))
-    aux = []
+    # glue: the warm state and the init arrays as byte copies (`_aux`); the
+    # binding expands tied, diag and spherical precisions_init to d x d per
+    # component (`x_cluster/entries.mojo::bgmm_entry`, ip[15] = 2, 3, 4)
+    parts = []
     prev = getattr(est, "_ext", None)
     warm = bool(est.warm_start) and prev is not None and prev["key"] == (k, d, est.covariance_type)
     if warm:
-        aux += prev["state"]
+        parts.append(prev["state"])
     flags = [0, 0, 0]
     if est.weights_init is not None and not warm:
-        w = [float(v) for v in est.weights_init]
-        if len(w) != k:
+        w = _buffer.as_f32_c(est.weights_init, ndim=None, name="weights_init")[0]
+        if w.size != k:
             raise ValueError(f"The parameter 'weights' should have the shape of ({k},)")
-        aux += w
+        parts.append(w)
         flags[0] = 1
     if est.means_init is not None and not warm:
         m = _f32(est.means_init, "means_init")
         if m.shape != (k, d):
             raise ValueError(f"The parameter 'means' should have the shape of ({k}, {d})")
-        aux += [float(v) for v in _buffer.flat_bytes(m).cast("f")]
+        parts.append(m)
         flags[1] = 1
     if est.precisions_init is not None and not warm:
-        from . import _portable_math as _m
-        pi = est.precisions_init
-        full = []
-        if ct == 0:
-            for c in range(k):
-                full += [float(pi[c][a][b]) for a in range(d) for b in range(d)]
-        elif ct == 1:
-            one = [float(pi[a][b]) for a in range(d) for b in range(d)]
-            full = one * k
-        elif ct == 2:
-            for c in range(k):
-                full += [float(pi[c][a]) if a == b else 0.0 for a in range(d) for b in range(d)]
-        else:
-            for c in range(k):
-                full += [float(pi[c]) if a == b else 0.0 for a in range(d) for b in range(d)]
-        if not all(_m.isfinite(v) for v in full):
+        pi = _buffer.as_f32_c(est.precisions_init, ndim=None, name="precisions_init")[0]
+        want = (k * d * d, d * d, k * d, k)[ct]
+        if pi.size != want:
+            raise ValueError(f"The parameter '{est.covariance_type} precision' has {pi.size} values, "
+                             f"expected {want}")
+        # the base binding's native scan (`_buffer.all_finite`)
+        if not _buffer.all_finite(pi):
             raise ValueError("precisions_init must be finite")
-        aux += full
-        flags[2] = 1
-    a = _f32([aux], "state") if aux else None
+        parts.append(pi)
+        flags[2] = ct + 1
+    a = _aux(*parts)
     fp = [-1.0, -1.0, -1.0, float(est.reg_covar), float(est.tol),
           float(getattr(est, "lower_bound_", 0.0)) if warm else 0.0]
     ip = [n, d, k, 0, int(est.max_iter), int(est.n_init), _GMM_INITS[est.init_params],
@@ -873,8 +871,8 @@ def _gmm_ext_fit(est, X):
     est.n_features_in_ = d
     est.weights_ = Array._from_flat(f[0], (k,), "<f4")
     est.means_ = Array._from_flat(f[1], (k, d), "<f4")
-    est.covariances_ = BayesianGaussianMixture._by_type(f[2], k, d, ct)
-    est.precisions_cholesky_ = BayesianGaussianMixture._by_type(f[3], k, d, ct)
+    est.covariances_ = BayesianGaussianMixture._by_type(f[13], k, d, ct)
+    est.precisions_cholesky_ = BayesianGaussianMixture._by_type(f[14], k, d, ct)
     est.log_det_chol_ = Array._from_flat(f[12], (k,), "<f4")   # x_cluster bgmm_entry
     est.n_iter_ = int(s[1])
     est.converged_ = bool(s[2])
@@ -894,12 +892,9 @@ def _gmm_ext_score(est, X):
     if d != est.n_features_in_:
         raise ValueError(f"mojolearn GaussianMixture: X has {d} features, the fit had {est.n_features_in_}")
     k = est.means_.shape[0]
-    vals = []
-    for arr in (est.means_, ext["pchol"], ext["consts"]):
-        vals += [float(v) for v in _buffer.flat_bytes(arr).cast("f")]
     # predict_proba's exp and score's fold in the binding (flags 1 | 2);
     # the fold rides as a fifth item for `_gmm_ext_bic_aic`
-    f, i, sc = ext["call"]._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k, 3])
+    f, i, sc = ext["call"]._call(_E_BGMM_SCORE, x, _aux(est.means_, ext["pchol"], ext["consts"]), [n, d, k, 3])
     return (f[0], Array._from_flat(f[1], (n,), "<f4"), Array._from_flat(f[2], (n, k), "<f4"),
             Array._from_flat(i[0], (n,), "<i4"), sc[0])
 

@@ -119,6 +119,7 @@ from checks.numerics import (
     identical_sqrt,
 )
 from core.identity_trace import IdentityTrace
+from hdbscan.impl.detail.idn_switches import IDN_HDB_SOFT_LEAN
 from hdbscan.impl.detail.predict import (
     _download_f32,
     _upload_f32,
@@ -145,7 +146,7 @@ comptime SOFT_MODE_ALL_POINTS: Int32 = 1
 """`all_points_membership_vectors`: rows are training points."""
 
 
-def soft_normalize_row(
+def soft_normalize_row_kern(
     p: MutPointer[Float32, MutAnyOrigin], base: Int, n: Int
 ):
     """`Utils::normalize` (`utils.h:176-194`) for one row. DEVIATION 1616:
@@ -242,7 +243,7 @@ def dist_membership_kernel(
             dst.unsafe_store(
                 base + c, identical_div(SOFT_FLOAT32_MAX, Float32(ns))
             )
-    soft_normalize_row(dst, base, ns)
+    soft_normalize_row_kern(dst, base, ns)
 
 
 def soft_row_prep_kernel(
@@ -385,7 +386,7 @@ def soft_outlier_kernel(
         dst.unsafe_store(
             base + c, identical_exp(ftz(dst.unsafe_load(base + c) - mx))
         )
-    soft_normalize_row(dst, base, ns)
+    soft_normalize_row_kern(dst, base, ns)
 
 
 def soft_prob_kernel(
@@ -456,7 +457,7 @@ def soft_combine_kernel(
         else:
             v = ftz(identical_mul(dm, m))
         dst.unsafe_store(base + c, v)
-    soft_normalize_row(dst, base, ns)
+    soft_normalize_row_kern(dst, base, ns)
     var p = prob.unsafe_load(idx)
     for c in range(ns):
         dst.unsafe_store(
@@ -541,6 +542,9 @@ def _soft_pass(
     var prob = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var out = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.synchronize()
+    var soft_lean = False
+    comptime if IDN_HDB_SOFT_LEAN:
+        soft_lean = True
     ctx.enqueue_function[soft_row_prep_kernel](
         mode, inds_buf.unsafe_ptr(), pl_buf.unsafe_ptr(), par_buf.unsafe_ptr(),
         iic_buf.unsafe_ptr(), lam_buf.unsafe_ptr(), death_buf.unsafe_ptr(),
@@ -548,27 +552,31 @@ def _soft_pass(
         row_lambda.unsafe_ptr(), row_death.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
-    ctx.synchronize()
+    if not soft_lean:
+        ctx.synchronize()
     ctx.enqueue_function[soft_merge_height_kernel](
         mode, inds_buf.unsafe_ptr(), par_buf.unsafe_ptr(), iic_buf.unsafe_ptr(),
         lam_buf.unsafe_ptr(), sel_buf.unsafe_ptr(), row_lambda.unsafe_ptr(),
         Int32(row0), Int32(n_rows), Int32(ns), heights.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
-    ctx.synchronize()
+    if not soft_lean:
+        ctx.synchronize()
     ctx.enqueue_function[soft_outlier_kernel](
         mode, heights.unsafe_ptr(), row_death.unsafe_ptr(), Int32(n_rows),
         Int32(ns), outlier.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
-    ctx.synchronize()
+    if not soft_lean:
+        ctx.synchronize()
     ctx.enqueue_function[soft_prob_kernel](
         mode, heights.unsafe_ptr(), row_lambda.unsafe_ptr(),
         death_buf.unsafe_ptr(), sel_buf.unsafe_ptr(), Int32(pd.n_leaves),
         Int32(n_rows), Int32(ns), prob.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(tpb, 1, 1),
     )
-    ctx.synchronize()
+    if not soft_lean:
+        ctx.synchronize()
     ctx.enqueue_function[soft_combine_kernel](
         mode, outlier.unsafe_ptr(), dist_mv.unsafe_ptr(), prob.unsafe_ptr(),
         Int32(n_rows), Int32(ns), out.unsafe_ptr(),
@@ -576,15 +584,23 @@ def _soft_pass(
     )
     ctx.synchronize()
 
-    var h_dist_mv = _download_f32(ctx, dist_mv, cells)
-    var h_heights = _download_f32(ctx, heights, cells)
-    var h_outlier = _download_f32(ctx, outlier, cells)
-    var h_prob = _download_f32(ctx, prob, n_rows)
+    # fam2-cluster, IDN_HDB_SOFT_LEAN: the four intermediates are read by
+    # the trace alone, so they stay on the device when no trace is written.
+    var h_dist_mv = List[Float32]()
+    var h_heights = List[Float32]()
+    var h_outlier = List[Float32]()
+    var h_prob = List[Float32]()
+    if trace.enabled or not soft_lean:
+        h_dist_mv = _download_f32(ctx, dist_mv, cells)
+        h_heights = _download_f32(ctx, heights, cells)
+        h_outlier = _download_f32(ctx, outlier, cells)
+        h_prob = _download_f32(ctx, prob, n_rows)
     var h_out = _download_f32(ctx, out, cells)
-    trace.record_list_f32("hdbscan.soft.dist_membership", h_dist_mv)
-    trace.record_list_f32("hdbscan.soft.merge_heights", h_heights)
-    trace.record_list_f32("hdbscan.soft.outlier_membership", h_outlier)
-    trace.record_list_f32("hdbscan.soft.prob_in_some_cluster", h_prob)
+    if trace.enabled or not soft_lean:
+        trace.record_list_f32("hdbscan.soft.dist_membership", h_dist_mv)
+        trace.record_list_f32("hdbscan.soft.merge_heights", h_heights)
+        trace.record_list_f32("hdbscan.soft.outlier_membership", h_outlier)
+        trace.record_list_f32("hdbscan.soft.prob_in_some_cluster", h_prob)
     trace.record_list_f32("hdbscan.soft.membership", h_out)
 
     # [[mojo-buffer-freed-at-last-use]]: every buffer outlives the queue.

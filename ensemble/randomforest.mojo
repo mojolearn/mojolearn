@@ -46,6 +46,32 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     row_ids_tiled_sequence_kernel,
 )
 from core.device_liveness import assert_device_alive
+from std.memory import bitcast, memcpy
+from ensemble.oob_device import (
+    OOB_STATS,
+    OOB_TPB,
+    OOB_WORDS,
+    rf_oob_clf_stats_kernel,
+    rf_oob_reg_mean_kernel,
+    rf_oob_reg_sq_kernel,
+    rf_oob_reg_ysum_kernel,
+    rf_oob_append_tree_kernel,
+    rf_oob_rows_kernel,
+    rf_oob_score_kernel,
+)
+from xtrees.oob import (
+    E64_FLAGS,
+    E64_LIMBS,
+    E64_MAX_ROWS,
+    E64_THREADS,
+    limb_reduce_kernel,
+    round_kernel,
+)
+from ensemble.weighted_bootstrap_device import (
+    build_weight_cdf_device,
+    launch_weighted_bootstrap_rows,
+    scan_weights_device,
+)
 from core.launch_log import log_launch
 from core.launch_clock import log_launch_ctx
 from ensemble.instruments import FitInstruments
@@ -55,7 +81,6 @@ from core.philox import (
     PhiloxState,
     custom_next_uniform_int_u32,
     launch_uniform_int,
-    uniform_double_host,
 )
 
 # DEVIATION 2010 -- the LSD one-bit radix passes are `core/`'s, already on
@@ -108,9 +133,42 @@ comptime LABELS_SAMPLED_ORDER = True
 # histograms, counts, leaves, and the resulting forest remain identical, but
 # `row_ids` order and its diagnostic trace intentionally differ from the reference.
 # `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
-comptime ROWS_SORTED_SAMPLE = is_defined["MOJOLEARN_2010_ROWS_SORTED"]() or (
-    has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()
+#
+# fam2-forests (2026-10-04) CANDIDATE ARM, default OFF: sorted bootstrap rows
+# on NVIDIA and AMD under IDENTICAL, wide data only (the same
+# `ROWS_SORTED_MIN_COLS` gate Apple ships). `-D MOJOLEARN_IDN_RF_ROWS_SORTED`
+# turns it on. Where NVIDIA's fused bootstrap gather would have staged the
+# labels in drawn order, a tree whose rows are sorted takes the two-launch
+# route instead (sample, sort, then gather labels by the sorted `row_ids`):
+# see `fused_gather_ok` in `fit_forest`. Same drawn multiset, same integer /
+# fixed-point histograms, counts and leaves, so the forest is the one the
+# drawn order builds and the host column is untouched.
+comptime IDN_RF_ROWS_SORTED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_IDN_RF_ROWS_SORTED"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+# cpu3-trees (2026-10-04), every mode and vendor: the weighted
+# non-bootstrap row set (AdaBoost members, any `sample_weight` fit with
+# `bootstrap=False`) is compacted ON THE DEVICE once per forest
+# (`RowSampler.prepare_weights` -> `scan_weights_device`) and each tree takes
+# a device-to-device copy of it: no host pass over the weights, no upload, no
+# per-tree drain. Same Int32 row ids as the host copy_if: no bit moves. (This
+# replaces fam2-forests' `IDN_RF_WEIGHT_ROWS_DEVICE`, whose `_OFF` define and
+# host-compacted upload are gone.)
+comptime ROWS_SORTED_SAMPLE = (
+    is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
+    or IDN_RF_ROWS_SORTED
+    or (
+        has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()
+        # lane/review-fixes: the Apple IDENTICAL arm is off under ALL_OFF
+        and not (
+            GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+            and is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        )
+    )
 )
 """Apple, FAST since 2026-09-25 and IDENTICAL since 2026-09-28 (the drawn
 multiset and every integer / fixed-point histogram, count and leaf are
@@ -119,7 +177,13 @@ columns and up), where a node's rows then read the row-major bins in
 ascending order. M4 1M rows, same forest hashes: istella 18.0-19.4 ->
 13.0-14.0 s, istellareg 92 -> 88 s; taxi / taxireg (16 columns) are ~7%
 slower with it (the sort costs more than the locality saves), so they keep
-the drawn order. `-D MOJOLEARN_RF_ROWS_SORTED_OFF` keeps the drawn order."""
+the drawn order. `-D MOJOLEARN_RF_ROWS_SORTED_OFF` keeps the drawn order.
+The edge is a RANGE rule from the cache line, not a board row: below 64
+columns a row's uint8 bins fit one 64-byte line (the same boundary as
+`RF_BINS_ROW_MAJOR`), so ascending rows buy little locality and the sort is
+pure cost; from 64 up a row spans whole lines and the ascending reads pay.
+Measured at 16 and 220 columns only: NEEDS NEIGHBOR-SHAPE VALIDATION (48, 63,
+64, 96, 128 columns). Bit-inert either side (same forest bytes)."""
 comptime ROWS_SORTED_MIN_COLS = 64
 
 # The default bootstrap sampler already
@@ -585,7 +649,7 @@ def check_random_seed(random_state: Int) raises -> UInt64:
     return UInt64(random_state)
 
 
-def class_weight_uniform(n_classes: Int) -> List[Float64]:
+def class_weight_uniform_host(n_classes: Int) -> List[Float64]:
     """`common/classification.py:70-72` -- the `class_weight is None` arm,
     `np.ones(n_classes, dtype=np.float64)`."""
     var w = List[Float64]()
@@ -594,7 +658,7 @@ def class_weight_uniform(n_classes: Int) -> List[Float64]:
     return w^
 
 
-def class_weight_balanced(
+def class_weight_balanced_host(
     n_classes: Int,
     y_ind: List[Int32],
     sample_weight: List[Float32] = List[Float32](),
@@ -643,7 +707,7 @@ def class_weight_balanced(
     return w^
 
 
-def class_weight_explicit(
+def class_weight_explicit_host(
     n_classes: Int, weights: List[Float64]
 ) raises -> List[Float64]:
     """`common/classification.py:81-91` -- the dict arm.
@@ -675,7 +739,7 @@ def class_weight_explicit(
     return weights.copy()
 
 
-def apply_class_weight(
+def apply_class_weight_host(
     class_weight: List[Float64],
     y_ind: List[Int32],
     sample_weight: List[Float32] = List[Float32](),
@@ -724,10 +788,10 @@ def apply_class_weight(
     return out^
 
 
-def preprocess_labels(
+def preprocess_labels_host(
     n_rows: Int, mut labels: List[Int32]
 ) raises -> Dict[Int32, Int32]:
-    """`preprocess_labels`, `randomforest.cu:113-131`.
+    """`preprocess_labels_host`, `randomforest.cu:113-131`.
 
         for (int i = 0; i < n_rows; i++) {
           ret = labels_map.insert(pair<int,int>(labels[i], n_unique_labels));
@@ -768,10 +832,10 @@ def preprocess_labels(
     return labels_map^
 
 
-def postprocess_labels(
+def postprocess_labels_host(
     n_rows: Int, mut labels: List[Int32], labels_map: Dict[Int32, Int32]
 ) raises:
-    """`postprocess_labels`, `randomforest.cu:140-161`.
+    """`postprocess_labels_host`, `randomforest.cu:140-161`.
 
         reverse_map.resize(labels_map.size());
         for (it = labels_map.begin(); it != labels_map.end(); it++)
@@ -1014,7 +1078,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
             row_major,
         )
 
-    def predict(
+    def predict_host(
         self,
         input: List[Scalar[Self.dtype]],
         n_rows: Int,
@@ -1118,7 +1182,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
                     Self.label_dtype
                 ]()
 
-    def predict_proba(
+    def predict_proba_host(
         self,
         input: List[Scalar[Self.dtype]],
         n_rows: Int,
@@ -1207,7 +1271,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
                 ] / Scalar[Self.dtype](n_trees)
 
     @staticmethod
-    def score(
+    def score_host(
         ref_labels: List[Scalar[Self.label_dtype]],
         n_rows: Int,
         predictions: List[Scalar[Self.label_dtype]],
@@ -1291,7 +1355,7 @@ struct RandomForest[dtype: DType, label_dtype: DType](
 
 
 # ---------------------------------------------------------------------------
-# compute_feature_importances -- `randomforest.cu:797-860`
+# compute_feature_importances_host -- `randomforest.cu:797-860`
 
 # ---------------------------------------------------------------------------
 # store_bootstrap_mask's two device ops -- `randomforest.cuh:170-183`
@@ -1408,11 +1472,164 @@ def bootstrap_mask_scatter_kernel(
 
 
 
+struct OobForestStore(Movable):
+    """The forest's flat OOB model ON THE DEVICE (cpu4-forest): per-tree
+    node offsets, and per node the column, the left child, the float32
+    threshold and the float32 leaf row -- the arrays `rf_oob_rows_kernel`
+    walks. Each finished tree is appended straight from its builder's
+    device tree (`rf_oob_append_tree_kernel`), so the model is never
+    flattened on the host nor uploaded. Allocated only when the fit asks
+    for an OOB score; growth doubles the node arrays with a device copy
+    and keeps the old ones alive until the fit's final drain."""
+
+    var enabled: Bool
+    var n_out: Int
+    var cap: Int
+    var used: Int
+    var d_off: DeviceBuffer[DType.int32]
+    var d_col: DeviceBuffer[DType.int32]
+    var d_left: DeviceBuffer[DType.int32]
+    var d_q: DeviceBuffer[DType.float32]
+    var d_leaf: DeviceBuffer[DType.float32]
+    var retired_i: List[DeviceBuffer[DType.int32]]
+    var retired_f: List[DeviceBuffer[DType.float32]]
+
+    def __init__(
+        out self, ctx: DeviceContext, n_trees: Int, n_out: Int, enabled: Bool
+    ) raises:
+        self.enabled = enabled
+        self.n_out = max(n_out, 1)
+        self.cap = 4096 if enabled else 1
+        self.used = 0
+        self.d_off = ctx.enqueue_create_buffer[DType.int32](
+            max(n_trees, 1) if enabled else 1
+        )
+        self.d_col = ctx.enqueue_create_buffer[DType.int32](self.cap)
+        self.d_left = ctx.enqueue_create_buffer[DType.int32](self.cap)
+        self.d_q = ctx.enqueue_create_buffer[DType.float32](self.cap)
+        self.d_leaf = ctx.enqueue_create_buffer[DType.float32](
+            self.cap * self.n_out
+        )
+        self.retired_i = List[DeviceBuffer[DType.int32]]()
+        self.retired_f = List[DeviceBuffer[DType.float32]]()
+
+    def _grow(mut self, ctx: DeviceContext, need: Int) raises:
+        var cap = self.cap * 2
+        while cap < need:
+            cap *= 2
+        var nc = ctx.enqueue_create_buffer[DType.int32](cap)
+        var nl = ctx.enqueue_create_buffer[DType.int32](cap)
+        var nq = ctx.enqueue_create_buffer[DType.float32](cap)
+        var nf = ctx.enqueue_create_buffer[DType.float32](cap * self.n_out)
+        if self.used > 0:
+            log_launch_ctx(ctx, "copy_oob_forest_grow")
+            ctx.enqueue_copy(
+                dst_buf=nc.create_sub_buffer[DType.int32](0, self.used),
+                src_buf=self.d_col.create_sub_buffer[DType.int32](
+                    0, self.used
+                ),
+            )
+            ctx.enqueue_copy(
+                dst_buf=nl.create_sub_buffer[DType.int32](0, self.used),
+                src_buf=self.d_left.create_sub_buffer[DType.int32](
+                    0, self.used
+                ),
+            )
+            ctx.enqueue_copy(
+                dst_buf=nq.create_sub_buffer[DType.float32](0, self.used),
+                src_buf=self.d_q.create_sub_buffer[DType.float32](
+                    0, self.used
+                ),
+            )
+            ctx.enqueue_copy(
+                dst_buf=nf.create_sub_buffer[DType.float32](
+                    0, self.used * self.n_out
+                ),
+                src_buf=self.d_leaf.create_sub_buffer[DType.float32](
+                    0, self.used * self.n_out
+                ),
+            )
+        swap(self.d_col, nc)
+        swap(self.d_left, nl)
+        swap(self.d_q, nq)
+        swap(self.d_leaf, nf)
+        self.retired_i.append(nc^)
+        self.retired_i.append(nl^)
+        self.retired_f.append(nq^)
+        self.retired_f.append(nf^)
+        self.cap = cap
+
+    def append[
+        dtype: DType
+    ](
+        mut self,
+        ctx: DeviceContext,
+        tree: MutPointer[SparseTreeNode[dtype], MutUntrackedOrigin],
+        tree_leaves: MutPointer[Scalar[dtype], MutUntrackedOrigin],
+        n_nodes: Int,
+        tree_idx: Int,
+    ) raises:
+        """Enqueue tree `tree_idx`'s append. Call while the builder's
+        device tree still holds it (before that builder's next leaf
+        pass, which the in-order queue guarantees for every append
+        enqueued at the tree's completion)."""
+        if not self.enabled or n_nodes <= 0:
+            return
+        if self.used + n_nodes > self.cap:
+            self._grow(ctx, self.used + n_nodes)
+        comptime k_app = rf_oob_append_tree_kernel[dtype]
+        log_launch_ctx(ctx, "oob_append_tree")
+        ctx.enqueue_function[k_app](
+            tree.unsafe_origin_cast[MutAnyOrigin](),
+            tree_leaves.unsafe_origin_cast[MutAnyOrigin](),
+            self.d_off.unsafe_ptr(),
+            self.d_col.unsafe_ptr(),
+            self.d_q.unsafe_ptr(),
+            self.d_left.unsafe_ptr(),
+            self.d_leaf.unsafe_ptr(),
+            Int32(n_nodes),
+            Int32(self.n_out),
+            Int32(self.used),
+            Int32(tree_idx),
+            grid_dim=_ceildiv(max(n_nodes, 1), OOB_TPB),
+            block_dim=OOB_TPB,
+        )
+        self.used += n_nodes
+
+
+def _oob_append_from_builder[
+    O: ObjectiveLike, sampled_labels: Bool
+](
+    ctx: DeviceContext,
+    mut store: OobForestStore,
+    mut builder: Builder[O, sampled_labels],
+    n_nodes: Int,
+    tree_idx: Int,
+) raises:
+    """A finished tree's append from the builder that grew it: its device
+    tree is `leaf_d_tree` / `leaf_d_leaves` (`set_leaf_predictions` and
+    `_finish_tree_device` both leave it there)."""
+    if not store.enabled:
+        return
+    store.append[O.DataT](
+        ctx,
+        builder.leaf_d_tree.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin]()
+        .unsafe_bitcast[SparseTreeNode[O.DataT]](),
+        builder.leaf_d_leaves.unsafe_ptr().unsafe_origin_cast[
+            MutUntrackedOrigin
+        ](),
+        n_nodes,
+        tree_idx,
+    )
+
+
 def compute_oob_score[
     O: ObjectiveLike, sabotage: Int = 0
 ](
     ctx: DeviceContext,
     mut forest: RandomForestMetaData[O.DataT, O.LabelT],
+    mut store: OobForestStore,
     sampler: RowSampler,
     mut x: DeviceBuffer[DType.float32],
     mut y: DeviceBuffer[O.LabelT],
@@ -1455,101 +1672,204 @@ def compute_oob_score[
         their `decisiontree.cuh:370-389` defines -- `<=` goes left, right
         is `left_child_id + 1`, a leaf adds its whole `vector_leaf` row
         with `+=`. Same values, different executor.
-      * THE WHOLE PASS IS ON THE HOST. Theirs is cupy on device. The
-        accumulation order therefore differs from theirs: ours is
-        tree-major then row, theirs is a vectorised add per tree. Both
-        are float64 and both are sequential in the tree index, so the
-        only float difference available is within a row's class vector,
-        which is added in class order on both sides. DEVIATION 311.
+      * THE WHOLE PASS IS ON THE DEVICE (`ensemble/oob_device.mojo`):
+        the (tree, row) walk, the exact binary64 accumulation, the count
+        division and the score epilogue. cpu3-trees (2026-10-04): the
+        host walk and host epilogue (`IDN_RF_OOB_DEVICE_OFF`,
+        `IDN_RF_OOB_EPILOGUE_DEVICE_OFF`) are gone from this GPU route;
+        `host_x_addr` is no longer read and stays for its callers.
+        DEVIATION 311.
     """
     var n_trees = len(forest.trees)
     if n_trees == 0:
         raise Error("cannot compute an OOB score for an empty forest")
     var num_outputs = Int(forest.trees[0].num_outputs)
 
-    # The masks, back on the host. `:717` indexes them per tree.
-    var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
-    log_launch_ctx(ctx, "xfer_oob_masks")
-    ctx.enqueue_copy(dst_buf=hm, src_buf=sampler.bootstrap_masks)
-
-    # X, row-major, because `predict_one` walks a row (`:366` does the
-    # same pointer arithmetic). Training may have been column-major.
-    # DEVIATION 2484: callers that still own training X may lend it until
-    # this synchronous call returns. Native callers retain the download arm.
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](
-        n_rows * n_cols if host_x_addr == 0 else 0
-    )
-    if host_x_addr == 0:
-        log_launch_ctx(ctx, "xfer_oob_x")
-        ctx.enqueue_copy(dst_buf=hx, src_buf=x)
-
-    var hy = ctx.enqueue_create_host_buffer[O.LabelT](n_rows)
-    log_launch_ctx(ctx, "xfer_oob_y")
-    ctx.enqueue_copy(dst_buf=hy, src_buf=y)
-    ctx.synchronize()
-
-    var source = MutPointer[Float32, MutUntrackedOrigin](
-        unsafe_from_address=host_x_addr
-    )
-    if host_x_addr == 0:
-        source = hx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-    var rows = List[Scalar[O.DataT]](capacity=n_rows * n_cols)
-    for r in range(n_rows):
-        for c in range(n_cols):
-            var src = r * n_cols + c if row_major else c * n_rows + r
-            var value = source.unsafe_load(src)
-            # The device training matrix was flushed in-place before bins.
-            # Mirror that seam on borrowed original X, without mutating it.
-            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-                value = ftz(value)
-            rows.append(rebind[Scalar[O.DataT]](value))
-
-    # `:711-712`
     var oob_predictions = List[Float64]()
-    for _ in range(n_rows * num_outputs):
-        oob_predictions.append(Float64(0.0))
-    var oob_counts = List[Int]()
-    for _ in range(n_rows):
-        oob_counts.append(0)
-
-    var scratch = List[Scalar[O.DataT]]()
-    for _ in range(num_outputs):
-        scratch.append(Scalar[O.DataT](0))
-
-    # `:715-722`
-    for t in range(n_trees):
-        for r in range(n_rows):
-            # `:717-718` -- oob_mask = ~in_bag_mask
-            #
-            # CHECK HOOK. 1 drops the `~`, scoring each tree on the rows
-            # it was TRAINED on. That is the failure this line exists to
-            # prevent and it does not look like a failure -- it reports a
-            # better number.
-            var in_bag = hm.unsafe_ptr().unsafe_load(t * n_rows + r) != UInt8(
-                0
-            )
-            comptime if sabotage == 1:
-                if not in_bag:
-                    continue
-            else:
-                if in_bag:
-                    continue
-            for k in range(num_outputs):
-                scratch[k] = Scalar[O.DataT](0)
-            DecisionTree.predict_one[O.DataT](
-                rows, r * n_cols, forest.trees[t], scratch, 0, num_outputs
-            )
-            # `:721` -- += , and the widening happens here
-            for k in range(num_outputs):
-                oob_predictions[r * num_outputs + k] += Float64(scratch[k])
-            # `:722`
-            oob_counts[r] += 1
+    # The valid row count and the score's binary64 word, computed on the
+    # device (`ensemble/oob_device.mojo`).
+    var dev_n_valid = 0
+    var dev_score = Float64(0.0)
+    # The (tree, row) walk, the binary64 accumulation and the division
+    # by the count run on the device (`ensemble/oob_device.mojo`) over the
+    # flat model the fit appended tree by tree (`OobForestStore`,
+    # cpu4-forest); X, the masks and the model stay there. What crosses
+    # the bus: the averaged predictions (an attribute the API returns),
+    # the counts and the score words, once.
+    if not store.enabled or store.n_out != num_outputs:
+        raise Error("OOB score: the fit did not keep the device OOB model")
+    # The sampler is borrowed immutably and a device buffer hands out
+    # a pointer only when mutable, so the masks take one device copy.
+    var d_masks = ctx.enqueue_create_buffer[DType.uint8](n_trees * n_rows)
+    log_launch_ctx(ctx, "copy_oob_masks")
+    ctx.enqueue_copy(dst_buf=d_masks, src_buf=sampler.bootstrap_masks)
+    var d_acc = ctx.enqueue_create_buffer[DType.uint64](
+        n_rows * num_outputs
+    )
+    var d_cnt = ctx.enqueue_create_buffer[DType.int32](n_rows)
+    log_launch_ctx(ctx, "oob_rows")
+    ctx.enqueue_function[rf_oob_rows_kernel](
+        x.unsafe_ptr(),
+        d_masks.unsafe_ptr(),
+        store.d_off.unsafe_ptr(),
+        store.d_col.unsafe_ptr(),
+        store.d_q.unsafe_ptr(),
+        store.d_left.unsafe_ptr(),
+        store.d_leaf.unsafe_ptr(),
+        d_acc.unsafe_ptr(),
+        d_cnt.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_cols),
+        Int32(n_trees),
+        Int32(num_outputs),
+        Int32(1) if row_major else Int32(0),
+        Int32(1) if sabotage == 1 else Int32(0),
+        grid_dim=_ceildiv(n_rows, OOB_TPB),
+        block_dim=OOB_TPB,
+    )
+    var h_acc = ctx.enqueue_create_host_buffer[DType.uint64](
+        n_rows * num_outputs
+    )
+    # B6 (fix-r1-rescue): the score epilogue on the device
+    # (`ensemble/oob_device.mojo`). Only the averaged predictions
+    # (an attribute the API returns), two integers and the score
+    # word come back; y and the counts stay on the device.
+    if n_rows > E64_MAX_ROWS:
+        raise Error("OOB score: more rows than the exact sum takes")
+    var d_words = ctx.enqueue_create_buffer[DType.uint64](OOB_WORDS)
+    d_words.enqueue_fill(UInt64(0))
+    var d_stats = ctx.enqueue_create_buffer[DType.int32](OOB_STATS)
+    d_stats.enqueue_fill(Int32(0))
+    var d_eflags = ctx.enqueue_create_buffer[DType.int32](E64_FLAGS)
+    d_eflags.enqueue_fill(Int32(0))
+    # The limb partials only on the regressor (2 x E64_THREADS rows).
+    comptime n_part = 0 if O.LabelT.is_integral() else E64_THREADS * E64_LIMBS
+    comptime n_tot = 0 if O.LabelT.is_integral() else E64_LIMBS
+    var d_p1 = ctx.enqueue_create_buffer[DType.int64](max(n_part, 1))
+    var d_p2 = ctx.enqueue_create_buffer[DType.int64](max(n_part, 1))
+    var d_t1 = ctx.enqueue_create_buffer[DType.int64](max(n_tot, 1))
+    var d_t2 = ctx.enqueue_create_buffer[DType.int64](max(n_tot, 1))
+    log_launch_ctx(ctx, "oob_epilogue")
+    comptime if O.LabelT.is_integral():
+        comptime clf_kernel = rf_oob_clf_stats_kernel[O.LabelT]
+        ctx.enqueue_function[clf_kernel](
+            d_acc.unsafe_ptr(),
+            d_cnt.unsafe_ptr(),
+            y.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(num_outputs),
+            d_stats.unsafe_ptr(),
+            grid_dim=_ceildiv(n_rows, OOB_TPB),
+            block_dim=OOB_TPB,
+        )
+        ctx.enqueue_function[rf_oob_score_kernel](
+            d_words.unsafe_ptr(),
+            d_stats.unsafe_ptr(),
+            d_eflags.unsafe_ptr(),
+            Int32(1),
+            grid_dim=1,
+            block_dim=1,
+        )
+    else:
+        comptime assert (
+            O.LabelT == DType.float32
+        ), "the OOB r2 epilogue reads float32 labels"
+        var y32 = y.unsafe_ptr().bitcast[Float32]()
+        var egrid = E64_THREADS // OOB_TPB
+        ctx.enqueue_function[rf_oob_reg_ysum_kernel](
+            d_cnt.unsafe_ptr(),
+            y32,
+            Int32(n_rows),
+            d_p1.unsafe_ptr(),
+            d_stats.unsafe_ptr(),
+            d_eflags.unsafe_ptr(),
+            grid_dim=egrid,
+            block_dim=OOB_TPB,
+        )
+        ctx.enqueue_function[limb_reduce_kernel](
+            d_p1.unsafe_ptr(), d_t1.unsafe_ptr(),
+            grid_dim=1, block_dim=E64_LIMBS,
+        )
+        ctx.enqueue_function[round_kernel](
+            d_t1.unsafe_ptr(), d_words.unsafe_ptr(), Int64(0),
+            d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
+        )
+        ctx.enqueue_function[rf_oob_reg_mean_kernel](
+            d_words.unsafe_ptr(), d_stats.unsafe_ptr(),
+            grid_dim=1, block_dim=1,
+        )
+        ctx.enqueue_function[rf_oob_reg_sq_kernel](
+            d_acc.unsafe_ptr(),
+            d_cnt.unsafe_ptr(),
+            y32,
+            Int32(n_rows),
+            Int32(num_outputs),
+            d_words.unsafe_ptr(),
+            d_p1.unsafe_ptr(),
+            d_p2.unsafe_ptr(),
+            d_eflags.unsafe_ptr(),
+            grid_dim=egrid,
+            block_dim=OOB_TPB,
+        )
+        ctx.enqueue_function[limb_reduce_kernel](
+            d_p1.unsafe_ptr(), d_t1.unsafe_ptr(),
+            grid_dim=1, block_dim=E64_LIMBS,
+        )
+        ctx.enqueue_function[limb_reduce_kernel](
+            d_p2.unsafe_ptr(), d_t2.unsafe_ptr(),
+            grid_dim=1, block_dim=E64_LIMBS,
+        )
+        ctx.enqueue_function[round_kernel](
+            d_t1.unsafe_ptr(), d_words.unsafe_ptr(), Int64(1),
+            d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
+        )
+        ctx.enqueue_function[round_kernel](
+            d_t2.unsafe_ptr(), d_words.unsafe_ptr(), Int64(2),
+            d_eflags.unsafe_ptr(), grid_dim=1, block_dim=1,
+        )
+        ctx.enqueue_function[rf_oob_score_kernel](
+            d_words.unsafe_ptr(),
+            d_stats.unsafe_ptr(),
+            d_eflags.unsafe_ptr(),
+            Int32(0),
+            grid_dim=1,
+            block_dim=1,
+        )
+    var h_words = ctx.enqueue_create_host_buffer[DType.uint64](OOB_WORDS)
+    var h_stats = ctx.enqueue_create_host_buffer[DType.int32](OOB_STATS)
+    log_launch_ctx(ctx, "xfer_oob_predictions")
+    ctx.enqueue_copy(dst_buf=h_acc, src_buf=d_acc)
+    ctx.enqueue_copy(dst_buf=h_words, src_buf=d_words)
+    ctx.enqueue_copy(dst_buf=h_stats, src_buf=d_stats)
+    ctx.synchronize()
+    # Into the List the forest exposes (an API attribute): one bulk copy
+    # of the returned binary64 words, no arithmetic.
+    oob_predictions = List[Float64](
+        length=n_rows * num_outputs, fill=Float64(0.0)
+    )
+    memcpy(
+        dest=oob_predictions.unsafe_ptr().bitcast[UInt64](),
+        src=h_acc.unsafe_ptr(),
+        count=n_rows * num_outputs,
+    )
+    dev_n_valid = Int(h_stats.unsafe_ptr().unsafe_load(0))
+    dev_score = bitcast[DType.float64](h_words.unsafe_ptr().unsafe_load(4))
+    _ = d_words^
+    _ = d_stats^
+    _ = d_eflags^
+    _ = d_p1^
+    _ = d_p2^
+    _ = d_t1^
+    _ = d_t2^
+    _ = h_words^
+    _ = h_stats^
+    _ = d_masks^
+    _ = d_acc^
+    _ = d_cnt^
+    _ = h_acc^
 
     # `:725-732`
-    var n_valid = 0
-    for r in range(n_rows):
-        if oob_counts[r] > 0:
-            n_valid += 1
+    var n_valid = dev_n_valid
     if n_valid != n_rows:
         print(
             "WARN: Some inputs do not have OOB scores. This probably means"
@@ -1562,76 +1882,31 @@ def compute_oob_score[
             " score to report"
         )
 
-    # `:734-738`
-    for r in range(n_rows):
-        if oob_counts[r] > 0:
-            var d = Float64(oob_counts[r])
-            for k in range(num_outputs):
-                oob_predictions[r * num_outputs + k] /= d
-
     forest.has_oob = True
     comptime if O.LabelT.is_integral():
         # `:741-748` -- argmax over the averaged class probabilities, then
         # accuracy. `cp.argmax` keeps the FIRST maximum on a tie, which is
         # what a strict `>` from index 0 does.
         forest.oob_decision_function_ = oob_predictions.copy()
-        var correct = 0
-        for r in range(n_rows):
-            if oob_counts[r] <= 0:
-                continue
-            var best = 0
-            var best_p = oob_predictions[r * num_outputs]
-            for k in range(1, num_outputs):
-                if oob_predictions[r * num_outputs + k] > best_p:
-                    best_p = oob_predictions[r * num_outputs + k]
-                    best = k
-            if Int(hy.unsafe_ptr().unsafe_load(r)) == best:
-                correct += 1
-        # `_classification.py:102` -- float(cp.average(correct))
-        forest.oob_score_ = Float64(correct) / Float64(n_valid)
+        # B6: correct / n_valid formed on the device (same word).
+        forest.oob_score_ = dev_score
     else:
         # `:750-753` -- r2_score over the valid rows only.
         forest.oob_prediction_ = oob_predictions.copy()
-        var mean = Float64(0.0)
-        for r in range(n_rows):
-            if oob_counts[r] > 0:
-                mean += Float64(hy.unsafe_ptr().unsafe_load(r))
-        mean /= Float64(n_valid)
-        # `metrics/regression.py:136-140`
-        var numerator = Float64(0.0)
-        var denominator = Float64(0.0)
-        for r in range(n_rows):
-            if oob_counts[r] <= 0:
-                continue
-            var yt = Float64(hy.unsafe_ptr().unsafe_load(r))
-            var d1 = yt - oob_predictions[r * num_outputs]
-            numerator = fma(d1, d1, numerator)  # the default build's fused op (lane/pinned-mul-contract-free)
-            var d2 = yt - mean
-            denominator = fma(d2, d2, denominator)  # the default build's fused op (lane/pinned-mul-contract-free)
-        # `:145-157`, force_finite=True: numerator == 0 -> 1;
-        # numerator != 0 and denominator == 0 -> 0; else 1 - num/den.
-        if numerator == Float64(0.0):
-            forest.oob_score_ = Float64(1.0)
-        elif denominator == Float64(0.0):
-            forest.oob_score_ = Float64(0.0)
-        else:
-            forest.oob_score_ = Float64(1.0) - numerator / denominator
-
-    _ = hm^
-    _ = hx^
-    _ = hy^
+        # B6: exact binary64 sums on the device (`ensemble/oob_device.mojo`).
+        forest.oob_score_ = dev_score
 
 
 # ---------------------------------------------------------------------------
 
 
-def compute_feature_importances[
+def compute_feature_importances_host[
     dtype: DType, label_dtype: DType
 ](
     forest: RandomForestMetaData[dtype, label_dtype],
     mut importances: List[Scalar[dtype]],
 ) raises:
-    """`ML::compute_feature_importances`, `randomforest.cu:799-860`.
+    """`ML::compute_feature_importances_host`, `randomforest.cu:799-860`.
 
     Pure host code over `sparsetree`, so it implements whole. Their structure,
     which is not the obvious one:
@@ -1990,18 +2265,21 @@ struct RowSampler(Movable):
     # arm produces FEWER rows than `n_sampled_rows`, and the builder must
     # be told how many, or it reads past the live entries.
     var n_selected: Int
-    # `:223` -- `rmm::device_uvector<double> sample_weight_cdf_`, and `:222`
-    # `double sample_weight_sum_`. Float64 on the HOST; see DEVIATION 306.
-    var weight_cdf: List[Float64]
-    var weight_sum: Float64
+    # `:223` -- `sample_weight_cdf_`, here the UInt64 CDF of the weights'
+    # integer quanta, on the device (`ensemble/weighted_bootstrap_device
+    # .mojo`), the only weighted-bootstrap route in every mode. None until
+    # `prepare_weights` builds it (bootstrap arms only).
+    var weight_qcdf: Optional[DeviceBuffer[DType.uint64]]
+    # `:144-154` -- the `copy_if` of the nonzero-weight rows, ascending, at
+    # most `n_sampled_rows` of them, compacted on the device once per
+    # forest by `prepare_weights`; each tree of the weighted
+    # non-bootstrap arm copies it device to device. None until then.
+    var kept_rows: Optional[DeviceBuffer[DType.int32]]
     # `:224` -- `std::vector<rmm::device_uvector<int>> selected_rows_`,
     # ONE PER STREAM. The pipelined forest loop (DEVIATION 117) is their
     # stream pool expressed on one queue, so the slot dimension is implemented
-    # with it: each in-flight tree reads its own row buffer. `h_rows` is
-    # DEVIATION 305's host staging and stays single -- the arms that use
-    # it synchronize, so it is never live for two slots at once.
+    # with it: each in-flight tree reads its own row buffer.
     var selected_rows_: List[DeviceBuffer[DType.int32]]
-    var h_rows: HostBuffer[DType.int32]
     # `:70`, `:81` -- `bool* bootstrap_masks_`, an `n_trees x n_rows`
     # DEVICE buffer the CALLER owns; theirs asserts it is a device
     # pointer (`:82-83`) and treats null as "OOB not requested".
@@ -2046,15 +2324,14 @@ struct RowSampler(Movable):
         self.n_sampled_rows = n_sampled_rows
         self.has_sample_weight = has_sample_weight
         self.n_selected = n_sampled_rows
-        self.weight_cdf = List[Float64]()
-        self.weight_sum = Float64(0.0)
+        self.weight_qcdf = Optional[DeviceBuffer[DType.uint64]]()
+        self.kept_rows = Optional[DeviceBuffer[DType.int32]]()
         var n = n_sampled_rows if n_sampled_rows > 0 else 1
         self.selected_rows_ = List[DeviceBuffer[DType.int32]]()
         for _ in range(n_slots if n_slots > 0 else 1):
             self.selected_rows_.append(
                 ctx.enqueue_create_buffer[DType.int32](n)
             )
-        self.h_rows = ctx.enqueue_create_host_buffer[DType.int32](n)
         self.has_masks = n_trees_for_masks > 0
         var m = n_trees_for_masks * n_rows if self.has_masks else 1
         self.bootstrap_masks = ctx.enqueue_create_buffer[DType.uint8](m)
@@ -2084,10 +2361,11 @@ struct RowSampler(Movable):
         ctx.synchronize()
 
     def prepare_weights(
-        mut self, ctx: DeviceContext, weights: List[Float32]
+        mut self, ctx: DeviceContext, mut weights: DeviceBuffer[DType.float32]
     ) raises:
         """`validate_sample_weight` (`:198-211`) + the `copy_if` of
-        `:144-154`, both done once.
+        `:144-154`, both done once, ON THE DEVICE, from the fit's own
+        device weights (`n_rows` Float32s).
 
         THEIR TWO REFUSALS ARE KEPT AND ARE NOT ADVISORY.
         `InvalidSampleWeight` rejects anything non-finite or negative
@@ -2096,15 +2374,64 @@ struct RowSampler(Movable):
         train a forest on a row set nobody asked for, which is the same
         failure class as a wrong bootstrap.
 
-        DEVIATION 305: theirs runs the `copy_if` on the DEVICE, inside
-        `sample()`, once per tree. Ours runs it on the HOST, once per
-        forest. The set is a function of `sample_weight` alone -- no tree
-        id, no RNG -- so every tree gets the identical set either way; the
-        difference is `n_trees - 1` redundant device passes, which is work
-        rather than meaning. PRICE: one host pass over `n_rows` weights
-        per forest, and the weights must be available on the host, which
-        they are because the caller supplies them.
+        cpu3-trees (2026-10-04): `scan_weights_device`
+        (`ensemble/weighted_bootstrap_device.mojo`) tests every weight's
+        bits, compacts the nonzero rows in order into `kept_rows` and hands
+        back four words (first refused row and its bits, kept count,
+        refused count): the refusals are decided from those, by the same
+        value tests and in the same row order as before (the FIRST refused
+        row names the error). The total is positive exactly when some
+        weight is nonzero, every weight being non-negative by then. The set
+        is a function of `sample_weight` alone, so every tree gets the same
+        one (DEVIATION 305: once per forest, not once per tree). The
+        bootstrap arms also build the integer CDF here, on the device.
         """
+        var wbits = (
+            weights.unsafe_ptr()
+            .unsafe_origin_cast[MutAnyOrigin]()
+            .unsafe_bitcast[UInt32]()
+        )
+        var cap = self.n_sampled_rows if self.n_sampled_rows > 0 else 1
+        var kept = ctx.enqueue_create_buffer[DType.int32](cap)
+        # drains before it returns: `st` is read on the host below
+        var st = scan_weights_device(ctx, wbits, self.n_rows, kept, cap)
+        if st[0] != UInt32(0xFFFFFFFF):
+            # `:202-208` -- non-finite or negative is refused BY VALUE.
+            var w = bitcast[DType.float32](st[1])
+            if not (w == w):
+                raise Error(
+                    "sample_weight values must be finite and non-negative;"
+                    " index " + String(Int(st[0])) + " is NaN"
+                )
+            raise Error(
+                "sample_weight values must be finite and non-negative;"
+                " index " + String(Int(st[0])) + " is " + String(w)
+            )
+        if Int(st[2]) == 0:
+            raise Error(
+                "sample_weight values must contain at least one positive"
+                " value (randomforest.cuh:93-95)"
+            )
+        self.n_selected = min(Int(st[2]), self.n_sampled_rows)
+        self.kept_rows = Optional(kept^)
+
+        # `:84-89` -- the weighted-bootstrap CDF: the UInt64 inclusive scan
+        # of the weights' integer quanta, whose LAST element is the draw
+        # span (`ensemble/weighted_bootstrap_device.mojo`). The weights'
+        # bits never cross the bus; every tree's draws are device work.
+        if self.bootstrap:
+            self.weight_qcdf = Optional(
+                build_weight_cdf_device(ctx, wbits, self.n_rows)
+            )
+        _ = st^
+
+    def prepare_weights(
+        mut self, ctx: DeviceContext, weights: List[Float32]
+    ) raises:
+        """The checks' door (`ensemble/checks/`): the caller's host List
+        crosses the bus once, as one bulk copy, and the device form above
+        does the work. `fit_forest` calls the device form on its own
+        weight buffer."""
         if len(weights) < self.n_rows:
             raise Error(
                 "sample_weight holds "
@@ -2112,46 +2439,12 @@ struct RowSampler(Movable):
                 + " values but n_rows is "
                 + String(self.n_rows)
             )
-        var total = Float64(0.0)
-        var kept = 0
-        var p = self.h_rows.unsafe_ptr()
-        for i in range(self.n_rows):
-            var w = weights[i]
-            # `:202-208` -- non-finite or negative is refused BY VALUE.
-            if not (w == w):
-                raise Error(
-                    "sample_weight values must be finite and non-negative;"
-                    " index " + String(i) + " is NaN"
-                )
-            if w < Float32(0.0):
-                raise Error(
-                    "sample_weight values must be finite and non-negative;"
-                    " index " + String(i) + " is " + String(w)
-                )
-            total += Float64(w)
-            if w != Float32(0.0):
-                if kept < self.n_sampled_rows:
-                    p.unsafe_store(kept, Int32(i))
-                kept += 1
-        if total <= 0.0:
-            raise Error(
-                "sample_weight values must contain at least one positive"
-                " value (randomforest.cuh:93-95)"
-            )
-        self.n_selected = min(kept, self.n_sampled_rows)
-
-        # `:84-89` -- the weighted-bootstrap CDF, an inclusive scan over the
-        # weights, and `:91` takes the total from its LAST ELEMENT rather
-        # than from a separate reduction. Kept: a separate sum could differ
-        # in the last bits from the scan's running total, and their
-        # `upper_bound` searches the SCAN.
-        if self.bootstrap:
-            self.weight_cdf = List[Float64]()
-            var run = Float64(0.0)
-            for i in range(self.n_rows):
-                run += Float64(weights[i])
-                self.weight_cdf.append(run)
-            self.weight_sum = self.weight_cdf[self.n_rows - 1]
+        var dw = ctx.enqueue_create_buffer[DType.float32](self.n_rows)
+        log_launch_ctx(ctx, "xfer_wboot_weights")
+        ctx.enqueue_copy(dst_buf=dw, src_ptr=weights.unsafe_ptr())
+        # the device form drains before it returns, so `dw` may die after
+        self.prepare_weights(ctx, dw)
+        _ = dw^
 
     def rng_seed_for(self, tree_id: Int32) -> UInt32:
         """`:120-123`, the per-tree seed, exposed so a check can hold it to
@@ -2249,53 +2542,28 @@ struct RowSampler(Movable):
         mut self, ctx: DeviceContext, tree_id: Int32, slot: Int = 0
     ) raises:
         """`:112-161`, the four-way dispatch in their order. All four arms
-        run; see the struct docstring."""
+        run; see the struct docstring. Every arm is device work on the
+        queue: no upload, no host staging, no per-tree drain."""
         if self.bootstrap and self.has_sample_weight:
             # `:125-138` -- "Draw bootstrap rows according to sample
-            # weights."
-            #
-            #   raft::random::uniform<double>(res, rng, scratch.data(),
-            #       scratch.size(), 0.0, sample_weight_sum_);
-            #   thrust::upper_bound(policy, cdf.data(), cdf.data() + n_rows,
-            #       scratch.begin(), scratch.end(), selected_rows.begin());
-            #
-            # `upper_bound` returns the index of the FIRST cdf entry
-            # STRICTLY GREATER than the draw, which is what makes a row's
-            # probability its own weight over the total. A `lower_bound`
-            # here would hand every zero-weight row the mass of its
-            # predecessor.
-            if len(self.weight_cdf) < self.n_rows:
+            # weights." fam2-forests: integer CDF + PCG bounded draw +
+            # `upper_bound` (the FIRST cdf entry STRICTLY GREATER than the
+            # draw, so a zero-weight row is never drawn), all on the
+            # device, in every mode. The host column
+            # (`rf_oracle.host_sampled_rows`) draws the same rows.
+            if not self.weight_qcdf:
                 raise Error(
                     "weighted bootstrap needs prepare_weights first"
                 )
-            var draws = uniform_double_host(
-                UInt64(Int(self.rng_seed_for(tree_id))),
-                UInt64(0),
-                RNG_STRIDE,
-                self.n_sampled_rows,
-                Float64(0.0),
-                self.weight_sum,
-            )
-            var p = self.h_rows.unsafe_ptr()
-            for i in range(self.n_sampled_rows):
-                # std::upper_bound over the cdf
-                var lo = 0
-                var hi = self.n_rows
-                var d = draws[i]
-                while lo < hi:
-                    var mid = (lo + hi) // 2
-                    if self.weight_cdf[mid] <= d:
-                        lo = mid + 1
-                    else:
-                        hi = mid
-                p.unsafe_store(i, Int32(lo))
             self.n_selected = self.n_sampled_rows
-            log_launch_ctx(ctx, "xfer_sampled_rows")
-            ctx.enqueue_copy(
-                dst_buf=self.selected_rows_[slot],
-                src_ptr=self.h_rows.unsafe_ptr(),
+            launch_weighted_bootstrap_rows(
+                ctx,
+                self.selected_rows_[slot],
+                self.weight_qcdf.value(),
+                self.n_sampled_rows,
+                self.n_rows,
+                self.rng_seed_for(tree_id),
             )
-            ctx.synchronize()
             return
         if self.bootstrap:
             # `:140-142` -- THE DEFAULT ARM.
@@ -2322,11 +2590,7 @@ struct RowSampler(Movable):
             # NO synchronize -- theirs is `uniformInt` on the stream and
             # `sample()` returns with no sync; the builder's kernels are
             # enqueued after this on the same queue and read
-            # `selected_rows` in order. The host never reads it. The
-            # host-staging arms below DO keep their sync, because each
-            # re-writes `h_rows` on the host next tree and the write must
-            # not race the in-flight copy -- that wait is the price of
-            # DEVIATION 305's host staging, not of the reference.
+            # `selected_rows` in order. The host never reads it.
             return
         if self.has_sample_weight:
             # `:144-154` -- `thrust::copy_if` over `NonzeroSampleWeight`,
@@ -2340,16 +2604,19 @@ struct RowSampler(Movable):
                     "sample_weight values must contain at least one"
                     " positive value (randomforest.cuh:94)"
                 )
-            log_launch_ctx(ctx, "xfer_sampled_rows")
+            if not self.kept_rows:
+                raise Error("weighted rows need prepare_weights first")
+            # The device-compacted set, device to device on the queue: the
+            # sampler outlives `fit_forest`'s final synchronize
+            # (`_ = sampler^` after it), so no drain is needed here.
+            log_launch_ctx(ctx, "copy_sampled_rows")
             ctx.enqueue_copy(
                 dst_buf=self.selected_rows_[slot],
-                src_ptr=self.h_rows.unsafe_ptr(),
+                src_buf=self.kept_rows.value(),
             )
-            ctx.synchronize()
             return
         # DEVIATION 2484: `:155-157` thrust::sequence, reusing ET's device
         # fill. Consumers use this queue, so no host staging or wait is needed.
-        # Weighted arms above retain their original sampling and synchronization.
         self.n_selected = self.n_sampled_rows
         log_launch_ctx(ctx, "sampled_rows_sequence")
         ctx.enqueue_function[row_ids_tiled_sequence_kernel](
@@ -2421,34 +2688,34 @@ def _record_tree[
     FOREST index, a position in the algorithm, identical under any
     pipeline width K (DEVIATION 117's output-freedom is what makes that
     true)."""
-    if not instr.trace.enabled:
-        return
-    var flat = List[UInt32]()
-    for i in range(len(tree.sparsetree)):
-        ref node = tree.sparsetree[i]
-        flat.append(UInt32(Int(node.ColumnId()) & 0xFFFFFFFF))
-        var qb = UInt64(node.QueryValue().to_bits())
-        flat.append(UInt32(qb & 0xFFFFFFFF))
-        flat.append(UInt32(qb >> 32))
-        var mb = UInt64(node.BestMetric().to_bits())
-        flat.append(UInt32(mb & 0xFFFFFFFF))
-        flat.append(UInt32(mb >> 32))
-        flat.append(UInt32(Int(node.LeftChildId()) & 0xFFFFFFFF))
-        flat.append(UInt32(Int(node.InstanceCount()) & 0xFFFFFFFF))
-    instr.trace.record_host(
-        "tree" + String(idx) + ".nodes", flat.unsafe_ptr(), len(flat)
-    )
-    # `[[mojo-buffer-freed-at-last-use]]` -- keep the list past the hash.
-    _ = flat^
-    var leaves = List[UInt32]()
-    for i in range(len(tree.vector_leaf)):
-        var lb = UInt64(tree.vector_leaf[i].to_bits())
-        leaves.append(UInt32(lb & 0xFFFFFFFF))
-        leaves.append(UInt32(lb >> 32))
-    instr.trace.record_host(
-        "tree" + String(idx) + ".leaves", leaves.unsafe_ptr(), len(leaves)
-    )
-    _ = leaves^
+    # identity-trace only (DEVIATION 401): nothing runs unless tracing is on
+    if instr.trace.enabled:
+        var flat = List[UInt32]()
+        for i in range(len(tree.sparsetree)):
+            ref node = tree.sparsetree[i]
+            flat.append(UInt32(Int(node.ColumnId()) & 0xFFFFFFFF))
+            var qb = UInt64(node.QueryValue().to_bits())
+            flat.append(UInt32(qb & 0xFFFFFFFF))
+            flat.append(UInt32(qb >> 32))
+            var mb = UInt64(node.BestMetric().to_bits())
+            flat.append(UInt32(mb & 0xFFFFFFFF))
+            flat.append(UInt32(mb >> 32))
+            flat.append(UInt32(Int(node.LeftChildId()) & 0xFFFFFFFF))
+            flat.append(UInt32(Int(node.InstanceCount()) & 0xFFFFFFFF))
+        instr.trace.record_host(
+            "tree" + String(idx) + ".nodes", flat.unsafe_ptr(), len(flat)
+        )
+        # `[[mojo-buffer-freed-at-last-use]]` -- keep the list past the hash.
+        _ = flat^
+        var leaves = List[UInt32]()
+        for i in range(len(tree.vector_leaf)):
+            var lb = UInt64(tree.vector_leaf[i].to_bits())
+            leaves.append(UInt32(lb & 0xFFFFFFFF))
+            leaves.append(UInt32(lb >> 32))
+        instr.trace.record_host(
+            "tree" + String(idx) + ".leaves", leaves.unsafe_ptr(), len(leaves)
+        )
+        _ = leaves^
 
 
 struct ForestPrep(Movable):
@@ -2582,9 +2849,10 @@ def fit_forest_prepared[
     already-hashed seed down would double-hash and produce a different
     forest.
     """
-    comptime assert not (FUSED_BOOTSTRAP_GATHER and ROWS_SORTED_SAMPLE), (
-        "fused bootstrap gather and sorted bootstrap rows are separate candidates"
-    )
+    # fam2-forests: the two candidates may now be compiled together. A
+    # tree whose bootstrap rows are sorted takes the two-launch route at
+    # run time (`fused_gather_ok` below), because the fused launch stages
+    # labels in DRAWN order and the sort would leave them misaligned.
     comptime assert (
         FUSED_BOOTSTRAP_GATHER or not FUSED_BOOTSTRAP_GATHER_SABOTAGE
     ), "fused bootstrap gather sabotage requires its candidate"
@@ -2835,7 +3103,23 @@ def fit_forest_prepared[
         or n_cols >= ROWS_SORTED_MIN_COLS,
     )
     if has_sw:
-        sampler.prepare_weights(ctx, sample_weight_host)
+        if len(sample_weight_host) < n_rows:
+            raise Error(
+                "sample_weight holds "
+                + String(len(sample_weight_host))
+                + " values but n_rows is "
+                + String(n_rows)
+            )
+        # the weights are the device buffer the objective reads too
+        # (`sample_weight`, `n_rows` Float32s); the host List only says
+        # that weights were given
+        sampler.prepare_weights(ctx, sample_weight)
+    # The fused bootstrap rows + labels launch serves the plain bootstrap
+    # arm only, and only when the rows stay in drawn order.
+    var fused_gather_ok = rf_params.bootstrap and not has_sw
+    comptime if ROWS_SORTED_SAMPLE:
+        if sampler.sort_keys:
+            fused_gather_ok = False
 
     # `RowSampler::tree_sample_weight`, `randomforest.cuh:166-167`:
     #
@@ -2897,6 +3181,14 @@ def fit_forest_prepared[
     var split_staging = SplitStaging(
         ctx, k_streams, builders[0].splits_capacity_bytes()
     )
+    # cpu4-forest: the OOB model is appended on the device as each tree
+    # finishes (`OobForestStore`); nothing is allocated without OOB.
+    var oob_store = OobForestStore(
+        ctx,
+        Int(rf_params.n_trees),
+        Int(builders[0].num_outputs),
+        oob_score,
+    )
     for k in range(k_streams):
         builders[k].adopt_shared_splits(split_staging, k)
 
@@ -2904,7 +3196,7 @@ def fit_forest_prepared[
     # the block above `k_streams`). Trees finish out of order, so the
     # forest is preallocated and each tree lands at ITS index.
     var n_trees = Int(rf_params.n_trees)
-    for _ in range(n_trees):
+    for _ in range(n_trees):  # small-loop(n_trees: empty output tree slots): preallocates the host model container, no data
         forest.trees.append(
             TreeMetaDataNode[O.DataT](
                 Int32(-1),
@@ -2931,7 +3223,7 @@ def fit_forest_prepared[
         while next_tree < n_trees:
             t_stage = instr.times.start()
             comptime if FUSED_BOOTSTRAP_GATHER:
-                if rf_params.bootstrap and not has_sw:
+                if fused_gather_ok:
                     comptime if FUSED_BOOTSTRAP_GATHER_SABOTAGE:
                         launch_bootstrap_rows_labels[sabotage=1](
                             ctx,
@@ -3009,7 +3301,7 @@ def fit_forest_prepared[
             # out under the default.
             comptime if LABELS_SAMPLED_ORDER:
                 comptime if FUSED_BOOTSTRAP_GATHER:
-                    if not (rf_params.bootstrap and not has_sw):
+                    if not fused_gather_ok:
                         builders[k].stage_sampled_order(ctx, dataset)
                     else:
                         dataset.labels = (
@@ -3022,6 +3314,10 @@ def fit_forest_prepared[
             instr.times.stop_host("host_begin_tree", t_host)
             if ts.done:
                 t_host = instr.times.start()
+                _oob_append_from_builder(
+                    ctx, oob_store, builders[k],
+                    len(ts.tree.sparsetree), next_tree,
+                )
                 forest.trees[next_tree] = ts.tree.copy()
                 _record_tree(instr, forest.trees[next_tree], next_tree)
                 instr.times.stop_host("tree_copy", t_host)
@@ -3064,6 +3360,10 @@ def fit_forest_prepared[
                 continue
             while True:
                 t_host = instr.times.start()
+                _oob_append_from_builder(
+                    ctx, oob_store, builders[k],
+                    len(states[k].tree.sparsetree), slot_tree[k],
+                )
                 forest.trees[slot_tree[k]] = states[k].tree.copy()
                 _record_tree(
                     instr, forest.trees[slot_tree[k]], slot_tree[k]
@@ -3075,7 +3375,7 @@ def fit_forest_prepared[
                     break
                 t_stage = instr.times.start()
                 comptime if FUSED_BOOTSTRAP_GATHER:
-                    if rf_params.bootstrap and not has_sw:
+                    if fused_gather_ok:
                         comptime if FUSED_BOOTSTRAP_GATHER_SABOTAGE:
                             launch_bootstrap_rows_labels[sabotage=1](
                                 ctx,
@@ -3149,7 +3449,7 @@ def fit_forest_prepared[
                 # DEVIATION 2001 -- as in the prime loop above.
                 comptime if LABELS_SAMPLED_ORDER:
                     comptime if FUSED_BOOTSTRAP_GATHER:
-                        if not (rf_params.bootstrap and not has_sw):
+                        if not fused_gather_ok:
                             builders[k].stage_sampled_order(ctx, dataset)
                         else:
                             dataset.labels = (
@@ -3182,7 +3482,8 @@ def fit_forest_prepared[
     if oob_score:
         t_stage = instr.times.start()
         compute_oob_score[O, oob_sabotage](
-            ctx, forest, sampler, x, y, n_rows, n_cols, row_major, host_x_addr
+            ctx, forest, oob_store, sampler, x, y, n_rows, n_cols, row_major,
+            host_x_addr,
         )
         instr.times.stop(ctx, "oob", t_stage)
 
@@ -3190,6 +3491,7 @@ def fit_forest_prepared[
     # kernel as a raw pointer. These uses keep them alive past the final
     # synchronize. Measured hazard, not a precaution.
     _ = sampler^
+    _ = oob_store^
     if not keep_prep:
         prep.clear()
     # DEVIATION 402 -- the stage table, printed only under

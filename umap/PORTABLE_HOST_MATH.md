@@ -8,8 +8,8 @@ through compile-time wrappers; no FAST or DETERMINISTIC tests were run here.
 |---|---|
 | `curve.mojo` | exp, log, pow |
 | `graph.mojo` | exp, log2 |
-| `sparse_graph.mojo` | exp, log2 |
-| `transform.mojo` | exp, log2, pow |
+| `sparse_graph.mojo` | exp, log2 (supervised set operations' pow: `sf64_pow` on the device since 2026-10-04) |
+| `transform.mojo` | exp, log2, pow (since 2026-10-04 on the device in every mode: `transform_rows.mojo` over `checks/soft_f64.mojo`'s `sf64_exp`/`sf64_pow`, shared with the host column) |
 | `optimizer.mojo` | pow in the serial host optimizer |
 | `sparse_optimizer.mojo` | pow in the serial host optimizer |
 

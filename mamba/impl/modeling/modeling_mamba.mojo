@@ -173,7 +173,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.
-from gemm.checks.gemm_identical import identical_gemm
+from mamba.impl.modules.idn_gemm_ws import mamba_proj_gemm
 
 # ORIENTATION NUMBERING: this `OP_NT` is `gemm_oracle`'s, where
 # `OP_NN = 0, OP_NT = 1, OP_TN = 2`. It is NOT `bench/gemm_shapes.mojo`'s
@@ -200,8 +200,16 @@ from mamba.impl.modules.afn_defines import (
     AFN_MAMBA1_FUSE_IN,
     AFN_MAMBA_ARENA,
     AFN_MAMBA_DEVICE_REFUSAL,
+    IDN_MAMBA_ALLOC_NOWAIT,
+    IDN_MAMBA_ARENA,
+    IDN_MAMBA_CONV_CELL,
 )
 from mamba.impl.modules.afn_arena import MambaArena
+from mamba.checks.mamba_rms_fold import (
+    IDN_MAMBA_RMS_TREE,
+    MAMBA_RMS_LANES,
+    mamba_rms_tree,
+)
 from mamba.impl.modules.afn_refusal import AfnRefusalBatch
 from mamba.impl.modeling.afn_mamba1_fused import afn_m1_conv_token, afn_m1_split_a
 #: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
@@ -489,7 +497,7 @@ def mamba_zeros[wait: Bool = True](
     else:
         dev.enqueue_fill(Float32(0.0))
     # The guarded sub-buffer is local; keep its existing completion fence.
-    comptime if wait or MAMBA_GUARD > 0:
+    comptime if (wait and not IDN_MAMBA_ALLOC_NOWAIT) or MAMBA_GUARD > 0:
         step_count_sync()
         ctx.synchronize()
     return dev^
@@ -582,7 +590,8 @@ def mamba_scratch(
     var dev = mamba_device_alloc(ctx, n_buf)
     comptime if not MAMBA_POISON:
         dev.enqueue_fill(Float32(0.0))
-    ctx.synchronize()
+    comptime if not IDN_MAMBA_ALLOC_NOWAIT:
+        ctx.synchronize()
     return dev^
 
 
@@ -701,6 +710,18 @@ def _m1_stage_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
             ctx.synchronize()
     else:
         ctx.synchronize()
+
+
+def _m1_final_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
+    """The block forward's LAST stage wait. lane fam-lm: under
+    IDN_MAMBA_ARENA (IDENTICAL) the per-stage waits above are traced-only,
+    but this one stays unconditional, so every caller that is not the arena
+    binding (sessions, gates) still gets a forward that has completed when
+    it returns, as main's did."""
+    comptime if IDN_MAMBA_ARENA:
+        ctx.synchronize()
+    else:
+        _m1_stage_sync(ctx, trace)
 
 
 struct MambaDeviceState(Movable):
@@ -935,6 +956,73 @@ def mamba_rms_norm_kernel(
         )
 
 
+def mamba_rms_lane_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],  # [M, MAMBA_RMS_LANES]
+    x: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    dm_in: Int32,
+):
+    """IDN_MAMBA_RMS_TREE (roadmap B11), S1 part 1: one thread per (row,
+    lane), lane k's chain over j = k, k + 32, ... ascending from +0.0
+    (mamba/checks/mamba_rms_fold.mojo states the fold)."""
+    var m = Int(m_in)
+    var dm = Int(dm_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= m * MAMBA_RMS_LANES:
+        return
+    var t = cell // MAMBA_RMS_LANES
+    var lane = cell - t * MAMBA_RMS_LANES
+    var acc = Float32(0.0)
+    var j = lane
+    while j < dm:
+        var xj = ftz(x.unsafe_load(t * dm + j))
+        acc = ftz(identical_mul_add(xj, xj, acc))
+        j += MAMBA_RMS_LANES
+    part.unsafe_store(cell, acc)
+
+
+def mamba_rms_tree_kernel(
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],  # [M, MAMBA_RMS_LANES]
+    m_in: Int32,
+):
+    """S1 part 2: one thread per row, the fixed pairwise tree over its lane
+    partials in lane order."""
+    var m = Int(m_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= m:
+        return
+    var v = SIMD[DType.float32, MAMBA_RMS_LANES](0.0)
+    comptime for lane in range(MAMBA_RMS_LANES):
+        v[lane] = part.unsafe_load(t * MAMBA_RMS_LANES + lane)
+    sumsq.unsafe_store(t, mamba_rms_tree(v))
+
+
+def mamba_rms_out_kernel(
+    out_buf: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    dm_in: Int32,
+):
+    """S2-S4 per element (`mamba_rms_norm_kernel`'s output loop, same
+    arithmetic per cell): rstd from the row's recorded sumsq."""
+    var m = Int(m_in)
+    var dm = Int(dm_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= m * dm:
+        return
+    var t = cell // dm
+    var j = cell - t * dm
+    var mean = ftz(identical_div(sumsq.unsafe_load(t), Float32(dm)))
+    var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
+    var inner = ftz(identical_mul(ftz(x.unsafe_load(cell)), rstd))
+    out_buf.unsafe_store(
+        cell, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
+    )
+
+
 def mamba_rms_norm(
     ctx: DeviceContext,
     mut sumsq: DeviceBuffer[DType.float32],
@@ -946,14 +1034,67 @@ def mamba_rms_norm(
 ) raises:
     """`MambaRMSNorm.forward(hidden_states)` (:495-499) over `M = B * L`
     token rows. ASYNCHRONOUS: the caller synchronizes."""
-    ctx.enqueue_function[mamba_rms_norm_kernel](
+    comptime if IDN_MAMBA_RMS_TREE:
+        # B11: lanes, tree, then the per-element output. The lane partials
+        # sit in `out_buf` (M * d_model >= M * 32 cells) until S2-S4
+        # overwrites it; a narrower row takes its own scratch.
+        if d_model >= MAMBA_RMS_LANES:
+            var pp = out_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            _mamba_rms_tree_launches(ctx, sumsq, pp, out_buf, x, weight, m, d_model)
+        else:
+            var part = mamba_scratch(ctx, m * MAMBA_RMS_LANES)
+            var pp = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            _mamba_rms_tree_launches(ctx, sumsq, pp, out_buf, x, weight, m, d_model)
+            # the scratch must outlive its two readers (a d_model below 32
+            # never occurs in a shipped config; the wait is this arm's only).
+            ctx.synchronize()
+            _ = part^
+    else:
+        ctx.enqueue_function[mamba_rms_norm_kernel](
+            sumsq.unsafe_ptr(),
+            out_buf.unsafe_ptr(),
+            x.unsafe_ptr(),
+            weight.unsafe_ptr(),
+            Int32(m),
+            Int32(d_model),
+            grid_dim=(_grid(m), 1, 1),
+            block_dim=(MAMBA_TPB, 1, 1),
+        )
+
+
+def _mamba_rms_tree_launches(
+    ctx: DeviceContext,
+    mut sumsq: DeviceBuffer[DType.float32],
+    part: MutPointer[Float32, MutAnyOrigin],
+    mut out_buf: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    m: Int,
+    d_model: Int,
+) raises:
+    ctx.enqueue_function[mamba_rms_lane_kernel](
+        part,
+        x.unsafe_ptr(),
+        Int32(m),
+        Int32(d_model),
+        grid_dim=(_grid(m * MAMBA_RMS_LANES), 1, 1),
+        block_dim=(MAMBA_TPB, 1, 1),
+    )
+    ctx.enqueue_function[mamba_rms_tree_kernel](
         sumsq.unsafe_ptr(),
+        part,
+        Int32(m),
+        grid_dim=(_grid(m), 1, 1),
+        block_dim=(MAMBA_TPB, 1, 1),
+    )
+    ctx.enqueue_function[mamba_rms_out_kernel](
         out_buf.unsafe_ptr(),
         x.unsafe_ptr(),
         weight.unsafe_ptr(),
+        sumsq.unsafe_ptr(),
         Int32(m),
         Int32(d_model),
-        grid_dim=(_grid(m), 1, 1),
+        grid_dim=(_grid(m * d_model), 1, 1),
         block_dim=(MAMBA_TPB, 1, 1),
     )
 
@@ -1051,6 +1192,55 @@ def causal_conv1d_fn_kernel(
         silu_out.unsafe_store((bb * l + li) * di + d, ftz(identical_silu(acc)))
 
 
+def causal_conv1d_cell_kernel(
+    conv_out: MutPointer[Float32, MutAnyOrigin],
+    silu_out: MutPointer[Float32, MutAnyOrigin],
+    in_proj: MutPointer[Float32, MutAnyOrigin],
+    conv_w: MutPointer[Float32, MutAnyOrigin],
+    conv_b: MutPointer[Float32, MutAnyOrigin],
+    win: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    di_in: Int32,
+):
+    """IDN_MAMBA_CONV_CELL (roadmap B2): `causal_conv1d_fn_kernel`'s
+    per-position body, one thread per (batch, position, channel) cell of the
+    token-major [M, d_inner] output. The same bias-seeded taps, so the same
+    bits."""
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var di = Int(di_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * l * di:
+        return
+    var row = cell // di
+    var d = cell - row * di
+    var bb = row // l
+    var li = row - bb * l
+    var acc = ftz(conv_b.unsafe_load(d))
+    comptime if SAB_S13_BIAS_LAST:
+        acc = Float32(0.0)
+    for kk in range(D_CONV):
+        var k = kk
+        comptime if SAB_S13_TAPS_REVERSED:
+            k = D_CONV - 1 - kk
+        var p = li - (D_CONV - 1) + k
+        var xv: Float32
+        if p >= 0:
+            xv = in_proj.unsafe_load((bb * l + p) * 2 * di + d)
+        else:
+            xv = win.unsafe_load((bb * di + d) * D_CONV + (D_CONV + p))
+        acc = ftz(
+            identical_mul_add(
+                ftz(conv_w.unsafe_load(d * D_CONV + k)), ftz(xv), acc
+            )
+        )
+    comptime if SAB_S13_BIAS_LAST:
+        acc = ftz(acc + ftz(conv_b.unsafe_load(d)))
+    conv_out.unsafe_store(cell, acc)
+    silu_out.unsafe_store(cell, ftz(identical_silu(acc)))
+
+
 def causal_conv1d_window_kernel(
     new_win: MutPointer[Float32, MutAnyOrigin],
     in_proj: MutPointer[Float32, MutAnyOrigin],
@@ -1101,19 +1291,34 @@ def causal_conv1d_fn(
     """`causal_conv1d_fn(hidden_states, weight, bias, activation="silu")`
     (:81-100) plus the cache's window update (`update_conv_state`, MM:415).
     ASYNCHRONOUS."""
-    ctx.enqueue_function[causal_conv1d_fn_kernel](
-        conv_out.unsafe_ptr(),
-        silu_out.unsafe_ptr(),
-        in_proj.unsafe_ptr(),
-        conv_w.unsafe_ptr(),
-        conv_b.unsafe_ptr(),
-        old_win.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(d_inner),
-        grid_dim=(_grid(b * d_inner), 1, 1),
-        block_dim=(MAMBA_TPB, 1, 1),
-    )
+    comptime if IDN_MAMBA_CONV_CELL:
+        ctx.enqueue_function[causal_conv1d_cell_kernel](
+            conv_out.unsafe_ptr(),
+            silu_out.unsafe_ptr(),
+            in_proj.unsafe_ptr(),
+            conv_w.unsafe_ptr(),
+            conv_b.unsafe_ptr(),
+            old_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(d_inner),
+            grid_dim=(_grid(b * l * d_inner), 1, 1),
+            block_dim=(MAMBA_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[causal_conv1d_fn_kernel](
+            conv_out.unsafe_ptr(),
+            silu_out.unsafe_ptr(),
+            in_proj.unsafe_ptr(),
+            conv_w.unsafe_ptr(),
+            conv_b.unsafe_ptr(),
+            old_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(d_inner),
+            grid_dim=(_grid(b * d_inner), 1, 1),
+            block_dim=(MAMBA_TPB, 1, 1),
+        )
     ctx.enqueue_function[causal_conv1d_window_kernel](
         new_win.unsafe_ptr(),
         in_proj.unsafe_ptr(),
@@ -1383,7 +1588,7 @@ def _gemm_op_nt() -> Int:
     return OP_NT
 
 
-def _refuse_nonfinite_named(name: String, values: List[Float32]) raises:
+def _refuse_nonfinite_named_host(name: String, values: List[Float32]) raises:
     """Contract section 6 / row 39, the device path's copy of the oracle's
     `refuse_nonfinite`. Tested BY BITS, not by compares: Metal flushes COMPARE
     operands (row 49), so a bit test is the only spelling with one meaning on
@@ -1484,40 +1689,40 @@ def mamba_refuse_bad_inputs(
         batch.finish(ctx)
         return
     # `x` CHANGES ON EVERY CALL and is always walked.
-    _refuse_nonfinite_named("x", mamba_download(ctx, x, b * l * dm))
+    _refuse_nonfinite_named_host("x", mamba_download(ctx, x, b * l * dm))
     if not w.weights_checked:
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "norm.weight", mamba_download(ctx, w.norm_w, dm)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "in_proj.weight", mamba_download(ctx, w.w_in, 2 * di * dm)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "conv1d.weight", mamba_download(ctx, w.conv_w, di * D_CONV)
         )
-        _refuse_nonfinite_named("conv1d.bias", mamba_download(ctx, w.conv_b, di))
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host("conv1d.bias", mamba_download(ctx, w.conv_b, di))
+        _refuse_nonfinite_named_host(
             "x_proj.weight", mamba_download(ctx, w.w_x, xr * di)
         )
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host(
             "dt_proj.weight", mamba_download(ctx, w.w_dt, di * r)
         )
-        _refuse_nonfinite_named("dt_proj.bias", mamba_download(ctx, w.b_dt, di))
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host("dt_proj.bias", mamba_download(ctx, w.b_dt, di))
+        _refuse_nonfinite_named_host(
             "A_log", mamba_download(ctx, w.a_log, di * D_STATE)
         )
-        _refuse_nonfinite_named("D", mamba_download(ctx, w.d_skip, di))
-        _refuse_nonfinite_named(
+        _refuse_nonfinite_named_host("D", mamba_download(ctx, w.d_skip, di))
+        _refuse_nonfinite_named_host(
             "out_proj.weight", mamba_download(ctx, w.w_out, dm * di)
         )
         w.weights_checked = True
     # The STATE changes on every call: the block WRITES it, so a second
     # call's input is the first call's output.
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.conv_win",
         mamba_download(ctx, state.conv_win, b * di * D_CONV),
     )
-    _refuse_nonfinite_named(
+    _refuse_nonfinite_named_host(
         "state.h", mamba_download(ctx, state.h, b * di * D_STATE)
     )
 
@@ -1574,7 +1779,7 @@ def mamba_mixer_forward(
         if not afn_proj_gemm_into(
             ctx, stages.in_proj, stages.norm_out, w.w_in, m, 2 * di, dm, _gemm_op_nt()
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx,
                 stages.in_proj,
                 stages.norm_out,
@@ -1585,7 +1790,7 @@ def mamba_mixer_forward(
                 _gemm_op_nt(),
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx,
             stages.in_proj,
             stages.norm_out,
@@ -1665,7 +1870,7 @@ def mamba_mixer_forward(
 
     # ---- x_proj (:437). `nn.Linear(d_inner, dt_rank + 2*d_state,
     #      bias=False)`. C[M, xr] = silu_out[M, di] . w_x[xr, di]^T.
-    identical_gemm[False](
+    mamba_proj_gemm(
         ctx, stages.x_proj, stages.silu_out, w.w_x, m, xr, di, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
@@ -1715,7 +1920,7 @@ def mamba_mixer_forward(
     #      `k = dt_rank = 1` the gemm leaf is `ftz(fma(a, b, +0.0))`, so a
     #      `-0.0`-valued product reaches this stage as `+0.0`. That is v1
     #      gemm behavior and this profile inherits it UNCHANGED.
-    identical_gemm[False](
+    mamba_proj_gemm(
         ctx, stages.dt_proj, stages.dt_low, w.w_dt, m, di, r, _gemm_op_nt()
     )
     trace.record_device[DType.float32](
@@ -1738,7 +1943,7 @@ def mamba_mixer_forward(
     #      traced call keeps main's GEMM here so `out_proj.out` is recorded.
     comptime if AFN_MAMBA_PROJ_ROUTE:
         if trace.enabled:
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx,
                 stages.out_proj,
                 stages.gate_out,
@@ -1749,7 +1954,7 @@ def mamba_mixer_forward(
                 _gemm_op_nt(),
             )
     else:
-        identical_gemm[False](
+        mamba_proj_gemm(
             ctx,
             stages.out_proj,
             stages.gate_out,
@@ -1876,7 +2081,7 @@ def mamba_block_forward(
             dims.d_inner,
             _gemm_op_nt(),
         ):
-            identical_gemm[False](
+            mamba_proj_gemm(
                 ctx,
                 stages.out_proj,
                 stages.gate_out,
@@ -1903,7 +2108,7 @@ def mamba_block_forward(
             grid_dim=(_grid(m * dm), 1, 1),
             block_dim=(MAMBA_TPB, 1, 1),
         )
-    _m1_stage_sync(ctx, trace)
+    _m1_final_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm
     )

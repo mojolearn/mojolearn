@@ -306,12 +306,22 @@ runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
     POD_NAME="mojolearn-dev-$KEY-$(date -u +%m%d%H%M)"
     rp_call GET "$RP/pods"; case "$RP_CODE" in 2*) ;; *) die "pod listing HTTP $RP_CODE" ;; esac
     python3 - "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" "$4" "$ROOT/tools/runpod_ssh_bootstrap.sh" "$( [ "$4" = 1 ] && echo 1 || echo "$NV_GPU_COUNT")" <<'PY'
-import json, sys
+import json, os, sys
 from pathlib import Path
 out, name, image, gpus, disk, amd, bootstrap, count = sys.argv[1:]
 req = {"name": name, "imageName": image, "gpuTypeIds": [g.strip() for g in gpus.split(",") if g.strip()], "gpuCount": int(count),
        "cloudType": "SECURE", "containerDiskInGb": int(disk), "volumeInGb": 0,
        "ports": ["22/tcp"], "supportPublicIp": True, "interruptible": False}
+# Optional placement filters; defaults preserve existing lane behavior.
+cloud = os.environ.get("MOJOLEARN_DEVPOD_CLOUD_TYPE", "SECURE")
+if cloud not in ("SECURE", "COMMUNITY"):
+    raise SystemExit("MOJOLEARN_DEVPOD_CLOUD_TYPE must be SECURE or COMMUNITY")
+req["cloudType"] = cloud
+if os.environ.get("MOJOLEARN_DEVPOD_MIN_VCPU"):
+    minimum = int(os.environ["MOJOLEARN_DEVPOD_MIN_VCPU"])
+    if minimum < 1:
+        raise SystemExit("MOJOLEARN_DEVPOD_MIN_VCPU must be positive")
+    req["minVCPUPerGPU"] = minimum
 if amd != "1":
     # THE PINNED MAX NEEDS AN NVIDIA DRIVER >= 580 (CUDA 13.0). On an older
     # host a GPU binding built without a named arch fails in the pass manager
@@ -543,6 +553,10 @@ up)
             echo "$HA_DEADMAN_PID" > "$D/deadman.pid"
             write_state; STATE_WRITTEN=1
         fi
+    fi
+    if [ "${MOJOLEARN_DEVPOD_PROVISION_ONLY:-0}" = 1 ]; then
+        say "box $POD_ID up on $PROVIDER, lease ${minutes} min; bootstrap deferred for harvester admission"
+        exit 0
     fi
     say "box $POD_ID up on $PROVIDER (\$${COST_HR:-?}/hr, $GPU), lease ${minutes} min; installing pixi"
     bx 600 'command -v curl > /dev/null || { export DEBIAN_FRONTEND=noninteractive; apt-get update -qq > /dev/null && apt-get install -y -qq curl ca-certificates > /dev/null; }

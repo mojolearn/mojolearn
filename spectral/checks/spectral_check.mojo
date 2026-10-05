@@ -151,6 +151,9 @@ from spectral.impl.sparse.solver.detail.lanczos import (
     clamp_down_vector_kernel,
     lanczos_which_first,
     spectral_sabotage_name,
+    ID_SPMV_ROWS,
+    ID_SPMV_TPB,
+    id_spmv_lanes_kernel,
     spmv_kernel,
 )
 from spectral.impl.sparse.solver.lanczos_types import LANCZOS_LA, LANCZOS_SM
@@ -1298,11 +1301,19 @@ def _device_spmv(
     var d_x = upload_f32(ctx, x)
     var d_y = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.synchronize()
-    ctx.enqueue_function[spmv_kernel](
-        d_y.unsafe_ptr(), d_indptr.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(),
-        d_x.unsafe_ptr(), Int32(n),
-        grid_dim=((n + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
-    )
+    comptime if IDN_SPMV_LANES:
+        # the lane kernel's block shape is fixed; `tpb` varies nothing here
+        ctx.enqueue_function[id_spmv_lanes_kernel](
+            d_y.unsafe_ptr(), d_indptr.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(),
+            d_x.unsafe_ptr(), Int32(n),
+            grid_dim=((n + ID_SPMV_ROWS - 1) // ID_SPMV_ROWS, 1, 1), block_dim=(ID_SPMV_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[spmv_kernel](
+            d_y.unsafe_ptr(), d_indptr.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(),
+            d_x.unsafe_ptr(), Int32(n),
+            grid_dim=((n + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
+        )
     ctx.synchronize()
     var y = download_f32(ctx, d_y, n)
     _ = d_indptr^

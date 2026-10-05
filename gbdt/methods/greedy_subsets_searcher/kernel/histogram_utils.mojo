@@ -229,6 +229,31 @@ def snap_plane_to_scale_kernel(
         i += stride
 
 
+def snap_plane_to_scale_dev_kernel(
+    plane: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    fixed_scale_p: MutPointer[Float32, MutAnyOrigin],
+):
+    """T5 drain (lane cpu3-gbdt-a): `snap_plane_to_scale_kernel` with the
+    scale read from a device word (the ordered fit's
+    `_ord_std_scale_kernel` output) instead of a launch value. Statement
+    for statement the same, so the bits are the same."""
+    var fixed_scale = fixed_scale_p.unsafe_load(0)
+    var n = Int(n_in)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    while i < n:
+        var u = hist2_dither(i)
+        comptime if is_defined["MOJOLEARN_SNAP_SABOTAGE"]():
+            u = hist2_dither(i + 1)
+        var q = hist2_quantize(plane.unsafe_load(i), fixed_scale, u)
+        var v = Float32(0.0)
+        if q != Int32(0):
+            v = ftz(Float32(Int(q)) / fixed_scale)
+        plane.unsafe_store(i, v)
+        i += stride
+
+
 def hist2_smem_add[
     dt: DType
 ](

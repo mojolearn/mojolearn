@@ -16,15 +16,21 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import ftz, identical_sqrt
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_sqrt
 from x_cluster.bodies import FPtr, IPtr
 from x_cluster.post_bodies import (
+    FOLD_CHUNK,
     FOLD_LANES,
     KEY_NONE,
     bin_key,
     bin_value,
+    center_cell,
     center_greater,
     ff_lane,
+    ff_mean_cell,
+    ff_strided_lane,
     first_equal_cell,
     kpp_search_cell,
     optics_relax_cell,
@@ -149,6 +155,57 @@ def ff_chunk_kernel(mode: Int32, a: FPtr, b: FPtr, c: FPtr, n: Int32, oh: FPtr, 
     if tid == 0:
         oh[Int(off) + Int(block_idx.x)] = sh[0]
         ol[Int(off) + Int(block_idx.x)] = sl[0]
+
+
+def ff_cols_chunk_kernel(
+    ff_in: Int32, a: FPtr, b: FPtr, n: Int32, col_stride: Int32, row_stride: Int32,
+    oh: FPtr, ol: FPtr, nch_out: Int32, ncols: Int32,
+):
+    """Block f + q * ncols (a 1-D grid of ncols * nch_out blocks, adjacent
+    blocks on adjacent columns): the fold of chunk q of column f, whose element t is
+    a[f * col_stride + t * row_stride] (`post_bodies.ff_strided_lane`, then
+    `ff_chunk_kernel`'s tree), into oh/ol[f * nch_out + q] (lane
+    fix-c1-cluster, `DeviceOps.center_cols`; the host twin is
+    `post_bodies.ff_col_fold_host`)."""
+    var sh = stack_allocation[RTPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sl = stack_allocation[RTPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var f = Int(block_idx.x) % Int(ncols)
+    var q = Int(block_idx.x) // Int(ncols)
+    var base = q * FOLD_CHUNK
+    var end = min(Int(n), base + FOLD_CHUNK)
+    var v = ff_strided_lane(
+        ff_in != Int32(0), a, b, f * Int(col_stride), Int(row_stride), base, end, tid
+    )
+    sh[tid] = v.hi
+    sl[tid] = v.lo
+    barrier()
+    var o = FOLD_LANES // 2
+    while o > 0:
+        if tid < o:
+            var r = ff_add(FF(sh[tid], sl[tid]), FF(sh[tid + o], sl[tid + o]))
+            sh[tid] = r.hi
+            sl[tid] = r.lo
+        barrier()
+        o //= 2
+    if tid == 0:
+        oh[f * Int(nch_out) + q] = sh[0]
+        ol[f * Int(nch_out) + q] = sl[0]
+
+
+def ff_col_mean_kernel(th: FPtr, tl: FPtr, d: Int32, n: Int32, mean: FPtr):
+    """mean[f] = `post_bodies.ff_mean_cell` of column f's folded sum."""
+    var f = _tid()
+    if f < Int(d):
+        mean[f] = ff_mean_cell(th[f], tl[f], Int(n))
+
+
+def center_cols_kernel(x: FPtr, total: Int64, d: Int32, mean: FPtr, dst: FPtr):
+    """dst[i] = `post_bodies.center_cell`(x[i], mean[i % d]), i < total.
+    `total` is Int64: a kernel argument cannot be Int (not DevicePassable)."""
+    var i = _tid()
+    if i < Int(total):
+        dst[i] = center_cell(x[i], mean[i % Int(d)])
 
 
 def kpp_search_kernel(mode: Int32, a: FPtr, b: FPtr, th: FPtr, tl: FPtr, n: Int32, v: FPtr, nt: Int32, ids: IPtr):
@@ -298,6 +355,68 @@ def optics_step_kernel(
     var cp = core[point]
     if cp != Float32.MAX * Float32(2):
         optics_relax_cell(dist, Int(n), point, cp, max_eps, done, reach, pred, o)
+
+
+#: fam-cluster (2026-10-04), IDENTICAL: OPTICS' ordering loop as ONE launch a
+#: step (`optics_fused_kernel`: pick from the previous launch's partial keys,
+#: relax, scan for the next step's partial keys) in place of two
+#: (`optics_part_kernel` then `optics_step_kernel`): n + 2 launches a fit
+#: for 2n + 1. The keys (`order_key`), the relaxation (`optics_relax_cell`)
+#: and the set each step scans are the two kernels' own, so the picks, the
+#: reachabilities and the predecessors are the same words.
+#: `-D MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF=1` restores the two launches.
+comptime IDN_OPTICS_FUSED_STEP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+
+def optics_fused_kernel(
+    part: UPtr, nb: Int32, dist: FPtr, core: FPtr, n: Int32, max_eps: Float32, done: IPtr, reach: FPtr,
+    pred: IPtr, ordering: IPtr, step: Int32,
+):
+    """Step `step` of the ordering in one launch of `nb` blocks of RTPB
+    threads, block b owning rows `[b * SCAN_PER, (b + 1) * SCAN_PER)` (each
+    thread a stride of RTPB through them). `step >= 0`: the step's point is
+    the min of the `nb` partial keys the previous launch left in half
+    `step & 1` of `part`; its owner marks it done, block 0 books it, every
+    other unprocessed row relaxes against it. Then (every step, and the
+    scan-only `step == -1`) the block's min key over its unprocessed rows
+    goes to half `(step + 1) & 1`, which no block reads in this launch."""
+    var red = stack_allocation[RTPB, UInt64, address_space = AddressSpace.SHARED]()
+    var NB = Int(nb)
+    var N = Int(n)
+    var s = Int(step)
+    var b = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var base = b * SCAN_PER
+    var end = min(base + SCAN_PER, N)
+    if s >= 0:
+        var r = KEY_NONE
+        var src = (s & 1) * NB
+        for q in range(NB):
+            r = min(r, part[src + q])
+        if r != KEY_NONE:
+            var point = Int(UInt32(r & UInt64(0xFFFFFFFF)))
+            if b == 0 and t == 0:
+                ordering[s] = Int32(point)
+            var cp = core[point]
+            var live = cp != Float32.MAX * Float32(2)
+            for o in range(base + t, end, RTPB):
+                if o == point:
+                    done[o] = 1
+                elif live:
+                    optics_relax_cell(dist, N, point, cp, max_eps, done, reach, pred, o)
+    var mine = KEY_NONE
+    for i in range(base + t, end, RTPB):
+        if done[i] == 0:
+            mine = min(mine, order_key(reach[i], i))
+    var rr = _block_min_u64(red, mine)
+    if t == 0:
+        part[((s + 1) & 1) * NB + b] = rr
 
 
 def optics_flag_kernel(ordering: IPtr, reach: FPtr, core: FPtr, n: Int32, eps: Float32, flag: IPtr):

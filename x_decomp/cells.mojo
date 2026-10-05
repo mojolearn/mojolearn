@@ -15,14 +15,17 @@ cell is written so it cannot:
   * every product `identical_mul` / `identical_mul_add` (the contraction
     pin), every quotient `identical_div`, every sqrt/exp/log/tanh/cos the
     `identical_*` (portable, one arithmetic) spelling;
-  * no computed NaN: every division and log is guarded explicitly, a zero
-    divisor yields 0 (IDENTITY_PATHS Clause B), never a vendor's payload;
+  * a zero divisor yields 0 (IDENTITY_PATHS Clause B); finite-input LU
+    overflow can still generate NaNs, whose result encoding is pinned by
+    lu_result_word at the factor/solve boundary;
   * no float64 anywhere.
 """
 from std.memory import bitcast
 
 from checks.numerics import (
     ftz,
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     identical_cos,
     identical_div,
     identical_exp,
@@ -1309,6 +1312,29 @@ def als_cg_row(
 # applied; 'T' scatters the rows back through the swaps (getrs's last to
 # first). The bits do not depend on the device's block size. The Cholesky
 # fold ascending. Arm 5308_lu_solve_order.
+@always_inline
+def lu_result_word(x: Float32) -> Float32:
+    """IDENTICAL LU result encoding: every NaN is positive quiet 0x7fc00000.
+
+    Finite inputs can overflow during elimination or substitution. CUDA,
+    HIP and CPU fused arithmetic produce different NaN signs/payloads there.
+    Pin result words at the LU boundary, not the comparison in its tests;
+    every non-NaN word (including infinities and signed zeros) is unchanged.
+    """
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        var bits = bitcast[DType.uint32](x)
+        if (bits & UInt32(0x7fffffff)) > UInt32(0x7f800000):
+            return bitcast[DType.float32](UInt32(0x7fc00000))
+    return x
+
+
+def lu_finish_host(a: F32Ptr, count: Int):
+    """Host counterpart of the device LU result-finishing kernel."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        for i in range(count):
+            a.unsafe_store(i, lu_result_word(a.unsafe_load(i)))
+
+
 def lu_pivot(a: F32Ptr, piv: I32Ptr, k: Int, n: Int):
     """Step k's pivot row: the largest |a[i, k]| for i >= k, ties to the
     LOWEST row (strict >), into piv[k]."""
@@ -1382,6 +1408,7 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
         for i in range(k + 1, n):
             for j in range(k + 1, n):
                 lu_update_elem(a, sp, k, i, j, n)
+    lu_finish_host(a, n * n)
 
 
 # DEVIATION 5309 (PIN; row 134): the orthonormal basis of a tall A is two
@@ -1567,6 +1594,7 @@ def trisolve_serial(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, tmp: F32P
                 trs_gather(src, idx, dst, nrhs, i, c)
         trs_tri_serial(lu, dst, n, nrhs, 0)
         trs_tri_serial(lu, dst, n, nrhs, 1)
+        lu_finish_host(dst, n * nrhs)
         return
     for q in range(n * nrhs):
         tmp.unsafe_store(q, src.unsafe_load(q))
@@ -1575,6 +1603,7 @@ def trisolve_serial(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, tmp: F32P
     for i in range(n):
         for c in range(nrhs):
             trs_gather(tmp, idx, dst, nrhs, i, c)
+    lu_finish_host(dst, n * nrhs)
 
 
 # ------------------------------------------------------------------ knn select

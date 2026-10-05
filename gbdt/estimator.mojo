@@ -65,6 +65,7 @@ from max.gpu.host import DeviceContext
 from ensemble.instruments import StageTimes as HostStageTimes
 from std.memory import memcpy
 from std.math import isfinite
+from core.device_scan import device_first_nonfinite
 
 from gbdt.models.model_text import load_model_text, model_text
 from gbdt.options.catboost_options import (
@@ -76,10 +77,14 @@ from gbdt.methods.doc_parallel_boosting import (
     model_approx_dim,
 )
 from gbdt.models.tensor_ctr_value_table import (
-    build_feature_freq_tensor_table,
-    materialize_tensor_candidate,
+    device_bins_for_borders,
+    device_float_extremes,
+    device_uniform_ctr_borders,
+    fit_feature_freq_tensor_candidate_device,
     stage_tensor_candidate_host,
 )
+from gbdt.data.cat_code_scan import cat_column_codes
+from gbdt.models.oblivious_model import TBinarySplit
 from gbdt.models.ctr_value_table import dense_category_code, TCtrValueTable
 from gbdt.ctrs.ctr_binarization import (
     BORDER_SELECTION_UNIFORM,
@@ -103,12 +108,11 @@ from gbdt.train import (
     BORROW_X_COLUMNS,
     TrainedModel,
     model_input_features,
-    multiclass_probabilities,
-    one_vs_all_probabilities,
     predict_floats,
-    predict_multi_floats,
+    predict_multi_linked_into,
     train,
 )
+from gbdt.models.kernel.resident_link import LINK_RAW, LINK_SIGMOID, LINK_SOFTMAX
 
 
 def gbdt_fit_two_level_feature_freq(
@@ -143,9 +147,12 @@ def gbdt_fit_two_level_feature_freq(
     var target = List[Float32]()
     target.resize(n_rows, Float32(0.0))
     memcpy(dest=target.unsafe_ptr(), src=y, count=n_rows)
-    for r in range(n_rows):
-        if not isfinite(target[r]):
-            raise Error("two-level FeatureFreq target is not finite")
+    # lane/cpu3-gbdt-b: the finiteness walk on the device, one word back
+    var d_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_buf=d_target, src_ptr=y)
+    if device_first_nonfinite(ctx, d_target, n_rows) >= 0:
+        raise Error("two-level FeatureFreq target is not finite")
+    _ = d_target^
     var weights = List[Float32]()
     if n_weights != 0:
         weights.resize(n_rows, Float32(0.0))
@@ -153,79 +160,89 @@ def gbdt_fit_two_level_feature_freq(
     var source_ids = List[Int]()
     var seen_source = List[Bool]()
     seen_source.resize(n_features, False)
-    for i in range(n_sources):
+    for i in range(n_sources):  # small-loop(n_sources: source feature ids): validates the caller's few source column ids, no row data
         var source = Int(sources.unsafe_load(i))
         if source < 0 or source >= n_features or seen_source[source]:
             raise Error("two-level FeatureFreq source is invalid or duplicated")
         seen_source[source] = True
         source_ids.append(source)
 
+    # lane cpu4-gbdt: every per-row step of the column build runs ON THE
+    # DEVICE, one feature at a time: a source column's dense-code scan
+    # (`cat_column_codes`, which validates, maxes and density-checks there;
+    # its codes ARE the column's bins), and a numeric column's finiteness
+    # scan, extremes (constancy and the Uniform-3 grid,
+    # `device_uniform_ctr_borders`, `compute_ctr_borders`' words) and bins
+    # (`device_bins_for_borders`). The host receives each column's bins once,
+    # because `fit_two_level_feature_freq_tree` (gbdt/methods) takes them as
+    # host lists.
     var columns = List[List[UInt32]]()
     var folds = List[Int]()
     var one_hot = List[Bool]()
     var borders = List[List[Float32]]()
-    var flat_bins = List[UInt32]()
+    var flat_bins = List[UInt32](unsafe_uninit_length=n_rows * n_features)
+    var grid = TBinarizationOptions(BORDER_SELECTION_UNIFORM, 3)
+    var x_ptr = rebind[MutPointer[Float32, MutUntrackedOrigin]](raw.unsafe_ptr())
     for f in range(n_features):
         var col = List[UInt32]()
         var feature_borders = List[Float32]()
         if seen_source[f]:
-            var max_code = -1
-            var seen_codes = List[Bool]()
-            for r in range(n_rows):
-                var code = dense_category_code(raw[f * n_rows + r], f, r)
-                if code > max_code:
-                    max_code = code
-                    seen_codes.resize(max_code + 1, False)
-                seen_codes[code] = True
-                col.append(UInt32(code))
+            var scan = cat_column_codes(ctx, x_ptr + f * n_rows, n_rows, f, col)
+            var max_code = scan.max_code
             if max_code < 1:
                 raise Error("two-level FeatureFreq source column is constant")
-            for code in range(max_code + 1):
-                if not seen_codes[code]:
-                    raise Error("two-level FeatureFreq categories must be dense")
+            if scan.first_absent >= 0:
+                raise Error("two-level FeatureFreq categories must be dense")
             folds.append(max_code + 1)
             one_hot.append(True)
-            for code in range(max_code):
+            for code in range(max_code):  # small-loop(max_code: one-hot categories of one source): synthetic one-hot borders, model parameters
                 feature_borders.append(Float32(code) + Float32(0.5))
         else:
-            var numeric_values = List[Float32]()
-            var numeric_changes = False
-            for r in range(n_rows):
-                var value = raw[f * n_rows + r]
-                if not isfinite(value):
-                    raise Error("two-level FeatureFreq numeric column is not finite")
-                if r > 0 and value != numeric_values[0]:
-                    numeric_changes = True
-                numeric_values.append(value)
-            if not numeric_changes:
+            var d_col = ctx.enqueue_create_buffer[DType.float32](n_rows)
+            ctx.enqueue_copy(dst_buf=d_col, src_ptr=x_ptr + f * n_rows)
+            if device_first_nonfinite(ctx, d_col, n_rows) >= 0:
+                raise Error("two-level FeatureFreq numeric column is not finite")
+            # constancy is equal extremes (the host walk's "some value
+            # differs from the first"); a non-constant column's Uniform-3
+            # grid is `compute_ctr_borders`' words
+            var ext = device_float_extremes(ctx, d_col, n_rows)
+            if ext[0] == ext[1]:
                 raise Error("two-level FeatureFreq numeric column is constant")
-            feature_borders = compute_ctr_borders(
-                numeric_values,
-                TBinarizationOptions(BORDER_SELECTION_UNIFORM, 3),
+            feature_borders = device_uniform_ctr_borders(
+                ctx, d_col, n_rows, grid
             )
-            for r in range(n_rows):
-                var bin = 0
-                for b in range(len(feature_borders)):
-                    if numeric_values[r] > feature_borders[b]:
-                        bin += 1
-                col.append(UInt32(bin))
+            var d_bins = device_bins_for_borders(
+                ctx, d_col, n_rows, feature_borders
+            )
+            col = List[UInt32](unsafe_uninit_length=n_rows)
+            ctx.enqueue_copy(
+                dst_ptr=col.unsafe_ptr(),
+                src_buf=d_bins.create_sub_buffer[DType.uint32](0, n_rows),
+            )
+            ctx.synchronize()
+            _ = d_bins^
+            _ = d_col^
             folds.append(len(feature_borders))
             one_hot.append(False)
-        for r in range(n_rows):
-            flat_bins.append(col[r])
+        memcpy(
+            dest=flat_bins.unsafe_ptr() + f * n_rows,
+            src=col.unsafe_ptr(),
+            count=n_rows,
+        )
         columns.append(col^)
         borders.append(feature_borders^)
 
-    var table = build_feature_freq_tensor_table(
-        raw, n_rows, n_features, source_ids^
+    # the FeatureFreq tensor candidate, fitted on the device (lane
+    # cpu4-gbdt): table counts, learn values, Uniform-3 borders and bins
+    var no_quantized = ctx.enqueue_create_buffer[DType.uint32](1)
+    var candidate = fit_feature_freq_tensor_candidate_device(
+        ctx, raw, n_rows, n_features, source_ids^, List[TBinarySplit](),
+        no_quantized, 0, Float32(0.0), Float32(1.0), grid,
     )
-    var values = List[Float32]()
-    for r in range(n_rows):
-        values.append(table.value_for_row(raw, n_rows, r))
-    var grid = TBinarizationOptions(BORDER_SELECTION_UNIFORM, 3)
-    var candidate = materialize_tensor_candidate(table^, values^, grid)
+    _ = no_quantized^
     var initial = stage_tensor_candidate_host(
-        columns, folds, one_hot, candidate^, fold_capacity=grid.border_count
+        columns, folds, one_hot, candidate^, fold_capacity=grid.border_count,
+        ctx=Optional[DeviceContext](ctx.copy()),
     )
     var fitted = fit_two_level_feature_freq_tree(
         ctx, initial, raw, target, weights, flat_bins, columns, folds, one_hot,
@@ -530,7 +547,7 @@ def gbdt_fit(
     var cats = List[Bool]()
     var one_hot = List[Bool]()
     if n_flags != 0:
-        for f in range(n_features):
+        for f in range(n_features):  # small-loop(n_features: per-feature option flags): decodes one flag word per feature, no row data
             var w = cat_flags.unsafe_load(f)
             cats.append((w & UInt32(1)) != UInt32(0))
             one_hot.append((w & UInt32(2)) != UInt32(0))
@@ -741,12 +758,11 @@ def gbdt_predict_multi(
     xs.resize(n_x, Float32(0.0))
     memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
 
-    var ap = predict_multi_floats(ctx, tm, xs, n_rows)
+    # lane/cpu3-gbdt-b: the reshape and the link on the device, written
+    # straight into the caller's buffer (`predict_multi_linked_into`); the
+    # host copy loops and the host softmax / sigmoid are gone
     if mode == PREDICT_RAW:
-        for i in range(n_rows * dim):
-            out_preds.unsafe_store(i, ap[i])
-        return dim
-
+        return predict_multi_linked_into(ctx, tm, xs, n_rows, LINK_RAW, out_preds)
     if dim < 2:
         raise Error(
             "gbdt_predict_multi: a probability mode needs a"
@@ -755,15 +771,13 @@ def gbdt_predict_multi(
             " Logloss's own predict_proba applies."
         )
     if mode == PREDICT_SOFTMAX:
-        var pr = multiclass_probabilities(ap, n_rows, dim + 1)
-        for i in range(n_rows * (dim + 1)):
-            out_preds.unsafe_store(i, pr[i])
-        return dim + 1
+        return predict_multi_linked_into(
+            ctx, tm, xs, n_rows, LINK_SOFTMAX, out_preds
+        )
     if mode == PREDICT_SIGMOID:
-        var ps = one_vs_all_probabilities(ap, n_rows, dim)
-        for i in range(n_rows * dim):
-            out_preds.unsafe_store(i, ps[i])
-        return dim
+        return predict_multi_linked_into(
+            ctx, tm, xs, n_rows, LINK_SIGMOID, out_preds
+        )
     raise Error(
         "gbdt_predict_multi: unknown mode " + String(mode)
     )

@@ -550,12 +550,48 @@ def _upload(
     return buf^
 
 
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF` restores the appends): `_download`
+#: fills a list of the final length 8 floats a step. The fit reads the n x n
+#: factor back through it (GPR and GPC), which was n^2 appends into a growing
+#: list on one host thread. The same words: no bit moves.
+comptime GP_IDN_BULK_DOWNLOAD = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GP_BULK_DOWNLOAD_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+#: fam-kernel-gp (2026-10-04), IDENTICAL, ON by default
+#: (`-D MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF` restores the upload):
+#: `gpr_predict_host` uploads the n_train x n_train factor only when
+#: `return_std` asks for the variance; the mean reads K_trans and the dual
+#: alone. No kernel reads the factor on the mean-only path: no bit moves.
+comptime GP_IDN_PREDICT_LAZY_L = _CTX_MODE == _CTX_IDENTICAL and not (
+    is_defined["MOJOLEARN_IDN_GP_PREDICT_LAZY_L_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
 def _download(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
 ) raises -> List[Float32]:
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
+    comptime if GP_IDN_BULK_DOWNLOAD:
+        # fam-kernel-gp: 8 floats a step into a list of the final length
+        # (`copy_f32`'s own loop), not n appends into a growing one. A copy:
+        # the same words in the same cells.
+        var packed = List[Float32](unsafe_uninit_length=n)
+        var pdst = packed.unsafe_ptr()
+        var psrc = h.unsafe_ptr()
+        var pi = 0
+        var pbody = n - n % 8
+        while pi < pbody:
+            pdst.unsafe_store[width=8](pi, psrc.unsafe_load[width=8](pi))
+            pi += 8
+        while pi < n:
+            pdst.unsafe_store(pi, psrc.unsafe_load(pi))
+            pi += 1
+        _ = h^
+        return packed^
     comptime if is_defined["MOJOLEARN_GP_BULK_DOWNLOAD"]():
         # lane neighbors-apple3, OPT-IN: one vector copy into a list of the
         # final length, not n appends into a growing one. A copy.
@@ -1261,7 +1297,12 @@ def gpr_predict_host(
     var dxs = _upload(ctx, x_star)
     var dls = _upload(ctx, _length_scale_table(model.kernel))
     var ddual = _upload(ctx, model.dual_coef)
-    var dl = _upload(ctx, model.l)
+    # GP_IDN_PREDICT_LAZY_L: the factor crosses only for the variance; the
+    # mean-only path holds a one-word stand-in nothing reads.
+    var want_l = True
+    comptime if GP_IDN_PREDICT_LAZY_L:
+        want_l = return_std
+    var dl = _upload(ctx, model.l) if want_l else ctx.enqueue_create_buffer[DType.float32](1)
     var dkcross = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
     var dstack = ctx.enqueue_create_buffer[DType.float32](
         gp_kernel_stack_floats(n_train, n_star)

@@ -37,6 +37,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
+from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from spectral.impl.sparse.coo import CooGraph
@@ -53,9 +54,26 @@ comptime SYMMETRIZE_TPB = 128
 #: ascending scan stops at, so the output is the same. Rows longer than
 #: FS_MAX_ROW or n >= 2^20 keep the scan.
 #: `-D MOJOLEARN_SYMMETRIZE_FAST_OFF` keeps the scan.
+#: fam-cluster (2026-10-04): IDENTICAL on the NVIDIA and AMD columns takes
+#: the sorted lookup too (it was Apple only). The same entry is found, so
+#: the output is the scan's. `-D MOJOLEARN_IDN_SYMMETRIZE_SORTED_OFF=1`
+#: keeps the scan there.
+comptime IDN_SYMMETRIZE_SORTED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not (
+        is_defined["MOJOLEARN_IDN_SYMMETRIZE_SORTED_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
 comptime SYMMETRIZE_FAST = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
+    (
+        (
+            (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+            and has_apple_gpu_accelerator()
+        )
+        or IDN_SYMMETRIZE_SORTED
+    )
     and not is_defined["MOJOLEARN_SYMMETRIZE_FAST_OFF"]()
 )
 comptime FS_MAX_ROW = 4096

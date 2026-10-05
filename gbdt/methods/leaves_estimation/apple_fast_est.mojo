@@ -35,7 +35,9 @@ family and the ranking targets keep main's path.
                               search planes and the value partials the loop
                               head would otherwise recompute.
   MOJOLEARN_SYM_EST_ALL       EST_STATS_FUSED + EST_ITERS_DEVICE (REUSE_PART
-                              and SHRINK_FUSED are recorded DROPs).
+                              and SHRINK_FUSED are recorded DROPs). The FAST
+                              + Apple default since 2026-10-04 (rab4-symest);
+                              rollback MOJOLEARN_SYM_EST_ALL_OFF.
 
 Apple has no f64 on the device, so the device walker computes in f32 what
 the host walker computed in f64 (the Hessian plus lambda, the direction
@@ -116,7 +118,13 @@ comptime _APPLE_FAST = (
 #: .980164; it carried EST_REUSE_PART's bug), 2026-10-04 DROP
 #: sym-est-all-ord taxi (+0.7%). The umbrella now holds EST_STATS_FUSED +
 #: EST_ITERS_DEVICE, the two switches with no verdict.
-comptime EST_ALL = _APPLE_FAST and is_defined["MOJOLEARN_SYM_EST_ALL"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, tag
+#: rab4-symest): gbdt-symmetric istella 14721.49 -> 14291.94 ms (-2.9%); auc
+#: 0.980132 -> 0.980155, logloss 0.186584 -> 0.186496 (both better). KEEP:
+#: the FAST + Apple default since then; rollback -D MOJOLEARN_SYM_EST_ALL_OFF
+#: (single defines then select flags again). rab7 per-define row:
+#: EST_STATS_FUSED -2.5% (covered by this umbrella).
+comptime EST_ALL = _APPLE_FAST and not is_defined["MOJOLEARN_SYM_EST_ALL_OFF"]()
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-est@c8518eb52; never built (its slot was killed
 #: unstarted), never timed.

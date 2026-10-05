@@ -6,7 +6,8 @@ per-pair logistic gradient and the per-document sums in the same launch.
 
 Compiled under `PAIRLOGIT_GROUP_FUSED` (the FAST + Apple default since the
 M3 A/B 2026-10-03; `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF` opts out);
-IDENTICAL compiles `gbdt/targets/kernel/pair_logit.mojo`'s path unchanged.
+and under IDENTICAL on every vendor since lane/fam2-gbdt F2
+(`IDN_PAIRLOGIT_GROUP`, `gbdt/data/pairs.mojo`; the host column restates it).
 `PAIRLOGIT_EST_REUSE` (also the FAST + Apple default, needs the first;
 `-D MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF` opts out) lets the leaf estimation's first evaluation reuse the search's
 sums, the YetiRank `YETI_EST_REUSE_SEARCH` model.
@@ -37,9 +38,9 @@ folds the per-256-pair partials) and the plane magnitudes two per group.
 
 BITS. A row's sum takes the `j` order, where main's takes increasing pair
 index, and the per-row pair weight is `w * count` where main folds `count`
-copies of `w`: FAST bits move, IDENTICAL bits do not (nothing here compiles
-under IDENTICAL). Every row's and every group's fold is a fixed sequential
-order, so FAST runs are repeatable.
+copies of `w`: bits move against the pair-list path, under FAST and (F2)
+under IDENTICAL, where the host oracle moves with it. Every row's and every
+group's fold is a fixed sequential order on every vendor.
 
 THE SETUP, once per fit (`launch_pair_logit_group_setup`): the same block
 per group copies the grades into row order, takes the group weight from the
@@ -63,7 +64,13 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    ftz,
+    identical_mul,
+)
+from gbdt.data.pairs import IDN_PAIRLOGIT_GROUP
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     pinned_block_sum,
@@ -78,10 +85,22 @@ def pairlogit_group_fused_for[column: Int]() -> Bool:
     n=2, same hash, ndcg10 .71995, map .85455): 4,802 -> 3,760 ms.
     `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF` restores the pair-list path
     (and turns `PAIRLOGIT_EST_REUSE` off with it); the old
-    `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED` is accepted and changes nothing."""
+    `-D MOJOLEARN_PAIRLOGIT_GROUP_FUSED` is accepted and changes nothing.
+    Under IDENTICAL `MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF` does NOT turn the
+    group kernel off (the host column restates it under
+    `IDN_PAIRLOGIT_GROUP`): the IDENTICAL before arm is
+    `-D MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF` (or MOJOLEARN_IDN_ALL_OFF),
+    which moves the device and the host column together (lane/review-fixes)."""
     comptime if not is_defined["MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF"]():
         comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
             return True
+    # lane/fam2-gbdt F2: IDENTICAL on every vendor (`IDN_PAIRLOGIT_GROUP`,
+    # `gbdt/data/pairs.mojo`); the host column restates this kernel under
+    # the same constant. Every product next to an add below is
+    # `identical_mul` (the pinned product under IDENTICAL, the plain product
+    # under FAST), so no vendor fuses it.
+    comptime if IDN_PAIRLOGIT_GROUP:
+        return True
     return False
 
 
@@ -130,8 +149,9 @@ def pl_pairs_once_for[column: Int]() -> Bool:
 
 
 def pl_group_narrow_for[column: Int]() -> Bool:
-    """Lane af-sym-multi, `-D MOJOLEARN_PL_GROUP_NARROW` (or
-    `-D MOJOLEARN_SYM_MULTI_ALL`), FAST + Apple: the group kernel runs on
+    """Lane af-sym-multi, FAST + Apple default since 2026-10-04 (rollback
+    `-D MOJOLEARN_PL_GROUP_NARROW_OFF`; the old `-D MOJOLEARN_PL_GROUP_NARROW`
+    and `-D MOJOLEARN_SYM_MULTI_ALL` change nothing): the group kernel runs on
     128-thread blocks instead of 256. Istella's queries hold ~103 documents,
     so a 256-thread block leaves four of its eight SIMD groups idle through
     every tile loop and barrier; at 128 the idle half is gone and twice the
@@ -140,10 +160,7 @@ def pl_group_narrow_for[column: Int]() -> Bool:
     the 256-thread kernel (the order is the `j` order, not the thread
     count), so the bits do not move; the setup kernel and the reuse scatter
     keep their width."""
-    comptime if (
-        is_defined["MOJOLEARN_PL_GROUP_NARROW"]()
-        or is_defined["MOJOLEARN_SYM_MULTI_ALL"]()
-    ):
+    comptime if not is_defined["MOJOLEARN_PL_GROUP_NARROW_OFF"]():
         return pairlogit_group_fused_for[column]()
     return False
 
@@ -156,8 +173,14 @@ def pl_group_narrow_for[column: Int]() -> Bool:
 comptime PL_PAIRS_ONCE = pl_pairs_once_for[TARGET_COLUMN]()
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-multi@d2c832da0; the laptop built the .so (Metal side
-#: unchecked), never timed. `-D MOJOLEARN_PL_GROUP_NARROW` (or
-#: SYM_MULTI_ALL).
+#: unchecked). `-D MOJOLEARN_PL_GROUP_NARROW` (or SYM_MULTI_ALL) until
+#: 2026-10-04.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04):
+#: gbdt-rank-pairlogit istella 3095.83 -> 3040.78 ms (-1.8%, tag
+#: rab4-symmulti) and 3095.91 -> 3038.19 ms (-1.9%, tag rab7-plgroupnarrow);
+#: map 0.854545, ndcg10 0.719953 and output digest identical. KEEP: the FAST
+#: + Apple default; rollback -D MOJOLEARN_PL_GROUP_NARROW_OFF. SYM_MULTI_ALL
+#: (yetirank +0.1%) stays a NEUTRAL record and no longer selects anything.
 comptime PL_GROUP_NARROW = pl_group_narrow_for[TARGET_COLUMN]()
 #: the group kernel's block: 128 under `PL_GROUP_NARROW`, else `PLG_THREADS`
 #: (`MSE_BLOCK_SIZE`, 256)
@@ -218,7 +241,7 @@ def pair_logit_group_setup_kernel(
                     if sh_grade.unsafe_load(k) != g_i:
                         count += 1
         if in_range:
-            var rw = ftz(w * Float32(count))
+            var rw = ftz(identical_mul(w, Float32(count)))
             grades.unsafe_store(i, g_i)
             row_weights.unsafe_store(i, rw)
             endpoints += Float32(count)
@@ -233,7 +256,7 @@ def pair_logit_group_setup_kernel(
         var pairs = total * Float32(0.5)
         group_w.unsafe_store(g, w)
         group_pairs.unsafe_store(g, pairs)
-        group_wsum.unsafe_store(g, w * pairs)
+        group_wsum.unsafe_store(g, identical_mul(w, pairs))
 
 
 def pair_logit_group_kernel[
@@ -448,8 +471,8 @@ def pair_logit_group_kernel[
                             Float32(1e-40),
                         )
                         var direction = Float32(1.0) - p
-                        var scale = ftz(p * (Float32(1.0) - p))
-                        var wd = ftz(w * direction)
+                        var scale = ftz(identical_mul(p, Float32(1.0) - p))
+                        var wd = ftz(identical_mul(w, direction))
                         if winner_side:
                             acc_der = acc_der + wd
                             if compute_fv != Int32(0):
@@ -458,10 +481,12 @@ def pair_logit_group_kernel[
                                     log_exp_val_plus_one = routed_log(
                                         Float32(1.0) + exp_diff
                                     )
-                                fv_local += w * (diff - log_exp_val_plus_one)
+                                fv_local = fv_local + identical_mul(
+                                    w, diff - log_exp_val_plus_one
+                                )
                         else:
                             acc_der = acc_der + (-wd)
-                        acc_der2 = acc_der2 + ftz(w * scale)
+                        acc_der2 = acc_der2 + ftz(identical_mul(w, scale))
         var der = ftz(acc_der)
         var der2 = ftz(acc_der2)
         var weight = Float32(0.0)

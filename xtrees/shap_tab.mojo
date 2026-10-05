@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """TreeSHAP's leaf-table row unit with one decision word per (row, tree)
-(FAST + Apple only, `-D MOJOLEARN_SHAP_TREE_TAB`, on top of the default
+(FAST + Apple only, the default since 2026-10-04 (rollback
+`-D MOJOLEARN_SHAP_TREE_TAB_OFF`), on top of the default
 leaf table MOJOLEARN_TREESHAP_FAST_TABLE of xtrees/shap.mojo).
 
 Recovered from lane/apple-fast-shap@13343dd51 (`shap_tab.mojo` there). Main

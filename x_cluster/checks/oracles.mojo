@@ -8,7 +8,8 @@ its DEVIATION (IDENTITY_PATHS.md rows 110-119)."""
 from std.math import fma, sqrt
 
 from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
-from x_cluster.bodies import SplitMix64
+from x_cluster.bodies import IDN_BGMM_NK_LEVELS, SplitMix64
+from mixture.nk_order import gmm_nk_fold_levels
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
 
@@ -233,8 +234,20 @@ def oracle_moments(
     var nk = List[Float32](capacity=kc)
     for k in range(kc):
         var acc = Float32(0)
-        for i in range(n):
-            acc = ftz(acc + resp[i * kc + k])
+        # fam2-cluster: the chunked levels of `bodies.IDN_BGMM_NK_LEVELS`
+        # (the retired `chain=True` spelling keeps the one chain)
+        comptime if IDN_BGMM_NK_LEVELS:
+            if chain:
+                for i in range(n):
+                    acc = ftz(acc + resp[i * kc + k])
+            else:
+                var col = List[Float32](capacity=n)
+                for i in range(n):
+                    col.append(resp[i * kc + k])
+                acc = gmm_nk_fold_levels(col)
+        else:
+            for i in range(n):
+                acc = ftz(acc + resp[i * kc + k])
         nk.append(ftz(acc + Float32(1.1920929e-06)))
     if not chain:
         var gm = gemm_fold_means(resp, x, nk, n, d, kc)

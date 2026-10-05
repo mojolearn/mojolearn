@@ -43,7 +43,7 @@ flags: `LABELS_SAMPLED_ORDER` on, `ROWS_SORTED_SAMPLE` off,
   6. `Builder.begin_tree` / `advance_tree` (`builder.mojo:2719-2841`) over
      `NodeQueue` (`:167-433`): FIFO pops of `max_batch_size`, the
      `_is_expandable` test, `push`'s six mutations in their order.
-  7. Per batch, `begin_batch` / `advance_batch` (`:2179-2320`): the
+  7. Per batch, `begin_batch_replay` / `advance_batch_replay` (`:2179-2320`): the
      sampling rounds (`max_sampling_rounds_for`, `sampled_cols_in_round`,
      `:143-164`), the column sample of `sampled_column_at`
      (`kernels/builder_kernels.mojo:315-335`, the per-node FNV seed
@@ -58,9 +58,9 @@ flags: `LABELS_SAMPLED_ORDER` on, `ROWS_SORTED_SAMPLE` off,
      (`split.mojo:686-779`, width 32, phase 1 per group and phase 2 over
      the group results, each step a lockstep read then update),
      `_publish_to_global` (`:614-683`, the range midpoint then the slot's
-     `update`), `_read_splits`' terminal rule (`builder.mojo:1733-1763`)
+     `update`), `_read_splits_host`' terminal rule (`builder.mojo:1733-1763`)
      and the retry of the invalid, non-terminal nodes.
-  8. `enqueue_node_split` (`builder.mojo:2357-2452`) through
+  8. `enqueue_node_split_replay` (`builder.mojo:2357-2452`) through
      `launch_node_split_kernel` (`builder_kernels_impl.mojo:1472-1702`):
      the local left count of `count_local_left_kernel` (`:915-966`, the
      `value(row, colid) <= quesval` test on valid splits only) and the
@@ -120,7 +120,8 @@ from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
 
 from checks.fixed_point import choose_scale
-from checks.numerics import ftz, identical_log, identical_mul_add
+from core.abs_sum_blocked_host import host_abs_sum_blocked
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_log, identical_mul_add
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from ensemble.host_layout import has_nan_f32_threaded
 from ensemble.nan_refusal import RF_NAN_REFUSAL
@@ -1080,18 +1081,36 @@ def _sortable_to_float(key: UInt32) -> UInt32:
 
 
 def host_quantile_bin_index(bin: Int, sample_count: Int, max_n_bins: Int) -> Int:
-    """`quantile_bin_index`, `quantiles.mojo:700-725`, Float64 round half away."""
-    var bin_width = Float64(sample_count) / Float64(max_n_bins)
-    var x = Float64(bin + 1) * bin_width
-    var r = floor(x)
-    if x - r >= Float64(0.5):
-        r = r + Float64(1.0)
-    var idx = Int(r) - 1
-    if idx < 0:
-        idx = 0
-    if idx > sample_count - 1:
-        idx = sample_count - 1
-    return idx
+    """`quantile_bin_index`, `quantiles.mojo:700-725`, Float64 round half away.
+
+    fam2-forests `IDN_RF_QBIN_DEVICE`: the device computes the index in
+    exact integers (`quantile_bin_index_exact`), and this host column
+    computes the same expression; `-D MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF`
+    (or `MOJOLEARN_IDN_ALL_OFF`) restores the Float64 form on both."""
+    # lane/review-fixes: the device gate's mode term too (quantiles.mojo)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+        is_defined["MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    ):
+        var ri = (2 * (bin + 1) * sample_count + max_n_bins) // (2 * max_n_bins)
+        var idx_i = ri - 1
+        if idx_i < 0:
+            idx_i = 0
+        if idx_i > sample_count - 1:
+            idx_i = sample_count - 1
+        return idx_i
+    else:
+        var bin_width = Float64(sample_count) / Float64(max_n_bins)
+        var x = Float64(bin + 1) * bin_width
+        var r = floor(x)
+        if x - r >= Float64(0.5):
+            r = r + Float64(1.0)
+        var idx = Int(r) - 1
+        if idx < 0:
+            idx = 0
+        if idx > sample_count - 1:
+            idx = sample_count - 1
+        return idx
 
 
 def host_lower_bound(values: List[Float32], base: Int, n: Int, element: Float32) -> Int:
@@ -1290,6 +1309,60 @@ def host_weight_cdf(weights: List[Float32], n_rows: Int) raises -> List[Float64]
     return cdf^
 
 
+comptime RF_ORACLE_WBOOT_INT = True
+"""fam2-forests `IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE`: the weighted bootstrap
+in exact integers, the host column of
+`ensemble/weighted_bootstrap_device.mojo` (quantum, UInt64 CDF, PCG bounded
+draw, upper_bound). cpu3-trees (2026-10-04): the device form is the only
+weighted route in IDENTICAL and FAST alike (its host Float64 arm and the
+`_OFF` define are gone), so the host column draws the integer stream in
+every mode too; the Float64 `weight_cdf` arm below is no longer reached
+for a weighted bootstrap."""
+
+
+def host_weight_quantum(bits: UInt32, max_bits: UInt32) -> UInt64:
+    """`weight_quantum`, `ensemble/weighted_bootstrap_device.mojo`,
+    statement for statement."""
+    if (bits & UInt32(0x7FFFFFFF)) == UInt32(0):
+        return UInt64(0)
+    var e = Int((bits >> 23) & UInt32(0xFF))
+    var sig = UInt64(Int(bits & UInt32(0x7FFFFF)))
+    if e == 0:
+        e = 1
+    else:
+        sig = sig | UInt64(0x800000)
+    var em = Int((max_bits >> 23) & UInt32(0xFF))
+    if em == 0:
+        em = 1
+    var d = e - em + 7
+    var q = UInt64(0)
+    if d >= 0:
+        q = sig << UInt64(d)
+    elif d > -24:
+        q = sig >> UInt64(-d)
+    if q == UInt64(0):
+        q = UInt64(1)
+    return q
+
+
+def host_weight_qcdf(weights: List[Float32], n_rows: Int) -> List[UInt64]:
+    """`build_weight_cdf_device`: the largest weight's bit pattern (sign
+    cleared), then the inclusive UInt64 sum of the quanta. Integer adds,
+    so the device's tiled scan and this row-order chain are the same
+    numbers."""
+    var max_bits = UInt32(0)
+    for i in range(n_rows):
+        var b = bitcast[DType.uint32](weights[i]) & UInt32(0x7FFFFFFF)
+        if b > max_bits:
+            max_bits = b
+    var cdf = List[UInt64](capacity=n_rows)
+    var run = UInt64(0)
+    for i in range(n_rows):
+        run += host_weight_quantum(bitcast[DType.uint32](weights[i]), max_bits)
+        cdf.append(run)
+    return cdf^
+
+
 def host_sampled_rows(
     seed: UInt64,
     tree_id: Int,
@@ -1297,10 +1370,37 @@ def host_sampled_rows(
     n_rows: Int,
     n_sampled: Int,
     weight_cdf: List[Float64] = List[Float64](),
+    weight_qcdf: List[UInt64] = List[UInt64](),
 ) raises -> List[Int32]:
     """`RowSampler._sample_rows`, `randomforest.mojo:2093-2206`: the two
-    unweighted arms and the weighted bootstrap (`weight_cdf` non-empty)."""
+    unweighted arms and the weighted bootstrap (`weight_cdf` non-empty;
+    under `RF_ORACLE_WBOOT_INT` the integer `weight_qcdf` decides)."""
     var rows = List[Int32](capacity=n_sampled)
+    comptime if RF_ORACLE_WBOOT_INT:
+        if bootstrap and len(weight_qcdf) > 0:
+            # `weighted_bootstrap_rows_kernel`: seed = the tree's hashed
+            # 32-bit seed, subsequence = the sample index, Lemire's bounded
+            # draw over [0, total), then upper_bound.
+            var total = weight_qcdf[n_rows - 1]
+            var qseed = UInt64(Int(host_seed_tree(seed, tree_id)) & 0xFFFFFFFF)
+            for i in range(n_sampled):
+                var qsub = UInt64(i)
+                comptime if RF_ORACLE_HOST_SABOTAGE:
+                    qsub = qsub + UInt64(1)
+                var qgen = host_pcg_init(qseed, qsub, UInt64(0))
+                var u = host_pcg_uniform_u64(qgen, UInt64(0), total)
+                var qlo = 0
+                var qhi = n_rows
+                while qlo < qhi:
+                    var qmid = (qlo + qhi) // 2
+                    if weight_qcdf[qmid] <= u:
+                        qlo = qmid + 1
+                    else:
+                        qhi = qmid
+                if qlo > n_rows - 1:
+                    qlo = n_rows - 1
+                rows.append(Int32(qlo))
+            return rows^
     if bootstrap and len(weight_cdf) > 0:
         # `:2098-2135`: `uniform_double_host` over `[0, weight_sum)` at stride
         # 110592 (`core/philox.mojo:357-379`, one generator per subsequence),
@@ -1595,17 +1695,23 @@ def rf_host_fit(
     # `fit_forest` calls `prepare_weights` before the first tree
     # (`randomforest.mojo:2567-2568`).
     var weight_cdf = List[Float64]()
+    var weight_qcdf = List[UInt64]()
     var wscale = Float32(0)
     var weighted_rows = List[Int32]()
     if len(weights) > 0:
         # Their two refusals by value (`prepare_weights`), both arms.
         weight_cdf = host_weight_cdf(weights, n_rows)
+        comptime if RF_ORACLE_WBOOT_INT:
+            if p.bootstrap:
+                weight_qcdf = host_weight_qcdf(weights, n_rows)
     if weighted_obj:
-        # `bindings/_mojolearn_rf.mojo:375-389, 439-443`: the Float64 total in
-        # row order, `choose_scale(total, n_rows)`, its Float32 range check.
-        var total = Float64(0)
-        for i in range(n_rows):
-            total += Float64(weights[i])
+        # `bindings/_mojolearn_rf.mojo` (cpu3-bindings): the total in the
+        # blocked binary64 order the device scan uses
+        # (`core/weight_scan_device` -> `core/abs_sum_blocked`; weights are
+        # nonnegative, so |w| = w), `choose_scale(total, n_rows)`, its
+        # Float32 range check.
+        var total = host_abs_sum_blocked(Int(weights.unsafe_ptr()), n_rows)
+        _ = len(weights)
         var scale = choose_scale(total, n_rows)
         if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
             raise Error("class weights exceed Float32 fixed-point scale range")
@@ -1650,13 +1756,14 @@ def rf_host_fit(
                 weighted_rows, weighted_obj, wscale, n_rows, n_cols,
                 n_unique_labels, n_classes, classification, p, criterion,
                 label_scale, tree_start, n_sampled, original_cols, max_rounds,
+                weight_qcdf=weight_qcdf,
             )
     else:
         var tree_chunk = host_predict_chunk(p.n_trees, tree_tasks)
         var failed = List[Bool](length=tree_tasks, fill=False)
         var messages = List[String](length=tree_tasks, fill=String(""))
         var n_trees = p.n_trees
-        def _tree_task(task: Int) {mut trees, mut failed, mut messages, imm x, imm q, imm labels_i, imm labels_f, imm weights, imm weight_cdf, imm weighted_rows, imm weighted_obj, imm wscale, imm n_rows, imm n_cols, imm n_unique_labels, imm n_classes, imm classification, imm p, imm criterion, imm label_scale, imm tree_start, imm n_sampled, imm original_cols, imm max_rounds, imm tree_chunk, imm n_trees}:
+        def _tree_task(task: Int) {mut trees, mut failed, mut messages, imm x, imm q, imm labels_i, imm labels_f, imm weights, imm weight_cdf, imm weight_qcdf, imm weighted_rows, imm weighted_obj, imm wscale, imm n_rows, imm n_cols, imm n_unique_labels, imm n_classes, imm classification, imm p, imm criterion, imm label_scale, imm tree_start, imm n_sampled, imm original_cols, imm max_rounds, imm tree_chunk, imm n_trees}:
             var lo = task * tree_chunk
             var hi = min(lo + tree_chunk, n_trees)
             try:
@@ -1667,6 +1774,7 @@ def rf_host_fit(
                         n_unique_labels, n_classes, classification, p,
                         criterion, label_scale, tree_start, n_sampled,
                         original_cols, max_rounds,
+                        weight_qcdf=weight_qcdf,
                     )
             except e:
                 failed[task] = True
@@ -1722,6 +1830,7 @@ def _rf_host_tree(
     n_sampled: Int,
     original_cols: Int,
     max_rounds: Int,
+    weight_qcdf: List[UInt64] = List[UInt64](),
 ) raises -> _RfHostTree:
     """Tree `t` of `rf_host_fit`: its row sample, `NodeQueue` walk, splits,
     partitions and leaves (`fit_forest`'s per-tree body,
@@ -1736,7 +1845,10 @@ def _rf_host_tree(
         row_ids = weighted_rows.copy()
         n_root = len(weighted_rows)
     else:
-        row_ids = host_sampled_rows(p.seed, tree_id, p.bootstrap, n_rows, n_sampled, weight_cdf)
+        row_ids = host_sampled_rows(
+            p.seed, tree_id, p.bootstrap, n_rows, n_sampled, weight_cdf,
+            weight_qcdf,
+        )
 
     # `NodeQueue.__init__` (`builder.mojo:197-232`).
     var t_colid = List[Int32]()
@@ -1783,7 +1895,7 @@ def _rf_host_tree(
                     p, criterion, label_scale, tree_id, k, sample_offset,
                     weights, wscale,
                 )
-                # `_read_splits` (`builder.mojo:1733-1763`): a pure node
+                # `_read_splits_host` (`builder.mojo:1733-1763`): a pure node
                 # is a leaf whatever its slot holds.
                 var terminal = s.pure != Int32(0)
                 if terminal:
@@ -1791,14 +1903,14 @@ def _rf_host_tree(
                 final_splits[orig] = s
                 if not s.is_valid() and not terminal:
                     retry.append(orig)
-            # `advance_batch`'s retry test (`:2290-2301`).
+            # `advance_batch_replay`'s retry test (`:2290-2301`).
             if len(retry) > 0 and sampling_round + 1 < max_rounds:
                 active = retry^
                 sampling_round += 1
                 continue
             break
 
-        # `enqueue_node_split` (`builder.mojo:2357-2452`): the splits go
+        # `enqueue_node_split_replay` (`builder.mojo:2357-2452`): the splits go
         # back with `split_start`/`split_end` -1 and `pure` 0, the local
         # left count is taken on valid splits, and each valid node's
         # range is stably partitioned.

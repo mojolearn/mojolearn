@@ -185,7 +185,8 @@ def prepare_numeric_dataset(
         no_ctr.append(-1)
     var grid = _quantize_training_columns(
         ctx, columns, flags, no_ctr, no_ctr,
-        List[List[List[Float32]]](), List[TBinarizationOptions](),
+        List[List[DeviceBuffer[DType.float32]]](),
+        List[TBinarizationOptions](),
         n_rows, border_count, border_build_max_samples, random_seed, nan_mode,
     )
     var ci = _build_cindex_from_columns(ctx, columns, n_rows, grid[0], grid[1], grid[2])

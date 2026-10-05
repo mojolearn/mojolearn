@@ -387,7 +387,7 @@ def _silu_recomputed(z: Float32) -> Float32:
 # ===========================================================================
 
 
-def mamba_bwd_gate_kernel(gid_: Int, 
+def mamba_bwd_gate_kernel(gid_: Int,
     dsk_ptr: MutPointer[Float32, MutAnyOrigin],
     dz_ptr: MutPointer[Float32, MutAnyOrigin],
     du_d_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -519,7 +519,7 @@ def mamba_bwd_gate_into(
 # ===========================================================================
 
 
-def mamba_bwd_ddtp_kernel(gid_: Int, 
+def mamba_bwd_ddtp_kernel(gid_: Int,
     ddtp_ptr: MutPointer[Float32, MutAnyOrigin],
     ddelta_ptr: MutPointer[Float32, MutAnyOrigin],
     dt_proj_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -625,7 +625,7 @@ def mamba_bwd_ddtp_into(
 # ===========================================================================
 
 
-def mamba_bwd_du_join_kernel(gid_: Int, 
+def mamba_bwd_du_join_kernel(gid_: Int,
     du_ptr: MutPointer[Float32, MutAnyOrigin],
     dconv_ptr: MutPointer[Float32, MutAnyOrigin],
     du_d_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -741,7 +741,7 @@ def mamba_bwd_du_join_into(
 # and from the index arithmetic above and is marked INFERRED.
 
 
-def mamba_bwd_dhin_kernel(gid_: Int, 
+def mamba_bwd_dhin_kernel(gid_: Int,
     dhin_ptr: MutPointer[Float32, MutAnyOrigin],
     dconv_ptr: MutPointer[Float32, MutAnyOrigin],
     conv_w_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -837,7 +837,7 @@ def mamba_bwd_dhin_into(
     host_launch(_launch_4, launch_count((_grid(n), 1, 1), (BWD_TPB, 1, 1)))
 
 
-def mamba_bwd_conv_tap_product_kernel(gid_: Int, 
+def mamba_bwd_conv_tap_product_kernel(gid_: Int,
     p_ptr: MutPointer[Float32, MutAnyOrigin],
     dconv_ptr: MutPointer[Float32, MutAnyOrigin],
     in_proj_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -958,7 +958,7 @@ def mamba_bwd_conv_tap_product_into(
 # below contains an arithmetic operation.
 
 
-def mamba_bwd_concat_xp_kernel(gid_: Int, 
+def mamba_bwd_concat_xp_kernel(gid_: Int,
     dxp_ptr: MutPointer[Float32, MutAnyOrigin],
     ddtl_ptr: MutPointer[Float32, MutAnyOrigin],
     dbm_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -991,7 +991,7 @@ def mamba_bwd_concat_xp_kernel(gid_: Int,
         )
 
 
-def mamba_bwd_concat_p_kernel(gid_: Int, 
+def mamba_bwd_concat_p_kernel(gid_: Int,
     dp_ptr: MutPointer[Float32, MutAnyOrigin],
     dhin_ptr: MutPointer[Float32, MutAnyOrigin],
     dz_ptr: MutPointer[Float32, MutAnyOrigin],
@@ -1094,7 +1094,7 @@ def mamba_bwd_concat_p_into(
 # c-inherited and not a new topology.
 
 
-def mamba_bwd_norm_kernel(gid_: Int, 
+def mamba_bwd_norm_kernel(gid_: Int,
     dx_ptr: MutPointer[Float32, MutAnyOrigin],
     drstd_ptr: MutPointer[Float32, MutAnyOrigin],
     pw_ptr: MutPointer[Float32, MutAnyOrigin],

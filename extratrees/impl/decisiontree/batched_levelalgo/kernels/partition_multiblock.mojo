@@ -172,6 +172,12 @@ def partition_count_kernel[
     var b = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var nid = Int(workload[unsafe_offset=b].nodeid)
+    if nid < 0:
+        # cpu4-forest: a map entry past the live total (the device
+        # level loop launches at a proven bound); the whole block
+        # leaves before any barrier. `build_workload_info` never
+        # emits one, so the host-staged path is unchanged.
+        return
     var ob = Int(workload[unsafe_offset=b].offset_blockid)
     if sabotage_in == PART_MB_SAB_SINGLE_BLOCK:
         ob = 0
@@ -302,6 +308,12 @@ def partition_scatter_kernel[
     var b = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var nid = Int(workload[unsafe_offset=b].nodeid)
+    if nid < 0:
+        # cpu4-forest: a map entry past the live total (the device
+        # level loop launches at a proven bound); the whole block
+        # leaves before any barrier. `build_workload_info` never
+        # emits one, so the host-staged path is unchanged.
+        return
     var ob = Int(workload[unsafe_offset=b].offset_blockid)
     if sabotage_in == PART_MB_SAB_SINGLE_BLOCK:
         ob = 0
@@ -410,6 +422,12 @@ def partition_writeback_kernel[
     var b = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var nid = Int(workload[unsafe_offset=b].nodeid)
+    if nid < 0:
+        # cpu4-forest: a map entry past the live total (the device
+        # level loop launches at a proven bound); the whole block
+        # leaves before any barrier. `build_workload_info` never
+        # emits one, so the host-staged path is unchanged.
+        return
     var ob = Int(workload[unsafe_offset=b].offset_blockid)
     if _skip_node(
         work_items,

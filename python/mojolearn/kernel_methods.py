@@ -289,7 +289,11 @@ class KernelRidge(_KernelMethodBase):
         scalars = empty((1,), "<f8")
         sw = _sqrt_weights(sample_weight, n, self._WHERE)
         tail = [] if sw is None else [addr_ro(sw, name="sample_weight")]
-        info = self._extension().kernel_ridge_fit(
+        ext = self._extension()
+        # glue: the pointer entry when the binding registers it (IDENTICAL
+        # device builds, `KRR_IDN_PTR_IN`); the same addrs and params.
+        fit_fn = getattr(ext, "kernel_ridge_fit_ptr", None) or ext.kernel_ridge_fit
+        info = fit_fn(
             # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_fit_binding.
             # x, y, dual_out, scalars_out[, sw]
             [addr_ro(x, name="X"), addr_ro(flat_y, name="y"), addr(dual, name="dual_coef_"), addr(scalars, name="scalars")] + tail,
@@ -322,7 +326,10 @@ class KernelRidge(_KernelMethodBase):
         _check_chi2_input(xq, kernel, self._WHERE)
         flat_dual = self.dual_coef_.reshape((n * t,))
         out = empty((q * t,), "<f4")
-        self._extension().kernel_ridge_predict(
+        ext = self._extension()
+        # glue: the pointer entry when the binding registers it (`KRR_IDN_PTR_IN`)
+        predict_fn = getattr(ext, "kernel_ridge_predict_ptr", None) or ext.kernel_ridge_predict
+        predict_fn(
             # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding.
             # x_fit, dual, x_new, out
             [addr_ro(self.X_fit_, name="X_fit_"), addr_ro(flat_dual, name="dual_coef_"), addr_ro(xq, name="X"), addr(out, name="predict")],
@@ -439,7 +446,10 @@ class Nystroem(_KernelMethodBase):
         eigenvalues = empty((q,), "<f4")
         eigenvectors = empty((q * q,), "<f4")
         scalars = empty((1,), "<f8")
-        sweeps = self._extension().nystroem_fit(
+        ext = self._extension()
+        # glue: the pointer entry when the binding registers it (`NYS_IDN_FIT_PTR_IN`)
+        fit_fn = getattr(ext, "nystroem_fit_ptr", None) or ext.nystroem_fit
+        sweeps = fit_fn(
             # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_fit_binding.
             # x, components_out, indices_out, normalization_out, eigenvalues_out, eigenvectors_out, scalars_out
             [addr_ro(x, name="X"), addr(components, name="components_"), addr(indices, name="component_indices_"),

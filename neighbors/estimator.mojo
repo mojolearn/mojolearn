@@ -128,10 +128,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.math import fma, sqrt
 
 comptime KNN_FAST_REFINE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_KNN_REFINE_QOLD"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_KNN_FAST_REFINE"]()
 )
-"""FAST QUALITY FIX (lane apple-fast-q-misc, 2026-10-04; old behavior
-`-D MOJOLEARN_KNN_REFINE_QOLD`). Euclidean / sqeuclidean
+"""FAST QUALITY FIX candidate (lane apple-fast-q-misc, 2026-10-04), REVERTED
+the same day: opt-in `-D MOJOLEARN_KNN_FAST_REFINE` (the old
+`-D MOJOLEARN_KNN_REFINE_QOLD` is harmless). OUTCOME (M3 afc_ab_def, full
+board size, 1 run per arm, tag rab5-knnref): knn recall_at_k identical
+(istella 0.982434, taxi 0.999773), istella 365.0 -> 378.4 ms (+3.7%), taxi
+-1.5%: no gain. What it did: Euclidean / sqeuclidean
 `knn_search_resident` (what `NearestNeighbors.kneighbors` runs on a GPU)
 selects a pool of `min(n_index, 4 k, KNN_REFINE_POOL_MAX)` candidates by
 the expanded float32 distance |q|^2 + |x|^2 - 2 q.x, then re-ranks the pool
@@ -150,6 +154,8 @@ from neighbors.impl.knn.knn import (
     knn_classify,
     knn_regress,
 )
+from neighbors.impl.selection.knn import device_distance_weights, device_check_index_range
+from neighbors.impl.knn.knn import KNN_IDN_VOTE_CACHE, KnnVoteCache, KnnVoteCachePointer
 from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     METRIC_FROM_IS_SQRT,
@@ -164,7 +170,6 @@ from neighbors.impl.detail.knn_brute_force import (
 from neighbors.impl.selection.distance_weights import (
     WEIGHTS_DISTANCE,
     WEIGHTS_UNIFORM,
-    host_distance_weights,
 )
 from neighbors.impl.distance.detail.distance_ops import (
     DIST_BRAY_CURTIS,
@@ -294,6 +299,28 @@ a measured one.
 """
 
 
+comptime BOUNDED_WORKSPACE_CAP_BYTES = 3 * 1024 * 1024 * 1024
+"""Ceiling on the WORST-CASE per-request workspace at the default query tile,
+for the bounded-budget rule in `plan_query_tile`.
+
+Per query row the tiled arm holds `identical_index_tile(n_index)` float32
+distance cells plus, at worst (k above the small-k selector, so no radix
+scratch shrink), `2 x n_index // 8` float32 radix pairs: `4 x index_tile +
+n_index` bytes. A policy number (under a fifth of a 16 GB device), not a
+measured one. On NVIDIA IDENTICAL (tile 4096, index tile 65,536) it admits
+every index up to 524,288 rows; larger indices take the historical halving.
+"""
+
+
+def query_tile_bounded_budget_applies(n_index: Int) -> Bool:
+    """Whether the default query tile's worst-case workspace fits
+    `BOUNDED_WORKSPACE_CAP_BYTES`. Size-derived: continuous in `n_index`,
+    no exact-shape keys. Query tiling never moves bits (each query's chain
+    and merge do not depend on its tile; `query_batch_check` asserts it)."""
+    var per_row = identical_index_tile(n_index) * 4 + n_index
+    return DEFAULT_QUERY_TILE * per_row <= BOUNDED_WORKSPACE_CAP_BYTES
+
+
 def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int) -> Int:
     """The tile actually used, after the workspace cap and the query clamp.
 
@@ -308,14 +335,13 @@ def plan_query_tile(n_index: Int, n_queries: Int, requested_tile: Int) -> Int:
     var per_row_bytes = n_index * 4
     var budget = WORKSPACE_BUDGET_BYTES
     comptime if QUERY_TILE_512_CANDIDATE:
-        # Limit the new budgeting rule to the largest measured index. For
-        # n_index > 400000 the historical estimate necessarily halves 512
-        # to 256 (already >768MiB), then follows the exact old default path.
-        # This prevents larger radix scratch on unmeasured large indices.
         # DEVIATION 2631: the scope's tile ceiling is the default tile, and
         # the budget admits that tile's bounded distance tile (2048 x 65,536
         # cells is 512 MiB, 4096 is 1 GiB) so the row's tile is not halved.
-        if n_index <= 400000 and tile <= DEFAULT_QUERY_TILE:
+        # The scope is a workspace bound, not an index size: see
+        # `query_tile_bounded_budget_applies` (it replaced an
+        # `n_index <= 400000` cut at the benchmark's index, 2026-10-04).
+        if tile <= DEFAULT_QUERY_TILE and query_tile_bounded_budget_applies(n_index):
             per_row_bytes = identical_index_tile(n_index) * 4
             if DEFAULT_QUERY_TILE * per_row_bytes > budget:
                 budget = DEFAULT_QUERY_TILE * per_row_bytes
@@ -613,7 +639,7 @@ def knn_search_resident(
     )
     comptime if KNN_FAST_REFINE:
         # FAST quality fix (lane apple-fast-q-misc): pool then exact re-rank;
-        # `-D MOJOLEARN_KNN_REFINE_QOLD` keeps the expanded-form top-k below.
+        # opt-in `-D MOJOLEARN_KNN_FAST_REFINE`; default: the expanded-form top-k below.
         if _knn_refine_applies(plan[0], negate_products, k, n_index):
             return _knn_search_resident_refined(
                 ctx, index, index_ptr, n_index, queries_ptr, n_queries, n_features, k,
@@ -1572,6 +1598,7 @@ def knn_classifier_predict_resident(
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
     cache: KnnIndexCachePointer = None,
+    vote_cache: KnnVoteCachePointer = None,
 ) raises -> Int:
     """`knn_classifier_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002, lane/knn-tiled-distance, 2026-09-17; the same door as
@@ -1618,7 +1645,7 @@ def knn_classifier_predict_resident(
     )
     _knn_classifier_vote(ctx, trace, retained_indices, h_dist.unsafe_ptr(),
         n_index, n_queries, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
-        out_proba_ptr, out_uniq_ptr, want_proba, weighted)
+        out_proba_ptr, out_uniq_ptr, want_proba, weighted, vote_cache)
     _ = h_dist^
     _ = h_idx^
     return used_tile
@@ -1689,49 +1716,45 @@ def _knn_classifier_vote(
     out_proba_ptr: MutPointer[Float32, MutUntrackedOrigin],
     out_uniq_ptr: MutPointer[Int32, MutUntrackedOrigin], want_proba: Bool,
     weighted: Bool,
+    vote_cache: KnnVoteCachePointer = None,
 ) raises:
+    # lane/fam2-neighbors (KNN_IDN_VOTE_CACHE): a resident handle's labels
+    # and unique sets stay on the device between predicts
+    var use_vc = False
+    comptime if KNN_IDN_VOTE_CACHE:
+        if vote_cache and not trace.enabled:
+            use_vc = True
     # DEVIATION 554: the weights are computed on the HOST, over the sorted
     # distances the search just wrote, exactly as scikit-learn computes
     # them in numpy over the same matrix. `distance_weights.mojo` carries
     # the reason (the zero test is a per-row any-reduction and the
     # replacement is row-level).
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+    # cpu3-neighbors: the weight rule runs as a kernel on every GPU route
+    # and mode (the host loop over the n_queries x k distances is gone from
+    # the GPU path; `host_distance_weights` stays the host column). A
+    # traced call records the device weights, which match the host rule bit
+    # for bit (`distance_weights_kernel` is its statements).
     if weighted:
-        # HOST LISTS ACROSS THE BOUNDARY, not pointers: a pointer from
-        # `enqueue_create_host_buffer` is not
-        # interchangeable with an arbitrary host pointer on this stack and
-        # that the failure is SILENT. The copy is `n_queries * k` floats,
-        # the size of the answer the caller is already receiving.
-        var d_in = List[Float32](capacity=n_queries * k)
-        for i in range(n_queries * k):
-            d_in.append(dist_ptr.unsafe_load(i))
-        var wl = host_distance_weights(d_in, n_queries, k)
-        var h_w = ctx.enqueue_create_host_buffer[DType.float32](
-            n_queries * k
-        )
-        ctx.synchronize()
-        for i in range(n_queries * k):
-            h_w.unsafe_ptr().unsafe_store(i, wl[i])
-        ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-        ctx.synchronize()
+        device_distance_weights(ctx, dist_ptr, d_w, n_queries, k)
         if trace.enabled:
-            trace.record_host(
-                "knn_clf.weights", h_w.unsafe_ptr(), n_queries * k
-            )
-        _ = h_w^
+            trace.record_device(ctx, "knn_clf.weights", d_w, n_queries * k)
 
     # Search returned its owned, sorted index buffer. It uploaded a host
     # permutation only if necessary; reuse the allocation for class_probs.
     var d_idx = retained_indices.pop()
     var y = List[DeviceBuffer[DType.int32]]()
-    for i in range(n_outputs):
-        y.append(ctx.enqueue_create_buffer[DType.int32](n_index))
-    ctx.synchronize()
-    for i in range(n_outputs):
-        ctx.enqueue_copy(
-            dst_buf=y[i], src_ptr=y_ptr.unsafe_offset(i * n_index)
-        )
-    ctx.synchronize()
+    if use_vc:
+        vote_cache.value()[].ensure(ctx, trace, y_ptr, n_index, n_outputs)
+    else:
+        for i in range(n_outputs):
+            y.append(ctx.enqueue_create_buffer[DType.int32](n_index))
+        ctx.synchronize()
+        for i in range(n_outputs):
+            ctx.enqueue_copy(
+                dst_buf=y[i], src_ptr=y_ptr.unsafe_offset(i * n_index)
+            )
+        ctx.synchronize()
 
     var uniq: List[List[Int32]]
     if want_proba:
@@ -1743,10 +1766,15 @@ def _knn_classifier_vote(
                 )
             )
         ctx.synchronize()
-        uniq = knn_class_proba(
-            ctx, trace, probas, d_idx, y, n_index, n_queries, k, d_w,
-            weighted,
-        )
+        if use_vc:
+            uniq = vote_cache.value()[].class_proba(
+                ctx, trace, probas, d_idx, n_queries, k, d_w, weighted,
+            )
+        else:
+            uniq = knn_class_proba(
+                ctx, trace, probas, d_idx, y, n_index, n_queries, k, d_w,
+                weighted,
+            )
         _check_class_counts(uniq, n_classes)
         var off = 0
         for i in range(n_outputs):
@@ -1766,10 +1794,15 @@ def _knn_classifier_vote(
             n_queries * n_outputs
         )
         ctx.synchronize()
-        uniq = knn_classify(
-            ctx, trace, labels, d_idx, y, n_index, n_queries, k, d_w,
-            weighted,
-        )
+        if use_vc:
+            uniq = vote_cache.value()[].classify(
+                ctx, trace, labels, d_idx, n_queries, k, d_w, weighted,
+            )
+        else:
+            uniq = knn_classify(
+                ctx, trace, labels, d_idx, y, n_index, n_queries, k, d_w,
+                weighted,
+            )
         _check_class_counts(uniq, n_classes)
         var h = ctx.enqueue_create_host_buffer[DType.int32](
             n_queries * n_outputs
@@ -1785,7 +1818,7 @@ def _knn_classifier_vote(
     # compare them to `classes_` -- the only way a caller can SEE policy
     # 7's agreement rather than trust it.
     var off = 0
-    for i in range(n_outputs):
+    for i in range(n_outputs):  # small-loop(n_outputs: target columns): hands out the per-output class sets, a few labels each
         for j in range(len(uniq[i])):
             out_uniq_ptr.unsafe_store(off + j, uniq[i][j])
         off += len(uniq[i])
@@ -1797,7 +1830,7 @@ def _knn_classifier_vote(
 
 def _check_class_counts(got: List[List[Int32]], want: List[Int]) raises:
     """Policy 7: the implementation's `getUniquelabels` count against the wrapper's."""
-    for i in range(len(want)):
+    for i in range(len(want)):  # small-loop(want: one class count per target column): compares set sizes only, no data
         if len(got[i]) != want[i]:
             raise Error(
                 "knn_classifier_predict: the implemented getUniquelabels found "
@@ -1886,31 +1919,18 @@ def _knn_regressor_vote(
     n_index: Int, n_queries: Int, k: Int,
     y_ptr: MutPointer[Float32, MutUntrackedOrigin], n_outputs: Int,
     out_ptr: MutPointer[Float32, MutUntrackedOrigin], weighted: Bool,
+    check_index_range: Bool = False,
 ) raises:
     var d_w = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+    # cpu3-neighbors: the weight rule runs as a kernel on every GPU route
+    # and mode (the host loop over the n_queries x k distances is gone from
+    # the GPU path; `host_distance_weights` stays the host column). A
+    # traced call records the device weights, which match the host rule bit
+    # for bit (`distance_weights_kernel` is its statements).
     if weighted:
-        # HOST LISTS ACROSS THE BOUNDARY, not pointers: a pointer from
-        # `enqueue_create_host_buffer` is not
-        # interchangeable with an arbitrary host pointer on this stack and
-        # that the failure is SILENT. The copy is `n_queries * k` floats,
-        # the size of the answer the caller is already receiving.
-        var d_in = List[Float32](capacity=n_queries * k)
-        for i in range(n_queries * k):
-            d_in.append(dist_ptr.unsafe_load(i))
-        var wl = host_distance_weights(d_in, n_queries, k)
-        var h_w = ctx.enqueue_create_host_buffer[DType.float32](
-            n_queries * k
-        )
-        ctx.synchronize()
-        for i in range(n_queries * k):
-            h_w.unsafe_ptr().unsafe_store(i, wl[i])
-        ctx.enqueue_copy(dst_buf=d_w, src_ptr=h_w.unsafe_ptr())
-        ctx.synchronize()
+        device_distance_weights(ctx, dist_ptr, d_w, n_queries, k)
         if trace.enabled:
-            trace.record_host(
-                "knn_reg.weights", h_w.unsafe_ptr(), n_queries * k
-            )
-        _ = h_w^
+            trace.record_device(ctx, "knn_reg.weights", d_w, n_queries * k)
 
     var d_idx = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
     var y = List[DeviceBuffer[DType.float32]]()
@@ -1919,6 +1939,8 @@ def _knn_regressor_vote(
     var out = ctx.enqueue_create_buffer[DType.float32](n_queries * n_outputs)
     ctx.synchronize()
     ctx.enqueue_copy(dst_buf=d_idx, src_ptr=idx_ptr)
+    if check_index_range:
+        device_check_index_range(ctx, d_idx, n_queries * k, n_index)
     for i in range(n_outputs):
         ctx.enqueue_copy(
             dst_buf=y[i], src_ptr=y_ptr.unsafe_offset(i * n_index)
@@ -2063,7 +2085,7 @@ def _rbc_index_and_count(
     _ = nearest^
     _ = nearest_dist^
     _ = counts^
-    # The count is EXACT (summed in 64-bit, `scan.mojo::rbc_exact_edge_total`)
+    # The count is EXACT (summed in 64-bit, `scan.mojo::rbc_exact_edge_total_host`)
     # but this surface hands back int32 `indptr`, which cannot address it.
     # Refused by name with the true count, never returned wrapped.
     if nnz > 2147483647:
@@ -2520,9 +2542,8 @@ def _validate_neighbors(idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
         raise Error("precomputed neighbors: invalid shape")
     if weights != WEIGHTS_UNIFORM and weights != WEIGHTS_DISTANCE:
         raise Error("precomputed neighbors: unsupported weights")
-    for i in range(n_queries * k):
-        if UInt64(idx_ptr[i]) >= UInt64(n_index):
-            raise Error("precomputed neighbor index outside reference data")
+    # cpu3-neighbors: the index bounds check runs on the device after the
+    # upload (`device_check_index_range`), not as a host walk here.
 
 
 def knn_classifier_from_neighbors(
@@ -2538,14 +2559,14 @@ def knn_classifier_from_neighbors(
     _validate_neighbors(idx_ptr, n_index, n_queries, k, n_outputs, weights)
     if len(n_classes) != n_outputs:
         raise Error("precomputed neighbors: class-count shape mismatch")
-    for count in n_classes:
-        if count < 1:
+    for c in range(len(n_classes)):  # small-loop(n_classes: one count per target column): shape check, no data
+        if n_classes[c] < 1:
             raise Error("precomputed neighbors: class counts must be positive")
     var trace = IdentityTrace()
     var retained = List[DeviceBuffer[DType.uint32]]()
     var indices = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
     ctx.enqueue_copy(dst_buf=indices, src_ptr=idx_ptr)
-    ctx.synchronize()
+    device_check_index_range(ctx, indices, n_queries * k, n_index)
     retained.append(indices^)
     _knn_classifier_vote(ctx, trace, retained, dist_ptr, n_index, n_queries, k,
         y_ptr, n_outputs, n_classes, out_labels_ptr, out_proba_ptr,
@@ -2562,4 +2583,5 @@ def knn_regressor_from_neighbors(
     _validate_neighbors(idx_ptr, n_index, n_queries, k, n_outputs, weights)
     var trace = IdentityTrace()
     _knn_regressor_vote(ctx, trace, dist_ptr, idx_ptr, n_index, n_queries, k,
-                        y_ptr, n_outputs, out_ptr, weights == WEIGHTS_DISTANCE)
+                        y_ptr, n_outputs, out_ptr, weights == WEIGHTS_DISTANCE,
+                        check_index_range=True)

@@ -8,7 +8,7 @@ from mamba.impl.modules.mamba3_refusal import (
     m3_first_nonfinite_code, m3_refuse_nonfinite_named,
 )
 from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
-from mamba.impl.modeling.modeling_mamba import _refuse_nonfinite_named
+from mamba.impl.modeling.modeling_mamba import _refuse_nonfinite_named_host
 
 
 def run_case(
@@ -24,7 +24,7 @@ def run_case(
     var host_error = String("")
     var device_error = String("")
     try:
-        _refuse_nonfinite_named("state.buf_qrot", prefix)
+        _refuse_nonfinite_named_host("state.buf_qrot", prefix)
     except e:
         host_error = String(e)
     try:

@@ -37,3 +37,31 @@ def rbf_fused_transform_kernel(
         acc = ftz(identical_mul_add(ftz(x.unsafe_load(i * d + f)), ftz(w.unsafe_load(f * dd + j)), acc))
     var shifted = ftz(acc + ftz(b_in.unsafe_load(j)))
     dst.unsafe_store(t, ftz(identical_mul(identical_cos(shifted), scale)))
+
+
+def rbf_fused_project_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_features_in: Int32,
+    n_components_in: Int32,
+):
+    """`X @ W` alone, one thread per cell: `rbf_fused_transform_kernel`'s
+    chain over the features ascending, stored before the offset. Followed
+    by `feature_map_epilogue_kernel` it writes the fused kernel's words
+    (the epilogue's `ftz(load)` of a flushed value is that value). The
+    IDENTICAL route when a trace or a sabotage arm needs the projection as
+    its own stage (`kernel_methods/estimator.mojo::RBF_IDN_FUSED`)."""
+    var d = Int(n_features_in)
+    var dd = Int(n_components_in)
+    var total = Int(n_rows_in) * dd
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= total:
+        return
+    var i = t // dd
+    var j = t - i * dd
+    var acc = Float32(0.0)
+    for f in range(d):
+        acc = ftz(identical_mul_add(ftz(x.unsafe_load(i * d + f)), ftz(w.unsafe_load(f * dd + j)), acc))
+    dst.unsafe_store(t, acc)

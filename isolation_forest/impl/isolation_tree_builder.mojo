@@ -1226,3 +1226,32 @@ def if_finite_scan_kernel(
         flag.unsafe_store(0, Int32(1))
     if gid < pad:
         data.unsafe_store(Int(n + gid), poison)
+
+
+def if_finite_scan_ftz_kernel(
+    data: MutPointer[Float32, MutAnyOrigin],
+    n: Int64,
+    pad: Int64,
+    poison: Float32,
+    flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """Lane fam-forests (`IDN_IF_QUERY_DEVICE`): `if_finite_scan_kernel`
+    that also stores `ftz(cell)` back in place, so a raw host-pointer copy of
+    a ROW-major query block becomes the words `_upload_f32` stages on the
+    host (`ftz` per cell, `poison` in the `pad` tail). Each cell is read and
+    written by exactly one thread (`i = gid, gid + grid, ...`)."""
+    var gid = Int64(block_idx.x) * Int64(block_dim.x) + Int64(thread_idx.x)
+    var stride = Int64(grid_dim.x) * Int64(block_dim.x)
+    var bad = False
+    var i = gid
+    while i < n:
+        var v = data.unsafe_load(Int(i))
+        var bits = bitcast[DType.uint32](v)
+        if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            bad = True
+        data.unsafe_store(Int(i), ftz(v))
+        i += stride
+    if bad:
+        flag.unsafe_store(0, Int32(1))
+    if gid < pad:
+        data.unsafe_store(Int(n + gid), poison)

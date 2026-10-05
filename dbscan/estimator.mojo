@@ -117,6 +117,100 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_PRECOMPUTED,
 )
 from core.cosine_rows import cosine_unit_rows
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    ftz,
+    identical_div,
+    identical_mul,
+    identical_sqrt,
+)
+from std.atomic import Atomic
+from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
+
+
+#: fam2-cluster (2026-10-04), IDENTICAL, every column: metric='cosine'
+#: scales the rows to unit length on the device. The host copy of X, the
+#: host fold over every element and the second host array are gone; the
+#: kernel is `core/cosine_rows.mojo::cosine_unit_rows` statement for
+#: statement (the same ascending fold of pinned products, `identical_sqrt`,
+#: `identical_div`, every intermediate flushed), one thread per row, so the
+#: unit rows carry the bits the host column's call of that function gives.
+#: A row it must refuse is reported through one Int32 cell and refused by
+#: name with the host function's sentence (without the squared norm value).
+#: `-D MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF=1` restores the host scaling.
+comptime IDN_DBSCAN_COSINE_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+#: fam2-cluster (2026-10-04), IDENTICAL, every column: the labels (and the
+#: core mask of `prediction_data=True`) are downloaded straight into the
+#: caller's arrays, without a host staging buffer and a per-element host
+#: copy loop. Same bytes. `-D MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF=1`
+#: restores the staged copy.
+comptime IDN_DBSCAN_DIRECT_OUT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (
+        is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
+        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    )
+)
+
+comptime COSINE_TPB = 256
+comptime COSINE_NO_BAD_ROW = Int32(2147483647)
+
+
+def cosine_unit_rows_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    bad: MutPointer[Int32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_cols_in: Int32,
+):
+    """`cosine_unit_rows` in place, one thread per row.
+
+    The fold order, the pinned product, the root and the quotient are that
+    function's, so the result is its result bit for bit. A row whose squared
+    norm is not a positive finite number is left untouched and its index
+    goes to `bad[0]` through `Atomic.min` (the lowest such row, which is the
+    row the host function names).
+    """
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= Int(n_rows_in):
+        return
+    var n_cols = Int(n_cols_in)
+    var base = row * n_cols
+    var n2 = Float32(0)
+    for f in range(n_cols):
+        var v = ftz(x.unsafe_load(base + f))
+        n2 = ftz(n2 + ftz(identical_mul(v, v)))
+    # `not (n2 > 0) or not isfinite(n2)`: NaN fails the first compare and
+    # +inf fails the second.
+    if not (n2 > Float32(0)) or not (n2 <= Float32(3.4028234663852886e38)):
+        _ = Atomic.min(bad, Int32(row))
+        return
+    var norm = identical_sqrt(n2)
+    for f2 in range(n_cols):
+        x.unsafe_store(
+            base + f2, ftz(identical_div(ftz(x.unsafe_load(base + f2)), norm))
+        )
+
+
+def _cosine_unit_rows_host(
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_samples: Int,
+    n_features: Int,
+) raises -> List[Float32]:
+    """DEVIATION 5113's host scaling, the `IDN_DBSCAN_COSINE_DEVICE` off
+    arm (and every non-IDENTICAL mode): unchanged."""
+    var raw = List[Float32](length=n_samples * n_features, fill=Float32(0))
+    for i in range(n_samples * n_features):
+        raw[i] = x_ptr.unsafe_load(i)
+    return cosine_unit_rows(raw, n_samples, n_features, "dbscan_fit")
 
 
 def dbscan_fit(
@@ -224,11 +318,41 @@ def dbscan_fit(
     # DEVIATION 5113: cosine runs on unit rows scaled on the host by the
     # code the CPU binding runs too (`core/cosine_rows.mojo`).
     var unit = List[Float32]()
-    if metric == DBSCAN_METRIC_COSINE:
-        var raw = List[Float32](length=n_samples * n_features, fill=Float32(0))
-        for i in range(n_samples * n_features):
-            raw[i] = x_ptr.unsafe_load(i)
-        unit = cosine_unit_rows(raw, n_samples, n_features, "dbscan_fit")
+    var cosine_on_device = False
+    comptime if IDN_DBSCAN_COSINE_DEVICE:
+        cosine_on_device = True
+    if metric == DBSCAN_METRIC_COSINE and cosine_on_device:
+        var d_bad = ctx.enqueue_create_buffer[DType.int32](1)
+        var h_bad = ctx.enqueue_create_host_buffer[DType.int32](1)
+        h_bad.unsafe_ptr().unsafe_store(0, COSINE_NO_BAD_ROW)
+        ctx.enqueue_copy(dst_buf=d_bad, src_ptr=h_bad.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        ctx.enqueue_function[cosine_unit_rows_kernel](
+            x.unsafe_ptr(),
+            d_bad.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(n_features),
+            grid_dim=((n_samples + COSINE_TPB - 1) // COSINE_TPB, 1, 1),
+            block_dim=(COSINE_TPB, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=h_bad.unsafe_ptr(), src_buf=d_bad)
+        ctx.synchronize()
+        var bad_row = h_bad.unsafe_ptr().unsafe_load(0)
+        _ = d_bad^
+        _ = h_bad^
+        if bad_row != COSINE_NO_BAD_ROW:
+            # `cosine_unit_rows`' refusal, by name. The squared norm it
+            # also prints stays on the device; the row is the lowest
+            # refused row, the one the host function names.
+            raise Error(
+                "dbscan_fit: metric='cosine' needs every row to have a"
+                " positive, finite norm; row " + String(Int(bad_row))
+                + " does not. The cosine distance of a zero row is"
+                " undefined (cuML divides by zero and carries NaN), so it is"
+                " refused by name"
+            )
+    elif metric == DBSCAN_METRIC_COSINE:
+        unit = _cosine_unit_rows_host(x_ptr, n_samples, n_features)
         ctx.enqueue_copy(dst_buf=x, src_ptr=unit.unsafe_ptr())
     else:
         ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
@@ -260,12 +384,16 @@ def dbscan_fit(
         out_core_addr,
     )
 
-    var hl = ctx.enqueue_create_host_buffer[DType.int32](n_samples)
-    ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
-    ctx.synchronize()
+    comptime if IDN_DBSCAN_DIRECT_OUT:
+        ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
+        ctx.synchronize()
+    else:
+        var hl = ctx.enqueue_create_host_buffer[DType.int32](n_samples)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=hl.unsafe_ptr(), src_buf=labels)
+        ctx.synchronize()
 
-    for i in range(n_samples):
-        out_labels_ptr.unsafe_store(i, hl.unsafe_ptr().unsafe_load(i))
+        for i in range(n_samples):
+            out_labels_ptr.unsafe_store(i, hl.unsafe_ptr().unsafe_load(i))
 
     return passes

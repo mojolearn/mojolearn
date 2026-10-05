@@ -18,9 +18,10 @@ from core.neural_context import process_ctx
 from xtrees.agnostic import (
     F32P, I32P, U64P, I64P, kshap_mask_unit, kshap_synth_unit, bg_mean_unit, logit_unit, kshap_gram_unit,
     kshap_rhs_unit, kshap_pivot_unit, kshap_elim_unit, kshap_back_unit, fx_unit, pshap_perm_unit,
-    pshap_synth_unit, pshap_marginal_unit, pshap_dcount_unit, scan_step_unit, pshap_dindex_unit,
+    pshap_synth_unit, pshap_marginal_unit, agn_model_unit, pshap_dcount_unit, scan_step_unit, pshap_dindex_unit,
     pshap_dsynth_unit, pshap_dmap_unit, bg_mean_mapped_unit,
 )
+from std.memory import bitcast
 
 comptime AGN_TPB = 128
 #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default
@@ -37,6 +38,39 @@ comptime AGN_TPB = 128
 #:   (-43.3%), rel_error_vs_exact 4.378e-09 both arms.
 comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"]()
+#: lane idn-shap-pca (2026-10-04), the IDENTICAL default on NVIDIA, AMD and
+#: Apple (-D MOJOLEARN_AGN_IDN_SYN_POOL_OFF restores the per-chunk buffers):
+#: MOJOLEARN_AGN_IDN_SYN_POOL  the explainers' synthetic matrix is built in
+#:   the one pooled device buffer (no 100-400 MB device allocation per
+#:   chunk; Permutation SHAP on a 220-feature table is one chunk a row) and
+#:   the Python glue hands every chunk the same host buffer (no fresh pages
+#:   per chunk), the FAST + Apple MOJOLEARN_KSHAP_FAST_BATCH buffer handling.
+#:   Bit-inert: the same units write the same words to the same offsets; the
+#:   host column builds the matrix in the caller's buffer either way.
+comptime AGN_IDN_SYN_POOL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_AGN_IDN_SYN_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
+comptime _AGN_SYN_POOL = KSHAP_FAST_BATCH or AGN_IDN_SYN_POOL
+#: lane fam2-forests (2026-10-04), the IDENTICAL default on NVIDIA, AMD and
+#: Apple (-D MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF restores the model callback;
+#: also off under MOJOLEARN_IDN_ALL_OFF):
+#: MOJOLEARN_IDN_SHAP_DEVICE_MODEL  Kernel and Permutation SHAP over one of
+#:   this library's flat forests (RandomForest*, ExtraTrees*, DecisionTree*
+#:   predicting through the strict increasing-tree kernel) evaluate the
+#:   model on the device, inside the explainer's own stream: the forest and
+#:   the background are uploaded once per `shap_values` call (`model_load`),
+#:   then each chunk is masks/permutations -> `model_kernel` (one thread per
+#:   synthetic row, reading x or the background per node, never building the
+#:   synthetic matrix) -> background means -> solve / marginals. Before, per
+#:   chunk: build the (R m nb) x d synthetic matrix, download it, call the
+#:   model's predict (its own upload, kernel, download), upload the outputs.
+#:   Bit-inert: `agn_model_unit` is the forest's IDENTICAL predict
+#:   arithmetic over the same compared values. The host column and every
+#:   other model keep the callback.
+comptime AGN_IDN_DEVICE_MODEL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not (is_defined["MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+)
 #: Default FAST + Apple; MOJOLEARN_PSHAP_DELTA_OFF restores full synthesis.
 #: M3 w2-pdelta-pshap-istella: 28,222.8 -> 14,788.6 ms (-47.6%).
 #: w2-pdelta-quality: linear/tanh/two-output phi byte-identical, identical
@@ -280,7 +314,10 @@ struct _Masks(Movable):
 
 struct _AgnPool(Defaultable, Movable):
     """The process's pooled synthetic-matrix device buffer
-    (MOJOLEARN_KSHAP_FAST_BATCH): grown on demand, never shrunk."""
+    (MOJOLEARN_KSHAP_FAST_BATCH, MOJOLEARN_AGN_IDN_SYN_POOL): grown on
+    demand, never shrunk while an explanation runs. One pool per tier (its
+    buffer belongs to that tier's device context). IDENTICAL frees it when
+    the explanation ends (`pool_release`)."""
     var syn: Optional[DeviceBuffer[DType.float32]]
     var cap: Int
 
@@ -289,7 +326,11 @@ struct _AgnPool(Defaultable, Movable):
         self.cap = 0
 
 
-comptime AGN_POOL = _Global[StorageType=_AgnPool, name="MojoXTreesAgnosticSynPoolFast", init_fn=_AgnPool.__init__]
+comptime _AGN_POOL_NAME = (
+    "MojoXTreesAgnosticSynPoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojoXTreesAgnosticSynPoolFast"
+)
+comptime AGN_POOL = _Global[StorageType=_AgnPool, name=_AGN_POOL_NAME, init_fn=_AgnPool.__init__]
 
 
 def _pool_syn(ctx: DeviceContext, total: Int) raises -> F32P:
@@ -302,6 +343,19 @@ def _pool_syn(ctx: DeviceContext, total: Int) raises -> F32P:
         slot[].syn = ctx.enqueue_create_buffer[DType.float32](total)
         slot[].cap = total
     return F32P(unsafe_from_address=Int(slot[].syn.value().unsafe_ptr()))
+
+
+def pool_release() raises:
+    """Lane idn-all (the review of idn-shap-pca): frees the pooled synthetic
+    buffer. The IDENTICAL explainers call it when a `shap_values` call ends
+    (python/mojolearn/_expansion_trees.py), so the pool lives for one
+    explanation, reused by its chunks, and never holds the largest chunk for
+    the life of the process. Every pool user synchronizes before returning,
+    so nothing in flight reads the buffer. The FAST pool is left as it is."""
+    comptime if AGN_IDN_SYN_POOL:
+        var slot = AGN_POOL.get_or_create_ptr()
+        slot[].syn = Optional[DeviceBuffer[DType.float32]]()
+        slot[].cap = 0
 
 
 def _pool_down(ctx: DeviceContext, dst: Int, total: Int) raises:
@@ -321,7 +375,7 @@ def kshap_synth(x: Int, bg: Int, size_off: Int, size_w: Int, cdf: Int, syn: Int,
     var mk = _Masks(ctx, size_off, size_w, cdf, R, d, m, nfixed, nfull, npaired, L, seed, row0, wrand)
     var dx = _up_f32(ctx, x, R * d)
     var dbg = _up_f32(ctx, bg, nb * d)
-    comptime if KSHAP_FAST_BATCH:
+    comptime if _AGN_SYN_POOL:
         var ps = _pool_syn(ctx, total)
         ctx.enqueue_function[ksynth_kernel](
             Int64(total), Int32(nb), Int32(d), Int32(m), dx.unsafe_ptr(), dbg.unsafe_ptr(), mk.masks.unsafe_ptr(),
@@ -507,7 +561,7 @@ def pshap_synth(x: Int, bg: Int, syn: Int, R: Int, nb: Int, d: Int, np: Int, see
     _perms(ctx, R, d, np, seed, row0, perm, inv)
     var dx = _up_f32(ctx, x, R * d)
     var dbg = _up_f32(ctx, bg, nb * d)
-    comptime if KSHAP_FAST_BATCH:
+    comptime if _AGN_SYN_POOL:
         var ps = _pool_syn(ctx, total)
         ctx.enqueue_function[psynth_kernel](
             Int64(total), Int32(nb), Int32(d), Int32(np), dx.unsafe_ptr(), dbg.unsafe_ptr(), inv.unsafe_ptr(),
@@ -574,6 +628,343 @@ def bg_mean(y: Int, res: Int, m: Int, nb: Int, k: Int) raises:
     ctx.synchronize()
     _ = dy^
     _ = dr^
+
+
+# ------------------------------------------- MOJOLEARN_IDN_SHAP_DEVICE_MODEL
+def model_kernel[RF_INPUT: Bool, PERM: Bool](total: Int64, nb: Int32, d: Int32, mc: Int32, k: Int32, trees: Int32,
+                                             off: I32P, col: I32P, thr: F32P, left: I32P, leaf: F32P, x: F32P,
+                                             bg: F32P, sel: I32P, y: F32P):
+    """One thread per synthetic row: the forest on it (`agn_model_unit`)."""
+    var t = _t0()
+    while t < Int(total):
+        agn_model_unit[RF_INPUT, PERM](t, Int(nb), Int(d), Int(mc), Int(k), Int(trees), off, col, thr, left, leaf,
+                                       x, bg, sel, y)
+        t += _stride()
+
+
+def nonfinite_kernel(total: Int64, v: F32P, flag: I32P):
+    """flag[0] = 1 when any of v's first `total` values is inf or NaN
+    (core/forest_inference.mojo `forest_nonfinite_kernel`'s predicate; every
+    writer stores the same 1, so the flag has no order)."""
+    var t = _t0()
+    while t < Int(total):
+        if (bitcast[DType.uint32](v[t]) & UInt32(0x7f800000)) == UInt32(0x7f800000):
+            flag[0] = Int32(1)
+        t += _stride()
+
+
+def model_check_kernel(trees: Int32, nodes: Int32, d: Int32, off: I32P, col: I32P, left: I32P, flag: I32P):
+    """`model_load`'s bounds walk (lane/review-fixes). Index t < trees: tree
+    t's offsets (flag[0] = 1 unless 0 <= off[t] < off[t + 1] <= nodes).
+    Index trees + i: node i, its tree found by a binary search over the
+    offsets (in bounds whatever they hold; its answer counts only when
+    flag[0] stays 0); flag[1] = 1 when a split node's local child or feature
+    is out of range. Every writer stores the same 1, so no order."""
+    var nt = Int(trees)
+    var nn = Int(nodes)
+    var t = _t0()
+    while t < nt + nn:
+        if t < nt:
+            var base = Int(off[t])
+            var end = Int(off[t + 1])
+            if base < 0 or end <= base or end > nn:
+                flag[0] = Int32(1)
+        else:
+            var i = t - nt
+            var lo = 0
+            var hi = nt - 1
+            while lo < hi:
+                var mid = (lo + hi + 1) // 2
+                if Int(off[mid]) <= i:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            var base = Int(off[lo])
+            var end = Int(off[lo + 1])
+            var child = Int(left[i])
+            if child != -1:
+                var f = Int(col[i])
+                if child < 0 or child + 1 >= end - base or f < 0 or f >= Int(d):
+                    flag[1] = Int32(1)
+        t += _stride()
+
+
+def _up_i32(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
+    var b = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=b.create_sub_buffer[DType.int32](0, n), src_ptr=I32P(unsafe_from_address=addr))
+    return b^
+
+
+struct _AgnModel(Defaultable, Movable):
+    """The explained forest and the background on the device, for one
+    `shap_values` call (`model_load` .. `model_release`). One per tier (its
+    buffers belong to that tier's device context)."""
+    var off: Optional[DeviceBuffer[DType.int32]]
+    var col: Optional[DeviceBuffer[DType.int32]]
+    var thr: Optional[DeviceBuffer[DType.float32]]
+    var left: Optional[DeviceBuffer[DType.int32]]
+    var leaf: Optional[DeviceBuffer[DType.float32]]
+    var bg: Optional[DeviceBuffer[DType.float32]]
+    var trees: Int
+    var k: Int
+    var d: Int
+    var nb: Int
+    var rf_input: Bool
+    var loaded: Bool
+
+    def __init__(out self):
+        self.off = Optional[DeviceBuffer[DType.int32]]()
+        self.col = Optional[DeviceBuffer[DType.int32]]()
+        self.thr = Optional[DeviceBuffer[DType.float32]]()
+        self.left = Optional[DeviceBuffer[DType.int32]]()
+        self.leaf = Optional[DeviceBuffer[DType.float32]]()
+        self.bg = Optional[DeviceBuffer[DType.float32]]()
+        self.trees = 0
+        self.k = 0
+        self.d = 0
+        self.nb = 0
+        self.rf_input = False
+        self.loaded = False
+
+
+comptime _AGN_MODEL_NAME = (
+    "MojoXTreesAgnosticModelIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojoXTreesAgnosticModelFast"
+)
+comptime AGN_MODEL = _Global[StorageType=_AgnModel, name=_AGN_MODEL_NAME, init_fn=_AgnModel.__init__]
+
+
+def model_release() raises:
+    """Frees the device forest and background (the explainers call it when
+    `shap_values` ends). Every user synchronizes before returning, so
+    nothing in flight reads the buffers."""
+    var slot = AGN_MODEL.get_or_create_ptr()
+    slot[].off = Optional[DeviceBuffer[DType.int32]]()
+    slot[].col = Optional[DeviceBuffer[DType.int32]]()
+    slot[].thr = Optional[DeviceBuffer[DType.float32]]()
+    slot[].left = Optional[DeviceBuffer[DType.int32]]()
+    slot[].leaf = Optional[DeviceBuffer[DType.float32]]()
+    slot[].bg = Optional[DeviceBuffer[DType.float32]]()
+    slot[].loaded = False
+
+
+def model_load(off: Int, col: Int, thr: Int, left: Int, leaf: Int, bg: Int, trees: Int, nodes: Int, k: Int, d: Int,
+               nb: Int, rf_input: Bool) raises:
+    """Uploads a flat forest (offsets Int32 trees + 1, feature ids Int32
+    nodes, thresholds Float32 nodes, local left children Int32 nodes, leaf
+    values Float32 nodes x k) and the background (Float32 nb x d). The
+    caller hands the snapshot the forest's own predict validated (acyclic,
+    finite); `model_check_kernel` re-checks on the device only what keeps
+    a kernel in bounds. Synchronizes, so the host arrays need
+    not outlive the call."""
+    if trees < 1 or nodes < 1 or k < 1 or d < 1 or nb < 1:
+        raise Error("x_trees_agn_model_load: needs trees, nodes, outputs, features and background rows")
+    if nodes > 2147483647 // k or nb > 2147483647 // d:
+        raise Error("x_trees_agn_model_load: element counts exceed Int32 range")
+    var po = I32P(unsafe_from_address=off)
+    if Int(po[0]) != 0 or Int(po[trees]) != nodes:
+        raise Error("x_trees_agn_model_load: offsets must cover all nodes")
+    model_release()
+    var ctx = _ctx()
+    var slot = AGN_MODEL.get_or_create_ptr()
+    slot[].off = _up_i32(ctx, off, trees + 1)
+    slot[].col = _up_i32(ctx, col, nodes)
+    slot[].thr = _up_f32(ctx, thr, nodes)
+    slot[].left = _up_i32(ctx, left, nodes)
+    slot[].leaf = _up_f32(ctx, leaf, nodes * k)
+    slot[].bg = _up_f32(ctx, bg, nb * d)
+    # lane/review-fixes: the bounds walk over every tree and node runs on
+    # the device on the uploaded forest (was a serial host loop per call):
+    # one thread per tree and per node, two flags read back.
+    var dflag = ctx.enqueue_create_buffer[DType.int32](2)
+    var hflag = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_memset(dflag, Int32(0))
+    ctx.enqueue_function[model_check_kernel](
+        Int32(trees), Int32(nodes), Int32(d),
+        I32P(unsafe_from_address=Int(slot[].off.value().unsafe_ptr())),
+        I32P(unsafe_from_address=Int(slot[].col.value().unsafe_ptr())),
+        I32P(unsafe_from_address=Int(slot[].left.value().unsafe_ptr())),
+        dflag.unsafe_ptr(),
+        grid_dim=_blocks(trees + nodes), block_dim=AGN_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=hflag.unsafe_ptr(), src_buf=dflag)
+    ctx.synchronize()
+    var bad_off = hflag.unsafe_ptr().unsafe_load(0) != Int32(0)
+    var bad_idx = hflag.unsafe_ptr().unsafe_load(1) != Int32(0)
+    _ = dflag^
+    _ = hflag^
+    if bad_off:
+        model_release()
+        raise Error("x_trees_agn_model_load: offsets must be strictly increasing")
+    if bad_idx:
+        model_release()
+        raise Error("x_trees_agn_model_load: feature/child index out of bounds")
+    slot[].trees = trees
+    slot[].k = k
+    slot[].d = d
+    slot[].nb = nb
+    slot[].rf_input = rf_input
+    slot[].loaded = True
+
+
+def _model_need(nb: Int, d: Int, k: Int, who: String) raises:
+    """Refuses a call that does not match the loaded model's shapes."""
+    var slot = AGN_MODEL.get_or_create_ptr()
+    if not slot[].loaded:
+        raise Error(who + ": no model loaded (x_trees_agn_model_load)")
+    if slot[].nb != nb or slot[].d != d or slot[].k != k:
+        raise Error(who + ": background rows/features/outputs differ from the loaded model")
+
+
+def _model_launch(ctx: DeviceContext, perm: Bool, total: Int, d: Int, mc: Int, x: F32P, sel: I32P, y: F32P,
+                  flag: I32P) raises:
+    """The loaded forest on `total` synthetic rows of a chunk into y (total
+    x k), then the finiteness scan of y (the forest predict's output
+    check) into flag."""
+    if total <= 0:
+        return
+    var slot = AGN_MODEL.get_or_create_ptr()
+    var nb = slot[].nb
+    var k = slot[].k
+    var trees = slot[].trees
+    var off = I32P(unsafe_from_address=Int(slot[].off.value().unsafe_ptr()))
+    var col = I32P(unsafe_from_address=Int(slot[].col.value().unsafe_ptr()))
+    var thr = F32P(unsafe_from_address=Int(slot[].thr.value().unsafe_ptr()))
+    var left = I32P(unsafe_from_address=Int(slot[].left.value().unsafe_ptr()))
+    var leaf = F32P(unsafe_from_address=Int(slot[].leaf.value().unsafe_ptr()))
+    var bg = F32P(unsafe_from_address=Int(slot[].bg.value().unsafe_ptr()))
+    if slot[].rf_input:
+        if perm:
+            ctx.enqueue_function[model_kernel[True, True]](
+                Int64(total), Int32(nb), Int32(d), Int32(mc), Int32(k), Int32(trees), off, col, thr, left, leaf,
+                x, bg, sel, y, grid_dim=_blocks(total), block_dim=AGN_TPB,
+            )
+        else:
+            ctx.enqueue_function[model_kernel[True, False]](
+                Int64(total), Int32(nb), Int32(d), Int32(mc), Int32(k), Int32(trees), off, col, thr, left, leaf,
+                x, bg, sel, y, grid_dim=_blocks(total), block_dim=AGN_TPB,
+            )
+    else:
+        if perm:
+            ctx.enqueue_function[model_kernel[False, True]](
+                Int64(total), Int32(nb), Int32(d), Int32(mc), Int32(k), Int32(trees), off, col, thr, left, leaf,
+                x, bg, sel, y, grid_dim=_blocks(total), block_dim=AGN_TPB,
+            )
+        else:
+            ctx.enqueue_function[model_kernel[False, False]](
+                Int64(total), Int32(nb), Int32(d), Int32(mc), Int32(k), Int32(trees), off, col, thr, left, leaf,
+                x, bg, sel, y, grid_dim=_blocks(total), block_dim=AGN_TPB,
+            )
+    ctx.enqueue_function[nonfinite_kernel](Int64(total * k), y, flag, grid_dim=_blocks(total * k),
+                                           block_dim=AGN_TPB)
+
+
+def kshap_solve_model(x: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf: Int, phi: Int, R: Int, nb: Int,
+                      d: Int, k: Int, m: Int, nfixed: Int, nfull: Int, npaired: Int, L: Int, seed: Int, row0: Int,
+                      wrand: UInt64, link: Bool) raises:
+    """`kshap_synth` + the model + `kshap_solve` for a chunk, on the device:
+    phi (R x d x k binary64, to the host address phi) from the rows x
+    (Float32 R x d), their own outputs fx (Float32 R x k) and the linked
+    background value fnull (binary64 k), over the loaded forest and
+    background. Refuses non-finite rows or outputs as the forest's predict
+    does."""
+    if R <= 0:
+        return
+    _model_need(nb, d, k, "x_trees_kshap_solve_model")
+    var ctx = _ctx()
+    var mk = _Masks(ctx, size_off, size_w, cdf, R, d, m, nfixed, nfull, npaired, L, seed, row0, wrand)
+    var dx = _up_f32(ctx, x, R * d)
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(flag, Int32(0))
+    var pflag = flag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pdx = dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[nonfinite_kernel](Int64(R * d), pdx, pflag, grid_dim=_blocks(R * d), block_dim=AGN_TPB)
+    var total = R * m * nb
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(total * k, 1))
+    var ey = ctx.enqueue_create_buffer[DType.uint64](max(R * m * k, 1))
+    if total > 0:
+        _model_launch(ctx, False, total, d, m, pdx, mk.masks.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                      dout.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), pflag)
+        ctx.enqueue_function[mean_kernel](
+            Int64(R * m * k), Int32(nb), Int32(k), dout.unsafe_ptr(), ey.unsafe_ptr(),
+            grid_dim=_blocks(R * m * k), block_dim=AGN_TPB,
+        )
+        if link:
+            ctx.enqueue_function[logit_kernel](Int64(R * m * k), ey.unsafe_ptr(), grid_dim=_blocks(R * m * k),
+                                               block_dim=AGN_TPB)
+    var hflag = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hflag.unsafe_ptr(), src_buf=flag)
+    var dfx32 = ctx.enqueue_create_buffer[DType.float32](max(R * k, 1))
+    var dfx = ctx.enqueue_create_buffer[DType.uint64](max(R * k, 1))
+    _fx_dev(ctx, fx, R, k, link, dfx32, dfx)
+    var dnull = _up_u64(ctx, fnull, k)
+    _ksolve_core(ctx, mk, ey.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                 dfx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                 dnull.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), phi, R, d, k, m)
+    var bad = hflag.unsafe_ptr().unsafe_load(0) != Int32(0)
+    _ = hflag^
+    _ = flag^
+    _ = mk^
+    _ = dx^
+    _ = dout^
+    _ = ey^
+    _ = dfx32^
+    _ = dfx^
+    _ = dnull^
+    if bad:
+        raise Error("resident forest requires finite Float32 values")
+
+
+def pshap_values_model(x: Int, phi: Int, R: Int, nb: Int, d: Int, k: Int, np: Int, seed: Int,
+                       row0: Int) raises:
+    """`pshap_synth` + the model + `pshap_values` for a chunk, on the device:
+    phi (R x d x k binary64, to the host address phi) from the rows x
+    (Float32 R x d), over the loaded forest and background. Refuses
+    non-finite rows or outputs as the forest's predict does."""
+    var mm = np * (2 * d + 1)
+    if R * d * k <= 0 or mm <= 0:
+        return
+    _model_need(nb, d, k, "x_trees_pshap_values_model")
+    var ctx = _ctx()
+    var perm = ctx.enqueue_create_buffer[DType.int32](R * np * d)
+    var inv = ctx.enqueue_create_buffer[DType.int32](R * np * d)
+    _perms(ctx, R, d, np, seed, row0, perm, inv)
+    var dx = _up_f32(ctx, x, R * d)
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(flag, Int32(0))
+    var pflag = flag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pdx = dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[nonfinite_kernel](Int64(R * d), pdx, pflag, grid_dim=_blocks(R * d), block_dim=AGN_TPB)
+    var total = R * mm * nb
+    var dout = ctx.enqueue_create_buffer[DType.float32](total * k)
+    _model_launch(ctx, True, total, d, np, pdx, inv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                  dout.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), pflag)
+    var ey = ctx.enqueue_create_buffer[DType.uint64](R * mm * k)
+    ctx.enqueue_function[mean_kernel](
+        Int64(R * mm * k), Int32(nb), Int32(k), dout.unsafe_ptr(), ey.unsafe_ptr(),
+        grid_dim=_blocks(R * mm * k), block_dim=AGN_TPB,
+    )
+    var dphi = ctx.enqueue_create_buffer[DType.uint64](R * d * k)
+    ctx.enqueue_function[marginal_kernel](
+        Int64(R * d * k), Int32(d), Int32(k), Int32(np), inv.unsafe_ptr(), ey.unsafe_ptr(), dphi.unsafe_ptr(),
+        grid_dim=_blocks(R * d * k), block_dim=AGN_TPB,
+    )
+    var hflag = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hflag.unsafe_ptr(), src_buf=flag)
+    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=phi), src_buf=dphi)
+    ctx.synchronize()
+    var bad = hflag.unsafe_ptr().unsafe_load(0) != Int32(0)
+    _ = hflag^
+    _ = flag^
+    _ = perm^
+    _ = inv^
+    _ = dx^
+    _ = dout^
+    _ = ey^
+    _ = dphi^
+    if bad:
+        raise Error("resident forest requires finite Float32 values")
 
 
 struct _Delta(Movable):

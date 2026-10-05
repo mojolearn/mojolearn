@@ -16,7 +16,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from core.forest_inference import (
-    validate_flat_forest, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
+    _forest_shape_checks, forest_pack_device, forest_validate_device, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
     device_all_finite,
 )
 from core.forest_inference_pool import PooledForest, forest_device_count
@@ -187,7 +187,9 @@ struct ResidentForest(Movable):
         shared_ctx: Optional[DeviceContext] = None) raises:
         var empty = List[Float32]()
         self.shared = False
-        validate_flat_forest(offsets, columns, thresholds, left, leaves, empty, 0, features, outputs)
+        # constant-time shape checks here; the per-node checks run on the
+        # device with the upload (`forest_pack_device` / `forest_validate_device`)
+        _forest_shape_checks(offsets, columns, thresholds, left, leaves, empty, 0, features, outputs)
         self.pool = Optional[PooledForest]()
         self.input_workspace = Optional[DeviceBuffer[DType.float32]]()
         self.output_workspace = Optional[DeviceBuffer[DType.float32]]()
@@ -212,6 +214,8 @@ struct ResidentForest(Movable):
         # cannot express one global increasing-tree fold.  The experimental
         # ordered arm stays on one device so its arithmetic graph is exact.
         if device_count > 1 and not ordered:
+            # the whole model is validated on owner 0's device before it is
+            # partitioned by grove there (`PooledForest`, lane cpu4-misc)
             self.pool = PooledForest(offsets, columns, thresholds, left, leaves,
                 features, outputs, device_count)
             return
@@ -221,21 +225,8 @@ struct ResidentForest(Movable):
         # Keep our sibling node order/local child IDs and raw <= policy;
         # do not adopt depth-first offsets or converted thresholds here.
         # Archive arrays are unchanged. Packing runs once per resident snapshot.
-        var packed_nodes = List[Int32]()
-        var compact_leaves = List[Float32]()
-        comptime if FOREST_PACKED_NODES:
-            if len(columns) > 2147483647 // 4:
-                raise Error("packed forest node word count exceeds Int32")
-            for node in range(len(columns)):
-                var payload = bitcast[DType.int32](thresholds[node])
-                if left[node] == -1:
-                    payload = Int32(len(compact_leaves) // outputs)
-                    for c in range(outputs):
-                        compact_leaves.append(leaves[node * outputs + c])
-                packed_nodes.append(payload)
-                packed_nodes.append(left[node])
-                packed_nodes.append(columns[node])
-                packed_nodes.append(0)
+        # Packing runs once per resident snapshot, on the device
+        # (`forest_pack_device`, lane cpu3-core: no host loop over nodes).
         if shared_ctx:
             self.ctx = shared_ctx.value().copy()
             self.shared = True
@@ -245,13 +236,13 @@ struct ResidentForest(Movable):
             self.offsets = self.ctx.value().enqueue_create_buffer[DType.int32](len(offsets))
             self.ctx.value().enqueue_copy(dst_buf=self.offsets.value(), src_ptr=offsets.unsafe_ptr())
             comptime if FOREST_PACKED_NODES:
-                self.columns = self.ctx.value().enqueue_create_buffer[DType.int32](len(packed_nodes))
+                forest_pack_device(
+                    self.ctx.value(), offsets, columns, thresholds, left, leaves,
+                    features, outputs, self.columns, self.leaves,
+                )
                 # Unused ABI operands; avoid retaining original SoA buffers.
                 self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](1)
                 self.left = self.ctx.value().enqueue_create_buffer[DType.int32](1)
-                self.leaves = self.ctx.value().enqueue_create_buffer[DType.float32](len(compact_leaves))
-                self.ctx.value().enqueue_copy(dst_buf=self.columns.value(), src_ptr=packed_nodes.unsafe_ptr())
-                self.ctx.value().enqueue_copy(dst_buf=self.leaves.value(), src_ptr=compact_leaves.unsafe_ptr())
             else:
                 self.columns = self.ctx.value().enqueue_create_buffer[DType.int32](len(columns))
                 self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](len(thresholds))
@@ -261,9 +252,12 @@ struct ResidentForest(Movable):
                 self.ctx.value().enqueue_copy(dst_buf=self.thresholds.value(), src_ptr=thresholds.unsafe_ptr())
                 self.ctx.value().enqueue_copy(dst_buf=self.left.value(), src_ptr=left.unsafe_ptr())
                 self.ctx.value().enqueue_copy(dst_buf=self.leaves.value(), src_ptr=leaves.unsafe_ptr())
+                forest_validate_device(
+                    self.ctx.value(), self.offsets.value(), self.columns.value(),
+                    self.thresholds.value(), self.left.value(), self.leaves.value(),
+                    self.trees, len(columns), features, outputs,
+                )
             self.ctx.value().synchronize()
-            _ = len(packed_nodes)
-            _ = len(compact_leaves)
             _ = len(offsets)
             _ = len(columns)
             _ = len(thresholds)
@@ -345,7 +339,8 @@ struct ResidentForest(Movable):
         var dx = self.ctx.value().enqueue_create_buffer[DType.float32](len(x))
         var dout = self.ctx.value().enqueue_create_buffer[DType.float32](rows * outputs)
         var out_ok = True
-        var hout = self.ctx.value().enqueue_create_host_buffer[DType.float32](rows * outputs)
+        # the answer lands straight in the result list (no host copy loop)
+        var result = List[Float32](length=rows * outputs, fill=Float32(0.0))
         try:
             self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_ptr())
             if not device_all_finite(self.ctx.value(), dx, rows * features):
@@ -363,21 +358,17 @@ struct ResidentForest(Movable):
                     dx, dout, rows, features, outputs, self.trees,
                 )
             out_ok = device_all_finite(self.ctx.value(), dout, rows * outputs)
-            self.ctx.value().enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
+            self.ctx.value().enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=dout)
             self.ctx.value().synchronize()
         except e:
             # A launch may already reference the temporary buffers or X.
             self.ctx.value().synchronize()
             raise e
-        var result = List[Float32](capacity=rows * outputs)
-        for i in range(rows * outputs):
-            result.append(hout.unsafe_ptr().unsafe_load(i))
         if not out_ok:
             raise Error("resident forest requires finite Float32 values")
         _ = len(x)
         _ = dx^
         _ = dout^
-        _ = hout^
         return result^
 
     def predict_into[RF_INPUT: Bool](mut self,

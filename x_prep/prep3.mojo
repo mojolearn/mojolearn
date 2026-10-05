@@ -22,14 +22,21 @@ host binding and the other vendors compile main's code unchanged.
 """
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 comptime PREP3_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime PREP3_MAXABS = PREP3_FAST_APPLE and not is_defined["MOJOLEARN_PREP3_MAXABS_OFF"]()
+#: lane/idn-gates (2026-10-04): PREP3_MAXABS is also the IDENTICAL default on
+#: every vendor's GPU binding (a maximum has one answer in any order: the
+#: program route's max_abs_ and scale_ words); -D MOJOLEARN_IDN_GATES_OFF (or
+#: the _OFF) restores the program route in IDENTICAL.
+comptime PREP3_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defined["MOJOLEARN_IDN_GATES_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
+comptime PREP3_MAXABS = (PREP3_FAST_APPLE or PREP3_IDN) and not is_defined["MOJOLEARN_PREP3_MAXABS_OFF"]()
 # KEEP, 2026-10-04: M3 w2-w4s-maxabs-istella, source 74d233862d74e2c8e48b7db38a24ec85a22b80a1,
 # maxabs-scaler istella 104.6 -> 17.0 ms. w2-w4s-maxabs-q PASS:
 # 12/12 output arrays byte-identical, including repeated pool reuse; max_abs_
 # also exact against NumPy. Same kernels and caller-owned output, download
 # synchronized before return (no deferred first-read cost). See EXPERIMENTS.md.
 # _OFF restores fresh device allocations; IDENTICAL and other vendors unchanged.
-comptime PREP3_MAXABS_POOL = PREP3_MAXABS and not is_defined["MOJOLEARN_PREP3_MAXABS_POOL_OFF"]()
+# merge 2026-10-04: the pool stays FAST + Apple (where it was measured); PREP3_MAXABS is now also
+# the IDENTICAL default (lane idn-gates), and the pool in IDENTICAL is an unmeasured candidate.
+comptime PREP3_MAXABS_POOL = PREP3_FAST_APPLE and PREP3_MAXABS and not is_defined["MOJOLEARN_PREP3_MAXABS_POOL_OFF"]()

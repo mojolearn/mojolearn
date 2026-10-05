@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "status": "PASS",
+  "source_sha": "e82c12650cd9f31b8dc0216157fb59b22a9d9313",
+  "vendor": "nvidia",
+  "gpu": "RTX 4090",
+  "tooling": {
+    "returncode": 0,
+    "tests_passed": 211,
+    "subtests_passed": 24
+  },
+  "scope": "Combined integration source, focused five-adapter correctness smoke; not release admission",
+  "probe": "experiments/identical_callpath/primitive_gate.mojo",
+  "comparisons_per_target": 12,
+  "adapters": 5,
+  "reuse_rounds": 2,
+  "digest": "12251619760217914789",
+  "targets": [
+    {
+      "arch": "sm_89",
+      "compile_rc": 0,
+      "run_rc": 0,
+      "environment": {}
+    },
+    {
+      "arch": "sm_80",
+      "compile_rc": 0,
+      "run_rc": 0,
+      "environment": {
+        "CUDA_FORCE_PTX_JIT": "1",
+        "CUDA_CACHE_DISABLE": "1"
+      }
+    }
+  ],
+  "compiler_jobs": 1,
+  "shared_compile_semaphore": true,
+  "remote_evidence": "/root/lq/ptx-current-e82c12650",
+  "local_evidence": "/Users/andrewhendel/mojolearn-evidence/identical-blackwell/ptx-current/results",
+  "evidence_sha256": {
+    "controller.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "primitive-sm_80-build.log": "4def203051f560a5f2376e8d0fb3e0aee0c3b7c548e5ba51fd3522836867addf",
+    "primitive-sm_80-run.log": "fbe7c7371700ac391a722af03fb86b0dcab1e9d76455bf85d7bcd86cd171bb4d",
+    "primitive-sm_80.sha256": "d579222c03e17f210808c2a9ae11cb1896fad67cb0b779b8a8b60e2b0c71bcc3",
+    "primitive-sm_89-build.log": "4def203051f560a5f2376e8d0fb3e0aee0c3b7c548e5ba51fd3522836867addf",
+    "primitive-sm_89-run.log": "fbe7c7371700ac391a722af03fb86b0dcab1e9d76455bf85d7bcd86cd171bb4d",
+    "primitive-sm_89.sha256": "5aa770bd5d33220cccde473a5b112d425fe0f4b8fa54c0876afbc0544a20e67a",
+    "probe-status.tsv": "64f4dc48885c58bb777b8a8287609b3a470cc96cf63dc1e71ac2ac932084a61a",
+    "reuse-tests.log": "92cd6f9e491f82eebb1173ffacb902a43be31b24b25dc6719a210906371fb795",
+    "source-stage.log": "d1e92161b073b96e688f58f5a64ff4aaa3f28e6dcfb7e2bdd701d30c5947080c",
+    "test-deps-install.log": "dd461ffd002442a093c5aabe10a8d7679ee208b7df5715a884d6ac96f58ff81b",
+    "test-deps-install.rc": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "tooling-tests.log": "4fa9a8e3cfd1e27f3963124fdc96e157812742bc2e5b7dadecd83aadb953d41c",
+    "tooling-tests.rc": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "deferred": [
+    "Final frozen release wheel and native/PTX artifact matrix",
+    "H100 and A100 forced/fallback qualification",
+    "Full nine-fixture baseline suite",
+    "Same-source final vendor reference/admission records",
+    "Apple checks explicitly deferred by user"
+  ]
+}

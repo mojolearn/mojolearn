@@ -93,7 +93,8 @@ from core.column_stats import STATS_TPB
 from core.gemm import PINNED_GEMM_TPB, gemm_nt, pinned_gemm_nt_kernel
 from core.identity_trace import IdentityTrace, first_divergence
 from glm.impl.qn.glm_base import GLMDims, GLMWithData
-from glm.host.qn_oracle import host_qnt_sum_strided
+from glm.host.qn_oracle import host_qnt_sum_strided, host_qnt_fold, host_qnt_tiles, HOST_QNT_ROWS
+from glm.impl.qn.qn_tiled_rule import qn_tiled_multi_shape
 from glm.impl.qn.glm_softmax import (
     SOFTMAX_MAX_SEED,
     SOFTMAX_SABOTAGE,
@@ -648,20 +649,36 @@ def _host_backward(
     fma partials, tree), the cuBLAS epilogue (`ftz(alpha * s)`, `+ g`), and
     `qn_tile_sum_classes` per class (tile chains, tile fold, `* ratio`)."""
     var alpha = Float32(1.0 / Float64(n))
-    for b in range(C * d):
-        var c = b % C
-        var j = b // C
-        var red = List[Float32]()
-        for t in range(STATS_TPB):
-            var acc = Float32(0.0)
-            var r = t
-            while r < n:
-                acc = identical_mul_add(xh[r * d + j], dz[c + C * r], acc)
-                r += STATS_TPB
-            red.append(acc)
-        var s0 = _tree(red)
-        var s = ftz(alpha * s0)
-        g[b] = s if set_zero else ftz(s + g[b])
+    # lane fam2-linear: QN_TILED_MULTI's order where the device takes it
+    var tiled = qn_tiled_multi_shape(n, d, C)
+    if tiled:
+        var tiles = host_qnt_tiles(n)
+        var part = List[Float32](length=tiles * C * d, fill=Float32(0.0))
+        for b in range(C * d):
+            var c = b % C
+            var j = b // C
+            for k in range(tiles):
+                var acc = Float32(0.0)
+                for r in range(k * HOST_QNT_ROWS, min(n, (k + 1) * HOST_QNT_ROWS)):
+                    acc = identical_mul_add(xh[r * d + j], dz[c + C * r], acc)
+                part[b * tiles + k] = acc
+            var st = ftz(alpha * host_qnt_fold(part, b * tiles, tiles))
+            g[b] = st if set_zero else ftz(st + g[b])
+    if not tiled:
+        for b in range(C * d):
+            var c = b % C
+            var j = b // C
+            var red = List[Float32]()
+            for t in range(STATS_TPB):
+                var acc = Float32(0.0)
+                var r = t
+                while r < n:
+                    acc = identical_mul_add(xh[r * d + j], dz[c + C * r], acc)
+                    r += STATS_TPB
+                red.append(acc)
+            var s0 = _tree(red)
+            var s = ftz(alpha * s0)
+            g[b] = s if set_zero else ftz(s + g[b])
     if fit_intercept:
         var ratio = Float32(1.0) / Float32(n)
         for c in range(C):

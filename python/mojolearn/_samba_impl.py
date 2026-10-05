@@ -301,7 +301,10 @@ class SambaStack(object):
         w = {n: self.arrays["layers.%d.%s" % (i, n)]
              for n, _ in self.config.block_shapes(kind)}  # glue: dict of named tensors
         if kind == "mamba3":
-            return Mamba3Block(w, numeric_mode=self.numeric_mode)
+            block = Mamba3Block(w, numeric_mode=self.numeric_mode)
+            # lane/fam2-lm: the stack reads no report stage of its blocks.
+            block._discard_reports = True
+            return block
         c = self.config
         return TransformerBlock(w, n_heads=c.n_heads, n_kv_heads=c.n_kv_heads,
                                 head_dim=c.head_dim, numeric_mode=self.numeric_mode)
