@@ -24,8 +24,6 @@ block-per-n	serial-gpu	UNOWNED	owed2	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_fun
 block-per-n	serial-gpu	UNOWNED	owed2	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[xty_kernel](
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
 block-per-n	serial-gpu	UNOWNED	owed2	glm/impl/ridge_multi.mojo	0	ctx.enqueue_function[column_mean_kernel](
-# why: apple-fast-purity2 left it: scikit-learn estimator tag classes (metadata for sklearn's checks); no data is touched
-py-sklearn	py-numpy	apple-fast-purity2	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
 # why: CROSS-LANE (training/LM): ce_serial_fold over the n_rows per-row losses in one block (the LM loss value's pinned order); a multi-block fold changes the loss bits on every vendor and the host column together
