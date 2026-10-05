@@ -49,6 +49,19 @@ class Provenance(unittest.TestCase):
             d['experimental_overlay']['artifacts'][next(iter(d['files']))]['build_receipt_sha256'] = 'e'*64
             f.write_text(json.dumps(d)); self.assertNotEqual(first, P.identity(f))
 
+    def test_overlay_requires_actual_replacement_load(self):
+        d=self.overlay_manifest(); name=next(iter(d['files']))
+        with self.assertRaisesRegex(ValueError,'not actually loaded'): P.require_overlay_loads(d, [])
+        P.require_overlay_loads(d,[{'file':name}])
+        P.require_overlay_loads(self.native,[])
+
+    def test_overlay_comparison_preserves_candidate_origin(self):
+        d=self.overlay_manifest(); key=P.overlay_comparison_key(d)
+        self.assertEqual(key['candidate_source_commit'],'c'*40)
+        self.assertNotEqual(key,P.overlay_comparison_key(self.native))
+        d['experimental_overlay']['candidate_source_commit']='e'*40
+        self.assertNotEqual(key,P.overlay_comparison_key(d))
+
     def test_ptx_overlay_requires_bound_payload_manifest(self):
         d=self.overlay_manifest(); d.update(code_path='ptx-baseline', runtime_files={'/common/lib.so':'f'*64})
         f=self.root/'ptx-overlay.json'

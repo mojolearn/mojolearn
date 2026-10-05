@@ -181,6 +181,22 @@ def loaded_runtime(manifest, maps_path='/proc/self/maps'):
     return rows
 
 
+def require_overlay_loads(manifest, loaded):
+    overlay = manifest.get('experimental_overlay')
+    if overlay and not set(overlay['replaced_files']).issubset({r['file'] for r in loaded}):
+        raise ValueError('Scoped candidate replacement was not actually loaded by this worker')
+
+
+def overlay_comparison_key(manifest):
+    overlay = manifest.get('experimental_overlay')
+    if not overlay:
+        return None
+    return dict(base_source_commit=overlay['base_source_commit'],
+                candidate_source_commit=overlay['candidate_source_commit'],
+                replaced_binding_names=sorted({Path(p).name for p in overlay['replaced_files']}),
+                uniform_numerical_source=False, identical_qualified=False)
+
+
 def collect(manifest):
     # This must be the worker's already imported package. Importing a fresh
     # package in the parent would say nothing about the timed child.
@@ -206,6 +222,7 @@ def collect(manifest):
         if manifest['files'].get(rel) != row['sha256']:
             raise ValueError('Loaded extension outside pinned inventory: ' + rel)
         loaded.append(dict(module=row['module'], file=rel, sha256=row['sha256'], role=row['role']))
+    require_overlay_loads(manifest, loaded)
     gpu = [r for r in loaded if r['role'] == 'gpu']
     if not gpu:
         raise ValueError('No actual GPU binding loads witnessed')
@@ -285,6 +302,9 @@ def compare_boards(native, ptx):
         raise ValueError('Require guarded native then guarded PTX board')
     if not identities[0].get('runtime_files') or identities[0].get('runtime_files') != identities[1].get('runtime_files'):
         raise ValueError('Paired boards require the same pinned common runtime environment')
+    overlay_key = overlay_comparison_key(identities[0])
+    if overlay_key != overlay_comparison_key(identities[1]):
+        raise ValueError('Different experimental artifact origins')
     for field in ('source_commit', 'numeric_mode'):
         if identities[0].get(field) != identities[1].get(field):
             raise ValueError('Different numerical ' + field)
@@ -335,6 +355,7 @@ def compare_boards(native, ptx):
                     raise ValueError('Missing timing: ' + rid + '/' + arm)
                 compared.append(dict(race=rid, arm=arm, phase=phase, native_ms=ms[0], ptx_ms=ms[1], ptx_over_native=ms[1]/ms[0]))
     return dict(schema='mojolearn-paired-board-comparison/1', source_commit=identities[0]['source_commit'],
+                experimental_overlay=overlay_key,
                 hardware=hardware, races=len(native['plan']), comparisons=compared,
                 missing_output_digests=missing_hashes, identical_qualified=False, release_qualified=False)
 
