@@ -612,10 +612,7 @@ class ARIMA(NumericModeMixin):
         # -2 llf + penalty in binary64, `T` is n_samples AFTER differencing
         # (their caller passes `n_obs - order.n_diff()`)
         ics = empty((2 * batch_size,), "<f8")
-        T = n_obs - (d + s * D)
-        n_par = float(N)
-        pen_aic = 2.0 * n_par
-        pen_bic = (math.log(T) if T > 0 else 0.0) * n_par
+        pen_aic, pen_bic = self._ic_penalties(N, n_obs)
         # EVERY ONE OF THOSE SIZES IS A FUNCTION OF (batch_size, n_obs,
         # order) ALONE, which is why this side can allocate before it calls.
         # There is no quantity in an ARIMA fit that is only known once the
@@ -644,6 +641,16 @@ class ARIMA(NumericModeMixin):
             )
         return self._adopt_fit(arr, copied, y_ndim, batch_size, n_obs, ex, n_exog,
                                params, x, x0, stats, flags, ics)
+
+    def _ic_penalties(self, N, n_obs):
+        """AIC and BIC penalties, two scalars of the order (2N; log(T) N,
+        `T` = n_obs after differencing), the `pen_aic, pen_bic` that
+        `arima_fit` and `arima_ic_from_loglike` take. No series data."""
+        d = self.order[1]
+        D, s = self.seasonal_order[1], self.seasonal_order[3]
+        T = n_obs - (d + s * D)
+        n_par = float(N)
+        return 2.0 * n_par, (math.log(T) if T > 0 else 0.0) * n_par
 
     def _adopt_fit(self, arr, copied, y_ndim, batch_size, n_obs, ex, n_exog,
                    params, x, x0, stats, flags, ics=None):
@@ -681,9 +688,18 @@ class ARIMA(NumericModeMixin):
         # column runs the same soft-float64 arithmetic). A NaN criterion is
         # the canonical quiet NaN.
         if ics is None:
-            raise RuntimeError(
-                "ARIMA._adopt_fit needs the device-written aic/bic (ics); the fit-reuse "
-                "path (MOJOLEARN_ARIMA_FAST_SEARCH_REUSE) does not supply it yet")
+            # an AutoARIMA search's fit block (SEARCH_REUSE, CSS_SEARCH,
+            # STEPWISE): the plain fit's device kernel over the adopted
+            # log-likelihood row (lane arima-ics)
+            ics = empty((2 * batch_size,), "<f8")
+            pen_aic, pen_bic = self._ic_penalties(N, n_obs)
+            written = self._extension().arima_ic_from_loglike(
+                addr_ro(stats, name="stats"), addr(ics, name="ic"),
+                [batch_size, pen_aic, pen_bic])
+            if int(written) != batch_size:
+                raise RuntimeError(
+                    f"mojolearn ARIMA: the criterion kernel wrote {int(written)} "
+                    f"series, batch_size is {batch_size}")
         self.aic_ = ics[:batch_size]
         self.bic_ = ics[batch_size:]
         return self
