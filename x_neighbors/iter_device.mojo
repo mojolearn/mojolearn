@@ -1994,14 +1994,14 @@ def _svgp_chol_panels(ctx: DeviceContext, wp: FP, m: Int, n: Int, nfac: Int) rai
 #: busy threads (m = 512) each 32,768 rows deep, and b's has m threads with
 #: one dependent float-float chain each: too few to fill the M3 Ultra. Bits
 #: change (float-float re-association, ~1e-14 relative in B and b).
-# OPEN / NOT-ADMITTED, 2026-10-04, lane/apple-fast-w2-svgp@146898d2c.
-# No valid judged A/B result in EXPERIMENTS.md; readiness review b1487e2e
-# is not quality or speed evidence. Default OFF. Require current-base build,
-# actual SVGP fitted quality and per-dataset timing before promotion.
-# See docs/apple-fast/EXPERIMENTS.md (SVGP_FAST_BSPLIT).
+#: Source lane/apple-fast-w2-svgp@146898d2c.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
+#: rab19-svgpbsplit): svgp istella 224.6 -> 167.1 ms, taxi 211.3 -> 149.1 ms,
+#: r2 equal. KEEP: the FAST + Apple default (with SYMTILE); rollback
+#: -D MOJOLEARN_SVGP_FAST_BSPLIT_OFF. See docs/apple-fast/EXPERIMENTS.md.
 comptime SVGP_FAST_BSPLIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and SVGP_FAST_SYMTILE
-    and is_defined["MOJOLEARN_SVGP_FAST_BSPLIT"]()
+    and not is_defined["MOJOLEARN_SVGP_FAST_BSPLIT_OFF"]()
 )
 comptime SVGP_BSPLIT_R = 4
 comptime SVGP_BSPLIT_RV = 32

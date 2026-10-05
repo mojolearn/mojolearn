@@ -29,7 +29,8 @@ snapshotted before it and restored before a rerun. Recovery note: main's
 device L-BFGS moved its P-vector sums to the vfold order; this fit keeps
 the source's ascending dots (FAST bits only, never IDENTICAL), so its words
 differ from main's FAST Huber fit and the A/B's quality check decides.
-`-D MOJOLEARN_HUBER_FAST_BLOCK512` (the second arm) folds the partials
+HUBER_FAST_BLOCK512 (the FAST + Apple default since rab19-huber512; rollback
+`-D MOJOLEARN_HUBER_FAST_BLOCK512_OFF`) folds the partials
 over 512-row blocks instead of FOLD_BLOCK: eight times the threads of the
 partials launch (taxi: 21 tasks x 366 blocks under FOLD_BLOCK), a
 different fold order (FAST bits only).
@@ -69,14 +70,18 @@ comptime HUBER_DEVICE_LBFGS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and (not is_defined["MOJOLEARN_HUBER_DEVICE_LBFGS_OFF"]() or is_defined["MOJOLEARN_HUBER_FAST_BLOCK512"]())
 )
-#: (FAST + Apple, default OFF; implies HUBER_DEVICE_LBFGS) the partials of
+#: (FAST + Apple, default ON since 2026-10-05; needs HUBER_DEVICE_LBFGS) the partials of
 #: the fast fit over 512-row blocks instead of FOLD_BLOCK: eight times the
 #: threads in the partials launch (taxi: 21 tasks x 366 blocks under
 #: FOLD_BLOCK), a shorter serial chain per thread and a different fold order
 #: (FAST bits only). Source lane/apple-fast-robust@cfdb95e48. Prior M3 (with
 #: DEVICE_LBFGS): huber taxi 226 -> 196 ms (-13%), EXPERIMENTS L182 OPEN.
 #: No failure recorded.
-comptime HUBER_FAST_BLOCK512 = HUBER_DEVICE_LBFGS and is_defined["MOJOLEARN_HUBER_FAST_BLOCK512"]()
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-05,
+#: rab19-huber512): huber taxi 192.0 -> 161.6 ms, r2 equal 0.900215. KEEP:
+#: the FAST + Apple default; rollback -D MOJOLEARN_HUBER_FAST_BLOCK512_OFF
+#: (the old -D name still forces HUBER_DEVICE_LBFGS on, harmless).
+comptime HUBER_FAST_BLOCK512 = HUBER_DEVICE_LBFGS and not is_defined["MOJOLEARN_HUBER_FAST_BLOCK512_OFF"]()
 #: Rows per partial of the fast fit: FOLD_BLOCK (the grid fit's order) or
 #: 512 under HUBER_FAST_BLOCK512.
 comptime HF_FOLD = 512 if HUBER_FAST_BLOCK512 else FOLD_BLOCK
