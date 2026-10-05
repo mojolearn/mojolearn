@@ -1868,6 +1868,24 @@ def launch_gemm(
         )
 
 
+def launch_gemm_ordered(
+    ctx: DeviceContext, a: F32Ptr, b: F32Ptr, c: F32Ptr, p: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool
+) raises:
+    """The existing per-cell ordered fold, including in FAST precision-sensitive callers."""
+    var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
+    if nb > 1:
+        ctx.enqueue_function[gemm_part_kernel](
+            a, b, p, Int32(m), Int32(k), Int32(n),
+            Int32(1 if ta else 0), Int32(1 if tb else 0), Int32(nb), grid_dim=_blocks(nb * m * n), block_dim=TPB,
+        )
+        ctx.enqueue_function[fold_kernel](p, c, Int32(m * n), Int32(nb), grid_dim=_blocks(m * n), block_dim=TPB)
+    else:
+        ctx.enqueue_function[gemm_kernel](
+            a, b, c, Int32(m), Int32(k), Int32(n),
+            Int32(1 if ta else 0), Int32(1 if tb else 0), grid_dim=_blocks(m * n), block_dim=TPB,
+        )
+
+
 def launch_ew(
     ctx: DeviceContext, op: Int, a: F32Ptr, b: F32Ptr, bm: Int, c: F32Ptr, cm: Int, dst: F32Ptr,
     count: Int, d: Int, s: Float32,

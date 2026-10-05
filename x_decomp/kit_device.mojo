@@ -46,6 +46,7 @@ from x_decomp.device import (
     launch_colsum,
     launch_ew,
     launch_gemm,
+    launch_gemm_ordered,
     launch_lu,
     launch_rowsum,
     launch_sqdist,
@@ -783,6 +784,24 @@ struct DKit(Movable):
         var ns = gemm_scratch(m, k, n)
         var sid = pool_alloc(max(ns, 1))
         launch_gemm(self.ctx, A.p(), B.p(), out.p(), _ptr(sid, max(ns, 1)), m, k, n, ta, tb)
+        pool_free(sid)
+        return out^
+
+    def mm_ordered(self, A: DMat, B: DMat, ta: Bool, tb: Bool) raises -> DMat:
+        var m = A.c if ta else A.r
+        var k = A.r if ta else A.c
+        var k2 = B.c if tb else B.r
+        var n = B.r if tb else B.c
+        if k != k2:
+            raise Error("x_decomp: gemm inner dimensions differ")
+        if m * n > 2147483647 or m * k > 2147483647 or k * n > 2147483647:
+            raise Error("x_decomp: gemm exceeds the Int32 index bound")
+        var out = DMat(m, n)
+        if m * n == 0:
+            return out^
+        var ns = gemm_scratch(m, k, n)
+        var sid = pool_alloc(max(ns, 1))
+        launch_gemm_ordered(self.ctx, A.p(), B.p(), out.p(), _ptr(sid, max(ns, 1)), m, k, n, ta, tb)
         pool_free(sid)
         return out^
 

@@ -7,6 +7,7 @@ SVD take DevExec's host-address forms, as Python's kit called them (the
 block comes home, the same launches run, the factor goes back up), and the
 subspace change is one word home. GPU binding only."""
 from std.math import inf, sqrt
+from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from x_decomp.api import _f, _n
@@ -48,7 +49,16 @@ def lle_iterate_dev(
         T = lle_orth_dev(k, k.ew2(OP_SUB, T, k.mm(z, k.mm(z, T, True, False), False, False)))
         var U = k.trisolve(lu, pm, T, 0)
         X = lle_orth_dev(k, k.rows(U, 0, a.n1))
-        var B = k.mm(F0, k.pad_zero_row(X), False, False)
+        var B = DMat(0, 0)
+        comptime if AFN_GEMM_APPLE:
+            # Ritz residuals approach float32's null floor. Unordered split-K
+            # MMA adds cancellation noise to F^ X, making identical operands
+            # alternate convergence/refusal. Use the existing ordered cells
+            # for this residual-sensitive product at every shape. The solver,
+            # subspace size, stopping tolerances and limits are unchanged.
+            B = k.mm_ordered(F0, k.pad_zero_row(X), False, False)
+        else:
+            B = k.mm(F0, k.pad_zero_row(X), False, False)
         var s = Mat(0, 0)
         var v = Mat(0, 0)
         k.svd_host(B, s, v)
