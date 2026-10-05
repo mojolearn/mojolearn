@@ -84,6 +84,10 @@ def identity(path):
         if d['code_path'] == 'ptx-baseline' and not full_sha(overlay.get('payload_manifest_sha256'), 64):
             raise ValueError('PTX overlay requires the exact scoped payload manifest hash')
         out['experimental_overlay'] = overlay
+    if 'vendor' in d:
+        if d['vendor'] not in ('cuda', 'hip') or (d['vendor'] == 'hip' and d['code_path'] != 'native'):
+            raise ValueError('Invalid guarded vendor/code path')
+        out['vendor'] = d['vendor']
     if d.get('installation') == 'source':
         if d['code_path'] != 'native' or not Path(d.get('source_root', '')).is_absolute():
             raise ValueError('Source layout is explicit native-only with absolute source_root')
@@ -197,6 +201,24 @@ def overlay_comparison_key(manifest):
                 uniform_numerical_source=False, identical_qualified=False)
 
 
+def hardware_receipt(vendor):
+    if vendor == 'cuda':
+        rows = subprocess.check_output(['nvidia-smi', '--query-gpu=uuid,name,compute_cap,driver_version', '--format=csv,noheader,nounits'], text=True, timeout=20).strip().splitlines()
+        if len(rows) != 1:
+            raise ValueError('Guarded board requires one unambiguous physical GPU')
+        return rows[0]
+    if vendor == 'hip':
+        data = json.loads(subprocess.check_output(['/opt/rocm/bin/rocm-smi', '--showuniqueid', '--showproductname', '--showdriverversion', '--json'], text=True, timeout=20))
+        cards = [name for name in data if name.startswith('card')]
+        if len(cards) != 1 or not isinstance(data[cards[0]], dict):
+            raise ValueError('Guarded board requires one unambiguous ROCm GPU')
+        values = data[cards[0]]
+        if not any('unique' in k.lower() and str(v).strip() not in ('', 'N/A', '0') for k,v in values.items()):
+            raise ValueError('ROCm GPU unique identity is missing')
+        return json.dumps(data, sort_keys=True)
+    raise ValueError('Unsupported guarded GPU vendor')
+
+
 def collect(manifest):
     # This must be the worker's already imported package. Importing a fresh
     # package in the parent would say nothing about the timed child.
@@ -211,8 +233,8 @@ def collect(manifest):
     source_check(manifest, package)
     plugin = backend.gpu_plugin() or {}
     source_native = manifest.get('installation') == 'source' and manifest['code_path'] == 'native' and not plugin
-    if (not source_native and plugin.get('code_format') != manifest['code_path']) or ml.vendor() != 'cuda':
-        raise ValueError('Worker selected wrong CUDA code path/vendor')
+    if (not source_native and plugin.get('code_format') != manifest['code_path']) or ml.vendor() != manifest.get('vendor', 'cuda'):
+        raise ValueError('Worker selected wrong code path/vendor')
     if ml.numeric_mode() != manifest['numeric_mode']:
         raise ValueError('Worker numeric mode differs')
     loaded = []
@@ -239,11 +261,9 @@ def collect(manifest):
             raise ValueError('PTX runtime receipt differs from actual loaded bindings')
     elif runtime is not None:
         raise ValueError('Native run selected a PTX fallback')
-    smi = subprocess.check_output(['nvidia-smi', '--query-gpu=uuid,name,compute_cap,driver_version', '--format=csv,noheader,nounits'], text=True, timeout=20).strip().splitlines()
-    if len(smi) != 1:
-        raise ValueError('Guarded paired board requires one unambiguous physical GPU')
+    hardware = hardware_receipt(manifest.get('vendor', 'cuda'))
     return dict(status='verified', artifact_identity=manifest, loaded_files=loaded,
-                runtime_selection=runtime, loaded_runtime_files=loaded_runtime(manifest), hardware=smi[0], numeric_mode=ml.numeric_mode(),
+                runtime_selection=runtime, loaded_runtime_files=loaded_runtime(manifest), hardware=hardware, numeric_mode=ml.numeric_mode(),
                 source_commit=manifest['source_commit'], identical_qualified=False)
 
 

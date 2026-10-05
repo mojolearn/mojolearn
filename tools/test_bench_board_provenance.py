@@ -49,6 +49,22 @@ class Provenance(unittest.TestCase):
             d['experimental_overlay']['artifacts'][next(iter(d['files']))]['build_receipt_sha256'] = 'e'*64
             f.write_text(json.dumps(d)); self.assertNotEqual(first, P.identity(f))
 
+    def test_explicit_hip_identity_preserves_vendor_and_rejects_ptx(self):
+        d=dict(self.native,vendor='hip'); f=self.root/'hip.json'
+        with patch.dict(os.environ,{},clear=True):
+            f.write_text(json.dumps(d)); self.assertEqual(P.identity(f)['vendor'],'hip')
+        d.update(code_path='ptx-baseline',runtime_files={'/common/lib.so':'e'*64})
+        with patch.dict(os.environ,{'MOJOLEARN_CUDA_PATH':'ptx-baseline','MOJOLEARN_EXPERIMENTAL_PTX':'1'},clear=True):
+            f.write_text(json.dumps(d))
+            with self.assertRaisesRegex(ValueError,'vendor'): P.identity(f)
+
+    def test_rocm_receipt_refuses_missing_or_ambiguous_identity(self):
+        for data in ({'card0':{'GPU Unique ID':'abc','Card series':'MI325X'}}, {'card0':{'GPU Unique ID':'abc'},'card1':{'GPU Unique ID':'def'}}, {'card0':{'GPU Unique ID':'N/A'}}):
+            with patch.object(P.subprocess,'check_output',return_value=json.dumps(data)):
+                if len(data)==1 and data['card0']['GPU Unique ID']=='abc': self.assertIn('abc',P.hardware_receipt('hip'))
+                else:
+                    with self.assertRaises(ValueError):P.hardware_receipt('hip')
+
     def test_overlay_requires_actual_replacement_load(self):
         d=self.overlay_manifest(); name=next(iter(d['files']))
         with self.assertRaisesRegex(ValueError,'not actually loaded'): P.require_overlay_loads(d, [])
@@ -166,7 +182,7 @@ class Provenance(unittest.TestCase):
             self.assertEqual(receipt['loaded_files'][0]['sha256'],digest)
             self.assertFalse(receipt['identical_qualified'])
             backend.gpu_plugin=lambda:{'code_format':'ptx-baseline'}
-            with self.assertRaisesRegex(ValueError,'wrong CUDA'):P.collect(manifest)
+            with self.assertRaisesRegex(ValueError,'wrong code path/vendor'):P.collect(manifest)
             manifest=dict(manifest,code_path='ptx-baseline')
             with self.assertRaisesRegex(ValueError,'Missing forced'):P.collect(manifest)
             backend._BASELINE_ROOT=str(package)
