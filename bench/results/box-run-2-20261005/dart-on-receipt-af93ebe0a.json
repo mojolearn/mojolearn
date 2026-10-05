@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "arm": "on",
+  "source_sha": "af93ebe0ab05676c550f02f68741261018c0751b",
+  "status": "PASS",
+  "prediction_sources": {
+    "dart": {
+      "sha256": "0aadbd2b15cc114416efe061612b59948597d67a493a0297c0285e8d3537a0ec"
+    },
+    "dart-reg": {
+      "sha256": "f4ad9d8f2abc6710e16ec67a028cc0c7417f858c688bd2de6d903d00a7ea088d"
+    }
+  },
+  "note": "AMD gfx942 ON-arm DART gate outputs of br2-wave-af93ebe0a; equal to the adjudicated a4d01a130 ON receipt."
+}

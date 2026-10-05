@@ -36,6 +36,9 @@ ADDED 2026-10-02 (lane/fix-dart-host): the data session entries
 `rf_regressor_fit_session_export`, `rf_regressor_fit_session_rows_export`
 and `rf_classifier_fit_weighted_session_export`, which DART opens by default
 (e3372c826); each member fit is the plain entries' body on the session's X.
+ADDED 2026-10-05 (box-run-2-dart-host): `rf_regressor_fit_dart_export`,
+the DART member fit on the host DART session's X and target plane
+(xtrees/dart_host.mojo), the host twin of cpu4-forest's device entry.
 ABSENT, and so refused BY NAME through `_HostBinding`: the global tree-ID
 shard fits (`rf_*_fit_shard`, the multi-GPU driver's), the non-resident
 `rf_predict_*_gpu_parallel` and the pool and comparison entries.
@@ -82,6 +85,7 @@ from bindings.forest_host_groves_binding import (
     forest_release_host_binding,
 )
 from ensemble.host_layout import has_nan_f32_threaded
+from xtrees.dart_host import DART_HOST, DART_HOST_SESSIONS
 from ensemble.nan_refusal import RF_NAN_REFUSAL
 from ensemble.host.rf_oracle import (
     RF_ENTROPY,
@@ -688,6 +692,105 @@ def rf_classifier_fit_weighted_session_binding(
     return _retain_rf_export(forest^)
 
 
+def rf_regressor_fit_dart_binding(
+    dart_handle: PythonObject, cls: PythonObject, rows_addr: PythonObject,
+    cols_addr: PythonObject, params: PythonObject, criterion: PythonObject,
+) raises -> PythonObject:
+    """`bindings/_mojolearn_rf.mojo::rf_regressor_fit_dart_binding` on the
+    host column (box-run-2-dart-host, 2026-10-05). cpu4-forest moved the
+    device DART member fit onto the DART session's buffers (X and the class
+    `target` plane `x_trees_dart_step` leaves there), and the Python loop
+    (`RandomForestRegressor._fit_in_dart`) calls this entry on both columns;
+    the host binding had no twin, so the host DART round could not fit.
+
+    Here the member reads the HOST DART session (xtrees/dart_host.mojo
+    `DART_HOST_SESSIONS`, the same `_Global` the host x_trees binding opens):
+    X is the caller's row-major n x d array at `x_addr`, the target the
+    session's k x n `target` plane. The gathers are
+    `ensemble/dart_member.mojo`'s, element for element: X column-major
+    `x[j * m + i] = X[rows[i] * d + cols[j]]` (identity rows / columns when
+    the address is 0) and `y[i] = target[c * n + rows[i]]` (the whole class
+    plane when rows is 0). Then `_rf_fit_colmajor[False]`, the body the plain
+    host regressor fit runs: the blocked label magnitude and scale, then
+    `rf_host_fit`, the host restatement of the device's
+    `fit_forest_prepared` (no prepared tables, no shared tables, as the
+    device entry). So the member forest's words are the device member's.
+    Same params, checks and export descriptor as the device entry."""
+    comptime entry = "rf_regressor_fit_dart"
+    comptime if DART_HOST:
+        var p = _session_params[False](entry, params, criterion)
+        var n_rows = _index(params[0])
+        var n_cols = _index(params[1])
+        var hid = _index(dart_handle)
+        var c = _index(cls)
+        var rows_a = _index(rows_addr)
+        var cols_a = _index(cols_addr)
+        var dreg = DART_HOST_SESSIONS.get_or_create_ptr()
+        var di = dreg[].find(hid)
+        var n = dreg[].sessions[di].n
+        var d = dreg[].sessions[di].d
+        var k = dreg[].sessions[di].k
+        if c < 0 or c >= k:
+            raise Error(entry + ": class out of range")
+        if n_rows <= 0 or n_cols <= 0:
+            raise Error(entry + ": invalid shape")
+        if (rows_a == 0 and n_rows != n) or (cols_a == 0 and n_cols != d):
+            raise Error(
+                entry + ": params name a shape the DART session does not hold"
+            )
+        if cols_a != 0 and n_cols > d:
+            raise Error(entry + ": more columns than X holds")
+        # the row and column ids, checked against the session (the device
+        # entry trusts its callers; a host read out of range is not a word
+        # the device writes, so refuse it instead)
+        var rows = List[Int](length=n_rows, fill=0)
+        for i in range(n_rows):
+            rows[i] = i
+        if rows_a != 0:
+            var rp = i32_ptr(rows_a)
+            for i in range(n_rows):
+                var r = Int(rp[i])
+                if r < 0 or r >= n:
+                    raise Error(entry + ": a row id is outside the DART session's X")
+                rows[i] = r
+        var cols = List[Int](length=n_cols, fill=0)
+        for j in range(n_cols):
+            cols[j] = j
+        if cols_a != 0:
+            var cp = i32_ptr(cols_a)
+            for j in range(n_cols):
+                var q = Int(cp[j])
+                if q < 0 or q >= d:
+                    raise Error(entry + ": a column id is outside the DART session's X")
+                cols[j] = q
+        # `dart_member_x_kernel` / `dart_member_y_kernel` on the host: pure
+        # copies, so the column-major X and the labels are the device's bytes
+        var xs = f32_ptr(dreg[].sessions[di].x_addr)
+        var x = List[Float32](length=n_rows * n_cols, fill=Float32(0.0))
+        for j in range(n_cols):
+            var col = cols[j]
+            for i in range(n_rows):
+                x[j * n_rows + i] = xs[rows[i] * d + col]
+        var y = List[Float32](length=n_rows, fill=Float32(0.0))
+        var coff = c * n
+        for i in range(n_rows):
+            y[i] = dreg[].sessions[di].target[coff + rows[i]]
+        var y_address = Int(y.unsafe_ptr())
+        var forest: RfHostForest
+        with GILReleased(Python()):
+            forest = _rf_fit_colmajor[False](
+                x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
+            )
+        # y is read through its address inside the fit: keep it alive past it
+        _ = y^
+        return _retain_rf_export(forest^)
+    else:
+        raise Error(
+            entry + ": built without the host DART round"
+            " (MOJOLEARN_IDN_DART_DEVICE_OFF)"
+        )
+
+
 def rf_forest_export_binding(
     handle: PythonObject,
     offsets: PythonObject,
@@ -879,6 +982,8 @@ def PyInit__mojolearn_rf_host() abi("C") -> PythonObject:
         module.def_function[rf_data_session_close_binding]("rf_data_session_close")
         module.def_function[rf_regressor_fit_session_binding]("rf_regressor_fit_session_export")
         module.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
+        # box-run-2-dart-host: the DART member fit on the host DART session
+        module.def_function[rf_regressor_fit_dart_binding]("rf_regressor_fit_dart_export")
         module.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
         return module.finalize()
     except error:
