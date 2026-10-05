@@ -509,6 +509,12 @@ def node_feature_range_kernel[
         wb = Int(block_idx.y)
         fslot = Int(block_idx.x)
     var nid = Int(workload_info[unsafe_offset=wb].nodeid)
+    if nid < 0:
+        # cpu4-forest: a map entry past the live total (the device
+        # level loop launches at a proven bound); the whole block
+        # leaves before any barrier. `build_workload_info` never
+        # emits one, so the host-staged path is unchanged.
+        return
     var offset_blockid = Int(workload_info[unsafe_offset=wb].offset_blockid)
     var num_blocks = Int(workload_info[unsafe_offset=wb].num_blocks)
 
@@ -722,6 +728,12 @@ def node_feature_range_tiled_kernel[
     var wb = Int(block_idx.x)
     var ftile = Int(block_idx.y)
     var nid = Int(workload_info[unsafe_offset=wb].nodeid)
+    if nid < 0:
+        # cpu4-forest: a map entry past the live total (the device
+        # level loop launches at a proven bound); the whole block
+        # leaves before any barrier. `build_workload_info` never
+        # emits one, so the host-staged path is unchanged.
+        return
     var offset_blockid = Int(workload_info[unsafe_offset=wb].offset_blockid)
     var num_blocks = Int(workload_info[unsafe_offset=wb].num_blocks)
     var range_start = Int(work_items[unsafe_offset=nid].instances.begin)
@@ -1728,6 +1740,12 @@ def node_feature_score_kernel[
         wb = Int(block_idx.y)
         fslot = Int(block_idx.x)
     var nid = Int(workload_info[unsafe_offset=wb].nodeid)
+    if nid < 0:
+        # cpu4-forest: a map entry past the live total (the device
+        # level loop launches at a proven bound); the whole block
+        # leaves before any barrier. `build_workload_info` never
+        # emits one, so the host-staged path is unchanged.
+        return
     var offset_blockid = Int(workload_info[unsafe_offset=wb].offset_blockid)
     var num_blocks = Int(workload_info[unsafe_offset=wb].num_blocks)
     var range_start = Int(work_items[unsafe_offset=nid].instances.begin)
@@ -1963,6 +1981,12 @@ def node_feature_score_reg_tiled_kernel[
     var wb = Int(block_idx.x)
     var ftile = Int(block_idx.y)
     var nid = Int(workload_info[unsafe_offset=wb].nodeid)
+    if nid < 0:
+        # cpu4-forest: a map entry past the live total (the device
+        # level loop launches at a proven bound); the whole block
+        # leaves before any barrier. `build_workload_info` never
+        # emits one, so the host-staged path is unchanged.
+        return
     var offset_blockid = Int(workload_info[unsafe_offset=wb].offset_blockid)
     var num_blocks = Int(workload_info[unsafe_offset=wb].num_blocks)
     var range_start = Int(work_items[unsafe_offset=nid].instances.begin)

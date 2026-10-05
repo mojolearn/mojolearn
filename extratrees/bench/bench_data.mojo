@@ -80,7 +80,7 @@ def dense_class_ids(
     THE MAPPING IS COMPUTED, NOT ASSUMED. covtype's fixture is 1-based and
     epsilon's is `-1 / +1`; a hardcoded `- 1.0` relabels one of them and a
     `- min` turns epsilon into class ids `0` and `2`, which the implementation's
-    `class_ids_for` refuses by name and scikit-learn would silently accept as
+    `class_ids_for_host` refuses by name and scikit-learn would silently accept as
     three classes with one empty. `numpy.unique(y, return_inverse=True)` is
     the same function on the scikit-learn side, and it sorts too, so the two
     arms agree on which original label is class 0 rather than merely on how
@@ -121,7 +121,7 @@ def dense_class_ids(
 def row_major(
     col: List[Float32], n_rows: Int, n_features: Int
 ) raises -> List[Float32]:
-    """A row-major copy, for `predict_class_forest`'s `(row, row_offset)`."""
+    """A row-major copy, for `predict_class_forest_host`'s `(row, row_offset)`."""
     var out = List[Float32](length=n_rows * n_features, fill=Float32(0.0))
     for c in range(n_features):
         for r in range(n_rows):

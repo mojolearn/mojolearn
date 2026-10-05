@@ -6,9 +6,9 @@ A IMPLEMENTATION of cuML `cpp/src/randomforest/randomforest.cuh`, pinned at `000
 
 | ours | theirs |
 |---|---|
-| `row_sample_for` | `randomforest.cuh:50-72` (`get_row_sample`) |
+| `row_sample_for_host` | `randomforest.cuh:50-72` (`get_row_sample`) |
 | `fit_classification` / `fit_regression` | `:155-195` (the tree loop) |
-| `predict_class_forest` / `predict_regression_forest` | `:223-256` |
+| `predict_class_forest_host` / `predict_regression_forest_host` | `:223-256` |
 | `error_checking` | `:74-90` |
 
 **THE TREES ARE NOT COPIES OF EACH OTHER, AND THAT IS THE KEY.** Their
@@ -44,7 +44,7 @@ far, and it must not reach for the zeroing convenience wrapper.
 **THE FOREST HAS A DEVICE ARM, AND IT IS THE SAME LOOP.** `fit_classification`
 calls the host trainer per tree; `fit_classification_device` calls
 `train_classification_device` per tree instead, and nothing else about the loop
-changes — same `error_checking`, same `row_sample_for` seed per tree, same
+changes — same `error_checking`, same `row_sample_for_host` seed per tree, same
 per-tree `row_ids`, same `i` passed as the tree id. That is the whole of the
 difference, and it is why the two produce the SAME forest: deviation 183 closed
 the last gap between the device and host trees, so tree `i` of the device
@@ -133,7 +133,7 @@ def resolve_n_sampled_rows(
     return n_rows
 
 
-def row_sample_for(
+def row_sample_for_host(
     n_rows: Int32,
     bootstrap: Bool,
     n_sampled_rows: Int32 = 0,
@@ -203,7 +203,7 @@ def error_checking(n_rows: Int32, n_cols: Int32, n_trees: Int32) raises:
         raise Error("Invalid n_trees " + String(n_trees))
 
 
-def class_ids_for(
+def class_ids_for_host(
     labels: List[Float32], n_rows: Int32, n_classes: Int32
 ) raises -> List[Int32]:
     """The labels as the `Int32` class ids the device trainer takes.
@@ -311,7 +311,7 @@ def fit_classification_device(
 
     # DEVIATION 186: once for the forest, not once per tree. cpu3-trees: the
     # truncation and range refusal run ON THE DEVICE inside
-    # `upload_dataset_labels_f32` (`class_ids_device_kernel`); `class_ids_for`
+    # `upload_dataset_labels_f32` (`class_ids_device_kernel`); `class_ids_for_host`
     # above stays the host column's (`host_estimator.mojo`), same ids.
 
     # DEVIATION 184, CLOSED: the dataset is uploaded ONCE FOR THE FOREST and
@@ -454,7 +454,7 @@ def fit_regression_device_f32(
     return forest^
 
 
-def forest_vote(
+def forest_vote_host(
     forest: Forest, row: List[Float32], row_offset: Int
 ) raises -> List[Float32]:
     """The averaged per-class (or per-output) prediction for one row.
@@ -488,7 +488,7 @@ def forest_vote(
     return acc^
 
 
-def predict_class_forest(
+def predict_class_forest_host(
     forest: Forest, row: List[Float32], row_offset: Int
 ) raises -> Int:
     """`randomforest.cuh:243-253`, the majority vote, including
@@ -496,7 +496,7 @@ def predict_class_forest(
     comparison is strictly greater while `k` ascends — so an exact tie keeps
     the LOWEST class index, and a row whose averaged scores are all `<= 0`
     returns class 0 without the comparison ever firing."""
-    var acc = forest_vote(forest, row, row_offset)
+    var acc = forest_vote_host(forest, row, row_offset)
     var best_class = 0
     var best_prob = Float32(0.0)
     for k in range(Int(forest.num_outputs)):
@@ -506,10 +506,10 @@ def predict_class_forest(
     return best_class
 
 
-def predict_regression_forest(
+def predict_regression_forest_host(
     forest: Forest, row: List[Float32], row_offset: Int
 ) raises -> Float32:
     """`randomforest.cuh:254-256`: `h_predictions[row_id] = row_prediction[0]`
     after the division by `n_trees`."""
-    var acc = forest_vote(forest, row, row_offset)
+    var acc = forest_vote_host(forest, row, row_offset)
     return acc[0]

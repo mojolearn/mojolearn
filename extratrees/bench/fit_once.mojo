@@ -50,7 +50,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     N_PHASES,
     PhaseClock,
 )
-from extratrees.impl.randomforest.randomforest import class_ids_for
+from extratrees.impl.randomforest.randomforest import class_ids_for_host
 
 
 def main() raises:
@@ -111,7 +111,7 @@ def main() raises:
         var lf = List[Float32]()
         for r in range(n_rows):
             lf.append(Float32(Int(labels[r])))
-        var ids = class_ids_for(lf, Int32(n_rows), Int32(n_classes))
+        var ids = class_ids_for_host(lf, Int32(n_rows), Int32(n_classes))
         dev = upload_dataset(
             ctx, x, ids, Int32(n_rows), Int32(n_feat), Int32(n_classes)
         )

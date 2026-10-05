@@ -350,7 +350,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
 from extratrees.impl.decisiontree.decisiontree import (
     DecisionTreeParams as EtTreeParams,
 )
-from extratrees.impl.randomforest.randomforest import class_ids_for
+from extratrees.impl.randomforest.randomforest import class_ids_for_host
 from gbdt.train import train as gbdt_train
 
 
@@ -1855,10 +1855,10 @@ def run_et(ctx: DeviceContext, smoke: Bool, rounds: Int) raises:
             xcol[f * n + i] = _price_u01(i, f, 47)
     for i in range(n):
         lf[i] = Float32(1.0) if _tree_hits3(i, 47) >= 2 else Float32(0.0)
-    # `class_ids_for` is the hoisted float-to-int truncation the device
+    # `class_ids_for_host` is the hoisted float-to-int truncation the device
     # trainer requires (DEVIATION 186); `fit_once.mojo:113` calls it in the
     # same place, before the upload and outside every clock.
-    var ids = class_ids_for(lf, Int32(n), Int32(n_classes))
+    var ids = class_ids_for_host(lf, Int32(n), Int32(n_classes))
     var dev = upload_dataset(
         ctx, xcol, ids, Int32(n), Int32(d), Int32(n_classes)
     )

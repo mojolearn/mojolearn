@@ -21,7 +21,7 @@ compile.
 WHAT IS RESTATED, AND WHERE THE ORIGINAL IS. `rf_host_predict` MIRRORS
 `RandomForest.predict_proba`, `ensemble/randomforest.mojo:1140-1161` (and the
 regression branch of `RandomForest.predict`, `:1033-1074`, which is the same
-loop read at output 0). `et_host_predict` MIRRORS `forest_vote`,
+loop read at output 0). `et_host_predict` MIRRORS `forest_vote_host`,
 `extratrees/impl/randomforest/randomforest.mojo:611-641`. Each is three
 statements. Zero a float32 vector, add every tree's leaf vector into it in
 increasing tree order, divide each element by `Float32(n_trees)`. The tree
@@ -69,7 +69,7 @@ comptime FOREST_HOST_THREADS_ENV = "MOJOLEARN_CPU_THREADS"
 
 def _divisor(n_trees: Int) -> Float32:
     """`Scalar[DType.float32](n_trees)` in `RandomForest.predict_proba`,
-    `Float32(Int(forest.n_trees))` in `forest_vote`; the same value."""
+    `Float32(Int(forest.n_trees))` in `forest_vote_host`; the same value."""
     comptime if FOREST_HOST_SABOTAGE:
         return Float32(n_trees + 1)
     return Float32(n_trees)
@@ -313,7 +313,7 @@ def et_host_predict(
     mut out: List[Float32],
     workers: Int = 0,
 ) raises:
-    """MIRRORS `forest_vote`, `extratrees/impl/randomforest/randomforest.mojo:611-641`,
+    """MIRRORS `forest_vote_host`, `extratrees/impl/randomforest/randomforest.mojo:611-641`,
     once per row, into `out` as `et_predict_binding` writes it (`:528-532`).
     `workers` is the thread count, `host_worker_count`'s reading of zero
     (DEVIATION 2900, the same fan-out as `rf_host_predict`)."""
