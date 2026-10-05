@@ -116,11 +116,14 @@ comptime ARIMA_FAST_GROUPS_CONCURRENT = (
 #: SEARCH_REUSE OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab16-arimareuse): autoarima synthetic 18229.7 -> 13688.1 ms,
 #: taxi-hourly 16386.5 -> 9872.2 ms, forecast_rmse identical. KEEP: the
-#: FAST + Apple default; rollback -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF.
+#: OFF again since 2026-10-05 (opt-in -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE): the reuse path adopts the search's fit without the
+#: device-written aic/bic (ARIMA._adopt_fit got no `ics`), so FAST AutoARIMA failed on main (NameError, then TypeError on M3 rab23/rab24).
+#: Computing aic/bic in Python is not allowed (no-host-routes). Lane arima-ics (2026-10-05): ARIMA._adopt_fit now gets them from the
+#: plain fit's device kernel (`arima_ic_kernel` via `arima_ic_from_loglike`) over the adopted log-likelihood; still opt-in pending the M3 A/B.
 #: The bundle with GROUPS/D_CONCURRENT (rab16-arimaall) was slower than this
 #: alone, so only this one is on.
 comptime ARIMA_FAST_SEARCH_REUSE = (
-    ARIMA_ORDER_BATCH and not is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF"]()
+    ARIMA_ORDER_BATCH and is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE"]()
 )
 
 #: MOJOLEARN_ARIMA_FAST_D_CONCURRENT (needs GROUPS_CONCURRENT; default off,

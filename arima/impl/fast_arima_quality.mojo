@@ -116,36 +116,6 @@ comptime ROOT_MAX_DEG = 4
 comptime ROOT_TPB = 128
 
 
-@always_inline
-def _root_inside(mut a: InlineArray[Float32, ROOT_MAX_DEG + 1], deg_in: Int) -> Bool:
-    """True when 1 + a[1] z + ... + a[deg] z^deg has a root with |z| < 1.01.
-    Trims at the last |a[i]| > 1e-8 (statsforecast's `testvec` trim), then
-    the Schur-Cohn step-down on the coefficients scaled by 1.01^i: every
-    reflection coefficient k_m = a[m] must have |k_m| < 1, and the order
-    m - 1 polynomial is (a[i] - k_m a[m - i]) / (1 - k_m^2). A NaN
-    coefficient fails the test (rejects)."""
-    var deg = deg_in
-    while deg > 0 and abs(a[deg]) <= ROOT_TRIM:
-        deg -= 1
-    var scale = Float32(1.0)
-    for i in range(1, deg + 1):
-        scale *= ROOT_MIN_MODULUS
-        a[i] = a[i] * scale
-    var m = deg
-    var tmp = InlineArray[Float32, ROOT_MAX_DEG + 1](fill=0.0)
-    while m >= 1:
-        var k = a[m]
-        if not (abs(k) < Float32(1.0)):
-            return True
-        var den = Float32(1.0) - k * k
-        for i in range(1, m):
-            tmp[i] = (a[i] - k * a[m - i]) / den
-        for i in range(1, m):
-            a[i] = tmp[i]
-        m -= 1
-    return False
-
-
 def root_check_kernel(
     ll: MutPointer[Float32, MutAnyOrigin],
     ar: MutPointer[Float32, MutAnyOrigin],
@@ -157,7 +127,17 @@ def root_check_kernel(
     `[b * p + i]` / `[b * q + i]`. AR polynomial 1 - phi_1 z - ..., MA
     polynomial 1 + theta_1 z + ... (statsforecast's `np.append(1, -phi)` /
     `np.append(1, theta)`). A series with a root of modulus < 1.01 in either
-    gets `ll[row * bs + b] = -inf`."""
+    gets `ll[row * bs + b] = -inf`.
+
+    The root test, per polynomial 1 + a[1] z + ... + a[deg] z^deg, in this
+    thread (every loop is bounded by ROOT_MAX_DEG): trim at the last
+    |a[i]| > 1e-8 (statsforecast's `testvec` trim), then the Schur-Cohn
+    step-down on the coefficients scaled by 1.01^i: every reflection
+    coefficient k_m = a[m] must have |k_m| < 1, and the order m - 1
+    polynomial is (a[i] - k_m a[m - i]) / (1 - k_m^2). A NaN coefficient
+    fails the test (rejects). The AR polynomial is tested first and the MA
+    one only when the AR one passes (the same operations, in the same order,
+    as the former `_root_inside` helper called twice)."""
     var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var bs = Int(bs_in)
     if b >= bs:
@@ -165,18 +145,36 @@ def root_check_kernel(
     var p = Int(p_in)
     var q = Int(q_in)
     var reject = False
-    if p > 0 and p <= ROOT_MAX_DEG:
+    for poly in range(2):
+        var deg = p if poly == 0 else q
+        if reject or deg <= 0 or deg > ROOT_MAX_DEG:
+            continue
         var a = InlineArray[Float32, ROOT_MAX_DEG + 1](fill=0.0)
         a[0] = 1.0
-        for i in range(p):
-            a[i + 1] = -ar.unsafe_load(b * p + i)
-        reject = _root_inside(a, p)
-    if not reject and q > 0 and q <= ROOT_MAX_DEG:
-        var a = InlineArray[Float32, ROOT_MAX_DEG + 1](fill=0.0)
-        a[0] = 1.0
-        for i in range(q):
-            a[i + 1] = ma.unsafe_load(b * q + i)
-        reject = _root_inside(a, q)
+        for i in range(deg):
+            if poly == 0:
+                a[i + 1] = -ar.unsafe_load(b * p + i)
+            else:
+                a[i + 1] = ma.unsafe_load(b * q + i)
+        while deg > 0 and abs(a[deg]) <= ROOT_TRIM:
+            deg -= 1
+        var scale = Float32(1.0)
+        for i in range(1, deg + 1):
+            scale *= ROOT_MIN_MODULUS
+            a[i] = a[i] * scale
+        var m = deg
+        var tmp = InlineArray[Float32, ROOT_MAX_DEG + 1](fill=0.0)
+        while m >= 1 and not reject:
+            var k = a[m]
+            if not (abs(k) < Float32(1.0)):
+                reject = True
+            else:
+                var den = Float32(1.0) - k * k
+                for i in range(1, m):
+                    tmp[i] = (a[i] - k * a[m - i]) / den
+                for i in range(1, m):
+                    a[i] = tmp[i]
+                m -= 1
     if reject:
         ll.unsafe_store(Int(row_in) * bs + b, -inf[DType.float32]())
 

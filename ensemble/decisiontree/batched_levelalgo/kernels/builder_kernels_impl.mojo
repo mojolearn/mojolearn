@@ -787,6 +787,18 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
                     break
             if same:
                 return self.device_ptr()
+        # box-run-2 (2026-10-05): `host` is the SOURCE of the previous
+        # enqueued copy. A pinned host->device copy is asynchronous (HIP and
+        # CUDA read the host bytes when the queue reaches the copy), so
+        # overwriting `host` while that copy is still queued sends the NEW
+        # bytes to every kernel enqueued before it. The device level loop
+        # enqueues several batches without a host wait, which turned this into
+        # a GPU memory access fault on the MI325X (DART gate, async only;
+        # gone under AMD_SERIALIZE_KERNEL=3 / RF_LAUNCH_CLOCK=1). Drain the
+        # queue before reusing the staging bytes; unchanged uploads (the
+        # common case, DEVIATION 1917) still skip both the copy and the wait.
+        if self.staged:
+            ctx.synchronize()
         # Byte copy rather than a second fieldwise store, so `host`'s
         # padding stays the stable bytes `cmp` carries.
         for i in range(nbytes):
