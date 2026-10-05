@@ -681,14 +681,9 @@ class ARIMA(NumericModeMixin):
         # column runs the same soft-float64 arithmetic). A NaN criterion is
         # the canonical quiet NaN.
         if ics is None:
-            # Fit-reuse path (ARIMA_FAST_SEARCH_REUSE): the search wrote no
-            # criterion, so form cuML's -2 llf + penalty from llf (glue
-            # arithmetic, one value per series).
-            import math
-            k = float(self.complexity_)
-            self.aic_ = -2.0 * llf + 2.0 * k
-            self.bic_ = -2.0 * llf + math.log(float(n_obs)) * k
-            return self
+            raise RuntimeError(
+                "ARIMA._adopt_fit needs the device-written aic/bic (ics); the fit-reuse "
+                "path (MOJOLEARN_ARIMA_FAST_SEARCH_REUSE) does not supply it yet")
         self.aic_ = ics[:batch_size]
         self.bic_ = ics[batch_size:]
         return self
