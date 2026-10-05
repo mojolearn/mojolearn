@@ -41,10 +41,6 @@ py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	return ma
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	return min(self._reduce_values("min"))
 # why: min/max/sum fallbacks behind reduce_stat: only for dtypes without a helper code (f2, u2, i1) and the test reference arm that plants a missing helper; owed with the f2/u2/i1 helper codes
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_array.py	0	return sum(values)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	before = tuple(array.tobytes() for array in inputs)
-# why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-text-io moves it or marks it `# glue:`
-py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/_byte_lm_impl.py	0	if any(saved != array.tobytes() for saved, array in zip(before, inputs)):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-np-compute	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cnn.py	0	dst = np.concatenate([dst[keep], np.arange(n)])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
