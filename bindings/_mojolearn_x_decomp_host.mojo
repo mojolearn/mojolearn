@@ -26,6 +26,7 @@ from x_decomp.chi2 import chi2_cdf_py, chi2_quantile_py, lda_bound_host_py
 from x_decomp.als import als_fit_py
 from x_decomp.mds import mds_fit_py
 from x_decomp.lle_iter import lle_iterate_py
+from x_decomp.pls import pls_fit_py
 from x_decomp.rotation import ortho_rotation_py
 from x_decomp.lanczos_host import lanczos_py
 from x_decomp.mds_iso import mds_disp_host_py, mds_setup_host_py
@@ -108,6 +109,7 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[ica_solve_py[HostExec]]("x_decomp_ica_solve")
         m.def_function[fa_em_main_py[HostExec]]("x_decomp_fa_em_main")
         m.def_function[dsum_f32_py]("x_decomp_dsum_f32")
+        m.def_function[pls_fit_py[HostExec]]("x_decomp_pls_fit")
         m.def_function[lle_iterate_py[HostExec]]("x_decomp_lle_iterate")
         m.def_function[mds_fit_py[HostExec]]("x_decomp_mds_fit")
         m.def_function[als_fit_py[HostExec]]("x_decomp_als_fit")

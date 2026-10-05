@@ -50,6 +50,8 @@ from x_decomp.device import (
     launch_rowsum,
     launch_sqdist,
     launch_trisolve,
+    absmax_scratch,
+    launch_absmax,
     cd_rows_kernel,
     lda_rows_kernel,
     rand_kernel,
@@ -57,7 +59,7 @@ from x_decomp.device import (
     xd_ctx,
 )
 from x_decomp.kit import (
-    Mat, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
+    Mat, OP_GTS, OP_SELECT, mat_const, svd_order, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
     mat_from,
 )
 from std.atomic import Atomic
@@ -68,7 +70,7 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from x_decomp.mcd import Est, _key, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
 from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
-from x_decomp.moves import MOVE_TRANSPOSE
+from x_decomp.moves import MOVE_TAKE_COLS, MOVE_TRANSPOSE
 from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.moves_device import launch_move
 from x_decomp.select_dev import enqueue_sel_reduce, order_small_kernel
@@ -526,6 +528,60 @@ struct DKit(Movable):
             var view = DMat(rows_of=out, row0=0, rows=X.r)
             self.ctx.enqueue_copy(dst_buf=self._sub(view), src_buf=self._sub(X))
         return out^
+
+    def const(mut self, v: Float64, r: Int, c: Int) raises -> DMat:
+        return self.upload(mat_const(v, r, c))
+
+    def cols(mut self, A: DMat, a: Int, b: Int) raises -> DMat:
+        """`_M.cols(a, b)` on the device (the TAKE_COLS move)."""
+        var w = b - a
+        var out = DMat(A.r, w)
+        if A.r * w == 0:
+            return out^
+        var ix = Mat(1, w)
+        for j in range(w):  # small-loop(w: selected columns): the move's exact float column numbers
+            ix.d[j] = Float32(a + j)
+        var idx = self.upload(ix)
+        launch_move(self.ctx, MOVE_TAKE_COLS, A.p(), idx.p(), out.p(), A.r * w, w, A.c, 0, 0, 0)
+        self.sync()
+        return out^
+
+    def take_col(mut self, A: DMat, j: Int) raises -> DMat:
+        return self.cols(A, j, j + 1)
+
+    def neg_signs(mut self, V: DMat) raises -> DMat:
+        var m1 = self.const(-1.0, 1, 1)
+        var p1 = self.const(1.0, 1, 1)
+        return self.ew3(OP_SELECT, self.ew1(OP_SCALE, V, -1.0), m1, p1, 0.0)
+
+    def absmax_signs(mut self, A: DMat, by_col: Bool) raises -> DMat:
+        var cnt = A.c if by_col else A.r
+        var out = DMat(1, cnt)
+        if cnt > 0 and A.n() > 0:
+            var ns = absmax_scratch(A.r, A.c, by_col)
+            var sc = DMat(max(ns, 1), 1)
+            launch_absmax(self.ctx, A.p(), out.p(), sc.p(), A.r, A.c, by_col)
+            self.ctx.synchronize()
+        if not by_col:
+            out = self.vec_t(out^)
+        return self.neg_signs(out)
+
+    def count_gt(mut self, A: DMat, s: Float64) raises -> Int:
+        if A.n() == 0:
+            return 0
+        return Int(self.word(self.total(self.ew1(OP_GTS, A, s))))
+
+    def svd(mut self, A: DMat, mut S: DMat, mut Vt: DMat) raises:
+        """`_Kit.svd` of a resident tall A: DevExec's solve, the descending
+        order of the values home (`svd_order`), S and Vt back up."""
+        var s = Mat(0, 0)
+        var v = Mat(0, 0)
+        self.svd_host(A, s, v)
+        var sh = Mat(0, 0)
+        var vh = Mat(0, 0)
+        svd_order(s, v, sh, vh)
+        S = self.upload(sh)
+        Vt = self.upload(vh)
 
     def word(mut self, A: DMat) raises -> Float64:
         """`A.s[0]` as Python reads it: one word home (a sync)."""

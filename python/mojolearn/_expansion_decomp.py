@@ -3181,48 +3181,6 @@ class _PLS(_Base):
             std = k.const(1.0, 1, A.c)
         return Ac, mean, std
 
-    def _power(self, k, X, Y, norm_y):
-        eps = _F32_EPS
-        # the first column of Y with some |y| > eps (lane cpu2-l8-decomp,
-        # re-audit L8 `_PLS._power`): per-column counts on the device, one
-        # word for "any", and the column found by the stable order of the
-        # 0 (live) / 1 (dead) keys, gathered where Y lives (no column download)
-        cnt = k.colsum(k.ew("gts", k.ew("abs", Y), s=eps))
-        if k.count_gt(cnt, 0.0) == 0:
-            raise StopIteration("y residual is constant")
-        first = k.order_small(k.ew("adds", k.ew("scale", k.ew("gts", cnt, s=0.0), s=-1.0), s=1.0))
-        y_score = k.take_cols_m(Y, first, 1)
-        xw_old = None
-        if self._pmode == "B":
-            Xp, Yp = _pinv(k, X), _pinv(k, Y)
-        it = 0
-        for it in range(1, self.max_iter + 1):
-            if self._pmode == "B":
-                xw = k.mm(Xp, y_score)
-            else:
-                xw = k.ew("div", k.mm(X, y_score, ta=True), _dot(k, y_score, y_score))
-            xw = k.ew("div", xw, k.ew("adds", k.ew("sqrt", _dot(k, xw, xw)), s=eps))
-            x_score = k.mm(X, xw)
-            if self._pmode == "B":
-                yw = k.mm(Yp, x_score)
-            else:
-                yw = k.ew("div", k.mm(Y, x_score, ta=True), _dot(k, x_score, x_score))
-            if norm_y:
-                yw = k.ew("div", yw, k.ew("adds", k.ew("sqrt", _dot(k, yw, yw)), s=eps))
-            y_score = k.ew("div", k.mm(Y, yw), k.ew("adds", _dot(k, yw, yw), s=eps))
-            if Y.c == 1:
-                break
-            if xw_old is not None:
-                diff = k.ew("sub", xw, xw_old)
-                if _dot(k, diff, diff).s[0] < self.tol:
-                    break
-            else:
-                diff = k.ew("adds", xw, s=-100.0)
-                if _dot(k, diff, diff).s[0] < self.tol:
-                    break
-            xw_old = xw
-        return xw, yw, it
-
     def fit(self, X, Y):
         self.numeric_mode_ = _mode(self.numeric_mode)
         k = self._kit()
@@ -3238,55 +3196,25 @@ class _PLS(_Base):
         Xk, self._x_mean, self._x_std = self._center_scale(k, M)
         Yk, self._y_mean, self._y_std = self._center_scale(k, Ym)
         norm_y = self._deflation == "canonical"
-        xw_c, yw_c, xs_c, ys_c, xl_c, yl_c = [], [], [], [], [], []
-        self.n_iter_ = []
-        thr = 10 * _F32_EPS
-        for _c in range(nc):
-            # Yk columns that are all below 10 eps are set to zero: per
-            # column, the count of |y| >= thr (-|y| <= -thr, exact) on the
-            # device; q values come back
-            live = k.colsum(k.ew("le", k.ew("scale", k.ew("abs", Yk), s=-1.0), _M.of([-thr], 1, 1)))
-            # lane cpu2-l8-decomp: one word ("is any column dead?") and the
-            # 0/1 mask made on the device (live count > 0), not q flags
-            if k.count_gt(live, 0.0) < q:
-                Yk = k.ew("mul", Yk, k.ew("gts", live, s=0.0))
-            try:
-                if getattr(self, "algorithm", "nipals") == "svd":
-                    # `_get_first_singular_vectors_svd`: the first singular pair of X^T Y
-                    Cxy = k.mm(Xk, Yk, ta=True)
-                    U, _, Vt = _thin_svd(k, Cxy, 1, u_based=True)
-                    xw, yw, it = U.cols(0, 1), Vt.rows(0, 1).T, 0
-                else:
-                    xw, yw, it = self._power(k, Xk, Yk, norm_y)
-            except StopIteration:
-                import warnings
-                warnings.warn(f"y residual is constant at iteration {_c}", stacklevel=2)
-                break
-            if getattr(self, "algorithm", "nipals") != "svd":
-                self.n_iter_.append(it)
-            # _svd_flip_1d: the largest-|.| entry of x_weights (the first on
-            # a tie) positive; its sign as a 1 x 1 device value (lane
-            # cpu2-l8-decomp: absmax_sign_cell over xw's one column)
-            sg = k.absmax_signs(xw, True)
-            xw, yw = k.ew("mul", xw, sg), k.ew("mul", yw, sg)
-            x_scores = k.mm(Xk, xw)
-            y_ss = k.const(1.0) if norm_y else _dot(k, yw, yw)
-            y_scores = k.ew("div", k.mm(Yk, yw), y_ss)
-            x_load = k.ew("div", k.mm(Xk, x_scores, ta=True), _dot(k, x_scores, x_scores))
-            Xk = k.ew("sub", Xk, k.mm(x_scores, x_load, tb=True))
-            if self._deflation == "canonical":
-                y_load = k.ew("div", k.mm(Yk, y_scores, ta=True), _dot(k, y_scores, y_scores))
-                Yk = k.ew("sub", Yk, k.mm(y_scores, y_load, tb=True))
-            else:
-                y_load = k.ew("div", k.mm(Yk, x_scores, ta=True), _dot(k, x_scores, x_scores))
-                Yk = k.ew("sub", Yk, k.mm(x_scores, y_load, tb=True))
-            xw_c.append(xw); yw_c.append(yw); xs_c.append(x_scores); ys_c.append(y_scores)
-            xl_c.append(x_load); yl_c.append(y_load)
-        self.x_weights_m_ = k.hstack(xw_c)
-        self.y_weights_m_ = k.hstack(yw_c)
-        self.x_loadings_m_ = k.hstack(xl_c)
-        self.y_loadings_m_ = k.hstack(yl_c)
-        self._x_scores_m, self._y_scores_m = k.hstack(xs_c), k.hstack(ys_c)
+        # the component loop (NIPALS `_power` or the SVD pair, the flips and
+        # the deflations) in ONE binding call (lane py-runtime-b:
+        # x_decomp/pls.mojo on the host column, pls_dev.mojo on resident
+        # device matrices), the same cells, counts and tolerance tests
+        svd_algo = getattr(self, "algorithm", "nipals") == "svd"
+        outs = [_M.zeros(r, nc) for r in (p, q, n, n, p, q)]  # glue: six output blocks
+        its = array.array("i", [0]) * nc
+        done, nits = k.b.x_decomp_pls_fit(
+            Xk.addr, Yk.addr, [o.addr for o in outs], its.buffer_info()[0],  # glue: six output addresses
+            [n, p, q, nc, int(self.max_iter), 1 if self._pmode == "B" else 0, int(norm_y),
+             int(self._deflation == "canonical"), int(svd_algo)], [float(self.tol)])
+        done, nits = int(done), int(nits)
+        if done < nc:
+            import warnings
+            warnings.warn(f"y residual is constant at iteration {done}", stacklevel=2)
+            outs = [o.cols(0, done) for o in outs]  # glue: the fitted columns of six blocks
+        self.n_iter_ = its.tolist()[:nits]
+        (self.x_weights_m_, self.y_weights_m_, self._x_scores_m, self._y_scores_m, self.x_loadings_m_,
+         self.y_loadings_m_) = outs
         self.x_rotations_m_ = k.mm(self.x_weights_m_, _pinv(k, k.mm(self.x_loadings_m_, self.x_weights_m_, ta=True)))
         self.y_rotations_m_ = k.mm(self.y_weights_m_, _pinv(k, k.mm(self.y_loadings_m_, self.y_weights_m_, ta=True)))
         coef = k.mm(self.x_rotations_m_, self.y_loadings_m_, tb=True)          # p x q
