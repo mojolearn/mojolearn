@@ -12,6 +12,15 @@ struct InstanceRange(ImplicitlyCopyable, Movable):
     var begin: Int32
     var count: Int32
 
+    @always_inline
+    def __init__(out self, *, copy: Self):
+        """Metal: an inlined field-by-field copy. The synthesized copy
+        constructor is an out-of-line call taking the source by reference,
+        and a device pointer crossing it crashes Apple's Metal compiler
+        ("failed to compile metallib") on any whole-record load."""
+        self.begin = copy.begin
+        self.count = copy.count
+
 
 @fieldwise_init
 struct NodeWorkItem(ImplicitlyCopyable, Movable):
@@ -22,6 +31,16 @@ struct NodeWorkItem(ImplicitlyCopyable, Movable):
 
     var depth: Int32
     var instances: InstanceRange
+
+    @always_inline
+    def __init__(out self, *, copy: Self):
+        """Metal: an inlined field-by-field copy. The synthesized copy
+        constructor is an out-of-line call taking the source by reference,
+        and a device pointer crossing it crashes Apple's Metal compiler
+        ("failed to compile metallib") on any whole-record load."""
+        self.idx = copy.idx
+        self.depth = copy.depth
+        self.instances = copy.instances
 
 
 @fieldwise_init
@@ -39,6 +58,17 @@ struct WorkloadInfo(ImplicitlyCopyable, Movable):
 
     var num_blocks: Int32
     """Total blocks working on this node."""
+
+    @always_inline
+    def __init__(out self, *, copy: Self):
+        """Metal: an inlined field-by-field copy. The synthesized copy
+        constructor is an out-of-line call taking the source by reference,
+        and a device pointer crossing it crashes Apple's Metal compiler
+        ("failed to compile metallib") on any whole-record load."""
+        self.nodeid = copy.nodeid
+        self.large_nodeid = copy.large_nodeid
+        self.offset_blockid = copy.offset_blockid
+        self.num_blocks = copy.num_blocks
 
 
 def split_not_valid(
