@@ -841,7 +841,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             comptime if MC_EST_ACTIVE:
                 if (
                     self.estimation_method == LEAF_ESTIMATION_NEWTON
-                    and self.single_bin_dim <= MULTICLASS_HESSIAN_BATCH_MAX_CLASSES
+                    and _mc_est_takes(self.single_bin_dim, self.n_rows)
                 ):
                     self._write_multiclass_fused_evaluation(value, gradient)
                     return
@@ -1355,11 +1355,15 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # planes the scratch was sized for (`_oracle_tri_planes`),
             # one reduce over all of them, one copy, one wait; then the
             # same mirror per row from the row's slot
-            var tri = _oracle_tri_planes(self.objective, hbs)
+            var tri = _oracle_tri_planes(self.objective, hbs, self.n_rows)
             if tri != hbs:
+                var reg_rows = False
                 comptime if MC_CLASS_BATCH_DERIV:
-                    # the softmax in registers (`MC_CLASS_BATCH_DERIV`); the
-                    # cap is `MC_REG_MAX_CLASSES`, the same 8
+                    # the softmax in registers (`MC_CLASS_BATCH_DERIV`) up to
+                    # the register kernel's `MC_REG_MAX_CLASSES`; a wider
+                    # batch (no longer capped at 8) takes the generic kernel
+                    reg_rows = self.num_classes <= MC_REG_MAX_CLASSES
+                if reg_rows:
                     launch_multilogit_second_der_all_rows_reg(
                         self.ctx, self.num_classes, self.n_rows,
                         self.d_weights, self.has_weights,
@@ -1629,9 +1633,38 @@ def _oracle_multi_host_len(multi_planes: Int, bin_count: Int) -> Int:
         return multi_planes * multi_planes * bin_count
     else:
         return multi_planes * bin_count
-#: the widest class count batched: `d_multi_der` is `K (K + 1) / 2` planes
-#: of `n_rows` floats under the batch (36 at 8), the row loop above that
+#: the widest class count batched under `-D
+#: MOJOLEARN_LEGACY_NARROW_MC_HESS_BATCH`: `d_multi_der` is `K (K + 1) / 2`
+#: planes of `n_rows` floats under the batch (36 at 8), the row loop above
+#: that. Removed as benchmark-tuned on 2026-10-04 (it admitted the board's
+#: small class counts; no kernel needs it: the all-rows kernel loops the
+#: triangle and the partition reduce loops planes), replacement UNMEASURED.
 comptime MULTICLASS_HESSIAN_BATCH_MAX_CLASSES = 8
+comptime LEGACY_NARROW_MC_HESS_BATCH = is_defined[
+    "MOJOLEARN_LEGACY_NARROW_MC_HESS_BATCH"
+]()
+#: The general rule: batch while the triangle scratch (K (K + 1) / 2 planes
+#: of `n_rows` float32) fits a fixed 1 GiB device-memory budget; above it the
+#: row loop serves with K planes. The batch does the same arithmetic as the
+#: row loop (one launch instead of K); only its memory grows with K^2.
+comptime MULTICLASS_HESSIAN_BATCH_MAX_BYTES = 1 << 30
+
+
+def _mc_hess_batch_takes(single_bin_dim: Int, n_rows: Int) -> Bool:
+    """Whether the batched Hessian takes a MultiClass oracle this wide."""
+    comptime if LEGACY_NARROW_MC_HESS_BATCH:
+        return single_bin_dim <= MULTICLASS_HESSIAN_BATCH_MAX_CLASSES
+    var tri = single_bin_dim * (single_bin_dim + 1) // 2
+    return tri * max(n_rows, 1) * 4 <= MULTICLASS_HESSIAN_BATCH_MAX_BYTES
+
+
+def _mc_est_takes(single_bin_dim: Int, n_rows: Int) -> Bool:
+    """`MC_EST_ACTIVE`'s fused evaluation: the batched layout AND the
+    register kernels' class bound (`MC_REG_MAX_CLASSES`, K-1 approxes and
+    exps per thread)."""
+    return single_bin_dim <= MC_REG_MAX_CLASSES and _mc_hess_batch_takes(
+        single_bin_dim, n_rows
+    )
 
 
 #: `MC_CLASS_BATCH_EST` (lane af-sym-multi) rides on the batched Hessian's
@@ -1639,20 +1672,20 @@ comptime MULTICLASS_HESSIAN_BATCH_MAX_CLASSES = 8
 comptime MC_EST_ACTIVE = MC_CLASS_BATCH_EST and MULTICLASS_HESSIAN_BATCH
 
 
-def _oracle_tri_planes(objective: Int, single_bin_dim: Int) -> Int:
+def _oracle_tri_planes(objective: Int, single_bin_dim: Int, n_rows: Int) -> Int:
     """The Hessian pass's plane count: `single_bin_dim` (the widest row) as
     main's, or the whole lower triangle under `MULTICLASS_HESSIAN_BATCH` for
     a MultiClass oracle within the cap."""
     comptime if MULTICLASS_HESSIAN_BATCH:
         if (
             objective == OBJECTIVE_MULTICLASS
-            and single_bin_dim <= MULTICLASS_HESSIAN_BATCH_MAX_CLASSES
+            and _mc_hess_batch_takes(single_bin_dim, n_rows)
         ):
             return single_bin_dim * (single_bin_dim + 1) // 2
     return single_bin_dim
 
 
-def _oracle_multi_planes(objective: Int, single_bin_dim: Int) -> Int:
+def _oracle_multi_planes(objective: Int, single_bin_dim: Int, n_rows: Int) -> Int:
     """The width of `d_multi_der` / `d_multi_stats`: `_oracle_tri_planes`,
     or under `MC_EST_ACTIVE` the der planes AND the triangle,
     `(K - 1) + K (K + 1) / 2`, for a MultiClass oracle within the cap (the
@@ -1662,10 +1695,10 @@ def _oracle_multi_planes(objective: Int, single_bin_dim: Int) -> Int:
     comptime if MC_EST_ACTIVE:
         if (
             objective == OBJECTIVE_MULTICLASS
-            and single_bin_dim <= MULTICLASS_HESSIAN_BATCH_MAX_CLASSES
+            and _mc_est_takes(single_bin_dim, n_rows)
         ):
             return (single_bin_dim - 1) + single_bin_dim * (single_bin_dim + 1) // 2
-    return _oracle_tri_planes(objective, single_bin_dim)
+    return _oracle_tri_planes(objective, single_bin_dim, n_rows)
 #: negative control for DEVIATION 3041 (default off): a task that REUSES the
 #: fit's buffers gets ONE cell of `d_bins` moved to another leaf after the
 #: fill, in range. It stands in for the stale read this DEVIATION must never
@@ -2069,7 +2102,7 @@ struct OracleScratchPool(Movable):
             return Optional[OracleDeviceScratch]()
         comptime if MULTICLASS_HESSIAN_BATCH:
             # the batched Hessian's wider planes (`_oracle_multi_planes`)
-            dims = (dims[0], _oracle_multi_planes(objective, dims[1]))
+            dims = (dims[0], _oracle_multi_planes(objective, dims[1], n_rows))
         var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
         if pair_blocks > 0:
             fv_blocks = pair_blocks
@@ -2188,7 +2221,7 @@ def make_bin_optimized_oracle(
     # planes) and the widest Hessian row (`single_bin_dim` columns)
     var multi_planes = single_bin_dim
     comptime if MULTICLASS_HESSIAN_BATCH:
-        multi_planes = _oracle_multi_planes(objective, single_bin_dim)
+        multi_planes = _oracle_multi_planes(objective, single_bin_dim, n_rows)
 
     var blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var fv_blocks = blocks
