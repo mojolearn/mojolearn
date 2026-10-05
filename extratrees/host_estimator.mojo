@@ -18,7 +18,7 @@ from extratrees.estimator import (
     depth_cap_bound,
     regressor_plan,
 )
-from extratrees.impl.randomforest.randomforest import class_ids_for
+from extratrees.impl.randomforest.randomforest import class_ids_for_host
 from extratrees.checks.fixed_point import choose_scale, quantize
 from core.abs_sum_blocked_host import host_abs_sum_blocked
 from extratrees.impl.randomforest.host_forest import (
@@ -92,13 +92,13 @@ def fit_extra_trees_classifier_host_exact(
     the host, over `fit_forest_exact` (the block comment above
     `train_tree_exact` in `batched_levelalgo/builder.mojo`). The plan is
     `classifier_plan`, the same resolver both GPU arms call, so every
-    refusal is theirs; the label plane is `class_ids_for`, the device's
+    refusal is theirs; the label plane is `class_ids_for_host`, the device's
     cast with its range refusal. Takes no DeviceContext; what
     `bindings/_mojolearn_trees_host.mojo` runs, and what
     `tools/identity_break.py --diff ... --require-columns 4` holds to the
     three GPU columns."""
     var plan = classifier_plan(config, n_rows, n_features)
-    var class_ids = class_ids_for(labels, n_rows, n_classes)
+    var class_ids = class_ids_for_host(labels, n_rows, n_classes)
     var forest = fit_forest_exact(
         x_col_major,
         labels,

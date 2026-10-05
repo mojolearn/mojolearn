@@ -21,7 +21,7 @@ is checked against an independently computed average, per row, per class — on
 a fixture built so the trees do NOT agree.
 
 **The bootstrap can be inert, or not a bootstrap (DEVIATION 460).** Since
-2026-08-23 `row_sample_for` draws cuML's with-replacement sample
+2026-08-23 `row_sample_for_host` draws cuML's with-replacement sample
 (`randomforest.cuh:64-67`) through the RF lane's Philox implementation. This file pins
 the per-tree seed chain to hand-computed fnv1a32 values, requires the sample
 to be a with-replacement sample (duplicates, every id in range, `n_sampled`
@@ -43,10 +43,10 @@ from extratrees.impl.decisiontree.decisiontree import DecisionTreeParams
 from extratrees.impl.decisiontree.flatnode import predict_leaf
 from extratrees.impl.randomforest.randomforest import (
     Forest,
-    forest_vote,
-    predict_class_forest,
-    predict_regression_forest,
-    row_sample_for,
+    forest_vote_host,
+    predict_class_forest_host,
+    predict_regression_forest_host,
+    row_sample_for_host,
 )
 from extratrees.impl.randomforest.host_forest import (
     fit_classification,
@@ -147,7 +147,7 @@ def main() raises:
     var vote_cells = 0
     for r in range(0, hashed.n_rows, 37):
         var row = row_of(hashed, r)
-        var got = forest_vote(forest, row, 0)
+        var got = forest_vote_host(forest, row, 0)
         # INDEPENDENT: route the row through each tree by hand, take each
         # tree's leaf vector, and average them here rather than in the code
         # under test.
@@ -177,7 +177,7 @@ def main() raises:
     # the actual test.
     for r in range(0, hashed.n_rows, 101):
         var row = row_of(hashed, r)
-        var got = forest_vote(forest, row, 0)
+        var got = forest_vote_host(forest, row, 0)
         var s = Float32(0.0)
         for k in range(Int(forest.num_outputs)):
             s += got[k]
@@ -229,7 +229,7 @@ def main() raises:
     var wrong = 0
     for r in range(gap.data.n_rows):
         var row = row_of(gap.data, r)
-        if predict_class_forest(gforest, row, 0) != Int(gap.data.label[r]):
+        if predict_class_forest_host(gforest, row, 0) != Int(gap.data.label[r]):
             wrong += 1
     assert_equal(wrong, 0, "a 10-tree forest on a separable fixture must be exact")
     cells += 1
@@ -249,7 +249,7 @@ def main() raises:
     )
     for r in range(0, rfx.n_rows, 23):
         var row = row_of(rfx, r)
-        var got = predict_regression_forest(rforest, row, 0)
+        var got = predict_regression_forest_host(rforest, row, 0)
         var acc = Float32(0.0)
         for t in range(len(rforest.trees)):
             var leaf = predict_leaf(rforest.trees[t], row, 0)
@@ -319,10 +319,10 @@ def main() raises:
         "rs(2^40,0): the high half gets its round (RF lane DEVIATION 400)",
     )
     cells += 6
-    var samp0 = row_sample_for(1024, True, 0, 0xABC123, 0)
-    var samp0b = row_sample_for(1024, True, 0, 0xABC123, 0)
-    var samp1 = row_sample_for(1024, True, 0, 0xABC123, 1)
-    var samp_half = row_sample_for(1024, True, 300, 0xABC123, 0)
+    var samp0 = row_sample_for_host(1024, True, 0, 0xABC123, 0)
+    var samp0b = row_sample_for_host(1024, True, 0, 0xABC123, 0)
+    var samp1 = row_sample_for_host(1024, True, 0, 0xABC123, 1)
+    var samp_half = row_sample_for_host(1024, True, 300, 0xABC123, 0)
     assert_equal(len(samp0), 1024, "n_sampled_rows=0 means every row")
     assert_equal(len(samp_half), 300, "n_sampled_rows=300 means 300 draws")
     var in_range = True
@@ -397,7 +397,7 @@ def main() raises:
     var refused = 0
     try:
         # the SABOTAGE arm of DEVIATION 460: max_samples without bootstrap
-        _ = row_sample_for(10, False, 5)
+        _ = row_sample_for_host(10, False, 5)
     except:
         refused += 1
     try:
