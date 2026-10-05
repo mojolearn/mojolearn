@@ -229,6 +229,34 @@ def merge_stage_times(mut dst: StageTimes, src: StageTimes):
             dst.ns.append(src.ns[i])
 
 
+def _mirror_second_der_row(
+    mut second_der: List[Float64],
+    h_stats: HostBuffer[DType.float32],
+    off: Int,
+    bin_stride: Int,
+    row: Int,
+    hbs: Int,
+    bin_count: Int,
+    lambda_reg: Float64,
+):
+    """Mirror Hessian row `row` of every bin from the read-back partition
+    stats (`h_stats[off + bin * bin_stride + col]`, `col <= row`) into both
+    triangles of the per-bin `hbs x hbs` blocks (`:166-180`); the diagonal
+    takes `+ lambda` (`:178`). Shared by the per-row wait path and the
+    IDENTICAL one-wait arm (`IDN_MULTI_HESS_ONE_WAIT`) so both mirror the
+    same way."""
+    var matrix_size = hbs * hbs
+    var column_count = row + 1
+    for bin in range(bin_count):  # small-loop(bin_count: feature borders, never rows): the per-bin Hessian block of one class row
+        var base = bin * matrix_size
+        for col in range(column_count):
+            var val = Float64(h_stats[off + bin * bin_stride + col])
+            if col == row:
+                second_der[base + row * hbs + row] = val + lambda_reg
+            else:
+                second_der[base + row * hbs + col] = val
+                second_der[base + col * hbs + row] = val
+
 @fieldwise_init
 struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     """One tree's estimation state. Build with `make_bin_optimized_oracle`."""
@@ -1410,24 +1438,11 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                     src_buf=self.d_multi_stats,
                 )
             self.ctx.synchronize()
-            for row in range(hbs):  # small-loop(hbs: class dimensions, over bins and columns): assemble the per-bin Hessian blocks, never rows
-                var column_count = row + 1
-                var slot = row * stats_len
-                for bin in range(self.bin_count):
-                    var base = bin * matrix_size
-                    for col in range(column_count):
-                        var val = Float64(
-                            self.h_multi_stats.unsafe_ptr().unsafe_load(
-                                slot + bin * column_count + col
-                            )
-                        )
-                        if col == row:
-                            second_der[base + row * hbs + row] = (
-                                val + self.lambda_reg
-                            )
-                        else:
-                            second_der[base + row * hbs + col] = val
-                            second_der[base + col * hbs + row] = val
+            for row in range(hbs):  # small-loop(hbs: class dimensions of one cursor): one mirror call per class row
+                _mirror_second_der_row(
+                    second_der, self.h_multi_stats, row * stats_len, row + 1,
+                    row, hbs, self.bin_count, self.lambda_reg,
+                )
             return
 
         for row in range(hbs):
@@ -1463,22 +1478,10 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             self.ctx.synchronize()
 
             # mirror this row into both triangles (`:166-180`)
-            for bin in range(self.bin_count):
-                var base = bin * matrix_size
-                for col in range(column_count):
-                    var val = Float64(
-                        self.h_multi_stats.unsafe_ptr().unsafe_load(
-                            bin * column_count + col
-                        )
-                    )
-                    if col == row:
-                        # `sigma[row*hbs + row] = ... + lambda` (`:178`)
-                        second_der[base + row * hbs + row] = (
-                            val + self.lambda_reg
-                        )
-                    else:
-                        second_der[base + row * hbs + col] = val
-                        second_der[base + col * hbs + row] = val
+            _mirror_second_der_row(
+                second_der, self.h_multi_stats, 0, column_count,
+                row, hbs, self.bin_count, self.lambda_reg,
+            )
 
     def make_estimation_result(
         self, point: List[Float32]
