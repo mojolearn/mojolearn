@@ -45,6 +45,8 @@ absent as in `lstsq.mojo`.
 from core.device_zero import enqueue_fill
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
+from x_decomp.cells import F32Ptr
+from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale
 
 from decomposition.spectrum_order_device import spectrum_rank_desc
 
@@ -147,6 +149,11 @@ def svd_eig_scratch_traced(
     trace.record_device[DType.float32](
         ctx, tag + ".covA", cov, n_cols * n_cols
     )
+    # lane idn-cov-overflow: the power-of-two range scale of
+    # x_decomp/eigh_scale.mojo on the Gram (no write while max |cov| is in
+    # [2^-33, 2^32)) so the Jacobi's ||A||_F^2 stays finite; the
+    # eigenvalues unscaled after it. `host_svd_eig` takes the same.
+    var dfac = enqueue_es_scale(ctx, F32Ptr(unsafe_from_address=Int(cov.unsafe_ptr())), 1, n_cols)
 
     # eigDC -> V, S. `svd.cuh:146`. The device Jacobi (row 31) consumes
     # `cov` and leaves S on its diagonal; `eigDC` ABORTS on a non-zero
@@ -168,6 +175,7 @@ def svd_eig_scratch_traced(
         grid_dim=((n_cols + MATRIX_ELEM_TPB - 1) // MATRIX_ELEM_TPB, 1, 1),
         block_dim=(MATRIX_ELEM_TPB, 1, 1),
     )
+    enqueue_es_unscale(ctx, F32Ptr(unsafe_from_address=Int(s_raw.unsafe_ptr())), dfac, 1, n_cols)
     var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
     ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
     ctx.synchronize()
@@ -193,6 +201,7 @@ def svd_eig_scratch_traced(
             + ". eigDC aborts here too (raft eig.cuh:149)."
         )
     _ = h_info^
+    _ = dfac^
     trace.record_device[DType.float32](ctx, tag + ".eigvals", s_raw, n_cols)
     trace.record_device[DType.float32](ctx, tag + ".info", info_buf, 3)
 
