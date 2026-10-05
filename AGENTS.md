@@ -59,7 +59,8 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 
 ## No Python in the runtime
 
-Python is the API shell only: check arguments, choose a binding, pass buffers, return results. No Python runs in the
+Python is good, and the right tool, for the glue layer: the public API, connecting to external code (NumPy, scikit-learn
+style interfaces, users' objects), argument checks and choosing bindings. It is the API shell only: check arguments, choose a binding, pass buffers, return results. No Python runs in the
 runtime: no loops over data, no NumPy or Python arithmetic on data, no Python-side sorting, sampling, reductions, label
 processing over rows, or worker threads in fit, transform, predict, score or training steps, in any mode or on any vendor.
 All runtime work is Mojo: on the device for GPU routes, in the host binding for CPU-only installs. Text and file handling
