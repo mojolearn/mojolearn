@@ -12,6 +12,7 @@ from checks.numerics import ftz
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import F32Ptr
+from x_decomp.eigh_scale import host_es_scale, host_es_unscale
 from x_decomp.rr import RR_EIGH_SWEEPS, host_eigh_rr, rr_converged, rr_fro_kept, rr_off_fold
 from x_decomp.rr_block import (
     RB_B,
@@ -34,10 +35,16 @@ def host_eigh_rr_sorted(mut m: List[Float32], n: Int, mut w: List[Float32], mut 
     """`m` (n x n row major, consumed): w = n values ascending, v = n x n row
     major, vector c in COLUMN c. Not converged in RR_EIGH_SWEEPS raises (no
     cyclic fallback). Returns the sweeps run."""
+    # lane idn-cov-overflow: the power-of-two range scale of
+    # x_decomp/eigh_scale.mojo, the device's `_eigh_par_on` / `_rr_batch_on`
+    # step (the eigenvalues come back unscaled below)
+    var fac = host_es_scale(m, n)
     # Experimental block Jacobi is opt-in only, the device's same shared
     # choice (`rb_use`, x_decomp/rr_block.mojo; `DevExec._eigh_par_on`).
     if rb_use(n):
-        return host_eigh_rb_sorted(m, n, w, v)
+        var sw = host_eigh_rb_sorted(m, n, w, v)
+        host_es_unscale(w, fac)
+        return sw
     var vr = List[Float32](length=n * n, fill=Float32(0.0))
     var rr = host_eigh_rr(m, vr, n, RR_EIGH_SWEEPS, Float32(JACOBI_TOL))
     if not rr[0]:
@@ -53,6 +60,7 @@ def host_eigh_rr_sorted(mut m: List[Float32], n: Int, mut w: List[Float32], mut 
     var got = eigh_ascending(diag, vr, n, True, rr[1])
     w = got.w.copy()
     v = got.v.copy()
+    host_es_unscale(w, fac)
     return rr[1]
 
 

@@ -172,6 +172,7 @@ from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 from x_decomp.eigh_tridiag import EIGH_FAST_TRIDIAG, TD_MIN_N, eigh_td_on, td_copy_kernel
+from x_decomp.eigh_scale import ES_TPB, es_apply_kernel, es_fold_kernel, es_rowmax_kernel, es_unscale_kernel
 
 
 #: rounds enqueued between two synchronize() calls
@@ -1682,6 +1683,36 @@ def _pj_off_blocks(n: Int) -> Int:
     return max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
 
 
+def _es_blocks(count: Int) -> Int:
+    return (count + ES_TPB - 1) // ES_TPB if count > 0 else 1
+
+
+def _eigh_scale_on(ctx: DeviceContext, a: F32Ptr, batch: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """x_decomp/eigh_scale.mojo on `batch` n x n problems stacked at `a`
+    (device): each problem's power-of-two range scale, applied in place (no
+    write inside the band). Returns the factors (4 a problem) for
+    `_eigh_unscale_on`. Three launches, nothing read back."""
+    var dfac = ctx.enqueue_create_buffer[DType.float32](4 * max(batch, 1))
+    var drm = ctx.enqueue_create_buffer[DType.float32](max(batch * n, 1))
+    ctx.enqueue_function[es_rowmax_kernel](
+        a, _p(drm), Int32(batch * n), Int32(n), grid_dim=_es_blocks(batch * n), block_dim=ES_TPB
+    )
+    ctx.enqueue_function[es_fold_kernel](_p(drm), _p(dfac), Int32(n), grid_dim=max(batch, 1), block_dim=ES_TPB)
+    ctx.enqueue_function[es_apply_kernel](
+        a, _p(dfac), Int32(n * n), Int32(batch * n * n), grid_dim=_es_blocks(batch * n * n), block_dim=ES_TPB
+    )
+    _ = drm^
+    return dfac^
+
+
+def _eigh_unscale_on(ctx: DeviceContext, w: F32Ptr, dfac: DeviceBuffer[DType.float32], batch: Int, n: Int) raises:
+    """The eigenvalues of `_eigh_scale_on`'s problems (batch x n at `w`,
+    device) back to the input's scale."""
+    ctx.enqueue_function[es_unscale_kernel](
+        w, _p(dfac), Int32(n), Int32(batch * n), grid_dim=_es_blocks(batch * n), block_dim=ES_TPB
+    )
+
+
 def _eigh_par_test(
     ctx: DeviceContext,
     mut da: DeviceBuffer[DType.float32],
@@ -2681,12 +2712,15 @@ struct DevExec(Exec):
         ctx.enqueue_function[td_copy_kernel](
             da.unsafe_ptr(), dwork.unsafe_ptr(), Int32(n * n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
         )
+        # the Jacobi's power-of-two range scale on the copy (FAST: quality)
+        var dfac = _eigh_scale_on(ctx, _p(dwork), 1, n)
         var dz = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dwt = ctx.enqueue_create_buffer[DType.float32](n)
         var ok = eigh_td_on(ctx, dwork, n, dz, dwt)
         _ = dwork^
         if not ok:
             ctx.synchronize()
+            _ = dfac^
             _ = dz^
             _ = dwt^
             return False
@@ -2697,9 +2731,11 @@ struct DevExec(Exec):
         var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dpos = ctx.enqueue_create_buffer[DType.int32](n)
         enqueue_eigh_ascending(ctx, _p(dwt), 1, _p(dz), n, dpos, _p(dw), _p(dvo))
+        _eigh_unscale_on(ctx, _p(dw), dfac, 1, n)
         _down(ctx, dw, w, n)
         _down(ctx, dvo, v, n * n)
         ctx.synchronize()
+        _ = dfac^
         _ = dw^
         _ = dvo^
         _ = dpos^
@@ -2730,10 +2766,14 @@ struct DevExec(Exec):
                 _ = bw^
                 _ = bv^
                 return 0
+        # lane idn-cov-overflow: the power-of-two range scale
+        # (x_decomp/eigh_scale.mojo; the host's `host_eigh_rr_sorted` takes
+        # the same), so the convergence test's squares stay finite
+        var dfac = _eigh_scale_on(ctx, _p(da), 1, n)
         # Experimental block Jacobi is opt-in only (x_decomp/rr_block.mojo);
         # shared rb_use keeps GPU and host defaults and OFF precedence aligned.
         if rb_use(n):
-            return DevExec._eigh_block_on(ctx, da, w, v, n)
+            return DevExec._eigh_block_on(ctx, da, w, v, n, dfac)
         var m = n + (n % 2)
         var h = m // 2
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -2796,9 +2836,11 @@ struct DevExec(Exec):
         var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dpos = ctx.enqueue_create_buffer[DType.int32](n)
         enqueue_eigh_ascending(ctx, _p(doff) + 2 * n, 1, _p(dv), n, dpos, _p(dw), _p(dvo))
+        _eigh_unscale_on(ctx, _p(dw), dfac, 1, n)
         _down(ctx, dw, w, n)
         _down(ctx, dvo, v, n * n)
         ctx.synchronize()
+        _ = dfac^
         _ = dw^
         _ = dvo^
         _ = dpos^
@@ -2811,7 +2853,10 @@ struct DevExec(Exec):
         return executed
 
     @staticmethod
-    def _eigh_block_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises -> Int:
+    def _eigh_block_on(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int,
+        dfac: DeviceBuffer[DType.float32],
+    ) raises -> Int:
         """The block Jacobi eigh (x_decomp/rr_block.mojo, lane fam2-decomp) on
         the device copy in `da` (n x n, read once): M - 1 block rounds a
         sweep, six launches each (gather, mark fill, the batched pivot
@@ -2819,7 +2864,8 @@ struct DevExec(Exec):
         sweep. Before every sweep the rotation solver's convergence test on
         the padded matrix (`_eigh_par_test`) and the pivot solves' two
         sticky flags come back in one wait. Then the sign flip, and the
-        real columns ascending into w (n) and v (n x n) on the host.
+        real columns ascending into w (n) and v (n x n) on the host, w
+        unscaled by `_eigh_par_on`'s range factors `dfac`.
         `host_eigh_rb_sorted` (x_decomp/rr_solve.mojo) is the same walk.
         Returns the sweeps run."""
         var m = rb_blocks(n)
@@ -2940,6 +2986,7 @@ struct DevExec(Exec):
             pkey, vfin, dpos.unsafe_ptr(), Int32(nn), Int32(n), _p(dw), _p(dvo),
             grid_dim=_pj_blocks(n * nn), block_dim=PJ_TPB,
         )
+        _eigh_unscale_on(ctx, _p(dw), dfac, 1, n)
         _down(ctx, dw, w, n)
         _down(ctx, dvo, v, n * n)
         ctx.synchronize()
@@ -2976,6 +3023,9 @@ struct DevExec(Exec):
         device in `da` (consumed): dw (batch x n ascending) and dvo (batch x
         n x n, vectors in columns). One sync to read the convergence marks;
         an unconverged problem raises."""
+        # lane idn-cov-overflow: each problem's power-of-two range scale
+        # (x_decomp/eigh_scale.mojo; `host_eigh_rr_sorted` takes the same)
+        var dfac = _eigh_scale_on(ctx, _p(da), batch, n)
         var dv = ctx.enqueue_create_buffer[DType.float32](batch * n * n)
         var dcs = ctx.enqueue_create_buffer[DType.float32](batch * rrb_cs_len(n))
         var dpart = ctx.enqueue_create_buffer[DType.float32](batch * rrb_part_len(n))
@@ -2986,6 +3036,7 @@ struct DevExec(Exec):
             _p(da), _p(dv), _p(dcs), _p(dpart), _p(ddg), _p(dinfo), _p(dw), _p(dvo), Int32(n),
             Int32(RR_EIGH_SWEEPS), Float32(JACOBI_TOL), grid_dim=batch, block_dim=RR_OFF_TPB,
         )
+        _eigh_unscale_on(ctx, _p(dw), dfac, batch, n)
         # the convergence marks are read on the device (lane cpu3-core):
         # the first problem whose block never ran, and the first unconverged
         var b_neg = xd_first_where(ctx, dinfo, batch, 2, 0)
@@ -2995,6 +3046,7 @@ struct DevExec(Exec):
         _ = dpart^
         _ = ddg^
         _ = dinfo^
+        _ = dfac^
         if b_neg >= 0 or b_zero >= 0:
             var b = b_neg if (b_zero < 0 or (b_neg >= 0 and b_neg < b_zero)) else b_zero
             if b == b_neg:
