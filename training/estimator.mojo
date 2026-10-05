@@ -107,6 +107,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # lane afn-optim (2026-10-03): the Apple FAST candidates (False aliases on
 # every other build, so IDENTICAL compiles this file's code unchanged).
 from training.afn_optim import (
+    AFN_APPLE_FAST,
     AFN_LOSS_FUSED,
     AFN_OPT_RESIDENT_STATE,
     AFN_SF_DENOM,
@@ -716,6 +717,31 @@ comptime IDN_OPT_PARAMS_RESIDENT = (
 )
 
 
+#: MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN (lane apple-fast-rec-optim, 2026-10-04),
+#: default OFF, FAST + Apple only (AFN_APPLE_FAST): the training optimizers'
+#: resident step (mojolearn.SGD / Adam / AdamW; board lanes sgd, adam, adamw)
+#: reads the parameter (and a clipped gradient) back through `opt_pipe_download`
+#: (OPT_PIPE_FLOATS chunks, the DMA of chunk i overlapping the host read of chunk
+#: i - 1 out of the other pinned half) instead of one whole-registry DMA followed
+#: by one whole single-thread read of write-combined memory, and drops the two
+#: mid-step waits (after the raw uploads, after the scratch buffers; the queue is
+#: in order and the step waits inside `identical_optimizer_step`). Uploads stay
+#: raw host-pointer copies (the fast Apple upload, memory
+#: metal-transfer-costs-on-apple). Why: on the M3 board sgd/adam/adamw run
+#: 33.5-34.3 ms a step while the sequence optimizers, which already pipeline the
+#: download (OPT_PIPE_DOWN, default since lane/apple-fast-optspeed: adagrad 318
+#: -> 191 ms), run ~20 ms a step on the same three 64 MB transfers. Copies only:
+#: the same bytes, no bit moves. Prior: none on this path (MOJOLEARN_OPT_PIPE=1
+#: pipelines both directions with STAGED uploads, never measured on Apple).
+#: Source: this branch.
+#: OUTCOME (M3 afc_ab_def, full board size, 1 run per arm, 2026-10-04, lane/
+#: apple-fast-rec-ab2 @ 40027eb8e): sgd 330.3 -> 208.7 ms, adam 337.5 -> 209.6,
+#: adamw 332.1 -> 209.8; output digests identical A == B (the quality evidence:
+#: the lane has no quality metric). KEEP: the FAST + Apple default since then;
+#: rollback -D MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF (the old -D name is harmless).
+comptime TRAIN_OPT_PIPE_DOWN = AFN_APPLE_FAST and not is_defined["MOJOLEARN_TRAIN_OPT_FAST_PIPE_DOWN_OFF"]()
+
+
 def identical_optimizer_step_resident_io(
     ctx: DeviceContext,
     param_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -834,7 +860,8 @@ def identical_optimizer_step_resident_io(
             ctx.enqueue_copy(dst_buf=p_buf, src_ptr=param_ptr)
         if up_g:
             ctx.enqueue_copy(dst_buf=g_buf, src_ptr=grad_ptr)
-        ctx.synchronize()
+        comptime if not TRAIN_OPT_PIPE_DOWN:
+            ctx.synchronize()
     if negate:
         # maximize: the step reads -g (the sign bit, on the device)
         maximize_negate_device(ctx, g_buf, n_total)
@@ -877,8 +904,9 @@ def identical_optimizer_step_resident_io(
         out2 = ctx.enqueue_create_buffer[DType.float32](2)
         ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
         sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
-    if not piped:
-        ctx.synchronize()
+    comptime if not TRAIN_OPT_PIPE_DOWN:
+        if not piped:
+            ctx.synchronize()
 
     _step_timing_tick(ctx, rton, rtk, "resident.small_buffers")
     var buf_initialized = List[Bool]()
@@ -920,7 +948,7 @@ def identical_optimizer_step_resident_io(
         # flags below are host words; the step's kernels are in order)
         ctx.synchronize()
         _step_timing_tick(ctx, rton, rtk, "resident.download")
-    elif piped:
+    elif piped or TRAIN_OPT_PIPE_DOWN:
         var down = PipeSegs()
         if down_p:
             down.add(0, 0, Int(param_ptr), n_total)

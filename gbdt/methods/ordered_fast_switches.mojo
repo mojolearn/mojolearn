@@ -7,11 +7,11 @@
 
 `ORD_ALL` is compiled only under the FAST tier on an Apple GPU; IDENTICAL,
 DETERMINISTIC and non-Apple FAST compile main's statements unchanged.
-`-D MOJOLEARN_ORD_ALL_OFF` compiles it out. At run time the fit turns it on
-only when the compressed index carries MORE than `ORD_ALL_MIN_FEATURES`
-features (`ord_all_on`); narrower data keeps main's Ordered path.
+`-D MOJOLEARN_ORD_ALL_OFF` compiles it out. Since 2026-10-04 it runs at
+every width; the old width gate (more than 32 features) was removed as
+benchmark-tuned and survives only behind MOJOLEARN_LEGACY_NARROW_ORD_ALL.
 
-WHY THE WIDTH GATE (M3 A/Bs, one run per arm, 2026-10-03, gbdt-ordered):
+WHY THE OLD WIDTH GATE EXISTED (M3 A/Bs, one run per arm, 2026-10-03, gbdt-ordered):
     istella (220 features): 75,758 -> 63,554 ms (-16.1%), auc .979518 ->
         .979529, logloss .190603 -> .190385 (better on both).
     taxi (11 features): 56,473 -> 48,163 ms (-14.7%) but auc .628875 ->
@@ -51,20 +51,20 @@ comptime ORD_ALL = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_ORD_ALL_OFF"]()
 )
-#: the bundle runs only above this many compressed-index features. A RANGE
-#: rule, not a board row: the bundle's savings are per-feature-group work
-#: (fold bins, gathers, score-noise reduce), so they grow with width, while
-#: the fold-order index's quality cost showed on narrow data. 32 lies
-#: between the two measured widths (about 3x above one, 7x below the other),
-#: so the edge is not fitted to either row. The two measured points
-#: (module docstring) are 11 and 220 features only: NEEDS NEIGHBOR-SHAPE
-#: VALIDATION (24, 32, 33, 48, 64, 128 features) before the edge is trusted.
+#: LEGACY, default OFF: the old width gate admitted only data with more than
+#: 32 compressed-index features, chosen between taxi (11, auc -0.0003 in one
+#: run) and istella (220). Removed as benchmark-tuned on 2026-10-04; the
+#: bundle now runs at every width, and that is UNMEASURED (taxi quality owed).
+comptime ORD_ALL_LEGACY_WIDTH = is_defined["MOJOLEARN_LEGACY_NARROW_ORD_ALL"]()
 comptime ORD_ALL_MIN_FEATURES = 32
 
 
 def ord_all_on(n_features: Int) -> Bool:
-    """True when the bundle is compiled in and the data is wide enough."""
+    """True when the bundle is compiled in (any width since 2026-10-04)."""
     comptime if ORD_ALL:
-        return n_features > ORD_ALL_MIN_FEATURES
+        comptime if ORD_ALL_LEGACY_WIDTH:
+            return n_features > ORD_ALL_MIN_FEATURES
+        else:
+            return n_features >= 1
     else:
         return False

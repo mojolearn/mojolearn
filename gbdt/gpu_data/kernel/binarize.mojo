@@ -187,3 +187,186 @@ def binarize_float_feature_kernel(
             var bin = dst.unsafe_load(base + idx)
             bin |= (index[j] & feature_mask) << feature_shift
             dst.unsafe_store(base + idx, bin)
+
+
+# ---------------------------------------------------------------------------
+# lane/apple-fast-sym-feat (2026-10-03): kernels referenced ONLY under the
+# FAST + Apple guards `GBDT_QUANT_DEVICE` / `GBDT_INDEX_PACK_DEVICE`
+# (`gbdt/train.mojo`) and `GBDT_PREDICT_PACKED` (`gbdt/resident_model.mojo`).
+# IDENTICAL never instantiates them.
+# ---------------------------------------------------------------------------
+
+#: `pack_cindex_words_kernel`'s block and rows per thread (2048 rows a block).
+comptime PACK_BLOCK = 256
+comptime PACK_DOCS = 8
+#: the most features one compressed-index word holds (the binary policy's
+#: `features_per_int`), and the shared slab for the word's border values:
+#: 32 x 1 (binary), 8 x 15 (half-byte) or 4 x 255 (one-byte) at most, so
+#: 1024 floats covers every policy. The host builder checks both bounds
+#: (`pack_word_table`) and takes the per-feature launches when exceeded.
+comptime PACK_MAX_ENTRIES = 32
+comptime PACK_BORDER_CAP = 1024
+
+
+def pack_cindex_words_kernel(
+    x_cols: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    word_start: MutPointer[UInt32, MutAnyOrigin],
+    entry_col: MutPointer[UInt32, MutAnyOrigin],
+    entry_shift: MutPointer[UInt32, MutAnyOrigin],
+    entry_mask: MutPointer[UInt32, MutAnyOrigin],
+    entry_slab: MutPointer[UInt32, MutAnyOrigin],
+    entry_sub: MutPointer[Float32, MutAnyOrigin],
+    borders: MutPointer[Float32, MutAnyOrigin],
+    cindex: MutPointer[UInt32, MutAnyOrigin],
+):
+    """Every bordered feature of every compressed-index word in ONE launch.
+
+    `block_idx.y` is the word (the `offset` column of `build_layout`); its
+    features are entries `word_start[w] .. word_start[w + 1])` of the
+    per-entry tables: the column of `x_cols` (column-major, `col * n_rows +
+    row`), the feature's shift and mask, the offset of its border slab in
+    `borders` (`borders[slab]` the count as a float, the values after it,
+    the layout `binarize_float_feature_kernel` reads) and the NaN substitute
+    (`nan_substitution`; a NaN substitute means leave NaN alone, and a NaN
+    then compares false against every border and lands in bin 0, exactly as
+    the per-feature kernel bins an AS_IS column). Per row the word is
+    assembled in a register from `(bin & mask) << shift` over its entries
+    and STORED once: no OR into a zeroed buffer, no atomics, because this
+    kernel owns every bit of the word. The bin is the same count of
+    `value > border` the per-feature kernel takes, over the same borders,
+    so the words are bit for bit the 220-launch build's.
+    """
+    var n = Int(n_rows_in)
+    var w = Int(block_idx.y)
+    var e0 = Int(word_start.unsafe_load(w))
+    var ne = Int(word_start.unsafe_load(w + 1)) - e0
+    var sh_meta = stack_allocation[
+        5 * PACK_MAX_ENTRIES,
+        Scalar[DType.uint32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_sub = stack_allocation[
+        PACK_MAX_ENTRIES,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_vals = stack_allocation[
+        PACK_BORDER_CAP,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tid = Int(thread_idx.x)
+    if tid == 0:
+        var acc = 0
+        for e in range(ne):
+            var slab = Int(entry_slab.unsafe_load(e0 + e))
+            var cnt = Int(borders.unsafe_load(slab))
+            sh_meta[e] = UInt32(cnt)
+            sh_meta[PACK_MAX_ENTRIES + e] = UInt32(acc)
+            sh_meta[2 * PACK_MAX_ENTRIES + e] = entry_col.unsafe_load(e0 + e)
+            sh_meta[3 * PACK_MAX_ENTRIES + e] = entry_shift.unsafe_load(e0 + e)
+            sh_meta[4 * PACK_MAX_ENTRIES + e] = entry_mask.unsafe_load(e0 + e)
+            sh_sub[e] = entry_sub.unsafe_load(e0 + e)
+            acc += cnt
+    barrier()
+    for e in range(ne):
+        var cnt = Int(sh_meta[e])
+        var off = Int(sh_meta[PACK_MAX_ENTRIES + e])
+        var slab = Int(entry_slab.unsafe_load(e0 + e))
+        var j = tid
+        while j < cnt:
+            sh_vals[off + j] = borders.unsafe_load(slab + 1 + j)
+            j += PACK_BLOCK
+    barrier()
+    var i = Int(block_idx.x) * PACK_BLOCK * PACK_DOCS + tid
+    var word = InlineArray[UInt32, PACK_DOCS](fill=0)
+    for e in range(ne):
+        var cnt = Int(sh_meta[e])
+        var off = Int(sh_meta[PACK_MAX_ENTRIES + e])
+        var col = Int(sh_meta[2 * PACK_MAX_ENTRIES + e])
+        var shift = sh_meta[3 * PACK_MAX_ENTRIES + e]
+        var mask = sh_meta[4 * PACK_MAX_ENTRIES + e]
+        var sub = sh_sub[e]
+        var vals = InlineArray[Float32, PACK_DOCS](fill=Float32(0.0))
+        var bins = InlineArray[UInt32, PACK_DOCS](fill=0)
+
+        @parameter
+        for j in range(PACK_DOCS):
+            var idx = i + j * PACK_BLOCK
+            if idx < n:
+                var v = x_cols.unsafe_load(col * n + idx)
+                if v != v and sub == sub:
+                    v = sub
+                vals[j] = v
+        for b in range(cnt):
+            var bv = sh_vals[off + b]
+
+            @parameter
+            for j in range(PACK_DOCS):
+                # bit-pattern compare, as `binarize_float_feature_kernel`
+                # (`exact_f32_gt`: Metal flushes subnormal compare operands)
+                if exact_f32_gt(vals[j], bv):
+                    bins[j] += 1
+
+        @parameter
+        for j in range(PACK_DOCS):
+            word[j] |= (bins[j] & mask) << shift
+
+    @parameter
+    for j in range(PACK_DOCS):
+        var idx = i + j * PACK_BLOCK
+        if idx < n:
+            cindex.unsafe_store(w * n + idx, word[j])
+
+
+#: `transpose_rows_to_columns_kernel`: 32 x 32 tiles, 32 x 8 threads.
+comptime TR_TILE = 32
+comptime TR_ROWS_PER_PASS = 8
+comptime TR_MAX_GRID_Y = 4096
+
+
+def transpose_rows_to_columns_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_cols_in: Int32,
+):
+    """Row-major `src[row * n_cols + col]` to column-major `dst[col * n_rows
+    + row]`, tiled through threadgroup memory so both sides are coalesced.
+    Moves bits, computes nothing. `block_idx.x` is the column tile, the row
+    tiles grid-stride over `block_idx.y` (the grid's y is capped at
+    `TR_MAX_GRID_Y`)."""
+    var n_rows = Int(n_rows_in)
+    var n_cols = Int(n_cols_in)
+    var tile = stack_allocation[
+        TR_TILE * (TR_TILE + 1),
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var c0 = Int(block_idx.x) * TR_TILE
+    var n_row_tiles = (n_rows + TR_TILE - 1) // TR_TILE
+    var rt = Int(block_idx.y)
+    while rt < n_row_tiles:
+        var r0 = rt * TR_TILE
+
+        @parameter
+        for k in range(TR_TILE // TR_ROWS_PER_PASS):
+            var lr = ty + k * TR_ROWS_PER_PASS
+            var r = r0 + lr
+            var c = c0 + tx
+            if r < n_rows and c < n_cols:
+                tile[lr * (TR_TILE + 1) + tx] = src.unsafe_load(r * n_cols + c)
+        barrier()
+
+        @parameter
+        for k in range(TR_TILE // TR_ROWS_PER_PASS):
+            var lc = ty + k * TR_ROWS_PER_PASS
+            var c = c0 + lc
+            var r = r0 + tx
+            if r < n_rows and c < n_cols:
+                dst.unsafe_store(c * n_rows + r, tile[tx * (TR_TILE + 1) + lc])
+        barrier()
+        rt += Int(grid_dim.y)

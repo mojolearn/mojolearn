@@ -4147,24 +4147,36 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
     # folds. Measured only at 768; needs neighbor-shape validation (640, 896,
     # 1024 and the 767/769 edges) before the band is trusted.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
-        var narrow = min(n, k)
-        if (
-            m >= 1024
-            and narrow >= APPLE_GEMM_NARROW_SIDE_MIN
-            and narrow <= APPLE_GEMM_NARROW_SIDE_MAX
-        ):
-            return PLAN_TUNED_64_4X4
-        # Weight gradients transpose the token dimension into the
-        # contraction: Q/K/V/O and MLP-down have m = model width and
-        # k = rows. The smaller tile exposes more independent output tiles
-        # without changing any leaf or fold in the exact GEMM DAG.
-        if (
-            m >= APPLE_GEMM_NARROW_SIDE_MIN
-            and m <= APPLE_GEMM_NARROW_SIDE_MAX
-            and n >= APPLE_GEMM_NARROW_SIDE_MIN
-            and k >= 1024
-        ):
-            return PLAN_TUNED_64_4X4
+        comptime if is_defined["MOJOLEARN_LEGACY_SHAPE_APPLE_PLAN64"]():
+            # LEGACY (default OFF): keyed to d_model = 768 exactly (the GPT-3
+            # small board). Removed Oct 4 as benchmark-shape tuning; the
+            # range rule below is unmeasured.
+            if m >= 1024 and n >= 768 and k >= 768 and (n == 768 or k == 768):
+                return PLAN_TUNED_64_4X4
+            # GPT weight gradients: m=d_model, k=rows.
+            if m == 768 and n >= 768 and k >= 1024:
+                return PLAN_TUNED_64_4X4
+        else:
+            # merge 2026-10-05: the IDENTICAL lane's narrow-side band rule (main's
+            # APPLE_PLAN64_NARROW range rule replaced by it; constant kept).
+            var narrow = min(n, k)
+            if (
+                m >= 1024
+                and narrow >= APPLE_GEMM_NARROW_SIDE_MIN
+                and narrow <= APPLE_GEMM_NARROW_SIDE_MAX
+            ):
+                return PLAN_TUNED_64_4X4
+            # Weight gradients transpose the token dimension into the
+            # contraction: Q/K/V/O and MLP-down have m = model width and
+            # k = rows. The smaller tile exposes more independent output tiles
+            # without changing any leaf or fold in the exact GEMM DAG.
+            if (
+                m >= APPLE_GEMM_NARROW_SIDE_MIN
+                and m <= APPLE_GEMM_NARROW_SIDE_MAX
+                and n >= APPLE_GEMM_NARROW_SIDE_MIN
+                and k >= 1024
+            ):
+                return PLAN_TUNED_64_4X4
     if m >= 2 * TUNED_BM_WIDE and n >= 2 * TUNED_BN_WIDE:
         return PLAN_TUNED_128_8X8
     if m >= TUNED_BM_WIDE and n >= TUNED_BN_WIDE:
@@ -6999,7 +7011,7 @@ def _shipped_body_kpack_hg[
     # body like every other column, `-D MOJOLEARN_GEMM_AMD_K768_PLAN64=1` to
     # the TUNED 64x64 plan (Apple's choice at these shapes).
     comptime if not SAB and TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_GEMM_AMD_NO_K768_TUNED"]():
-        if amd_short_contract_large_output(m, n, k):
+        if gemm_amd_short_k_tuned(m, n, k):
             comptime if is_defined["MOJOLEARN_GEMM_AMD_K768_PLAN64"]():
                 identical_gemm_with_plan(
                     ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_64_4X4
@@ -7026,30 +7038,27 @@ def _shipped_body_kpack_hg[
                 )
             return
     if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
-        # L40S, 2026-09-20: GPT-3-small Q/K/V/O dWeight (768 x 768 x 2048,
-        # OP_TN) folds at most eight leaves per group, so FS4 covers its
-        # unchanged fold tree while avoiding 3 KiB of unreachable per-thread
-        # local stack; other production shapes were neutral.
-        # lane/no-bench-tuning (2026-10-04): the rule used to name that one
-        # shape. The saving is a per-thread stack (occupancy) fact that holds
-        # for ANY launch whose fold bound fits the 4-slot class, so NVIDIA now
-        # takes FS4 wherever `gemm_kpack_fold_slots_for` says 4 slots cover
-        # the launch (at most 8 leaves per group, any op), the same bound
-        # `_kpack_hg_run_with_ws` folds with. FS only sizes unused storage
-        # above the highest reachable level: no leaf, merge or operation
-        # moves, so no bits move. Needs neighbor-shape validation (other
-        # k <= 1024 or grouped launches, every op).
-        # `-D MOJOLEARN_GEMM_NV_FS4_OFF` keeps the profile-wide stack.
-        comptime if (
-            not SAB
-            and TARGET_COLUMN == COLUMN_NVIDIA
-            and not is_defined["MOJOLEARN_GEMM_NV_FS4_OFF"]()
-        ):
-            if gemm_kpack_fold_slots_for(
-                contract_partition(k)[1], gemm_default_ksplit_leaves(m, n, k)
-            ) == 4:
-                _kpack_hg_run_with_ws[4, SAB](ctx, c, a, b, ws, m, n, k, op)
-                return
+        # L40S, 2026-09-20: a call with at most eight leaves per fold group
+        # needs only the FS4 stack, which avoids 3 KiB of unreachable
+        # per-thread local stack. Measured at one board shape (OP_TN
+        # 768x768x2048, six leaves); the general fold-slot rule (Oct 4) is
+        # unmeasured elsewhere. FS bounds unused local storage only; it
+        # cannot change the fold DAG, so no bit changes.
+        comptime if not SAB and TARGET_COLUMN == COLUMN_NVIDIA:
+            comptime if is_defined["MOJOLEARN_LEGACY_SHAPE_NV_FS4"]():
+                # LEGACY (default OFF): the exact GPT-3-small dWeight board
+                # shape. Removed Oct 4 as benchmark-shape tuning.
+                if op == OP_TN and m == 768 and n == 768 and k == 2048:
+                    _kpack_hg_run_with_ws[4, SAB](ctx, c, a, b, ws, m, n, k, op)
+                    return
+            else:
+                # `-D MOJOLEARN_GEMM_NV_FS4_OFF` keeps the profile-wide stack.
+                comptime if not is_defined["MOJOLEARN_GEMM_NV_FS4_OFF"]():
+                    if gemm_kpack_fold_slots_for(
+                        contract_partition(k)[1], gemm_default_ksplit_leaves(m, n, k)
+                    ) == 4:
+                        _kpack_hg_run_with_ws[4, SAB](ctx, c, a, b, ws, m, n, k, op)
+                        return
         _kpack_hg_run_with_ws[GEMM_KPACK_FS, SAB](
             ctx, c, a, b, ws, m, n, k, op
         )
@@ -7727,6 +7736,10 @@ comptime GEMM_KPACK_CPT = TUNED_CPT if (
 comptime GEMM_KPACK_LAUNCH_BOUND = 2 * TUNED_TPB if lib_gemm_kpack_narrow_for[TARGET_COLUMN]() else GEMM_LAUNCH_BOUND
 comptime GEMM_KPACK_KS = 16
 comptime GEMM_KPACK_FS = TUNED_FOLD_SLOTS
+# Oct 4 range bounds replacing exact-dimension rules (unmeasured).
+comptime APPLE_PLAN64_NARROW = 1024
+comptime AMD_SHORT_K_MIN = 512
+comptime AMD_SHORT_K_MAX = 1024
 #: DEVIATION 2700, `kpack_pad`: words of padding after each line group of
 #: the packed page. `VEC` (4) turns the 128-word group stride of the 128x128
 #: geometry into 132, `4 mod 32`, so the per-step B loads of a warp's 16
@@ -7835,6 +7848,25 @@ def gemm_kpack_register_slots(slots: Int) -> Int:
     if slots <= 256:
         return 256
     return 0
+
+
+@always_inline
+def gemm_amd_short_k_tuned(m: Int, n: Int, k: Int) -> Bool:
+    """AMD IDENTICAL: send a short-contraction, large-output call to the
+    TUNED 128x128 plan instead of the packed body. Range rule (Oct 4,
+    unmeasured): k in [AMD_SHORT_K_MIN, AMD_SHORT_K_MAX] is too shallow for
+    the packed body's group setup to amortize, and the output must fill the
+    CUs several times over (m >= 4096, or m >= 2048 with n >= 1024).
+    Scheduling only: the same leaf/fold DAG, so no bit changes."""
+    comptime if is_defined["MOJOLEARN_LEGACY_SHAPE_AMD_K768"]():
+        # LEGACY (default OFF): keyed to k == 768 exactly (GPT-3 small
+        # d_model). Removed Oct 4 as benchmark-shape tuning.
+        return k == 768 and (m >= 4096 or (m >= 2048 and n >= 1024))
+    # merge 2026-10-05: main's AMD_SHORT_K_MIN..MAX range rule and the
+    # IDENTICAL lane's leaf-band rule both replaced k == 768; IDENTICAL keeps
+    # the lane's `amd_short_contract_large_output` (AMD_SHORT_K_* kept for
+    # reference), the legacy arm above stays.
+    return amd_short_contract_large_output(m, n, k)
 
 
 def gemm_kpack_fold_slots_for(p_count: Int, group_leaves: Int) -> Int:
@@ -8653,7 +8685,7 @@ def identical_gemm_kpack_fold_specialized_trial_into(
     if m <= 0 or n <= 0:
         return
     comptime if TARGET_COLUMN == COLUMN_AMD:
-        if amd_short_contract_large_output(m, n, k):
+        if gemm_amd_short_k_tuned(m, n, k):
             identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
             return
     if choose_gemm_plan_tiles(m, n, k) != PLAN_TUNED_128_8X8:

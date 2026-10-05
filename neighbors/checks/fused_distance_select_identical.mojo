@@ -343,12 +343,25 @@ def fused_distance_select_launch(
     if k < 1 or k > SMALLK_MAX_K or k > length:
         raise Error("fused distance selector supports only 1 <= k <= min(64, length)")
     comptime if knn_selector_specialize_common_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]():
-        if k == 10:
-            _fused_enqueue[16, 10](ctx, out_values, out_indices, q, yt, q_norm, y_norm, rows, length, y_stride, d, k, is_sqrt)
-            return
-        elif k == 15:
-            _fused_enqueue[16, 15](ctx, out_values, out_indices, q, yt, q_norm, y_norm, rows, length, y_stride, d, k, is_sqrt)
-            return
+        comptime if is_defined["MOJOLEARN_LEGACY_SHAPE_KNN_K10_15"]():
+            # LEGACY (default OFF): compile-time K only at k = 10 and 15, the
+            # knn board's k values. Removed Oct 4 as benchmark-shape tuning;
+            # the every-k rule below is unmeasured.
+            if k == 10:
+                _fused_enqueue[16, 10](ctx, out_values, out_indices, q, yt, q_norm, y_norm, rows, length, y_stride, d, k, is_sqrt)
+                return
+            elif k == 15:
+                _fused_enqueue[16, 15](ctx, out_values, out_indices, q, yt, q_norm, y_norm, rows, length, y_stride, d, k, is_sqrt)
+                return
+        else:
+            # Every k the 16-capacity bucket holds gets its compile-time-K
+            # list (static loop bounds, no dynamic insertion guards), not
+            # just the board's k. Same composite-key scan and block minimum,
+            # so the selected keys are unchanged. Unmeasured (Oct 4).
+            comptime for KS in range(1, 17):
+                if k == KS:
+                    _fused_enqueue[16, KS](ctx, out_values, out_indices, q, yt, q_norm, y_norm, rows, length, y_stride, d, k, is_sqrt)
+                    return
     if k <= 16:
         _fused_enqueue[16, 0](ctx, out_values, out_indices, q, yt, q_norm, y_norm, rows, length, y_stride, d, k, is_sqrt)
     elif k <= 32:

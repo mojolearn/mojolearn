@@ -118,10 +118,10 @@ def supervise_graph(
         var far = Float64(1.0e12)
         if target_weight < Float32(1.0):
             far = Float64(2.5) * (Float64(1.0) / (Float64(1.0) - Float64(target_weight)))
-        return categorical_intersection(graph, target, far)
+        return categorical_intersection(ctx, graph, target, far)
     var tp = UMAPParams(n_neighbors=target_n_neighbors, n_components=2, random_seed=seed)
     var tgraph = sparse_fuzzy_graph_from_data(ctx, target, n_samples, target_dims, tp)
-    return general_intersection(graph, tgraph, target_weight)
+    return general_intersection(ctx, graph, tgraph, target_weight)
 
 
 def sparse_fit_transform(

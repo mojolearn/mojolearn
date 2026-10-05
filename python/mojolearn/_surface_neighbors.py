@@ -26,7 +26,8 @@ FAMILIES = (
         forest_kinds=(),
         classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer", "PageRank", "connected_components", "Louvain", "SVGP"),
         display="the neighbors + kernel expansion lane",
-        host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo", "x_neighbors/eigh.mojo"),
+        host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo", "x_neighbors/eigh.mojo",
+                      "x_neighbors/proba64_nc.mojo", "checks/f64_words.mojo"),
         exports=(
             # BEGIN GENERATED EXPORTS
             "x_neighbors_host_numeric_mode",

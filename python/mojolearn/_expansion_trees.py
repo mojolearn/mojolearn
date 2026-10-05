@@ -297,6 +297,21 @@ class DecisionTreeClassifier(RandomForestClassifier):
         return super().save(path)
 
 
+def _dt_tier_bins(est):
+    """The quantile bin count a DecisionTreeRegressor fits with: its own
+    n_bins, or for n_bins=None its binding's `rf_dt_default_bins` (QUALITY
+    FIX, lane apple-fast-q-reg: 256 in a FAST build, 128 in IDENTICAL and
+    under `-D MOJOLEARN_DT_BINS_QOLD`; 128 for a binding without the export).
+    The audit numbers are at bindings/_mojolearn_rf.mojo RF_DT_DEFAULT_BINS."""
+    if getattr(est, "n_bins", None) is not None:
+        return int(est.n_bins)
+    try:
+        query = getattr(est._bind("_mojolearn_rf"), "rf_dt_default_bins", None)
+    except (AttributeError, ImportError):
+        return 128
+    return int(query()) if callable(query) else 128
+
+
 @forest_estimator("regressor")
 class DecisionTreeRegressor(RandomForestRegressor):
     """sklearn's `DecisionTreeRegressor` on the forest builder: one tree, no
@@ -318,21 +333,27 @@ class DecisionTreeRegressor(RandomForestRegressor):
         min_impurity_decrease=0.0,
         ccp_alpha=0.0,
         monotonic_cst=None,
-        n_bins=128,
+        n_bins=None,
         device="gpu",
         inference_engine="auto",
     ):
         rf_leaves = _dt_common(splitter, max_features, max_leaf_nodes)
+        # n_bins=None: the tier's default, resolved at fit (`_dt_tier_bins`)
         super().__init__(
             n_estimators=1, criterion=criterion, max_depth=max_depth,
             min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf,
             min_weight_fraction_leaf=min_weight_fraction_leaf, max_features=max_features,
             max_leaf_nodes=rf_leaves, min_impurity_decrease=min_impurity_decrease,
             bootstrap=False, random_state=random_state, ccp_alpha=ccp_alpha,
-            monotonic_cst=monotonic_cst, n_bins=n_bins, n_streams=1, device=device,
-            inference_engine=inference_engine,
+            monotonic_cst=monotonic_cst, n_bins=128 if n_bins is None else n_bins, n_streams=1,
+            device=device, inference_engine=inference_engine,
         )
         self.splitter = splitter
+
+    def _fit_params(self, n_rows, n_features, n_classes):
+        params = super()._fit_params(n_rows, n_features, n_classes)
+        params[7] = _dt_tier_bins(self)   # slot 7: max_n_bins
+        return params
 
     def fit(self, X, y, sample_weight=None):
         if sample_weight is not None:
@@ -488,10 +509,17 @@ _KSHAP_FAST_BATCH = 8
 #     SHAP hand every chunk the same host buffer for the synthetic rows (the
 #     device side builds them in one pooled buffer). Moves no bit.
 _AGN_IDN_SYN_POOL = 16
+#   MOJOLEARN_PSHAP_DELTA (FAST Apple default; _OFF rollback): the
+#     PermutationExplainer model runs only on the synthetic rows that differ
+#     from the previous coalition's (`x_trees_pshap_dsynth` +
+#     `x_trees_pshap_dvalues`); see xtrees/agnostic_device.mojo.
+_PSHAP_DELTA = 32
 #   _XT_IDN_ADA_SESSION (lane fam-forests; an IDENTICAL build's switch, -D
 #     MOJOLEARN_IDN_ADA_SESSION_OFF clears it): the AdaBoost members fit the
 #     one staged device copy of X through the EXACT session. Moves no bit.
-_IDN_ADA_SESSION = 32
+#     Bit 128 since the 2026-10-05 merge (was 32 on the IDENTICAL branch;
+#     main took 32 for PSHAP_DELTA; xtrees/api.mojo XTREES_FAST_SWITCHES).
+_IDN_ADA_SESSION = 128
 
 
 def _trees_fast_tier(est):
@@ -780,7 +808,8 @@ class _BaggingBase(_TreesEnsembleBase):
                       min_impurity_decrease=base.min_impurity_decrease,
                       bootstrap=bool(self.bootstrap),
                       max_samples=(n_rows / n) if self.bootstrap else None,
-                      random_state=seed, n_bins=base.n_bins,
+                      random_state=seed,
+                      n_bins=_dt_tier_bins(base) if isinstance(base, DecisionTreeRegressor) else base.n_bins,
                       numeric_mode=getattr(base, "numeric_mode", None))
         if isinstance(base, DecisionTreeClassifier):
             forest = RandomForestClassifier(class_weight=base.class_weight, **common)
@@ -3477,6 +3506,9 @@ class PermutationExplainer(_AgnosticExplainer):
         # one synthetic buffer for every chunk
         idn_pool = _trees_build_switch(self, _AGN_IDN_SYN_POOL)
         reuse = _trees_switch(self, _KSHAP_FAST_BATCH) or idn_pool
+        if _trees_switch(self, _PSHAP_DELTA):
+            self._delta(b, Xa, phi, n, d, k, nb, npm, seed, R, mm)
+            return self._shape(phi, n, d)
         syn = None
         try:
             for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
@@ -3495,3 +3527,30 @@ class PermutationExplainer(_AgnosticExplainer):
             if idn_pool:
                 _agn_pool_release(b)   # the pooled device buffer does not outlive the explanation
         return self._shape(phi, n, d)
+
+    def _delta(self, b, Xa, phi, n, d, k, nb, npm, seed, R, mm):
+        """MOJOLEARN_PSHAP_DELTA: per chunk, the device builds only the
+        synthetic rows that differ from their previous coalition's into the
+        front of one reused host buffer (their count into `tot`), the model
+        runs on that prefix, and the device expands the outputs back to
+        every (coalition, background row)."""
+        x0, bg0, p0 = addr_ro(Xa, name="X"), addr_ro(self._bg, name="data"), addr(phi, name="phi")
+        # the device keeps three Int64 words per (coalition, background row):
+        # bound them as if d were at least 16 (a narrow X would else index
+        # up to the whole synthetic budget in Int64 triples)
+        R = min(R, self._chunk(mm * nb * max(d, 16), n))
+        tot = zeros((1,), "<i8")
+        t0 = addr(tot, name="count")
+        syn = empty((R * mm * nb * d,), "<f4")
+        for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
+            rows = min(R, n - r0)
+            params = [rows, nb, d, npm, r0, seed]
+            b.x_trees_pshap_dsynth(x0 + 4 * r0 * d, bg0, addr(syn, name="synthetic"), t0, params)
+            nv = int(tot.tolist()[0])
+            # the first nv rows of syn, zero-copy (syn stays alive in this frame)
+            front = memory_at(addr(syn, name="synthetic"), 4 * nv * d, writable=True).cast("f")
+            out = self._eval(Array.from_buffer(front).reshape((nv, d)))
+            del front
+            b.x_trees_pshap_dvalues(x0 + 4 * r0 * d, bg0, addr_ro(out, name="y"), p0 + 8 * r0 * d * k, t0,
+                                    params + [k])
+            del out

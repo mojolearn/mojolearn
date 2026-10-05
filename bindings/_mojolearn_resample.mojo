@@ -40,6 +40,9 @@ from resample.estimator import (
     resample_indices_host,
     resample_indices_replace_into,
     RESAMPLE_IDX_DIRECT,
+    RESAMPLE_GPU_GATHER,
+    resample_gather_gpu,
+    resample_fast_defines,
 )
 
 
@@ -55,6 +58,15 @@ def resample_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL, 2
     DETERMINISTIC."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
+def resample_fast_defines_binding() raises -> PythonObject:
+    """The FAST + Apple candidate defines this build was compiled with, as
+    resample/estimator.mojo `resample_fast_defines`' bit mask (0 unless the
+    build is FAST on Apple with a `-D MOJOLEARN_RESAMPLE_FAST_*` / `-D
+    MOJOLEARN_CV_FAST_*` define). Python switches on this, never on an
+    environment variable (lane apple-fast-rec-resample, 2026-10-04)."""
+    return PythonObject(resample_fast_defines())
 
 
 def resample_vendor_binding() raises -> PythonObject:
@@ -395,6 +407,31 @@ def resample_indices_binding(
     return PythonObject(0)
 
 
+def resample_gpu_gather_enabled_binding() raises -> PythonObject:
+    return PythonObject(Int(RESAMPLE_GPU_GATHER))
+
+
+def resample_gather_gpu_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    # addrs: src,dst per array; params: n,count,seed,width per array.
+    var k = len(addrs) // 2
+    if k < 1 or len(addrs) != 2 * k or len(params) != 3 + k:
+        raise Error("resample: invalid GPU gather argument lengths")
+    var srcs = List[Int]()
+    var dsts = List[Int]()
+    var widths = List[Int]()
+    for a in range(k):
+        srcs.append(Int(py=addrs[2 * a]))
+        dsts.append(Int(py=addrs[2 * a + 1]))
+        widths.append(Int(py=params[3 + a]))
+    var n = Int(py=params[0])
+    var count = Int(py=params[1])
+    var seed = UInt64(Int(py=params[2]))
+    var done = False
+    with GILReleased(Python()):
+        done = resample_gather_gpu(n, count, seed, srcs, dsts, widths)
+    return PythonObject(Int(done))
+
+
 def _mc_run(
     f_id: Int,
     lower: List[Float32],
@@ -502,11 +539,14 @@ def PyInit__mojolearn_resample() abi("C") -> PythonObject:
         m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
         m.def_function[resample_vendor_binding]("resample_vendor")
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
+        m.def_function[resample_fast_defines_binding]("resample_fast_defines")
         m.def_function[bootstrap_binding]("bootstrap")
         m.def_function[bootstrap_unpaired_binding]("bootstrap_unpaired")
         m.def_function[permutation_test_binding]("permutation_test")
         m.def_function[permutation_samples_binding]("permutation_samples")
         m.def_function[resample_indices_binding]("resample_indices")
+        m.def_function[resample_gpu_gather_enabled_binding]("resample_gpu_gather_enabled")
+        m.def_function[resample_gather_gpu_binding]("resample_gather_gpu")
         m.def_function[monte_carlo_integrate_binding]("monte_carlo_integrate")
         return m.finalize()
     except e:

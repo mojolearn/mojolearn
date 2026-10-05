@@ -1,0 +1,67 @@
+K3 compensated reference proposal, 2026-10-04
+============================================
+No product change or GPU implementation. M3 CPU-reference execution only.
+Baseline source102e0d70a; actual-tail saved report hash
+0bb5fa599ca808fd5d51c3dcc854c83edcc411f527e64dbf3744a53a7cf0e4ec.
+
+Why this candidate
+------------------
+Actual ew_finish correction leaves12/13groups HOLD (n1PASS),49worse gradient
+components out of648. There are394different gradients:345improve,49worsen;
+bit difference itself is not a failure. Prediction/variance/finalP fields
+pass, but7innovation and13LLmembers regress. Therefore precision must cover
+residual formation as well as LL reduction and the finite-difference tail.
+The actual tail already subtracts raw LL before normalization. Reordering
+normalization again is not a fix for low words already lost at LL stores.
+
+Proposal represented by tools/arima_k3_df_reference.py
+-----------------------------------------------------
+Use two float32 words through T*y+mu, y-prediction, residual square/variance,
+log(variance), two-level256-lane tree reduction, final LL arithmetic and
+(base+h minus base) / h / (nobs-1). Only public stages/LL/gradient round to
+float32. The low LL word survives separately for the gradient calculation.
+This is the same fixed-step likelihood objective, not an analytic gradient.
+No change to step2^-10, parameter ordering or input/model state semantics.
+A paired per-observation difference route is not added to this experiment;
+retained LL low words first isolates the lost-information hypothesis.
+
+The reference emulates two-sum, compensated add/multiply/divide with NumPy
+float32 operations. Float64 models f32 FMA residuals, and independently
+computes oracle outputs. This is not guaranteed instruction-level Metal
+bit replay (FMA contraction, FTZ and double-rounding edges remain untested).
+The log proposal uses exact power-of-two decomposition followed by
+log(m)=2*(z+z^3/3+...+z^25/25), z=(m-1)/(m+1), |z|<=0.171573;
+series truncation bound below2e-22 on the reduced interval, with floating
+arithmetic error still assessed by the unchanged oracle comparison.
+No host log is substituted into candidate arithmetic. ln2/log2pi constants
+are split into hi/lo words. This would need a separate GPU implementation
+and validated FTZ/nonfinite behavior before any product use.
+
+Fixed corpus and strict comparison
+----------------------------------
+All original13lengths and18models perlength, each base plus3perturbations;
+all4original controls (variance refusal, constant, impulse, alternating).
+The original quality.model(raw) is reused. Every generated y/state array is
+hash-checked against the saved actual-GPU report; all labels and independent
+reference gradient values must match exactly. No fixture selection, new
+allowance, averaging across model members or adaptive retry. Each reported
+field independently counts worse/improved/equal oracle errors relative to
+saved actual-main GPU A. Each gradient component compared independently.
+Original comparison is unchanged: candidate error <= A error, zero allowance.
+The baseline report hash and complete length set are pinned.
+
+Important transformation limit: the existing probe supplies states using
+NumPy tanh and rounded initial covariance/alpha; it does not execute the
+production device Jones transform/initializer. This proposal preserves that
+exact tested fixture contract, verified by input hashes. It must NOT claim
+actual device initialization equivalence. Actual optimizer/forecast and
+initialization coverage remain required even if this reference passes.
+Original actual-GPU K3 HOLD remains recorded; a reference PASS is not a
+new GPU PASS or permission to time/promote. Stage and likelihood accuracy
+must pass as well as gradients; no selecting only improved gradient checks.
+
+After source review, M3 serial CPU-oracle queue (REPORT_PATH is the saved
+actual-tail report with the hash above):
+CMD lane/apple-fast-arima-k3-df-reference arima-k3-df-reference-v1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/board-0834/cache/venv/bin/python tools/arima_k3_df_reference.py --baseline-report REPORT_PATH --output ~/mq/out/arima-k3-df-reference-v1.json
+
+No local numerical run, build, GPU access, timing or main merge performed.

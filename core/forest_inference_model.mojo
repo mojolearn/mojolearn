@@ -16,7 +16,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from core.forest_inference import (
-    _forest_shape_checks, forest_pack_device, forest_validate_device, forest_validate_lists_device, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
+    _forest_shape_checks, forest_pack_device, forest_validate_device, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
     device_all_finite,
 )
 from core.forest_inference_pool import PooledForest, forest_device_count
@@ -214,12 +214,8 @@ struct ResidentForest(Movable):
         # cannot express one global increasing-tree fold.  The experimental
         # ordered arm stays on one device so its arithmetic graph is exact.
         if device_count > 1 and not ordered:
-            # the whole model is validated on the device before the host
-            # partitions it by grove (each owner re-checks its own part)
-            var vctx = DeviceContext()
-            forest_validate_lists_device(vctx, offsets, columns, thresholds, left, leaves, features, outputs)
-            vctx.synchronize()
-            _ = vctx^
+            # the whole model is validated on owner 0's device before it is
+            # partitioned by grove there (`PooledForest`, lane cpu4-misc)
             self.pool = PooledForest(offsets, columns, thresholds, left, leaves,
                 features, outputs, device_count)
             return

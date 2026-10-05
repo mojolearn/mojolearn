@@ -287,8 +287,12 @@ def kmeans_fit(
     metric: Int = METRIC_L2_EXPANDED,
     requested_sum_scale: Float64 = 0.0,
     oversampling_factor: Float64 = 2.0,
+    lazy_shift: Bool = False,
 ) raises -> KMeansFitResult:
     """Fit k-means on host-resident row-major data. See THE POLICY CHOICES.
+
+    `lazy_shift` sets `KMeansParams.lazy_shift` (the lazy convergence read,
+    FAST on Apple only; IVF-PQ's codebooks pass True, 2026-10-04).
 
     `x_ptr` is `n_samples x n_features`, row-major, float32.
     `out_centroids_ptr` is `n_clusters x n_features` and is WRITTEN; when
@@ -431,7 +435,7 @@ def kmeans_fit(
     return _kmeans_fit_tail(
         ctx, x, x_norm, weights, centroids, labels, min_dist, n_samples, n_features,
         n_clusters, out_centroids_ptr, out_labels_ptr, max_iter, tol, seed, n_init, init,
-        metric, oversampling_factor, sum_scale, weight_scale,
+        metric, oversampling_factor, sum_scale, weight_scale, lazy_shift=lazy_shift,
     )
 
 
@@ -458,6 +462,7 @@ def _kmeans_fit_tail(
     oversampling_factor: Float64,
     sum_scale: Float64,
     weight_scale: Float64,
+    lazy_shift: Bool = False,
     copy_labels: Bool = True,
 ) raises -> KMeansFitResult:
     """`kmeans_fit` from the uploaded design on: the row norms, the fit, the
@@ -485,6 +490,7 @@ def _kmeans_fit_tail(
     params.seed = seed
     params.n_init = n_init
     params.oversampling_factor = oversampling_factor
+    params.lazy_shift = lazy_shift
 
     var result = fit_predict(
         ctx,
@@ -533,6 +539,7 @@ def kmeans_fit_rows(
     init: Int = INIT_KMEANS_PLUS_PLUS,
     metric: Int = METRIC_L2_EXPANDED,
     oversampling_factor: Float64 = 2.0,
+    lazy_shift: Bool = False,
 ) raises -> KMeansFitResult:
     """`kmeans_fit` with unit weights on rows `rows` of the host matrix
     `host_x`, whose gathered copy (rows in that order) is ALREADY on the
@@ -556,7 +563,7 @@ def kmeans_fit_rows(
     return _kmeans_fit_tail(
         ctx, x, x_norm, weights, centroids, labels, min_dist, n_samples, n_features,
         n_clusters, out_centroids_ptr, out_labels_ptr, max_iter, tol, seed, n_init, init,
-        metric, oversampling_factor, sum_scale, weight_scale,
+        metric, oversampling_factor, sum_scale, weight_scale, lazy_shift=lazy_shift,
     )
 
 
