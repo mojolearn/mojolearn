@@ -83,6 +83,7 @@ from gbdt.ctrs.ctr_calcers import (
     THistoryBasedCtrCalcer,
     THistoryBasedCtrCalcerGpu,
     compute_simple_ctrs_gpu,
+    download_ctr_columns,
 )
 from gbdt.ctrs.index_wrapper import index_of, is_segment_start
 from gbdt.data.permutation import (
@@ -497,7 +498,9 @@ def _check_ordered_statistic(
         gpu_builder.add_cat_feature_bins(ctx, codes, k)
         var gpu_calcer = THistoryBasedCtrCalcerGpu(ctx, gpu_builder)
         gpu_calcer.set_binarized_sample(ctx, target)
-        var got = gpu_calcer.visit_cat_feature_ctr(ctx, configs)
+        var got = download_ctr_columns(
+            ctx, gpu_calcer.visit_cat_feature_ctr(ctx, configs), n
+        )
 
         # the HOST arm, same order
         var host_builder = TCtrBinBuilder(order.copy())
