@@ -49,6 +49,15 @@ class Provenance(unittest.TestCase):
             d['experimental_overlay']['artifacts'][next(iter(d['files']))]['build_receipt_sha256'] = 'e'*64
             f.write_text(json.dumps(d)); self.assertNotEqual(first, P.identity(f))
 
+    def test_ptx_overlay_requires_bound_payload_manifest(self):
+        d=self.overlay_manifest(); d.update(code_path='ptx-baseline', runtime_files={'/common/lib.so':'f'*64})
+        f=self.root/'ptx-overlay.json'
+        with patch.dict(os.environ, {'MOJOLEARN_CUDA_PATH':'ptx-baseline','MOJOLEARN_EXPERIMENTAL_PTX':'1'}, clear=True):
+            f.write_text(json.dumps(d))
+            with self.assertRaisesRegex(ValueError,'payload manifest'): P.identity(f)
+            d['experimental_overlay']['payload_manifest_sha256']='e'*64
+            f.write_text(json.dumps(d)); self.assertEqual(P.identity(f)['experimental_overlay']['payload_manifest_sha256'],'e'*64)
+
     def test_overlay_rejects_incomplete_mismatched_or_false_qualification(self):
         for mutation in ('missing', 'bytes', 'source', 'qualified', 'uniform', 'replacement'):
             with self.subTest(mutation=mutation), patch.dict(os.environ, {}, clear=True):
