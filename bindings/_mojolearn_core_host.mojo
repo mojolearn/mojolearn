@@ -158,6 +158,7 @@ from bindings.hotpath_helpers import (
     group_fold_assign_i32_binding,
     strat_group_assign_i32_binding,
 )
+from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import lr_decide_binding, lr_onecycle_fill_binding, lr_schedule_values_binding
 from bindings.array_helpers import (
     strided_copy_bytes_binding,
@@ -1541,6 +1542,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
         module.def_function[nsum_f64_binding]("nsum_f64")
         module.def_function[row_means_f64_binding]("row_means_f64")
+        module.def_function[truncnorm_draws_binding]("truncnorm_draws")
         module.def_function[fsum_f64_binding]("fsum_f64")
         module.def_function[row_stds_f64_binding]("row_stds_f64")
         module.def_function[lr_schedule_values_binding]("lr_schedule_values")

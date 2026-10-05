@@ -238,7 +238,7 @@ def row_means_f64_binding(
     return PythonObject(bad)
 
 
-def _fsum_terms(sp: MutPointer[Float64, MutUntrackedOrigin], count: Int, mut bad: Bool) -> Float64:
+def _fsum_terms(vals: List[Float64], count: Int, mut bad: Bool) -> Float64:
     """`_portable_math.fsum` of count float64 terms: the last NaN if any,
     else one kind of infinity, else Shewchuk's exact partials rounded once
     (`_exact_sum`, a zero sum +0.0); bad = +inf with -inf (fsum's
@@ -249,7 +249,7 @@ def _fsum_terms(sp: MutPointer[Float64, MutUntrackedOrigin], count: Int, mut bad
     var pinf = False
     var ninf = False
     for i in range(count):  # small-loop(count: terms of one fsum): every caller sums a k-sized list (estimator weights, class priors, one candidate's split scores)
-        var v = sp.unsafe_load(i)
+        var v = vals[i]
         if isnan(v):
             any_nan = True
             nan_v = v
@@ -280,8 +280,12 @@ def fsum_f64_binding(src_addr: PythonObject, n: PythonObject, out_addr: PythonOb
     if count <= 0:
         op.unsafe_store(0, Float64(0.0))
         return PythonObject(0)
+    var sp = _addr_ptr[DType.float64](Int(py=src_addr))
+    var vals = List[Float64](capacity=count)
+    for i in range(count):  # small-loop(count: terms of one fsum): every caller sums a k-sized list (estimator weights, class priors)
+        vals.append(sp.unsafe_load(i))
     var bad = False
-    var t = _fsum_terms(_addr_ptr[DType.float64](Int(py=src_addr)), count, bad)
+    var t = _fsum_terms(vals, count, bad)
     if bad:
         return PythonObject(1)
     op.unsafe_store(0, t)
@@ -311,7 +315,7 @@ def row_stds_f64_binding(
             var d = sp.unsafe_load(r * nc + c) - m
             sq[c] = pinned_mul_f64(d, d)
         var bad = False
-        var t = _fsum_terms(sq.unsafe_ptr(), nc, bad)
+        var t = _fsum_terms(sq, nc, bad)
         op.unsafe_store(r, sqrt(t / Float64(nc)))
     return PythonObject(0)
 

@@ -26,9 +26,8 @@ integer bookkeeping and IEEE basic operations on scalar parameters.
 EXCEPTIONS, named (python_work_audit prep; each is host float64 Python today
 and none is covered by a ledger row yet): KBinsDiscretizer's cumulative sample
 weights and 53-bit uniform scaling (`_draw`-driven subsample); IterativeImputer's
-`_truncnorm_host` (binary64 per missing entry, sample_posterior with a user
-estimator only; its normal cdf / inverse cdf are the pinned `_portable_math`
-twins since lane py-bugs, DEVIATION 6902, row 252) and the O(d^2) `_abs_corr` /
+truncated-normal posterior draw (in Mojo since lane py-runtime round 3:
+bindings/normal_dist_helpers.mojo) and the O(d^2) `_abs_corr` /
 `_neighbours` normalisation (n_nearest_features). IterativeImputer with a
 user `estimator` otherwise runs its data-sized plumbing as x_prep units
 (x_prep/iterative.mojo `ii_rcount` .. `ii_scatter`: row selection, gathers,
@@ -5265,9 +5264,7 @@ class IterativeImputer(_PrepBase):
             clip = 1
         else:
             mus, sig = est.predict(Xm, return_std=True)
-            v = Array._owned(array.array("d", [self._truncnorm_host(float(a), float(s_), lo, hi)
-                                               for a, s_ in zip(_as_list(mus), _as_list(sig))]),
-                             (m,), "<f8", "C")
+            v = self._truncnorm_draws(mus, sig, lo, hi)
             clip = 0
         k = min(v.size, m)      # the reference's zip stops at the shorter
         if k == 0:
@@ -5305,28 +5302,24 @@ class IterativeImputer(_PrepBase):
         pr.run(_mode())
         return as_f32_c(pr.get(mo, (n, len(self._keep))), name="mask")[0]
 
-    def _truncnorm_host(self, mu, sigma, lo, hi):
-        """`_impute_one_feature`'s rule in Python float64: mu beyond a bound
-        -> the bound, sigma <= 0 -> mu, else inversion of the truncated normal
-        at a 53-bit splitmix64 uniform. DEVIATION 6902: statistics.NormalDist's
-        cdf and inv_cdf formulas on the pinned erfc / log (`_pm.normal_cdf`,
-        `_pm.normal_inv_cdf`); NormalDist itself calls the platform erfc and
-        a C accelerator a compiler may contract, so its bits vary by host."""
-        if mu < lo:
-            return lo
-        if mu > hi:
-            return hi
-        if not sigma > 0:
-            return mu
-        pa = 0.0 if lo == -_pm.inf else _pm.normal_cdf((lo - mu) / sigma)
-        pb = 1.0 if hi == _pm.inf else _pm.normal_cdf((hi - mu) / sigma)
-        u = ((self._draw() >> 11) + 0.5) * 2.0 ** -53
-        pu = pa + u * (pb - pa)
-        if pu <= 0:
-            return lo
-        if pu >= 1:
-            return hi
-        return min(max(mu + sigma * _pm.normal_inv_cdf(pu), lo), hi)
+    def _truncnorm_draws(self, mus, sig, lo, hi):
+        """`_impute_one_feature`'s rule per entry, in Mojo (the core helper
+        `truncnorm_draws`, bindings/normal_dist_helpers.mojo; lane py-runtime
+        round 3, it was Python float64 per entry): mu beyond a bound -> the
+        bound, sigma <= 0 -> mu, else the inversion of the truncated normal
+        at a 53-bit splitmix64 uniform on the pinned normal cdf / inverse cdf
+        (DEVIATION 6902), the instance's stream advanced by the entries that
+        draw. The reference's zip stops at the shorter of the two outputs."""
+        from ._buffer import _native
+        mu = array.array("d", mus.tolist() if hasattr(mus, "tolist") else mus)  # cpu-route: the user estimator's predict output, the explicit input step
+        sd = array.array("d", sig.tolist() if hasattr(sig, "tolist") else sig)  # cpu-route: the user estimator's predict output, the explicit input step
+        k = min(len(mu), len(sd))
+        out = array.array("d", bytes(8 * k))
+        st = int(self._rng)
+        hi_lo = _native("truncnorm_draws")(mu.buffer_info()[0], sd.buffer_info()[0], k, [float(lo), float(hi)],
+                                           [st >> 32, st & 0xFFFFFFFF], out.buffer_info()[0])
+        self._rng = (int(hi_lo[0]) << 32) | int(hi_lo[1])
+        return Array._owned(out, (k,), "<f8", "C")
 
     def fit(self, X, y=None):
         self.fit_transform(X)
@@ -5373,7 +5366,7 @@ def _clone(est):
 
 
 def _as_list(v):
-    return [float(x) for x in (v.tolist() if hasattr(v, "tolist") else v)]
+    return [float(x) for x in (v.tolist() if hasattr(v, "tolist") else v)]  # cpu-route: a user estimator's predict output as Python floats, the explicit input step
 
 
 def _pred_f64(v):

@@ -101,6 +101,7 @@ from core.hotpath_device import (
     device_gather_u64,
 )
 from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_last_f32
+from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import lr_decide_binding, lr_onecycle_fill_binding, lr_schedule_values_binding
 from bindings.array_helpers import (
     nsum_f64_binding,
@@ -2011,6 +2012,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
         m.def_function[nsum_f64_binding]("nsum_f64")
         m.def_function[row_means_f64_binding]("row_means_f64")
+        m.def_function[truncnorm_draws_binding]("truncnorm_draws")
         m.def_function[fsum_f64_binding]("fsum_f64")
         m.def_function[row_stds_f64_binding]("row_stds_f64")
         m.def_function[lr_schedule_values_binding]("lr_schedule_values")
