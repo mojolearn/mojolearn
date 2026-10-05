@@ -2517,7 +2517,9 @@ def _build_cnnclf(lane, arm, D):
     torch.backends.cuda.matmul.allow_tf32 = prec == "tf32"
     torch.backends.cudnn.allow_tf32 = prec == "tf32"
     dt = torch.bfloat16 if prec == "bf16" else None
-    Xt, Xqt = torch.from_numpy(X).to(dev), torch.from_numpy(Xq).to(dev)
+    # float32 on the host before .to(dev): MPS has no float64
+    Xt = torch.from_numpy(np.ascontiguousarray(X, dtype=np.float32)).to(dev)
+    Xqt = torch.from_numpy(np.ascontiguousarray(Xq, dtype=np.float32)).to(dev)
     yt = torch.from_numpy(y.astype(np.int64)).to(dev)
     # ours' row orders: one permutation per epoch from default_rng(random_state)
     rng = np.random.default_rng(p["random_state"])
@@ -2590,14 +2592,15 @@ def _build_cnnclf(lane, arm, D):
     def infer():
         with torch.no_grad():
             out = torch.cat([run(S["fwd"], Xqt[i:i + 4096]).float() for i in range(0, Xqt.shape[0], 4096)])
-        S["pred"] = out.argmax(1).double()
+        S["pred"] = out.argmax(1)               # float64 only after .cpu(): MPS has no float64
         _torch_sync(torch, dev)
     rec = dict(__library__="torch", seed=p["random_state"], learning_rate=p["learning_rate"],
                momentum=p["momentum"], dampening=p["dampening"], nesterov=p["nesterov"],
                weight_decay=p["weight_decay"], batch_size=p["batch_size"], max_iter=p["max_iter"],
                shuffle=p["shuffle"], kernel_size=p["kernel_size"], pool_size=p["pool_size"],
                conv_channels=list(p["conv_channels"]), optimizer="sgd")
-    return Runner(info, fit, lambda: {"pred": S["pred"].cpu().numpy()}, infer, record=rec)
+    return Runner(info, fit, lambda: {"pred": S["pred"].detach().cpu().double().numpy()}, infer,
+                  record=rec)
 
 
 def _build_seqmodel(lane, arm, D):
@@ -2617,7 +2620,9 @@ def _build_seqmodel(lane, arm, D):
     torch.backends.cuda.matmul.allow_tf32 = prec == "tf32"
     torch.backends.cudnn.allow_tf32 = prec == "tf32"
     dt = torch.bfloat16 if prec == "bf16" else None
-    Xt, Xqt = torch.from_numpy(X).to(dev), torch.from_numpy(Xq).to(dev)
+    # float32 on the host before .to(dev): MPS has no float64
+    Xt = torch.from_numpy(np.ascontiguousarray(X, dtype=np.float32)).to(dev)
+    Xqt = torch.from_numpy(np.ascontiguousarray(Xq, dtype=np.float32)).to(dev)
     yt = torch.from_numpy(y.astype(np.int64) if clf else y.astype(np.float32)).to(dev)
     cell = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}[s["cell"]]
     ckw = {"nonlinearity": p["nonlinearity"]} if s["cell"] == "RNN" else {}
@@ -2693,9 +2698,10 @@ def _build_seqmodel(lane, arm, D):
         with torch.no_grad():                    # in chunks, as ours' predict_chunk does
             out = torch.cat([run(S["fwd"], Xqt[i:i + 4096]).float()
                              for i in range(0, Xqt.shape[0], 4096)])
-        S["pred"] = out.argmax(1).double() if clf else out[:, 0].double()
+        S["pred"] = out.argmax(1) if clf else out[:, 0]   # float64 only after .cpu(): MPS has no float64
         _torch_sync(torch, dev)
-    return Runner(info, fit, lambda: {"pred": S["pred"].cpu().numpy()}, infer, record=rec)
+    return Runner(info, fit, lambda: {"pred": S["pred"].detach().cpu().double().numpy()}, infer,
+                  record=rec)
 
 
 # ---- DART -----------------------------------------------------------------
@@ -4225,7 +4231,7 @@ def _build_svgp(lane, arm, D):
             S["pred"] = S["m"](Xqt).mean
         _torch_sync(torch, dev)
     rec = dict(hyp, __library__="gpytorch", n_inducing=int(Z0.shape[0]), seed=SEED)
-    return Runner(info, fit, lambda: {"pred": S["pred"].double().cpu().numpy()}, infer, record=rec)
+    return Runner(info, fit, lambda: {"pred": S["pred"].detach().cpu().double().numpy()}, infer, record=rec)
 
 
 # ---------------------------------------------------------------------------
