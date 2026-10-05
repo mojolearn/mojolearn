@@ -4645,7 +4645,7 @@ def _lle_smallest(k, F, nc, max_iter, seed=0, Xd=None):
         return k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
 
     while True:
-        X, Y, S, null = _lle_iterate(k, F0, Fhat, dev_f0, solve, solve_t, z, n, n1, nc, p, max_iter, seed, floor)
+        X, Y, S, null = _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor)
         if not (canon and null):
             break
         # N = the Ritz vectors whose values are numerically zero (under
@@ -4682,41 +4682,24 @@ def _lle_smallest(k, F, nc, max_iter, seed=0, Xd=None):
     return k.ew("mul", V, k.absmax_signs(V, True)), sv
 
 
-def _lle_iterate(k, F0, Fhat, dev_f0, solve, solve_t, z, n, n1, nc, p, max_iter, seed, floor):
-    """`_lle_smallest`'s subspace iteration with p columns: (X n1 x p the Ritz
-    vectors by descending Ritz value, Y n1 x nc the wanted ones, S 1 x p
-    their values, whether it stopped on the null floor)."""
-    X = _lle_orth(k, k.ew("adds", k.rand(n1, p, seed, 0x11E, 0), s=-0.5))
-    want = list(range(p - 1, p - 1 - nc, -1))
-    prev, e_prev = None, float("inf")
-    for it in range(max(1, int(max_iter))):
-        # (F^T F^)^-1 X in two orthonormalized halves: F^+T X = P_z F0^-T
-        # [X; 0] (range(F^), n x p), then F^+ of that = the first n - 1 rows
-        # of F0^-1; each half stretches the block by 1 / sigma, not
-        # 1 / sigma^2, so the columns stay far from float32 dependence
-        Y = solve_t(k.pad_zero_row(X))      # [X; 0] (lane fix-d1-decomp: on the device, IDN_LLE_PAD_DEV)
-        Y = _lle_orth(k, k.ew("sub", Y, k.mm(z, k.mm(z, Y, ta=True))))
-        X = _lle_orth(k, solve(Y).rows(0, n1))
-        if dev_f0:          # F^ X = F0 [X; 0] (the last column of F0 meets a zero row)
-            S, Vt = k.svd(k.mm(F0, k.pad_zero_row(X)))
-        else:
-            S, Vt = k.svd(k.mm(Fhat, X))
-        X = k.mm(X, Vt, tb=True)
-        Y = X.take_cols(want)
-        if it >= 2 and k.word(k.reduce(S.take_cols(want), k._SEL_MAX)) <= floor:
-            return X, Y, S, True
-        if prev is not None:
-            E = k.ew("sub", Y, k.mm(prev, k.mm(prev, Y, ta=True)))
-            e = math.sqrt(max(float(k.total(k.ew("sq", E)).s[0]), 0.0))
-            if e <= _LLE_SUBSPACE_TOL or (e <= _LLE_STALL_TOL and e >= e_prev):
-                return X, Y, S, False
-            e_prev = e
-        prev = Y
-    else:
+def _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor):
+    """`_lle_smallest`'s subspace iteration with p columns on the F0 route:
+    (X n1 x p the Ritz vectors by descending Ritz value, Y n1 x nc the wanted
+    ones, S 1 x p their values, whether it stopped on the null floor). The
+    loop runs in ONE binding call (lane py-runtime-b: x_decomp/lle_iter.mojo
+    on the host column, lle_iter_dev.mojo on the GPU binding): the same
+    cells, solves on the LU factor (pm the pivots' row order, im its
+    inverse), Householder QR and descending SVD, and the same float64 tests."""
+    X, Y, S = _M.zeros(n1, p), _M.zeros(n1, nc), _M.zeros(1, p)
+    st, e_prev = k.b.x_decomp_lle_iterate(F0.addr, lu.addr, pm.addr, im.addr, z.addr, [X.addr, Y.addr, S.addr],
+                                          [n, n1, nc, p, max(1, int(max_iter)), int(seed) & 0xFFFFFFFF],
+                                          [float(floor), _LLE_SUBSPACE_TOL, _LLE_STALL_TOL])
+    if int(st) == 2:
         raise RuntimeError(
             f"LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in {max_iter} "
-            f"iterations (last subspace change {e_prev:.3g}); pass eigen_solver='dense' for the full SVD. "
+            f"iterations (last subspace change {float(e_prev):.3g}); pass eigen_solver='dense' for the full SVD. "
             "An unconverged embedding is not returned as if it were one.")
+    return X, Y, S, int(st) == 1
 
 
 class LocallyLinearEmbedding(_Base):

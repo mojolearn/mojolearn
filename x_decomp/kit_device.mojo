@@ -49,6 +49,7 @@ from x_decomp.device import (
     launch_lu,
     launch_rowsum,
     launch_sqdist,
+    launch_trisolve,
     cd_rows_kernel,
     lda_rows_kernel,
     rand_kernel,
@@ -503,6 +504,27 @@ struct DKit(Movable):
         var out = DMat(A.r, B.r)
         if A.r * B.r > 0 and A.c > 0:
             launch_sqdist(self.ctx, A.p(), B.p(), out.p(), A.r, B.r, A.c, 0, Float32(2))
+        return out^
+
+    def trisolve(self, lu: DMat, idx: DMat, B: DMat, trans: Int) raises -> DMat:
+        """`_Kit.trisolve` on device matrices (`launch_trisolve`)."""
+        var n = lu.r
+        var w = B.c
+        var out = DMat(n, w)
+        if n * w > 0:
+            if n >= 1 << 24:
+                raise Error("x_decomp: trisolve row numbers exceed float32's exact integers")
+            var tmp = DMat(n * w, 1)
+            launch_trisolve(self.ctx, lu.p(), idx.p(), B.p(), out.p(), tmp.p(), n, w, trans)
+            self.ctx.synchronize()
+        return out^
+
+    def pad_zero_row(self, X: DMat) raises -> DMat:
+        """`_Kit.pad_zero_row`: [X; 0] (copies only)."""
+        var out = self.zeros(X.r + 1, X.c)
+        if X.n() > 0:
+            var view = DMat(rows_of=out, row0=0, rows=X.r)
+            self.ctx.enqueue_copy(dst_buf=self._sub(view), src_buf=self._sub(X))
         return out^
 
     def word(mut self, A: DMat) raises -> Float64:
