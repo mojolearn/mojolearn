@@ -95,7 +95,7 @@ from arima.estimator import (
 )
 
 
-from arima.impl.fast_order_search import order_search_loglike
+from arima.impl.fast_order_search import order_search_loglike, order_search_fit, ARIMA_FAST_SEARCH_REUSE
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH
 from arima.impl.tsa.arima_common import ARIMAOrder
 from core.identity_trace import IdentityTrace
@@ -123,6 +123,37 @@ def arima_order_search_binding(y_addr: PythonObject, out_addr: PythonObject,
     var written = 0
     with GILReleased(Python()):
         written = order_search_loglike(yp, op, orders, bs, nobs, maxiter)
+    return PythonObject(written)
+
+
+def arima_search_reuse_enabled_binding() raises -> PythonObject:
+    """MOJOLEARN_ARIMA_FAST_SEARCH_REUSE compiled in (FAST+Apple only)."""
+    var trace = IdentityTrace()
+    return PythonObject(ARIMA_FAST_SEARCH_REUSE and not trace.enabled)
+
+
+def arima_order_search_fit_binding(y_addr: PythonObject, out_addr: PythonObject,
+                                   fit_f32_addr: PythonObject, fit_i32_addr: PythonObject,
+                                   grid: PythonObject, config: PythonObject) raises -> PythonObject:
+    """`arima_order_search` that also writes each order's fit block
+    (fast_order_search.order_search_fit's layout)."""
+    if len(config) != 4 or len(grid) % 3 != 0:
+        raise Error("arima_order_search_fit: expected [batch,nobs,d,maxiter] and (p,q,k) triples")
+    var bs = Int(py=config[0])
+    var nobs = Int(py=config[1])
+    var d = Int(py=config[2])
+    var maxiter = Int(py=config[3])
+    var orders = List[ARIMAOrder]()
+    for i in range(len(grid) // 3):
+        orders.append(ARIMAOrder(Int(py=grid[3*i]), d, Int(py=grid[3*i+1]),
+                                 0, 0, 0, 0, Int(py=grid[3*i+2]), 0))
+    var yp = f32_ptr(Int(py=y_addr))
+    var op = f32_ptr(Int(py=out_addr))
+    var fp = f32_ptr(Int(py=fit_f32_addr))
+    var ip = i32_ptr(Int(py=fit_i32_addr))
+    var written = 0
+    with GILReleased(Python()):
+        written = order_search_fit(yp, op, orders, bs, nobs, maxiter, True, fp, ip)
     return PythonObject(written)
 
 
@@ -442,6 +473,8 @@ def PyInit__mojolearn_arima() abi("C") -> PythonObject:
         m.def_function[arima_fit_binding]("arima_fit")
         m.def_function[arima_order_batch_enabled_binding]("arima_order_batch_enabled")
         m.def_function[arima_order_search_binding]("arima_order_search")
+        m.def_function[arima_search_reuse_enabled_binding]("arima_search_reuse_enabled")
+        m.def_function[arima_order_search_fit_binding]("arima_order_search_fit")
         m.def_function[arima_predict_binding]("arima_predict")
         m.def_function[arima_forecast_binding]("arima_forecast")
         return m.finalize()
