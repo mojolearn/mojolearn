@@ -164,7 +164,7 @@ def _dart_addr_list(v: PythonObject, nt: Int, who: String) raises -> List[Int]:
 
 
 def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObject, coefs: PythonObject,
-                         inits: PythonObject, out: PythonObject, params: PythonObject) raises -> PythonObject:
+                         inits: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
     """DART's raw score (lane cpu2-l5-trees, xtrees/dart_*.mojo
     `dart_predict`): x float32 n x d row-major; forest = [colid addresses,
     quesval addresses, left addresses, leaf value addresses], one per tree
@@ -189,7 +189,7 @@ def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObj
     dart_predict(Int(py=x), _dart_addr_list(forest[0], nt, "x_trees_dart_predict"),
                  _dart_addr_list(forest[1], nt, "x_trees_dart_predict"),
                  _dart_addr_list(forest[2], nt, "x_trees_dart_predict"),
-                 _dart_addr_list(forest[3], nt, "x_trees_dart_predict"), sz, cf, iv, Int(py=out), p[0], p[1], p[2])
+                 _dart_addr_list(forest[3], nt, "x_trees_dart_predict"), sz, cf, iv, Int(py=dst), p[0], p[1], p[2])
     return PythonObject(p[0])
 
 

@@ -927,7 +927,7 @@ def _build_cindex_from_columns(
             else:
                 ctx.enqueue_function[binarize_float_feature_kernel](
                     Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                    dev_col_bufs[dev_slot].unsafe_ptr(), Int32(n_rows),
+                    dev_col_bufs[dev_slot].unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), Int32(n_rows),
                     bdevs[slot].unsafe_ptr(), cindex.unsafe_ptr(),
                     grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
                     block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),

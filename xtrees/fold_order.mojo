@@ -110,7 +110,7 @@ def fold_tree_device(ctx: DeviceContext, p: DeviceBuffer[DType.uint64], m: Int, 
     while s < m:
         var pairs = ceildiv(m, 2 * s)
         ctx.enqueue_function[fold_tree_pass_kernel](
-            p.unsafe_ptr(), Int64(m), Int64(w), Int64(s),
+            p.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), Int64(m), Int64(w), Int64(s),
             grid_dim=max(1, min(ceildiv(pairs * w, FOLD_TPB), FOLD_MAX_BLOCKS)), block_dim=FOLD_TPB,
         )
         s *= 2

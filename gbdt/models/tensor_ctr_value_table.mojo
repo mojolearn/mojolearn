@@ -617,7 +617,7 @@ def device_float_extremes(
     var d_w = ctx.enqueue_create_buffer[DType.int32](2)
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=h.unsafe_ptr())
     ctx.enqueue_function[float_minmax_kernel](
-        values.unsafe_ptr(), d_w.unsafe_ptr(), Int32(n_rows),
+        values.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), d_w.unsafe_ptr(), Int32(n_rows),
         grid_dim=tensor_ctr_blocks(n_rows), block_dim=TENSOR_CTR_BLOCK,
     )
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_w)
@@ -671,7 +671,7 @@ def device_bins_for_borders(
     ctx.enqueue_copy(dst_buf=d_b, src_ptr=h_b.unsafe_ptr())
     var d_bins = ctx.enqueue_create_buffer[DType.uint32](max(n_rows, 1))
     ctx.enqueue_function[tensor_bins_kernel](
-        values.unsafe_ptr(), d_b.unsafe_ptr(), Int32(nb),
+        values.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), d_b.unsafe_ptr(), Int32(nb),
         d_bins.unsafe_ptr(), Int32(n_rows),
         grid_dim=tensor_ctr_blocks(n_rows), block_dim=TENSOR_CTR_BLOCK,
     )
@@ -800,7 +800,7 @@ def fit_feature_freq_tensor_candidate_device(
     var blocks = tensor_ctr_blocks(n_rows)
     ctx.enqueue_function[tensor_keys_counts_kernel](
         d_codes.unsafe_ptr(), d_cards.unsafe_ptr(), Int32(n_src),
-        quantized.unsafe_ptr(), d_split_meta.unsafe_ptr(), Int32(n_splits),
+        quantized.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), d_split_meta.unsafe_ptr(), Int32(n_splits),
         d_keys.unsafe_ptr(), d_counts.unsafe_ptr(), Int32(n_rows),
         grid_dim=blocks, block_dim=TENSOR_CTR_BLOCK,
     )

@@ -214,17 +214,17 @@ def device_take_rows(
     var d_out = ctx.enqueue_create_buffer[DType.uint8](total)
     var d_status = ctx.enqueue_create_buffer[DType.int32](2)
     enqueue_fill(ctx, d_status, Int32(0))
-    var idx = store.bufs[idx_id].unsafe_ptr().bitcast[Int64]()
+    var idx = store.bufs[idx_id].unsafe_ptr().bitcast[Int64]().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
     if row_bytes % 4 == 0:
         var w = row_bytes // 4
         ctx.enqueue_function[_take_words_kernel](
-            store.bufs[src_id].unsafe_ptr().bitcast[UInt32](), Int64(n_src), Int64(w),
+            store.bufs[src_id].unsafe_ptr().bitcast[UInt32]().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), Int64(n_src), Int64(w),
             idx, Int64(n_idx), d_out.unsafe_ptr().bitcast[UInt32](), d_status.unsafe_ptr(),
             grid_dim=_grid(n_idx * w), block_dim=MSEL_TPB,
         )
     else:
         ctx.enqueue_function[_take_bytes_kernel](
-            store.bufs[src_id].unsafe_ptr(), Int64(n_src), Int64(row_bytes),
+            store.bufs[src_id].unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), Int64(n_src), Int64(row_bytes),
             idx, Int64(n_idx), d_out.unsafe_ptr(), d_status.unsafe_ptr(),
             grid_dim=_grid(total), block_dim=MSEL_TPB,
         )
@@ -290,8 +290,8 @@ def device_scatter_rows(
     enqueue_fill(ctx, d_status, Int32(0))
     ctx.enqueue_function[_scatter_kernel](
         d_src.unsafe_ptr(), Int32(src_code), Int64(n_src), Int64(width),
-        store.bufs[idx_id].unsafe_ptr().bitcast[Int64](), Int64(n_dst),
-        store.bufs[dst_id].unsafe_ptr().bitcast[UInt64](), Int32(dst_code), d_status.unsafe_ptr(),
+        store.bufs[idx_id].unsafe_ptr().bitcast[Int64]().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), Int64(n_dst),
+        store.bufs[dst_id].unsafe_ptr().bitcast[UInt64]().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), Int32(dst_code), d_status.unsafe_ptr(),
         grid_dim=_grid(n_src * width), block_dim=MSEL_TPB,
     )
     var ok = _status(ctx, d_status) == 0
