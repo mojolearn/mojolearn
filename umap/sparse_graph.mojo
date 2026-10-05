@@ -28,13 +28,14 @@ failure, folded by `Atomic.min` (an order-free integer min), decoded once.
 """
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
+    identical_div,
     identical_exp64,
     identical_log2_64,
     identical_mul,
@@ -56,6 +57,7 @@ from checks.soft_f64 import (
     sf64_lt,
     sf64_mul,
     sf64_neg,
+    sf64_pow,
     sf64_sub,
     sf64_to_f32,
     sf64_to_int,
@@ -741,184 +743,538 @@ def sparse_fuzzy_simplicial_graph_device(
 
 # ---------------------------------------------------------------------------
 # Supervised UMAP (lane/algos-decomp, 2026-09-27; DEVIATION 5324, PIN): the
-# target's graph set operations of umap-learn's `umap_.py`, host code both
-# columns run, every CSR row in ascending column order.
+# target's graph set operations of umap-learn's `umap_.py`, every CSR row in
+# ascending column order.
+#
+# ON THE DEVICE (lane cpu4-umap, 2026-10-04). These were host walks over
+# every stored edge inside the supervised GPU fit. Each now runs as grid-wide
+# launches: the graph CSR goes up once, a count pass, a scan and a write
+# pass build each result (one thread per row), the transpose of
+# `reset_local_connectivity` is the build's stable radix sort by column, and
+# the finished CSR comes back once into the struct the spectral init and the
+# optimizer take. The per-cell statements below (`ug_reset_scale`,
+# `ug_reset_weight`, `ug_categorical_weight`, `ug_intersect_cell`) are shared
+# with the host column (`umap/host/sparse_graph_host.mojo::host_*`): binary64
+# steps in the soft arithmetic (`sf64_pow` is `portable_pow64` statement for
+# statement), float32 steps pinned and flushed, so both columns return the
+# same words. Bits moved against the old host walks only where a subnormal
+# was involved (the flush model), and in FAST where the pow was the stdlib's.
 # ---------------------------------------------------------------------------
 
 
-def _with_csr(
-    graph: SparseFuzzySimplicialGraph, var offsets: List[Int], var indices: List[UInt32], var values: List[Float32]
-) -> SparseFuzzySimplicialGraph:
-    return SparseFuzzySimplicialGraph(
-        graph.n_samples, graph.n_neighbors, graph.rhos.copy(), graph.sigmas.copy(),
-        graph.directed_offsets.copy(), graph.directed_indices.copy(), graph.directed_values.copy(),
-        offsets^, indices^, values^,
+comptime UG_FLT_MAX_BITS = Int32(0x7F7FFFFF)
+comptime UG_NO_NEG = Int32(-2147483648)
+
+
+@always_inline
+def ug_reset_scale(v: Float32, mx: Float32) -> Float32:
+    """sklearn `normalize(norm='max')`'s cell: one float32 division by the
+    row's largest stored value (the value itself in a row with none above 0)."""
+    if mx > Float32(0.0):
+        return ftz(identical_div(v, mx))
+    return ftz(v)
+
+
+@always_inline
+def ug_reset_weight(a: Float32, b: Float32) -> Float32:
+    """`S + S^T - S o S^T` per cell as `(a + b) - a b`, the product pinned."""
+    var fa = ftz(a)
+    var fb = ftz(b)
+    return ftz(ftz(fa + fb) - ftz(identical_mul(fa, fb)))
+
+
+@always_inline
+def ug_categorical_weight(w: Float32, ti: Float32, tj: Float32, unknown: UInt64, far: UInt64) -> Float32:
+    """An edge whose ends carry different labels scaled by exp(-far_dist),
+    one with an unknown label (-1) by exp(-unknown_dist), each as
+    `Float32(Float64(w) * exp)`; flushed."""
+    if ti == Float32(-1.0) or tj == Float32(-1.0):
+        return ftz(sf64_to_f32(sf64_mul(sf64_from_f32(w), unknown)))
+    if ti != tj:
+        return ftz(sf64_to_f32(sf64_mul(sf64_from_f32(w), far)))
+    return ftz(w)
+
+
+@always_inline
+def ug_intersect_cell(
+    lv_in: Float32, rv_in: Float32, left_min: UInt64, right_min: UInt64, low: Bool, expo: UInt64
+) -> Float32:
+    """One union cell of `general_sset_intersection`: `left + right`, or,
+    when either side beats its floor (an absent or zero side reads as its
+    floor), `left * right^expo` (`low`, weight < 0.5) or `left^expo * right`
+    in binary64 with the portable pow, rounded once; flushed."""
+    var lv = ftz(lv_in)
+    var rv = ftz(rv_in)
+    var out = ftz(lv + rv)
+    var left_val = sf64_from_f32(lv) if lv != Float32(0.0) else left_min
+    var right_val = sf64_from_f32(rv) if rv != Float32(0.0) else right_min
+    if sf64_gt(left_val, left_min) or sf64_gt(right_val, right_min):
+        if low:
+            out = ftz(sf64_to_f32(sf64_mul(left_val, sf64_pow(right_val, expo))))
+        else:
+            out = ftz(sf64_to_f32(sf64_mul(sf64_pow(left_val, expo), right_val)))
+    return out
+
+
+def ug_categorical_constants(far_dist: Float64, unknown_dist: Float64) -> Tuple[UInt64, UInt64]:
+    """HOST scalars both columns call: exp(-unknown_dist), exp(-far_dist)."""
+    return (
+        bitcast[DType.uint64](identical_exp64(-unknown_dist)),
+        bitcast[DType.uint64](identical_exp64(-far_dist)),
     )
 
 
-def reset_local_connectivity(graph: SparseFuzzySimplicialGraph) raises -> SparseFuzzySimplicialGraph:
-    """umap-learn `reset_local_connectivity`: every row divided by its
-    largest stored value (sklearn `normalize(norm='max')`, one float32
-    division), then S + S^T - S o S^T per cell as (a + b) - a*b with the
-    product pinned (no contraction), and exact zeros eliminated."""
+def ug_intersect_floor(min_stored: Float32) -> UInt64:
+    """HOST scalar: half a graph's smallest stored value, at least 1e-8."""
+    return bitcast[DType.uint64](max(Float64(min_stored) / 2.0, Float64(1.0e-8)))
+
+
+def ug_intersect_expo(weight: Float32) -> Tuple[Bool, UInt64]:
+    """HOST scalar: (weight < 0.5, w / (1 - w) or (1 - w) / w) in Float64."""
+    var w64 = Float64(weight)
+    if w64 < 0.5:
+        return (True, bitcast[DType.uint64](w64 / (1.0 - w64)))
+    return (False, bitcast[DType.uint64]((1.0 - w64) / w64))
+
+
+def ug_min_stored(pos_bits: Int32, neg_bits: Int32) -> Float32:
+    """HOST: a graph's smallest nonzero stored value from the device's two
+    words (the most negative value's bits by `Atomic.max`, else the smallest
+    positive one's by `Atomic.min` from FLT_MAX), as the host scan's
+    `v != 0 and v < m` from m = FLT_MAX finds it."""
+    if neg_bits != UG_NO_NEG:
+        return bitcast[DType.float32](neg_bits)
+    return bitcast[DType.float32](pos_bits)
+
+
+def ug_min_stored_kernel(v: UG_F32P, pos: UG_I32P, neg: UG_I32P, n_in: Int32):
+    """`pos[0]` the smallest positive value's bits (Atomic.min, from
+    FLT_MAX: infinities and NaNs never win), `neg[0]` the most negative
+    value's bits (Atomic.max over the signed words, from INT32_MIN)."""
+    var i = _ug_gid()
+    if i >= Int(n_in):
+        return
+    var x = ftz(v[i])
+    if x > Float32(0.0):
+        _ = Atomic.min(pos, bitcast[DType.int32](x))
+    elif x < Float32(0.0):
+        _ = Atomic.max(neg, bitcast[DType.int32](x))
+
+
+def ug_narrow_kernel(src: MutPointer[Int64, MutAnyOrigin], dst: UG_I32P, n_in: Int32):
+    """One offset per thread, the CSR list's 64-bit `Int` to Int32."""
+    var i = _ug_gid()
+    if i >= Int(n_in):
+        return
+    dst[i] = Int32(src[i])
+
+
+def ug_row_ids_kernel(off: UG_I32P, erow: UG_U32P, n_in: Int32):
+    """Each stored entry's row id (one thread per row)."""
+    var row = _ug_gid()
+    if row >= Int(n_in):
+        return
+    for e in range(Int(off[row]), Int(off[row + 1])):
+        erow[e] = UInt32(row)
+
+
+def ug_reset_scale_kernel(off: UG_I32P, val: UG_F32P, nv: UG_F32P, n_in: Int32):
+    """Row `row` divided by its largest stored value (strict >, from 0)."""
+    var row = _ug_gid()
+    if row >= Int(n_in):
+        return
+    var b = Int(off[row])
+    var end = Int(off[row + 1])
+    var mx = Float32(0.0)
+    for e in range(b, end):
+        var v = ftz(val[e])
+        if v > mx:
+            mx = v
+    for e in range(b, end):
+        nv[e] = ug_reset_scale(val[e], mx)
+
+
+def ug_reset_merge_kernel[WRITE: Bool](
+    off: UG_I32P, col: UG_U32P, val: UG_F32P,
+    toff: UG_I32P, tcol: UG_U32P, tval: UG_F32P,
+    moff: UG_I32P, mcount: UG_I32P, ocol: UG_U32P, oval: UG_F32P, n_in: Int32,
+):
+    """Row `row` of `S + S^T - S o S^T` in ascending column order, exact
+    zeros eliminated: the count pass (`WRITE` false) and the write pass."""
+    var row = _ug_gid()
+    var n = Int(n_in)
+    if row >= n:
+        return
+    var left = Int(off[row])
+    var lend = Int(off[row + 1])
+    var right = Int(toff[row])
+    var rend = Int(toff[row + 1])
+    var out = 0
+    var at = 0
+    comptime if WRITE:
+        at = Int(moff[row])
+    while left < lend or right < rend:
+        var lc = n
+        var rc = n
+        if left < lend:
+            lc = Int(col[left])
+        if right < rend:
+            rc = Int(tcol[right])
+        var c = min(lc, rc)
+        var a = Float32(0.0)
+        var b = Float32(0.0)
+        if lc == c:
+            a = val[left]
+            left += 1
+        if rc == c:
+            b = tval[right]
+            right += 1
+        var w = ug_reset_weight(a, b)
+        if w != Float32(0.0):
+            comptime if WRITE:
+                ocol[at + out] = UInt32(c)
+                oval[at + out] = w
+            out += 1
+    comptime if not WRITE:
+        mcount[row] = Int32(out)
+
+
+def ug_categorical_kernel[WRITE: Bool](
+    off: UG_I32P, col: UG_U32P, val: UG_F32P, target: UG_F32P,
+    moff: UG_I32P, mcount: UG_I32P, ocol: UG_U32P, oval: UG_F32P,
+    n_in: Int32, unknown: UInt64, far: UInt64,
+):
+    """Row `row` of the label-scaled graph, exact zeros eliminated: the
+    count pass (`WRITE` false) and the write pass."""
+    var row = _ug_gid()
+    if row >= Int(n_in):
+        return
+    var ti = target[row]
+    var out = 0
+    var at = 0
+    comptime if WRITE:
+        at = Int(moff[row])
+    for e in range(Int(off[row]), Int(off[row + 1])):
+        var j = Int(col[e])
+        var w = ug_categorical_weight(val[e], ti, target[j], unknown, far)
+        if w != Float32(0.0):
+            comptime if WRITE:
+                ocol[at + out] = UInt32(j)
+                oval[at + out] = w
+            out += 1
+    comptime if not WRITE:
+        mcount[row] = Int32(out)
+
+
+def ug_intersect_kernel[WRITE: Bool](
+    loff: UG_I32P, lcol: UG_U32P, lval: UG_F32P,
+    roff: UG_I32P, rcol: UG_U32P, rval: UG_F32P,
+    moff: UG_I32P, mcount: UG_I32P, ocol: UG_U32P, oval: UG_F32P,
+    n_in: Int32, left_min: UInt64, right_min: UInt64, low: Int32, expo: UInt64,
+):
+    """Row `row` of the union pattern of the two graphs, every cell kept:
+    the count pass (`WRITE` false) and the write pass."""
+    var row = _ug_gid()
+    var n = Int(n_in)
+    if row >= n:
+        return
+    var a = Int(loff[row])
+    var aend = Int(loff[row + 1])
+    var b = Int(roff[row])
+    var bend = Int(roff[row + 1])
+    var out = 0
+    var at = 0
+    comptime if WRITE:
+        at = Int(moff[row])
+    while a < aend or b < bend:
+        var ac = n
+        var bc = n
+        if a < aend:
+            ac = Int(lcol[a])
+        if b < bend:
+            bc = Int(rcol[b])
+        var c = min(ac, bc)
+        var lv = Float32(0.0)
+        var rv = Float32(0.0)
+        if ac == c:
+            lv = lval[a]
+            a += 1
+        if bc == c:
+            rv = rval[b]
+            b += 1
+        comptime if WRITE:
+            ocol[at + out] = UInt32(c)
+            oval[at + out] = ug_intersect_cell(lv, rv, left_min, right_min, low != Int32(0), expo)
+        out += 1
+    comptime if not WRITE:
+        mcount[row] = Int32(out)
+
+
+struct UgDeviceCsr(Movable):
+    """A CSR on the device: Int32 offsets (n + 1), columns and values."""
+
+    var off: DeviceBuffer[DType.int32]
+    var col: DeviceBuffer[DType.uint32]
+    var val: DeviceBuffer[DType.float32]
+    var nnz: Int
+
+    def __init__(
+        out self,
+        var off: DeviceBuffer[DType.int32],
+        var col: DeviceBuffer[DType.uint32],
+        var val: DeviceBuffer[DType.float32],
+        nnz: Int,
+    ):
+        self.off = off^
+        self.col = col^
+        self.val = val^
+        self.nnz = nnz
+
+
+def _ug_csr_up(ctx: DeviceContext, graph: SparseFuzzySimplicialGraph) raises -> UgDeviceCsr:
+    """The graph's union CSR up once (bulk copies through pinned staging);
+    offsets narrowed to Int32 on the device."""
     var n = graph.n_samples
-    var nv = List[Float32](capacity=len(graph.values))
-    for row in range(n):
-        var mx = Float32(0.0)
-        for e in range(graph.offsets[row], graph.offsets[row + 1]):
-            if graph.values[e] > mx:
-                mx = graph.values[e]
-        for e in range(graph.offsets[row], graph.offsets[row + 1]):
-            nv.append(graph.values[e] / mx if mx > Float32(0.0) else graph.values[e])
-    # the transpose: rows scattered in ascending order, so each row of it is
-    # column sorted
-    var toff = List[Int](length=n + 1, fill=0)
-    for col in graph.indices:
-        toff[Int(col) + 1] += 1
-    for i in range(n):
-        toff[i + 1] += toff[i]
-    var cursor = toff.copy()
-    var tcol = List[UInt32](length=len(graph.indices), fill=UInt32(0))
-    var tval = List[Float32](length=len(graph.indices), fill=Float32(0.0))
-    for i in range(n):
-        for at in range(graph.offsets[i], graph.offsets[i + 1]):
-            var col = Int(graph.indices[at])
-            tcol[cursor[col]] = UInt32(i)
-            tval[cursor[col]] = nv[at]
-            cursor[col] += 1
-    var offsets = List[Int]()
-    var indices = List[UInt32]()
-    var values = List[Float32]()
-    offsets.append(0)
-    for i in range(n):
-        var left = graph.offsets[i]
-        var right = toff[i]
-        while left < graph.offsets[i + 1] or right < toff[i + 1]:
-            var lc = n
-            var rc = n
-            if left < graph.offsets[i + 1]:
-                lc = Int(graph.indices[left])
-            if right < toff[i + 1]:
-                rc = Int(tcol[right])
-            var col = min(lc, rc)
-            var a = Float32(0.0)
-            var b = Float32(0.0)
-            if lc == col:
-                a = nv[left]
-                left += 1
-            if rc == col:
-                b = tval[right]
-                right += 1
-            var w = (a + b) - identical_mul(a, b)
-            if w != Float32(0.0):
-                indices.append(UInt32(col))
-                values.append(w)
-        offsets.append(len(indices))
-    return _with_csr(graph, offsets^, indices^, values^)
+    var nnz = len(graph.indices)
+    if len(graph.offsets) != n + 1 or len(graph.values) != nnz:
+        raise Error("UMAP sparse graph shape mismatch")
+    if n > 2147483646 or nnz > 2147483647:
+        raise Error("UMAP sparse graph exceeds the kernel Int32 range")
+    var cap = max(nnz, 1)
+    var h_off = ctx.enqueue_create_host_buffer[DType.int64](n + 1)
+    var h_col = ctx.enqueue_create_host_buffer[DType.uint32](cap)
+    var h_val = ctx.enqueue_create_host_buffer[DType.float32](cap)
+    ctx.synchronize()
+    memcpy(dest=h_off.unsafe_ptr(), src=graph.offsets.unsafe_ptr().bitcast[Int64](), count=n + 1)
+    if nnz > 0:
+        memcpy(dest=h_col.unsafe_ptr(), src=graph.indices.unsafe_ptr(), count=nnz)
+        memcpy(dest=h_val.unsafe_ptr(), src=graph.values.unsafe_ptr(), count=nnz)
+    var off64 = ctx.enqueue_create_buffer[DType.int64](n + 1)
+    var off = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var col = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var val = ctx.enqueue_create_buffer[DType.float32](cap)
+    ctx.enqueue_copy(dst_buf=off64, src_ptr=h_off.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=col, src_ptr=h_col.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=val, src_ptr=h_val.unsafe_ptr())
+    ctx.enqueue_function[ug_narrow_kernel](
+        off64.unsafe_ptr(), off.unsafe_ptr(), Int32(n + 1),
+        grid_dim=_ug_blocks(n + 1), block_dim=UG_TPB,
+    )
+    ctx.synchronize()
+    _ = h_off^
+    _ = h_col^
+    _ = h_val^
+    _ = off64^
+    return UgDeviceCsr(off^, col^, val^, nnz)
+
+
+def _ug_reset_device(
+    ctx: DeviceContext, graph: SparseFuzzySimplicialGraph, mut csr: UgDeviceCsr
+) raises -> SparseFuzzySimplicialGraph:
+    """`reset_local_connectivity` of a device CSR: the row max scale, the
+    transpose (a STABLE sort of (column, entry) keeps each column's entries
+    in ascending source row, the host scatter's order), the zero-eliminating
+    union merge; the result back once into `graph`'s struct."""
+    var n = graph.n_samples
+    var nnz = csr.nnz
+    var cap = max(nnz, 1)
+    var rg = _ug_blocks(n)
+    var nv = ctx.enqueue_create_buffer[DType.float32](cap)
+    var erow = ctx.enqueue_create_buffer[DType.uint32](cap)
+    ctx.enqueue_function[ug_reset_scale_kernel](
+        csr.off.unsafe_ptr(), csr.val.unsafe_ptr(), nv.unsafe_ptr(), Int32(n),
+        grid_dim=rg, block_dim=UG_TPB,
+    )
+    ctx.enqueue_function[ug_row_ids_kernel](
+        csr.off.unsafe_ptr(), erow.unsafe_ptr(), Int32(n),
+        grid_dim=rg, block_dim=UG_TPB,
+    )
+    var tcount = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_memset(tcount, Int32(0))
+    var keys = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var order = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var tkeys = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var torder = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var sort_counts = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(cap), 1))
+    var eg = _ug_blocks(nnz)
+    if nnz > 0:
+        ctx.enqueue_function[ug_tcount_kernel](
+            csr.col.unsafe_ptr(), keys.unsafe_ptr(), order.unsafe_ptr(), tcount.unsafe_ptr(),
+            Int32(nnz), grid_dim=eg, block_dim=UG_TPB,
+        )
+        fast_radix_sort_pairs_u32(ctx, nnz, keys, order, tkeys, torder, sort_counts)
+    var toff = _ug_scan(ctx, tcount, n)
+    var tcol = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var tval = ctx.enqueue_create_buffer[DType.float32](cap)
+    if nnz > 0:
+        ctx.enqueue_function[ug_tgather_kernel](
+            order.unsafe_ptr(), erow.unsafe_ptr(), nv.unsafe_ptr(),
+            tcol.unsafe_ptr(), tval.unsafe_ptr(), Int32(nnz),
+            grid_dim=eg, block_dim=UG_TPB,
+        )
+    var mcount = ctx.enqueue_create_buffer[DType.int32](n)
+    var no_off = ctx.enqueue_create_buffer[DType.int32](1)
+    var no_col = ctx.enqueue_create_buffer[DType.uint32](1)
+    var no_val = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.enqueue_function[ug_reset_merge_kernel[False]](
+        csr.off.unsafe_ptr(), csr.col.unsafe_ptr(), nv.unsafe_ptr(),
+        toff.unsafe_ptr(), tcol.unsafe_ptr(), tval.unsafe_ptr(),
+        no_off.unsafe_ptr(), mcount.unsafe_ptr(), no_col.unsafe_ptr(), no_val.unsafe_ptr(),
+        Int32(n), grid_dim=rg, block_dim=UG_TPB,
+    )
+    var moff = _ug_scan(ctx, mcount, n)
+    var mnz = Int(_ug_get_i32(ctx, moff, n, 1)[0])
+    var ocol = ctx.enqueue_create_buffer[DType.uint32](max(mnz, 1))
+    var oval = ctx.enqueue_create_buffer[DType.float32](max(mnz, 1))
+    ctx.enqueue_function[ug_reset_merge_kernel[True]](
+        csr.off.unsafe_ptr(), csr.col.unsafe_ptr(), nv.unsafe_ptr(),
+        toff.unsafe_ptr(), tcol.unsafe_ptr(), tval.unsafe_ptr(),
+        moff.unsafe_ptr(), mcount.unsafe_ptr(), ocol.unsafe_ptr(), oval.unsafe_ptr(),
+        Int32(n), grid_dim=rg, block_dim=UG_TPB,
+    )
+    var out = SparseFuzzySimplicialGraph(
+        n, graph.n_neighbors, graph.rhos.copy(), graph.sigmas.copy(),
+        graph.directed_offsets.copy(), graph.directed_indices.copy(), graph.directed_values.copy(),
+        _ug_get_offsets(ctx, moff, n + 1), _ug_get_u32(ctx, ocol, mnz), _ug_get_f32(ctx, oval, mnz),
+    )
+    _ = nv^
+    _ = erow^
+    _ = tcount^
+    _ = keys^
+    _ = order^
+    _ = tkeys^
+    _ = torder^
+    _ = sort_counts^
+    _ = toff^
+    _ = tcol^
+    _ = tval^
+    _ = mcount^
+    _ = no_off^
+    _ = no_col^
+    _ = no_val^
+    _ = moff^
+    _ = ocol^
+    _ = oval^
+    return out^
+
+
+def reset_local_connectivity(ctx: DeviceContext, graph: SparseFuzzySimplicialGraph) raises -> SparseFuzzySimplicialGraph:
+    """umap-learn `reset_local_connectivity` on the device: every row divided
+    by its largest stored value, then S + S^T - S o S^T per cell, exact
+    zeros eliminated (`_ug_reset_device`)."""
+    var csr = _ug_csr_up(ctx, graph)
+    return _ug_reset_device(ctx, graph, csr)
 
 
 def categorical_intersection(
-    graph: SparseFuzzySimplicialGraph, target: List[Float32], far_dist: Float64,
+    ctx: DeviceContext, graph: SparseFuzzySimplicialGraph, target: List[Float32], far_dist: Float64,
     unknown_dist: Float64 = Float64(1.0),
 ) raises -> SparseFuzzySimplicialGraph:
     """umap-learn `discrete_metric_simplicial_set_intersection` (no target
-    metric): an edge whose ends carry different labels is scaled by
-    exp(-far_dist), one with an unknown label (-1) by exp(-unknown_dist),
-    each as Float32(Float64(w) * exp) with the portable exp; exact zeros are
-    eliminated, then `reset_local_connectivity`."""
+    metric) on the device: each edge scaled by `ug_categorical_weight`,
+    exact zeros eliminated (count, scan, write), then the reset."""
     var n = graph.n_samples
     if len(target) != n:
         raise Error("UMAP supervised target length differs from n_samples")
-    var far = identical_exp64(-far_dist)
-    var unknown = identical_exp64(-unknown_dist)
-    var offsets = List[Int]()
-    var indices = List[UInt32]()
-    var values = List[Float32]()
-    offsets.append(0)
-    for i in range(n):
-        for e in range(graph.offsets[i], graph.offsets[i + 1]):
-            var j = Int(graph.indices[e])
-            var w = graph.values[e]
-            if target[i] == Float32(-1.0) or target[j] == Float32(-1.0):
-                w = Float32(Float64(w) * unknown)
-            elif target[i] != target[j]:
-                w = Float32(Float64(w) * far)
-            if w != Float32(0.0):
-                indices.append(UInt32(j))
-                values.append(w)
-        offsets.append(len(indices))
-    return reset_local_connectivity(_with_csr(graph, offsets^, indices^, values^))
+    var consts = ug_categorical_constants(far_dist, unknown_dist)
+    var src = _ug_csr_up(ctx, graph)
+    var h_t = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.synchronize()
+    memcpy(dest=h_t.unsafe_ptr(), src=target.unsafe_ptr(), count=n)
+    var d_t = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=d_t, src_ptr=h_t.unsafe_ptr())
+    var rg = _ug_blocks(n)
+    var mcount = ctx.enqueue_create_buffer[DType.int32](n)
+    var no_off = ctx.enqueue_create_buffer[DType.int32](1)
+    var no_col = ctx.enqueue_create_buffer[DType.uint32](1)
+    var no_val = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.enqueue_function[ug_categorical_kernel[False]](
+        src.off.unsafe_ptr(), src.col.unsafe_ptr(), src.val.unsafe_ptr(), d_t.unsafe_ptr(),
+        no_off.unsafe_ptr(), mcount.unsafe_ptr(), no_col.unsafe_ptr(), no_val.unsafe_ptr(),
+        Int32(n), consts[0], consts[1], grid_dim=rg, block_dim=UG_TPB,
+    )
+    var moff = _ug_scan(ctx, mcount, n)
+    var mnz = Int(_ug_get_i32(ctx, moff, n, 1)[0])
+    var ocol = ctx.enqueue_create_buffer[DType.uint32](max(mnz, 1))
+    var oval = ctx.enqueue_create_buffer[DType.float32](max(mnz, 1))
+    ctx.enqueue_function[ug_categorical_kernel[True]](
+        src.off.unsafe_ptr(), src.col.unsafe_ptr(), src.val.unsafe_ptr(), d_t.unsafe_ptr(),
+        moff.unsafe_ptr(), mcount.unsafe_ptr(), ocol.unsafe_ptr(), oval.unsafe_ptr(),
+        Int32(n), consts[0], consts[1], grid_dim=rg, block_dim=UG_TPB,
+    )
+    _ = h_t^
+    _ = d_t^
+    _ = mcount^
+    _ = no_off^
+    _ = no_col^
+    _ = no_val^
+    _ = src^
+    var scaled = UgDeviceCsr(moff^, ocol^, oval^, mnz)
+    return _ug_reset_device(ctx, graph, scaled)
 
 
-def _csr_at(offsets: List[Int], indices: List[UInt32], values: List[Float32], row: Int, col: Int) -> Tuple[Bool, Float32]:
-    for e in range(offsets[row], offsets[row + 1]):
-        if Int(indices[e]) == col:
-            return (True, values[e])
-    return (False, Float32(0.0))
+def _ug_min_stored_device(ctx: DeviceContext, mut csr: UgDeviceCsr) raises -> Float32:
+    """A device CSR's smallest nonzero stored value, flushed (two words back)."""
+    var pos = ctx.enqueue_create_buffer[DType.int32](1)
+    var neg = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(pos, UG_FLT_MAX_BITS)
+    ctx.enqueue_memset(neg, UG_NO_NEG)
+    if csr.nnz > 0:
+        ctx.enqueue_function[ug_min_stored_kernel](
+            csr.val.unsafe_ptr(), pos.unsafe_ptr(), neg.unsafe_ptr(), Int32(csr.nnz),
+            grid_dim=_ug_blocks(csr.nnz), block_dim=UG_TPB,
+        )
+    var p = _ug_get_i32(ctx, pos, 0, 1)[0]
+    var q = _ug_get_i32(ctx, neg, 0, 1)[0]
+    _ = pos^
+    _ = neg^
+    return ug_min_stored(p, q)
 
 
 def general_intersection(
-    left: SparseFuzzySimplicialGraph, right: SparseFuzzySimplicialGraph, weight: Float32,
+    ctx: DeviceContext, left: SparseFuzzySimplicialGraph, right: SparseFuzzySimplicialGraph, weight: Float32,
 ) raises -> SparseFuzzySimplicialGraph:
     """umap-learn `general_simplicial_set_intersection` +
-    `sparse.general_sset_intersection` (right_complement False): the union
-    pattern of the two graphs holding left + right; a cell where either side
-    beats its floor (half its graph's smallest stored value, at least 1e-8,
-    in Float64) becomes left * right^(w / (1 - w)) (w < 0.5) or
-    left^((1 - w) / w) * right, Float64 with the portable pow, rounded once;
-    then `reset_local_connectivity`."""
+    `sparse.general_sset_intersection` (right_complement False) on the
+    device: the union pattern of the two graphs, each cell
+    `ug_intersect_cell` against the floors (half each graph's smallest
+    stored value, at least 1e-8; umap-learn's graphs have had their explicit
+    zeros eliminated, so a stored zero counts as absent); then the reset."""
     var n = left.n_samples
     if right.n_samples != n:
         raise Error("UMAP supervised target graph size differs")
-    # the smallest STORED value: umap-learn's graphs have had their explicit
-    # zeros eliminated, so a stored zero here counts as absent
-    var lmin_v = Float32(3.4028234663852886e38)
-    for v in left.values:
-        if v != Float32(0.0) and v < lmin_v:
-            lmin_v = v
-    var rmin_v = Float32(3.4028234663852886e38)
-    for v in right.values:
-        if v != Float32(0.0) and v < rmin_v:
-            rmin_v = v
-    var left_min = max(Float64(lmin_v) / 2.0, Float64(1.0e-8))
-    var right_min = max(Float64(rmin_v) / 2.0, Float64(1.0e-8))
-    var w64 = Float64(weight)
-    var offsets = List[Int]()
-    var indices = List[UInt32]()
-    var values = List[Float32]()
-    offsets.append(0)
-    for i in range(n):
-        var a = left.offsets[i]
-        var b = right.offsets[i]
-        while a < left.offsets[i + 1] or b < right.offsets[i + 1]:
-            var ac = n
-            var bc = n
-            if a < left.offsets[i + 1]:
-                ac = Int(left.indices[a])
-            if b < right.offsets[i + 1]:
-                bc = Int(right.indices[b])
-            var col = min(ac, bc)
-            var lv = Float32(0.0)
-            var rv = Float32(0.0)
-            var has_l = False
-            var has_r = False
-            if ac == col:
-                lv = left.values[a]
-                has_l = lv != Float32(0.0)
-                a += 1
-            if bc == col:
-                rv = right.values[b]
-                has_r = rv != Float32(0.0)
-                b += 1
-            var out = lv + rv
-            var left_val = Float64(lv) if has_l else left_min
-            var right_val = Float64(rv) if has_r else right_min
-            if left_val > left_min or right_val > right_min:
-                if w64 < 0.5:
-                    out = Float32(left_val * identical_pow64(right_val, w64 / (1.0 - w64)))
-                else:
-                    out = Float32(identical_pow64(left_val, (1.0 - w64) / w64) * right_val)
-            indices.append(UInt32(col))
-            values.append(out)
-        offsets.append(len(indices))
-    return reset_local_connectivity(_with_csr(left, offsets^, indices^, values^))
+    var lcsr = _ug_csr_up(ctx, left)
+    var rcsr = _ug_csr_up(ctx, right)
+    var left_min = ug_intersect_floor(_ug_min_stored_device(ctx, lcsr))
+    var right_min = ug_intersect_floor(_ug_min_stored_device(ctx, rcsr))
+    var ex = ug_intersect_expo(weight)
+    var low = Int32(1) if ex[0] else Int32(0)
+    var rg = _ug_blocks(n)
+    var mcount = ctx.enqueue_create_buffer[DType.int32](n)
+    var no_off = ctx.enqueue_create_buffer[DType.int32](1)
+    var no_col = ctx.enqueue_create_buffer[DType.uint32](1)
+    var no_val = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.enqueue_function[ug_intersect_kernel[False]](
+        lcsr.off.unsafe_ptr(), lcsr.col.unsafe_ptr(), lcsr.val.unsafe_ptr(),
+        rcsr.off.unsafe_ptr(), rcsr.col.unsafe_ptr(), rcsr.val.unsafe_ptr(),
+        no_off.unsafe_ptr(), mcount.unsafe_ptr(), no_col.unsafe_ptr(), no_val.unsafe_ptr(),
+        Int32(n), left_min, right_min, low, ex[1], grid_dim=rg, block_dim=UG_TPB,
+    )
+    var moff = _ug_scan(ctx, mcount, n)
+    var mnz = Int(_ug_get_i32(ctx, moff, n, 1)[0])
+    var ocol = ctx.enqueue_create_buffer[DType.uint32](max(mnz, 1))
+    var oval = ctx.enqueue_create_buffer[DType.float32](max(mnz, 1))
+    ctx.enqueue_function[ug_intersect_kernel[True]](
+        lcsr.off.unsafe_ptr(), lcsr.col.unsafe_ptr(), lcsr.val.unsafe_ptr(),
+        rcsr.off.unsafe_ptr(), rcsr.col.unsafe_ptr(), rcsr.val.unsafe_ptr(),
+        moff.unsafe_ptr(), mcount.unsafe_ptr(), ocol.unsafe_ptr(), oval.unsafe_ptr(),
+        Int32(n), left_min, right_min, low, ex[1], grid_dim=rg, block_dim=UG_TPB,
+    )
+    _ = mcount^
+    _ = no_off^
+    _ = no_col^
+    _ = no_val^
+    _ = lcsr^
+    _ = rcsr^
+    var merged = UgDeviceCsr(moff^, ocol^, oval^, mnz)
+    return _ug_reset_device(ctx, left, merged)

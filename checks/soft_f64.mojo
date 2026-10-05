@@ -787,6 +787,89 @@ def sf64_log(x_in: UInt64) -> UInt64:
     return z
 
 
+def sf64_pow(x: UInt64, p: UInt64) -> UInt64:
+    """`checks/numerics.mojo::portable_pow64`, statement for statement, over
+    these operations (lane cpu4-umap, 2026-10-04): the UMAP transform's
+    attraction term and supervised UMAP's set intersection run it on the
+    device on every vendor, the host column runs this same function."""
+    comptime ABS = UInt64(0x7FFFFFFFFFFFFFFF)
+    var axb = x & ABS
+    var apb = p & ABS
+    if apb == 0 or x == SF64_ONE:
+        return SF64_ONE
+    if axb > SF64_INF or apb > SF64_INF:
+        return SF64_NAN
+    if apb == SF64_INF:
+        if axb == SF64_ONE:
+            return SF64_ONE
+        if (axb > SF64_ONE) == sf64_gt(p, SF64_ZERO):
+            return SF64_INF
+        return SF64_ZERO
+
+    # Finite exponent classification, including |p| >= 2**53 (all even).
+    var integral = False
+    var odd = False
+    var pe = Int((apb >> 52) & UInt64(0x7FF)) - 1023
+    if pe >= 0:
+        if pe > 52:
+            integral = True
+        else:
+            var fraction = 52 - pe
+            var significand = (apb & SF64_FRAC) | SF64_HIDDEN
+            integral = (significand & ((UInt64(1) << UInt64(fraction)) - UInt64(1))) == 0
+            odd = integral and ((significand >> UInt64(fraction)) & UInt64(1)) != 0
+    var sign = SF64_SIGN if (x & SF64_SIGN) != 0 and odd else UInt64(0)
+    if axb == 0:
+        return sign | (SF64_INF if sf64_lt(p, SF64_ZERO) else UInt64(0))
+    if axb == SF64_INF:
+        return sign | (SF64_INF if sf64_gt(p, SF64_ZERO) else UInt64(0))
+    if (x & SF64_SIGN) != 0 and not integral:
+        return SF64_NAN
+    if p == SF64_ONE:
+        return x
+    if p == _NONE:
+        return sf64_div(SF64_ONE, x)
+    if p == _TWO:
+        return sf64_mul(x, x)
+
+    # Integer powers of binary powers are exact, including overflow and
+    # subnormal ties.
+    var binary_power = (axb & SF64_FRAC) == 0
+    var xe = Int(axb >> 52) - 1023
+    if axb < (UInt64(1) << 52) and (axb & (axb - UInt64(1))) == 0:
+        binary_power = True
+        var shifted_bits = axb
+        xe = -1074
+        while shifted_bits > 1:
+            shifted_bits >>= 1
+            xe += 1
+    if integral and binary_power:
+        var exponent = sf64_mul(p, sf64_from_int(xe))
+        if sf64_gt(exponent, sf64_from_int(1023)):
+            return sign | SF64_INF
+        if sf64_lt(exponent, sf64_from_int(-1074)):
+            return sign
+        var e = sf64_to_int(exponent)
+        var result_bits = UInt64(e + 1023) << 52 if e >= -1022 else UInt64(1) << UInt64(e + 1074)
+        return sign | result_bits
+
+    var power = sf64_mul(p, sf64_log(axb))
+    var magnitude: UInt64
+    if sf64_lt(power, sf64_from_int(-708)):
+        if sf64_lt(power, sf64_from_int(-746)):
+            magnitude = SF64_ZERO
+        else:
+            # exp(power + 512*ln(2)) * 2**-512, the split ln(2) of the exp
+            # reduction (`_NC1`, `_NC2` negated).
+            var five12 = sf64_from_int(512)
+            var shifted = sf64_fma(five12, sf64_neg(_NC1), power)
+            shifted = sf64_fma(five12, sf64_neg(_NC2), shifted)
+            magnitude = sf64_mul(sf64_exp(shifted), UInt64(511) << 52)
+    else:
+        magnitude = sf64_exp(power)
+    return magnitude | sign
+
+
 # ---- the GBDT probability links, one row-element each -------------------
 
 

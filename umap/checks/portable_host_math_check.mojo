@@ -14,7 +14,7 @@ from umap.graph import fuzzy_simplicial_graph
 from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
 from umap.optimizer import optimize_layout_identical_reference
 from umap.sparse_optimizer import optimize_sparse_layout_identical_reference, sparse_weight_at
-from umap.transform import transform_memberships, initialize_transform, refine_transform
+from umap.host.umap_oracle import host_transform_memberships, host_initialize_transform, host_refine_transform
 
 
 def emit(name: String, values: List[Float32]) raises:
@@ -89,11 +89,11 @@ def main() raises:
 
         var query_distances: List[Float32] = [0, 1, 2, 0.5, 1.5, 3]
         var query_ids: List[UInt32] = [0, 1, 2, 1, 0, 2]
-        var strengths = transform_memberships(query_distances, 2, 3)
+        var strengths = host_transform_memberships(query_distances, 2, 3)
         var before = start.copy()
-        var query_init = initialize_transform(query_ids, strengths, start, 2, 3, 3, components)
-        var transformed = refine_transform(query_init, start, query_ids, strengths, 2, 3, 3, components, 4, curve.a, curve.b, UInt64(19))
-        var again = refine_transform(query_init, start, query_ids, strengths, 2, 3, 3, components, 4, curve.a, curve.b, UInt64(19))
+        var query_init = host_initialize_transform(query_ids, strengths, start, 2, 3, 3, components)
+        var transformed = host_refine_transform(query_init, start, query_ids, strengths, 2, 3, 3, components, 4, curve.a, curve.b, UInt64(19))
+        var again = host_refine_transform(query_init, start, query_ids, strengths, 2, 3, 3, components, 4, curve.a, curve.b, UInt64(19))
         equal(transformed, again, "repeated transform")
         equal(start, before, "frozen transform training coordinates")
         emit("transform_memberships_" + String(components), strengths)

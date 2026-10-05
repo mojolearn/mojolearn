@@ -6,7 +6,8 @@ from std.math import isfinite
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.params import UMAPParams
-from umap.transform import transform, transform_memberships, initialize_transform, refine_transform
+from umap.transform import transform
+from umap.host.umap_oracle import host_transform_memberships, host_initialize_transform, host_refine_transform
 
 
 def _bits(a: List[Float32], b: List[Float32], name: String) raises:
@@ -21,14 +22,14 @@ def main() raises:
     var ids: List[UInt32] = [0, 1]
     var weights: List[Float32] = [0.25, 0.75]
     var anchors: List[Float32] = [0, 0, 2, 4]
-    var initialized = initialize_transform(ids, weights, anchors, 1, 2, 2, 2)
+    var initialized = host_initialize_transform(ids, weights, anchors, 1, 2, 2, 2)
     var expected: List[Float32] = [1.5, 3]
     _bits(initialized, expected, "weighted mean")
     var exact_weights: List[Float32] = [1, 0.5]
     var zero: List[Float32] = [0, 0]
-    _bits(initialize_transform(ids, exact_weights, anchors, 1, 2, 2, 2), zero, "exact anchor")
+    _bits(host_initialize_transform(ids, exact_weights, anchors, 1, 2, 2, 2), zero, "exact anchor")
     var distances: List[Float32] = [0, 1, 2, 0.5, 1.5, 3]
-    var strengths = transform_memberships(distances, 2, 3)
+    var strengths = host_transform_memberships(distances, 2, 3)
     if strengths[0] != Float32(1) or strengths[1] < strengths[2]:
         raise Error("bipartite zero edge or membership ordering was lost")
     for i in range(len(strengths)):
@@ -72,14 +73,14 @@ def main() raises:
     var bad_ids: List[UInt32] = [0, 2]
     var refused = False
     try:
-        _ = initialize_transform(bad_ids, weights, anchors, 1, 2, 2, 2)
+        _ = host_initialize_transform(bad_ids, weights, anchors, 1, 2, 2, 2)
     except:
         refused = True
     if not refused:
         raise Error("transform admitted out-of-range neighbor")
     refused = False
     try:
-        _ = refine_transform(expected, anchors, ids, weights, 1, 2, 2, 2, 0,
+        _ = host_refine_transform(expected, anchors, ids, weights, 1, 2, 2, 2, 0,
                              Float32(1), Float32(1), UInt64(19))
     except:
         refused = True
