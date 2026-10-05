@@ -831,6 +831,38 @@ def _host_knn_block_rows(
     _ = bestl^
 
 
+def _host_knn_extra_rows(
+    ip: HostF32Ptr, n_index: Int, qp: HostF32Ptr, lo: Int, hi: Int, d: Int,
+    k: Int, mtr: Int, metric_arg: Float32, odp: HostF32Ptr, oip: HostU32Ptr,
+):
+    """Query rows `[lo, hi)` of `host_knn_search` under the five added
+    metrics (`metric_is_extra`: canberra, braycurtis, correlation,
+    jensenshannon, inner_product): every cell through
+    `host_metric_cell_ptr`, i.e. the device's own `extra_metric_cell`, then
+    `host_select_k`. THE BLOCK ENGINE HAS NO SPELLING OF THESE METRICS: its
+    step kinds are ip/L1/Linf/Lp/diff2 and its epilogue falls through to
+    cosine's, so an extra metric sent there was computed as an Lp fold
+    with cosine's division by zero norms (no norms are formed for these
+    metrics) -> -inf / NaN distances, and the distance-weighted regressor
+    refused every row (DEVIATION 555). This is lane/algos-neighbors' row
+    loop, verbatim, kept for the metrics only it knew."""
+    var dist_row = List[Float32](length=n_index, fill=Float32(0.0))
+    var sel_dist = List[Float32](length=k, fill=Float32(0.0))
+    var sel_idx = List[UInt32](length=k, fill=UInt32(0))
+    for row in range(lo, hi):
+        for col in range(n_index):
+            dist_row[col] = host_metric_cell_ptr(
+                qp, row, ip, col, d, Float32(0.0), Float32(0.0), mtr, metric_arg
+            )
+        host_select_k(dist_row, n_index, k, sel_dist, sel_idx, 0)
+        for rank in range(k):
+            odp.unsafe_store(row * k + rank, sel_dist[rank])
+            oip.unsafe_store(row * k + rank, sel_idx[rank])
+    _ = dist_row^
+    _ = sel_dist^
+    _ = sel_idx^
+
+
 def host_knn_search(
     index: List[Float32], n_index: Int,
     queries: List[Float32], n_queries: Int, d: Int, k: Int,
@@ -909,12 +941,20 @@ def host_knn_search(
     var odp = host_list_ptr(out_dist)
     var oip = host_list_ptr_u32(out_idx)
 
-    var packed = host_pack_index(ip, n_index, d)
+    var extra = metric_is_extra(mtr)
+    # The packed panel only feeds the block engine; the extra metrics read
+    # the row-major index through `ip`.
+    var packed = host_pack_index(ip, n_index, d) if not extra else List[Float32]()
     var pan = host_list_ptr(packed)
 
-    def _rows(c: Int) {imm pan, imm qp, imm inp, imm qnp, imm odp, imm oip, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm mtr, imm metric_arg, imm l2_pair, imm is_sqrt}:
+    def _rows(c: Int) {imm ip, imm pan, imm qp, imm inp, imm qnp, imm odp, imm oip, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm mtr, imm metric_arg, imm l2_pair, imm is_sqrt, imm extra}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
+        if extra:
+            _host_knn_extra_rows(
+                ip, n_index, qp, lo, hi, d, k, mtr, metric_arg, odp, oip,
+            )
+            return
         _host_knn_block_rows(
             pan, n_index, qp, lo, hi, d, k, inp, qnp, mtr, metric_arg,
             l2_pair, is_sqrt, odp, oip,
