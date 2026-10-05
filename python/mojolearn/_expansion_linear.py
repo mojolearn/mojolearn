@@ -102,8 +102,8 @@ def _run_array(est, algo, X, n, d, y, ip, fp, n_out, n_fw, n_iw):
     """One `x_linear_fit` call; the flat float32 result as an Array."""
     out = empty((n_out,), "<f4")
     yy = y if y is not None else zeros((1,), "<f4")
-    ip = [int(v) for v in ip]
-    fp = [float(v) for v in fp]
+    ip = [int(v) for v in ip]  # glue: converts the int parameter list
+    fp = [float(v) for v in fp]  # glue: converts the float parameter list
     _fit_module(est, algo).x_linear_fit(
         int(algo), addr_ro(X, name="X"), addr_ro(yy, name="y"),
         [n, d, X.size, 0 if y is None else yy.size, n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)],
@@ -172,7 +172,7 @@ def _weights_f32(sample_weight, n):
         w = full((n,), float(sample_weight), "<f4")
     else:
         w = _vector(sample_weight, n, "sample_weight")
-    if n == 0 or not (w.min() >= 0) or not (w.sum() > 0):
+    if n == 0 or not (w.min() >= 0) or not (w.sum() > 0):  # glue: native Mojo min and sum of the weights via Array methods
         raise ValueError("mojolearn: sample_weight must be non-negative with a positive sum")
     return w
 
@@ -224,7 +224,7 @@ def _py2mojo_proba(est, mode, scores, k):
 
 
 def _rows(values, k, d):
-    return [values[c * d:(c + 1) * d] for c in range(k)]
+    return [values[c * d:(c + 1) * d] for c in range(k)]  # glue: per-class coefficient row views (k-sized: class count)
 
 
 def _check_fitted(est):
@@ -746,7 +746,7 @@ def _lars_fit(est, X, y, max_iter, lasso, alpha_min):
     est.n_iter_ = int(vals[d + 1])
     est.alpha_ = float(vals[d + 2])
     k = int(vals[d + 3])
-    est.active_ = [int(v) for v in vals[d + 4:d + 4 + k]]
+    est.active_ = [int(v) for v in vals[d + 4:d + 4 + k]]  # glue: reads the active feature indices (k-sized: active feature count)
     est.n_features_in_ = d
     return est
 
@@ -1082,8 +1082,8 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
     def fit(self, X, y, sample_weight=None):
         if self.scoring is not None or self.alpha_per_target:
             raise ValueError("mojolearn RidgeCV: only scoring=None, alpha_per_target=False are implemented")
-        alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]
-        if not alphas or any(not v > 0 for v in alphas):
+        alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]  # glue: converts the alphas argument
+        if not alphas or any(not v > 0 for v in alphas):  # glue: validates the alphas argument
             raise ValueError("mojolearn RidgeCV: alphas must be positive")
         a, n, d = _matrix(X)
         yv = _vector(y, n)
@@ -1157,7 +1157,7 @@ def _enetcv_fit(est, X, y, l1_ratios):
     name = type(est).__name__
     if est.selection != "cyclic":
         raise ValueError(f"mojolearn {name}: selection='random' is not implemented")
-    if any(not 0 < r <= 1 for r in l1_ratios):
+    if any(not 0 < r <= 1 for r in l1_ratios):  # glue: validates the l1_ratio argument
         raise ValueError(f"mojolearn {name}: l1_ratio must be in (0, 1]")
     a, n, d = _matrix(X)
     yv = _vector(y, n)
@@ -1171,13 +1171,13 @@ def _enetcv_fit(est, X, y, l1_ratios):
         explicit, grid = False, int(n_alphas) if isinstance(n_alphas, int) else 100
     else:
         explicit = True
-        values = sorted((float(v) for v in alphas), reverse=True)
+        values = sorted((float(v) for v in alphas), reverse=True)  # glue: sorts the user alphas argument
         grid = len(values)
     if grid < 1:
         raise ValueError(f"mojolearn {name}: at least one alpha is required")
     yy = _concat_f32(yv, ids)
     L = len(l1_ratios)
-    fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
+    fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])  # glue: builds the float parameter list
     ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit), int(bool(est.positive))]
     vals = _run(est, ALGO_ENETCV, a, n, d, yy, ip, fp, d + 4 + L * grid + L * grid * folds,
                 d * d + 4 * d + 3 + grid * (d + 2), 1)
@@ -1191,14 +1191,14 @@ def _enetcv_fit(est, X, y, l1_ratios):
     ms = vals[off + L * grid:off + L * grid + L * grid * folds]
     if L == 1:
         est.alphas_ = Array.from_list(al, "<f4")
-        est.mse_path_ = Array.from_list([ms[k * folds:(k + 1) * folds] for k in range(grid)], "<f4")
+        est.mse_path_ = Array.from_list([ms[k * folds:(k + 1) * folds] for k in range(grid)], "<f4")  # glue: reshapes the returned mse path (grid-sized: alpha grid)
     else:
-        est.alphas_ = Array.from_list([al[l * grid:(l + 1) * grid] for l in range(L)], "<f4")
+        est.alphas_ = Array.from_list([al[l * grid:(l + 1) * grid] for l in range(L)], "<f4")  # glue: reshapes the returned alpha path (grid-sized: alpha grid)
         est.mse_path_ = Array.from_list(
-            [[ms[(l * grid + k) * folds:(l * grid + k + 1) * folds] for k in range(grid)] for l in range(L)], "<f4")
+            [[ms[(l * grid + k) * folds:(l * grid + k + 1) * folds] for k in range(grid)] for l in range(L)], "<f4")  # glue: reshapes the returned mse path (grid-sized: alpha grid)
     est.n_features_in_ = d
     # the user's own value (the kernel carried it as float32)
-    return min(l1_ratios, key=lambda r: abs(r - l1_best))
+    return min(l1_ratios, key=lambda r: abs(r - l1_best))  # glue: maps the returned best l1_ratio to the argument entry
 
 
 class LassoCV(_LinearRegressorMixin, NumericModeMixin):
@@ -1236,7 +1236,7 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
 
     def fit(self, X, y):
         ratios = list(self.l1_ratio) if hasattr(self.l1_ratio, "__len__") else [self.l1_ratio]
-        self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])
+        self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])  # glue: converts the l1_ratio argument
         return self
 
 
@@ -1281,9 +1281,9 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         if isinstance(self.Cs, int) and not isinstance(self.Cs, bool):
             m = self.Cs
             # np.logspace(-4, 4, m); 10 ** y through `_pm.powr` (DEVIATION 6900), not the platform pow
-            Cs = [_pm.powr(10.0, -4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]
+            Cs = [_pm.powr(10.0, -4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]  # glue: builds the Cs parameter grid (m-sized: Cs grid size)
         else:
-            Cs = [float(c) for c in self.Cs]
+            Cs = [float(c) for c in self.Cs]  # glue: converts the Cs argument
         folds = 5 if self.cv is None else self.cv
         # lane cpu2-l10-linear: the class counts, the 'balanced' weights
         # (theirs: from the weighted counts of all of y) and the row weights
@@ -1310,14 +1310,14 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         self.classes_ = classes
         self.coef_ = Array.from_list(_rows(vals, kp, d), "<f4")
         self.intercept_ = Array.from_list(vals[kp * d:kp * d + kp], "<f4")
-        best_c = Cs[min(range(nc), key=lambda i: abs(Cs[i] - vals[kp * d + kp]))]
+        best_c = Cs[min(range(nc), key=lambda i: abs(Cs[i] - vals[kp * d + kp]))]  # glue: maps the returned best C to its grid entry (nc-sized: Cs grid size)
         self.Cs_ = Cs
         self.C_ = [best_c] * kp
         self.n_iter_ = int(vals[kp * d + kp + 1])
         off = kp * d + kp + 2
-        grid = [vals[off + f * nc:off + (f + 1) * nc] for f in range(folds)]
+        grid = [vals[off + f * nc:off + (f + 1) * nc] for f in range(folds)]  # glue: reshapes the returned score grid (folds-sized: CV folds)
         labels = classes.tolist() if hasattr(classes, "tolist") else list(classes)
-        self.scores_ = {lab: Array.from_list(grid, "<f4") for lab in (labels[1:] if kp == 1 else labels)}
+        self.scores_ = {lab: Array.from_list(grid, "<f4") for lab in (labels[1:] if kp == 1 else labels)}  # glue: one score table per class label
         self.n_features_in_ = d
         return self
 

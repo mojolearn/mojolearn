@@ -360,13 +360,13 @@ class _M:
         if not any(flags):
             return self
         k = _Kit(_backend.default_mode())
-        return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], self.r, 1))  # glue: plus-minus one vector of kernel sign flags (flags-sized: component sign flags)
+        return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], self.r, 1))
 
     def neg_cols(self, flags):
         if not any(flags):
             return self
         k = _Kit(_backend.default_mode())
-        return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], 1, self.c))  # glue: plus-minus one vector of kernel sign flags (flags-sized: component sign flags)
+        return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], 1, self.c))
 
     def list(self):
         return list(self.s)
@@ -1520,11 +1520,11 @@ class _Kit:
         if cnt and A.r * A.c and self._use(A):
             out = self._dout(1, cnt)
             self.b.x_decomp_dev_absmax(self._did(A), out._d.id, [A.r, A.c, 1 if by_col else 0])
-            return [v < 0 for v in out.s]  # glue: reads the kernel sign values as flags (out-sized: component sign values)
+            return [v < 0 for v in out.s]
         out = _M.zeros(1, cnt)
         if cnt and len(A.s):
             self.b.x_decomp_absmax_sign(A.addr, out.addr, [A.r, A.c, 1 if by_col else 0])
-        return [v < 0 for v in out.s]  # glue: reads the kernel sign values as flags (out-sized: component sign values)
+        return [v < 0 for v in out.s]
 
     def chol(self, A):
         L = A.copy()

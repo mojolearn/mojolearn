@@ -147,7 +147,7 @@ def _sorted_plain_classes(labels, kind):
                 "mojolearn: y contains a NaN label; NaN is not a class"
             )
     classes = sorted(dict.fromkeys(labels))
-    code = {c: i for i, c in enumerate(classes)}
+    code = {c: i for i, c in enumerate(classes)}  # glue: class index table (classes-sized: distinct classes)
     return classes, list(map(code.__getitem__, labels))
 
 
@@ -184,8 +184,8 @@ def sorted_classes(labels):
             "mojolearn: y mixes numeric and str labels; encode one kind "
             "before fitting"
         )
-    classes = sorted(first)
-    code = {c: i for i, c in enumerate(classes)}
+    classes = sorted(first)  # glue: sorts the distinct class labels (first-sized: distinct classes)
+    code = {c: i for i, c in enumerate(classes)}  # glue: class index table (classes-sized: distinct classes)
     return classes, [code[v] for v in labels]
 
 
@@ -322,18 +322,18 @@ def _encode_labels_native(y):
         return [conv(v) for v in wide_classes.tolist()], codes  # glue: the k class values
     del arr
     if bool_source:
-        classes = [bool(classes_store[i]) for i in range(k)]
+        classes = [bool(classes_store[i]) for i in range(k)]  # glue: reads the native class table (k-sized: class count)
     else:
-        classes = [py(classes_store[i]) for i in range(k)]
+        classes = [py(classes_store[i]) for i in range(k)]  # glue: reads the native class table (k-sized: class count)
     return classes, Array._owned(codes_store, (len(codes_store),), "<i4", "C")
 
 
 def label_kind(classes):
     """'int' if every class is an integer (bools excluded), 'float' if
     every class is a real number, else 'object'."""
-    if all(isinstance(c, numbers.Integral) and not is_bool(c) for c in classes):
+    if all(isinstance(c, numbers.Integral) and not is_bool(c) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
         return "int"
-    if all(isinstance(c, numbers.Real) and not is_bool(c) for c in classes):
+    if all(isinstance(c, numbers.Real) and not is_bool(c) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
         return "float"
     return "object"
 
@@ -386,8 +386,8 @@ def _decode_labels_native(classes, codes, kind):
     if codes.dtype != "<i8" or codes.ndim != 1 or not classes:
         return None
     try:
-        table = (Array.from_list([int(c) for c in classes], "<i8") if kind == "int"
-                 else Array.from_list([float(c) for c in classes], "<f8"))
+        table = (Array.from_list([int(c) for c in classes], "<i8") if kind == "int"  # glue: packs the class table for the native decode (classes-sized: distinct classes)
+                 else Array.from_list([float(c) for c in classes], "<f8"))  # glue: packs the class table for the native decode (classes-sized: distinct classes)
     except (OverflowError, TypeError):
         return None  # a class outside int64: the Python arm returns the objects
     n = int(codes.size)
@@ -404,11 +404,11 @@ def classes_member(classes):
     dtype `np.asarray` gave them). Bool labels are stored as int64 and
     come back as ints from `load` (DEVIATION 2340)."""
     kind = label_kind(classes)
-    if kind == "int" or all(is_bool(c) for c in classes):
-        return Array.from_list([int(c) for c in classes], "<i8")
+    if kind == "int" or all(is_bool(c) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
+        return Array.from_list([int(c) for c in classes], "<i8")  # glue: packs the class table (classes-sized: distinct classes)
     if kind == "float":
-        return Array.from_list([float(c) for c in classes], "<f8")
-    if all(isinstance(c, str) for c in classes):
+        return Array.from_list([float(c) for c in classes], "<f8")  # glue: packs the class table (classes-sized: distinct classes)
+    if all(isinstance(c, str) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
         return list(classes)
     raise ValueError("mojolearn: classes_ holds labels no model file can carry")
 
@@ -419,17 +419,17 @@ def classes_from_member(member):
     if isinstance(member, str):
         return [member]
     if isinstance(member, (list, tuple)):
-        return [str(v) for v in flatten_labels(list(member))]
+        return [str(v) for v in flatten_labels(list(member))]  # glue: converts a classes_ member of str labels
     dtype = str(getattr(member, "dtype", ""))
     kind = dtype.lstrip("<>|=")[:1]
     values = flatten_labels(member)
     if kind in ("i", "u"):
-        return [int(v) for v in values]
+        return [int(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
     if kind == "f":
-        return [float(v) for v in values]
+        return [float(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
     if kind == "b":
-        return [bool(v) for v in values]
-    return [str(v) for v in values]
+        return [bool(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
+    return [str(v) for v in values]  # glue: converts a classes_ member (values-sized: distinct classes)
 
 
 def argmax_rows(scores):
@@ -511,7 +511,7 @@ def finite_integer_codes(arr):
         if not int(_native("reduce_stat")(classes._addr, _NATIVE_CODE["<f8"], k, _REDUCE_INTEGRAL)):
             return None
     del ends
-    return [int(v) for v in classes.tolist()]
+    return [int(v) for v in classes.tolist()]  # glue: reads the class table (classes-sized: distinct classes)
 
 
 def unique_inverse(y):

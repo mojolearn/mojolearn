@@ -1020,7 +1020,7 @@ def _triu(M, r):
     # a slice assignment per row (one C-level copy each) instead of a
     # Python store per zeroed cell (lane/neural-net-experiment)
     c = M.c
-    for i in range(1, r):
+    for i in range(1, r):  # glue: one C-level zero fill per row (r-sized: matrix rows)
         w = min(i, c)
         out[i * c:i * c + w] = _array.array("f", bytes(4 * w))
     return _M(out, r, c)

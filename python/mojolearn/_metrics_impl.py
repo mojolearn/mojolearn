@@ -1178,7 +1178,7 @@ def _native_classification_labels(values):
         return None
     classes, codes = encoded
     # a bool buffer's classes come back as bools; the list routine's are ints
-    return _EncodedLabels([int(c) for c in classes], codes)
+    return _EncodedLabels([int(c) for c in classes], codes)  # glue: reads the native class table (classes-sized: distinct classes)
 
 
 def _label_set(labels):
@@ -1195,7 +1195,7 @@ def _label_map(labels, fn):
     if isinstance(labels, _EncodedLabels):
         from ._buffer import _native
         gather = _native("gather_i32")
-        table = [fn(c) for c in labels.classes]
+        table = [fn(c) for c in labels.classes]  # glue: maps the class table through the label function
         table = Array.from_list(table, "<i4")
         out = empty((len(labels),), "<i4")
         gather(_addr_ro(table), len(labels.classes), _addr_ro(labels.codes),
@@ -1215,7 +1215,7 @@ def _classification_pair(y_true, y_pred, sample_weight):
         raise TypeError("y_true and y_pred must use the same label type")
     if len(true) > 2147483647:
         raise ValueError("classification counts require at most INT32_MAX rows")
-    return true, pred, kind, sorted(_label_set(true) | _label_set(pred))
+    return true, pred, kind, sorted(_label_set(true) | _label_set(pred))  # glue: sorts the distinct class labels
 
 
 
@@ -1243,11 +1243,11 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     if not is_bool(normalize):
         raise ValueError("normalize must be a bool")
     true, kind = _classification_encoded(y_true, "y_true")
-    selected = _selected_labels(labels, kind, sorted(_label_set(true)))
+    selected = _selected_labels(labels, kind, sorted(_label_set(true)))  # glue: sorts the distinct class labels
     if len(selected) < 2:
         raise ValueError("log_loss requires at least two labels; pass labels for one observed class")
-    mapping = {label: i for i, label in enumerate(selected)}
-    if any(label not in mapping for label in _label_set(true)):
+    mapping = {label: i for i, label in enumerate(selected)}  # glue: class index table
+    if any(label not in mapping for label in _label_set(true)):  # glue: checks the label set against the selected labels
         raise ValueError("y_true contains a label missing from labels")
     probabilities = materialize_f32_lists(y_pred, "input")[0]
     if probabilities.dtype != "<f4":
@@ -1293,7 +1293,7 @@ def _binary_ranking_inputs(y_true, y_score, sample_weight):
     if sample_weight is not None:
         raise NotImplementedError("binary ranking metrics do not yet support sample_weight")
     true, kind = _classification_encoded(y_true, "y_true")
-    classes = sorted(_label_set(true))
+    classes = sorted(_label_set(true))  # glue: sorts the distinct class labels
     if len(classes) > 2:
         raise ValueError("binary ranking metrics support at most two observed classes")
     scores = materialize_f32_lists(y_score, "input")[0]
@@ -1399,7 +1399,7 @@ def _selected_labels(labels, kind, observed):
 
 
 def _encode_classification(true, pred, labels):
-    mapping = {label: i for i, label in enumerate(labels)}
+    mapping = {label: i for i, label in enumerate(labels)}  # glue: class index table
     return (_label_map(true, lambda v: mapping.get(v, -1)),
             _label_map(pred, lambda v: mapping.get(v, -1)))
 
@@ -1475,7 +1475,7 @@ def _precision_recall_fscore(y_true, y_pred, *, labels, pos_label, average,
     # Keep classes outside the requested output set for false-positive and
     # false-negative accounting. Truncating confusion first would be wrong.
     selected_set = set(selected)
-    all_labels = selected + [v for v in observed if v not in selected_set]
+    all_labels = selected + [v for v in observed if v not in selected_set]  # glue: appends the observed class labels
     if len(all_labels) > 715827882:
         raise ValueError("classification metrics exceed the native class-index bound")
     yt, yp = _encode_classification(true, pred, all_labels)

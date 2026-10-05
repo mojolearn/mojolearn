@@ -265,9 +265,9 @@ def driver_read_shift(index, first, devices):
 
 
 def _cpu_refusal(requests, cooperative, n_devices=1):
-    names = sorted({request[0] for request in requests})
+    names = sorted({request[0] for request in requests})  # glue: multi-device worker setup over device ids and request tuples
     if cooperative:
-        if all(name in CPU_SINGLE_DEVICE_COOPERATIVE for name in names):
+        if all(name in CPU_SINGLE_DEVICE_COOPERATIVE for name in names):  # glue: multi-device worker setup over device ids and request tuples
             if n_devices == 1:
                 return None
             return NotImplementedError(
@@ -279,7 +279,7 @@ def _cpu_refusal(requests, cooperative, n_devices=1):
             'no CPU implementation of the cooperative multi-GPU driver ' + ', '.join(names) + ' yet: '
             'its shards are device row tiles, chunks or ranges inside the GPU binding, '
             'which no host binding restates')
-    missing = [name for name in names if name not in CPU_OPERATIONS]
+    missing = [name for name in names if name not in CPU_OPERATIONS]  # glue: multi-device worker setup over device ids and request tuples
     if missing:
         return NotImplementedError(
             'no CPU implementation of the parallel worker operation ' + ', '.join(missing) + ' yet')
@@ -290,7 +290,7 @@ class DevicePool:
     def __init__(self, devices, *, cooperative=False):
         self.cooperative = cooperative
         self.devices = tuple(devices)
-        if (not self.devices or any(type(i) is not int or i < 0 for i in self.devices)
+        if (not self.devices or any(type(i) is not int or i < 0 for i in self.devices)  # glue: multi-device worker setup over device ids and request tuples
                 or len(set(self.devices)) != len(self.devices)):
             raise ValueError('devices must be distinct nonnegative integer indices')
         self._workers = []
@@ -299,8 +299,8 @@ class DevicePool:
         if self._workers:
             return
         try:
-            groups = [self.devices] if self.cooperative else [(d,) for d in self.devices]
-            for group in groups:
+            groups = [self.devices] if self.cooperative else [(d,) for d in self.devices]  # glue: multi-device worker setup over device ids and request tuples
+            for group in groups:  # glue: multi-device worker setup over device ids and request tuples
                 env = dict(os.environ, MOJOLEARN_NUMERIC_MODE='identical')
                 from . import _backend
                 vendor = _backend.vendor()
@@ -321,22 +321,22 @@ class DevicePool:
                     names = ()
                 else:
                     raise ValueError('device selection is unavailable for this vendor/device group')
-                for name in names:
+                for name in names:  # glue: multi-device worker setup over device ids and request tuples
                     visible = os.environ.get(name)
                     if visible is not None:
-                        ids = [token.strip() for token in visible.split(',')]
-                        if max(self.devices) >= len(ids) or any(not ids[d] for d in self.devices):
+                        ids = [token.strip() for token in visible.split(',')]  # glue: multi-device worker setup over device ids and request tuples
+                        if max(self.devices) >= len(ids) or any(not ids[d] for d in self.devices):  # glue: multi-device worker setup over device ids and request tuples
                             raise ValueError('device index outside ' + name)
                         # Validate the entire pool before its first worker:
                         # distinct logical indices can repeat the same visible
                         # token. This catches duplicate masks, not UUID aliases;
                         # physical qualification still needs device witnesses.
-                        if len({ids[d] for d in self.devices}) != len(self.devices):
+                        if len({ids[d] for d in self.devices}) != len(self.devices):  # glue: multi-device worker setup over device ids and request tuples
                             raise ValueError('selected devices repeat an identifier in ' + name)
-                        env[name] = ','.join(ids[d] for d in group)
+                        env[name] = ','.join(ids[d] for d in group)  # glue: multi-device worker setup over device ids and request tuples
                     else:
-                        env[name] = ','.join(str(d) for d in group)
-                for name in DEVICE_COUNT_VARIABLES:
+                        env[name] = ','.join(str(d) for d in group)  # glue: multi-device worker setup over device ids and request tuples
+                for name in DEVICE_COUNT_VARIABLES:  # glue: multi-device worker setup over device ids and request tuples
                     env[name] = str(len(group))
                 self._workers.append(subprocess.Popen(
                     [sys.executable, '-m', 'mojolearn._parallel_worker'], env=env,
@@ -372,7 +372,7 @@ class DevicePool:
                 raise refusal
             from ._cpu_reference import _active
             if _active.get():
-                requests = [('cpu_reference', None, request) for request in requests]
+                requests = [('cpu_reference', None, request) for request in requests]  # glue: multi-device worker setup over device ids and request tuples
         self._start()
         result = []
         # Waves preserve logical order and never use one worker concurrently.
@@ -381,19 +381,19 @@ class DevicePool:
         # computes, so the writes do not wait on any computation), and the
         # replies are then read in worker order. The workers run their
         # devices concurrently; this process only moves the pickled bytes.
-        for start in range(0, len(requests), len(self._workers)):
+        for start in range(0, len(requests), len(self._workers)):  # glue: multi-device worker setup over device ids and request tuples
             wave = requests[start:start + len(self._workers)]
             pairs = list(zip(self._workers, wave))
             error = None
             sent = []
-            for worker, request in pairs:
+            for worker, request in pairs:  # glue: multi-device worker setup over device ids and request tuples
                 try:
                     self._send(worker, request)
                     sent.append(worker)
                 except BaseException as exc:
                     error = exc
                     break
-            for worker in sent:
+            for worker in sent:  # glue: multi-device worker setup over device ids and request tuples
                 try:
                     value = self._receive(worker)
                     if error is None:
@@ -407,7 +407,7 @@ class DevicePool:
         return result
 
     def close(self):
-        for worker in self._workers:
+        for worker in self._workers:  # glue: multi-device worker setup over device ids and request tuples
             if worker.poll() is None:
                 worker.terminate()
             try:

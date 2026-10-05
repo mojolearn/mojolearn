@@ -77,7 +77,7 @@ class _Entries:
 
     def __init__(self, module):
         self._module = module
-        for name in _ABI:
+        for name in _ABI:  # glue: looks up the binding ABI entries
             f = getattr(module, "bpe_" + name, None) or getattr(module, "gpt2_" + name, None)
             if f is None:
                 raise ImportError(f"mojolearn: the tokenizer binding exports neither bpe_{name} nor gpt2_{name}")
@@ -116,7 +116,7 @@ def _native(fn, *args, prefix="mojolearn: "):
         return fn(*args)
     except Exception as exc:
         msg = str(exc)
-        for name, kind in (("ValueError: ", ValueError), ("TypeError: ", TypeError)):
+        for name, kind in (("ValueError: ", ValueError), ("TypeError: ", TypeError)):  # glue: maps two native error prefixes
             if msg.startswith(name):
                 raise kind(prefix + msg[len(name):]) from None
         raise
@@ -363,12 +363,12 @@ class BpeTokenizer:
         total = int(self._m.bpe_encode_batch(
             self._handle, addr_ro(text_buf, name="text"), addr_ro(lengths, name="lengths"),
             addr(ids, name="ids"), addr(counts, name="counts"), [n_docs, n, n, allow]))
-        if not 0 <= total <= n or sum(counts) != total:
+        if not 0 <= total <= n or sum(counts) != total:  # glue: checks the native token counts (counts-sized: per-document token counts)
             raise RuntimeError(
                 f"mojolearn: bpe_encode_batch returned {total} ids for {n} bytes (counts sum {sum(counts)})"
             )
         out, at = [], 0
-        for c in counts:
+        for c in counts:  # glue: splits the native token output per document (counts-sized: per-document token counts)
             out.append(ids[at:at + c].tolist())
             at += c
         return out
@@ -424,13 +424,13 @@ class BpeTokenizer:
         if isinstance(batch, (str, bytes, bytearray)):
             raise TypeError(f"mojolearn: decode_bytes_batch takes a sequence of id sequences, got {type(batch).__name__}")
         seqs = self._id_list(batch)
-        cap = sum(map(len, seqs)) * self._max_token_bytes
+        cap = sum(map(len, seqs)) * self._max_token_bytes  # glue: output capacity of the native decode (seqs-sized: token sequences)
         out = bytearray(max(cap, 1))
         lengths = array.array("q", bytes(8 * max(len(seqs), 1)))
         _native(self._m.bpe_decode_batch, self._handle, seqs, addr(out, name="text"), cap,
                 addr(lengths, name="lengths"))
         result, at = [], 0
-        for k in range(len(seqs)):
+        for k in range(len(seqs)):  # glue: splits the native decode output per sequence (seqs-sized: token sequences)
             result.append(bytes(out[at:at + lengths[k]]))
             at += lengths[k]
         return result
@@ -613,7 +613,7 @@ def _native_trainer(required):
         if required:
             raise ImportError(f"mojolearn: backend='mojo' needs the tokenizer host binding: {exc}") from exc
         return None
-    if not all(hasattr(module, n) for n in ("bpe_train", "bpe_trained_sizes", "bpe_trained_copy")):
+    if not all(hasattr(module, n) for n in ("bpe_train", "bpe_trained_sizes", "bpe_trained_copy")):  # glue: checks three trainer binding entries
         if required:
             raise ImportError("mojolearn: backend='mojo': this tokenizer binding predates bpe_train; rebuild it")
         return None
@@ -633,7 +633,7 @@ def _train_native(module, raws, vocab_size, min_frequency, break_ties_high):
 
 
 def _read_trained(module, handle, vocab_size, min_frequency):
-    n_tokens, arena_bytes, n_merges, n_ties, n_groups = (int(x) for x in module.bpe_trained_sizes(handle))
+    n_tokens, arena_bytes, n_merges, n_ties, n_groups = (int(x) for x in module.bpe_trained_sizes(handle))  # glue: unpacks five trainer sizes
     arena = bytearray(max(arena_bytes, 1))
     lengths = array.array("q", [0]) * n_tokens
     left = array.array("q", [0]) * max(n_merges, 1)
@@ -643,7 +643,7 @@ def _read_trained(module, handle, vocab_size, min_frequency):
     # The result as the public shape: token bytes by rank, merges as
     # (left, right, new) ids.
     tokens, at = [], 0
-    for m in lengths:
+    for m in lengths:  # glue: splits the native trained token arena (lengths-sized: trained token lengths)
         tokens.append(bytes(arena[at:at + m]))
         at += m
     merges = list(zip(left[:n_merges], right[:n_merges], range(256, 256 + n_merges)))

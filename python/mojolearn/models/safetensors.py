@@ -79,7 +79,7 @@ class TensorInfo:
     @property
     def size(self):
         n = 1
-        for s in self.shape:
+        for s in self.shape:  # glue: product of the tensor shape entries
             n *= s
         return n
 
