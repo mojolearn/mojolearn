@@ -35,14 +35,15 @@ from checks.numerics import ftz, identical_silu
 from sequence.ops import FP, ld, mul, st
 from sequence.moe_reg import MOE_DEVGROUP
 
-# MERGED-UNMEASURED, source5e2eec7a3, gapmisc-moe-*; default OFF.
-# No judged A/B run; geometry variants are not validated winners.
+#: MOE_FAST_MMA is the FAST + Apple default since M3 A/B rab10-moemma (2026-10-05, afc_ab_def, full board
+#: size, 1 run per arm): moe synthetic 71.39 -> 53.48 ms (-25.1%), output digest identical.
+#: `-D MOJOLEARN_MOE_FAST_MMA_OFF` turns it off. KB32/WIDE/PF geometry variants stay opt-in (rab10-moemmaall pending).
 # See docs/apple-fast/EXPERIMENTS.md (MOE_FAST_MMA); neural lane owns validation.
 comptime MM_KB32 = is_defined["MOJOLEARN_MOE_FAST_MMA_KB32"]()
 comptime MM_WIDE = is_defined["MOJOLEARN_MOE_FAST_MMA_WIDE"]()
 comptime MM_PF = is_defined["MOJOLEARN_MOE_FAST_MMA_PF"]()
 comptime MOE_MMA = MOE_DEVGROUP and (
-    is_defined["MOJOLEARN_MOE_FAST_MMA"]() or MM_KB32 or MM_WIDE or MM_PF
+    (not is_defined["MOJOLEARN_MOE_FAST_MMA_OFF"]()) or MM_KB32 or MM_WIDE or MM_PF
 )
 
 comptime MM_KB = 32 if MM_KB32 else 16

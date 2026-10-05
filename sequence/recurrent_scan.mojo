@@ -52,6 +52,9 @@ comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
 #: kernels' Args came from a non-inlined `_scan_args` that started from
 #: `Args()`, whose pointer slots are integer-made (`dummy_ptr`): see the note
 #: at `_scan_args`. Re-judge SCAN, SCAN + SMEM and the bundle on quality.
+#: STILL BROKEN after the Args fix (8bb42b7de): M3 A/B rab10-scan (2026-10-05) lstm-clf synthetic accuracy 0.9608 -> 0.5002,
+#: lstm-reg synthetic r2 0.9804 -> -0.1043 (constant prediction), 20% faster. SCAN_SMEM, WGRAD and SCAN_WIDE inherit it. DROPPED-quality;
+#: the next step is a device-vs-host digest of SCAN alone, per step. Stays opt-in.
 comptime SEQ_LSTM_SCAN = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()
 comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()
 comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()
