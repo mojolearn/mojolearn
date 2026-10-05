@@ -433,7 +433,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             # the per-class values summed in storage order by the native
             # reduction (lane py-runtime-b: was a Python accumulation)
             lml = Array.from_list([float(e.log_marginal_likelihood_value_) for e in fits], "<f8")  # glue: one saved scalar per class
-            self.log_marginal_likelihood_value_ = float(lml.sum()) / len(fits)
+            self.log_marginal_likelihood_value_ = float(lml.sum()) / len(fits)  # glue: Array.sum is the native reduce_stat over the k class values
 
     # -- prediction -------------------------------------------------------------
 

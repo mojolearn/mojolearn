@@ -96,13 +96,13 @@ from core.hotpath_device import (
     HPD_MAX_N,
     HPD_U32,
     HPD_U8,
+    device_class_ratio_f64,
     device_encode_labels,
     device_gather_u64,
 )
 from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_last_f32
 from bindings.array_helpers import (
     nsum_f64_binding,
-    class_ratio_f64_binding,
 )
 from core.shard_merge_device import device_shard_topk_merge_f32
 from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows_bytes
@@ -1594,6 +1594,35 @@ def _gather_u64_device(
     if not ok:
         raise Error(name + ": code out of range")
     return PythonObject(0)
+
+
+def class_ratio_f64_binding(
+    counts_addr: PythonObject, k: PythonObject, n: PythonObject, mode: PythonObject, out_addr: PythonObject,
+) raises -> PythonObject:
+    """Per-class ratios of k int64 class counts on the device (lane
+    py-runtime-b, `core/hotpath_device.mojo::device_class_ratio_f64`): mode
+    0, scikit-learn's 'balanced' weight n / (k * count_c); mode 1, the prior
+    count_c / n, in soft binary64 (the words of Python's `int / int`; the host
+    column is `bindings/array_helpers.mojo`). Returns nonzero when a mode-0
+    count is zero (the caller raises ZeroDivisionError)."""
+    var kk = Int(py=k)
+    var nn = Int(py=n)
+    var m = Int(py=mode)
+    if kk <= 0:
+        return PythonObject(0)
+    if m != 0 and m != 1:
+        raise Error("class_ratio_f64: mode is 0 (balanced) or 1 (prior)")
+    if m == 1 and nn == 0:
+        raise Error("class_ratio_f64: the prior of zero rows")
+    if Int(py=counts_addr) == 0 or Int(py=out_addr) == 0:
+        raise Error("class_ratio_f64: null buffer address")
+    if kk > HPD_MAX_N:
+        raise Error("class_ratio_f64: more classes than the kernel holds")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var zeros = 0
+    with GILReleased(Python()):
+        zeros = device_class_ratio_f64(ctx, Int(py=counts_addr), kk, nn, m, Int(py=out_addr))
+    return PythonObject(zeros)
 
 
 def gather_i64_binding(
