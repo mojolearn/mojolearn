@@ -369,18 +369,11 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     var h_weight_stats: Optional[HostBuffer[DType.float32]]
 
     def settle_weights(mut self) raises:
-        """`WeightsCpu` from the deferred weight fold (see
-        `h_weight_stats`): the SAME per-leaf float32 sums the constructor's
-        drained readback reads, widened the same way. The caller must have
-        drained the queue since construction. A no-op on an ordinary
-        oracle."""
-        if not self.h_weight_stats.__bool__():
-            return
-        var h = self.h_weight_stats.take()
-        self.weights_cpu.clear()
-        for leaf in range(self.bin_count):
-            self.weights_cpu.append(Float64(h.unsafe_ptr().unsafe_load(leaf)))
-        _ = h^
+        """Retired with the host walk (lane cpu4-gbdt): a deferred-weights
+        oracle keeps its weight fold on the device for the device walk, so
+        there is nothing to settle. `h_weight_stats` is always None."""
+        if self.h_weight_stats.__bool__():
+            raise Error("settle_weights: a host weight copy exists; none should")
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -2174,7 +2167,11 @@ def make_bin_optimized_oracle(
     # here (the evaluation's readback reuses `h_part_stats`, so the two
     # copies may not share it while both are in flight)
     var h_weight_stats = Optional[HostBuffer[DType.float32]]()
-    if has_weights and defer_weights and weights_on_device:
+    if has_weights and defer_weights:
+        # lane cpu4-gbdt: the deferred fold stays on the device for the
+        # device walk (`device_walker.mojo` stashes it before the first
+        # evaluation); nothing is copied home (`weights_on_device` is kept
+        # as the callers' spelling of the same request)
         compute_partition_stats(
             ctx, bin_count, 0, 1, n_rows,
             d_leaves, d_p_off, d_p_sz,
@@ -2182,22 +2179,6 @@ def make_bin_optimized_oracle(
             sm_count=sm,
             row_bound=widest_leaf,
         )
-    elif has_weights and defer_weights:
-        compute_partition_stats(
-            ctx, bin_count, 0, 1, n_rows,
-            d_leaves, d_p_off, d_p_sz,
-            d_weights, d_partials, d_part_stats,
-            sm_count=sm,
-            row_bound=widest_leaf,
-        )
-        var h_w: HostBuffer[DType.float32]
-        if have_host:
-            h_w = host_scratch.value().h_weight_stats.copy()
-        else:
-            # `d_part_stats`' length: the copy below is whole-buffer
-            h_w = ctx.enqueue_create_host_buffer[DType.float32](2 * bin_count)
-        ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=d_part_stats)
-        h_weight_stats = Optional(h_w^)
     elif has_weights:
         compute_partition_stats(
             ctx, bin_count, 0, 1, n_rows,

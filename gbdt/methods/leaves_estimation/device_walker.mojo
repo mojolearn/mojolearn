@@ -179,7 +179,7 @@ def walker_fold_decide_kernel(
         if always_accept == Int32(0):
             # `function_value <= next_value`: both doubles are widened
             # floats, so the float comparison is the same test
-            take = values.unsafe_load(0) <= next_value
+            take = Bool(values.unsafe_load(0) <= next_value)
         values.unsafe_store(1, next_value)
         if take:
             values.unsafe_store(0, next_value)
