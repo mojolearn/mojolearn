@@ -1,0 +1,114 @@
+{
+  "vendor": "metal",
+  "records": [
+    {
+      "rows": 17,
+      "metric": "euclidean",
+      "seconds": [
+        0.10897908300103154,
+        0.0041660420029074885,
+        0.0009302079997723922
+      ],
+      "embedding_sha256": "3fcdfe6eb53488da6eb193a28c2c791021a4249868981deba4ce62af17c049fd",
+      "eigenvalues_sha256": "789475ce170d0f72848cb0a0e7fd3bd6ab54a5cdf698190e707c50f744b73257",
+      "input_sha256": "286ec01e384dbf2f7a085f2ba8033c77e53554e64a0ae716c68b6b0ced7ba5c0",
+      "cpu_gpu_identical": true,
+      "repeat_identical": true,
+      "reference_eigenvalue_relative_error": 1.434018551841332e-06,
+      "relative_residual": 1.8347220939248198e-06,
+      "subspace_cosines": [
+        0.9999999999999596,
+        0.999999999999937
+      ]
+    },
+    {
+      "rows": 17,
+      "metric": "precomputed",
+      "seconds": [
+        0.00523300000349991,
+        0.0044531250023283064,
+        0.0006378329999279231
+      ],
+      "embedding_sha256": "1d1ca3ea0d0893b562c78b53cc8dffb8e0d880372a15b4754b1969c3a484f772",
+      "eigenvalues_sha256": "436e1bef2cf4dd19e535f5d93e8824cdf98a7d6bee1a97a91420e000d654bdd2",
+      "input_sha256": "fe4ecce7fbf50c526dd563ae66652f396a7e778b33ac3a5d64197f15027612a9",
+      "cpu_gpu_identical": true,
+      "repeat_identical": true,
+      "reference_eigenvalue_relative_error": 1.6286964352191734e-06,
+      "relative_residual": 1.983790819078033e-06,
+      "subspace_cosines": [
+        0.9999999999999784,
+        0.9999999999999598
+      ]
+    },
+    {
+      "rows": 257,
+      "metric": "euclidean",
+      "seconds": [
+        0.03735408400098095,
+        0.0364518330025021,
+        0.004476125002838671
+      ],
+      "embedding_sha256": "ae003748612e331422835b07708e4dcdf60abbc7672798b471d3a14b54fb92f9",
+      "eigenvalues_sha256": "4719c72f60ea830340660cdd0f2a09c94cc63a713155ec8d483957fb56b3e9cb",
+      "input_sha256": "f8f9569475f4a8dc8e4d9fab2f628923521ae0a717fa8a5fdd2bb010f9d246c9",
+      "cpu_gpu_identical": true,
+      "repeat_identical": true,
+      "reference_eigenvalue_relative_error": 7.405058803326852e-07,
+      "relative_residual": 1.0593690563782415e-06,
+      "subspace_cosines": [
+        0.9999999999999696,
+        0.9999999999999568
+      ]
+    },
+    {
+      "rows": 257,
+      "metric": "precomputed",
+      "seconds": [
+        0.035233999995398335,
+        0.03612608300318243,
+        0.0034160829964093864
+      ],
+      "embedding_sha256": "ad14e5730d2fe6a228a00b6bc5dd59e8f79d8a30f2231a9b20e7b25fccce780e",
+      "eigenvalues_sha256": "8be3250a31105b1855b2fe7398dc42aec5bb401335700330f75022b379a5d389",
+      "input_sha256": "23901b66a4343b2530b5652c9af48c1cf5e12368071263f05a1849dc500d5855",
+      "cpu_gpu_identical": true,
+      "repeat_identical": true,
+      "reference_eigenvalue_relative_error": 1.7332783281555118e-06,
+      "relative_residual": 2.1497918933852863e-06,
+      "subspace_cosines": [
+        0.999999999999978,
+        0.9999999999999672
+      ]
+    },
+    {
+      "rows": 17,
+      "metric": "euclidean",
+      "seconds": [
+        0.002887082999222912,
+        0.002793917003145907,
+        0.000415082999097649
+      ],
+      "embedding_sha256": "b707241545a346265aab1ffb32ff64b55bf8f8dc1b56a46ef33ce3d15db11d33",
+      "eigenvalues_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "input_sha256": "c0c74543cc9dcc7f0ddc24eaced85c278aa3e357d3cb319977a8140d26268d06",
+      "cpu_gpu_identical": true,
+      "repeat_identical": true,
+      "reference_eigenvalue_relative_error": 0.0
+    },
+    {
+      "rows": 5000,
+      "metric": "euclidean",
+      "seconds": [
+        0.1757641669973964,
+        0.15839733400207479
+      ],
+      "embedding_sha256": "ad266b911208ecac59d4733b53388118d4a485da0b66ed04785823df24c949bd",
+      "eigenvalues_sha256": "56b0b171601aa5b23379d0815f6b12f12e325007d6d910ab8469b419d4a6cbb5",
+      "input_sha256": "f57af3b7a4c3d02546aa05a51cab1ea90cf7b070aa899fbbea2c81818d6adb46",
+      "cpu_gpu_identical": false,
+      "repeat_identical": true
+    }
+  ],
+  "passed": true
+}

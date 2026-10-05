@@ -67,3 +67,36 @@ def test_every_family_stops_and_records_timeout(family,tmp_path,monkeypatch):
     assert rec['rc']==124 and rec['status']=='failed'
     assert rec['reason'].startswith('TIMEOUT')
     assert all(c['status']=='timeout' for c in rec['cells'])
+
+@pytest.mark.parametrize('yield_after_current', [False, True])
+def test_resume_timeout_continues_or_yields_without_losing_result(tmp_path,yield_after_current):
+    import json,signal
+    root=tmp_path/'run';root.mkdir()
+    (tmp_path/'tools').mkdir()
+    (tmp_path/'tools/bench_board.py').write_text('''import pathlib,json,sys,time,subprocess
+
+def plan_races(*a,**k):return [{'id':'hang'},{'id':'ok'}]
+def main(args):
+ out=pathlib.Path(args[args.index('--out')+1]);out.mkdir(exist_ok=True)
+ rid=plan_races()[0]['id']
+ if rid=='hang':
+  child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'],start_new_session=True)
+  (out/'child.pid').write_text(str(child.pid))
+  time.sleep(60)
+ else:
+  (out/'board.json').write_text(json.dumps({'races':{'ok':{'status':'done','cells':[{'status':'ok','median_ms':1}]}}}))
+ return 0
+''')
+    (root/'resume-config.json').write_text(json.dumps({'plan':['hang','ok'],'vendor':'nvidia','version':'test','race_timeout_s':1}))
+    proc=subprocess.Popen([sys.executable,resume.__file__,'--root',str(root)],cwd=tmp_path,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    pidfile=root/'board/child.pid'
+    deadline=time.monotonic()+5
+    while not pidfile.exists() and time.monotonic()<deadline:time.sleep(.01)
+    assert pidfile.exists()
+    if yield_after_current:os.kill(proc.pid,signal.SIGUSR1)
+    stdout,stderr=proc.communicate(timeout=10)
+    assert proc.returncode==(75 if yield_after_current else 2),(stdout,stderr)
+    coverage=json.loads((root/'coverage.json').read_text())
+    assert coverage['exceptions']['hang']['exit']==124
+    assert coverage['pending']==(['ok'] if yield_after_current else [])
+    assert not coverage['complete']
