@@ -40,7 +40,7 @@ import mojolearn as ml
 if algo == "rsvd":
     from mojolearn import _expansion_decomp as xd
     X = rng.standard_normal((900_000, d), dtype=np.float32)
-    for nm in ("mm", "orth", "rand", "colsum", "ew", "svd", "eigh", "absmax_flags"):
+    for nm in ("mm", "orth", "rand", "colsum", "ew", "svd", "eigh", "absmax_signs"):
         if hasattr(xd._Kit, nm):
             wrap(xd._Kit, nm)
     for nm in ("from_input", "out", "cols", "rows", "take_cols"):

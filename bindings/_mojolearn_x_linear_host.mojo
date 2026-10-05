@@ -13,6 +13,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_linear.spearman import spearman_sign_host
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
+from x_linear.ridgecv import ridge_best_alpha
 from x_linear.dispatch import fit_dispatch, decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
 from x_linear.dispatch import ALGO_GLM
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_host
@@ -78,6 +79,15 @@ def class_prep_binding(codes_addr: PythonObject, sw_addr: PythonObject, cw_addr:
             FP(unsafe_from_address=wa), n, k, balanced, weighted, FP(unsafe_from_address=oa if oa != 0 else wa),
             oa != 0)
     return PythonObject(largest)
+
+
+def best_alpha_binding(scores_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """Lane py-runtime round 2: RidgeCV's best alpha index over the n mean
+    CV scores (`ridge_best_alpha`, x_linear/ridgecv.mojo); -1 if all NaN."""
+    var na = Int(py=n)
+    if na <= 0:
+        return PythonObject(-1)
+    return PythonObject(ridge_best_alpha(FP(unsafe_from_address=Int(py=scores_addr)), na))
 
 
 def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, dims: PythonObject,
@@ -246,6 +256,7 @@ def PyInit__mojolearn_x_linear_host() abi("C") -> PythonObject:
         m.def_function[x_linear_host_column_binding]("x_linear_host_column")
         m.def_function[x_linear_host_sabotage_binding]("x_linear_host_sabotage")
         m.def_function[fit_binding]("x_linear_fit")
+        m.def_function[best_alpha_binding]("x_linear_best_alpha")
         comptime if XLIN_GLM_DEV_YDOM:
             m.def_function[glm_ydom_binding]("x_linear_glm_ydom")
         m.def_function[class_prep_binding]("x_linear_class_prep")

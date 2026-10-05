@@ -558,6 +558,24 @@ def r_signs_py(r: PythonObject, c: PythonObject, p: PythonObject) raises -> Pyth
         pc[j * n + j] = Float32(-1.0) if neg else Float32(1.0)
     return PythonObject(0)
 
+def rank_above_py(sv: PythonObject, p: PythonObject, rtol: PythonObject) raises -> PythonObject:
+    """Lane py-runtime round 2: how many of the n float32 singular values at
+    sv (descending, s[0] the largest) are > 0 and > s[0] * rtol, the
+    product and the comparisons in binary64 as Python's
+    `sum(1 for v in S.s if v > 0.0 and v > s0 * rtol)` made them
+    (`_linalg_impl._svd_tall`). p = [n]."""
+    var n = _n(p, 0)
+    if n == 0:
+        return PythonObject(0)
+    var ps = _f(sv)
+    var t = Float64(ps[0]) * Float64(py=rtol)
+    var r = 0
+    for i in range(n):  # small-loop(n: singular value count): one comparison per singular value
+        var v = Float64(ps[i])
+        if v > 0.0 and v > t:
+            r += 1
+    return PythonObject(r)
+
 # lane idn-dense-linalg (2026-10-04): the one-entry routes Python takes when
 # `idn_flags_py` says so (both bindings; the same words as the calls they
 # replace). -D MOJOLEARN_IDN_OLS_ONE_ENTRY_OFF / -D MOJOLEARN_IDN_LU_GESV_OFF

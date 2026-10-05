@@ -257,3 +257,16 @@ def _kf_ff_stats_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, s: Int, e: Int, ff
 
     seq_rows(means, d + 1, 1)
     seq_rows(cells, units - (d + 1), 1)
+
+
+def ridge_best_alpha(scores: FP, na: Int) -> Int:
+    """The first alpha with the largest finite mean score (a NaN score, a
+    system singular in float32, never wins), or -1 when every score is NaN
+    (lane py-runtime round 2; it was Python's loop in RidgeCV._fit_kfold).
+    Comparisons only: no arithmetic, no bits to move."""
+    var best = -1
+    for i in range(na):  # small-loop(na: alpha count): one comparison per candidate alpha
+        var v = scores[i]
+        if v == v and (best < 0 or v > scores[best]):
+            best = i
+    return best

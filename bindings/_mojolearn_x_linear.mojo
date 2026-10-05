@@ -21,6 +21,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from x_linear.ops import FP, IP
+from x_linear.ridgecv import ridge_best_alpha
 from x_linear.device import fit_device, decision_device, decision_codes_device, SGD_IDN_DEV_FINITE
 from x_linear.dispatch import isotonic_abi_check, ALGO_SGD
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE
@@ -51,6 +52,15 @@ def _finite(p: FP, count: Int, name: String) raises:
         if not device_all_finite(ctx, Int(p) + off * 4, m, False):
             raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
         off += m
+
+
+def best_alpha_binding(scores_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """Lane py-runtime round 2: RidgeCV's best alpha index over the n mean
+    CV scores (`ridge_best_alpha`, x_linear/ridgecv.mojo); -1 if all NaN."""
+    var na = Int(py=n)
+    if na <= 0:
+        return PythonObject(-1)
+    return PythonObject(ridge_best_alpha(FP(unsafe_from_address=Int(py=scores_addr)), na))
 
 
 def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, dims: PythonObject,
@@ -205,6 +215,7 @@ def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")
+        m.def_function[best_alpha_binding]("x_linear_best_alpha")
         comptime if XLIN_GLM_DEV_YDOM:
             m.def_function[glm_ydom_binding]("x_linear_glm_ydom")
         m.def_function[class_prep_binding]("x_linear_class_prep")

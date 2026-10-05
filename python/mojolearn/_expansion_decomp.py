@@ -355,19 +355,6 @@ class _M:
             return _M._on_device(self._d, r, c)     # lane cpu2-l8-decomp: a view, no download
         return _M(self.s, r, c)
 
-    def neg_rows(self, flags):
-        """Exact sign flip of the rows whose flag is set (a sign bit only)."""
-        if not any(flags):
-            return self
-        k = _Kit(_backend.default_mode())
-        return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], self.r, 1))
-
-    def neg_cols(self, flags):
-        if not any(flags):
-            return self
-        k = _Kit(_backend.default_mode())
-        return k.ew("mul", self, _M.of([-1.0 if f else 1.0 for f in flags], 1, self.c))
-
     def list(self):
         return list(self.s)
 
@@ -1201,17 +1188,17 @@ class _Kit:
         return Q
 
     def orth_diag(self, A):
-        """`orth`, and the list of the two passes' R-diagonal products (A.c
-        floats): the sign of entry j orients Q's column j along A's, 0 marks
+        """`orth`, and the two passes' R-diagonal products (a 1 x A.c
+        matrix): the sign of entry j orients Q's column j along A's, 0 marks
         a dependent column (`orth_diag_cell`, lane neural-pass17)."""
         diag = _M.zeros(1, A.c)
         if A.r * A.c and self._use(A):
             Q = self._dout(A.r, A.c)
             self.b.x_decomp_dev_orth_diag(self._did(A), Q._d.id, diag.addr, [A.r, A.c])
-            return Q, list(diag.s)
+            return Q, diag
         Q = A.copy()
         self.b.x_decomp_orth_diag(Q.addr, diag.addr, [A.r, A.c])
-        return Q, list(diag.s)
+        return Q, diag
 
     def lasso_rows(self, G, Q, W, alpha, max_iter, tol, positive):
         """Row-parallel Lasso CD on the Gram (x_decomp/cells.mojo `lasso_row`),
@@ -1511,20 +1498,6 @@ class _Kit:
             self.b.x_decomp_dev_move(did, one, did, [_MV_FILL0, c, cnt, 1, 0, 0, 0, tot, tot, 1])
             return out
         return _M(array.array("f", X.s) + array.array("f", [0.0]) * c, r + 1, c)
-
-    def absmax_flags(self, A, by_col):
-        """Per column (by_col) or row of A: True when its largest-|.| entry
-        (ties to the lower index) is negative (x_decomp/cells.mojo
-        `absmax_sign_cell`, DEVIATION 5317)."""
-        cnt = A.c if by_col else A.r
-        if cnt and A.r * A.c and self._use(A):
-            out = self._dout(1, cnt)
-            self.b.x_decomp_dev_absmax(self._did(A), out._d.id, [A.r, A.c, 1 if by_col else 0])
-            return [v < 0 for v in out.s]
-        out = _M.zeros(1, cnt)
-        if cnt and len(A.s):
-            self.b.x_decomp_absmax_sign(A.addr, out.addr, [A.r, A.c, 1 if by_col else 0])
-        return [v < 0 for v in out.s]
 
     def chol(self, A):
         L = A.copy()

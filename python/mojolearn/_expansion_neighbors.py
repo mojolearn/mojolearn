@@ -938,7 +938,7 @@ class KernelPCA(_XNeighbors):
             result = _lanczos_top(kit, Kc_M, c)
         if result is not None:
             values, vectors = result
-            vectors = vectors.neg_cols(kit.absmax_flags(vectors, True))
+            vectors = kit.ew("mul", vectors, kit.absmax_signs(vectors, True))
             # lane cpu2-l9-neighbors: the clamp and the positive count on the
             # kit's cells (values come back descending, so the kept set is a
             # prefix); one count word read back, no host list of the values
@@ -986,7 +986,7 @@ class KernelPCA(_XNeighbors):
         # largest-|.| entry (ties to the lower row) made positive
         vecs = Vm.take_cols(order)
         if order:
-            vecs = vecs.neg_cols(kit.absmax_flags(vecs, True))
+            vecs = kit.ew("mul", vecs, kit.absmax_signs(vecs, True))
         self.eigenvectors_ = Array._from_flat(vecs.s, (n, len(order)), "<f4")
         self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
         self.n_features_in_ = d

@@ -60,7 +60,7 @@ def _calls(k):
     rec("svd", s, vt)
     rec("orth", k.orth(A))
     rec("qr_r", k.qr_r(A))
-    rec("absmax_sign", [1.0 if f else 0.0 for f in k.absmax_flags(A, True)])
+    rec("absmax_sign", [1.0 if v < 0 else 0.0 for v in k.absmax_signs(A, True).s])
     W = _m(7, 5, 5, 0.0, 1.0)
     H = _m(5, 5, 6, 0.0, 1.0)
     rec("cd_rows", [k.cd_rows(W, k.mm(H, H, tb=True), k.mm(_m(7, 5, 7, 0.0, 1.0), H, tb=True), list(range(5)))], W)

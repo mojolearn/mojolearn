@@ -81,6 +81,7 @@ caller of this function:
   cannot stop you from creating an order dependence afterwards.
 """
 
+import array
 import importlib.machinery
 import importlib.util
 import os
@@ -1203,7 +1204,7 @@ def _tsvd_tsqr_components(x, nc, mode):
         R = _tsqr_r(k.b, x, rows, cols, False)
     S, Vt = k.svd(_xd_matrix(R, cols, cols))
     V = Vt.rows(0, nc)
-    V = V.neg_rows(k.absmax_flags(V, False))
+    V = k.ew("mul", V, k.absmax_signs(V, False))
     return V.out(), S.take_cols(list(range(nc))).out((nc,))
 
 
@@ -1450,7 +1451,8 @@ def _svd_tall(k, A, full, null_rtol=None, householder=False):
     s0 = S.s[0] if n else 0.0
     # a local of the module constant's name: SVD_QFIX's override, if any
     _SVD_NULL_RTOL = _SVD_NULL_RTOL_MODULE if null_rtol is None else null_rtol
-    r = sum(1 for v in S.s if v > 0.0 and v > s0 * _SVD_NULL_RTOL)
+    # the numerical rank, counted in Mojo (x_decomp/api.mojo rank_above_py)
+    r = int(k.b.x_decomp_rank_above(S.s.buffer_info()[0], [n], float(_SVD_NULL_RTOL))) if n else 0
     AV = k.mm(A, Vt, tb=True)                                   # m x n
     tick("A V (gemm)")
     Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
@@ -1470,8 +1472,10 @@ def _svd_tall(k, A, full, null_rtol=None, householder=False):
         # the Householder route then stands.
         Qo, d = k.orth_diag(Ug)
         tick("U = orth(A V / s)")
-        if all(v != 0.0 for v in d):
-            out = Qo.neg_cols([v < 0.0 for v in d])
+        # every product nonzero (a NaN counts as nonzero, as `!=` did), then
+        # each column signed by its product's sign, on the kit
+        if not k.total(k.ew("le", k.ew("abs", d), _M.zeros(1, 1))).s[0]:   # one count word down
+            out = k.ew("mul", Qo, k.neg_signs(d))
             tick("U column signs")
             return out, S, Vt
     import array as _array
@@ -1490,15 +1494,18 @@ def _svd_tall(k, A, full, null_rtol=None, householder=False):
     tick("geqrf(A V / s)")
     Qc = k.orgqr(h, tau, width)
     tick("orgqr")
-    neg = [h.s[j * r + j] < 0.0 for j in range(r)] + [False] * (width - r)
+    # R[j, j]'s sign per kept column (+1 for the trailing complement), on the kit
+    sg = k.neg_signs(k.strided(h, r, r + 1, 0))
+    if width > r:
+        sg = k.hstack([sg, k.const(1.0, 1, width - r)])
     # lane/neural-net-experiment (2026-09-30): the sign flip of Q's columns
     # was a Python loop over every value of each flipped column (m Python
     # negations per column: at 1,000,000 rows and 220 columns, most of the
-    # bench board's 95.8 s svd on an MI325X). `neg_cols` is the kit's
+    # bench board's 95.8 s svd on an MI325X). The flip is the kit's
     # elementwise multiply by -1.0 / +1.0 per column: an exact sign flip of
     # values a device kernel already stored (so already flushed), the same
     # bits the loop produced (the loop and its env switch are gone).
-    return Qc.neg_cols(neg), S, Vt
+    return k.ew("mul", Qc, sg), S, Vt
 
 
 def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
@@ -1535,13 +1542,19 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
         if rows != cols:
             raise ValueError("mojolearn.linalg.svd: hermitian=True needs a square matrix")
         w, v = k.eigh(A, uplo=1)
+        from ._expansion_decomp import _M
         # numpy: argsort(|w|) (ascending) reversed, so equal magnitudes come
         # higher index first
-        order = sorted(range(rows), key=lambda j: (abs(w.s[j]), j))[::-1]
-        S = k.ew("abs", w).take_cols(order)
-        U = v.take_cols(order)
-        sg = [w.s[j] < 0 for j in order]
-        Vt = U.T.neg_rows(sg)
+        # (lane py-runtime round 2: the order and the signs on the kit) the
+        # stable ascending order of -|w| read back to front is |w| descending
+        # with equal magnitudes higher index first
+        rev = _M.of(array.array("f", range(rows - 1, -1, -1)), 1, rows)   # the index table n-1 .. 0
+        wr = k.take_cols_m(w, rev, rows)
+        o = k.order_small(k.ew("scale", k.ew("abs", wr), s=-1.0))
+        order = k.ew("adds", k.ew("scale", o.reshape(1, rows), s=-1.0), s=float(rows - 1))
+        S = k.take_cols_m(k.ew("abs", w), order, rows)
+        U = k.take_cols_m(v, order, rows)
+        Vt = k.ew("mul", U.T, k.neg_signs(k.take_cols_m(w, order, rows)).reshape(rows, 1))
         return SVDResult(U.out(), S.out((rows,)), Vt.out())
     if rows >= cols:
         U, S, Vt = _svd_tall(k, A, bool(full_matrices))

@@ -1114,12 +1114,11 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
             raise ValueError("cv!=None and store_cv_results=True are incompatible")
         A = len(alphas)
         n_fw = 2 * d * d + 3 * d + 1 + A * (d + 2) + A * (n // cv + 1)
-        scores = _run(self, ALGO_RIDGE_KFOLD, a, n, d, yv, [cv, int(bool(self.fit_intercept)), A], alphas, A, n_fw, 1)
-        # an alpha whose system is singular in float32 scores NaN (x_linear/ridgecv.mojo)
-        best = -1
-        for i in range(A):
-            if scores[i] == scores[i] and (best < 0 or scores[i] > scores[best]):
-                best = i
+        scores = _run_array(self, ALGO_RIDGE_KFOLD, a, n, d, yv, [cv, int(bool(self.fit_intercept)), A], alphas, A,
+                            n_fw, 1)
+        # an alpha whose system is singular in float32 scores NaN (x_linear/ridgecv.mojo);
+        # the first best finite score is chosen in Mojo (`x_linear_best_alpha`)
+        best = int(_fit_module(self, ALGO_RIDGE_KFOLD).x_linear_best_alpha(addr_ro(scores, name="scores"), A))
         if best < 0:
             raise ValueError("mojolearn RidgeCV: X'X + alpha I is singular in float32 for every alpha "
                              "(rescale X, or use larger alphas)")
@@ -1127,7 +1126,7 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.alpha_ = alphas[best]
-        self.best_score_ = float(scores[best])
+        self.best_score_ = float(scores[best])  # one element of the score Array
         self.n_features_in_ = d
         return self
 

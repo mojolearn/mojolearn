@@ -37,7 +37,7 @@ kernel_ms=(time.perf_counter()-t)*1000
 store=array.array('f');store.frombytes(host.tobytes());A=_M(store,n,n)
 t=time.perf_counter();got=_lanczos_top(k,A,nc)
 if got is None:raise RuntimeError('Lanczos did not converge within its bounded basis; no dense fallback')
-w,V=got;V=V.neg_cols(k.absmax_flags(V,True))
+w,V=got;V=k.ew("mul",V,k.absmax_signs(V,True))
 values=np.asarray(w.s,dtype=np.float32);vectors=np.asarray(V.s,dtype=np.float32).reshape(n,nc).copy()
 solver_ms=(time.perf_counter()-t)*1000
 # Residual uses our GPU GEMM; no large CPU eigensolve or CPU timing race.
