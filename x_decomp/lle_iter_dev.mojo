@@ -76,7 +76,7 @@ def lle_iterate_dev(
 
 
 def lle_iterate_dev_py(
-    f0: PythonObject, lu: PythonObject, pm: PythonObject, im: PythonObject, z: PythonObject, out: PythonObject,
+    f0: PythonObject, lu: PythonObject, pm: PythonObject, im: PythonObject, z: PythonObject, outs: PythonObject,
     p: PythonObject, f: PythonObject,
 ) raises -> PythonObject:
     """`lle_iterate_py` on the resident kit."""
@@ -89,9 +89,9 @@ def lle_iterate_dev_py(
     var ppm = _f(pm)
     var pim = _f(im)
     var pz = _f(z)
-    var px = _f(out[0])
-    var py_ = _f(out[1])
-    var ps = _f(out[2])
+    var px = _f(outs[0])
+    var py_ = _f(outs[1])
+    var ps = _f(outs[2])
     var st = 0
     var e = 0.0
     with GILReleased(Python()):

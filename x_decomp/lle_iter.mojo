@@ -126,7 +126,7 @@ def _lle_args(p: PythonObject, f: PythonObject) raises -> LleArgs:
 
 
 def lle_iterate_py[E: Exec](
-    f0: PythonObject, lu: PythonObject, pm: PythonObject, im: PythonObject, z: PythonObject, out: PythonObject,
+    f0: PythonObject, lu: PythonObject, pm: PythonObject, im: PythonObject, z: PythonObject, outs: PythonObject,
     p: PythonObject, f: PythonObject,
 ) raises -> PythonObject:
     """out = [X (n1 x p), Y (n1 x nc), S (p)] addresses. Returns (status, e)."""
@@ -139,9 +139,9 @@ def lle_iterate_py[E: Exec](
     var ppm = _f(pm)
     var pim = _f(im)
     var pz = _f(z)
-    var px = _f(out[0])
-    var py_ = _f(out[1])
-    var ps = _f(out[2])
+    var px = _f(outs[0])
+    var py_ = _f(outs[1])
+    var ps = _f(outs[2])
     var st = 0
     var e = 0.0
     with GILReleased(Python()):
