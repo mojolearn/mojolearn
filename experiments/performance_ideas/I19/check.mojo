@@ -5,6 +5,7 @@ live lengths and untouched capacity tails. Contract is unsigned UInt32
 keys; floating NaN/signed-zero preprocessing remains each caller's policy."""
 from max.gpu.host import DeviceContext
 from experiments.performance_ideas.I19.float_check import check_float_ragged
+from experiments.performance_ideas.I19.quantile_check import check_quantile_caller
 from core.stable_radix_sort import stable_radix_sort_pairs_u32, stable_radix_counts_len, stable_radix_bsum_len
 
 def check(ctx: DeviceContext,n: Int,bits: Int,all_equal: Bool) raises:
@@ -49,6 +50,7 @@ def check(ctx: DeviceContext,n: Int,bits: Int,all_equal: Bool) raises:
 def main() raises:
     var ctx = DeviceContext()
     check_float_ragged(ctx)
+    check_quantile_caller(ctx)
     for n in [31,33,513,31]:
         for bits in [8,15,17,32]:
             check(ctx,n,bits,False)
