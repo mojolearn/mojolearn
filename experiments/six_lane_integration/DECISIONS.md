@@ -48,3 +48,26 @@ RunPod H100 SXM worker mf7ill27pzepp7 was provisioned for compile-only work at t
 ## D028 — Repairs from the native NVIDIA compile round
 
 Repair source/API mismatches reported by frozen native builds: Mamba registration indentation and PythonObject scalar admission, transformer profile raises annotations, reconciled MoE helper names, sparse-code pointer types, stale ByteLM table lifetime and cache keyword, lifetime/optimizer metadata borrowing, shared histogram pointer admission, missing criterion/numeric imports, and device-passable integer Boolean metadata. No generated compiler output or toolchain internals were changed. The supported pointer cast is documented at https://mojolang.static.modular.com/docs/std/memory/pointer/Pointer/ . Baselines and dependent candidate artifacts require new source-matched compile evidence. Original errors remain under the prior freeze.
+
+
+## D029 — Ownership and pointer-origin repairs
+
+ByteLM cache pools now build all views before swapping complete DeviceBuffer owners; old owners remain alive through the existing synchronization. This uses supported source ownership operations rather than partially assigning immutable nested fields. NN34 factor input pointers accept a readonly-compatible `Origin` and callers preserve explicit pointer origins. Mamba host source was refreshed only through the repository's `--source-write-only` generator. Each failed freeze and compiler log is preserved; dependent configurations were rebuilt after source changes.
+
+## D030 — Main advanced independently
+
+The integration worktree was created from equal committed main/origin-main `0f779ed5d3f0a2ab2f418e054d3af950a766e5f1`. A later read-only preservation check observed both at `74967f7119a802d30216f4198d1d9c47bc4165fd`, with opponent repairs and measurements from another session. The active compile freeze and its benchmark specification were not changed to chase that moving branch. All seven source commits and worktree statuses still matched the frozen input inventory. The later main state is retained on main; reconciliation before a future merge must preserve those additional results and repairs.
+
+## D031 — NVIDIA teardown and compilation claims
+
+The owned H100 worker was terminated and verified absent after compile artifacts and full logs were downloaded. Eighty downloaded successful artifact receipts, including rebuilds, passed file-hash transport checks; they represent 65 unique source-matched selected configurations, not 80 distinct covered configurations. The remaining selected NVIDIA GBDT combined configuration is a recorded Mojo compiler failure. No binding was loaded and no estimator output or model-state identity check was performed. Compiler evidence never qualifies timing, quality, identity, runtime reach or default promotion.
+
+
+## D032 — Host-only shared-helper admission
+
+The broad local pass exposed host KMeans, PCA and KDE pointer-origin mismatches when candidate controls were enabled. Adapt the synchronous host call sites to the shared helpers' existing raw-pointer ABI; the helpers only read those views and the owning Lists remain alive. Numerical formulas, shared GPU helpers and defaults are unchanged. Freeze `5dc2bbd927bfe9c82a68d1d7cfdaee9ef2e14772` retains the original two failure logs and rebuilds affected host baselines/candidates. None of the 65 current NVIDIA build closures includes the three repaired host files.
+
+
+## D033 — Final host repairs and dependent NVIDIA rebuild
+
+The next host pass exposed IVF's matching C30 pointer-origin mismatch, a C27 FactorAnalysis vector transpose that implicitly copied a non-ImplicitlyCopyable Mat, and malformed casts around RF Feistel bit counts. Repair only those source errors: explicit read-only raw-pointer admission, `sk.copy()` because the original vector is used later, and `UInt64(self.left_bits/right_bits)`. Freeze `76165b54ec6a31b71854f9e2a7b2952934783b3a` compiles all 195 selected local configurations (127 Apple, 68 host). The FA host module is also imported by the GPU binding for a separate helper, so its two NVIDIA binding configurations require fresh source-matched artifacts despite the repair being in the host routine. A second short H100 lease compiles only those two configurations; earlier valid builds remain retained.
