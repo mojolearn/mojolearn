@@ -515,12 +515,19 @@ def byte_stream():
     the conductor)."""
     spec = importlib.util.find_spec("mojolearn")
     roots = list(spec.submodule_search_locations) if spec and spec.submodule_search_locations else []
+    source = "installed mojolearn package .py sources, sorted by path, concatenated"
     if not roots:
-        raise SystemExit("bench_board_neural: mojolearn is not installed in %s" % sys.executable)
+        # Opponent-only environments need the byte fixture, not our GPU binding.
+        # Use this checkout's frozen sources and retain their hash/provenance.
+        checkout = os.path.join(REPO, "python", "mojolearn")
+        if not os.path.isfile(os.path.join(checkout, "__init__.py")):
+            raise SystemExit("bench_board_neural: no installed or checkout mojolearn byte corpus in %s" % sys.executable)
+        roots = [checkout]
+        source = "repository mojolearn package .py sources, sorted by path, concatenated"
     root = roots[0]
     files = sorted(glob.glob(os.path.join(root, "**", "*.py"), recursive=True))
     raw = b"".join(open(f, "rb").read() for f in files)
-    return raw, {"source": "installed mojolearn package .py sources, sorted by path, concatenated",
+    return raw, {"source": source,
                  "package_dir": root, "files": len(files), "bytes": len(raw), "sha256": _sha(raw)}
 
 
