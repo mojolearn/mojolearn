@@ -21,8 +21,9 @@ def apple_fast(load_product=True):
     if os.environ.get('MOJOLEARN_NUMERIC_MODE') != 'fast' or os.environ.get('MOJOLEARN_VENDOR') != 'apple':
         raise RuntimeError('requires explicit Apple FAST mode')
     chip = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).strip()
-    if 'Apple M3 Ultra' not in chip:
-        raise RuntimeError('qualification is restricted to the existing M3 Ultra queue')
+    correctness_only=os.environ.get('MOJOLEARN_EXPERIMENT_CORRECTNESS_ONLY')=='1'
+    if 'Apple M3 Ultra' not in chip and not ('Apple M4' in chip and correctness_only):
+        raise RuntimeError('requires retained M3 Ultra, or explicit untimed M4 correctness verification')
     if load_product:
         import mojolearn
         return mojolearn
@@ -41,7 +42,8 @@ def binding_check(binding, family):
 def consumed(call):
     """Time actual public work through first read of every requested output."""
     import numpy as np
-    start = time.perf_counter_ns()
+    correctness_only=os.environ.get("MOJOLEARN_EXPERIMENT_CORRECTNESS_ONLY")=="1"
+    start = None if correctness_only else time.perf_counter_ns()
     result = call()
     values = result if isinstance(result, tuple) else (result,)
     for value in values:
@@ -49,7 +51,7 @@ def consumed(call):
         if not np.isfinite(array).all():
             raise AssertionError('nonfinite public output')
         array.tobytes()  # includes mandatory first read, never just launch timing
-    return result, (time.perf_counter_ns() - start) / 1e6
+    return result, None if start is None else (time.perf_counter_ns() - start) / 1e6
 
 
 def capture_main(exercise):
@@ -60,10 +62,22 @@ def capture_main(exercise):
     args = parser.parse_args()
     apple_fast()
     packet = exercise(args)
+    correctness_only=os.environ.get('MOJOLEARN_EXPERIMENT_CORRECTNESS_ONLY')=='1'
+    if correctness_only:
+        # Fixtures may have private diagnostic timers. They cannot become a
+        # timing/performance record in the user's local verification mode.
+        def discard_times(value):
+            if isinstance(value,dict):
+                return {key:None if key.endswith('_ms') else discard_times(item) for key,item in value.items()}
+            if isinstance(value,list):return [discard_times(item) for item in value]
+            return value
+        packet=discard_times(packet)
     packet.update(schema=1, arm=args.arm, variant=args.variant,
                   source_sha=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                   mode='fast', vendor='apple', timing_contract='public caller through first read',
-                  digest_equality_required=False, promotion_authorized=False)
+                  digest_equality_required=False, promotion_authorized=False,
+                  correctness_only=correctness_only,performance='pending',
+                  verification_host=subprocess.check_output(['sysctl','-n','machdep.cpu.brand_string'],text=True).strip())
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open('x') as stream:
         json.dump(packet, stream, indent=2, allow_nan=False)
