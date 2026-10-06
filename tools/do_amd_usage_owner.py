@@ -24,8 +24,8 @@ def validate(c):
     if not str(c['droplet_id']).isdigit():raise ValueError('invalid droplet ID')
     for field in ('state_dir', 'local_out', 'remote_out', 'steward_script'):
         if not Path(c[field]).is_absolute():raise ValueError('absolute path required: ' + field)
-    if c.get('idle_seconds',2700)!=2700 or c.get('renew_minutes',90)!=90:
-        raise ValueError('policy requires idle45min and orphan90min')
+    if c.get('idle_seconds',2700) not in (1800,2700) or c.get('renew_minutes',90)!=90:
+        raise ValueError('policy requires idle30/45min and orphan90min')
     if not 10<=c.get('poll_seconds',60)<=300:raise ValueError('poll outside10..300seconds')
     if not 1<=c.get('capture_timeout',1800)<=1800:raise ValueError('capture timeout exceeds orphan margin')
     return c
@@ -161,17 +161,17 @@ def manage(c,once=False):
                 if (local/'HOLD').exists():captured=None
                 else:
                     atomic(local/'capture-receipt.json',dict(droplet_id=c['droplet_id'],owner_id=c['owner_id'],rows=before['rows'],manifest_sha256=captured,verified_at=time.time()))
-                    notify(c,local,'DONE_CAPTURED','Verified capture '+captured+'; idle45 clock eligible')
+                    notify(c,local,'DONE_CAPTURED','Verified capture '+captured+'; idle clock eligible')
             idle=next_idle(state,time.time(),observed['done'],observed['shared_queue_busy'],captured,hold)
             state=dict(status='MANAGING',manager_pid=os.getpid(),droplet_id=c['droplet_id'],owner_id=c['owner_id'],idle_since=idle,capture_digest=captured,last_probe=observed,updated_at=time.time())
             atomic(statusfile,state)
-            if idle is not None and time.time()-idle>=2700:
+            if idle is not None and time.time()-idle>=c.get('idle_seconds',2700):
                 # Recheck work, hold, inventory, and identity at deletion time.
                 final=probe(c,full=True)
                 if not (local/'HOLD').exists() and digest(final['rows'])==captured:
                     steward(c,'down',timeout=600)
                     state.update(status='TERMINATED_VERIFIED',updated_at=time.time())
-                    atomic(statusfile,state);notify(c,local,'TERMINATED','Idle45elapsed; steward down verified provider404');return
+                    atomic(statusfile,state);notify(c,local,'TERMINATED','Idle policy elapsed; steward down verified provider404');return
             if errors >= 3:
                 steward(c,'extend','90')
             errors=0
@@ -199,7 +199,7 @@ def main():
     p.add_argument('config',type=Path);p.add_argument('--once',action='store_true')
     p.add_argument('--reason',default='pending campaign work')
     a=p.parse_args();c=validate(json.loads(a.config.read_text()))
-    if a.action=='plan':print(json.dumps(dict(status='PLAN_ONLY',droplet_id=c['droplet_id'],idle_minutes=45,orphan_minutes=90)))
+    if a.action=='plan':print(json.dumps(dict(status='PLAN_ONLY',droplet_id=c['droplet_id'],idle_minutes=c.get('idle_seconds',2700)//60,orphan_minutes=90)))
     elif a.action=='manage':manage(c,a.once)
     else:
         local=Path(c['local_out']);local.mkdir(parents=True,exist_ok=True)
