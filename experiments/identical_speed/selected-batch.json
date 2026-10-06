@@ -63,5 +63,17 @@
     "jobs": 19,
     "reuse_rule": "Retain original source and hashes. Reuse only when relevant numerical sources, flags, architecture and compiler match; never relabel a006 binaries as built from the consolidated commit."
   },
-  "launch_policy": "Only selected candidates plus necessary baseline. Do not repeat completed experiments or run diagnostic-only candidates. Existing owned boxes; no duplicate controllers."
+  "launch_policy": "Only selected candidates plus necessary baseline. Do not repeat completed experiments or run diagnostic-only candidates. Existing owned boxes; no duplicate controllers.",
+  "experiment_status": {
+    "rf": "COMPILE_PASS_MEASUREMENTS_PENDING",
+    "et": "COMPILE_PASS_MEASUREMENTS_PENDING",
+    "centered-block-eigh": "APPLE_HOST_COMPILE_PASS_GPU_COMPILE_IDENTITY_AND_TIMING_PENDING",
+    "gemm": "MEASURED_NO_DEFAULT_CHANGE"
+  },
+  "merge_policy": {
+    "authorization": "Owner requested main integration before measurements; existing single-device compilation is sufficient for experimental merge.",
+    "defaults": "Unqualified experimental switches remain disabled.",
+    "compile_scope": "RF/ET: retained NVIDIA/AMD and Apple builds. Centered block-eigh: Apple host compile and execution; GPU candidate compilation remains pending.",
+    "no_recompile_for_merge": true
+  }
 }

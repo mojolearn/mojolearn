@@ -1,3 +1,6 @@
+# Experiment status: RF/ET builds passed on NVIDIA, AMD and Apple.
+# Full A/B measurements and scored-state comparisons are PENDING; merging
+# this harness into main does not enable a candidate or claim a speedup.
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
