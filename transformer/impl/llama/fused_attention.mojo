@@ -9315,6 +9315,8 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
     return g[].bufs[at].create_sub_buffer[DType.float32](0, cells)
 
 
+# I06 new candidate remains default off. Qualification is pending: native
+# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
 comptime ATTN_GQA_HEAD_REUSE = (
     GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE"]()
