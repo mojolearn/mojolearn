@@ -9,7 +9,9 @@
   "status": "source_ready",
   "implementation_paths": [
     "x_decomp/tsqr_device.mojo",
-    "experiments/performance_ideas/F11/caller.py"
+    "experiments/performance_ideas/F11/caller.py",
+    "decomposition/impl/linalg/detail/pca.mojo",
+    "bindings/_mojolearn_estimators.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_DECOMP_FAST_TSQR_NORM"
@@ -41,7 +43,7 @@
     "actual TSQR least-squares fit on ill-conditioned neighbors",
     "residual and coefficient error no material loss",
     "rank/singular values retained",
-    "selective compensated PCA product integration remains separate, no PCA-fit admission"
+    "Selective compensated covariance: independent PCA reconstruction/singular/noise errors; fit and transform times separate"
   ],
   "timing_contract": "Actual least-squares through read of coefficients/rank/singular values",
   "blocker": null,
@@ -52,11 +54,17 @@
     ],
     "grid": [
       "MOJOLEARN_DECOMP_FAST_TSQR_GRID"
+    ],
+    "compensated-pca": [
+      "MOJOLEARN_PCA_FAST_COMPENSATED_COV"
     ]
   },
   "binding": "x_decomp",
   "prerequisite_bindings": [
     "core"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "variant_bindings": {
+    "compensated-pca": "estimators"
+  }
 }

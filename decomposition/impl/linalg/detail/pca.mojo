@@ -15,6 +15,7 @@ from std.memory import stack_allocation
 
 from core.gemm import gemm_nt, gemm_tn
 from std.sys.compile import is_defined
+from std.ffi import _Global
 from gemm.afn_apple_fast import (
     AFN_EPI_NONE,
     AFN_GEMM_APPLE,
@@ -73,6 +74,39 @@ from decomposition.checks.jacobi_eigh_device import (
 )
 
 
+# Default-off FAST experiment: compensate only centered covariance products.
+# One writer per covariance cell; no atomic/split-policy race, host arithmetic,
+# or input shift/restore pass. Performance admission belongs to full PCA fit.
+comptime PCA_COMPENSATED_COV = AFN_GEMM_APPLE and is_defined["MOJOLEARN_PCA_FAST_COMPENSATED_COV"]()
+
+struct PcaCovAudit(Defaultable, Movable):
+    var calls: Int
+    def __init__(out self):
+        self.calls = 0
+comptime PCA_COV_STATE = _Global[StorageType=PcaCovAudit, name="PcaCompensatedCovAudit", init_fn=PcaCovAudit.__init__]
+
+def pca_compensated_cov_count() raises -> Int:
+    return PCA_COV_STATE.get_or_create_ptr()[].calls
+
+def pca_compensated_cov_kernel(x: F32Ptr, mu: F32Ptr, cov: F32Ptr, rows_in: Int32, cols_in: Int32):
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= cols * cols:
+        return
+    var i = cell // cols
+    var j = cell % cols
+    var total = Float32(0)
+    var correction = Float32(0)
+    for r in range(rows):
+        var product = (x[r * cols + i] - mu[i]) * (x[r * cols + j] - mu[j])
+        var adjusted = product - correction
+        var updated = total + adjusted
+        correction = (updated - total) - adjusted
+        total = updated
+    cov[cell] = total / Float32(rows - 1)
+
+
 @fieldwise_init
 struct PCAResult(Movable):
     """What `pca_fit` writes back on the host side."""
@@ -100,6 +134,16 @@ def compute_covariance(
     # (core/xtdz_coalesced.mojo::column_mean_launch).
     column_mean_launch(ctx, mu, x, n_rows, n_cols)
     var cells = n_rows * n_cols
+    comptime if PCA_COMPENSATED_COV:
+        PCA_COV_STATE.get_or_create_ptr()[].calls += 1
+        ctx.enqueue_function[pca_compensated_cov_kernel](
+            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n_rows), Int32(n_cols),
+            grid_dim=((n_cols * n_cols + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        ctx.synchronize()
+        return
     comptime if PCA_FAST_GRAM_MMA:
         if not gram_splitk_applies(n_cols, n_cols, n_rows):
             ctx.enqueue_function[shift_columns_kernel](

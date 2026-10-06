@@ -117,6 +117,11 @@ from decomposition.impl.pca_rank import pca_rank_finish
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 
 
+from decomposition.impl.linalg.detail.pca import pca_compensated_cov_count
+
+def pca_compensated_cov_count_py() raises -> PythonObject:
+    return PythonObject(pca_compensated_cov_count())
+
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
 
@@ -1437,6 +1442,7 @@ def scoped_gemm_metadata_binding(index: PythonObject) raises -> PythonObject:
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
+        m.def_function[pca_compensated_cov_count_py]("pca_compensated_cov_count")
         m.def_function[dbscan_parallel_available_binding]("dbscan_parallel_available")
         m.def_function[gram_parallel_available_binding]("gram_parallel_available")
         m.def_function[gram_parallel_available_binding]("gram_outputs_parallel_available")
