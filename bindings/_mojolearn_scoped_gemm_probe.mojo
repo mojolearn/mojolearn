@@ -5,6 +5,9 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.gemm import gemm_nt, gemm_nt_gram
+from gemm.checks.gemm_identical import _fast_vendor_gemm
+from gemm.contract import OP_NN, OP_NT
 from experiments.apple_fast.gemm.scoped_dispatch import (
     AUDIT, ENABLED, TALL, DENSE, GRAM, NARROW, SPLITS, PCA,
     scoped_count, scoped_last,
@@ -23,6 +26,9 @@ def flags_py() raises -> PythonObject:
 def enabled_py() raises -> PythonObject:
     return PythonObject(Int(ENABLED and AUDIT and DECOMP_FAST_GEMM_MMA))
 
+def vendor_py() raises -> PythonObject:
+    return PythonObject("metal")
+
 def mode_py() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -36,7 +42,7 @@ def gemm_py(aa: PythonObject, bb: PythonObject, cc: PythonObject, dims: PythonOb
     comptime if not (ENABLED and AUDIT and DECOMP_FAST_GEMM_MMA):
         raise Error("scoped probe requires FAST Apple and scoped AUDIT")
     else:
-        if len(dims) != 6:
+        if len(dims) != 6 and len(dims) != 7:
             raise Error("expected m,n,k,ta,tb,alias")
         var m = Int(py=dims[0])
         var n = Int(py=dims[1])
@@ -60,7 +66,19 @@ def gemm_py(aa: PythonObject, bb: PythonObject, cc: PythonObject, dims: PythonOb
         var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
         # This probe requires the existing AFN default, which does not use scratch.
         var scratch = ctx.enqueue_create_buffer[DType.float32](1)
-        launch_gemm(ctx,
+        var entrance = Int(py=dims[6]) if len(dims) == 7 else 0
+        if entrance == 1:
+            if ta or not tb:
+                raise Error("core entrance requires NT")
+            if aliased_inputs:
+                gemm_nt_gram(ctx, dc, da, m, n, k)
+            else:
+                gemm_nt(ctx, dc, da, db, m, n, k)
+        elif entrance == 2:
+            if ta or not _fast_vendor_gemm(ctx, dc, da, db, m, n, k, OP_NT if tb else OP_NN):
+                raise Error("SDK entrance only supports unfused NN/NT")
+        else:
+            launch_gemm(ctx,
             da.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             db.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             dc.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
@@ -104,6 +122,8 @@ def PyInit__mojolearn_scoped_gemm_probe() abi("C") -> PythonObject:
         m.def_function[flags_py]("flags")
         m.def_function[enabled_py]("enabled")
         m.def_function[mode_py]("numeric_mode")
+        m.def_function[mode_py]("scoped_gemm_probe_numeric_mode")
+        m.def_function[vendor_py]("scoped_gemm_probe_vendor")
         m.def_function[route_count_py]("route_count")
         m.def_function[metadata_py]("metadata")
         m.def_function[gemm_py]("gemm")

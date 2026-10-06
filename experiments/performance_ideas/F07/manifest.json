@@ -25,7 +25,9 @@
     "--idea",
     "F07",
     "--output",
-    "{output}/arms"
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
   ],
   "run_argv": [
     "{python}",
@@ -64,5 +66,6 @@
   "prerequisite_bindings": [
     "core"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "paired_build": true
 }

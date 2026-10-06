@@ -22,7 +22,9 @@
     "--idea",
     "F20",
     "--output",
-    "{output}/arms"
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
   ],
   "run_argv": [
     "{python}",
@@ -65,5 +67,6 @@
   },
   "variant_bindings": {
     "normalization": "x_sequence"
-  }
+  },
+  "paired_build": true
 }

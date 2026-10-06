@@ -132,6 +132,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
+from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
 from std.sys.defines import get_defined_int
 from std.sys.info import is_amd_gpu
 from core.apple_air import simdgroup_load_legacy_air
@@ -9637,12 +9638,24 @@ def _fast_vendor_gemm(
             var vy = TileTensor(b, row_major(k, 1))
             gemv_gpu(vz, vx, vy, ctx)
             return True
+        if try_scoped_gemm[False, 1](
+            ctx, c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            m, n, k, k, 1, 1, k, 1, k,
+        ):
+            return True
         var tc = TileTensor(c, row_major(m, n))
         var ta = TileTensor(a, row_major(m, k))
         var tb = TileTensor(b, row_major(n, k))
         matmul[transpose_b=True, target="gpu"](tc, ta, tb, ctx)
         return True
     if op == OP_NN:
+        if try_scoped_gemm[False, 1](
+            ctx, c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            m, n, k, k, 1, n, 1, 1, k,
+        ):
+            return True
         var tc2 = TileTensor(c, row_major(m, n))
         var ta2 = TileTensor(a, row_major(m, k))
         var tb2 = TileTensor(b, row_major(k, n))

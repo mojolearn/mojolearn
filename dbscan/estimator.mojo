@@ -120,6 +120,7 @@ from core.cosine_rows import cosine_unit_rows
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
+    NUMERIC_FAST,
     ftz,
     identical_div,
     identical_mul,
@@ -128,6 +129,7 @@ from checks.numerics import (
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 
 #: fam2-cluster (2026-10-04), IDENTICAL, every column: metric='cosine'
@@ -159,7 +161,7 @@ comptime IDN_DBSCAN_DIRECT_OUT = (
         is_defined["MOJOLEARN_IDN_DBSCAN_DIRECT_OUT_OFF"]()
         or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
-)
+) or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"]())
 
 comptime COSINE_TPB = 256
 comptime COSINE_NO_BAD_ROW = Int32(2147483647)

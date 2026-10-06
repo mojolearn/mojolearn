@@ -63,7 +63,25 @@ def scoped_last(index: Int) raises -> Int:
     return STATE.get_or_create_ptr()[].last[index]
 
 
-def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool, SUBTRACT: Bool = False](
+struct SharedSubAudit(Defaultable, Movable):
+    var lu: Int
+    var chol: Int
+    def __init__(out self):
+        self.lu = 0
+        self.chol = 0
+comptime SUB_STATE = _Global[StorageType=SharedSubAudit, name="SharedSubtractAuditV1", init_fn=SharedSubAudit.__init__]
+
+def shared_sub_record(cholesky: Bool) raises:
+    if cholesky:
+        SUB_STATE.get_or_create_ptr()[].chol += 1
+    else:
+        SUB_STATE.get_or_create_ptr()[].lu += 1
+
+def shared_sub_count(cholesky: Bool) raises -> Int:
+    return SUB_STATE.get_or_create_ptr()[].chol if cholesky else SUB_STATE.get_or_create_ptr()[].lu
+
+
+def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool, SUBTRACT: Bool = False, LOWER: Bool = False](
     dst: FPtr, a: FPtr, b: FPtr,
     m_in: Int32, n_in: Int32, k_in: Int32,
     a_si_in: Int32, a_sp_in: Int32, b_sp_in: Int32, b_sj_in: Int32, per_in: Int32,
@@ -88,6 +106,9 @@ def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool, SUBTRACT: Bool = False](
     var cols = (n + BN - 1) // BN
     var bm = (Int(block_idx.x) // cols) * BM
     var bn = (Int(block_idx.x) % cols) * BN
+    comptime if LOWER:
+        if bn >= bm + BM:
+            return  # uniform whole-tile rejection, no partial warp exit
     var sr = (sg // 2) * (BM // 2)
     var sc = (sg % 2) * (BN // 2)
     var first = 0
@@ -126,7 +147,7 @@ def scoped_kernel[BM: Int, BN: Int, SPLIT: Bool, SUBTRACT: Bool = False](
             comptime for s in range(2):
                 var row = bm + sr + mi * 8 + fr
                 var col = bn + sc + ni * 8 + fc + s
-                if row < m and col < n:
+                if row < m and col < n and (not LOWER or col <= row):
                     comptime if SPLIT:
                         _ = Atomic.fetch_add(dst.unsafe_offset(row * n + col), fragment[s])
                     elif SUBTRACT:
@@ -205,12 +226,12 @@ def try_scoped_gemm[SPLIT: Bool, ROUTE: Int](
             state[].last[14] = Int(nt)
         if arm == 1:
             ctx.enqueue_function[scoped_kernel[64, 64, SPLIT]](
-                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
+                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(n),
                 grid_dim=(((m + 63) // 64) * ((n + 63) // 64), splits, 1), block_dim=(128, 1, 1),
             )
         elif arm == 2:
             ctx.enqueue_function[scoped_kernel[32, 32, SPLIT]](
-                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
+                dst, a, b, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(n),
                 grid_dim=(((m + 31) // 32) * ((n + 31) // 32), splits, 1), block_dim=(128, 1, 1),
             )
         return arm != 0

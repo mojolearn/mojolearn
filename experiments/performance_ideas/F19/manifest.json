@@ -11,7 +11,9 @@
     "resample/gather_fast.mojo",
     "resample/estimator.mojo",
     "experiments/performance_ideas/F19/caller.py",
-    "experiments/performance_ideas/F04/caller.py"
+    "experiments/performance_ideas/F04/caller.py",
+    "bindings/_mojolearn_resample.mojo",
+    "python/mojolearn/resample.py"
   ],
   "candidate_defines": [
     "MOJOLEARN_RESAMPLE_FAST_GATHER",
@@ -28,7 +30,9 @@
     "--idea",
     "F19",
     "--output",
-    "{output}/arms"
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
   ],
   "run_argv": [
     "{python}",
@@ -50,7 +54,8 @@
     "actual GPU draw/gather, no NumPy hybrid fallback",
     "exact replacement sampling semantics",
     "narrow/wide/tail rows and multiple arrays",
-    "weighted API refused; nonreplacement gather prerequisite explicitly outstanding"
+    "weighted API refused; nonreplacement gather prerequisite explicitly outstanding",
+    "weighted API remains explicitly refused; no synthetic weighted support claim"
   ],
   "timing_contract": "Whole resample through output consumption, all upload/download bytes included; no width/dataset-specific route",
   "blocker": null,
@@ -59,5 +64,14 @@
   "prerequisite_bindings": [
     "core"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "variants": {
+    "permutation": [
+      "MOJOLEARN_RESAMPLE_FAST_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+      "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"
+    ]
+  },
+  "paired_build": true
 }

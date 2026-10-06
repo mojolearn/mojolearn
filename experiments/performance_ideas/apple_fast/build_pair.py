@@ -23,11 +23,12 @@ def flags(defines):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--idea',required=True);p.add_argument('--output',type=Path,required=True)
-    p.add_argument('--variant',default='default');a=p.parse_args()
+    p.add_argument('--variant',default='default');p.add_argument('--source-sha',required=True);a=p.parse_args()
     chip=subprocess.check_output(['sysctl','-n','machdep.cpu.brand_string'],text=True)
     if 'Apple M2 Pro' not in chip:raise RuntimeError('build on existing cheap M2 queue only')
     subprocess.run(['git','diff','--quiet','HEAD','--'],cwd=ROOT,check=True)
     source=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    if source!=a.source_sha:raise RuntimeError('source drift: expected '+a.source_sha+' got '+source)
     card=json.loads((ROOT/'experiments/performance_ideas'/a.idea/'manifest.json').read_text())
     if card['status'].startswith('blocked_'):raise RuntimeError(card['blocker'])
     a.output.mkdir(parents=True,exist_ok=False)
@@ -48,17 +49,29 @@ def main():
         shutil.copy2(binary,destination)
         return hashlib.sha256(destination.read_bytes()).hexdigest()
     (a.output/'dependencies').mkdir()
-    for prerequisite in card.get('prerequisite_bindings',['core']):
+    for prerequisite in card.get('variant_prerequisite_bindings',{}).get(a.variant,card.get('prerequisite_bindings',['core'])):
         name='_mojolearn.so' if prerequisite=='core' else '_mojolearn_'+prerequisite+'.so'
         destination=a.output/'dependencies'/name
         digest=build(prerequisite,[],destination)
         dependencies[name]=dict(source_sha=source,numeric_mode='fast',vendor='apple',defines=[],sha256=digest)
     hashes={}
-    for arm,defines in (('A',card['baseline_defines']),('B',candidate)):
+    baseline=card.get('variant_baseline_defines',{}).get(a.variant,card['baseline_defines'])
+    for arm,defines in (('A',baseline),('B',candidate)):
         hashes[arm]=build(binding,defines,a.output/(arm+'.so'))
+    native_checks={}
+    for check in card.get('native_checks',[]):
+        destination=a.output/check['name']
+        command=['pixi','run','mojo','build','-j','1','--target-cpu','apple-m1','--target-accelerator','metal:1','-I','.','-I','bindings']
+        for token in candidate:command.extend(['-D',token])
+        command.extend([check['source'],'-o',str(destination)])
+        with destination.with_suffix('.build.log').open('x') as stream:
+            rc=subprocess.run(['bash',str(slot)]+command,cwd=ROOT,env=env,stdout=stream,stderr=subprocess.STDOUT).returncode
+        if rc or not destination.is_file():raise RuntimeError('native prerequisite build failed rc='+str(rc)+' log='+str(destination.with_suffix('.build.log')))
+        native_checks[check['name']]=dict(source_sha=source,numeric_mode='fast',vendor='apple',defines=candidate,
+            sha256=hashlib.sha256(destination.read_bytes()).hexdigest(),source=check['source'])
     manifest=dict(source_sha=source,binding=binding,numeric_mode='fast',vendor='apple',
-        defines_A=flags(card['baseline_defines']),defines_B=flags(candidate),hashes=hashes,
-        dependencies=dependencies,builder='existing M2 Pro',status='OK')
+        defines_A=flags(baseline),defines_B=flags(candidate),hashes=hashes,
+        dependencies=dependencies,native_checks=native_checks,builder='existing M2 Pro',status='OK')
     (a.output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print('APPLE_FAST_BUILD status=OK source='+source+' binding='+binding+' artifacts='+str(a.output))
 if __name__=='__main__':main()

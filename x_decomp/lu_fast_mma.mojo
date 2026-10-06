@@ -60,7 +60,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import COLUMN_APPLE, lib_smem_page_fits_for
 from checks.numerics import ftz, identical_mul_add
-from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
+from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel, shared_sub_record
 from gemm.afn_apple_fast import AFN_GEMM_APPLE, AFN_GEMM_KB, _afn_gload, _afn_load_t, _afn_mma, _afn_stage
 from x_decomp.cells import F32Ptr, I32Ptr, lu_swap_elem
 from x_decomp.lu_fast import LFS_TPB, LU_FAST_STEP1, lfs_blocks, lu_fast_panel
@@ -196,6 +196,7 @@ def _lfm_gemm_sub(ctx: DeviceContext, a: F32Ptr, n: Int, r0: Int, c0: Int, p0: I
     if m <= 0 or nc <= 0 or k <= 0:
         return
     comptime if LFM_SHARED_SUB:
+        shared_sub_record(False)
         ctx.enqueue_function[scoped_kernel[64, 64, False, True]](
             a.unsafe_offset(r0 * n + c0), a.unsafe_offset(r0 * n + p0), a.unsafe_offset(p0 * n + c0),
             Int32(m), Int32(nc), Int32(k), Int32(n), Int32(1), Int32(n), Int32(1), Int32(k), Int32(n),

@@ -92,6 +92,11 @@ comptime ET_EXPORTS = _Global[StorageType=ForestExportRegistry[FitResult],
           "MojoETFitExportFast"), init_fn=ForestExportRegistry[FitResult].__init__]
 
 
+from xtrees.shap_device import shap_pair_count
+
+def trees_shap_pair_count_py() raises -> PythonObject:
+    return PythonObject(shap_pair_count())
+
 def _retain_et_export(var result: FitResult) raises -> PythonObject:
     var trees = len(result.forest.trees)
     var nodes = 0
@@ -645,6 +650,7 @@ def et_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
 def PyInit__mojolearn_trees() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_trees")
+        m.def_function[trees_shap_pair_count_py]("trees_shap_pair_count")
         m.def_function[trees_vendor_binding]("trees_vendor")
         m.def_function[trees_numeric_mode_binding]("trees_numeric_mode")
         m.def_function[trees_device_finite_scan_binding]("trees_device_finite_scan")

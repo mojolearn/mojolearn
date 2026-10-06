@@ -23,7 +23,9 @@
     "--idea",
     "F18",
     "--output",
-    "{output}/arms"
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
   ],
   "run_argv": [
     "{python}",
@@ -60,5 +62,6 @@
     "immutable": [
       "MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"
     ]
-  }
+  },
+  "paired_build": true
 }

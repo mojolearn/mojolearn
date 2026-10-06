@@ -41,13 +41,24 @@ def main():
     if defines is None:
         assert args.variant == 'default'
         defines = card['candidate_defines']
-    assert [token for token in manifest['defines_A'].split() if token != '-D'] == card['baseline_defines']
+    assert [token for token in manifest['defines_A'].split() if token != '-D'] == card.get('variant_baseline_defines', {}).get(args.variant, card['baseline_defines'])
     assert [token for token in manifest['defines_B'].split() if token != '-D'] == defines
     hashes = {arm: sha(args.arms / (arm + '.so')) for arm in ('A', 'B')}
     assert hashes == manifest['hashes']
     binding = manifest['binding']
     assert binding == card.get('variant_bindings', {}).get(args.variant, card['binding'])
     args.output.mkdir(parents=True, exist_ok=False)
+    # Independent structural/gradient gates run before measured public calls.
+    required=card.get('native_checks',[])
+    assert set(manifest.get('native_checks',{}))=={check['name'] for check in required}
+    for check in required:
+        receipt=manifest['native_checks'][check['name']]
+        binary=args.arms/check['name']
+        assert receipt['source_sha']==source and receipt['numeric_mode']=='fast' and receipt['vendor']=='apple'
+        assert receipt['defines']==defines and receipt['sha256']==sha(binary)
+        with (args.output/(check['name']+'.log')).open('x') as stream:
+            outcome=subprocess.run([str(binary.resolve())],cwd=ROOT,env=dict(os.environ,MOJOLEARN_NUMERIC_MODE='fast',MOJOLEARN_VENDOR='apple'),stdout=stream,stderr=subprocess.STDOUT)
+        if outcome.returncode:raise RuntimeError('independent prerequisite failed rc='+str(outcome.returncode)+'; '+str(args.output/(check['name']+'.log')))
     records = {}
     for arm in ('A', 'B'):
         package = args.output / arm / 'package' / 'mojolearn'
@@ -64,7 +75,7 @@ def main():
         env = dict(os.environ, PYTHONPATH=str(package.parent), MOJOLEARN_NUMERIC_MODE='fast',
                    MOJOLEARN_VENDOR='apple', OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1')
         output = args.output / (arm + '.json')
-        command = [sys.executable, str(ROOT / 'experiments/performance_ideas' / args.idea / 'caller.py'),
+        command = [sys.executable, str(ROOT / 'experiments/performance_ideas' / args.idea / card.get('variant_callers', {}).get(args.variant, 'caller.py')),
                    '--arm', arm, '--variant', args.variant, '--output', str(output)]
         with (args.output / (arm + '.log')).open('x') as stream:
             result = subprocess.run(command, cwd=ROOT, env=env, stdout=stream, stderr=subprocess.STDOUT)

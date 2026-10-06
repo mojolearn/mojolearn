@@ -22,7 +22,9 @@
     "--idea",
     "F10",
     "--output",
-    "{output}/arms"
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
   ],
   "run_argv": [
     "{python}",
@@ -42,7 +44,7 @@
     "actual FAST Metal full Mamba forward",
     "multiple corpus lengths and independent FP64 reference",
     "each candidate isolated before combinations",
-    "training and long continuation drift separately owed"
+    "Carried-state prefix/decode drift, actual supported zero-state VJP directional oracle and compiled SGD task loss"
   ],
   "timing_contract": "Full caller through first read; missing corpus coverage fails explicitly",
   "blocker": null,
@@ -66,7 +68,9 @@
   },
   "binding": "mamba",
   "prerequisite_bindings": [
-    "core"
+    "core",
+    "training"
   ],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "paired_build": true
 }

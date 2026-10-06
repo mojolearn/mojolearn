@@ -29,6 +29,11 @@ from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from std.utils.index import IndexList
+from std.sys.compile import is_defined
+from gemm.afn_apple_fast import AFN_GEMM_APPLE
+from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel, shared_sub_record
+
+comptime CHOL_SHARED_SUB = AFN_GEMM_APPLE and is_defined["MOJOLEARN_CHOL_FAST_SHARED_SUB"]()
 
 comptime FTS_BLOCK = 512
 comptime FTS_TPB = 256
@@ -297,6 +302,17 @@ def fast_gemm_nt_sub_lower(
     subtraction rides the vendor GEMM's epilogue, so the product is never
     stored and read back. `shape` only gives the output tensor its extent
     (`m * cols` floats; nothing is written to it)."""
+
+    comptime if CHOL_SHARED_SUB:
+        shared_sub_record(True)
+        ctx.enqueue_function[scoped_kernel[64, 64, False, True, True]](
+            a.unsafe_offset((base + off) * n + base + off),
+            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            Int32(m), Int32(cols), Int32(k), Int32(k), Int32(1), Int32(1), Int32(k), Int32(k), Int32(n),
+            grid_dim=(((m + 63) // 64) * ((cols + 63) // 64), 1, 1), block_dim=(128, 1, 1),
+        )
+        return
 
     @parameter
     @always_inline
