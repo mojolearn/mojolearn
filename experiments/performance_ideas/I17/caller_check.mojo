@@ -21,13 +21,15 @@ def check_grow_policy_callers(ctx: DeviceContext) raises:
             var categories=List[Bool]()
             for feature in range(cols):
                 categories.append(categorical and feature==2)
-            var params: List[TCatFeatureParams]=[TCatFeatureParams.feature_freq_only()]
             var reference=UInt64(0)
             for repeat in range(2):
+                var fit_params=List[TCatFeatureParams]()
+                if categorical:
+                    fit_params.append(TCatFeatureParams.feature_freq_only())
                 var model=train(ctx,x,y,rows,cols,border_count=16,n_estimators=3,max_depth=4,
                     grow_policy=policy,max_leaves=11 if policy==String("Lossguide") else -1,
                     min_data_in_leaf=1 if policy==String("SymmetricTree") else 3,
-                    cat_features=categories,cat_feature_params=params if categorical else List[TCatFeatureParams](),
+                    cat_features=categories,cat_feature_params=fit_params^,
                     random_seed=UInt64(7921),leaf_estimation_iterations=2)
                 if categorical and model.ctr_column_count!=1:
                     raise Error("I17 categorical grow-policy caller did not reach feature-frequency CTR")

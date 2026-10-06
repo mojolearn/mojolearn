@@ -47,10 +47,10 @@ def check(ctx: DeviceContext,m: Int,d: Int) raises:
 def main() raises:
     var ctx=DeviceContext()
     for rows in [257,513,1031]:
-        for d in [7,17]:
+        for d in [7,17,33]:
             check(ctx,rows,d)
             check_factor_reuse(ctx,rows,d)
     check_cho_solve_residual()
     check_pivot_failure_is_identical()
     check_signed_zero_and_denormal()
-    print("I22 PASS TSQR_tail_cases=6 solve_pivot_zero_contract")
+    print("I22 PASS TSQR_tail_cases=9 solve_pivot_zero_contract")
