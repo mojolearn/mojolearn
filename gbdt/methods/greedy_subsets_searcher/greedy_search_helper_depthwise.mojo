@@ -2230,9 +2230,14 @@ def fit_non_symmetric_tree[
     # One current snapshot plus the binary tree's bounded node arena.
     var lg_resident_stats = List[DeviceBuffer[DType.float32]]()
     var lg_resident_snapshots = 0
-    # I17 new candidate remains default off. Qualification is pending: native
-    # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
-    # NEVER RUN — PENDING MEASUREMENT
+    # I17 2026-10-06 AMD MI325X Lossguide scoped LOSER (source 5b467815b):
+    # candidate/base 1.041, 1.292, 1.083 at rows/features10000/17,10001/18,32769/9.
+    # Complete 10-tree fits; logs show six resident snapshots/tree. Depthwise
+    # recorded zero snapshots: those controls do not measure this candidate.
+    # One same-process warmup and score; accepted identity evidence reused.
+    # NVIDIA/full-workload qualification pending. Keep resident frontier OFF.
+    # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I17;
+    # exact snapshot counts and raw timings remain in amd/live/repairs.
     comptime if LG_EXACT_ID and is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]():
         if lg_exact and max_leaves>0 and stat_count>0 and max_leaves<=(1<<22)//(3*stat_count):
             lg_resident_stats.append(ctx.enqueue_create_buffer[DType.float32]((2*max_leaves-1)*stat_count))
@@ -4116,7 +4121,7 @@ def fit_non_symmetric_tree[
     comptime if REPORT_PART_STATS_WORK:
         print("part_stats_work", options.policy, n_rows,
               part_stats_leaves_reduced, part_stats_rows_reduced)
-    # NEVER RUN — PENDING MEASUREMENT
+    # Retain measured resident-snapshot diagnostics for the opt-in I17 caller.
     comptime if LG_EXACT_ID and is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]():
         print("I17 frontier_resident_snapshots",lg_resident_snapshots,"retained_nodes",len(lg_node_stats)//stat_count)
     _ = lg_resident_stats^
