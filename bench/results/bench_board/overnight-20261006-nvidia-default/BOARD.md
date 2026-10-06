@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T08:42:22Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T08:44:29Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T08:42:22Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 102 done, 3 failed, 0 unsupported, 8 pending. Cells: 226 (REFUSED 5, ok 221).
+Races: 113 planned, 103 done, 3 failed, 0 unsupported, 7 pending. Cells: 231 (REFUSED 7, ok 224).
 
-Inference cells: 144 (REFUSED 2, ok 142).
+Inference cells: 150 (REFUSED 4, ok 146).
 
 ## Quality at a glance
 
@@ -184,6 +184,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | neural | samba-forward | bytes | mean_nll (lower is better) | - | - | torch-eager-fp32 5.635910; torch-eager-tf32 5.635948; torch-compile-fp32 5.635910; torch-compile-tf32 5.635950; torch-eager-bf16 5.635952; torch-compile-bf16 5.635985 |
 | trees | gbdt-depthwise | istella | logloss (lower is better) | - | - | catboost-gpu 0.156748; xgboost-gpu 0.149263; catboost-cpu -; xgboost-cpu - |
 | trees | gbdt-depthwise | istella | auc (higher is better) | - | - | catboost-gpu 0.983152; xgboost-gpu 0.983622; catboost-cpu -; xgboost-cpu - |
+| trees | gbdt-lossguide | istella | logloss (lower is better) | - | - | catboost-gpu 0.149188; xgboost-gpu 0.149263; catboost-cpu -; xgboost-cpu -; lightgbm-cuda 0.356515 |
+| trees | gbdt-lossguide | istella | auc (higher is better) | - | - | catboost-gpu 0.983668; xgboost-gpu 0.983622; catboost-cpu -; xgboost-cpu -; lightgbm-cuda 0.500000 |
 
 ## Inference at a glance
 
@@ -249,6 +251,8 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 | classical | svc | taxi | Xq | - | - | - | - | cuml-gpu 7.1 ms (IDENTICAL/arm -) |
 | trees | gbdt-depthwise | istella | test | - | - | - | - | catboost-gpu 483.3 ms (IDENTICAL/arm -); xgboost-gpu 96.9 ms (IDENTICAL/arm -) |
 | trees | gbdt-depthwise | istella | large | - | - | - | - | catboost-gpu 888.0 ms (IDENTICAL/arm -); xgboost-gpu 187.0 ms (IDENTICAL/arm -) |
+| trees | gbdt-lossguide | istella | test | - | - | - | - | catboost-gpu 470.1 ms (IDENTICAL/arm -); xgboost-gpu 96.8 ms (IDENTICAL/arm -); lightgbm-cuda - ms (IDENTICAL/arm -) |
+| trees | gbdt-lossguide | istella | large | - | - | - | - | catboost-gpu 901.4 ms (IDENTICAL/arm -); xgboost-gpu 185.4 ms (IDENTICAL/arm -); lightgbm-cuda - ms (IDENTICAL/arm -) |
 
 ## Trees
 
@@ -318,6 +322,65 @@ Inference (each arm predicts with its own model from the fit rounds above):
 inference call, catboost-gpu: catboost predict_proba(X, task_type CPU, thread_count -1) (task_type GPU refused: catboost/libs/model/cuda/evaluator.cpp:25: Model is not oblivious, GPU evaluatio), column 1
 
 inference call, xgboost-gpu: xgboost Booster.inplace_predict(cupy.asarray(X)) then cupy.asnumpy, the rows uploaded and the probability copied back inside the clock
+
+### gbdt-lossguide / istella (rows full, shape istella-2043304x220)
+
+race: done, driver rc 0, log `raw/trees/gbdt-lossguide.istella.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| catboost-gpu | catboost | gpu | opponent | 23630.6 | 23630.6..23630.6 | 1 | - | - | 5379.7 | 496.0 | auc=0.983668, logloss=0.149188 | yes | COMPARABLE | - | ok (measured this run) |
+| xgboost-gpu | xgboost | gpu | opponent | 13126.2 | 13126.2..13126.2 | 1 | - | - | 6475.4 | 496.0 | auc=0.983622, logloss=0.149263 | yes | COMPARABLE | - | ok (measured this run) |
+| catboost-cpu | catboost | cpu | opponent | - | - | 0 | - | - | - | - | - | - | COMPARABLE | - | REFUSED(GPU-PATH-ONLY: catboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against) (measured this run) |
+| xgboost-cpu | xgboost | cpu | opponent | - | - | 0 | - | - | - | - | - | - | COMPARABLE | - | REFUSED(GPU-PATH-ONLY: xgboost-cpu is a CPU arm and cpu was not requested on this accelerator box. On NVIDIA we compare against ) (measured this run) |
+| lightgbm-cuda | lightgbm | gpu | opponent | 4935.5 | 4935.5..4935.5 | 1 | - | - | 4205.8 | 544.0 | auc=0.500000, logloss=0.356515 | yes | UNKNOWN | - | ok (measured this run) |
+
+memory, catboost-gpu, xgboost-gpu, lightgbm-cuda: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+
+memory, catboost-cpu, xgboost-cpu: host not sampled; GPU not sampled
+
+FSPEED-FIT-VERDICT: `lane=gbdt-lossguide arms=lightgbm-cuda leaves=lightgbm-cuda:1 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one`
+
+config: NVIDIA gbm-bench, xgb/lgbm/cat shared_params, ntrees 500 (https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `lightgbm-cuda`, seed 7): MATCHED
+
+| parameter | lightgbm-cuda |
+|---|---|
+| library (source) | lightgbm (get_params) |
+| boosting_type | "gbdt" |
+| class_weight | null |
+| feature_fraction | 1.0 |
+| learning_rate | 0.1 |
+| max_bin | 255 |
+| max_depth | 8 |
+| max_leaves | 256 |
+| min_child_weight | 0.001 |
+| min_samples_leaf | 20 |
+| min_split_gain | 0.0 |
+| n_estimators | 500 |
+| reg_alpha | 0.0 |
+| reg_lambda | 1.0 |
+| scale_pos_weight | 8.85789592328634 |
+| seed | 7 |
+| subsample | 1.0 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| catboost-gpu | test | 500000 | 470.1 | 470.1..470.1 | 1 | - | - | auc=0.983668, auc_matches_fit=True, logloss=0.149188, logloss_matches_fit=True | yes | COMPARABLE | ok |
+| xgboost-gpu | test | 500000 | 96.8 | 96.8..96.8 | 1 | - | - | auc=0.983622, auc_matches_fit=True, logloss=0.149263, logloss_matches_fit=True | yes | COMPARABLE | ok |
+| catboost-gpu | large | 1000000 | 901.4 | 901.4..901.4 | 1 | - | - | - | yes | COMPARABLE | ok |
+| xgboost-gpu | large | 1000000 | 185.4 | 185.4..185.4 | 1 | - | - | - | yes | COMPARABLE | ok |
+| lightgbm-cuda | test | - | - | - | 0 | - | - | - | yes | UNKNOWN | REFUSED(GPU-INFERENCE-NOT-SUPPORTED: LightGBM Booster.predict executes on CPU) |
+| lightgbm-cuda | large | - | - | - | 0 | - | - | - | yes | UNKNOWN | REFUSED(GPU-INFERENCE-NOT-SUPPORTED: LightGBM Booster.predict executes on CPU) |
+
+inference call, catboost-gpu: catboost predict_proba(X, task_type CPU, thread_count -1) (task_type GPU refused: catboost/libs/model/cuda/evaluator.cpp:25: Model is not oblivious, GPU evaluatio), column 1
+
+inference call, xgboost-gpu: xgboost Booster.inplace_predict(cupy.asarray(X)) then cupy.asnumpy, the rows uploaded and the probability copied back inside the clock
+
+inference call, lightgbm-cuda: Booster.predict (CPU; not executed)
 
 ## Classical
 
