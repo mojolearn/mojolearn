@@ -77,6 +77,13 @@ comptime LFM_PANEL = 32
 # Shared direct fragments retain the caller strided subtract epilogue. No
 # additional buffer or pass; eligibility is kernel limits, never board size.
 # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# M3 F02/default measured 2026-10-06: n=257,319,513 factor A_over_B
+# 0.624,0.936,0.958; solve 0.708,0.812,1.005. One excluded warmup +
+# one scored public call, current compiled A/B artifacts reused. Candidate
+# mostly regresses; retain OFF. Identity/compile not retested. Caller
+# 67d0efb29, both builds 05b4dd48a; raw timings/hashes/metrics retained at
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F02/default.
+# Single-sample component evidence; not a universal full-workload decision.
 comptime LFM_SHARED_SUB = AFN_GEMM_APPLE and is_defined["MOJOLEARN_LU_FAST_SHARED_SUB"]()
 
 comptime _M64 = SIMD[DType.float32, 64]

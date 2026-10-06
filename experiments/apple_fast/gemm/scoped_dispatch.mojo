@@ -36,6 +36,13 @@ comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
 # never PASS inferred from process rc. Rejudge saved captures (no GPU replay)
 # is owed; no fit timing/default admission. Mechanism PASS above is separate.
 # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# M3 measurement 2026-10-06, F01/default and F02/pca: candidate warmup
+# failed actual-route reach assertions; no scored pair admitted. F02/sdk
+# matrix-call A/B had A_over_B 0.654..1.432 (mixed; one warmup/one score),
+# so no full-caller promotion. Identity/compile evidence reused, not rerun.
+# Harness 67d0efb29; per-arm builds/hashes and captures:
+# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/{F01,F02}.
+# Keep PCA and scoped candidate toggles OFF pending affected measurement repair.
 comptime PCA = is_defined["MOJOLEARN_SCOPED_GEMM_PCA"]()
 comptime AUDIT = is_defined["MOJOLEARN_SCOPED_GEMM_AUDIT"]()
 # LEGACY, default OFF: the old per-route windows (TALL M>=4096 N32..128

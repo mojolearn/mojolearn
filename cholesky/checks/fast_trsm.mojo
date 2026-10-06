@@ -34,6 +34,12 @@ from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel, shared_sub_record
 
 # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# M3 F02/cholesky 2026-10-06 measurement attempt: baseline captured,
+# candidate warmup failed positive shared-subtract reach assertion. No
+# scored A/B pair admitted; retain OFF while measurement failure is repaired.
+# Caller 67d0efb29; compiled artifacts reused (see per-arm provenance),
+# no new compile/identity gate. Evidence: ~/mojolearn-evidence/
+# ab-overnight-20261006/m3/artifacts/results/F02/cholesky.
 comptime CHOL_SHARED_SUB = AFN_GEMM_APPLE and is_defined["MOJOLEARN_CHOL_FAST_SHARED_SUB"]()
 
 comptime FTS_BLOCK = 512
