@@ -7,6 +7,7 @@ from experiments.performance_ideas.I07.state_cost import state_cost
 from transformer.checks.transformer_fused_check import FusedCase, run_case
 from transformer.impl.llama.fused_attention import FUSED_RAN, fused_attention_arm_parse
 
+# NEVER RUN — PENDING VALIDATION
 def main() raises:
     var ctx = DeviceContext()
     var arms: List[String] = ["stash_tiled_fgrid_r32_qres_pf_kvrecompute", "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32", "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32"]

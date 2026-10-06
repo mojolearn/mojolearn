@@ -1387,6 +1387,7 @@ default resolves to: `_launch_fwd_r2_keep[64, 32, True, True, False]` and
 of the trial tree (the sabotage copies stay trial-only, like
 `ATTN_SHIPPED_BWD_KV`'s)."""
 
+# NEVER RUN — PENDING VALIDATION
 comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
 comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
 comptime ATTN_V1_ALIAS_Y_ESTASH = (
