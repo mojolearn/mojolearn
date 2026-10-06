@@ -11,13 +11,19 @@
   ],
   "status": "source_ready",
   "implementation_paths": [
-    "experiments/performance_ideas/I16/check.mojo"
+    "experiments/performance_ideas/I16/check.mojo",
+    "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo",
+    "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo"
   ],
-  "candidate_defines": [],
+  "candidate_defines": [
+    "MOJOLEARN_IVF_BALANCED_TASKS=1"
+  ],
   "baseline_defines": [],
   "build_argv": [
     "mojo",
     "build",
+    "-D",
+    "MOJOLEARN_IVF_BALANCED_TASKS=1",
     "-j1",
     "-I",
     "{repo}",

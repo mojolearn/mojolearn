@@ -2,8 +2,8 @@
 """Actual IVF search with planted CSR occupancy: all rows in one list,
 uniform lists, heavy skew, empty lists and odd feature tails. Every probe
 is selected and flat, staged, grouped schedules compare all returned bits.
-Changing nprobe/index training is excluded. Long-list chunk task integration
-is a follow-up prerequisite, distinct from these existing scan schedules."""
+Changing nprobe/index training is excluded. Opt-in balanced tasks split long lists into fixed work units without
+changing probe order, per-point arithmetic, filtering or final tie order."""
 from std.os import setenv, unsetenv
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
