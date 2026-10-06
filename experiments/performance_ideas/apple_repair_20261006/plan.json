@@ -37,7 +37,7 @@
     "qn-reg": "Reuse accepted71f3333fd dense LinearRegression tolerance exception; olderOct1 refusals predate it.",
     "gmm": "Lossless float64 conversion inside sklearn fit clock, parametersunchanged; explicitly uncapped inputrecipe honored during worker and quality.",
     "dart": "Replace old300-second warmup attempt with bounded full-data retry under shared deadline; currenthistCPU n_jobs=-1 unchanged.",
-    "lars": "One bounded full-data attempt; retained solver overflow has no faithful harness fix. Currentacceptedpackage reused."
+    "lars": "Retain full original float32 solver overflow; separately frozen follow-up uses sklearn-supported lossless float64 X/y/query widening inside fit/infer clocks. Epsilon and all estimator settings unchanged; original total deadline inherited."
   },
   "not_retried": {
     "dbscan/taxi": "Actual253.9GB process-tree OOM on1mrows; full5.25m cannot be repaired by smallerdata or changingeps/algorithm.",
@@ -49,5 +49,11 @@
     "excluded_warmups_per_arm": 1,
     "scored_samples_per_arm": 1
   },
-  "validation": "Source syntax, metadata and publication-isolation checks only. No compilation, installation, smoke or numerical verification rerun."
+  "validation": "Source syntax, metadata and publication-isolation checks only. No compilation, installation, smoke or numerical verification rerun.",
+  "followup_retry_policy": {
+    "maximum_lars_seconds": 300,
+    "deadline": "Read unchanged started_at/deadline_at from original attempt-01/status.json; never start a new two-hour budget.",
+    "eligible": "Only explicit failed cells; successful cells cannot be replayed.",
+    "data": "Existing full input recipes; no smaller fixture or preparation step in retry."
+  }
 }

@@ -2404,9 +2404,25 @@ def _build_est(lane, arm, D):
         h = D["X"].shape[1] // 2
         Xa, Ya, Xqa, Yqa = X[:, :h], X[:, h:], Xq[:, :h], Xq[:, h:]
 
+    lars_float64 = lane == "lars" and arm == "sklearn-cpu"
+    if lars_float64:
+        # sklearn Lars explicitly retains consistent input precision for its
+        # Gram/Cholesky solver. Its float32 ill-conditioned recovery overflowed
+        # on full data; float64 is the supported same-value path. Widen all
+        # original float32 rows/labels inside the fit clock, and queries inside
+        # the inference clock. Keep eps, iterations and every estimator option.
+        info.update(input_dtype=str(X.dtype), target_input_dtype=str(y.dtype),
+                    query_input_dtype=str(Xq.dtype), fit_dtype="float64", infer_dtype="float64",
+                    input_conversion_inside_clock=True,
+                    fit_rows=int(X.shape[0]), eval_rows=int(Xq.shape[0]),
+                    precision_reason="Lossless float32-to-float64 input widening for sklearn Lars Gram/Cholesky stability; original failed attempt retained")
+
     def fit():
         est = make()
-        if t in ("labels",):
+        if lars_float64:
+            est.fit(np.ascontiguousarray(X, dtype=np.float64),
+                    np.ascontiguousarray(y, dtype=np.float64))
+        elif t in ("labels",):
             S["out"] = est.fit_transform(lab)
         elif t == "multilabel":
             S["out"] = est.fit_transform(sets)
@@ -2424,7 +2440,9 @@ def _build_est(lane, arm, D):
 
     def infer():
         est = S["est"]
-        if t in ("clf", "reg", "semi", "outlier", "multiclf", "multireg"):
+        if lars_float64:
+            S["pred"] = est.predict(np.ascontiguousarray(Xq, dtype=np.float64))
+        elif t in ("clf", "reg", "semi", "outlier", "multiclf", "multireg"):
             S["pred"] = est.predict(Xq)
             if t == "clf" and hasattr(est, "predict_proba") and quality_kind(lane) == "clf":
                 try:
