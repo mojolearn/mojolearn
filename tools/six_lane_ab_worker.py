@@ -98,14 +98,19 @@ def complete_operation(module,family,work,data,runner):
     if family=='forest':runner.out=None
     if family=='expanded':runner.fit()
     else:runner.call();runner.sync()
-    fitted=time.perf_counter();inference={}
+    fitted=time.perf_counter();inference={};inference_outputs=None
     if work['inference']=='separate':
         if family=='classical':
             inf=module.infer_runner(work['lane'],runner,data);inf.call();inf.sync();inference=inf.outputs()
+        elif family=='more':
+            # These saved runners perform prediction and its host conversion
+            # in outputs(). Keep that exact operation once, inside the declared
+            # inference interval, instead of issuing duplicate predictions.
+            inference_outputs=runner.outputs();runner.sync()
         elif hasattr(runner,'infer') and runner.infer():pass
         else:raise ValueError('No existing separate inference operation for this saved race')
     inferred=time.perf_counter()
-    outputs=runner.outputs()
+    outputs=inference_outputs if inference_outputs is not None else runner.outputs()
     if hasattr(runner,'sync'):runner.sync()
     elif hasattr(runner,'sync_for_receipt'):runner.sync_for_receipt()
     end=time.perf_counter()
