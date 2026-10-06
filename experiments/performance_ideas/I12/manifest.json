@@ -11,15 +11,21 @@
   ],
   "status": "source_ready",
   "implementation_paths": [
-    "experiments/performance_ideas/I12/check.mojo"
+    "experiments/performance_ideas/I12/check.mojo",
+    "glm/impl/qn/glm_base.mojo",
+    "glm/impl/qn/qn_linesearch.mojo"
   ],
-  "candidate_defines": [],
+  "candidate_defines": [
+    "MOJOLEARN_IDN_QN_EXACT_TRIALS=1"
+  ],
   "baseline_defines": [
     "MOJOLEARN_IDN_ALL_OFF=1"
   ],
   "build_argv": [
     "mojo",
     "build",
+    "-D",
+    "MOJOLEARN_IDN_QN_EXACT_TRIALS=1",
     "-j1",
     "-I",
     "{repo}",
