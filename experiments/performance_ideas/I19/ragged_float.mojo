@@ -51,6 +51,8 @@ def _rank_control(src: MutPointer[Float32,MutAnyOrigin],dst: MutPointer[Float32,
     dst[Int(base)+rank] = value
     permutation[Int(base)+rank] = UInt32(Int(base)+i)
 
+# I19 new candidate remains default off. Qualification is pending: native
+# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
 def enqueue_ragged_float_sort(ctx: DeviceContext,mut src: DeviceBuffer[DType.float32],
     mut dst: DeviceBuffer[DType.float32],mut permutation: DeviceBuffer[DType.uint32],
     offsets: List[Int32],categories: Bool,mut keys: DeviceBuffer[DType.uint32],

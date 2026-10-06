@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "id": "I19",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "new_candidates_default_off": true,
+  "existing_promoted_defaults_unchanged": true,
+  "arms": [
+    {
+      "name": "incumbent",
+      "source": "experiments/performance_ideas/I19/check.mojo",
+      "defines": [],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I19/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I19/check.mojo",
+      "defines": [
+        "MOJOLEARN_IDN_RAGGED_FLOAT_RADIX=1"
+      ],
+      "build_argv": [
+        "{python}",
+        "{repo}/gemm/experiments/native_build.py",
+        "{repo}/experiments/performance_ideas/I19/check.mojo",
+        "--vendor",
+        "{vendor}",
+        "--mode",
+        "identical",
+        "--source-sha",
+        "{source_sha}",
+        "--mojo",
+        "{mojo}",
+        "--output",
+        "{output}",
+        "--define",
+        "MOJOLEARN_IDN_RAGGED_FLOAT_RADIX=1"
+      ],
+      "validation_argv": [
+        "{output}"
+      ],
+      "qualification": "pending native build and separate device qualification"
+    }
+  ]
+}
