@@ -44,7 +44,7 @@ def shap(args):
     import numpy as np
     import time
     from mojolearn import RandomForestClassifier,TreeExplainer
-    from mojolearn import _mojolearn_trees as binding
+    from mojolearn import _mojolearn_x_trees as binding
     cases={}
     for depth,classes,skew in ((3,2,False),(6,3,False),(9,4,True)):
         rng=np.random.default_rng(456)
@@ -56,11 +56,11 @@ def shap(args):
         start=time.perf_counter_ns();explainer=TreeExplainer(model,data=x[:127])
         expected=np.asarray(explainer.expected_value,float);expected.tobytes()
         prepare_ms=(time.perf_counter_ns()-start)/1e6
-        before=int(binding.trees_shap_pair_count())
+        before=int(binding.x_trees_shap_pair_count())
         values,cold=consumed(lambda:explainer.shap_values(q))
         saved=np.asarray(values).copy()
         repeated,reuse=consumed(lambda:explainer.shap_values(q))
-        reached=int(binding.trees_shap_pair_count())-before
+        reached=int(binding.x_trees_shap_pair_count())-before
         if args.arm=='B':assert reached>0,'paired SHAP row schedule not reached'
         probability,_=consumed(lambda:model.predict_proba(q))
         restored=np.asarray(values,float).sum(axis=1)+expected
@@ -70,5 +70,5 @@ def shap(args):
         cases[f'depth{depth}-c{classes}-skew{skew}']=dict(contract=dict(depth=depth,classes=classes,skew=skew,trees=17,seed=7,background=127,queries=67),
             metrics=dict(additivity_error=dict(value=additivity,rtol=.1,atol=2e-5),repeat_error=dict(value=repeat_error,rtol=0,atol=2e-6)),
             preparation_ms=prepare_ms,cold_shap_ms=cold,repeated_shap_ms=reuse,paired_chunks=reached)
-    return dict(binding=binding_check(binding,'trees'),cases=cases)
+    return dict(binding=binding_check(binding,'x_trees'),cases=cases)
 if __name__=='__main__':capture_main(exercise)

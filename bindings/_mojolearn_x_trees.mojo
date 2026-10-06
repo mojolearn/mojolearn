@@ -10,9 +10,16 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from xtrees.api import register
-from xtrees.shap_device import shap_prepare, tree_shap_values
+from xtrees.shap_device import shap_prepare, tree_shap_values, shap_pair_count
 from xtrees.dart_device import DART_DEVICE, dart_open, dart_step, dart_add, dart_close, dart_predict
 from xtrees.dart_units import IDN_DART_DEVICE
+
+
+# F13 measurement audit lives in the binding used by public TreeExplainer.
+# The original recipe compiled the separate trees binding, so its counter
+# could never observe the public x_trees execution.
+def x_trees_shap_pair_count_binding() raises -> PythonObject:
+    return PythonObject(shap_pair_count())
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -183,6 +190,7 @@ def PyInit__mojolearn_x_trees() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_trees")
         register(m)
+        m.def_function[x_trees_shap_pair_count_binding]("x_trees_shap_pair_count")
         m.def_function[tree_shap_prepare_binding]("x_trees_tree_shap_prepare")
         m.def_function[tree_shap_binding]("x_trees_tree_shap")
         m.def_function[numeric_mode_binding]("x_trees_numeric_mode")
