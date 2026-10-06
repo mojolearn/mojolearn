@@ -53,7 +53,8 @@
   "output_kind": "directory",
   "binding": "arima",
   "prerequisite_bindings": [
-    "core"
+    "core",
+    "tsa"
   ],
   "build_uses_compile_slot": true,
   "native_checks": [
