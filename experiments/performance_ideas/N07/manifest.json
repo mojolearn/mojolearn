@@ -8,11 +8,13 @@
     "amd",
     "apple"
   ],
-  "status": "build_passed",
+  "status": "source_ready",
   "implementation_paths": [
     "experiments/performance_ideas/N07/streamed_histogram.mojo",
     "experiments/performance_ideas/N07/check.mojo",
-    "gemm/experiments/native_build.py"
+    "gemm/experiments/native_build.py",
+    "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
+    "experiments/performance_ideas/N07/production_check.mojo"
   ],
   "candidate_defines": [],
   "baseline_defines": [],
@@ -46,7 +48,8 @@
     "exact intermediate outputs and poison control",
     "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
     "Native harness instantiates explicit control and candidate; all compared cells and poison/failure gates required",
-    "Build target/column must match actual device; CPU identity uses independent host references and separately owed host caller qualification, not a GPU DeviceContext host run"
+    "Build target/column must match actual device; CPU identity uses independent host references and separately owed host caller qualification, not a GPU DeviceContext host run",
+    "Production fixed-point weighted fits + actual stream enqueue reach and independent percell histograms; native production_check baseline/candidate require separate compile_matrix arms"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
   "blocker": null,
