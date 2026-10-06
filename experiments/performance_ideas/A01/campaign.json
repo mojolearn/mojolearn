@@ -1,0 +1,68 @@
+{
+  "id": "A01",
+  "arms": [
+    {
+      "name": "current",
+      "defines": []
+    },
+    {
+      "name": "mfma16_off",
+      "defines": [
+        "MOJOLEARN_IDN_GEMM_MFMA16_OFF=1"
+      ]
+    },
+    {
+      "name": "band_off",
+      "defines": [
+        "MOJOLEARN_IDN_GEMM_AMD_BAND_MFMA_OFF=1"
+      ]
+    }
+  ],
+  "fixtures": [
+    {
+      "MOJOLEARN_EXPERIMENT_M": 63,
+      "MOJOLEARN_EXPERIMENT_N": 66,
+      "MOJOLEARN_EXPERIMENT_K": 385
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 63,
+      "MOJOLEARN_EXPERIMENT_N": 66,
+      "MOJOLEARN_EXPERIMENT_K": 513
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 63,
+      "MOJOLEARN_EXPERIMENT_N": 66,
+      "MOJOLEARN_EXPERIMENT_K": 1025
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 127,
+      "MOJOLEARN_EXPERIMENT_N": 130,
+      "MOJOLEARN_EXPERIMENT_K": 385
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 127,
+      "MOJOLEARN_EXPERIMENT_N": 130,
+      "MOJOLEARN_EXPERIMENT_K": 513
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 127,
+      "MOJOLEARN_EXPERIMENT_N": 130,
+      "MOJOLEARN_EXPERIMENT_K": 1025
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 255,
+      "MOJOLEARN_EXPERIMENT_N": 258,
+      "MOJOLEARN_EXPERIMENT_K": 385
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 255,
+      "MOJOLEARN_EXPERIMENT_N": 258,
+      "MOJOLEARN_EXPERIMENT_K": 513
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 255,
+      "MOJOLEARN_EXPERIMENT_N": 258,
+      "MOJOLEARN_EXPERIMENT_K": 1025
+    }
+  ]
+}

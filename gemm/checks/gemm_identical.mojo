@@ -651,7 +651,8 @@ def _leaf_at(t: Int, p_count: Int) -> Int:
 # ===========================================================================
 
 
-def identical_gemm_flat_kernel(
+@always_inline
+def _flat_cell_body(
     c: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
@@ -664,6 +665,7 @@ def identical_gemm_flat_kernel(
     a_sp_in: Int32,
     b_sp_in: Int32,
     b_sj_in: Int32,
+    cell_in: Int32,
 ):
     """`C[i, j]` for one thread: every leaf, then the tree, all in registers.
 
@@ -694,7 +696,7 @@ def identical_gemm_flat_kernel(
         if k <= 0:
             p_count = 0
 
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var cell = Int(cell_in)
     if cell >= m * n:
         return
     var i = cell // n
@@ -740,6 +742,26 @@ def identical_gemm_flat_kernel(
     # between the leaf partial and memory (contract 7.3); at `P == 0` it
     # stores the `+0.0` section 8 requires to be written rather than skipped.
     c.unsafe_store(cell, ftz(out))
+
+
+def identical_gemm_flat_kernel(
+    c: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    leaf_in: Int32,
+    p_in: Int32,
+    a_si_in: Int32,
+    a_sp_in: Int32,
+    b_sp_in: Int32,
+    b_sj_in: Int32,
+):
+    # Shared per-cell arithmetic; grid changes only select a cell/job.
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    _flat_cell_body(c,a,b,m_in,n_in,k_in,leaf_in,p_in,a_si_in,a_sp_in,
+                    b_sp_in,b_sj_in,Int32(cell))
 
 
 # ===========================================================================
@@ -7054,6 +7076,12 @@ def _shipped_body_kpack_hg[
             else:
                 # `-D MOJOLEARN_GEMM_NV_FS4_OFF` keeps the profile-wide stack.
                 comptime if not is_defined["MOJOLEARN_GEMM_NV_FS4_OFF"]():
+                    comptime if is_defined["MOJOLEARN_IDN_GEMM_FS2"]():
+                        if gemm_kpack_fold_slots_for(
+                            contract_partition(k)[1], gemm_default_ksplit_leaves(m,n,k)
+                        ) == 2:
+                            _kpack_hg_run_with_ws[2,SAB](ctx,c,a,b,ws,m,n,k,op)
+                            return
                     if gemm_kpack_fold_slots_for(
                         contract_partition(k)[1], gemm_default_ksplit_leaves(m, n, k)
                     ) == 4:
@@ -7140,6 +7168,15 @@ def identical_gemm_shipped_into(
     Row above 0 (NVIDIA): `identical_gemm_shipped_at_row_into[False]` at the
     row. Row 0 (AMD until the MI300X leg decides, Apple, every other column):
     the old line, and the ksplit path is not compiled at all."""
+    # A05: halve per-thread row accumulators to shorten register live ranges.
+    # Forced opt-in isolates resource changes; no measured default or size rule.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE"]():
+        _kpack_run[
+            TUNED_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS,
+            GEMM_KPACK_FS, False, GEMM_KPACK_PAD, GEMM_KPACK_ALIGN,
+            0, True, True,
+        ](ctx,c,a,b,m,n,k,op,0)
+        return
     comptime if GEMM_BODY_KPACK_HG:
         _shipped_body_kpack_hg[False](ctx, c, a, b, ws, m, n, k, op)
         return
@@ -7744,7 +7781,13 @@ comptime AMD_SHORT_K_MAX = 1024
 #: the packed page. `VEC` (4) turns the 128-word group stride of the 128x128
 #: geometry into 132, `4 mod 32`, so the per-step B loads of a warp's 16
 #: column threads spread over eight bank groups (the kernel's docstring).
-comptime GEMM_KPACK_PAD = TUNED_VECLEN
+# A03: physical LDS stride experiment only. Vector-aligned padding leaves
+# every logical staged address and the accumulator traversal unchanged.
+# Compare 0/4/8 words; resource counters decide, never dataset dimensions.
+comptime GEMM_KPACK_PAD = (
+    get_defined_int["MOJOLEARN_IDN_GEMM_LDS_PAD_WORDS", TUNED_VECLEN]()
+    if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else TUNED_VECLEN
+)
 #: DEVIATION 2703, `kpack_padv`: the shared page alignment in bytes at which
 #: the per-step loads become `ld.shared.v4` (brief section 15).
 comptime GEMM_KPACK_ALIGN = 16
@@ -7879,6 +7922,12 @@ def gemm_kpack_fold_slots_for(p_count: Int, group_leaves: Int) -> Int:
     var bound = p_count
     if group_leaves > 0 and group_leaves < bound:
         bound = group_leaves
+    # N02: two levels are sufficient for at most two logical leaves:
+    # the second push carries into level1. This proof depends on logical
+    # contraction/group bounds only and holds across neighboring outputs.
+    comptime if is_defined["MOJOLEARN_IDN_GEMM_FS2"]():
+        if bound <= 2:
+            return 2
     if bound <= 8:
         return 4
     if bound <= 128:
@@ -8124,7 +8173,7 @@ def identical_gemm_kpack_kernel[
     comptime assert (
         FS >= GEMM_FOLD_LEVELS
         or is_defined["MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL"]()
-        or (TARGET_COLUMN == COLUMN_NVIDIA and (FS == 4 or FS == 8))
+        or (TARGET_COLUMN == COLUMN_NVIDIA and (FS == 4 or FS == 8 or (FS == 2 and is_defined["MOJOLEARN_IDN_GEMM_FS2"]())))
     ), (
         "identical_gemm_kpack_kernel: the local fold stack must cover the"
         " profile cap CONTRACT_MAX_LEAVES (smaller stacks are trial-only and"

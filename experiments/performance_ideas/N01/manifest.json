@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "id": "N01",
+  "title": "Isolate packed64 body tiles and their interaction",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "gemm/experiments/profile_campaign.py",
+    "gemm/experiments/profile_check.mojo",
+    "gemm/checks/gemm_identical.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_GEMM_KPACK_RPT4=1",
+    "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY=1",
+    "MOJOLEARN_GEMM_KPACK_RPT4=1",
+    "MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY=1",
+    "MOJOLEARN_IDN_GEMM_NV_STEP_KPACK_OFF=1"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/N01/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/N01/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--run-only"
+  ],
+  "validation_paths": [
+    "gemm/checks/gemm_step_arms_check.mojo",
+    "core/gemm_identity_check.mojo"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host output bits",
+    "exact intermediate outputs and poison control",
+    "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
+    "Campaign receipt contains explicit baseline and independently compiled candidate arms; do not rebuild for run-only"
+  ],
+  "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
+  "blocker": null,
+  "build_uses_compile_slot": true,
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/gemm/experiments/profile_campaign.py",
+    "{repo}/experiments/performance_ideas/N01/campaign.json",
+    "--evidence",
+    "{output}",
+    "--vendor",
+    "{vendor}",
+    "--build-only"
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "id": "N04",
+  "source": "gemm/experiments/profile_check.mojo",
+  "arms": [
+    {
+      "name": "aligned_plain",
+      "defines": [
+        "MOJOLEARN_GEMM_ARM_TRIAL=1"
+      ],
+      "environment": {
+        "MOJOLEARN_GEMM_ARM": "kpack_padv"
+      }
+    },
+    {
+      "name": "gather",
+      "defines": [
+        "MOJOLEARN_GEMM_ARM_TRIAL=1"
+      ],
+      "environment": {
+        "MOJOLEARN_GEMM_ARM": "kpack_gs"
+      }
+    },
+    {
+      "name": "gather_hwfold",
+      "defines": [
+        "MOJOLEARN_GEMM_ARM_TRIAL=1"
+      ],
+      "environment": {
+        "MOJOLEARN_GEMM_ARM": "kpack_hg"
+      }
+    }
+  ],
+  "fixtures": [
+    {
+      "MOJOLEARN_EXPERIMENT_M": 63,
+      "MOJOLEARN_EXPERIMENT_N": 131,
+      "MOJOLEARN_EXPERIMENT_K": 257
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 1025,
+      "MOJOLEARN_EXPERIMENT_N": 67,
+      "MOJOLEARN_EXPERIMENT_K": 513
+    },
+    {
+      "MOJOLEARN_EXPERIMENT_M": 127,
+      "MOJOLEARN_EXPERIMENT_N": 255,
+      "MOJOLEARN_EXPERIMENT_K": 4097
+    }
+  ]
+}
