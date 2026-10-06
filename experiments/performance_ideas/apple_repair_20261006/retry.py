@@ -21,6 +21,7 @@ MAX_SECONDS = 300
 RECIPES = {
     ('algos/lars/istella/rows=full', 'sklearn-cpu'): 'reg-istella',
     ('algos/lars-stable/istella/rows=full', 'sklearn-cpu'): 'reg-istella',
+    ('algos/lars-direct/istella/rows=full', 'sklearn-cpu'): 'reg-istella',
     ('algos/dart/istella/rows=full', 'xgboost-cpu'): 'cls-istella',
     ('algos/dart-reg/istella/rows=full', 'xgboost-cpu'): 'reg-istella',
 }
@@ -47,7 +48,7 @@ def coverage(board_path, race_id, arm):
     if (not quality or quality.get('finite') is False or quality.get('error')
             or any(isinstance(value, float) and not math.isfinite(value) for value in quality.values())):
         return dict(status='FAILED_QUALITY', **details)
-    if '/lars-stable/' in race_id and quality.get('r2', -math.inf) < 0:
+    if any('/'+lane+'/' in race_id for lane in ('lars-stable', 'lars-direct')) and quality.get('r2', -math.inf) < 0:
         return dict(status='FAILED_QUALITY', **details)
     receipts = cell.get('state_receipts', [])
     if (len(receipts) != 1 or receipts[0].get('output_status') != 'ok'
@@ -77,7 +78,8 @@ def main():
     failed_raw = args.failed_result.read_bytes()
     failed = json.loads(failed_raw)
     stabilization = args.race == 'algos/lars-stable/istella/rows=full'
-    original_race = RACE if stabilization else args.race
+    direct = args.race == 'algos/lars-direct/istella/rows=full'
+    original_race = RACE if stabilization or direct else args.race
     if (failed.get('race') != original_race or failed.get('arm') != args.arm
             or not (str(failed.get('status', '')).startswith('FAILED')
                     or failed.get('status') in ('BUDGET_LIMIT', 'NOT_RUN_BUDGET_EXHAUSTED'))):
@@ -136,6 +138,11 @@ def main():
         result['recipe_change'] = dict(original_race=original_race,
                                       eps_before=2.0**-52, eps_after=2.0**-26,
                                       scope='Separate opt-in recipe; historical LARS unchanged')
+    if direct:
+        result['recipe_change'] = dict(original_race=original_race,
+                                      eps_before=2.0**-52, eps_after=2.0**-52,
+                                      precompute_before='auto', precompute_after=False,
+                                      scope='Separate sklearn-only direct-X recipe; other arms unsupported')
     # Waiting for the active batch also consumes the inherited total budget.
     # There is no new two-hour clock when this process acquires the machine.
     with (args.runtime / 'gpu.lock').open('a') as lock:
@@ -184,7 +191,8 @@ def main():
         allowance = min(args.max_seconds, deadline-time.time())
         if allowance <= 0:
             return finish(dict(result, status='NOT_RUN_BUDGET_EXHAUSTED', elapsed_seconds=0))
-        driver = 'lars_stable_board.py' if stabilization else 'selected_board.py'
+        driver = ('lars_direct_board.py' if direct else
+                  ('lars_stable_board.py' if stabilization else 'selected_board.py'))
         command = [python, '-u', str(Path(__file__).with_name(driver)),
                    '--vendor', 'apple', '--modes', 'identical', '--families', 'algos',
                    '--rows', 'full', '--rounds', '1', '--python-env', python, '--skip-install',
