@@ -179,7 +179,7 @@ LANES = ("lm-train-step", "lm-forward", "gemm",
          "mamba1-forward", "mamba1-infer", "mamba2-forward", "mamba2-infer",
          "mamba3-forward", "mamba3-infer",
          "samba-train-step", "samba-forward", "samba-infer",
-         "mlp-train-step", "mlp-forward", "mlp-infer",
+         "mlp-train-step", "mlp-infer",
          # 2026-09-29: the byte LM's CPU inference and CPU training step, and the
          # bf16 and int8 GEMM profiles (SmallByteLanguageModelTrainer IS
          # LanguageModelTrainer, raced by lm-train-step and lm-forward)
@@ -191,7 +191,7 @@ MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "mamba2-forward": "mamba2", "mamba2-infer": "mamba2",
             "mamba3-forward": "mamba3", "mamba3-infer": "mamba3",
             "samba-train-step": "samba", "samba-forward": "samba", "samba-infer": "samba",
-            "mlp-train-step": "mlp", "mlp-forward": "mlp", "mlp-infer": "mlp",
+            "mlp-train-step": "mlp", "mlp-infer": "mlp",
             "lm-infer": "lm", "lm-host-train-step": "lm", "gemm-bf16": "gemm", "gemm-int8": "gemm"}
 TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-train-step")
 #: Where OUR class runs: the *Inference classes are the host binding.
@@ -248,8 +248,8 @@ NOT_COVERED = [
     "The blocks' backward (the Mamba and TransformerBlock VJPs), their decode `step`, ragged "
     "`lengths` and the carried-state forward are public and not raced; only a zero-state "
     "forward is.",
-    "The mlp-forward GPU lane and explicit session operation are newly authored; "
-    "their existence does not establish any completed measurement or model-quality qualification.",
+    "SmallMLPTrainer.predict_logits (the GPU forward of the 8-16-3 MLP) is not raced; "
+    "MLPInference (its CPU forward) and the training step are.",
     "The GPT-3-small target shape is not on the board (the LM lanes use the smaller control "
     "shape so one shape runs on every box, a 16 GB Mac included).",
 ]
@@ -442,8 +442,6 @@ LANE_TEXT = {
                     "the same stack twin on the CPU"),
     "mlp-train-step": ("mojolearn.SmallMLPTrainer(w1, b1, w2, b2).train_step(X, y)",
                        "F.linear, ReLU, F.linear; mean CE; backward; torch.optim.AdamW step"),
-    "mlp-forward": ("mojolearn.SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X)",
-                    "shared-weight Linear/ReLU/Linear forward, host input to consumed logits"),
     "mlp-infer": ("mojolearn.MLPInference(w1, b1, w2, b2).predict_logits(X) (CPU host binding)",
                   "F.linear, ReLU, F.linear on the CPU"),
 }

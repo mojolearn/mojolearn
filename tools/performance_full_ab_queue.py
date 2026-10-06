@@ -133,6 +133,9 @@ def validate_result(data, job, config, arm, phase, artifacts):
         raise ValueError('Model state must explicitly be CAPTURED or UNAVAILABLE')
     if data.get('loaded_artifacts') != artifacts[arm]:
         raise ValueError('Workload did not attest expected loaded artifact hashes')
+    if job.get('master_selection'):
+        from six_lane_evidence import validate_master_result
+        data['master_qualification'] = validate_master_result(data, job, config, arm, phase)
     return dict(output_sha256=data['output_sha256'], model_state=model,
                 timings=timings, model_identity_available=model['status'] == 'CAPTURED')
 
@@ -203,7 +206,7 @@ def run(config, root, retry_failed=False):
                 substitutions = {'output': str(output), 'phase': phase, 'arm': arm}
                 argv = [part.format_map(substitutions) for part in spec['argv']]
                 inherited = dict(os.environ)
-                if job.get('neural_selection'):
+                if job.get('neural_selection') or job.get('master_selection'):
                     # Clean experimental state before applying the explicitly
                     # recorded worker setup and frozen A/B controls. Bindings
                     # read many switches once, at import or first use.

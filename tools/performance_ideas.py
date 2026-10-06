@@ -531,6 +531,9 @@ def main(argv: list[str] | None = None) -> int:
     # rules and full-operation queue adapter. Share that implementation instead
     # of copying 60 manifests and letting their controls drift from the kernels.
     arguments = sys.argv[1:] if argv is None else argv
+    if arguments[:1] == ["master"]:
+        from six_lane_ab import main as master_main
+        return master_main(arguments[1:])
     if arguments and arguments[0] == "neural":
         from neural_identical_ideas import main as neural_main
         return neural_main(arguments[1:])

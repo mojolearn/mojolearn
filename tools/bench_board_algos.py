@@ -1843,6 +1843,8 @@ def synthetic_series(kind, n_series, n_obs, seed=SEED):
 
 def _aft_full_tree_workload(lane):
     enabled = os.environ.get("MOJOLEARN_AFT_FULL_TREE_WORKLOAD") == "1"
+    if enabled:
+        raise ValueError("integration benchmark freeze forbids removing existing tree caps; coverage remains pending")
     if enabled and lane not in AFT_FULL_TREE_LANES:
         raise ValueError("full-tree-workload is restricted to the named tree estimator lanes")
     return enabled
@@ -1913,6 +1915,7 @@ def prep(args):
     cap = int(args.max_rows) if args.max_rows else None
     os.makedirs(args.data, exist_ok=True)
     if getattr(args, "full_tree_workload", False):
+        raise ValueError("integration benchmark freeze forbids --full-tree-workload; retain the saved race")
         return _aft_prepare_full_tree_blocks(args, lanes, datasets)
     base = {"rule": "tools/bench_board_algos.py prep", "smoke_max_rows": cap, "seed": SEED}
     need = set()
@@ -5090,6 +5093,7 @@ def race(args):
         if frozen_config is not None:
             cmd += ["--neural-ab-config", frozen_config]
         if getattr(args, "full_tree_workload", False):
+            raise ValueError("integration benchmark freeze forbids --full-tree-workload; retain the saved race")
             cmd.append("--full-tree-workload")
         env = _worker_env(arm)
         env.update(env_extra)
@@ -5291,6 +5295,7 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     if getattr(args, "full_tree_workload", False):
+        raise ValueError("integration benchmark freeze forbids --full-tree-workload; retain the saved race")
         if getattr(args, "smoke_rows", 0) or getattr(args, "max_rows", 0):
             raise ValueError("full-tree-workload is incompatible with row caps")
         if os.environ.get("MOJOLEARN_ALGOS_SMOKE_ROWS"):

@@ -331,14 +331,16 @@ def run(args, recipe):
                     inf = module.infer_runner(w["lane"], runner, arrays)
                     inf.call(); inf.sync()
                     inference_outputs = inf.outputs()
-                    inference_digests = consume(inference_outputs, w["required_inference_outputs"])
                     inferred = True
                 if not inferred:
                     raise ValueError("Recipe requires a separate inference operation")
             infer_done = clock_ns()
             outputs = runner.outputs()
-            digests = consume(outputs, w["required_outputs"])
             end = clock_ns()
+            # Output transfer/completion is timed; hashing and reporting are not.
+            digests = consume(outputs, w["required_outputs"])
+            if inference_outputs:
+                inference_digests = consume(inference_outputs, w["required_inference_outputs"])
             sample = {"phase": phase, "excluded_warmup": phase == "warmup",
                       "whole_operation_ms": milliseconds(end,t0),
                       "preparation_ms": milliseconds(prep_done,t0),
@@ -361,11 +363,13 @@ def run(args, recipe):
             start = clock_ns()
             if w["family"] == "classical":
                 inf.call(); inf.sync()
-                digest = consume(inf.outputs(), w["required_inference_outputs"])
+                repeated_outputs = inf.outputs()
             else:
                 runner.infer()
-                digest = consume(runner.outputs(), w["required_outputs"])
-            repeated_inference = {"whole_operation_ms": milliseconds(clock_ns(),start),
+                repeated_outputs = runner.outputs()
+            repeated_end = clock_ns()
+            digest = consume(repeated_outputs, w.get("required_inference_outputs", w["required_outputs"]))
+            repeated_inference = {"whole_operation_ms": milliseconds(repeated_end,start),
                                   "scope": "same fitted estimator, full query split", **digest}
         resource_policy["effective_pools_after_workload"] = threadpool_info()
         results.append({"key": w["key"], "status": "EXECUTED_NOT_QUALIFIED" if timed else "CAPTURED_NOT_QUALIFIED", "samples": samples,

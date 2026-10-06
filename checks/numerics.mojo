@@ -3,6 +3,7 @@
 """What may vary between backends, and what may not."""
 
 from std.sys.compile import is_defined
+from core.six_lane_experiment_guards import SIX_LANE_CONFIGURATION_OK
 
 
 

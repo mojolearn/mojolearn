@@ -820,7 +820,7 @@ comptime NN60_BLOCK_VIEWS = (
     and is_defined["MOJOLEARN_NN60_BLOCK_VIEWS"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS
+comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS
 comptime BYTE_LM_EMB_HEAD_VIEWS = (
     (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS)
     and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
@@ -830,7 +830,6 @@ comptime BYTE_LM_EMB_HEAD_VIEWS = (
 # Only aliases change; every gradient writer keeps the same arithmetic.
 # Both parameter and gradient views are rebound before each use, including
 # after the transactional optimizer swaps param with shadow_p. Unverified.
-comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or IDN_LM_PARAM_VIEWS
 
 
 def _bind_emb_head(ctx: DeviceContext, mut tb: ByteBuffers, config: ByteConfig) raises:
@@ -1422,12 +1421,11 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
                     norm1_ready=norm1_ready,
-                    retain_decode_cache=not IDN_TRAIN_NO_DECODE_CACHE,
                     next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not NN28_DEAD_TRAINING_CACHE)
+                    retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
@@ -1437,12 +1435,11 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
                     norm1_ready=norm1_ready,
-                    retain_decode_cache=not IDN_TRAIN_NO_DECODE_CACHE,
                     next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(tr.weights[layer + 1].eps),
-                    retain_kv_cache=not NN28_DEAD_TRAINING_CACHE)
+                    retain_kv_cache=not (NN28_DEAD_TRAINING_CACHE or IDN_TRAIN_NO_DECODE_CACHE))
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
