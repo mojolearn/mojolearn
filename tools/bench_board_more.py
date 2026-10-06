@@ -314,7 +314,10 @@ LANE_CONFIG = {
                        "(its default); cuML its own"],
     },
     "gmm": {
-        "rows": "%d fit and %d held-out stride rows of the reg block (%s)" % (GMM_FIT, GMM_EVAL, _STD),
+        "rows": ("%d fit and %d held-out stride rows of the reg block (%s); "
+                 "an explicitly full_dataset_coverage recipe retains all fit/eval rows")
+                % (GMM_FIT, GMM_EVAL, _STD),
+        "opponent_precision": "scikit-learn receives the same values promoted to float64 inside the fit clock; original float32 covariance failure retained",
         "params": "n_components=8, covariance_type='full', tol=1e-3, reg_covar=1e-6 on taxi and "
                   "3e-3 on Istella-S (GMM_REG_COVAR), max_iter=100, "
                   "init_params='kmeans', n_init=1, warm_start=False, random_state=7",
@@ -713,7 +716,7 @@ def shape_desc(D):
                      for k, v in sorted(D.items()))
 
 
-def lane_arrays(lane, B):
+def lane_arrays(lane, B, rec=None):
     """The arrays one lane reads from its block, subsets taken by stride (the
     same rows for every arm and for the conductor's quality pass)."""
     import numpy as np
@@ -739,6 +742,15 @@ def lane_arrays(lane, B):
     if lane in ("spectral", "agglomerative"):
         return {"X": sub(X, CLUSTER_ROWS)}
     if lane == "gmm":
+        if (rec or {}).get("full_dataset_coverage") is True:
+            # An explicitly complete input recipe must not regain the legacy
+            # diagnostic GMM row caps in either the worker or its quality pass.
+            # Keep the same constant-column policy on every measurement arm.
+            if (rec.get("fit_rows") != [0, X.shape[0]]
+                    or rec.get("fit_rows_available") != X.shape[0]
+                    or rec.get("eval_rows_available") != Xq.shape[0]):
+                raise ValueError("Full GMM recipe does not attest complete fit/eval rows")
+            return drop_constant_columns({"X": X, "Xq": Xq})
         return drop_constant_columns({"X": sub(X, GMM_FIT), "Xq": sub(Xq, GMM_EVAL)})
     if lane in ("gpr", "gpc"):
         return {"X": sub(X, GP_FIT), "y": sub(y, GP_FIT), "Xq": sub(Xq, GP_EVAL), "yq": sub(yq, GP_EVAL)}
@@ -1130,7 +1142,16 @@ def _build_sklearn(lane, D, rec, S):
         make = lambda: GaussianMixture(n_components=GMM_COMPONENTS, covariance_type="full", tol=1e-3,  # noqa: E731
                                        reg_covar=_gmm_reg_covar(rec), max_iter=100, init_params="kmeans", n_init=1,
                                        warm_start=False, random_state=SEED)
-        call = lambda: S.update(est=make().fit(X))  # noqa: E731
+        # Float32 covariance accumulation can lose positive definiteness even
+        # after standardization. The retained sklearn failure recommends its
+        # float64 path; promoting these same values changes no samples or
+        # estimator parameters. Include the conversion in the timed fit call.
+        info.update(input_dtype=str(X.dtype), fit_dtype="float64",
+                    input_conversion_inside_clock=True,
+                    fit_rows=int(X.shape[0]), eval_rows=int(D["Xq"].shape[0]))
+
+        def call():
+            S.update(est=make().fit(np.ascontiguousarray(X, dtype=np.float64)))
 
         def out():
             e = S["est"]
@@ -1439,7 +1460,7 @@ def worker(args):
             B = {k: np.ascontiguousarray(z[k]) for k in z.files}
         with open(block + ".json") as fh:
             rec = json.load(fh)
-        runner = build(args.lane, args.arm, lane_arrays(args.lane, B), rec)
+        runner = build(args.lane, args.arm, lane_arrays(args.lane, B, rec), rec)
         # the parameters this arm really got, read back from what it constructed
         params = _load("classical_two_datasets").params_record(runner.params)
     except BaseException as exc:  # noqa: BLE001 (SystemExit from a missing arm too)
@@ -1470,7 +1491,7 @@ def worker(args):
                     # Release the previous fitted device model before allocating
                     # its replacement, avoiding a transient double allocation.
                     runner = None
-                    runner = build(args.lane, args.arm, lane_arrays(args.lane, B), rec)
+                    runner = build(args.lane, args.arm, lane_arrays(args.lane, B, rec), rec)
                     runner.sync()
                 preparation_ms = (time.perf_counter() - whole_start) * 1000.0
                 t0 = time.perf_counter()
@@ -1770,7 +1791,7 @@ def race(args):
     with open(block + ".json") as fh:
         rec = json.load(fh)
     with np.load(block + ".npz") as z:
-        D = lane_arrays(lane, {k: z[k] for k in z.files})
+        D = lane_arrays(lane, {k: z[k] for k in z.files}, rec)
     shape = shape_desc(D)
     result = {"lane": lane, "dataset": ds, "block": rec, "shape": shape, "arms": {},
               "lane_config": LANE_CONFIG[lane], "rounds_requested": args.rounds,
