@@ -1,0 +1,111 @@
+{
+  "schema": "mojolearn.public-fitted-state-source-audit/1",
+  "reviewed_source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+  "scope": "Future measurement capture only. No product API/runtime changes, model executions, builds, numerical verification, or retrospective receipt upgrades.",
+  "sources": [
+    {
+      "path": "python/mojolearn/_expansion_linear.py",
+      "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957"
+    },
+    {
+      "path": "python/mojolearn/_array.py",
+      "sha256": "c51f4d86b0341e52a9fabc296e7589e51753732ab4b81fca0d10502f82a4267e"
+    },
+    {
+      "path": "x_linear/sgd.mojo",
+      "sha256": "6d41640fbc90179d2e57ed7f253aabfccb299df99947d90119d08922da687b16"
+    },
+    {
+      "path": "x_linear/bayes.mojo",
+      "sha256": "51cc8c2e4ec00254504c170068fdf1b31546406103ccba7291c89ac283d3e335"
+    },
+    {
+      "path": "bindings/_mojolearn_x_linear.mojo",
+      "sha256": "b6d51f3dccd6544d774b51ac575ddcf3ca98c8a2400598f686bdbfa9c21954bc"
+    }
+  ],
+  "contracts": [
+    {
+      "class": "mojolearn._expansion_linear.SGDRegressor",
+      "public_fields": [
+        "coef_",
+        "intercept_",
+        "n_features_in_",
+        "n_iter_",
+        "t_"
+      ],
+      "byte_encoding": {
+        "coef_": "original public Array float32 vector, copied through documented __array_interface__ without dtype conversion",
+        "intercept_": "original one-element public Array float32, unchanged dtype/bytes",
+        "remaining_scalars": "exact public Python int/float values; no reconstruction from predictions"
+      },
+      "fit_source": "SGDRegressor.fit; _sgd_fit exports coefficients, intercept, n_iter_; public t_ and n_features_in_ assigned there",
+      "prediction_source": "_LinearRegressorMixin.predict \u2192 _decision \u2192 _coef_block; reads coef_, intercept_, n_features_in_, fixed identity link; no retained native model handle",
+      "excluded_unsupported_operations": [
+        "warm_start=True, average=True, early_stopping=True: explicitly rejected by _sgd_refuse",
+        "No public partial_fit or optimizer-state resume API"
+      ],
+      "missing_native_apis_for_supported_contract": [],
+      "unsupported_extension_gap": "A future resume/partial_fit API would need its own optimizer/RNG-state contract; no such state is claimed here"
+    },
+    {
+      "class": "mojolearn._expansion_linear.PassiveAggressiveRegressor",
+      "public_fields": [
+        "coef_",
+        "intercept_",
+        "n_features_in_",
+        "n_iter_",
+        "t_"
+      ],
+      "byte_encoding": {
+        "coef_": "original public Array float32 vector, copied through documented __array_interface__ without dtype conversion",
+        "intercept_": "original one-element public Array float32, unchanged dtype/bytes",
+        "remaining_scalars": "exact public Python int/float values; no reconstruction from predictions"
+      },
+      "fit_source": "PassiveAggressiveRegressor.fit; _sgd_fit exports coefficients, intercept, n_iter_; public t_ and n_features_in_ assigned there",
+      "prediction_source": "_LinearRegressorMixin.predict \u2192 _decision \u2192 _coef_block; reads coef_, intercept_, n_features_in_, fixed identity link; no retained native model handle",
+      "excluded_unsupported_operations": [
+        "warm_start=True, average=True, early_stopping=True: explicitly rejected by _sgd_refuse",
+        "No public partial_fit or optimizer-state resume API"
+      ],
+      "missing_native_apis_for_supported_contract": [],
+      "unsupported_extension_gap": "A future resume/partial_fit API would need its own optimizer/RNG-state contract; no such state is claimed here"
+    },
+    {
+      "class": "mojolearn._expansion_linear.BayesianRidge",
+      "public_fields": [
+        "coef_",
+        "intercept_",
+        "n_features_in_",
+        "n_iter_",
+        "alpha_",
+        "lambda_"
+      ],
+      "byte_encoding": {
+        "coef_": "original public Array float32 vector, copied through documented __array_interface__ without dtype conversion",
+        "intercept_": "Python float as returned by fit",
+        "remaining_scalars": "exact public Python int/float values; no reconstruction from predictions"
+      },
+      "fit_source": "BayesianRidge.fit; _run/_run_array returns d+4 native outputs; x_linear/bayes.mojo:bayes_finish",
+      "prediction_source": "_LinearRegressorMixin.predict \u2192 _decision \u2192 _coef_block; reads coef_, intercept_, n_features_in_, fixed identity link; no retained native model handle",
+      "excluded_unsupported_operations": [
+        "predict(return_std=True): explicitly rejected by _bayes_refuse",
+        "compute_score=True: explicitly rejected; no sigma_/scores_ persisted"
+      ],
+      "missing_native_apis_for_supported_contract": [],
+      "unsupported_extension_gap": "Posterior covariance is temporary native workspace, not returned by d+4 output contract; a future supported return_std/export would need additional product/native APIs and a new review"
+    }
+  ],
+  "retention": "six_lane_evidence.capture_model calls public_fitted_state after clocks stop, then retain_values writes exact typed .model-state.json tree and .npy leaves. This public-attribute schema does not invent or claim an estimator save/load NPZ API.",
+  "fitted_state_boundary": "Every retained public fit output and supported inference control is included. Constructor recipe, runtime numeric mode, binding/compiler/target provenance remain separately recorded. Temporary native solver workspace is not retained by the estimator and is not a resumable optimizer checkpoint.",
+  "future_reaudit": "Exact loaded _expansion_linear.py SHA must match. Different classes/subclasses, altered source, absent attributes, scalar types, coefficient/intercept dtype or shape fail explicitly to UNAVAILABLE. Existing warmup/scored receipts and active/queued freezes are unchanged.",
+  "validation": {
+    "source_review": "complete",
+    "syntax_only": "ast.parse, no module import",
+    "whitespace": "git diff --check",
+    "model_runs": 0,
+    "numerical_verification_runs": 0,
+    "builds": 0,
+    "runtime_capture_execution": "NOT RUN; first future scored execution supplies runtime capture evidence"
+  }
+}
