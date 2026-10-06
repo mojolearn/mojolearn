@@ -17,8 +17,12 @@
   ],
   "baseline_defines": [],
   "build_argv": [
-    "bash",
-    "bindings/build_gbdt.sh"
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F12",
+    "--output",
+    "{output}/arms"
   ],
   "run_argv": [
     "{python}",
@@ -53,5 +57,10 @@
     "arena": [
       "MOJOLEARN_SYM_BUF_ARENA"
     ]
-  }
+  },
+  "binding": "gbdt",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
 }

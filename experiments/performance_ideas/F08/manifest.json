@@ -18,8 +18,12 @@
   ],
   "baseline_defines": [],
   "build_argv": [
-    "bash",
-    "bindings/build_byte_lm.sh"
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F08",
+    "--output",
+    "{output}/arms"
   ],
   "run_argv": [
     "{python}",
@@ -56,5 +60,10 @@
     "views": [
       "MOJOLEARN_AFN_LM_PARAM_VIEWS"
     ]
-  }
+  },
+  "binding": "byte_lm",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
 }

@@ -17,8 +17,12 @@
   ],
   "baseline_defines": [],
   "build_argv": [
-    "bash",
-    "bindings/build_x_decomp.sh"
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F02",
+    "--output",
+    "{output}/arms"
   ],
   "run_argv": [
     "{python}",
@@ -43,5 +47,10 @@
   ],
   "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
   "blocker": null,
-  "output_kind": "directory"
+  "output_kind": "directory",
+  "binding": "x_decomp",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
 }

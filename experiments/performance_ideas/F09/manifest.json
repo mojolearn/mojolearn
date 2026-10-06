@@ -15,8 +15,12 @@
   "candidate_defines": [],
   "baseline_defines": [],
   "build_argv": [
-    "bash",
-    "bindings/build_training.sh"
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F09",
+    "--output",
+    "{output}/arms"
   ],
   "run_argv": [
     "{python}",
@@ -40,5 +44,10 @@
   ],
   "timing_contract": "Eight whole head train steps through read of loss/gradients; requested logits measured separately; A full logits B chunked public API",
   "blocker": null,
-  "output_kind": "directory"
+  "output_kind": "directory",
+  "binding": "training",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
 }

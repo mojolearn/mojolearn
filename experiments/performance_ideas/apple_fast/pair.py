@@ -51,12 +51,14 @@ def main():
     for arm in ('A', 'B'):
         package = args.output / arm / 'package' / 'mojolearn'
         shutil.copytree(ROOT / 'python/mojolearn', package, ignore=shutil.ignore_patterns('*.so', '__pycache__'))
-        # Existing prerequisites are transport-only; retain all dependency hashes.
-        prerequisites = {}
-        for path in (ROOT / 'python/mojolearn').glob('*.so'):
-            if path.name != '_mojolearn_' + binding + '.so':
-                shutil.copy2(path, package / path.name)
-                prerequisites[path.name] = sha(path)
+        # Only exact-source FAST Apple prerequisites from the build receipt may
+        # enter the isolated package. Never copy arbitrary installed binaries.
+        prerequisites = manifest['dependencies']
+        for name, receipt in prerequisites.items():
+            path = args.arms / 'dependencies' / name
+            assert receipt['source_sha'] == source and receipt['numeric_mode'] == 'fast'
+            assert receipt['vendor'] == 'apple' and receipt['sha256'] == sha(path)
+            shutil.copy2(path, package / name)
         shutil.copy2(args.arms / (arm + '.so'), package / ('_mojolearn_' + binding + '.so'))
         env = dict(os.environ, PYTHONPATH=str(package.parent), MOJOLEARN_NUMERIC_MODE='fast',
                    MOJOLEARN_VENDOR='apple', OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1')

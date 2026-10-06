@@ -15,8 +15,12 @@
   "candidate_defines": [],
   "baseline_defines": [],
   "build_argv": [
-    "bash",
-    "bindings/build_byte_lm.sh"
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F03",
+    "--output",
+    "{output}/arms"
   ],
   "run_argv": [
     "{python}",
@@ -40,5 +44,10 @@
   ],
   "timing_contract": "Train step through consumed scalar, first step separate from repeated calls; A resident=False B resident=True; no new default",
   "blocker": null,
-  "output_kind": "directory"
+  "output_kind": "directory",
+  "binding": "byte_lm",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
 }

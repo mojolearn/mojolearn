@@ -16,8 +16,12 @@
   ],
   "baseline_defines": [],
   "build_argv": [
-    "bash",
-    "bindings/build_x_decomp.sh"
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F11",
+    "--output",
+    "{output}/arms"
   ],
   "run_argv": [
     "{python}",
@@ -49,5 +53,10 @@
     "grid": [
       "MOJOLEARN_DECOMP_FAST_TSQR_GRID"
     ]
-  }
+  },
+  "binding": "x_decomp",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
 }

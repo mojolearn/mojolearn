@@ -19,8 +19,12 @@
     "MOJOLEARN_RESAMPLE_FAST_GATHER"
   ],
   "build_argv": [
-    "bash",
-    "bindings/build_resample.sh"
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F04",
+    "--output",
+    "{output}/arms"
   ],
   "run_argv": [
     "{python}",
@@ -44,5 +48,10 @@
   ],
   "timing_contract": "Whole public resample through first read of every output; direct transport counted; no packed extra copy",
   "blocker": null,
-  "output_kind": "directory"
+  "output_kind": "directory",
+  "binding": "resample",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
 }

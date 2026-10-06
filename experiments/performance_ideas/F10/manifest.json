@@ -17,8 +17,12 @@
   ],
   "baseline_defines": [],
   "build_argv": [
-    "bash",
-    "bindings/build_mamba.sh"
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F10",
+    "--output",
+    "{output}/arms"
   ],
   "run_argv": [
     "{python}",
@@ -59,5 +63,10 @@
     "arena": [
       "MOJOLEARN_AFN_MAMBA_ARENA"
     ]
-  }
+  },
+  "binding": "mamba",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true
 }
