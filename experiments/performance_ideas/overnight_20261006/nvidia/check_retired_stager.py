@@ -33,4 +33,7 @@ with tempfile.TemporaryDirectory() as temp:
     errors=ns['publish_queues']()
     assert list(errors)==['specific'] and calls==['specific','default']
     assert normalized==['specific','default']
+    def broken_alert(*args):raise RuntimeError('simulated alert failure')
+    ns['notify']=broken_alert;calls.clear()
+    assert list(ns['publish_queues']())==['specific'] and calls==['specific','default']
 print('PASS retired route never SSHs, captured normalization retained, route failure does not block other route')
