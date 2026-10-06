@@ -24,10 +24,17 @@
     "evidence": "non-gemm-backlog/apple/identity/rf-comparison.json"
   },
   "et_apple_identity": {
-    "status": "FIXTURE_API_CORRECTION_RETRY_PENDING",
+    "status": "SAME_ARM_APPLE_HOST_IDENTICAL",
     "failure": "Original sharedmax_leaves keyword is RF-only; ET ref uses distinctmax_leaf_nodes. All failures occurred before fit, not numerical mismatches.",
     "corrected_commit": "5e04c02c1ca98838a8e31011ff833e758d929977",
     "gate": "Same ET arm model/pred bytes across vendors/host; baseline vsu16 RMSE/R2 separately. No asserted baseline/candidate model equality.",
-    "coverage": "6active k=d plus6inactive k=floor((d-1)/2); exactceil(d/2) boundary NOT covered. Full eligible regression fixtures istellareg/year; ETn_bins is not constructor parameter."
+    "coverage": "6active k=d plus6inactive k=floor((d-1)/2); exactceil(d/2) boundary NOT covered. Full eligible regression fixtures istellareg/year; ETn_bins is not constructor parameter.",
+    "captured_fits": 48,
+    "apple_vs_host_comparisons": 24,
+    "model_bits": "IDENTICAL within each arm",
+    "prediction_bits": "IDENTICAL within each arm",
+    "baseline_vs_candidate_changed_model_cases": 6,
+    "baseline_vs_candidate_rmse_delta_on_these_fixtures": 0.0,
+    "evidence": "non-gemm-backlog/apple/identity-et-retry/comparison.json"
   }
 }
