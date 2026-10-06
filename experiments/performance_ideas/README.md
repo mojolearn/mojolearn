@@ -1,5 +1,9 @@
 # Performance experiment implementations
 
+The [consolidated A/B experiment index](../AB_EXPERIMENT_INDEX.md) lists all
+114 registered cards with their files, plus existing IDENTICAL recipes,
+historical Apple FAST records and other A/B drivers.
+
 The shared catalog also registers the 54 source-only
 [Apple FAST classical candidates](../apple_fast_classical_20261006/README.md)
 as `AFCL-L01..L14`, `AFCL-G01..G14`, `AFCL-T01..T12` and `AFCL-P01..P14`.

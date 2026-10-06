@@ -1,5 +1,9 @@
 # Apple FAST classical ML A/B ideas — 2026-10-06
 
+See the [consolidated A/B experiment index](../AB_EXPERIMENT_INDEX.md) for every
+new card's implementation files, controls, callers and registration, together
+with the existing shared catalog and historical experiment records.
+
 This is a source-only experiment branch from `fd6cf8045`. The owner explicitly
 requested a new worktree, a thorough idea inventory before delegation, implementation,
 commit and push, and **no compilation, verification or measurement**. Those commands
