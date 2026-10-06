@@ -10,10 +10,10 @@ def exercise(args):
     from mojolearn import chunked_lm_head_loss,linear_forward,linear_backward,cross_entropy,SGD
     from mojolearn import _mojolearn_training as binding
     cases={}
-    for vocabulary in (1031,4099):
+    for vocabulary,logit_scale in ((1031,1),(4099,1),(1031,128)):
         rng=np.random.default_rng(619);rows,width=31,37
         hidden=rng.normal(size=(rows,width)).astype('float32')
-        w=rng.normal(0,.1,size=(vocabulary,width)).astype('float32')
+        w=rng.normal(0,.1*logit_scale,size=(vocabulary,width)).astype('float32')
         teacher=rng.normal(size=(vocabulary,width))
         targets=np.argmax(hidden.astype(float)@teacher.T,axis=1).astype('int32')
         targets[-1]=vocabulary-1  # vocabulary-tile tail must be observed
@@ -37,7 +37,7 @@ def exercise(args):
         # Independent test oracle checks stable normalization under tail targets.
         z=hidden.astype(float)@w.astype(float).T;z-=z.max(axis=1,keepdims=True)
         ref=float(np.mean(np.log(np.exp(z).sum(axis=1))-z[np.arange(rows),targets]))
-        cases[str(vocabulary)]=dict(contract=dict(rows=rows,width=width,vocab=vocabulary,steps=8,lr=.03,seed=619),
+        cases[f"{vocabulary}-scale{logit_scale}"]=dict(contract=dict(rows=rows,width=width,vocab=vocabulary,logit_scale=logit_scale,steps=8,lr=.03,seed=619),
              metrics=dict(final_loss=dict(value=final,rtol=1e-3,atol=1e-5),oracle_error=dict(value=abs(final-ref),rtol=1,atol=1e-5)),
              train_step_ms=times,learning_curve=curve,requested_logits_ms=logits_ms,
              nominal_logits_bytes=rows*vocabulary*4,candidate_workspace_policy='vocabulary tiles with required gradients')

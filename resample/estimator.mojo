@@ -2348,51 +2348,10 @@ comptime RESAMPLE_FAST_DEVICE_PERMUTE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and 
 def resample_permutation_gather_gpu(
     n: Int, count: Int, seed: UInt64, srcs: List[Int], dsts: List[Int], widths: List[Int],
 ) raises -> Bool:
-    comptime if RESAMPLE_GPU_GATHER and RESAMPLE_FAST_DEVICE_PERMUTE:
-        utils_validate(n, count, False)
-        if len(srcs) == 0 or len(srcs) != len(dsts) or len(srcs) != len(widths):
-            raise Error("resample: invalid permutation gather spans")
-        if count <= 0:
-            return False
-        for a in range(len(widths)):
-            if widths[a] <= 0 or max(n * widths[a], count * widths[a]) > 2147483647:
-                return False
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var rows = ctx.enqueue_create_buffer[DType.int32](n)
-        var scratch = ctx.enqueue_create_buffer[DType.int32](n)
-        var keys = ctx.enqueue_create_buffer[DType.uint64](n)
-        var key = resample_key(seed, RESAMPLE_KIND_UTILS_PERMUTE)
-        ctx.enqueue_function[utils_draw_kernel](
-            rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key), Int32(n), Int32(n), Int32(0),
-            grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1),
-        )
-        ctx.enqueue_function[permutation_positions_kernel](rows.unsafe_ptr(), Int32(n),
-            grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
-        var width = 1
-        var output_in_rows = True
-        while width < n:
-            if output_in_rows:
-                ctx.enqueue_function[permutation_merge_kernel](scratch.unsafe_ptr(), rows.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(width),
-                    grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
-            else:
-                ctx.enqueue_function[permutation_merge_kernel](rows.unsafe_ptr(), scratch.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(width),
-                    grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
-            output_in_rows = not output_in_rows
-            width *= 2
-        if output_in_rows:
-            resample_gather_grouped(ctx, rows, n, count, srcs, dsts, widths)
-        else:
-            resample_gather_grouped(ctx, scratch, n, count, srcs, dsts, widths)
-        _ = rows^
-        _ = scratch^
-        _ = keys^
-        _ = ctx^
-        return True
-    else:
-        return False
+    return resample_gather_gpu[False](n, count, seed, srcs, dsts, widths)
 
 
-def resample_gather_gpu(
+def resample_gather_gpu[REPLACE: Bool = True](
     n: Int, count: Int, seed: UInt64, srcs: List[Int],
     dsts: List[Int], widths: List[Int],
 ) raises -> Bool:
@@ -2400,7 +2359,9 @@ def resample_gather_gpu(
     Input/output copies are transport, not host row indexing. No retained pointers.
     """
     comptime if RESAMPLE_GPU_GATHER:
-        utils_validate(n, count, True)
+        comptime if not REPLACE and not RESAMPLE_FAST_DEVICE_PERMUTE:
+            return False
+        utils_validate(n, count, REPLACE)
         if len(srcs) == 0 or len(srcs) != len(dsts) or len(srcs) != len(widths):
             raise Error("resample: invalid gather array spans")
         if count <= 0:
@@ -2408,15 +2369,40 @@ def resample_gather_gpu(
         for a in range(len(widths)):
             if widths[a] <= 0 or max(n * widths[a], count * widths[a]) > 2147483647:
                 return False
-        var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE)
+        var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE if REPLACE else RESAMPLE_KIND_UTILS_PERMUTE)
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        var rows = ctx.enqueue_create_buffer[DType.int32](count)
-        var keys = ctx.enqueue_create_buffer[DType.uint64](1)
+        var draw_count = count if REPLACE else n
+        var rows = ctx.enqueue_create_buffer[DType.int32](draw_count)
+        var keys = ctx.enqueue_create_buffer[DType.uint64](1 if REPLACE else n)
         ctx.enqueue_function[utils_draw_kernel](
             rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
-            Int32(n), Int32(count), Int32(1),
-            grid_dim=(ceildiv(count, 256), 1, 1), block_dim=(256, 1, 1),
+            Int32(n), Int32(draw_count), Int32(1) if REPLACE else Int32(0),
+            grid_dim=(ceildiv(draw_count, 256), 1, 1), block_dim=(256, 1, 1),
         )
+        comptime if not REPLACE:
+            var scratch = ctx.enqueue_create_buffer[DType.int32](n)
+            ctx.enqueue_function[permutation_positions_kernel](rows.unsafe_ptr(), Int32(n),
+                grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
+            var width = 1
+            var output_in_rows = True
+            while width < n:
+                if output_in_rows:
+                    ctx.enqueue_function[permutation_merge_kernel](scratch.unsafe_ptr(), rows.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(width),
+                        grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
+                else:
+                    ctx.enqueue_function[permutation_merge_kernel](rows.unsafe_ptr(), scratch.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(width),
+                        grid_dim=(ceildiv(n, 256), 1, 1), block_dim=(256, 1, 1))
+                output_in_rows = not output_in_rows
+                width *= 2
+            if output_in_rows:
+                resample_gather_grouped(ctx, rows, n, count, srcs, dsts, widths)
+            else:
+                resample_gather_grouped(ctx, scratch, n, count, srcs, dsts, widths)
+            _ = scratch^
+            _ = rows^
+            _ = keys^
+            _ = ctx^
+            return True
         comptime if RESAMPLE_FAST_WAIT_PAIR:
             resample_gather_grouped(ctx, rows, n, count, srcs, dsts, widths)
             _ = rows^

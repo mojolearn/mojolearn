@@ -58,7 +58,7 @@ def training(cls,weights,opts,x):
     from mojolearn import SGD
     parameters={name:np.asarray(value).copy() for name,value in weights.items()}
     model=cls(parameters,**opts)
-    optimizer=SGD(lr=.001)
+    optimizer=SGD(list(parameters.values()),lr=.001,resident=False)
     losses=[];times=[];directional_errors=[]
     for step in range(3):
         output,forward_ms=consumed(lambda:model.forward(x))
@@ -79,7 +79,7 @@ def training(cls,weights,opts,x):
             reference=(float(np.mean(np.asarray(plus,float)**2))-float(np.mean(np.asarray(minus,float)**2)))/(2*h)
             vjp=float(np.sum(np.asarray(gradients['x'],float)*direction))
             directional_errors.append(abs(vjp-reference))
-        start=time.perf_counter_ns();optimizer.step(parameters,{name:gradients[name] for name in parameters})
+        start=time.perf_counter_ns();optimizer.step([gradients[name] for name in parameters])
         for value in parameters.values():np.asarray(value).tobytes()
         update_ms=(time.perf_counter_ns()-start)/1e6
         times.append(dict(forward_ms=forward_ms,backward_ms=backward_ms,update_ms=update_ms))
