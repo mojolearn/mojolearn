@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect frozen full PCA evidence and render it through the board tool.
+"""Collect frozen full PCA/resample evidence through the board tool.
 
 Only JSON/log files are fetched. Every attempt has its own immutable identity;
 failed attempts survive later successful freezes. This never runs a workload.
@@ -16,7 +16,7 @@ import subprocess
 import time
 
 from fast_quality_rule import judge
-from performance_full_ab_queue import validate_result
+from performance_full_ab_queue import validate_result, sha256_value
 import performance_measurement_board as board_tool
 
 
@@ -60,6 +60,9 @@ def normalized(receipt, path, run):
     cell['model_states'] = {arm: r.get('result', {}).get('model_state') for arm, r in scored.items()}
     cell['output_hashes'] = {arm: r.get('result', {}).get('output_sha256') for arm, r in scored.items()}
     cell['repeated_output_hashes'] = {arm: r.get('result', {}).get('repeated_output_sha256') for arm, r in scored.items()}
+    if idea in ('F04', 'F19'):
+        cell['indices_hashes'] = {arm: r.get('result', {}).get('indices_sha256') for arm, r in scored.items()}
+        cell['model_hash_policy'] = 'Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim'
     if receipt.get('status') == 'MEASUREMENT_FAILED' or any(r.get('error') or r.get('returncode') != 0 for r in records):
         cell['status'] = 'MEASUREMENT_FAILED'
         return cell
@@ -68,8 +71,8 @@ def normalized(receipt, path, run):
     try:
         if source != run['source_sha']:
             raise ValueError('Receipt differs from configured source freeze')
-        if workload.get('mode') != 'fast' or idea not in ('F01', 'F11'):
-            raise ValueError('Collector supports only declared FAST PCA workloads')
+        if workload.get('mode') != 'fast' or idea not in ('F01', 'F11', 'F04', 'F19'):
+            raise ValueError('Collector supports only declared FAST PCA/resample workloads')
         counts = [(r.get('phase'), r.get('arm')) for r in records]
         if sorted(counts) != sorted((phase, arm) for phase in ('warmup', 'scored') for arm in ('A', 'B')):
             raise ValueError('Require exactly one excluded warmup and scored run per arm')
@@ -83,23 +86,49 @@ def normalized(receipt, path, run):
         a, b = (scored[arm]['result'] for arm in ('A', 'B'))
         if a.get('idea') != idea or b.get('idea') != idea:
             raise ValueError('Result candidate differs from receipt')
-        errors = []
-        for data in (a, b):
-            quality = data['quality']
-            if quality.get('fitted_state_finite') is not True or quality.get('output_finite') is not True:
-                raise ValueError('Scored fitted state or output is not finite')
-            squared, norm = quality['reconstruction_squared_error'], quality['query_squared_norm']
-            if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
-                       for v in (squared, norm)) or squared < 0 or norm <= 0:
-                raise ValueError('Invalid reconstruction sums')
-            errors.append(math.sqrt(squared / norm))
-        if b.get('candidate_reached') is not True:
-            raise ValueError('Candidate mechanism was not reached')
-        # F01's retained caller contract uses relative L2 reconstruction error.
-        # Preserve F11's incomplete auxiliary quality coverage explicitly.
-        quality = judge(errors[0], errors[1], rtol=1e-3, atol=1e-6)
-        cell['quality'] = dict(reconstruction=quality, finite=True, candidate_reached=True,
-                               scope='full query relative L2 reconstruction; other oracle metrics pending')
+        if idea in ('F04', 'F19'):
+            if any(data.get('variant') != 'default' for data in (a, b)):
+                raise ValueError('Only the default replacement-resample variant is covered')
+            for data in (a, b):
+                if data['model_state'].get('status') != 'UNAVAILABLE':
+                    raise ValueError('Stateless resampling must not claim fitted model identity')
+                if not sha256_value(data.get('indices_sha256')) or not sha256_value(data.get('repeated_output_sha256')):
+                    raise ValueError('Complete indices and repeated-output SHA256 required')
+                routes = data.get('reach', {}).get('gpu_paired_gather_returncodes')
+                if routes != [1, 1] or any(type(code) is not int for code in routes):
+                    raise ValueError('Cold and repeated GPU paired gather must both execute')
+            exact = {
+                'complete_output_equal': a['output_sha256'] == b['output_sha256'],
+                'public_indices_equal': a['indices_sha256'] == b['indices_sha256'],
+                'repeated_output_equal': a['repeated_output_sha256'] == b['repeated_output_sha256'],
+                'cold_equals_repeated': all(data['output_sha256'] == data['repeated_output_sha256'] for data in (a, b)),
+                'own_row_oracle': all(data['quality'].get('exact_gather_matches_public_indices') is True for data in (a, b)),
+                'own_repeated_oracle': all(data['quality'].get('repeated_output_exact') is True for data in (a, b)),
+                'candidate_baseline_oracle': b['quality'].get('baseline_exact_match') is True,
+            }
+            quality = dict(ok=all(exact.values()), **exact)
+            cell['quality'] = dict(exact_resample=quality, actual_gpu_gather=True,
+                                   scope='all gathered rows, public seeded indices, cold/repeated A/B output')
+            cell['indices_hashes'] = {arm: scored[arm]['result']['indices_sha256'] for arm in ('A', 'B')}
+            cell['model_hash_policy'] = 'Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim'
+        else:
+            errors = []
+            for data in (a, b):
+                quality = data['quality']
+                if quality.get('fitted_state_finite') is not True or quality.get('output_finite') is not True:
+                    raise ValueError('Scored fitted state or output is not finite')
+                squared, norm = quality['reconstruction_squared_error'], quality['query_squared_norm']
+                if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+                           for v in (squared, norm)) or squared < 0 or norm <= 0:
+                    raise ValueError('Invalid reconstruction sums')
+                errors.append(math.sqrt(squared / norm))
+            if b.get('candidate_reached') is not True:
+                raise ValueError('Candidate mechanism was not reached')
+            # F01's retained caller contract uses relative L2 reconstruction error.
+            # Preserve F11's incomplete auxiliary quality coverage explicitly.
+            quality = judge(errors[0], errors[1], rtol=1e-3, atol=1e-6)
+            cell['quality'] = dict(reconstruction=quality, finite=True, candidate_reached=True,
+                                   scope='full query relative L2 reconstruction; other oracle metrics pending')
         hashes = [data['model_state'].get('sha256') for data in (a, b)]
         cell['model_hashes_equal'] = hashes[0] == hashes[1] if all(hashes) else None
         cell['output_hashes_equal'] = a['output_sha256'] == b['output_sha256']
@@ -110,15 +139,21 @@ def normalized(receipt, path, run):
                     baseline_machine=run['machine'], candidate_machine=run['machine'],
                     baseline_source_sha=source, candidate_source_sha=source,
                     artifact_hashes=dict(baseline=artifacts['A'], candidate=artifacts['B']))
-        cell['pending_coverage'] = ['all affected estimator workloads and interacting configurations',
-                                    'full-data singular/noise oracle quality']
-        if idea == 'F11':
-            cell['variant'] = 'compensated-pca'
-            cell['pending_coverage'].append('downstream LLE full-workload mapping and quality')
-        else:
+        if idea in ('F04', 'F19'):
             cell['variant'] = 'default'
-            cell['equivalent_candidate_mapping'] = dict(id='F02', variant='pca',
-                reason='Same corrected job001/job011 pair and PCA workload; reuse evidence, no additional execution')
+            cell['pending_coverage'] = ['other affected public operations and interacting candidate combinations']
+            if idea == 'F19':
+                cell['pending_coverage'].append('F19 permutation variant is separate and remains unmeasured here')
+        else:
+            cell['pending_coverage'] = ['all affected estimator workloads and interacting configurations',
+                                        'full-data singular/noise oracle quality']
+            if idea == 'F11':
+                cell['variant'] = 'compensated-pca'
+                cell['pending_coverage'].append('downstream LLE full-workload mapping and quality')
+            else:
+                cell['variant'] = 'default'
+                cell['equivalent_candidate_mapping'] = dict(id='F02', variant='pca',
+                    reason='Same corrected job001/job011 pair and PCA workload; reuse evidence, no additional execution')
     except (KeyError, TypeError, ValueError) as exc:
         cell.update(status='RECEIPT_REJECTED', error=str(exc))
     return cell
@@ -172,8 +207,8 @@ def collect(config):
         outcomes.append(outcome)
     index = dict(cells=sorted(cells.values(), key=lambda c: c['measurement_id']),
                  machines=sorted(set(prior.get('machines', [])) | {run['machine'] for run in config['runs']}),
-                 notes=['Full PCA scored execution only; original failed attempts retained.',
-                        'FAST state/output hashes may differ; this is not an IDENTICAL comparison.',
+                 notes=['Full PCA/resample scored execution only; original failed attempts retained.',
+                        'FAST PCA state/output hashes may differ. Stateless resample requires exact seeded indices and outputs; no model identity claim.',
                         'No opponent ratios or default promotions. F11 downstream LLE and auxiliary oracle quality remain pending.'])
     atomic(prior_path, index)
     # Use the repository board tool for every generated board update.
