@@ -12,5 +12,9 @@ def run_race(ctx,race):
  R=pathlib.Path('/root/overnight-nvidia');q=json.loads((R/'repair-queue.json').read_text());p=pathlib.Path('/root/campaign-results/repairs/results.json');done=json.loads(p.read_text()) if p.exists() else {}
  if any(x['key'] not in done for x in q) or not (R/'CANDIDATES_SEALED').exists():raise SystemExit(75)
  return run(ctx,race)
+def arm_envs(args,vendor,out,log):
+ p=pathlib.Path('/root/overnight-nvidia/implicit-env-ready.json')
+ return {'implicit-gpu':json.loads(p.read_text())['python']} if p.exists() else {}
+b.setup_arm_venvs=arm_envs
 b.plan_races=plan;b.run_race=run_race
 sys.exit(b.main())

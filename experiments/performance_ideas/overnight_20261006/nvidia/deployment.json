@@ -2,11 +2,12 @@
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/nvidia",
   "deploy_role": "Frozen scripts for already-owned campaign. Local controllers resolve evidence root from their deployed file directory; deploy there, do not run from this archive.",
   "local_processes": {
-    "stream": 59834,
-    "tail_monitor": 59836,
+    "stream": 92033,
+    "tail_monitor": 83499,
     "health_watch": 32311,
     "normalizer": 34273,
-    "hold_release": 39421
+    "hold_release": 39421,
+    "opponent_publisher": 92035
   },
   "remote": {
     "specific": {
@@ -23,5 +24,15 @@
   "idle_seconds": 1800,
   "hold_expires_utc": "2026-10-06T05:15:00Z",
   "opponent_policy": "GPU-only shards; candidate arrivals preempt between races; default tail waits completed builds and no fresh claims; exact hardware/runtime provenance; no old RTX4090 timings reused",
-  "measurement_policy": "Existing identity accepted. Missing timing entrypoints only are built. Driver warmup+score runs once."
+  "measurement_policy": "Existing identity accepted. Missing timing entrypoints only are built. Driver warmup+score runs once.",
+  "updated": 1791264816.414171,
+  "harness_repairs": [
+    "8b0bdf4d4a7d145eec60e82f06b1f5a4ac05b948"
+  ],
+  "source_repairs": {
+    "I07": "47ff63bb319d52ab7416ee2edf1e45a69727b0bd",
+    "I06": "e80a1d0a0467d6c0723ba8cd233b66247832c63e"
+  },
+  "effective_shape_dedup": "binary hash, candidate id, arm, source-derived effective environment; never rewrite old tasks",
+  "runtime_notes": "Remote worker PIDs are historical; current repair-launch/status receipts in evidence are authoritative. CUDA13 implicit uses isolated per-arm environment and targeted ALS retry, no CPU fallback."
 }

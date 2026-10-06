@@ -1,0 +1,102 @@
+{
+  "A04": {
+    "AB_GROUPS": "65537"
+  },
+  "A07": {
+    "AB_ROWS": "100000",
+    "AB_FEATURES": "32"
+  },
+  "A08": {
+    "AB_ROWS": "100000",
+    "AB_FEATURES": "32",
+    "AB_CLUSTERS": "32"
+  },
+  "I02": {
+    "AB_M": "1024",
+    "AB_N": "1024",
+    "AB_K": "2048"
+  },
+  "I04": {
+    "AB_M": "1024",
+    "AB_N": "1024",
+    "AB_K": "2048"
+  },
+  "I06": {
+    "AB_LENGTH": "1024",
+    "AB_HEADS": "12",
+    "AB_KV_HEADS": "4"
+  },
+  "I07": {
+    "AB_LENGTH": "1024",
+    "AB_HEADS": "12",
+    "AB_KV_HEADS": "4"
+  },
+  "I08": {
+    "AB_LENGTH": "1024",
+    "AB_CASE": "1"
+  },
+  "I09": {
+    "AB_LENGTH": "1024",
+    "AB_FEATURES": "64"
+  },
+  "I10": {},
+  "I11": {
+    "AB_ROWS": "65536",
+    "AB_VOCAB": "4096",
+    "AB_FEATURES": "64"
+  },
+  "I12": {
+    "AB_ROWS": "100000",
+    "AB_FEATURES": "32"
+  },
+  "I13": {
+    "AB_ROWS": "100000",
+    "AB_DEGREE": "32"
+  },
+  "I14": {
+    "AB_ROWS": "100000"
+  },
+  "I15": {
+    "AB_ROWS": "100000",
+    "AB_QUERIES": "2000",
+    "AB_FEATURES": "8",
+    "AB_K": "8"
+  },
+  "I16": {
+    "AB_ROWS": "100000",
+    "AB_FEATURES": "33",
+    "AB_QUERIES": "128"
+  },
+  "I17": {
+    "AB_ROWS": "10000",
+    "AB_FEATURES": "17"
+  },
+  "I18": {
+    "AB_ROWS": "100000",
+    "AB_FEATURES": "32"
+  },
+  "I19": {
+    "AB_ROWS": "1000000"
+  },
+  "I20": {
+    "AB_ROWS": "100000",
+    "AB_QUERIES": "1024",
+    "AB_FEATURES": "8"
+  },
+  "I21": {
+    "AB_ROWS": "10000",
+    "AB_FEATURES": "17",
+    "AB_COMPONENTS": "9"
+  },
+  "I22": {
+    "AB_ROWS": "65537",
+    "AB_FEATURES": "33"
+  },
+  "I23": {
+    "AB_OBSERVATIONS": "4096"
+  },
+  "I24": {
+    "AB_ROWS": "1000000",
+    "AB_CLASSES": "33"
+  }
+}
