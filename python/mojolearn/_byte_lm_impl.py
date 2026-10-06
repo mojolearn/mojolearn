@@ -338,8 +338,9 @@ def _load(shape=None):
     # the GPU vendors; the install decides, so this module never imports the
     # CPU trainer adapter (cpu-gpu-cleanup n-pyneural).
     vendors = ('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal')
+    arithmetic_suffix = str(binding.byte_lm_arithmetic_suffix())
     if (int(binding.byte_lm_numeric_mode()) != _NATIVE_MODE_CODE[mode]
-            or str(binding.byte_lm_profile()) != PROFILE
+            or str(binding.byte_lm_profile()) != PROFILE + arithmetic_suffix
             or str(binding.byte_lm_vendor()) not in vendors):
         raise RuntimeError('Byte-LM requires the exact native profile, the selected IDENTICAL/FAST mode and CUDA/HIP/Metal vendor '
                            '(or, on a CPU-only install, the CPU byte LM binding)')
@@ -348,9 +349,15 @@ def _load(shape=None):
     if shape.profile != PROFILE:
         if not callable(getattr(binding, 'byte_lm_run_configured', None)) or not callable(getattr(binding, 'byte_lm_config_profile', None)):
             raise ImportError('Byte-LM binding lacks runtime shapes; rebuild bindings/build_byte_lm.sh')
-        if str(binding.byte_lm_config_profile(list(shape.native_shape))) != shape.profile:
+        if str(binding.byte_lm_config_profile(list(shape.native_shape))) != shape.profile + arithmetic_suffix:
             raise RuntimeError('Byte-LM native runtime shape/profile mismatch')
     return binding
+
+
+def _runtime_profile(shape, mode=None):
+    """Bind shape metadata to the arithmetic of the actual loaded binary."""
+    binding = _backend.binding(_EXTENSION, mode or _mode())
+    return shape.profile + str(binding.byte_lm_arithmetic_suffix())
 
 
 def _snapshot(state, copy=True):
@@ -378,7 +385,7 @@ def _validate_state(value):
     if not isinstance(value, dict) or set(value) != keys:
         raise ValueError('Byte-LM state has missing or unknown fields')
     shape = state_shape(value)
-    if (value['schema'] != _SCHEMA or value['profile'] != shape.profile or value['numeric_mode'] not in _NATIVE_MODE_CODE
+    if (value['schema'] != _SCHEMA or value['numeric_mode'] not in _NATIVE_MODE_CODE or value['profile'] != _runtime_profile(shape, value['numeric_mode'])
             or value['parameter_names'] != list(shape.parameter_names)
             or value['parameter_shapes'] != [list(shape) for shape in shape.parameter_shapes]  # glue: compares the model parameter shapes
             or value['parameter_offsets'] != list(shape.offsets)):
@@ -654,7 +661,7 @@ class SmallByteLanguageModelTrainer:
         self._lock = threading.RLock()
         self._runtime = None
         self._runtime_binding = None
-        self._state = dict(schema=_SCHEMA, profile=shape.profile, numeric_mode=mode,
+        self._state = dict(schema=_SCHEMA, profile=_runtime_profile(shape, mode), numeric_mode=mode,
                            parameter_names=list(shape.parameter_names),
                            parameter_shapes=[list(shape) for shape in shape.parameter_shapes],  # glue: lists the model parameter shapes
                            parameter_offsets=list(shape.offsets), parameters=flat,

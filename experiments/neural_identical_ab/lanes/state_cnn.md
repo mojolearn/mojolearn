@@ -1,249 +1,235 @@
-# Neural state/CNN lane source handoff
+# Neural state/CNN source handoff
 
-Branch `ideas/neural-identical-ab-20261006-r3`; base `main` at `fd6cf80453a6f18eb02e81566c824e7da106ccf0`. Source changes are uncommitted; no hooks were run.
+Branch `ideas/neural-identical-ab-20261006-r3`, forked from `main` at `fd6cf80453a6f18eb02e81566c824e7da106ccf0`. These edits follow root commit `88c68d132`; root owns the next commit/push.
 
-Compilation, static verification, tests, model execution, vendor identity, quality and timing were **not run by request**. No default was promoted. Every new switch is opt-in, IDENTICAL-only and disabled by `MOJOLEARN_IDN_ALL_OFF`. Existing inherited defaults are not rebranded as new work. There are no measurement sample counts other than zero.
+All selected arms below have actual runtime caller source or explicitly reuse an existing caller. They remain **uncompiled and unverified source drafts**. Compilation, checks, model execution, same-version vendor identity, quality and timing were not run by request. No default was promoted; all new switches are OFF, IDENTICAL-only and respect `MOJOLEARN_IDN_ALL_OFF`.
 
-Arithmetic changes are allowed between versions. NN39 and NN43 define new shared within-version graphs. Scheduling arms retain incumbent per-cell arithmetic; this is intended design, not executed proof.
+Host source was authored with the explicit `--source-write-only` generator mode (exit0; `/tmp/neural_mamba_source_authoring.log`). It disables post-generation verification and stale comparisons. The ordinary write/check paths remain separate. Private stack arrays are preserved; only actual shared-memory/barrier bodies are replaced by host stubs. This is source authoring, not compile or identity evidence.
 
-Repository-generated host sources were directly mirrored where new arithmetic/internal state requires it. The repository generator was not executed; source freshness and any generator compatibility remain pending. NN36 has an authored host fallback substitution in `tools/mamba_host_gen.py`.
+NN03/04 integration covers dense Mamba projections/backward and CNN contractions. The handwritten Mamba-2/3 SSD/SISO forward kernels retain their own incumbent numerical profile, and their host SSD helper calls deliberately retain the matching graph. Sequence retains its separate same-chain profile.
 
-The catalog scope is broader than these draft implementations. Per-card remaining work below must remain visible; do not label a card fully qualified merely because a source switch is wired.
+## Chosen source arms
 
-## NN33 — wired_draft
+### NN33 — wired_draft
 
-Candidate defines: `MOJOLEARN_NN33_YDIAG_ROWS8`, `MOJOLEARN_NN33_CSTATE_P16`.
+Mamba-2 inherited tiled Ydiag rows8 and Cstate value-width16 geometries.
 
-Implemented: New independent geometries on inherited I08 SSD tiles: eight Ydiag rows with 32-column input staging; sixteen Cstate value channels. Existing per-cell leaves, order, padded terms and saved stages retained.
+Defines: `MOJOLEARN_NN33_YDIAG_ROWS8`, `MOJOLEARN_NN33_CSTATE_P16`.
 
-Pending: Mamba-3 SISO geometry extension. Generated-source refresh for changed source text.
+New independent geometries on inherited I08 SSD tiles: eight Ydiag rows with 32-column input staging; sixteen Cstate value channels. Existing per-cell leaves, order, padded terms and saved stages retained.
 
-Source: `mamba/impl/modules/ssd_minimal.mojo`.
+Further research, outside this chosen arm: Mamba-3 SISO geometry extension.
 
-Prior work: I08 shared tiles/defaults and optional retained G*L already existed; no duplicate implementation or measurement claim.
+Sources: `mamba/impl/modules/ssd_minimal.mojo`.
 
-Route requirements: Inherited M2_SSD_TILED route active; the existing shared-memory resource guard still applies.
+### NN34 — wired_draft
 
-## NN34 — component_draft
+Mamba-1 full prefill/decode and zero-state prefill backward affine-prefix numerical profile; public checkpoint and host inference integration.
 
-Candidate define: `MOJOLEARN_NN34_AFFINE_PREFIX`.
+Defines: `MOJOLEARN_NN34_AFFINE_PREFIX`.
 
-Implemented: an isolated prepared-factor recurrence A/B with real host/device prefill and one-token decode entry points. Candidate arithmetic uses fixed absolute 32-token chunks, shared affine compose/evaluate helpers and canonical adjacent-pair prefix trees. Three-phase prefill constructs independent prefixes, propagates completed-chunk boundaries per chain and evaluates outputs. Decode retains binary-prefix slots and uses the same graph. Initialization and checkpoint profile-id metadata checks are present.
+Fixed absolute32 prefix tree and shared compose/evaluate; actual Mamba-1 factor preparation, emission, D skip and complete model forward/decode route. Optional device-owned boundary and affine slots; profile id and scalar absolute position in Python checkpoint schema; host and resident GPU session open/export/load; scalar metadata and named finite refusal for added state. Real canonical-tree VJP for zero-state prefill: descending prefix losses, reverse node creation order, chunk-boundary adjoints, separate prepared-factor A/B gradients feeding all existing downstream parameter/input gradients. Public Mamba host generated model plus alternate neural-host inference/oracle share new profile. Source-only generator refresh; no check or compilation execution.
 
-The new graph may change bits from the previous version. It is intended to match across host/NVIDIA/AMD/Apple within this version; no execution or quality evidence exists. No public Mamba/Samba route imports the component.
+Further research, outside this chosen arm: Parallel-prefix subtree reuse; segmented training/checkpoint VJP beyond the established zero-state prefill-backward API; Mamba-2/3 numerical profiles; independent-position ragged carried-state API (existing ragged fresh inference still invokes independent rows).
 
-Pending: raw model factor preparation/emission, all backward/optimizer consequences, public ownership, serialized checkpoint validation/restore, failure handling, ragged streams and complete model/host migration. Repeated prefix subtree work is still a scheduling opportunity. Component A/B is not full-dataset model evidence.
+Sources: `mamba/impl/ops/neural_scan_profile.mojo`, `mamba/impl/ops/neural_mamba_scan.mojo`, `mamba/impl/ops/selective_scan_backward.mojo`, `mamba/impl/modeling/modeling_mamba.mojo`, `mamba/checks/mamba_oracle.mojo`, `mamba/checks/mamba_backward.mojo`, `mamba/host/gen/neural_scan_profile.mojo`, `mamba/host/gen/neural_mamba_scan.mojo`, `mamba/host/gen/selective_scan_backward.mojo`, `mamba/host/gen/modeling_mamba.mojo`, `bindings/_mojolearn_mamba.mojo`, `bindings/_mojolearn_mamba_host.mojo`, `bindings/_mojolearn_neural_host.mojo`, `python/mojolearn/_mamba_impl.py`, `experiments/neural_identical_ab/NN34_AFFINE_PREFIX_CONTRACT.md`.
 
-Source: `mamba/impl/ops/neural_scan_profile.mojo`. Contract: `experiments/neural_identical_ab/NN34_AFFINE_PREFIX_CONTRACT.md`.
+### NN35 — wired_draft
 
-## NN35 — wired_draft
+Mamba-1/2 paired causal-convolution time outputs with shared window loads.
 
-Candidate defines: `MOJOLEARN_NN35_CONV_PAIR`.
+Defines: `MOJOLEARN_NN35_CONV_PAIR`.
 
-Implemented: Two adjacent independent time cells share input windows and weight loads for Mamba-1 and Mamba-2 causal depthwise convolution. Original bias-seeded ordered FMA taps, portable SiLU, retained preactivation and separate window-state update remain. Odd tail loads only the inputs used by its one live output.
+Two adjacent independent time cells share input windows and weight loads for Mamba-1 and Mamba-2 causal depthwise convolution. Original bias-seeded ordered FMA taps, portable SiLU, retained preactivation and separate window-state update remain. Odd tail loads only the inputs used by its one live output.
 
-Pending: Generated-source refresh; old host per-cell arithmetic remains the same intended output contract. Additional standalone neural Conv1d callers and gradient-specific window reuse.
+Further research, outside this chosen arm: Additional standalone neural Conv1d callers and gradient-specific window reuse.
 
-Source: `mamba/impl/modeling/modeling_mamba.mojo`, `mamba/impl/modules/mamba2.mojo`.
+Sources: `mamba/impl/modeling/modeling_mamba.mojo`, `mamba/impl/modules/mamba2.mojo`.
 
-Prior work: I09 token-parallel cell arms are inherited. Pair window reuse is the new arm.
+### NN36 — wired_draft
 
-## NN36 — wired_draft
+Mamba-2 off-diagonal SSD output shares the rounded token/head exp across value channels.
 
-Candidate defines: `MOJOLEARN_NN36_SHARED_DECAY`.
+Defines: `MOJOLEARN_NN36_SHARED_DECAY`.
 
-Implemented: Mamba-2 off-diagonal SSD output uses one block per batch/token/head, sharing one explicitly rounded exp word across value channels. No retained global scratch or extra synchronization lifetime. Generator substitution selects unchanged host cell exp/dot expression for the shared-memory kernel.
+Mamba-2 off-diagonal SSD output uses one block per batch/token/head, sharing one explicitly rounded exp word across value channels. No retained global scratch or extra synchronization lifetime. Generator substitution selects unchanged host cell exp/dot expression for the shared-memory kernel.
 
-Pending: Run repository host source regeneration when authorized; not run here. Remaining Mamba-2 inter-chunk/backward and Mamba-3 decay consumers.
+Further research, outside this chosen arm: Remaining Mamba-2 inter-chunk/backward and Mamba-3 decay consumers.
 
-Source: `mamba/impl/modules/ssd_minimal.mojo`, `tools/mamba_host_gen.py`.
+Sources: `mamba/impl/modules/ssd_minimal.mojo`, `tools/mamba_host_gen.py`.
 
-Prior work: Existing retained decay stages and I08 reuse are not claimed as new.
+### NN37 — wired_draft
 
-## NN37 — wired_draft
+Mamba-2 lower-triangle CB task enumeration with explicit upper/padded stage zeroing.
 
-Candidate defines: `MOJOLEARN_NN37_TRIANGLE_TASKS`.
+Defines: `MOJOLEARN_NN37_TRIANGLE_TASKS`.
 
-Implemented: Mamba-2 CB tasks enumerate only lower-triangle coordinates using exact integer upper-bound search. Explicit full cb_g zero-fill preserves upper and padded stage cells for traces/backward; include its launch and traffic in A/B.
+Mamba-2 CB tasks enumerate only lower-triangle coordinates using exact integer upper-bound search. Explicit full cb_g zero-fill preserves upper and padded stage cells for traces/backward; include its launch and traffic in A/B.
 
-Pending: Mamba-3 causal task scheduling. Generated-source refresh.
+Further research, outside this chosen arm: Mamba-3 causal task scheduling.
 
-Source: `mamba/impl/modules/ssd_minimal.mojo`.
+Sources: `mamba/impl/modules/ssd_minimal.mojo`.
 
-Prior work: I08 lower-triangle arithmetic pruning already existed. Compact task indexing and explicit clearing are new.
+### NN38 — wired_draft
 
-Route requirements: Inherited IDN_M2_CB_LOWER must remain enabled.
+Mamba-3 existing angle/dt suffix profile reuses descending chunk-summary seeds before replay.
 
-## NN38 — wired_draft
+Defines: `MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS`.
 
-Candidate defines: `MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS`.
+Reuse each descending chunk-summary chain once to create exclusive suffix seeds in place before replaying token chunks. Device and direct host source mirror include seed scratch transformation and retain inherited angle/rate/dt operations.
 
-Implemented: Reuse each descending chunk-summary chain once to create exclusive suffix seeds in place before replaying token chunks. Device and direct host source mirror include seed scratch transformation and retain inherited angle/rate/dt operations.
+Sources: `mamba/impl/modules/mamba3_backward.mojo`, `mamba/host/gen/mamba3_backward.mojo`.
 
-Pending: Generated-source refresh remains pending; mirrors were source-authored without running the generator. Full Mamba-3/Samba caller mapping and scored quality/identity later.
+### NN39 — wired_draft
 
-Source: `mamba/impl/modules/mamba3_backward.mojo`, `mamba/host/gen/mamba3_backward.mojo`.
+Mamba-2 existing fixed256-row conv/A/dt gradient partials merge with one shared adjacent-pair tree.
 
-Arithmetic profile: The fixed-64 chunk angle suffix profile already exists and is default-on; this new extension changes only repeated computation scheduling.
+Defines: `MOJOLEARN_NN39_M2_GRAD_TREE`.
 
-Route requirements: Inherited IDN_M3_ANGLE_DT_SUFFIX active.
+New shared pure Mojo Mamba-2 gradient fold profile uses existing row leaves and adjacent binary subtree merges, with explicitly carried odd tails and no added zero leaf. Device and host import the same arithmetic helper; single leaf is returned verbatim. Reaches existing Mamba-2 conv weight/bias, A/A_log and dt_bias terminal-gradient merge caller.
 
-## NN39 — wired_draft
+Further research, outside this chosen arm: Mamba-1/Mamba-3 parameter families and separately attributable per-family switches.
 
-Candidate defines: `MOJOLEARN_NN39_M2_GRAD_TREE`.
+Sources: `mamba/impl/ops/neural_gradient_profile.mojo`, `mamba/impl/ops/mamba2_ssd_backward.mojo`, `mamba/host/gen/mamba2_ssd_backward.mojo`.
 
-Implemented: New shared pure Mojo Mamba-2 gradient fold profile uses existing row leaves and adjacent binary subtree merges, with explicitly carried odd tails and no added zero leaf. Device and host import the same arithmetic helper; single leaf is returned verbatim. Reaches existing Mamba-2 conv weight/bias, A/A_log and dt_bias terminal-gradient merge caller.
+### NN40 — wired_draft
 
-Pending: Mamba-1/Mamba-3 parameter families and separately attributable per-family switches. Generated-source refresh and future full optimizer/quality acceptance.
+Retained projection workspace headroom plus explicit Mamba-3 immutable snapshot install/update/export and generation-owned fresh forward/backward on GPU and host.
 
-Source: `mamba/impl/ops/neural_gradient_profile.mojo`, `mamba/impl/ops/mamba2_ssd_backward.mojo`, `mamba/host/gen/mamba2_ssd_backward.mojo`.
+Defines: `MOJOLEARN_NN40_WS_HEADROOM`, `MOJOLEARN_NN40_OWNED_WEIGHTS`.
 
-Prior work: Mamba-2 fixed 256-row gradient leaves and serial partial merge were already default-on; the balanced merge is new.
+Projection workspace grow-ahead capacity (25%, at most16MiB) retains context ownership and wait-before-replacement. Explicit Mamba3Block.install_owned_weights creates an immutable copied snapshot; generation-owned fresh forward/backward never trust mutable external pointers; reinstall after optimizer/load mutation invalidates device stages. Host implements the same snapshot semantics; export reads installed bytes; pickle stores those bytes and lazily reinstalls a new generation. Binding changes, stale generation, busy/unusable sessions and disabled ownership arm refuse by name. Ordinary borrowed-buffer calls retain byte validation.
 
-Arithmetic profile: mojolearn.neural-ab.mamba2.gradient-fold.fp32.v2; version-to-version bits may change, within-version columns share the exact helper.
+Ownership recipe: explicitly call `install_owned_weights()` for A and reinstall after every intended optimizer/load update. B uses the ordinary borrowed-buffer path. Include snapshot installation/update in cold/update timing. Ordinary mutable weight semantics do not change when the compile flag alone is set.
 
-## NN40 — wired_draft
+Further research, outside this chosen arm: Packed/pretransposed immutable weight layouts with additional retained-memory accounting; Mamba-1/2 snapshot-generation APIs.
 
-Candidate defines: `MOJOLEARN_NN40_WS_HEADROOM`.
+Sources: `mamba/impl/modules/idn_gemm_ws.mojo`, `bindings/_mojolearn_mamba.mojo`, `bindings/_mojolearn_mamba_host.mojo`, `python/mojolearn/_mamba_impl.py`.
 
-Implemented: Workspace-only sub-arm reserves 25% grow-ahead capacity capped at 16 MiB additional scratch. Existing per-context ownership and wait-before-replacement semantics stay.
+### NN41 — reused_existing
 
-Pending: Immutable packed-weight owner/generation API for all mutation/load/update routes. Cross-session invalidation and public caller ownership mapping.
+Existing IDENTICAL whole-sequence LSTM scan and source correction preventing FAST-wide backward from entering IDENTICAL.
 
-Source: `mamba/impl/modules/idn_gemm_ws.mojo`.
+Defines: `MOJOLEARN_IDN_SEQ_LSTM_SCAN`.
 
-Prior work: Existing decode sessions already own copied weights; ordinary external mutable buffers are not trusted by this arm.
+Existing IDENTICAL whole-sequence scan is reused rather than reimplemented. Source repair restricts SCAN_WIDE to FAST because its backward folds are a different graph and the host scan uses the original graph.
 
-Scope limit: This does not implement or claim a weight-generation cache.
+The inherited FAST scan constant-predictor quality failure remains unresolved. Restricting FAST-wide backward to FAST is a source routing correction; it does not establish the cause or qualify the IDENTICAL arm.
 
-Route requirements: Existing IDN_MAMBA_GEMM_WS enabled; GPU workspace route only.
+Further research, outside this chosen arm: Explicit bounded-segment launch/state contract beyond existing whole-sequence scan.
 
-## NN41 — reused_existing
+Sources: `sequence/recurrent_scan.mojo`, `sequence/recurrent.mojo`, `sequence/exec_device.mojo`.
 
-Candidate defines: `MOJOLEARN_IDN_SEQ_LSTM_SCAN`.
+### NN42 — wired_draft
 
-Implemented: Existing IDENTICAL whole-sequence scan is reused rather than reimplemented. Source repair restricts SCAN_WIDE to FAST because its backward folds are a different graph and the host scan uses the original graph.
+Sequence per-step recurrent input-bias materialization fused into gate/hidden operation.
 
-Pending: Recorded FAST scan quality failure still needs diagnosis; source alone does not establish its cause. IDENTICAL forward/backward scan vendor ordering and quality qualification. Explicit bounded-segment launch/state contract beyond existing whole-sequence scan.
+Defines: `MOJOLEARN_NN42_INPUT_BIAS_FUSED`.
 
-Source: `sequence/recurrent_scan.mojo`, `sequence/recurrent.mojo`, `sequence/exec_device.mojo`.
+Fold input projection bias materialization into the per-step recurrent hidden/gate kernel. Each owner stores the same rounded GX word before reading its gates; shared host/GPU element body. Saved GX, gate activations, hidden/cell words and derivative inputs keep their seams.
 
-Prior failure: Source records constant-predictor quality collapse in FAST scan even after Args repair; NOT repaired or qualified by this lane.
+Further research, outside this chosen arm: Scan path deliberately retains its separate bias launch. Sequence MLP-specific fusion and further derivative-state fusions.
 
-Modular ask: If the existing team_barrier memory ordering is insufficient on a vendor, request a documented supported workgroup barrier that orders device-memory stores/loads across loop iterations, or a supported persistent launch primitive. No cross-block spin barrier or compiler workaround.
+Sources: `sequence/ops.mojo`, `sequence/recurrent.mojo`.
 
-## NN42 — wired_draft
+### NN43 — wired_draft
 
-Candidate defines: `MOJOLEARN_NN42_INPUT_BIAS_FUSED`.
+Recurrent weight and bias gradients use fixed128-row leaves, with size-derived portable scratch-cap growth.
 
-Implemented: Fold input projection bias materialization into the per-step recurrent hidden/gate kernel. Each owner stores the same rounded GX word before reading its gates; shared host/GPU element body. Saved GX, gate activations, hidden/cell words and derivative inputs keep their seams.
+Defines: `MOJOLEARN_NN43_WGRAD_FIXED128`.
 
-Pending: Scan path deliberately retains its separate bias launch. Sequence MLP-specific fusion and further derivative-state fusions.
+New recurrent weight/bias profile uses absolute 128-row leaves, incumbent per-leaf chain and ascending partial merges. Host and GPU execute the same generic Exec split-K operations; independent oracle source states the same partition. For exceptional K whose single-cell partials exceed the fixed scratch budget, double the leaf identically on every column until it fits.
 
-Source: `sequence/ops.mojo`, `sequence/recurrent.mojo`.
+Further research, outside this chosen arm: Separate dWeight/dBias attribution switches. Non-recurrent sequence MLP gradient profile caller coverage.
 
-Route requirements: Per-step recurrent path; when SEQ_LSTM_SCAN is compiled, this arm deliberately yields to the existing bias path.
+Sources: `sequence/recurrent.mojo`, `sequence/checks/oracle.mojo`, `sequence/ops.mojo`.
 
-## NN43 — wired_draft
+### NN44 — wired_draft
 
-Candidate defines: `MOJOLEARN_NN43_WGRAD_FIXED128`.
+Neural MoE stable expert-local ascending pair grouping and upper-bound expert tile lookup.
 
-Implemented: New recurrent weight/bias profile uses absolute 128-row leaves, incumbent per-leaf chain and ascending partial merges. Host and GPU execute the same generic Exec split-K operations; independent oracle source states the same partition. For exceptional K whose single-cell partials exceed the fixed scratch budget, double the leaf identically on every column until it fits.
+Defines: `MOJOLEARN_NN44_STABLE_GROUP`, `MOJOLEARN_NN44_EXPERT_BISECT`.
 
-Pending: Separate dWeight/dBias attribution switches. Non-recurrent sequence MLP gradient profile caller coverage.
+Stable per-expert ascending pair scatter reuses existing device counts/offsets and preserves original pair output positions. Independent integer binary-search expert lookup handles empty experts and retains scheduling semantics. Router/top-k/weighted combine arithmetic remains inherited.
 
-Source: `sequence/recurrent.mojo`, `sequence/checks/oracle.mojo`, `sequence/ops.mojo`.
+Further research, outside this chosen arm: Scalable parallel stable grouping with explicit workspace for large expert counts. Additional expert gradient/training grouped caller coverage.
 
-Prior work: The default square-root/512-minimum blocked gradient profile already existed; this arm is a distinct profile.
+Sources: `sequence/moe_group.mojo`, `sequence/moe_tiled.mojo`, `sequence/exec_device.mojo`.
 
-Arithmetic profile: mojolearn.neural-ab.recurrent.gradient-leaves.fp32.v2; numerical profile may change previous-version bits.
+### NN45 — wired_draft
 
-Route requirements: Existing blocked recurrent weight-gradient route enabled.
+CNN unpooled conv-layout/bias/preactivation/ReLU fusion, with inherited direct convolution continuing its established path.
 
-## NN44 — wired_draft
+Defines: `MOJOLEARN_NN45_CONV_RELU`.
 
-Candidate defines: `MOJOLEARN_NN44_STABLE_GROUP`, `MOJOLEARN_NN44_EXPERT_BISECT`.
+Fuse GEMM-output layout, bias, retained preactivation and ReLU for unpooled CNN blocks. Shared host/device element function preserves canonical NaNs, bias rounding and ReLU derivative inputs. Existing direct-convolution path still uses its original separate ReLU.
 
-Implemented: Stable per-expert ascending pair scatter reuses existing device counts/offsets and preserves original pair output positions. Independent integer binary-search expert lookup handles empty experts and retains scheduling semantics. Router/top-k/weighted combine arithmetic remains inherited.
+Further research, outside this chosen arm: Residual epilogue fusion and additional Conv1d/ResNet callers. Pooled block path already has inherited ReLU/maxpool fusion; no new claim.
 
-Pending: Scalable parallel stable grouping with explicit workspace for large expert counts. Additional expert gradient/training grouped caller coverage.
+Sources: `x_cnn/ops.mojo`, `x_cnn/device.mojo`, `x_cnn/host/ops_host.mojo`.
 
-Source: `sequence/moe_group.mojo`, `sequence/moe_tiled.mojo`, `sequence/exec_device.mojo`.
+### NN46 — wired_draft
 
-Risk: Stable scatter does E*pair_count comparisons; it may lose despite less cursor contention. Existing FP32 pair indices/range contract is inherited, not enlarged.
+CNN col2im and maxpool backward gathers prune impossible taps using exact stride/dilation bounds.
 
-## NN45 — wired_draft
+Defines: `MOJOLEARN_NN46_GATHER_BOUNDS`.
 
-Candidate defines: `MOJOLEARN_NN45_CONV_RELU`.
+Derive exact candidate tap intervals for col2im and maxpool-backward gathers from stride/dilation/padding inequalities. Keep all original divisibility checks, tap order and floating operations; reversed negative-control path keeps incumbent bounds. Fused pool-ReLU backward consumers share the same maxpool value helper.
 
-Implemented: Fuse GEMM-output layout, bias, retained preactivation and ReLU for unpooled CNN blocks. Shared host/device element function preserves canonical NaNs, bias rounding and ReLU derivative inputs. Existing direct-convolution path still uses its original separate ReLU.
+Further research, outside this chosen arm: New dWeight tree and shared-memory gather tiling. Host optimized plane routines retain the same old fold; new host scheduling is not claimed.
 
-Pending: Residual epilogue fusion and additional Conv1d/ResNet callers. Pooled block path already has inherited ReLU/maxpool fusion; no new claim.
+Sources: `x_cnn/ops.mojo`.
 
-Source: `x_cnn/ops.mojo`, `x_cnn/device.mojo`, `x_cnn/host/ops_host.mojo`.
+### NN47 — wired_draft
 
-## NN46 — wired_draft
+CNN training batchnorm apply also owns running-stat updates once/channel; statistics unchanged.
 
-Candidate defines: `MOJOLEARN_NN46_GATHER_BOUNDS`.
+Defines: `MOJOLEARN_NN47_APPLY_RUNNING`.
 
-Implemented: Derive exact candidate tap intervals for col2im and maxpool-backward gathers from stride/dilation/padding inequalities. Keep all original divisibility checks, tap order and floating operations; reversed negative-control path keeps incumbent bounds. Fused pool-ReLU backward consumers share the same maxpool value helper.
+Training normalization output and running-state updates share one launch using the same element helper on host/GPU. Exactly one first-image pixel per channel owns running updates after existing statistics; output does not read running state. Existing mean/centered variance folds, biased/unbiased conversions, momentum and epsilon unchanged.
 
-Pending: New dWeight tree and shared-memory gather tiling. Host optimized plane routines retain the same old fold; new host scheduling is not claimed.
+Further research, outside this chosen arm: Separate centered fixed-tree moment profile and additional statistics-load reuse.
 
-Source: `x_cnn/ops.mojo`.
+Sources: `x_cnn/ops.mojo`, `x_cnn/device.mojo`, `x_cnn/host/ops_host.mojo`.
 
-Prior work: Maxpool value/arg-index already fused; tiled pool and several bounded backward paths were inherited.
+### NN48 — wired_draft
 
-## NN47 — wired_draft
+Neural weighted/mean/inverse/normalized CSR SpMM shares index/value tiles across feature lanes.
 
-Candidate defines: `MOJOLEARN_NN47_APPLY_RUNNING`.
+Defines: `MOJOLEARN_NN48_CSR_TILES`.
 
-Implemented: Training normalization output and running-state updates share one launch using the same element helper on host/GPU. Exactly one first-image pixel per channel owns running updates after existing statistics; output does not read running state. Existing mean/centered variance folds, biased/unbiased conversions, momentum and epsilon unchanged.
+Neural CSR aggregation stages 32 edge columns/weights once per 128-feature tile, preserving ascending edge folds. Weighted, mean, inverse-weight and backward normalization modes retain original floating seams; inactive feature lanes still join barriers. Host retains the incumbent exact arithmetic definition.
 
-Pending: Separate centered fixed-tree moment profile and additional statistics-load reuse. Alias/exception and small-batch acceptance when verification is authorized.
+Further research, outside this chosen arm: GraphSAGE max-specific tiles and degree-normalization fusion.
 
-Source: `x_cnn/ops.mojo`, `x_cnn/device.mojo`, `x_cnn/host/ops_host.mojo`.
+Sources: `x_cnn/device.mojo`, `x_cnn/ops.mojo`.
 
-## NN48 — wired_draft
+### NN13 — reused_existing
 
-Candidate defines: `MOJOLEARN_NN48_CSR_TILES`.
+Existing sequence tiled same-chain GEMM callers reused; independent sequence numerical profile retained.
 
-Implemented: Neural CSR aggregation stages 32 edge columns/weights once per 128-feature tile, preserving ascending edge folds. Weighted, mean, inverse-weight and backward normalization modes retain original floating seams; inactive feature lanes still join barriers. Host retains the incumbent exact arithmetic definition.
+Defines: .
 
-Pending: GraphSAGE max-specific tiles and degree-normalization fusion. Graph learning forward/backward quality and skew/tail coverage later.
+Inherited same-chain sequence tiled GEMM serves neural recurrent/MLP projections; source was not changed by this lane.
 
-Source: `x_cnn/device.mojo`, `x_cnn/ops.mojo`.
+Further research, outside this chosen arm: GEMM lane owns any new neural caller/profile API.
 
-Scope limit: Neural spmm only; no PageRank, classical graph, sparsification or neighbor sampling changes.
+Sources: `sequence/gemm_tiled.mojo`, `sequence/exec_device.mojo`.
 
-## NN13 — reused_existing
+### NN14 — wired_draft
 
-Candidate defines: none newly introduced.
+Bounded-im2col full Conv2d/CNNClassifier forward/recompute, virtual-im2col dWeight and dInput backward, and reduced saved-column allocation.
 
-Implemented: Inherited same-chain sequence tiled GEMM serves neural recurrent/MLP projections; source was not changed by this lane.
+Defines: `MOJOLEARN_NN14_BOUNDED_IM2COL`.
 
-Pending: GEMM lane owns any new neural caller/profile API.
+Forward and CNNClassifier training/recompute tile complete-K GEMMs over bounded row slabs (8MiB cols+y2 target, one indivisible row minimum), scattering to absolute NCHW coordinates. Backward dWeight contracts against generated im2col values using full-row selected GEMM leaf/chain/tree; dInput generates each dcols contraction within the incumbent tap-ordered gather. No full cols/dcols materialization. Standalone Conv2d and resident CNNClassifier block backward select the same shared host/device element functions. Bias gradients stay routed to selected GEMM. Saved-column owner allocates one sentinel word under the native compile-flag query; saved preactivation remains full.
 
-Source: `sequence/gemm_tiled.mojo`, `sequence/exec_device.mojo`.
+Further research, outside this chosen arm: Tiling/caching generated backward operands for speed without changing the fixed contraction graph.
 
-Scope limit: No change to generic shared dispatcher or classical sequence callers.
+Sources: `x_cnn/ops.mojo`, `x_cnn/device.mojo`, `x_cnn/host/ops_host.mojo`, `x_cnn/host/gemm_host.mojo`, `bindings/_mojolearn_x_cnn.mojo`, `bindings/_mojolearn_x_cnn_host.mojo`, `python/mojolearn/_expansion_cnn.py`.
 
-## NN14 — wired_draft
+## Remaining acceptance
 
-Candidate defines: `MOJOLEARN_NN14_BOUNDED_IM2COL`.
+All compile/static checks, same-version host/NVIDIA/AMD/Apple identity, checkpoint/resume and gradient behavior, estimator quality, and full-dataset end-to-end NVIDIA+AMD timing remain unrun. Sample count0. Mathematical equivalence or shared source is not executed evidence. NN34 changes the scan graph and requires particular attention to long sequences, cancellation, strong decay and multi-step training before any promotion.
 
-Implemented: Public Conv2d forward device and host paths batch complete K rows through bounded im2col/GEMM scratch with global NCHW scatter. Target cols+y2 scratch is 8 MiB, except one indivisible row; full K reduction and bias seam retained.
-
-Pending: CNNClassifier saved-column block/training callers, backward dInput/dWeight caller integration. Direct-convolution comparison must be included: this candidate public-forward path uses im2col/GEMM even where baseline direct route applies. The per-call requested scratch bound does not shrink existing process context caches; cold/repeated peak memory remain separate measurements.
-
-Source: `x_cnn/ops.mojo`, `x_cnn/device.mojo`, `x_cnn/host/ops_host.mojo`.
-
-Scope limit: Forward caller sub-arm only; not complete NN14 training coverage.
-
-## Later evidence requirements
-
-For each active arm, first map actual full-workload recipes, dataset/version/hash and dimensions, estimator settings, exact A/B defines and the timed boundary. Preparation, training/fit, synchronization and consumed outputs belong inside the declared operation. Separate forward/backward/train, prefill/decode, cold/repeated use, neighboring shapes and a non-board dataset. Do not substitute components for the affected full neural workloads.
-
-Promotion remains disallowed without future accepted frozen compilation, required same-version host/NVIDIA/AMD/Apple identity, quality and full-dataset end-to-end NVIDIA+AMD A/B evidence. Include independent arms and combinations. Reuse already accepted evidence where applicable. Apple identity matters; Apple timing does not vote.
-
-Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output.
+No unsupported compiler workaround was introduced. NN41 still needs a documented vendor workgroup barrier ordering guarantee if its existing team-barrier semantics prove insufficient; request Modular support rather than add cross-block spin protocols.

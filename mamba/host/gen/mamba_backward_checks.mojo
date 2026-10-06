@@ -8,9 +8,10 @@ from mamba.host.device_shim import host_launch, launch_count
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
+from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX
 from gemm.contract import OP_NT
 from mamba.host.device_shim import identical_gemm_workspace_max_floats
-from mamba.host.gen.gemm_backward import (
+from mamba.host.gen.neural_backward import (
     gemm_backward_a_call,
     gemm_backward_b_call,
     gemm_backward_call_name,
@@ -373,7 +374,7 @@ comptime T3_DB_PREFORMS_DELTA_TIMES_U = True
 
 def t3_dh_floats(b: Int, l: Int, dims: MambaDims) -> Int:
     """`B * d_inner * L * D_STATE`, the materialized `dh`. The declared spelling is GATE-SCALE; a blocked variant is phase K and its tiling must be `contract_partition(d_inner)`'s leaf boundary, never a VRAM budget, or the answer becomes a function of the machine."""
-    return b * dims.d_inner * l * D_STATE
+    return (2 if NN34_AFFINE_PREFIX else 1) * b * dims.d_inner * l * D_STATE
 
 
 comptime T4_DIRECTION_IS_DESCENDING_IN_T = True

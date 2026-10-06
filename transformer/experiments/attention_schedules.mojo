@@ -5,6 +5,9 @@ No compilation, identity, quality or timing evidence exists for these drafts.
 Every switch requires IDENTICAL and is disabled by MOJOLEARN_IDN_ALL_OFF.
 All numeric loops run in Mojo; no vendor or benchmark dimension dispatch.
 """
+from transformer.experiments.norm_profile import (
+    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+)
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from checks.numerics import (
@@ -34,6 +37,8 @@ def rms_sumsq_kernel(
     for j in range(dm):
         var v = ftz(x.unsafe_load(row * dm + j))
         acc = ftz(identical_mul_add(v, v, acc))
+    comptime if NN24_NORM_LANES8:
+        acc = norm_profile_dot[NN24_LANES](x, x, row * dm, row * dm, dm)
     sumsq.unsafe_store(row, acc)
 
 

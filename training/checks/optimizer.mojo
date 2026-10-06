@@ -134,7 +134,7 @@ from core.step_phase import (
     step_count_sync,
 )
 
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
@@ -147,6 +147,7 @@ from core.device_scan import (
     device_first_nonfinite,
     nonfinite_partial_kernel,
 )
+from training.neural_ab_profiles import NN57_NORM_PROFILE, nn_reduce_pointer_into, nn_reduce_scratch_floats
 from checks.numerics import (
     ftz,
     identical_div,
@@ -1255,7 +1256,10 @@ def identical_clip_coefficient(
         var na = norms.create_sub_buffer[DType.float32](0, j_count)
         var nb = norms.create_sub_buffer[DType.float32](0, j_count)
         var tv = total_cell.create_sub_buffer[DType.float32](0, 1)
-        identical_gemm_into(ctx, tv, na, nb, ws, 1, 1, j_count, OP_NT)
+        comptime if NN57_NORM_PROFILE:
+            nn_reduce_pointer_into[128, True](ctx, tv.unsafe_ptr(), na.unsafe_ptr(), ws.unsafe_ptr(), j_count)
+        else:
+            identical_gemm_into(ctx, tv, na, nb, ws, 1, 1, j_count, OP_NT)
         step_count_sync()
         ctx.synchronize()
         _ = na
@@ -1407,7 +1411,10 @@ def identical_clip_grad_norm(
             var ga = grad.create_sub_buffer[DType.float32](begin, count)
             var gb = grad.create_sub_buffer[DType.float32](begin, count)
             var cv = sumsq.create_sub_buffer[DType.float32](slot, 1)
-            identical_gemm_into(ctx, cv, ga, gb, ws, 1, 1, count, OP_NT)
+            comptime if NN57_NORM_PROFILE:
+                nn_reduce_pointer_into[128, True](ctx, cv.unsafe_ptr(), ga.unsafe_ptr(), ws.unsafe_ptr(), count)
+            else:
+                identical_gemm_into(ctx, cv, ga, gb, ws, 1, 1, count, OP_NT)
             step_count_sync()
             ctx.synchronize()
             # The keep-alives. Without these three the views are dead at
@@ -1467,7 +1474,10 @@ def identical_clip_grad_norm_batched(
         var ga = grad.create_sub_buffer[DType.float32](begin, count)
         var gb = grad.create_sub_buffer[DType.float32](begin, count)
         var cv = sumsq.create_sub_buffer[DType.float32](j, 1)
-        identical_gemm_into(ctx, cv, ga, gb, ws, 1, 1, count, OP_NT)
+        comptime if NN57_NORM_PROFILE:
+            nn_reduce_pointer_into[128, True](ctx, cv.unsafe_ptr(), ga.unsafe_ptr(), ws.unsafe_ptr(), count)
+        else:
+            identical_gemm_into(ctx, cv, ga, gb, ws, 1, 1, count, OP_NT)
         keep.append(ga^)
         keep.append(gb^)
         keep.append(cv^)
@@ -1509,9 +1519,13 @@ def identical_optimizer_workspace_floats(offsets: List[Int]) -> Int:
     for j in range(j_count):
         var count = offsets[j + 1] - offsets[j]
         var wj = identical_gemm_workspace_max_floats(1, 1, count)
+        comptime if NN57_NORM_PROFILE:
+            wj = max(wj, 2 * nn_reduce_scratch_floats[128](count))
         if wj > w:
             w = wj
     var wt = identical_gemm_workspace_max_floats(1, 1, j_count)
+    comptime if NN57_NORM_PROFILE:
+        wt = max(wt, 2 * nn_reduce_scratch_floats[128](j_count))
     if wt > w:
         w = wt
     return w

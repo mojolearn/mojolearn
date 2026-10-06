@@ -16,7 +16,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from embedding.checks.embedding_oracle import EmbConfig, emb_refuse_shape
 from embedding.checks.embedding_sort import embedding_sort_runs, PLAN_SORT
 from embedding.checks.embedding_identical import (
-    ANY_EMB_SABOTAGE, EMB_TPB, _emb_backward_launch,
+    ANY_EMB_SABOTAGE, EMB_TPB, _emb_backward_launch, _emb_backward_refuse_launch,
 )
 
 comptime NN50_OWNED_RUNS = (
@@ -45,6 +45,12 @@ def _nn_ids_copy_validate(dst: _IP, src: _IP, status: _IP, n: Int32, vocab: Int3
 def _nn_ids_error_value(ids: _IP, status: _IP, n: Int32):
     if status[0] < n:
         status[1] = ids[Int(status[0])]
+
+
+def _nn_ids_compare(left: _IP, right: _IP, status: _IP, n: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n) and left[i] != right[i]:
+        _ = Atomic[DType.int32].min(status, Int32(i))
 
 
 struct OwnedEmbeddingRuns(Movable):
@@ -84,6 +90,23 @@ struct OwnedEmbeddingRuns(Movable):
             raise Error("embedding: id " + String(Int(host.unsafe_ptr()[1])) + " at position " + String(first) + " is outside [0, " + String(cfg.vocab) + ") REFUSED (contract 8; never clamped)")
         embedding_sort_runs(ctx, self.ids, self.counts, self.begin, self.perm, positions, cfg.vocab, cfg.padding_idx, EMB_TPB)
 
+    def matches(mut self, ctx: DeviceContext, mut source: DeviceBuffer[DType.int32], positions: Int, cfg: EmbConfig) raises -> Bool:
+        """Compare actual device IDs, never external address identity."""
+        if positions != self.positions or cfg.vocab != self.vocab or cfg.padding_idx != self.padding:
+            return False
+        var status = ctx.enqueue_create_buffer[DType.int32](1)
+        status.enqueue_fill(Int32(positions))
+        var host = ctx.enqueue_create_host_buffer[DType.int32](1)
+        if positions > 0:
+            ctx.enqueue_function[_nn_ids_compare](self.ids.unsafe_ptr(), source.unsafe_ptr(), status.unsafe_ptr(), Int32(positions), grid_dim=((positions + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=status)
+        ctx.synchronize()
+        var same = host[0] == Int32(positions)
+        _ = source
+        _ = self.ids
+        _ = status^
+        return same
+
     def backward_into(mut self, ctx: DeviceContext, mut dw: DeviceBuffer[DType.float32], mut dy: DeviceBuffer[DType.float32], cfg: EmbConfig) raises:
         """Use original fold/seed/padding kernels, skipping only group rebuild.
 
@@ -94,4 +117,5 @@ struct OwnedEmbeddingRuns(Movable):
         emb_refuse_shape(cfg, self.positions)
         if cfg.vocab != self.vocab or cfg.padding_idx != self.padding:
             raise Error("NN50 grouping does not match vocabulary/padding")
+        _emb_backward_refuse_launch(ctx, PLAN_SORT, EMB_TPB)
         _emb_backward_launch(ctx, dw, dy, self.ids, self.counts, self.begin, self.perm, self.positions, cfg, PLAN_SORT, EMB_TPB, runs_ready=True)

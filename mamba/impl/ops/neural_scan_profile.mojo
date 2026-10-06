@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
-"""NN34 isolated affine-prefix scan component, fp32 numerical profile v2.
+"""NN34 affine-prefix scan component, fp32 numerical profile v2.
 
-This file is not imported or selected by the public Mamba/Samba runtime.
+Mamba-1 imports this profile through neural_mamba_scan; other Mamba families
+retain their own SSD profiles.
 It supplies an actual selectable component A/B: candidate uses absolute
 32-token chunks and canonical adjacent affine-prefix trees; baseline uses
 one ascending recurrent FMA chain. All new switches are OFF by default.
 
 The input is PREPARED affine factors [tokens, chains], not raw Mamba model
-inputs: mathematically h[t] = a[t] * h[t-1] + b[t]. Discretization, emission,
-backward and model checkpoint integration remain unimplemented. No quality,
+inputs: mathematically h[t] = a[t] * h[t-1] + b[t]. Discretization, emission, tree VJP and checkpoint integration are in
+`neural_mamba_scan`, modeling_mamba and the Mamba bindings. No quality,
 compilation, identity or timing evidence is claimed.
 
 Within a chunk, compose(left, right) means apply left, then right:
@@ -34,7 +35,7 @@ The final prefix also produces next slots into DISJOINT state buffers.
 Decode pushes one leaf into the same binary slots and uses the same drain
 and evaluate graph. Request length and device launch shape never choose
 chunk boundaries or the arithmetic tree. Host and device entry points use
-identical per-cell functions. These are explicit component APIs only.
+identical per-cell functions. The explicit component APIs also remain available for isolated A/B work.
 """
 from std.memory import stack_allocation
 from std.sys.compile import is_defined

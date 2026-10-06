@@ -137,6 +137,7 @@ from bindings.hostptr import f32_ptr, read_f32, copy_f32
 from std.memory import bitcast, memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
+from mamba.impl.ops.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS, NN34_COMPONENT_PROFILE
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
 from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
 from std.os import abort, getenv
@@ -335,7 +336,31 @@ def mamba_vendor_binding() raises -> PythonObject:
 # ===========================================================================
 
 
-def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False) raises:
+
+def mamba1_profile_binding() -> PythonObject:
+    return PythonObject(NN34_COMPONENT_PROFILE)
+
+
+def _m1_profile_load(ctx: DeviceContext, mut state: MambaDeviceState,
+    boundary: Int, sa: Int, sb: Int, position: Int, chains: Int) raises:
+    if position < 0 or position > (1 << 62) - 32:
+        raise Error("Mamba-1 NN34: invalid absolute checkpoint position")
+    if boundary == 0 or sa == 0 or sb == 0:
+        raise Error("Mamba-1 NN34: full affine checkpoint buffers required")
+    state.nn34_boundary = mamba_upload(ctx, _read_f32(boundary, chains))
+    state.nn34_sa = mamba_upload(ctx, _read_f32(sa, chains * NN34_LEVELS))
+    state.nn34_sb = mamba_upload(ctx, _read_f32(sb, chains * NN34_LEVELS))
+    state.nn34_position = position
+
+
+def _m1_profile_export(ctx: DeviceContext, mut state: MambaDeviceState,
+    boundary: Int, sa: Int, sb: Int, chains: Int) raises:
+    _m3_download_addr[False](ctx, state.nn34_boundary.value(), chains, boundary)
+    _m3_download_addr[False](ctx, state.nn34_sa.value(), chains * NN34_LEVELS, sa)
+    _m3_download_addr[False](ctx, state.nn34_sb.value(), chains * NN34_LEVELS, sb)
+
+
+def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False, absolute_start: Int = 0) raises:
     """The GIL-free half of `mamba1_forward_binding`: everything after
     the `PythonObject`s have been read. Builds the host weights, uploads
     the caller's state, runs THE certified entry point once, and writes
@@ -345,7 +370,7 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False) rai
     still alive when `mamba_block_forward` returns because that function
     synchronizes before it does, and the explicit transfers at the end
     hold them past the last download anyway."""
-    comptime if AFN_MAMBA_ARENA:
+    comptime if AFN_MAMBA_ARENA and not NN34_AFFINE_PREFIX:
         _mamba1_run_arena(a, b, l, dm, decode)
         return
     var dims = MambaDims.of(dm)
@@ -376,6 +401,8 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False) rai
     var dstate = MambaDeviceState(ctx, b, dims)
     dstate.conv_win = mamba_upload(ctx, _read_f32(a[11], b * di * D_CONV))
     dstate.h = mamba_upload(ctx, _read_f32(a[12], b * di * D_STATE))
+    comptime if NN34_AFFINE_PREFIX:
+        _m1_profile_load(ctx, dstate, a[14], a[15], a[16], absolute_start, b * di * D_STATE)
     var dstages = MambaDeviceStages(ctx, b, l, dims)
     var dx = mamba_upload(ctx, _read_f32(a[0], b * l * dm))
 
@@ -395,6 +422,8 @@ def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False) rai
     _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[13])
     _m3_download_addr[False](ctx, dstate.conv_win, b * di * D_CONV, a[11])
     _m3_download_addr[False](ctx, dstate.h, b * di * D_STATE, a[12])
+    comptime if NN34_AFFINE_PREFIX:
+        _m1_profile_export(ctx, dstate, a[14], a[15], a[16], b * di * D_STATE)
     ctx.synchronize()
     _ = dw^
     _ = dstate^
@@ -516,7 +545,8 @@ def mamba1_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
 
 
 def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
-    if len(addrs) != 14:
+    var count = 17 if NN34_AFFINE_PREFIX else 14
+    if len(addrs) != count:
         raise Error(
             what
             + ": addrs must contain 14 addresses (x, norm.weight,"
@@ -526,7 +556,7 @@ def _mamba1_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
             + String(len(addrs))
         )
     var a = List[Int]()
-    for i in range(14):
+    for i in range(count):
         a.append(Int(py=addrs[i]))
     return a^
 
@@ -571,7 +601,7 @@ def mamba1_forward_binding(
     disagreements are refused BY NAME in Mojo, downstream (DEVIATION
     793's split)."""
     var a = _mamba1_addrs(addrs, String("mamba1_forward"))
-    if len(params) != 3:
+    if len(params) != (4 if NN34_AFFINE_PREFIX else 3):
         raise Error(
             "mamba1_forward: params must contain 3 values (B, L, d_model),"
             " got "
@@ -580,8 +610,9 @@ def mamba1_forward_binding(
     var b = Int(py=params[0])
     var l = Int(py=params[1])
     var dm = Int(py=params[2])
+    var position = Int(py=params[3]) if NN34_AFFINE_PREFIX else 0
     with GILReleased(Python()):
-        _mamba1_run(a, b, l, dm)
+        _mamba1_run(a, b, l, dm, False, position)
     return PythonObject(0)
 
 
@@ -599,7 +630,7 @@ def mamba1_decode_step_binding(
     `addrs`: the same FOURTEEN as `mamba1_forward` with L = 1 shapes
     (x and y_out are B * d_model). `params`: 0 B, 1 d_model."""
     var a = _mamba1_addrs(addrs, String("mamba1_decode_step"))
-    if len(params) != 2:
+    if len(params) != (3 if NN34_AFFINE_PREFIX else 2):
         raise Error(
             "mamba1_decode_step: params must contain 2 values (B, d_model),"
             " got "
@@ -607,8 +638,9 @@ def mamba1_decode_step_binding(
         )
     var b = Int(py=params[0])
     var dm = Int(py=params[1])
+    var position = Int(py=params[2]) if NN34_AFFINE_PREFIX else 0
     with GILReleased(Python()):
-        _mamba1_run(a, b, 1, dm, True)
+        _mamba1_run(a, b, 1, dm, True, position)
     return PythonObject(0)
 
 
@@ -691,7 +723,7 @@ def _m1_require_session_open(s: Mamba1DecodeSession) raises:
         raise Error("mamba1 session: lost after a failed call; close it and open a new one")
 
 
-def _m1_session_open_run(mut s: Mamba1DecodeSession, a: List[Int], b: Int, dm: Int) raises:
+def _m1_session_open_run(mut s: Mamba1DecodeSession, a: List[Int], b: Int, dm: Int, position: Int = 0) raises:
     """The GIL-free half of `mamba1_session_open`: the host weight lists
     through the lane's own struct, one context, the device weights, the
     state over fresh zeros, the L = 1 stages and the resident x buffer."""
@@ -715,6 +747,8 @@ def _m1_session_open_run(mut s: Mamba1DecodeSession, a: List[Int], b: Int, dm: I
     var dstate = MambaDeviceState(s.ctx.value(), b, dims)
     dstate.conv_win = mamba_upload(s.ctx.value(), _read_f32(a[11], b * di * D_CONV))
     dstate.h = mamba_upload(s.ctx.value(), _read_f32(a[12], b * di * D_STATE))
+    comptime if NN34_AFFINE_PREFIX:
+        _m1_profile_load(s.ctx.value(), dstate, a[13], a[14], a[15], position, b * di * D_STATE)
     s.state = dstate^
     s.stages = MambaDeviceStages(s.ctx.value(), b, 1, dims)
     s.dx = mamba_zeros(s.ctx.value(), b * dm)
@@ -767,7 +801,8 @@ def mamba1_session_open_binding(
     in `mamba1_forward`'s order (slots 1 to 10 there), then conv_window and
     h; `params` is [B, d_model]. Everything is COPIED to the device."""
     var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
-    if len(addrs) != 12 or len(params) != 2:
+    var count = 15 if NN34_AFFINE_PREFIX else 12
+    if len(addrs) != count or len(params) != (3 if NN34_AFFINE_PREFIX else 2):
         raise Error("mamba1_session_open: expected 12 addresses and 2 scalars")
     if owner[].busy:
         raise Error("mamba1 session: busy")
@@ -775,7 +810,7 @@ def mamba1_session_open_binding(
         raise Error("mamba1 session: already open; close it first")
     var a = List[Int]()
     a.append(0)
-    for i in range(12):
+    for i in range(count):
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("mamba1_session_open: null buffer address at slot " + String(i))
@@ -784,11 +819,12 @@ def mamba1_session_open_binding(
     var dm = Int(py=params[1])
     if b <= 0:
         raise Error("mamba1_session_open: B must be positive")
+    var position = Int(py=params[2]) if NN34_AFFINE_PREFIX else 0
     owner[].busy = True
     owner[].usable = False
     try:
         with GILReleased(Python()):
-            _m1_session_open_run(owner[], a, b, dm)
+            _m1_session_open_run(owner[], a, b, dm, position)
     except error:
         owner[].busy = False
         owner[].release()
@@ -829,23 +865,31 @@ def mamba1_session_export_state_binding(
     """Copy the resident state into the caller's buffers: `addrs` =
     [conv_window, h]. The session stays open."""
     var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
-    if len(addrs) != 2:
+    if len(addrs) != (5 if NN34_AFFINE_PREFIX else 2):
         raise Error("mamba1_session_export_state: expected 2 addresses")
     var pw = Int(py=addrs[0])
     var ph = Int(py=addrs[1])
     if pw == 0 or ph == 0:
         raise Error("mamba1_session_export_state: null buffer address")
     _m1_require_session_open(owner[])
+    var pb = Int(py=addrs[2]) if NN34_AFFINE_PREFIX else 0
+    var pa = Int(py=addrs[3]) if NN34_AFFINE_PREFIX else 0
+    var pc = Int(py=addrs[4]) if NN34_AFFINE_PREFIX else 0
+    if NN34_AFFINE_PREFIX and (pb == 0 or pa == 0 or pc == 0):
+        raise Error("Mamba-1 NN34: null checkpoint buffer")
     owner[].busy = True
     try:
         with GILReleased(Python()):
             _m1_session_export_run(owner[], pw, ph)
+            comptime if NN34_AFFINE_PREFIX:
+                _m1_profile_export(owner[].ctx.value(), owner[].state.value(), pb, pa, pc, owner[].b * owner[].di * D_STATE)
+                owner[].ctx.value().synchronize()
     except error:
         owner[].busy = False
         owner[].usable = False
         raise error
     owner[].busy = False
-    return PythonObject(0)
+    return PythonObject(owner[].state.value().nn34_position if NN34_AFFINE_PREFIX else 0)
 
 
 def mamba1_session_load_state_binding(
@@ -854,17 +898,24 @@ def mamba1_session_load_state_binding(
     """Replace the resident state with the caller's bytes: `addrs` =
     [conv_window, h]. The explicit refresh for the state half."""
     var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
-    if len(addrs) != 2:
+    if len(addrs) != (6 if NN34_AFFINE_PREFIX else 2):
         raise Error("mamba1_session_load_state: expected 2 addresses")
     var pw = Int(py=addrs[0])
     var ph = Int(py=addrs[1])
     if pw == 0 or ph == 0:
         raise Error("mamba1_session_load_state: null buffer address")
     _m1_require_session_open(owner[])
+    var pb = Int(py=addrs[2]) if NN34_AFFINE_PREFIX else 0
+    var pa = Int(py=addrs[3]) if NN34_AFFINE_PREFIX else 0
+    var pc = Int(py=addrs[4]) if NN34_AFFINE_PREFIX else 0
+    var position = Int(py=addrs[5]) if NN34_AFFINE_PREFIX else 0
     owner[].busy = True
     try:
         with GILReleased(Python()):
             _m1_session_load_run(owner[], pw, ph)
+            comptime if NN34_AFFINE_PREFIX:
+                _m1_profile_load(owner[].ctx.value(), owner[].state.value(), pb, pa, pc, position, owner[].b * owner[].di * D_STATE)
+                owner[].ctx.value().synchronize()
     except error:
         owner[].busy = False
         owner[].usable = False
@@ -2013,6 +2064,11 @@ def _m3_session_export_run(mut s: Mamba3DecodeSession, a: List[Int]) raises -> I
 # ===========================================================================
 
 
+# NN40 explicit owned snapshots, not pointer identity or caller promises.
+# A snapshot is copied into session-owned device storage by install/update;
+# owned forward/backward never read the original external weight addresses.
+comptime NN40_OWNED_WEIGHTS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN40_OWNED_WEIGHTS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+
 struct Mamba3PrefillSession(Movable, Writable):
     var ctx: Optional[DeviceContext]
     var w: Optional[Mamba3DeviceWeights]
@@ -2024,6 +2080,8 @@ struct Mamba3PrefillSession(Movable, Writable):
     var weight_uploads: Int
     var weight_recopies: Int
     var weight_reuses: Int
+    var owned_weights: Bool
+    var weight_generation: Int
     # lane/neural-net-experiment (backward session): the last forward's
     # recorded stages and zero state, kept for the backward that follows it
     # in a training step. `stages_valid` is cleared whenever the retained
@@ -2043,6 +2101,7 @@ struct Mamba3PrefillSession(Movable, Writable):
         self.ctx = None
         self.w = None
         self.w_host = List[Float32]()
+        self.owned_weights = False
         self.dm = 0
         self.dx = None
         self.busy = False
@@ -2050,6 +2109,8 @@ struct Mamba3PrefillSession(Movable, Writable):
         self.weight_uploads = 0
         self.weight_recopies = 0
         self.weight_reuses = 0
+        self.owned_weights = False
+        self.weight_generation = 0
         self.stages = None
         self.state = None
         self.stages_b = 0
@@ -2068,6 +2129,7 @@ struct Mamba3PrefillSession(Movable, Writable):
         self.dx = None
         self.w = None
         self.w_host = List[Float32]()
+        self.owned_weights = False
         self.dm = 0
         if self.ctx:
             try: self.ctx.value().synchronize()
@@ -2160,9 +2222,21 @@ def _m3_weights_recopy(ctx: DeviceContext, mut w: Mamba3DeviceWeights, a: List[I
     w.weights_checked = False
 
 
-def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3Dims) raises:
+def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3Dims, use_owned: Bool = False) raises:
     """Leave `s.w` holding this call's weights: reused, recopied, or freshly
     uploaded (see the section header)."""
+    if use_owned:
+        comptime if NN40_OWNED_WEIGHTS:
+            if not s.owned_weights or not s.w or s.dm != dims.d_model:
+                raise Error("mamba3 owned weights: install a matching snapshot first")
+            s.weight_reuses += 1
+            return
+        else:
+            raise Error("mamba3 owned weights: NN40 arm is disabled")
+    # Normal APIs continue inspecting the weights passed on THIS call.
+    # They relinquish the explicit snapshot route instead of silently
+    # ignoring changed external buffers supplied through the ordinary API.
+    s.owned_weights = False
     ref ctx = s.ctx.value()
     var lens = _m3_weight_lens(dims)
     # MOJOLEARN_MAMBA3_RETAIN_WEIGHTS=0: the per-call upload (the A/B
@@ -2203,7 +2277,7 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
     s.weight_uploads += 1
 
 
-def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int) raises -> Int:
+def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, use_owned: Bool = False) raises -> Int:
     """`_mamba3_run[True]` on the session: `a` is the fresh entry's 25-slot
     list (state slots zero, never read)."""
     var dims = Mamba3Dims.of(dm)
@@ -2217,7 +2291,7 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     var phase_tick = 0
     comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
         phase_tick = Int(perf_counter_ns())
-    _m3_prefill_weights(s, a, dims)
+    _m3_prefill_weights(s, a, dims, use_owned)
     # lane/fam2-lm (IDN_M3_SESSION_STAGE_REUSE): the retained stages and
     # state serve this call when they have its shape; they are refilled with
     # zeros below. (`stages_valid` is not asked: stale VALUES do not matter,
@@ -2370,7 +2444,7 @@ def _m3_prefill_backward_forward(mut s: Mamba3PrefillSession, a: List[Int], b: I
 comptime _M3_BWD_NONFINITE_DY = "mamba3 backward: non-finite grad_output at flat index "
 
 
-def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int) raises:
+def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, use_owned: Bool = False) raises:
     """`mamba3_backward` on the session: `a` is the entry's 21-slot list
     (x, nine weights, grad_output, grad_x, nine weight gradients).
 
@@ -2395,7 +2469,7 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     var bad_dy = device_first_nonfinite(s.ctx.value(), d_output, n_x)
     if bad_dy >= 0:
         raise Error(String(_M3_BWD_NONFINITE_DY) + String(bad_dy))
-    _m3_prefill_weights(s, a, dims)
+    _m3_prefill_weights(s, a, dims, use_owned)
     var reuse = False
     if s.stages_valid and s.stages and s.stages_b == b and s.stages_l == l and s.dx:
         if len(s.dx.value()) == n_x:
@@ -2425,6 +2499,124 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     ctx.synchronize()
     _ = g^
     _ = d_output^
+
+
+def mamba3_owned_weights_enabled_binding() raises -> PythonObject:
+    return PythonObject(NN40_OWNED_WEIGHTS)
+
+
+def mamba3_prefill_session_install_weights_binding(session: PythonObject, addrs: PythonObject, d_model: Int) raises -> PythonObject:
+    """Copy nine tensors into an immutable session-owned generation.
+    Complete all uploads before replacing the previous snapshot. External
+    arrays may mutate afterwards: owned calls no longer consult them."""
+    comptime if not NN40_OWNED_WEIGHTS:
+        raise Error("mamba3 owned weights: NN40 arm is disabled")
+    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
+    if owner[].busy or not owner[].usable:
+        raise Error("mamba3 owned weights: session is busy or unusable")
+    if len(addrs) != 9:
+        raise Error("mamba3 owned weights: expected nine weight addresses")
+    var dims = Mamba3Dims.of(d_model)
+    var a = List[Int]()
+    a.append(0)
+    for i in range(9):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("mamba3 owned weights: null weight address")
+        a.append(address)
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            if not owner[].ctx:
+                owner[].ctx = neural_ctx[_NEURAL_CTX]()
+            var fresh = _m3_load_weights(owner[].ctx.value(), a, dims)
+            owner[].ctx.value().synchronize()
+            # Copy-on-install is the ownership boundary. Drop stages before
+            # exposing the new generation, never reusing old-weight activations.
+            owner[].drop_stages()
+            owner[].w = fresh^
+            owner[].w_host = List[Float32]()
+            owner[].dm = d_model
+            owner[].owned_weights = True
+            owner[].weight_generation += 1
+            owner[].weight_uploads += 1
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    return PythonObject(owner[].weight_generation)
+
+
+def mamba3_prefill_session_forward_owned_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """[x,y,h_last,k_last,v_last,theta_last], [B,L,d_model,generation].
+    A null report follows the existing reports-optional contract."""
+    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
+    if len(addrs) != 6 or len(params) != 4:
+        raise Error("mamba3 owned forward: expected six addresses and four scalars")
+    if owner[].busy or not owner[].usable or not owner[].owned_weights:
+        raise Error("mamba3 owned forward: session is not ready")
+    var generation = Int(py=params[3])
+    if generation != owner[].weight_generation:
+        raise Error("mamba3 owned forward: stale weight generation")
+    var b = Int(py=params[0]); var l = Int(py=params[1]); var dm = Int(py=params[2])
+    if b <= 0 or l <= 0 or dm != owner[].dm:
+        raise Error("mamba3 owned forward: invalid shape or configuration")
+    var a = List[Int](length=25, fill=0)
+    a[0] = Int(py=addrs[0])
+    a[20] = Int(py=addrs[1])
+    if a[0] == 0 or a[20] == 0:
+        raise Error("mamba3 owned forward: null input/output")
+    for i in range(4):
+        a[21 + i] = Int(py=addrs[2 + i])
+        comptime if not IDN_MAMBA3_REPORTS_ON_REQUEST:
+            if a[21 + i] == 0:
+                raise Error("mamba3 owned forward: report address required")
+    owner[].busy = True
+    var out_len = 0
+    try:
+        with GILReleased(Python()):
+            out_len = _m3_prefill_run(owner[], a, b, l, dm, True)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        owner[].release()
+        raise error
+    owner[].busy = False
+    return PythonObject(out_len)
+
+
+def mamba3_prefill_session_backward_owned_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """[x,dy,dx,nine dWeights], [B,L,d_model,generation]. Explicit stale
+    generation refusal prevents differentiating a different snapshot."""
+    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
+    if len(addrs) != 12 or len(params) != 4:
+        raise Error("mamba3 owned backward: expected twelve addresses and four scalars")
+    if owner[].busy or not owner[].usable or not owner[].owned_weights:
+        raise Error("mamba3 owned backward: session is not ready")
+    if Int(py=params[3]) != owner[].weight_generation:
+        raise Error("mamba3 owned backward: stale weight generation")
+    var b = Int(py=params[0]); var l = Int(py=params[1]); var dm = Int(py=params[2])
+    if b <= 0 or l <= 0 or dm != owner[].dm:
+        raise Error("mamba3 owned backward: invalid shape or configuration")
+    var a = List[Int](length=21, fill=0)
+    a[0] = Int(py=addrs[0])
+    for i in range(1, 12):
+        a[9 + i] = Int(py=addrs[i])
+        if a[9 + i] == 0:
+            raise Error("mamba3 owned backward: null buffer address")
+    if a[0] == 0:
+        raise Error("mamba3 owned backward: null input")
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            _m3_prefill_backward_run(owner[], a, b, l, dm, True)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        owner[].release()
+        raise error
+    owner[].busy = False
+    return PythonObject(0)
 
 
 def mamba3_prefill_session_create_binding() raises -> PythonObject:
@@ -2800,6 +2992,7 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_mamba")
         m.def_function[mamba_vendor_binding]("mamba_vendor")
         m.def_function[mamba_numeric_mode_binding]("mamba_numeric_mode")
+        m.def_function[mamba1_profile_binding]("mamba1_profile")
         m.def_function[mamba1_forward_binding]("mamba1_forward")
         m.def_function[mamba1_backward_binding]("mamba1_backward")
         m.def_function[mamba1_decode_step_binding]("mamba1_decode_step")
@@ -2829,6 +3022,11 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
             # lane/neural-net-experiment: the fresh prefill on a session.
             _ = m.add_type[Mamba3PrefillSession]("_Mamba3PrefillSession")
             m.def_function[mamba3_prefill_session_create_binding]("mamba3_prefill_session_create")
+        m.def_function[mamba3_prefill_session_export_weights_binding]("mamba3_prefill_session_export_weights")
+        m.def_function[mamba3_owned_weights_enabled_binding]("mamba3_owned_weights_enabled")
+        m.def_function[mamba3_prefill_session_install_weights_binding]("mamba3_prefill_session_install_weights")
+        m.def_function[mamba3_prefill_session_forward_owned_binding]("mamba3_prefill_session_forward_owned")
+        m.def_function[mamba3_prefill_session_backward_owned_binding]("mamba3_prefill_session_backward_owned")
             m.def_function[mamba3_prefill_session_close_binding]("mamba3_prefill_session_close")
             m.def_function[mamba3_prefill_session_forward_binding]("mamba3_prefill_session_forward")
             m.def_function[mamba3_prefill_session_backward_binding]("mamba3_prefill_session_backward")
@@ -2847,3 +3045,40 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_mamba: ", e))
+
+
+def mamba3_prefill_session_export_weights_binding(session: PythonObject, addrs: PythonObject, generation: Int) raises -> PythonObject:
+    """Download the installed immutable generation, never borrowed arrays."""
+    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
+    if owner[].busy or not owner[].usable or not owner[].owned_weights or not owner[].w or generation != owner[].weight_generation:
+        raise Error("mamba3 owned export: missing, busy, unusable or stale generation")
+    if len(addrs) != 9:
+        raise Error("mamba3 owned export: expected nine writable buffers")
+    var a = List[Int]()
+    for i in range(9):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("mamba3 owned export: null output address")
+        a.append(address)
+    var dm = owner[].dm
+    var dims = Mamba3Dims.of(dm)
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            ref ctx = owner[].ctx.value()
+            ref w = owner[].w.value()
+            _m3_download_addr[False](ctx, w.norm_w, dm, a[0])
+            _m3_download_addr[False](ctx, w.w_in, dims.d_in_proj() * dm, a[1])
+            _m3_download_addr[False](ctx, w.dt_bias, dims.nheads, a[2])
+            _m3_download_addr[False](ctx, w.bnorm_w, M3_D_STATE, a[3])
+            _m3_download_addr[False](ctx, w.cnorm_w, M3_D_STATE, a[4])
+            _m3_download_addr[False](ctx, w.b_bias, dims.nheads * M3_D_STATE, a[5])
+            _m3_download_addr[False](ctx, w.c_bias, dims.nheads * M3_D_STATE, a[6])
+            _m3_download_addr[False](ctx, w.d_skip, dims.nheads, a[7])
+            _m3_download_addr[False](ctx, w.w_out, dm * dims.d_inner, a[8])
+            ctx.synchronize()
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    return PythonObject(generation)

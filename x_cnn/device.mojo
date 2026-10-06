@@ -19,7 +19,8 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_rsqrt
 from checks.rtf_seam import rtf_mul_add
-from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats, NEURAL_GEMM_EXPERIMENT_ENABLED
+from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
     PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, PLAN_SPLITK, apple_mma_applies, apple_mma_applies_one_leaf, PLAN_APPLE_MMA_SPLIT, PLAN_APPLE_MMA_SPLIT_BIG,
@@ -37,7 +38,7 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 #: compiled only under FAST + Apple + `-D MOJOLEARN_AFN_CNN_DIRECT`; every
 #: other build runs the paths below unchanged (x_cnn/afn_direct.mojo).
 from x_cnn.afn_direct import AFN_CNN_DIRECT, afn_conv_direct_applies, afn_conv_direct_launch
-from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell
+from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell, nn14_wgrad_at, nn14_input_grad_at
 from x_cnn.ops import NN45_CONV_RELU, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
@@ -284,7 +285,7 @@ comptime DIRECT_CONV_NVAMD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 comptime DIRECT_CONV = (
     TARGET_COLUMN == COLUMN_APPLE
     or (DIRECT_CONV_NVAMD and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD))
-) and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
+) and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]() and not NEURAL_GEMM_EXPERIMENT_ENABLED
 comptime DC_MAXK = 32
 comptime DC_MAXW = 2048  # 8 KB of threadgroup memory: four blocks fit a core
 comptime DC_TPB = 256
@@ -424,6 +425,13 @@ def device_gemm(
     """`C = op(A) . op(B)` under mojolearn.identical.gemm.fp32.v1, full FP32
     in both tiers (allow_vendor=False: the NVIDIA vendor route is TF32).
     Asynchronous: the entry's own synchronize ends it."""
+    # Neural experiment arms own every contraction, including small TN and
+    # direct-convolution bypasses. Host selects the same arithmetic profile.
+    comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
+        var wp = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
+        identical_gemm_into[False](ctx, c, a, b, wp, m, n, k, op)
+        _ = wp^
+        return
     # DEVIATION 5718: the shipped dispatcher (`identical_gemm_into`, the plan
     # `choose_gemm_plan` picks) on a cached workspace, instead of
     # `identical_gemm`'s allocate, run, synchronize and free per call.
@@ -657,6 +665,9 @@ def bias_grad_gemm(
 ) raises:
     """gb = G^T ones (OC x 1 over `rows`): the pinned GEMM TN's words, by
     XCNN_BIAS_FOLD's two launches when it is on."""
+    comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
+        device_gemm(ctx, gb, g, ones, OC, 1, rows, OP_TN)
+        return
     comptime if XCNN_BIAS_FOLD:
         if rows > 0 and OC > 0:
             var lp = contract_partition(rows)
@@ -1050,14 +1061,15 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dw = m_in(ctx, 1, a[1], OC * ckk, isdev(dev, 1))
     var ddout = m_in(ctx, 2, a[2], rows * OC, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
-    var cols = ws(ctx, 4, rows * ckk)
+    var cols = ws(ctx, 4, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
     var g = ws(ctx, 5, rows * OC)
     var ones = ones_buf(ctx, 6, rows)
     var gw = m_out(ctx, 7, a[4], OC * ckk, isdev(dev, 4))
     var gb = m_out(ctx, 8, a[5], OC, isdev(dev, 5))
-    var dcols = ws(ctx, 9, rows * ckk)
+    var dcols = ws(ctx, 9, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
     var gx = m_out(ctx, 10, a[3], nx, isdev(dev, 3))
-    _im2col(ctx, dxin, cols, dp, rows, ckk, C)
+    comptime if not NN14_BOUNDED_IM2COL:
+        _im2col(ctx, dxin, cols, dp, rows, ckk, C)
     comptime if TILED_LAYOUT:
         var tg = _tiled_grid(N, rows // N, OC)
         ctx.enqueue_function[dout_rows_tiled_kernel](
@@ -1070,10 +1082,16 @@ def conv2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the weight gradient's reduction over the N*OH*OW rows is
     # the pinned GEMM's (leaves + balanced fold), never an atomic accumulation.
-    device_gemm(ctx, gw, g, cols, OC, ckk, rows, OP_TN)
+    comptime if NN14_BOUNDED_IM2COL:
+        launch[nn14_wgrad_at](ctx, fp(dxin), fp(g), fp(gw), fp(gw), ip(dp), ip(dp), OC * ckk)
+    else:
+        device_gemm(ctx, gw, g, cols, OC, ckk, rows, OP_TN)
     bias_grad_gemm(ctx, gb, g, ones, OC, rows)
-    device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
-    launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+    comptime if NN14_BOUNDED_IM2COL:
+        launch[nn14_input_grad_at](ctx, fp(g), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+    else:
+        device_gemm(ctx, dcols, g, dw, rows, ckk, OC, OP_NN)
+        launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
     m_fetch(ctx, gx, a[3], nx, isdev(dev, 3))
     m_fetch(ctx, gw, a[4], OC * ckk, isdev(dev, 4))
     m_fetch(ctx, gb, a[5], OC, isdev(dev, 5))
@@ -2568,6 +2586,16 @@ def _conv_relu_on_device(
     = 27) runs `direct_conv_kernel` instead: the same cols words (written
     only when `need_cols`), each output cell the contract's one-leaf chain,
     no y2."""
+    comptime if NN14_BOUNDED_IM2COL:
+        var tile_rows = nn14_conv_rows(rows, ckk, OC)
+        var row0 = 0
+        while row0 < rows:
+            var take = min(tile_rows, rows - row0)
+            ctx.enqueue_function[nn14_im2col_slice_kernel](fp(dx), fp(cols), ip(dp), Int32(row0), Int32(take * ckk), grid_dim=((take * ckk + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1))
+            device_gemm(ctx, y2, cols, dw, take, OC, ckk, OP_NT)
+            ctx.enqueue_function[nn14_conv_slice_kernel](fp(y2), fp(dbias), fp(yconv), ip(dp), Int32(row0), Int32(take * OC), grid_dim=((take * OC + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1))
+            row0 += take
+        return False
     comptime if DIRECT_CONV:
         if ckk <= DC_MAXK and OC * ckk <= DC_MAXW and rows > 0:
             ctx.enqueue_function[direct_conv_kernel](
@@ -2627,9 +2655,10 @@ def conv_block_forward_into[resident: Bool = False](
     var dw = put[resident](ctx, 1, w, OC * ckk)
     var dbias = put[resident](ctx, 2, bias, OC)
     var dp = put_prm(ctx, 3, cprm)
-    var saved = resident and save_cols != 0 and save_y != 0
-    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 4, rows * ckk)
-    var y2 = ws(ctx, 5, ny)
+    var saved = resident and save_y != 0 and (NN14_BOUNDED_IM2COL or save_cols != 0)
+    var tile_rows = nn14_conv_rows(rows, ckk, OC) if NN14_BOUNDED_IM2COL else rows
+    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved and not NN14_BOUNDED_IM2COL else ws(ctx, 4, tile_rows * ckk)
+    var y2 = ws(ctx, 5, tile_rows * OC)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 6, ny)
     comptime if AFN_CNN_DIRECT:
         # lane afn-mlp: without a pool the tiled launch's epilogue writes the
@@ -2704,9 +2733,10 @@ def conv_block_backward_into[resident: Bool = False](
     var dbias = put[resident](ctx, 2, bias, OC)
     var dgo = put[resident](ctx, 3, g, no)
     var dp = put_prm(ctx, 5, cprm)
-    var saved = resident and save_cols != 0 and save_y != 0
-    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 7, rows * ckk)
-    var y2 = ws(ctx, 8, ny)
+    var saved = resident and save_y != 0 and (NN14_BOUNDED_IM2COL or save_cols != 0)
+    var tile_rows = nn14_conv_rows(rows, ckk, OC) if NN14_BOUNDED_IM2COL else rows
+    var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved and not NN14_BOUNDED_IM2COL else ws(ctx, 7, tile_rows * ckk)
+    var y2 = ws(ctx, 8, tile_rows * OC)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 9, ny)
     var gy = ws(ctx, 11, ny)
     if not saved:
@@ -2742,13 +2772,19 @@ def conv_block_backward_into[resident: Bool = False](
     comptime if not ONES_CACHE:
         launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
-    device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
+    comptime if NN14_BOUNDED_IM2COL:
+        launch[nn14_wgrad_at](ctx, fp(dx), fp(grow), fp(gw), fp(gw), ip(dp), ip(dp), OC * ckk)
+    else:
+        device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
     bias_grad_gemm(ctx, gb, grow, ones, OC, rows)
     if need_dx:
-        var dcols = ws(ctx, 16, rows * ckk)
+        var dcols = ws(ctx, 16, 1 if NN14_BOUNDED_IM2COL else rows * ckk)
         var gx = outb[resident](ctx, 17, gx_out, nx)
-        device_gemm(ctx, dcols, grow, dw, rows, ckk, OC, OP_NN)
-        launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+        comptime if NN14_BOUNDED_IM2COL:
+            launch[nn14_input_grad_at](ctx, fp(grow), fp(dw), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+        else:
+            device_gemm(ctx, dcols, grow, dw, rows, ckk, OC, OP_NN)
+            launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
         fetch[resident](ctx, gx, gx_out, nx)
         _ = dcols^
         _ = gx^

@@ -68,8 +68,8 @@ from std.os import getenv
 
 from core.host_lanes import host_f32_uninit
 from gemm.contract import OP_NT
-from gemm.host.identical_gemm import gemm_oracle
-from gemm.host.gemm_host_rows import gemm_host_rows
+from gemm.host.neural_gemm import gemm_oracle
+from gemm.host.neural_gemm import gemm_host_rows
 from embedding.checks.embedding_oracle import (
     EmbConfig,
     emb_backward_oracle,

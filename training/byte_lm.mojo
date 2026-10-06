@@ -53,11 +53,11 @@ from training.checks.train_loop import (
     _zeros, _zeros_i32, _upload, _ones, _copy_into, download_f32,
 )
 from training.byte_lm_block_copy import byte_block_copy
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     ANY_SABOTAGE as GEMM_SABOTAGE, identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_backward import (
+from gemm.neural_backward import (
     ANY_BWD_SABOTAGE as GEMM_BWD_SABOTAGE, identical_gemm_backward_a_into,
     identical_gemm_backward_b_into, identical_gemm_backward_workspace_max_floats,
 )
@@ -68,6 +68,8 @@ from embedding.checks.embedding_identical import (
     identical_embedding_forward_prerefused_into,
     identical_embedding_backward_prerefused_into,
 )
+from embedding.owned_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
+from training.neural_ab_lifetime import NN62_LIFETIME_ARENA, NeuralLifetimeArena, NeuralLiveRange
 from embedding.checks.embedding_oracle import EmbConfig
 from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
 from training.checks.loss import (
@@ -86,6 +88,7 @@ from training.checks.optimizer import (
     OPT_TPB, _grid_for as _opt_grid_for, adam_update_kernel, adam_update_oop_kernel, adam_update_oop_status_kernel,
     device_step_scalars, opt_refuse_device_inputs,
 )
+from training.neural_ab_optimizer import NN55_BLOCK_STATUS, NN56_GROUPED_ADAM, NN_ADAM_TPB, nn_adam_scalar_table, nn_grouped_adam_into
 from training.checks.optimizer_contract import OPT_ADAMW, OPT_SGD, OptimizerConfig
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_eager_for
 from core.device_arena import arena_begin, arena_end, arena_release
@@ -453,6 +456,7 @@ def _byte_validate_allocations(config: ByteConfig) raises:
 
 struct ByteBuffers(Movable):
     """Configured buffers; flat arrays are authoritative, weights are copies."""
+    var neural_scratch: List[NeuralLifetimeArena]
     var config: ByteConfig
     var n_total: Int
     var optimizer_first: Int
@@ -570,9 +574,23 @@ struct ByteBuffers(Movable):
         self.norms = _zeros(ctx, config.n_tensors())
         self.total_cell = _zeros(ctx, 1)
         self.out2 = _zeros(ctx, 2)
-        self.opt_ws = _zeros(
-            ctx, identical_optimizer_workspace_floats(self.offsets)
-        )
+        self.neural_scratch = List[NeuralLifetimeArena]()
+        var opt_cells = identical_optimizer_workspace_floats(self.offsets)
+        var ce_cells = 1 if config.chunked_lm_head_v2 else identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN)
+        comptime if NN62_LIFETIME_ARENA:
+            # CE workspace is dead when forward enqueues its final fold (phase
+            # 0); clipping starts after all backward work (phase 2). Neither is
+            # retained for replay. Both use the same ordered context, and every
+            # scratch read follows its producer. The owner retains the slab
+            # across forward, backward, update and rollback; no async alias
+            # crosses contexts. Fresh steps repeat this fixed phase order.
+            var ranges = List[NeuralLiveRange]()
+            ranges.append(NeuralLiveRange(ce_cells, 0, 0))
+            ranges.append(NeuralLiveRange(opt_cells, 2, 2))
+            self.neural_scratch.append(NeuralLifetimeArena(ctx, ranges, 4 * max(ce_cells, opt_cells)))
+            self.opt_ws = self.neural_scratch[0].view(1, 2)
+        else:
+            self.opt_ws = _zeros(ctx, opt_cells)
         self.sab_partials = _zeros(ctx, SAB_CHUNKS)
 
         # Views of the flat parameters (`_bind_emb_head`), not copies.
@@ -657,7 +675,10 @@ struct ByteBuffers(Movable):
                 self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
                 self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
         self.ce_ones = _ones(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_ones_floats(M, V))
-        self.ce_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN))
+        comptime if NN62_LIFETIME_ARENA:
+            self.ce_ws = self.neural_scratch[0].view(0, 0)
+        else:
+            self.ce_ws = _zeros(ctx, ce_cells)
 
         self.head_ws = _zeros(ctx, identical_gemm_workspace_max_floats(M, min(V, LM_HEAD_V2_CHUNK) if config.chunked_lm_head_v2 else V, DM))
         self.head_bwd_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_gemm_backward_workspace_max_floats(OP_NT, M, V, DM, False))
@@ -916,6 +937,7 @@ struct ByteTrainer(Movable):
     var released_eager_cells: Int
     var grad_step: Int
     # Diagnostic reach witness; counts successful live-status optimizer checks.
+    var embedding_runs: List[OwnedEmbeddingRuns]
     var live_status_steps: Int
 
     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
@@ -940,6 +962,7 @@ struct ByteTrainer(Movable):
         self.shadow_step = -1
         self.released_eager_cells = 0
         self.grad_step = -1
+        self.embedding_runs = List[OwnedEmbeddingRuns]()
         self.live_status_steps = 0
         # lane/neural-pass43: the session's buffers carved from arena chunks
         # (core/device_arena.mojo) between here and `arena_end` below.
@@ -1450,7 +1473,7 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
             tr.buffers.ce_logp_target, tr.buffers.ce_nll, tr.buffers.ce_logp,
             tr.buffers.ce_logp_sum, tr.buffers.ce_smooth, tr.buffers.ce_row,
             tr.buffers.ce_total, tr.buffers.ce_loss, tr.buffers.logits,
-            tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce)
+            tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce, targets_prerefused=NN51_RESIDENT_TOKEN_VALIDATION)
     # No wait: `download_f32` below waits for the loss itself.
     # A host round trip costs about a dozen kernel launches on Metal.
     comptime if AFN_LM_NOSYNC and deferred:
@@ -1745,7 +1768,16 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
         PLAN_SORT if config.vocab_size * M >= EMB_AUTO_SORT_MIN_CELLS
         else PLAN_SCAN
     )
-    comptime if NN51_RESIDENT_TOKEN_VALIDATION:
+    comptime if NN50_OWNED_RUNS:
+        var reuse = False
+        if len(tr.embedding_runs) == 1:
+            reuse = tr.embedding_runs[0].matches(ctx, tr.buffers.ids, M, emb)
+        if not reuse:
+            if len(tr.embedding_runs) == 1:
+                _ = tr.embedding_runs.pop()
+            tr.embedding_runs.append(OwnedEmbeddingRuns(ctx, tr.buffers.ids, M, emb))
+        tr.embedding_runs[0].backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x, emb)
+    elif NN51_RESIDENT_TOKEN_VALIDATION:
         # The immediately preceding forward in this gradient operation owned
         # and validated the same IDs. This skips a redundant ID download only.
         identical_embedding_backward_prerefused_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
@@ -1797,7 +1829,10 @@ def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     # path, unchanged.
     var glue_update = False
     var live_validated = False
-    comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
+    comptime if NN56_GROUPED_ADAM and not BYTE_LM_FAULT_INJECT:
+        glue_update = True
+        live_validated = _byte_neural_group_update(ctx, tr, next_step)
+    elif STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
         var glue_arm = step_glue_arm_from_env()
         if (glue_arm & STEP_GLUE_UPDATE_BITS) != 0:
             glue_update = True
@@ -1957,6 +1992,67 @@ def byte_glue_update_launch(
     _ = denom_out
     _ = q_out
 
+
+
+def _byte_neural_group_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int) raises -> Bool:
+    """NN56 actual byte-LM transactional update; NN55 replaces output scans.
+
+    The tensor registry defines groups. This model has one admitted AdamW
+    config, repeated in metadata, while the kernel supports distinct configs.
+    Gradients and all carried state retain their existing entry scans. Updates
+    are tentative until the normal finish/rollback boundary accepts them.
+    """
+    var n = tr.config.n_total()
+    opt_refuse_device_inputs(ctx, tr.buffers.param, tr.buffers.grad,
+        tr.buffers.m_state, tr.buffers.v_state, tr.buffers.offsets, tr.optimizer)
+    # byte_validate_optimizer currently refuses clipping and non-AdamW options;
+    # this native arm inherits that admission rather than silently dropping it.
+    var offsets = List[Int32]()
+    var configs = List[OptimizerConfig]()
+    var steps = List[Int]()
+    var kinds = List[Int32]()
+    var groups = len(tr.buffers.offsets) - 1
+    var largest = 0
+    for j in range(groups):
+        offsets.append(Int32(tr.buffers.offsets[j]))
+        largest = max(largest, tr.buffers.offsets[j + 1] - tr.buffers.offsets[j])
+        configs.append(tr.optimizer.copy())
+        steps.append(next_step)
+        kinds.append(Int32(1))
+    offsets.append(Int32(n))
+    var table = nn_adam_scalar_table(configs, steps)
+    var d_offsets = ctx.enqueue_create_buffer[DType.int32](groups + 1)
+    var d_kinds = ctx.enqueue_create_buffer[DType.int32](groups)
+    var d_table = ctx.enqueue_create_buffer[DType.float32](len(table))
+    ctx.enqueue_copy(dst_buf=d_offsets, src_ptr=offsets.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_kinds, src_ptr=kinds.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_table, src_ptr=table.unsafe_ptr())
+    var parts = ctx.enqueue_create_buffer[DType.int32](4 * groups * ((largest + NN_ADAM_TPB - 1) // NN_ADAM_TPB))
+    var status = ctx.enqueue_create_buffer[DType.int32](4)
+    tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
+    tr.shadow_step = tr.completed_steps
+    nn_grouped_adam_into[NN55_BLOCK_STATUS](ctx, tr.buffers.shadow_p, tr.buffers.shadow_m,
+        tr.buffers.shadow_v, tr.buffers.param, tr.buffers.grad, tr.buffers.m_state,
+        tr.buffers.v_state, d_offsets, d_kinds, d_table, parts, status, n, groups, largest)
+    ctx.synchronize()
+    # The old state remains in the three original handles until the launch has
+    # finished. After swapping, existing recovery owns exactly that old state.
+    swap(tr.buffers.param, tr.buffers.shadow_p)
+    swap(tr.buffers.m_state, tr.buffers.shadow_m)
+    swap(tr.buffers.v_state, tr.buffers.shadow_v)
+    tr.shadow_valid = True
+    comptime if NN55_BLOCK_STATUS:
+        _byte_live_status_finish(ctx, status, n, next_step)
+        tr.live_status_steps += 1
+    _ = offsets
+    _ = kinds
+    _ = table
+    _ = d_offsets^
+    _ = d_kinds^
+    _ = d_table^
+    _ = parts^
+    _ = status^
+    return NN55_BLOCK_STATUS
 
 
 def _byte_live_status_launch(ctx: DeviceContext,mut tr: ByteTrainer,mut status: DeviceBuffer[DType.int32],next_step: Int) raises:

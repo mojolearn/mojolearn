@@ -563,6 +563,33 @@ class TransformerState:
         return self._packed(self.v_cache)
 
 
+class TransformerForwardTape:
+    """Opaque, single-use native forward ticket returned by a transformer block."""
+
+    def __init__(self, block, session, binding, token, shape, configuration, profile):
+        self._block = block
+        self._session = session
+        self._binding = binding
+        self._token = (int(token[0]), int(token[1]))
+        self.retained = bool(token[2])
+        self.stage_bytes = int(token[3])
+        self.shape = tuple(shape)
+        self.profile = profile
+        self._configuration = configuration
+        self._weight_shapes = tuple(a.shape for a in block._w)  # glue: tensor shape metadata
+        self._consumed = False
+
+    def __reduce__(self):
+        raise TypeError("TransformerForwardTape is a live native owner and cannot be serialized")
+
+    def close(self):
+        """Explicitly discard this ticket and its saved native buffers."""
+        with self._block._runtime_lock:
+            if not self._consumed and self._session is self._block._native_session:
+                self._binding.transformer_session_discard_tape(self._session, self._token)
+            self._consumed = True
+
+
 class TransformerBlock(NumericModeMixin):
     """One Llama-shaped decoder block on the GPU -- input RMSNorm, eager
     self-attention with RoPE, GQA and a KV cache, residual,
@@ -708,6 +735,7 @@ class TransformerBlock(NumericModeMixin):
         self._runtime_lock = threading.RLock()
         self._native_session = None
         self._session_binding = None
+        self._arithmetic_profile = None
         what = "TransformerBlock"
         # lane/identical-lowbit-inference (2026-09-17): packed bf16 or int8
         # projection weights (mojolearn.lowbit) are materialized exactly here
@@ -926,6 +954,7 @@ class TransformerBlock(NumericModeMixin):
     def __getstate__(self):
         # Device contexts and thread locks cannot cross serialization/copy.
         # Only ordinary model state is saved; GPU ownership is recreated lazily.
+        self._extension()  # admit and save the binding's arithmetic version
         state = self.__dict__.copy()
         for name in ("_runtime_lock", "_native_session", "_session_binding"):  # glue: drops three cached attributes
             state.pop(name, None)
@@ -1003,10 +1032,24 @@ class TransformerBlock(NumericModeMixin):
         ext.transformer_forward_fresh(addrs, params)
         return y
 
+    def _admit_state_profile(self, state):
+        if state is None:
+            return
+        profile = getattr(self, "_arithmetic_profile", None)
+        saved = getattr(state, "arithmetic_profile", None)
+        if (saved is None and int(state.cached_tokens) != 0
+                and getattr(self, "_arithmetic_profile_changed", False)):
+            raise ValueError("TransformerState with cached tokens needs arithmetic profile metadata under an experimental version")
+        if saved is not None and profile is not None and saved != profile:
+            raise ValueError("TransformerState arithmetic profile differs from this block")
+        if profile is not None:
+            state.arithmetic_profile = profile
+
     def _call(self, x, state, step):
         what = "TransformerBlock.step" if step else "TransformerBlock.forward"
         x = _batch_tokens(x, what, self.d_model, step)
         ext = self._extension()
+        self._admit_state_profile(state)
         if getattr(self, "_int15", None) is not None:
             with self._runtime_lock:
                 return self._call_int15(x, state, step, ext, what)
@@ -1195,6 +1238,17 @@ class TransformerBlock(NumericModeMixin):
                     "directory it sits in disagree, rebuild it with "
                     "bash bindings/build_transformer.sh"
                 )
+        if want == "identical" and _exports(mod, "transformer_arithmetic_profile"):
+            profile = str(mod.transformer_arithmetic_profile())
+            saved = getattr(self, "_arithmetic_profile", None)
+            if saved is not None and saved != profile:
+                raise ValueError(
+                    f"mojolearn {type(self).__name__}: saved arithmetic profile {saved!r} "
+                    f"does not match binding profile {profile!r}; explicitly construct a new "
+                    "block from the weights to migrate versions"
+                )
+            self._arithmetic_profile = profile
+            self._arithmetic_profile_changed = bool(mod.transformer_arithmetic_profile_changed())
         return mod
 
     def forward(self, x, state=None, *, lengths=None):
@@ -1240,6 +1294,85 @@ class TransformerBlock(NumericModeMixin):
                 "max_tokens) makes the fresh one)"
             )
         return self._call(x, state, step=True)
+
+    def _tape_configuration(self):
+        # API metadata only; no tensor data is read or compared in Python.
+        return (self.d_model, self.n_heads, self.n_kv_heads, self.head_dim,
+                self.intermediate, self.window, tuple(self._opts_tail),
+                self.numeric_profile)
+
+    def forward_with_tape(self, x, *, activation_budget_bytes=536870912,
+                          minimum_replay_ops_per_byte=0):
+        """Return ``(output, tape)`` for one zero-state training forward.
+
+        The native session snapshots the input and weights. Backward uses
+        those snapshots even if the caller edits its arrays. A later call on
+        this block invalidates the ticket; tickets are single-use and cannot
+        be serialized. Only default FP32 options in IDENTICAL are supported.
+
+        NN32 retains native forward stages; NN31 uses the activation byte
+        budget and optional replay cost threshold. A budget miss or switches
+        off selects native replay. The budget covers retained forward stages,
+        excluding input/weight snapshots and transient forward/backward work.
+        No compilation, identity, quality or timing admission is implied.
+        """
+        what = "TransformerBlock.forward_with_tape"
+        if getattr(self, "_int15", None) is not None or getattr(self, "_extended", False):
+            raise NotImplementedError(f"mojolearn {what}: default FP32 block options required")
+        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
+        if mode != "identical":
+            raise NotImplementedError(f"mojolearn {what}: IDENTICAL required")
+        budget = int(activation_budget_bytes)
+        cost = int(minimum_replay_ops_per_byte)
+        if budget < 0 or cost < 0:
+            raise ValueError(f"mojolearn {what}: activation budget and replay cost must be nonnegative")
+        x = _batch_tokens(x, what, self.d_model, False)
+        b, l = int(x.shape[0]), int(x.shape[1])
+        y = _buffers.empty(x.shape, "<f4")
+        ext = self._extension()
+        if not _exports(ext, "transformer_session_forward_tape"):
+            raise NotImplementedError(f"mojolearn {what}: loaded binding lacks the native tape API")
+        addrs = [_addr_ro(x)] + [_addr_ro(a) for a in self._w] + [_addr(y)]  # glue: tensor addresses
+        params = [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+                  self.head_dim, self.intermediate, self.window, budget, cost]
+        with self._runtime_lock:
+            if self._native_session is not None and self._session_binding is not ext:
+                self._session_binding.transformer_session_close(self._native_session)
+                self._native_session = None
+                self._session_binding = None
+            if self._native_session is None:
+                self._native_session = ext.transformer_session_create()
+                self._session_binding = ext
+            token = ext.transformer_session_forward_tape(self._native_session, addrs, params)
+            tape = TransformerForwardTape(self, self._native_session, ext, token,
+                                          x.shape, self._tape_configuration(),
+                                          self._arithmetic_profile)
+        return y, tape
+
+    def backward_from_tape(self, tape, grad_output):
+        """Consume one matching forward ticket and return input/weight VJPs.
+
+        Retention and replay both use the native snapshots from the forward.
+        Replacing model configuration or calling the session again refuses
+        this ticket. Parameter-array edits do not alter the saved forward.
+        """
+        what = "TransformerBlock.backward_from_tape"
+        if not isinstance(tape, TransformerForwardTape) or tape._block is not self:
+            raise ValueError(f"mojolearn {what}: tape belongs to another block")
+        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"), what,
+                         "grad_output", tape.shape)
+        ext = self._extension()
+        with self._runtime_lock:
+            if (tape._consumed or tape._session is not self._native_session
+                    or tape._binding is not ext or tape.profile != self._arithmetic_profile
+                    or tape._configuration != self._tape_configuration()):
+                raise ValueError(f"mojolearn {what}: stale, consumed or incompatible tape")
+            grads = [_buffers.empty(tape.shape, "<f4")] + [
+                _buffers.empty(shape, "<f4") for shape in tape._weight_shapes]  # glue: gradient buffers
+            addrs = [_addr_ro(dy)] + [_addr(g) for g in grads]  # glue: tensor addresses
+            tape._consumed = True
+            ext.transformer_session_backward_tape(tape._session, addrs, tape._token)
+        return dict(zip(("x",) + self._W_NAMES, grads))
 
     def backward(self, x, grad_output):
         """The zero-state prefill VJP: `x` `(B, L, d_model)` float32 and
@@ -1316,7 +1449,10 @@ class TransformerBlock(NumericModeMixin):
                     self._session_binding = ext
                 ext.transformer_session_backward(self._native_session, addrs, params)
             return dict(zip(("x",) + self._W_NAMES, grads))
-        native(addrs, params)
+        with self._runtime_lock:
+            if self._native_session is not None and _exports(self._session_binding, "transformer_session_invalidate_tape"):
+                self._session_binding.transformer_session_invalidate_tape(self._native_session)
+            native(addrs, params)
         return dict(zip(("x",) + self._W_NAMES, grads))
 
     def decode_session(self, state):
@@ -1468,6 +1604,7 @@ class TransformerDecodeSession:
             )
         if state is None:
             raise ValueError(f"mojolearn {what}: state is required (allocate_state)")
+        block._admit_state_profile(state)
         _refuse_resident(state, what)
         if state.batch_size < 1:
             raise ValueError(f"mojolearn {what}: the state holds no rows")
@@ -1622,6 +1759,7 @@ class TransformerDecodeSession:
         self._require_open(what)
         st = self._state
         blk = self._block
+        blk._admit_state_profile(st)
         n = st.batch_size * blk.n_kv_heads * st.capacity * blk.head_dim
         kc = _state_buf(st.k_cache, what, "k_cache", (n,))
         vc = _state_buf(st.v_cache, what, "v_cache", (n,))

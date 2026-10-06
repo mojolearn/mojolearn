@@ -2155,6 +2155,25 @@ def _pmul(a: Float32, b: Float32) -> Float32:
     return _step(a, b, Float32(-0.0))
 
 
+# NN18 counterfactual control isolates the already implemented structural
+# K-tile bounds. OFF by default. A uses the existing visibility bounds; B
+# stages every K page while unchanged per-row predicates exclude every
+# masked term. Only page traffic/barriers/unused score work differ. This
+# does not bypass the existing finite-regime admission or corner replay.
+comptime NN18_DENSE_TILE_CONTROL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN18_DENSE_TILE_CONTROL"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+@always_inline
+def nn18_key_tile_bounds(lo: Int,hi: Int,keys: Int,tile: Int) -> Tuple[Int,Int]:
+    comptime if NN18_DENSE_TILE_CONTROL:
+        return (0,(keys-1)//tile)
+    return (lo//tile,hi//tile)
+
+
 @always_inline
 def _row_range(
     t: Int, pos0: Int, key_lo: Int, window: Int, s: Int
@@ -2737,8 +2756,9 @@ def fused_attn_forward_regblocked_kernel[HD: Int](
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
     var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
@@ -2930,8 +2950,9 @@ def fused_attn_forward_regblocked_sstash_kernel[HD: Int, SABOTAGE: Bool](
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
     var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
@@ -3155,8 +3176,9 @@ def fused_attn_forward_kernel[HD: Int, TQ: Int](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var qbase = (bb * l + tt) * nh * HD + h * HD
@@ -3413,8 +3435,9 @@ def fused_bwd_zdot_kernel[HD: Int, TQ: Int](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -3576,8 +3599,9 @@ def fused_bwd_dq_kernel[HD: Int, TQ: Int](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -3992,8 +4016,9 @@ def fused_bwd_zdot_stash_kernel[HD: Int, TQ: Int](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -4139,8 +4164,9 @@ def fused_bwd_dq_stash_kernel[HD: Int, TQ: Int, SABOTAGE: Bool](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var row = (bb * nh + h) * l + tt
@@ -4624,8 +4650,9 @@ def fused_bwd_dq_tiled_kernel[HD: Int, SABOTAGE: Bool](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // TK
-    var kb_hi = r1[1] // TK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,TK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var hbase = (bb * nh + h) * l
@@ -4953,8 +4980,9 @@ def fused_bwd_ydy_tiled_kernel[HD: Int, TQ: Int, SABOTAGE: Bool](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var hbase = (bb * nh + h) * l
@@ -5240,8 +5268,9 @@ def fused_bwd_zdot_stash_pf_kernel[HD: Int, TQ: Int, SABN: Bool](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -5407,8 +5436,9 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False, TQP: Int = ATTN_DQ_
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // TK
-    var kb_hi = r1[1] // TK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,TK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var hbase = (bb * nh + h) * l
@@ -5680,8 +5710,9 @@ def fused_bwd_dq_mfma_kernel[HD: Int, SWZ: Bool = False](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // TK
-    var kb_hi = r1[1] // TK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,TK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var hbase = (bb * nh + h) * l
@@ -6864,8 +6895,9 @@ def fused_bwd_zdot_sched_pf_kernel[HD: Int, TQ: Int, LAG: Bool, SABN: Bool](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -7089,8 +7121,9 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     var t1 = min(t0 + TQ//HEAD_SHARE - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
     var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
@@ -7368,8 +7401,9 @@ def fused_attn_forward_r2_mfma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
     var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
@@ -7670,8 +7704,9 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -7853,8 +7888,9 @@ def fused_bwd_zdot_kreg_kernel[HD: Int, TQ: Int, SWZ: Bool = False](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var kvbase = (bb * nkv + kvh) * s * HD
     var headrow = (bb * nh + h) * l
 
@@ -8586,8 +8622,9 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
     var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
@@ -8933,8 +8970,9 @@ def fused_bwd_zdot_estash_amma_kernel[HD: Int, SWZ: Bool = False](
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var kvbase = (bb * nkv + kvh) * s * HD
     # The block's dctx rows, flushed once, transposed: dT[p][r].
     var ed = UInt32(0xFF)
@@ -9146,8 +9184,9 @@ def fused_bwd_zdot_stash_amma_kernel[HD: Int](
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var kvbase = (bb * nkv + kvh) * s * HD
     for i in range(tid, TQ * HD, FUSED_THREADS):
         var r = i // HD

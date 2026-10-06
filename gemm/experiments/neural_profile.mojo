@@ -6,9 +6,7 @@ Every profile uses this SAME scalar arithmetic body on host and device. A
 profile may change bits across versions, never between vendors in one run.
 No compilation, identity, quality or timing has been run for this source.
 """
-from std.sys.compile import is_defined
-from std.gpu import block_idx, block_dim, thread_idx
-from max.gpu.host import DeviceBuffer, DeviceContext
+from std.sys.compile import is_defined, get_defined_int
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from checks.rtf_seam import rtf_mul_add
 from gemm.contract import CONTRACT_K_LEAF_MIN, CONTRACT_MAX_LEAVES, OP_NN, OP_NT, OP_TN
@@ -22,6 +20,11 @@ comptime NEURAL_EXPERIMENTS_ALLOWED = (
 # full-workload A/Bs. No inherited I04 component result admits these profiles.
 comptime NN03 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN03"]()
 comptime NN04 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN04"]()
+comptime NEURAL_PROFILE_CHANGED = NN03 or NN04
+comptime NEURAL_LEAF = get_defined_int["MOJOLEARN_IDN_NEURAL_LEAF",128]() if NN03 else CONTRACT_K_LEAF_MIN
+comptime NEURAL_CHAINS = get_defined_int["MOJOLEARN_IDN_NEURAL_CHAINS",2]() if NN04 else 1
+comptime assert NEURAL_LEAF == 64 or NEURAL_LEAF == 128 or NEURAL_LEAF == 256, "neural leaf profile must be 64/128/256"
+comptime assert NEURAL_CHAINS == 1 or NEURAL_CHAINS == 2 or NEURAL_CHAINS == 4, "neural chains must be 1/2/4"
 
 
 def neural_partition[MIN_LEAF: Int](k: Int) -> Tuple[Int, Int]:
@@ -83,10 +86,20 @@ def neural_fold_drain[SLOTS: Int](stack: SIMD[DType.float32, SLOTS], occupied: I
 
 
 @always_inline
+def neural_merge_chains[CHAINS: Int](acc: SIMD[DType.float32,CHAINS]) -> Float32:
+    comptime if CHAINS == 1:
+        return ftz(acc[0])
+    elif CHAINS == 2:
+        return ftz(ftz(acc[0])+ftz(acc[1]))
+    else:
+        return ftz(ftz(ftz(acc[0])+ftz(acc[1]))+ftz(ftz(acc[2])+ftz(acc[3])))
+
+
+@always_inline
 def neural_leaf[CHAINS: Int](
     a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin],
     row: Int, col: Int, begin: Int, end: Int,
-    asi: Int, asp: Int, bsp: Int, bsj: Int,
+    asi: Int, asp: Int, bsp: Int, bsj: Int, real_k: Int = -1,
 ) -> Float32:
     """Versioned leaf graph: chain q owns begin+q+j*CHAINS in ascending j.
 
@@ -100,63 +113,29 @@ def neural_leaf[CHAINS: Int](
         comptime for chain in range(CHAINS):
             var p = base + chain
             if p < end:
-                acc[chain] = rtf_mul_add(
-                    ftz(a.unsafe_load(row*asi + p*asp)),
-                    ftz(b.unsafe_load(p*bsp + col*bsj)), acc[chain])
-    comptime if CHAINS == 1:
-        return ftz(acc[0])
-    elif CHAINS == 2:
-        return ftz(ftz(acc[0]) + ftz(acc[1]))
-    else:
-        var left = ftz(ftz(acc[0]) + ftz(acc[1]))
-        var right = ftz(ftz(acc[2]) + ftz(acc[3]))
-        return ftz(ftz(left) + ftz(right))
+                var av = Float32(0)
+                var bv = Float32(0)
+                if real_k<0 or p<real_k:
+                    av = ftz(a.unsafe_load(row*asi+p*asp))
+                    bv = ftz(b.unsafe_load(p*bsp+col*bsj))
+                # Explicit logical +0 suffix still participates in the
+                # selected chain; never shorten k or move leaf boundaries.
+                acc[chain] = rtf_mul_add(av,bv,acc[chain])
+    return neural_merge_chains[CHAINS](acc)
 
 
 @always_inline
 def neural_cell[CHAINS: Int, SLOTS: Int = 16](
     a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin],
     row: Int, col: Int, k: Int, leaf: Int, leaves: Int,
-    asi: Int, asp: Int, bsp: Int, bsj: Int,
+    asi: Int, asp: Int, bsp: Int, bsj: Int, real_k: Int = -1,
 ) -> Float32:
     var stack = SIMD[DType.float32, SLOTS](0.0)
     var occupied = 0
     for t in range(leaves):
-        var value = neural_leaf[CHAINS](a,b,row,col,t*leaf,min((t+1)*leaf,k),asi,asp,bsp,bsj)
+        var value = neural_leaf[CHAINS](a,b,row,col,t*leaf,min((t+1)*leaf,k),asi,asp,bsp,bsj,real_k)
         neural_fold_push[SLOTS](stack,occupied,value)
     return neural_fold_drain[SLOTS](stack,occupied)
-
-
-def neural_profile_kernel[CHAINS: Int, SLOTS: Int](
-    c: MutPointer[Float32, MutAnyOrigin], a: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin], m: Int32, n: Int32, k: Int32,
-    leaf: Int32, leaves: Int32, asi: Int32, asp: Int32, bsp: Int32, bsj: Int32,
-):
-    var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if cell < Int(m)*Int(n):
-        c.unsafe_store(cell,neural_cell[CHAINS,SLOTS](a,b,cell//Int(n),cell%Int(n),
-            Int(k),Int(leaf),Int(leaves),Int(asi),Int(asp),Int(bsp),Int(bsj)))
-
-
-def neural_profile_device[MIN_LEAF: Int = 128, CHAINS: Int = 1, SLOTS: Int = 16](
-    ctx: DeviceContext, mut c: DeviceBuffer[DType.float32],
-    mut a: DeviceBuffer[DType.float32], mut b: DeviceBuffer[DType.float32],
-    m: Int, n: Int, k: Int, op: Int,
-) raises:
-    """Low-level explicit profile launch; NN03/04 selection lives below."""
-    neural_validate(m,n,k,op)
-    if len(c)<m*n or len(a)<m*k or len(b)<n*k:
-        raise Error("neural profile buffer too short")
-    if m == 0 or n == 0:
-        return
-    var part = neural_partition[MIN_LEAF](k)
-    if part[1] >= (1 << SLOTS):
-        raise Error("neural profile fold stack too small")
-    var st = neural_strides(op,m,n,k)
-    ctx.enqueue_function[neural_profile_kernel[CHAINS,SLOTS]](
-        c,a,b,Int32(m),Int32(n),Int32(k),Int32(part[0]),Int32(part[1]),
-        Int32(st[0]),Int32(st[1]),Int32(st[2]),Int32(st[3]),
-        grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
 
 
 def neural_profile_host[MIN_LEAF: Int = 128, CHAINS: Int = 1](
@@ -170,22 +149,6 @@ def neural_profile_host[MIN_LEAF: Int = 128, CHAINS: Int = 1](
         for col in range(n):
             c.unsafe_store(row*n+col,neural_cell[CHAINS](a,b,row,col,k,part[0],part[1],
                 st[0],st[1],st[2],st[3]))
-
-
-def neural_profile_ab_device[LEAF: Int = 128, CHAINS: Int = 1, CANDIDATE: Bool = False](
-    ctx: DeviceContext, mut c: DeviceBuffer[DType.float32],
-    mut a: DeviceBuffer[DType.float32], mut b: DeviceBuffer[DType.float32],
-    m: Int, n: Int, k: Int, op: Int,
-) raises:
-    """A and B share scheduling; leaf and chain changes can be isolated.
-
-    NN03 permits LEAF; NN04 permits CHAINS. Missing defines and ALL_OFF
-    resolve that dimension to the incumbent profile, including its I04 build
-    constant. Default CANDIDATE=False cannot select a new profile.
-    """
-    comptime L = LEAF if CANDIDATE and NN03 else CONTRACT_K_LEAF_MIN
-    comptime C = CHAINS if CANDIDATE and NN04 else 1
-    neural_profile_device[L,C](ctx,c,a,b,m,n,k,op)
 
 
 def neural_profile_ab_host[LEAF: Int = 128, CHAINS: Int = 1, CANDIDATE: Bool = False](

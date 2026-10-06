@@ -17,7 +17,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_floats,identical_gemm_with_plan,choose_gemm_plan,
     PLAN_FLAT,PLAN_TUNED_32_2X2,PLAN_TUNED_64_4X4,PLAN_TUNED_128_8X8,
 )
-from gemm.experiments.neural_profile import NEURAL_EXPERIMENTS_ALLOWED,neural_validate
+from gemm.experiments.neural_profile import NEURAL_EXPERIMENTS_ALLOWED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate
 from gemm.experiments.async_operand_pipeline import pipeline_gemm
 
 comptime NN01 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN01"]()
@@ -66,9 +66,9 @@ def neural_async_ab[CANDIDATE: Bool = False](
     comptime if CANDIDATE and NN08:
         comptime if TARGET_COLUMN != COLUMN_NVIDIA:
             raise Error("NN08 async candidate available only on supported NVIDIA path; Modular support pending elsewhere")
-        pipeline_gemm[True](ctx,c,a,b,m,n,k,op)
+        pipeline_gemm[True,NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
     else:
-        pipeline_gemm[False](ctx,c,a,b,m,n,k,op)
+        pipeline_gemm[False,NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
 
 
 def _neural_tile_cost(m: Int,n: Int,k: Int,tile: Int,target_blocks: Int) -> Float64:

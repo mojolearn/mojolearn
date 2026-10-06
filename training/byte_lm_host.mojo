@@ -51,9 +51,9 @@ from core.host_parallel import host_parallelize
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle, refuse_nonfinite
-from gemm.host.gemm_host_rows import GhrPtr
+from gemm.host.neural_gemm import GhrPtr
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
-from gemm.host.identical_gemm import gemm_oracle
+from gemm.host.neural_gemm import gemm_oracle
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_kernels import (
     all_finite_span,
@@ -815,6 +815,14 @@ def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch:
                               length: Int, config: ByteConfig, threads: Int = 0) raises -> List[Float32]:
     """`byte_host_logits` through the DEVIATION 2640 kernels on at most
     `threads` threads (0: one per physical core); same arguments, same bits."""
+    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        and (is_defined["MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"]()
+             or is_defined["MOJOLEARN_NN24_NORM_LANES8"]())):
+        # The legacy packed host block materializes the v1 attention/norm
+        # graph. A v2 build uses the shared host block contract, including
+        # its profile-specific tapes, rather than reusing that v1 graph.
+        return byte_host_logits(params, inputs, batch, length, config)
     _validate_logits_inputs(params, inputs, batch, length, config)
     return _threaded_rows(params, inputs, batch, length, config, byte_host_worker_count(threads))
 
@@ -830,6 +838,20 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
     Skipping those independent output cells changes no fold and no bit in the
     surviving row.
     """
+    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        and (is_defined["MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"]()
+             or is_defined["MOJOLEARN_NN24_NORM_LANES8"]())):
+        var logits = byte_host_logits(params, inputs, batch, length, config)
+        var chosen = List[Int32](length=batch, fill=Int32(0))
+        for row in range(batch):
+            var base = ((row + 1) * length - 1) * config.vocab_size
+            var best = 0
+            for token in range(1, config.vocab_size):
+                if logits[base + token] > logits[base + best]:
+                    best = token
+            chosen[row] = Int32(best)
+        return chosen^
     _validate_logits_inputs(params, inputs, batch, length, config)
     var vocab = config.vocab_size
     var layers = config.n_layers

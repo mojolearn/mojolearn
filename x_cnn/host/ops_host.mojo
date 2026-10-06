@@ -23,7 +23,7 @@ from checks.numerics import ftz
 from bindings.hostptr import i32_ptr, f32_ptr
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell
+from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell, nn14_wgrad_at, nn14_input_grad_at
 from x_cnn.ops import NN45_CONV_RELU, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
 from x_cnn.ops import (
     canon,
@@ -362,6 +362,23 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: Li
     """gx (when need_dx), gw [OC x ckk] and gb [OC] of a conv from its
     output gradient: dW = TN over the N*OH*OW rows (5701), db = TN against
     ones, dcols = NN, col2im as a gather (5700)."""
+    comptime if NN14_BOUNDED_IM2COL:
+        var OC = Int(prm[CP_OC])
+        var ckk = Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW])
+        var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
+        var nx = Int(prm[CP_N]) * Int(prm[CP_C]) * Int(prm[CP_H]) * Int(prm[CP_W])
+        var ps = _host_prm(prm, CP_REV)
+        var grow = scratch(rows * OC)
+        dout_rows_host(dout, grow, ps)
+        run[nn14_wgrad_at](x, grow, gw, gw, hi(ps), hi(ps), OC * ckk)
+        var ones = List[Float32](length=rows, fill=Float32(1))
+        gemm_host_into(grow, hp(ones), gb, OP_TN, OC, 1, rows)
+        if need_dx:
+            run[nn14_input_grad_at](grow, w, gx, gx, hi(ps), hi(ps), nx)
+        grow.free()
+        _ = ones^
+        _ = ps^
+        return
     var ckk = Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW])
     var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
     var ps = prm.copy()
@@ -442,10 +459,10 @@ def conv_block_forward_into(
     var ckk = Int(cprm[CP_C]) * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = Int(cprm[CP_N]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
     var zp: List[Int32] = [0, 0, 0]
-    var cols = kcols if keep else scratch(rows * ckk)
+    var cols = kcols if keep else scratch(1 if NN14_BOUNDED_IM2COL else rows * ckk)
     var y = ky if keep else (dst if not pool else scratch(ny))
     var fused_relu = False
-    comptime if NN45_CONV_RELU:
+    comptime if NN45_CONV_RELU and not NN14_BOUNDED_IM2COL:
         if not pool:
             var ps = cprm.copy()
             var y2 = scratch(ny)
@@ -456,7 +473,10 @@ def conv_block_forward_into(
             _ = ps^
             fused_relu = True
     if not fused_relu:
-        conv2d_forward_cols(x, w, bias, y, cprm, cols)
+        comptime if NN14_BOUNDED_IM2COL:
+            conv2d_forward_into(x, w, bias, y, cprm)
+        else:
+            conv2d_forward_cols(x, w, bias, y, cprm, cols)
     if not keep:
         cols.free()
     if not pool:
@@ -489,9 +509,12 @@ def conv_block_backward_into(
     var cols = kcols
     var yconv = ky
     if not keep:
-        cols = scratch(rows * ckk)
+        cols = scratch(1 if NN14_BOUNDED_IM2COL else rows * ckk)
         yconv = scratch(ny)
-        conv2d_forward_cols(x, w, bias, yconv, cprm, cols)
+        comptime if NN14_BOUNDED_IM2COL:
+            conv2d_forward_into(x, w, bias, yconv, cprm)
+        else:
+            conv2d_forward_cols(x, w, bias, yconv, cprm, cols)
     var gy = scratch(ny)
     if pool:
         var ps = _host_prm(pprm, PP_REV)
@@ -502,7 +525,10 @@ def conv_block_backward_into(
         run[relu_bwd_at](yconv, g, gy, gy, hi(zp), hi(zp), ny)
     if not keep:
         yconv.free()
-    conv2d_backward_cols(cols, w, gy, gx, gw, gb, cprm, need_dx)
+    comptime if NN14_BOUNDED_IM2COL:
+        conv2d_backward_into(x, w, gy, gx, gw, gb, cprm, need_dx)
+    else:
+        conv2d_backward_cols(cols, w, gy, gx, gw, gb, cprm, need_dx)
     if not keep:
         cols.free()
     gy.free()

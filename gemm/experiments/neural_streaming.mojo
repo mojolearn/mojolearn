@@ -7,14 +7,17 @@ The control writes ALL leaf partials once and folds them in a single pass.
 Scratch ownership is one in-order context; no allocation is shared globally.
 Uncompiled and unverified by explicit request. Public callers remain pending.
 """
+from gemm.experiments.neural_profile_device import neural_profile_device
 from std.sys.compile import is_defined
 from std.gpu import block_idx, block_dim, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz
 from gemm.contract import CONTRACT_K_LEAF_MIN
 from gemm.experiments.neural_profile import (
-    NEURAL_EXPERIMENTS_ALLOWED, neural_partition, neural_strides, neural_validate,
-    neural_leaf, neural_fold_push, neural_fold_drain, neural_profile_device,
+    NEURAL_EXPERIMENTS_ALLOWED, NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_strides, neural_validate,
+    neural_leaf, neural_fold_push, neural_fold_drain, 
 )
 
 # No measured winners: all switches OFF. A full-workload A/B on NVIDIA and
@@ -36,7 +39,7 @@ def neural_fold_levels(leaves: Int) -> Int:
 
 def neural_streaming_floats[GROUP: Int = 8, SPECIALIZE: Bool = False](k: Int, cells: Int) -> Int:
     comptime assert GROUP > 0, "positive bounded leaf group"
-    var leaves = neural_partition[CONTRACT_K_LEAF_MIN](k)[1]
+    var leaves = neural_partition[NEURAL_LEAF](k)[1]
     var levels = neural_fold_levels(leaves) if SPECIALIZE and NN11 else 16
     return max(1,(min(GROUP,leaves)+levels)*cells)
 
@@ -57,7 +60,7 @@ def _neural_leaf_batch_kernel(
     if i < cells*Int(count):
         var t = Int(first)+i//cells
         var cell = i%cells
-        var value = neural_leaf[1](a,b,cell//Int(n),cell%Int(n),
+        var value = neural_leaf[NEURAL_CHAINS](a,b,cell//Int(n),cell%Int(n),
             t*Int(leaf),min((t+1)*Int(leaf),Int(k)),Int(asi),Int(asp),Int(bsp),Int(bsj))
         partials.unsafe_store(i,value)
 
@@ -110,6 +113,63 @@ def _neural_full_fold_kernel(
         c.unsafe_store(cell,neural_fold_drain[16](stack,occupied))
 
 
+def _neural_shared_fold_kernel[SLOTS: Int](
+    c: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,MutAnyOrigin],
+    b: MutPointer[Float32,MutAnyOrigin],m: Int32,n: Int32,k: Int32,
+    leaf: Int32,leaves: Int32,asi: Int32,asp: Int32,bsp: Int32,bsj: Int32,
+):
+    # Every thread owns one column of this level-major shared array. There
+    # is no interthread read and consequently no barrier or physical-lane
+    # participation assumption. At 16 levels this uses 8 KiB per block.
+    var state = stack_allocation[SLOTS*128,Float32,address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var cell = Int(block_idx.x)*128+tid
+    if cell>=Int(m)*Int(n):
+        return
+    var occupied = 0
+    for t in range(Int(leaves)):
+        var value = neural_leaf[NEURAL_CHAINS](a,b,cell//Int(n),cell%Int(n),
+            t*Int(leaf),min((t+1)*Int(leaf),Int(k)),Int(asi),Int(asp),Int(bsp),Int(bsj))
+        var level = 0
+        while (occupied & (1 << level)) != 0:
+            value = ftz(ftz(state[level*128+tid])+ftz(value))
+            occupied -= 1 << level
+            level += 1
+        state[level*128+tid] = value
+        occupied += 1 << level
+    var result = Float32(0)
+    var have = False
+    comptime for level in range(SLOTS):
+        if (occupied & (1 << level)) != 0:
+            if have:
+                result = ftz(ftz(state[level*128+tid])+ftz(result))
+            else:
+                result = state[level*128+tid]
+                have = True
+    c.unsafe_store(cell,ftz(result))
+
+
+def _neural_capacity_launch[SLOTS: Int,SHARED: Bool](ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
+    m: Int,n: Int,k: Int,op: Int) raises:
+    comptime if not SHARED:
+        neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS,SLOTS](ctx,c,a,b,m,n,k,op)
+    else:
+        neural_validate(m,n,k,op)
+        if len(c)<m*n or len(a)<m*k or len(b)<n*k:
+            raise Error("neural shared fold operand too short")
+        if m==0 or n==0:
+            return
+        var part = neural_partition[NEURAL_LEAF](k)
+        if part[1]>=(1 << SLOTS):
+            raise Error("neural shared fold stack too small")
+        var st = neural_strides(op,m,n,k)
+        ctx.enqueue_function[_neural_shared_fold_kernel[SLOTS]](c,a,b,
+            Int32(m),Int32(n),Int32(k),Int32(part[0]),Int32(part[1]),
+            Int32(st[0]),Int32(st[1]),Int32(st[2]),Int32(st[3]),
+            grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
+
+
 def neural_streaming_ab[
     CANDIDATE: Bool = False, GROUP: Int = 8,
     SPECIALIZE: Bool = False, ELIDE_CLEAR: Bool = False,
@@ -130,7 +190,7 @@ def neural_streaming_ab[
         raise Error("neural streaming operand storage too short")
     if m == 0 or n == 0:
         return
-    var part = neural_partition[CONTRACT_K_LEAF_MIN](k)
+    var part = neural_partition[NEURAL_LEAF](k)
     var cells = m*n
     var levels = neural_fold_levels(part[1]) if SPECIALIZE and NN11 else 16
     var batch = part[1]
@@ -164,7 +224,7 @@ def neural_streaming_ab[
                 grid_dim=((cells+127)//128,1,1),block_dim=(128,1,1))
 
 
-def neural_fold_capacity_ab[CANDIDATE: Bool = False](
+def neural_fold_capacity_ab[CANDIDATE: Bool = False,SHARED: Bool = False](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
     m: Int,n: Int,k: Int,op: Int,
@@ -175,16 +235,16 @@ def neural_fold_capacity_ab[CANDIDATE: Bool = False](
     only the mathematical tree height; m/n, dataset and vendor are absent.
     """
     comptime if CANDIDATE and NN11:
-        var levels = neural_fold_levels(neural_partition[CONTRACT_K_LEAF_MIN](k)[1])
+        var levels = neural_fold_levels(neural_partition[NEURAL_LEAF](k)[1])
         if levels <= 1:
-            neural_profile_device[CONTRACT_K_LEAF_MIN,1,1](ctx,c,a,b,m,n,k,op)
+            _neural_capacity_launch[1,SHARED](ctx,c,a,b,m,n,k,op)
         elif levels <= 2:
-            neural_profile_device[CONTRACT_K_LEAF_MIN,1,2](ctx,c,a,b,m,n,k,op)
+            _neural_capacity_launch[2,SHARED](ctx,c,a,b,m,n,k,op)
         elif levels <= 4:
-            neural_profile_device[CONTRACT_K_LEAF_MIN,1,4](ctx,c,a,b,m,n,k,op)
+            _neural_capacity_launch[4,SHARED](ctx,c,a,b,m,n,k,op)
         elif levels <= 8:
-            neural_profile_device[CONTRACT_K_LEAF_MIN,1,8](ctx,c,a,b,m,n,k,op)
+            _neural_capacity_launch[8,SHARED](ctx,c,a,b,m,n,k,op)
         else:
-            neural_profile_device[CONTRACT_K_LEAF_MIN,1,16](ctx,c,a,b,m,n,k,op)
+            _neural_capacity_launch[16,SHARED](ctx,c,a,b,m,n,k,op)
     else:
-        neural_profile_device[CONTRACT_K_LEAF_MIN,1,16](ctx,c,a,b,m,n,k,op)
+        neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS,16](ctx,c,a,b,m,n,k,op)

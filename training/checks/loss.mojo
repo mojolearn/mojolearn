@@ -112,6 +112,7 @@ from max.gpu.sync import barrier
 # them because `checks/numerics.mojo`'s own two-arm functions put their
 # stdlib import at FUNCTION scope after the comptime branch, and an import
 # INSIDE a comptime-if body is a spelling nothing in this tree has compiled.
+from training.neural_ab_profiles import NN54_LOSS_PROFILE, nn_reduce_pointer_into, nn_reduce_scratch_floats
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -128,7 +129,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_max_block_size,
 )
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
@@ -1255,6 +1256,8 @@ def identical_ce_workspace_max_floats(
         var wb = identical_gemm_workspace_max_floats(1, 1, n_rows)
         if wb > w:
             w = wb
+    comptime if NN54_LOSS_PROFILE:
+        w = max(w, 2 * nn_reduce_scratch_floats[128](n_rows))
     if w < 1:
         return 1
     return w
@@ -1308,6 +1311,7 @@ def ce_refuse_device_inputs(
     mut targets: DeviceBuffer[DType.int32],
     n_rows: Int,
     cfg: CeConfig,
+    targets_prerefused: Bool = False,
 ) raises:
     """Contract section 8 ON THE DEVICE ENTRY POINT, which is where it was
     missing. DEVIATION 1495; the scan moved to the device at DEVIATION 2514
@@ -1358,6 +1362,8 @@ def ce_refuse_device_inputs(
     if idx >= 0:
         var is_nan = device_classify_nonfinite(ctx, logits, idx)
         raise Error(ce_nonfinite_message("logits", idx, is_nan))
+    if targets_prerefused:
+        return
     step_count_host_alloc()
     var ht = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
     step_count_sync()
@@ -1403,6 +1409,7 @@ def identical_ce_forward_into(
     n_rows: Int,
     count: Int,
     cfg: CeConfig,
+    targets_prerefused: Bool = False,
 ) raises:
     """Seams L1 through L13, enqueued. Nothing waits.
 
@@ -1446,7 +1453,7 @@ def identical_ce_forward_into(
     # `step.ce_forward`, whose wait exists only under the switch.
     var ton = _step_timing_on()
     var tk = Int(perf_counter_ns())
-    ce_refuse_device_inputs(ctx, logits, targets, n_rows, cfg)
+    ce_refuse_device_inputs(ctx, logits, targets, n_rows, cfg, targets_prerefused)
     _step_timing_tick(ctx, ton, tk, "step.ce_refuse_scan")
     if ton:
         # Two four-token lines (`timing <name> <value> bytes`, the shape
@@ -1629,6 +1636,8 @@ def identical_ce_forward_into(
             grid_dim=(1, 1, 1),
             block_dim=(CE_TPB, 1, 1),
         )
+    elif NN54_LOSS_PROFILE:
+        nn_reduce_pointer_into[128, False](ctx, total.unsafe_ptr(), row.unsafe_ptr(), ws.unsafe_ptr(), n_rows)
     else:
         identical_gemm_into(ctx, total, ones, row, ws, 1, 1, n_rows, OP_NN)
 

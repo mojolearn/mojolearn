@@ -101,7 +101,7 @@ from gemm.afn_apple_fast import (
     afn_gemm_tile_count,
     afn_zero_kernel,
 )
-from gemm.checks.gemm_backward import (
+from gemm.neural_backward import (
     BWD_DC_LEFT,
     gemm_backward_a_call,
     gemm_backward_b_call,
@@ -110,7 +110,7 @@ from gemm.checks.gemm_backward import (
     identical_gemm_backward_b_into,
     identical_gemm_backward_b_workspace_max_floats,
 )
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )

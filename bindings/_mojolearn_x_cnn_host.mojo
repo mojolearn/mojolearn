@@ -11,6 +11,8 @@ from std.python.bindings import PythonModuleBuilder
 from std.memory import alloc, memcpy, memset_zero
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from x_cnn.ops import NN14_BOUNDED_IM2COL
+
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, conv_params
 from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, pool_params
 from x_cnn.host.ops_host import X_CNN_HOST_SABOTAGE
@@ -1134,6 +1136,7 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[adam_binding]("x_cnn_adam")
         m.def_function[batchnorm_forward_binding]("x_cnn_batchnorm_forward")
         m.def_function[batchnorm_backward_binding]("x_cnn_batchnorm_backward")
+        m.def_function[nn14_bounded_im2col_binding]("x_cnn_bounded_im2col")
         m.def_function[dropout2d_binding]("x_cnn_dropout2d")
         m.def_function[mul_binding]("x_cnn_mul")
         m.def_function[spmm_binding]("x_cnn_spmm")
@@ -1165,3 +1168,8 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn_host: ", e))
+
+
+def nn14_bounded_im2col_binding() -> PythonObject:
+    """Source-arm query for saved-buffer allocation, never data-dependent."""
+    return PythonObject(1 if NN14_BOUNDED_IM2COL else 0)

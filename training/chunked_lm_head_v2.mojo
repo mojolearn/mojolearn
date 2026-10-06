@@ -12,7 +12,7 @@ from checks.numerics import (
 )
 from training.checks.loss_contract import CE_NEG_INF_BITS, neg_by_bits
 from std.memory import bitcast
-from gemm.checks.gemm_identical import identical_gemm_into
+from gemm.neural_dispatch import identical_gemm_into
 from gemm.contract import OP_NT
 
 # Four passes visit every vocabulary chunk (max, denominator/loss, dHidden,

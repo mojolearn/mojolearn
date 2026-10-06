@@ -4,6 +4,7 @@
 These are explicit neural component entry points, not public-model routing.
 All numerical work is Mojo; no classical path imports this module. No build
 or verification has been run. Reused I03 machinery is identified separately
+from gemm.experiments.neural_profile_device import neural_profile_kernel
 from the new per-thread shared-left operand arm.
 """
 from std.sys.compile import is_defined
@@ -14,7 +15,7 @@ from checks.rtf_seam import rtf_mul_add
 from gemm.contract import CONTRACT_K_LEAF_MIN
 from gemm.experiments.neural_profile import (
     NEURAL_EXPERIMENTS_ALLOWED,neural_partition,neural_strides,neural_validate,
-    neural_profile_kernel,neural_profile_host,
+    neural_profile_host,
 )
 from gemm.experiments.grouped_jobs import grouped_gemm
 

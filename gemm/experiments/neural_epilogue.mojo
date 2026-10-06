@@ -6,14 +6,15 @@ backward integration are pending; this module does not redefine any caller's
 activation. Order is product -> bias -> scale -> residual -> optional ReLU.
 Each enabled stage owns an explicit FP32/FTZ boundary in both A and B.
 """
+from gemm.experiments.neural_profile_device import neural_profile_device
 from std.sys.compile import is_defined
 from std.gpu import block_idx,block_dim,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz,identical_mul,identical_fmax
 from gemm.contract import CONTRACT_K_LEAF_MIN
 from gemm.experiments.neural_profile import (
-    NEURAL_EXPERIMENTS_ALLOWED,neural_partition,neural_strides,neural_validate,
-    neural_cell,neural_profile_device,neural_profile_host,
+    NEURAL_EXPERIMENTS_ALLOWED, NEURAL_LEAF, NEURAL_CHAINS,neural_partition,neural_strides,neural_validate,
+    neural_cell,neural_profile_host,
 )
 
 # OFF: no compile/identity/quality/timing evidence in this worktree. This is
@@ -64,7 +65,7 @@ def _neural_epilogue_fused_kernel[KIND: Int](
 ):
     var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if cell < Int(m)*Int(n):
-        var product = neural_cell[1](a,b,cell//Int(n),cell%Int(n),Int(k),Int(leaf),
+        var product = neural_cell[NEURAL_CHAINS](a,b,cell//Int(n),cell%Int(n),Int(k),Int(leaf),
             Int(leaves),Int(asi),Int(asp),Int(bsp),Int(bsj))
         c.unsafe_store(cell,neural_epilogue_apply[KIND](product,bias,residual,preactivation,cell,Int(n),scale))
 
@@ -108,14 +109,14 @@ def neural_epilogue_ab[KIND: Int = EP_BIAS, CANDIDATE: Bool = False](
     if m == 0 or n == 0:
         return
     comptime if CANDIDATE and NN06:
-        var part = neural_partition[CONTRACT_K_LEAF_MIN](k)
+        var part = neural_partition[NEURAL_LEAF](k)
         var st = neural_strides(op,m,n,k)
         ctx.enqueue_function[_neural_epilogue_fused_kernel[KIND]](c,a,b,bias,residual,preactivation,
             Int32(m),Int32(n),Int32(k),Int32(part[0]),Int32(part[1]),
             Int32(st[0]),Int32(st[1]),Int32(st[2]),Int32(st[3]),scale,
             grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
     else:
-        neural_profile_device[CONTRACT_K_LEAF_MIN,1](ctx,c,a,b,m,n,k,op)
+        neural_profile_device[NEURAL_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
         comptime if (KIND & EP_BIAS) != 0:
             ctx.enqueue_function[_neural_epilogue_stage_kernel[EP_BIAS]](c,bias,preactivation,
                 Int32(m*n),Int32(n),scale,grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
@@ -136,7 +137,7 @@ def neural_epilogue_host[KIND: Int = EP_BIAS](
     residual: MutPointer[Float32,MutAnyOrigin],preactivation: MutPointer[Float32,MutAnyOrigin],
     m: Int,n: Int,k: Int,op: Int,scale: Float32 = 1.0,
 ) raises:
-    neural_profile_host[CONTRACT_K_LEAF_MIN,1](c,a,b,m,n,k,op)
+    neural_profile_host[NEURAL_LEAF,NEURAL_CHAINS](c,a,b,m,n,k,op)
     for cell in range(m*n):
         c.unsafe_store(cell,neural_epilogue_apply[KIND](c.unsafe_load(cell),bias,residual,preactivation,cell,n,scale))
 

@@ -230,8 +230,9 @@ class LanguageModelInference:
         self._native = _native_shape(shape)
         self._binding = _load()
         compiled = str(self._binding.byte_lm_host_profile(self._native))
-        if compiled != shape.profile:
-            raise RuntimeError(f'byte LM host profile mismatch: {compiled} != {shape.profile}')
+        expected = shape.profile + str(self._binding.byte_lm_host_arithmetic_suffix())
+        if compiled != expected:
+            raise RuntimeError(f'byte LM host profile mismatch: {compiled} != {expected}')
 
     @classmethod
     def from_checkpoint(cls, path, *, threaded=True, threads=None):
@@ -258,7 +259,7 @@ class LanguageModelInference:
 
     @property
     def profile(self):
-        return self._shape.profile
+        return str(self._binding.byte_lm_host_profile(self._native))
 
     def parameters_sha256(self):
         return hashlib.sha256(le_bytes(self._parameters, 'f')).hexdigest()
@@ -434,7 +435,7 @@ class LanguageModelHostTrainer:
 
     @property
     def profile(self):
-        return self._shape.profile
+        return str(self._binding.byte_lm_host_profile(self._native))
 
     @property
     def completed_steps(self):

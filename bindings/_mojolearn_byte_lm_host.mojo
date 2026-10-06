@@ -36,6 +36,7 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE
 # gemm_oracle, so a build carrying it computes wrong answers and must read
 # back as a sabotage build too.
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
+from training.neural_arithmetic_profile import neural_arithmetic_suffix
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host import (
     byte_host_logits,
@@ -357,10 +358,15 @@ def cast_f64_to_f32_binding(src_addr: PythonObject, dst_addr: PythonObject,
     return PythonObject(0)
 
 
+def byte_lm_host_arithmetic_suffix_binding() raises -> PythonObject:
+    return PythonObject(neural_arithmetic_suffix())
+
+
 @export
 def PyInit__mojolearn_byte_lm_host() abi("C") -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_byte_lm_host")
+        module.def_function[byte_lm_host_arithmetic_suffix_binding]("byte_lm_host_arithmetic_suffix")
         module.def_function[byte_lm_host_numeric_mode_binding]("byte_lm_host_numeric_mode")
         module.def_function[byte_lm_host_vendor_binding]("byte_lm_host_vendor")
         module.def_function[byte_lm_host_column_binding]("byte_lm_host_column")

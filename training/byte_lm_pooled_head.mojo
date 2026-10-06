@@ -3,8 +3,8 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 from training.byte_lm_config import ByteConfig
 from training.checks.train_loop import _zeros, _zeros_i32, _ones
-from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
-from gemm.checks.gemm_backward import identical_gemm_backward_workspace_max_floats
+from gemm.neural_dispatch import identical_gemm_workspace_max_floats
+from gemm.neural_backward import identical_gemm_backward_workspace_max_floats
 from gemm.contract import OP_NT
 from embedding.checks.embedding_identical import emb_run_scratch_ints
 from training.checks.loss import identical_ce_ones_floats, identical_ce_workspace_max_floats

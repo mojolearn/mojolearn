@@ -31,10 +31,11 @@ experiments, not new defaults for classical callers.
 The user explicitly requested **no compilation or verification**. No builds,
 tests, static checkers, candidate execution, benchmarks, remote GPU jobs or
 measurement-board updates were performed. The document-authoring Python
-scripts only wrote metadata/documents. The inspection/planning CLI below was
+scripts only wrote metadata/documents. Mamba host source was refreshed through
+an explicit source-write-only mode that disables its verification phase. The inspection/planning CLI below was
 written but not executed as a check.
 
-Read the [implementation status](IMPLEMENTATION_STATUS.md) and per-lane source
+Read [what model integration means](MODEL_INTEGRATION.md), the [implementation status](IMPLEMENTATION_STATUS.md) and per-lane source
 handoffs before choosing an experiment:
 
 - [GEMM](lanes/gemm.md), [machine-readable handoff](lanes/gemm.json)
@@ -42,7 +43,7 @@ handoffs before choosing an experiment:
 - [State-space/recurrent/CNN](lanes/state_cnn.md), [machine-readable handoff](lanes/state_cnn.json)
 - [Embedding/loss/optimizer/runtime](lanes/training.md), [machine-readable handoff](lanes/training.json)
 
-`wired_draft` means a new opt-in source branch reaches a real existing caller.
+`wired_draft` means a new opt-in source branch reaches a real native/public caller, including newly exposed complete model/layer operations.
 `component_draft` means real native code exists but full caller/lifetime/profile
 integration remains unfinished. `reused_existing` records prior source and
 its controls; it is not a new implementation or qualification. `pending`

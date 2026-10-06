@@ -31,7 +31,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.ctx_key import ctx_cache_key, ctx_cache_slot
 from core.step_phase import step_count_device_alloc, step_count_sync
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     identical_gemm,
     identical_gemm_into,
     identical_gemm_workspace_max_floats,

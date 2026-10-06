@@ -2,6 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Transformer backward kernels and host-side launch composition used by the independent gradient checks."""
 
+from transformer.experiments.summary_model import model_summary_backward
+from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY_TREE
+from transformer.experiments.norm_profile import (
+    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+)
 from transformer.experiments.attention_schedules import (
     NN22_EAGER_DKDV_PAIR, eager_dkdv_pair_kernel,
     NN23_ROWDOT_DS, eager_rowdot_ds_kernel,
@@ -50,12 +55,12 @@ from core.step_glue import (
 )
 
 from core.identity_trace import IdentityTrace
-from gemm.checks.gemm_backward import (
+from gemm.neural_backward import (
     BWD_DC_LEFT,
     gemm_backward_a_call,
     gemm_backward_b_call,
 )
-from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm
+from gemm.neural_dispatch import GemmWorkspace, identical_gemm
 from std.os import getenv
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from checks.numerics import (
@@ -915,6 +920,8 @@ def bwd_norm_dh_dot_kernel(
         )
         dh.unsafe_store(i, dhj)
         c = ftz(identical_mul_add(dhj, ftz(x.unsafe_load(i)), c))
+    comptime if NN24_NORM_LANES8:
+        c = norm_profile_dot[NN24_LANES](dh, x, t * dm, t * dm, dm)
     c = ftz(c)
     dot.unsafe_store(t, c)
     var ss = ftz(sumsq.unsafe_load(t))
@@ -1009,6 +1016,8 @@ def bwd_norm_dot_kernel(
                     c,
                 )
             )
+    comptime if NN24_NORM_LANES8:
+        c = norm_profile_dot[NN24_LANES](dh, x, t * dm, t * dm, dm)
     c = ftz(c)
     dot.unsafe_store(t, c)
 
@@ -3608,95 +3617,113 @@ def llama_decoder_layer_backward_device(
     timing_tick(ctx, ton, tk, "bwd.before_attention")
     bst.attn_repaired = 0
     bst.attn_backward_status = -1
-    var choice = attention_path_choice(PLANT_AT_NONE)
-    if choice == ATTN_PATH_AUTO and fwd.attn_prefer_eager:
-        choice = ATTN_PATH_EAGER
-    var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
-    if need_eager:
-        bwd_attention_eager_stages(
-            ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
-            trace, prefix,
-        )
-    # DEVIATION 3110: see fused_attention.mojo. A backward refusal is worse
-    # than a forward one -- `bwd_attention_eager_stages` calls
-    # `ensure_attention_materialized`, which recomputes this layer's whole
-    # EAGER FORWARD as well -- so the discarded launch is paid on top of two
-    # eager passes. The latch removes the launch.
-    # `not need_eager` confines the latch to the trace-off trainer path; see
-    # `eager_attention_forward`. Under `need_eager` this branch reduces to the
-    # code that was here before, so the identity card is untouched.
-    if (choice != ATTN_PATH_EAGER and bst.attn_bwd_fused_off
-            and ATTN_STICKY and not need_eager):
-        bst.attn_backward_status = FUSED_SKIPPED_STICKY
-        if not need_eager:
+    comptime if NN20_BALANCED_SUMMARY_TREE:
+        if fwd.attn_forward_status != 20:
+            raise Error("NN20 backward requires summary-profile forward state")
+        var record_attention = materialize or trace.enabled
+        if record_attention:
+            ensure_backward_attention_capacity(ctx, bst, l, s)
+        model_summary_backward(ctx,bst.attn_zdot,bst.d_q_rope,bst.d_k_cache,bst.d_v_cache,
+            fwd.q_rope,bst.d_attn_ctx,fwd.k_cache,fwd.v_cache,fwd.amax,fwd.denom,
+            bst.d_attn_weights,bst.d_attn_masked,bst.d_attn_scores,bst.d_qk_cell,
+            b,l,nh,nkv,hd,s,pos0,key_lo,window,scale,record_attention)
+        bst.attn_backward_status = 20
+        if record_attention:
+            _rec(ctx,trace,prefix,17,bst.d_attn_weights,cells)
+            _rec(ctx,trace,prefix,18,bst.attn_zdot,b*nh*l)
+            _rec(ctx,trace,prefix,19,bst.d_attn_masked,cells)
+            _rec(ctx,trace,prefix,20,bst.d_attn_scores,cells)
+            _rec(ctx,trace,prefix,21,bst.d_qk_cell,cells)
+    else:
+        var choice = attention_path_choice(PLANT_AT_NONE)
+        if choice == ATTN_PATH_AUTO and fwd.attn_prefer_eager:
+            choice = ATTN_PATH_EAGER
+        var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
+        if need_eager:
             bwd_attention_eager_stages(
                 ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
                 trace, prefix,
             )
-    elif choice != ATTN_PATH_EAGER:
-        var status = -1
-        var estash_done = False
-        # IDN_ATTN_BWD_SCAN_REUSE: the forward's q/k/v regime maxima when
-        # its record matches these very buffers and lengths (-1 otherwise:
-        # the launcher then scans all four buffers as before).
-        var fqmax = Float64(-1.0)
-        var fkmax = Float64(-1.0)
-        var fvmax = Float64(-1.0)
-        if fwd.attn_fwd_scan.valid_for(
-            Int(fwd.q_rope.unsafe_ptr()), b * l * nh * hd,
-            Int(fwd.k_cache.unsafe_ptr()), Int(fwd.v_cache.unsafe_ptr()),
-            b * nkv * s * hd,
-        ):
-            fqmax = fwd.attn_fwd_scan.qmax
-            fkmax = fwd.attn_fwd_scan.kmax
-            fvmax = fwd.attn_fwd_scan.vmax
-        comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
-            # DEVIATION 2652 (brief section 20.3): under an `_estash` arm the
-            # backward reads the exp stash this call's forward kept in
-            # `fwd.aexp` (valid when `fwd.attn_estash_cells` is this call's
-            # cell count; otherwise the launcher runs the shipped backward).
-            # A trial build, or a shipped build whose column default carries
-            # the estash bits (DEVIATION 2657); every other build takes the
-            # call below unchanged.
-            var arm = fused_attention_arm_from_env()
-            if fused_attention_arm_estash_runs(arm):
-                var kept_cells = fwd.attn_estash_cells
-                var ran = 0
-                status = fused_backward_launch_estash_report(
-                    ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
-                    fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
-                    fwd.denom, fwd.aexp, kept_cells, b, l, nh, nkv, hd, s, pos0,
-                    key_lo, window, scale, arm, ran, bst.attn_repaired,
-                    fwd_qmax=fqmax, fwd_kmax=fkmax, fwd_vmax=fvmax,
+        # DEVIATION 3110: see fused_attention.mojo. A backward refusal is worse
+        # than a forward one -- `bwd_attention_eager_stages` calls
+        # `ensure_attention_materialized`, which recomputes this layer's whole
+        # EAGER FORWARD as well -- so the discarded launch is paid on top of two
+        # eager passes. The latch removes the launch.
+        # `not need_eager` confines the latch to the trace-off trainer path; see
+        # `eager_attention_forward`. Under `need_eager` this branch reduces to the
+        # code that was here before, so the identity card is untouched.
+        if (choice != ATTN_PATH_EAGER and bst.attn_bwd_fused_off
+                and ATTN_STICKY and not need_eager):
+            bst.attn_backward_status = FUSED_SKIPPED_STICKY
+            if not need_eager:
+                bwd_attention_eager_stages(
+                    ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
+                    trace, prefix,
                 )
-                estash_done = True
-        comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
-            # lane/neural-apple2: a process denied the kept stashes
-            # recomputes this layer's (fused_attention.mojo,
-            # ATTN_APPLE_ESTASH_RECOMPUTE); same bits, one extra forward.
-            if not estash_done and attention_estash_recompute_granted():
-                status = fused_backward_launch_erecomp_report(
+        elif choice != ATTN_PATH_EAGER:
+            var status = -1
+            var estash_done = False
+            # IDN_ATTN_BWD_SCAN_REUSE: the forward's q/k/v regime maxima when
+            # its record matches these very buffers and lengths (-1 otherwise:
+            # the launcher then scans all four buffers as before).
+            var fqmax = Float64(-1.0)
+            var fkmax = Float64(-1.0)
+            var fvmax = Float64(-1.0)
+            if fwd.attn_fwd_scan.valid_for(
+                Int(fwd.q_rope.unsafe_ptr()), b * l * nh * hd,
+                Int(fwd.k_cache.unsafe_ptr()), Int(fwd.v_cache.unsafe_ptr()),
+                b * nkv * s * hd,
+            ):
+                fqmax = fwd.attn_fwd_scan.qmax
+                fkmax = fwd.attn_fwd_scan.kmax
+                fvmax = fwd.attn_fwd_scan.vmax
+            comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
+                # DEVIATION 2652 (brief section 20.3): under an `_estash` arm the
+                # backward reads the exp stash this call's forward kept in
+                # `fwd.aexp` (valid when `fwd.attn_estash_cells` is this call's
+                # cell count; otherwise the launcher runs the shipped backward).
+                # A trial build, or a shipped build whose column default carries
+                # the estash bits (DEVIATION 2657); every other build takes the
+                # call below unchanged.
+                var arm = fused_attention_arm_from_env()
+                if fused_attention_arm_estash_runs(arm):
+                    var kept_cells = fwd.attn_estash_cells
+                    var ran = 0
+                    status = fused_backward_launch_estash_report(
+                        ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
+                        fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
+                        fwd.denom, fwd.aexp, kept_cells, b, l, nh, nkv, hd, s, pos0,
+                        key_lo, window, scale, arm, ran, bst.attn_repaired,
+                        fwd_qmax=fqmax, fwd_kmax=fkmax, fwd_vmax=fvmax,
+                    )
+                    estash_done = True
+            comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
+                # lane/neural-apple2: a process denied the kept stashes
+                # recomputes this layer's (fused_attention.mojo,
+                # ATTN_APPLE_ESTASH_RECOMPUTE); same bits, one extra forward.
+                if not estash_done and attention_estash_recompute_granted():
+                    status = fused_backward_launch_erecomp_report(
+                        ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
+                        fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
+                        fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
+                        bst.attn_repaired,
+                    )
+                    estash_done = True
+            if not estash_done:
+                status = fused_backward_launch(
                     ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
                     fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
                     fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
-                    bst.attn_repaired,
+                    fwd_qmax=fqmax, fwd_kmax=fkmax, fwd_vmax=fvmax,
                 )
-                estash_done = True
-        if not estash_done:
-            status = fused_backward_launch(
-                ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
-                fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
-                fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
-                fwd_qmax=fqmax, fwd_kmax=fkmax, fwd_vmax=fvmax,
-            )
-        bst.attn_backward_status = status
-        if status != FUSED_RAN and not need_eager:
-            bst.attn_bwd_fused_off = True
-        if status != FUSED_RAN and not need_eager:
-            bwd_attention_eager_stages(
-                ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
-                trace, prefix,
-            )
+            bst.attn_backward_status = status
+            if status != FUSED_RAN and not need_eager:
+                bst.attn_bwd_fused_off = True
+            if status != FUSED_RAN and not need_eager:
+                bwd_attention_eager_stages(
+                    ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
+                    trace, prefix,
+                )
     _rec(ctx, trace, prefix, 22, bst.d_q_rope, m * qw)
     _rec(ctx, trace, prefix, 23, bst.d_k_cache, b * nkv * s * hd)
     _rec(ctx, trace, prefix, 24, bst.d_v_cache, b * nkv * s * hd)

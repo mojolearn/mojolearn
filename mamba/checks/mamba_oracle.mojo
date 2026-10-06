@@ -32,10 +32,12 @@ from checks.numerics import (
     identical_silu,
     identical_softplus,
 )
+from mamba.host.gen.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS, NN34_CHUNK, nn34_clear_slots, nn34_push, nn34_prefix, nn34_evaluate
+from mamba.host.gen.neural_mamba_scan import nn34_factors
 from gemm.contract import OP_NT
 from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_list
-from gemm.checks.gemm_oracle import gemm_oracle
-from gemm.host.gemm_host_rows import gemm_host_rows
+from gemm.host.neural_gemm import gemm_oracle
+from gemm.host.neural_gemm import gemm_host_rows
 from mamba.checks.mamba_fixture import (
     D_CONV,
     D_STATE,
@@ -97,10 +99,19 @@ struct MambaState(Copyable, Movable):
 
     var conv_win: List[Float32]
     var h: List[Float32]
+    var nn34_position: Int
+    var nn34_boundary: List[Float32]
+    var nn34_sa: List[Float32]
+    var nn34_sb: List[Float32]
 
     def __init__(out self, b: Int, dims: MambaDims):
         self.conv_win = List[Float32]()
         self.h = List[Float32]()
+        self.nn34_position = 0
+        var chains = b * dims.d_inner * D_STATE if NN34_AFFINE_PREFIX else 0
+        self.nn34_boundary = List[Float32](length=chains, fill=Float32(0))
+        self.nn34_sa = List[Float32](length=chains * NN34_LEVELS, fill=Float32(0))
+        self.nn34_sb = List[Float32](length=chains * NN34_LEVELS, fill=Float32(0))
         for _ in range(b * dims.d_inner * D_CONV):
             self.conv_win.append(0.0)
         for _ in range(b * dims.d_inner * D_STATE):
@@ -214,6 +225,48 @@ def selective_scan_oracle(
     return y^
 
 
+
+def nn34_mamba_host_scan(u: List[Float32], delta: List[Float32], a: List[Float32],
+    bmat: List[Float32], cmat: List[Float32], mut state: MambaState,
+    batch: Int, length: Int, dim: Int) raises -> List[Float32]:
+    """The public host/oracle callers share NN34 factor and prefix helpers.
+    Serialized public state travels through the dedicated Mamba binding;
+    stateless neural-host and repeated decode callers own this same state."""
+    var hidden = List[Float32](length=batch * length * dim * D_STATE, fill=Float32(0))
+    var up = u.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var dp = delta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var ap = a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var bp = bmat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    for chain in range(batch * dim * D_STATE):
+        var bb = chain // (dim * D_STATE)
+        var d = (chain // D_STATE) % dim
+        var n = chain % D_STATE
+        var boundary = ftz(state.h[chain]) if state.nn34_position == 0 else ftz(state.nn34_boundary[chain])
+        var sa = state.nn34_sa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + chain * NN34_LEVELS
+        var sb = state.nn34_sb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + chain * NN34_LEVELS
+        for li in range(length):
+            var pair = nn34_factors(bb * length + li, d, n, dim, up, dp, ap, bp)
+            var count = (state.nn34_position + li) % NN34_CHUNK
+            nn34_push(count, pair[0], pair[1], sa, sb)
+            var prefix = nn34_prefix(count + 1, sa, sb)
+            var h = nn34_evaluate(prefix[0], prefix[1], boundary)
+            hidden[((bb * length + li) * dim + d) * D_STATE + n] = h
+            if count + 1 == NN34_CHUNK:
+                boundary = h
+                nn34_clear_slots(sa, sb)
+            state.h[chain] = h
+        state.nn34_boundary[chain] = boundary
+    state.nn34_position += length
+    var y = List[Float32](length=batch * length * dim, fill=Float32(0))
+    for t in range(batch * length):
+        for d in range(dim):
+            var acc = Float32(0)
+            for n in range(D_STATE):
+                acc = ftz(identical_mul_add(ftz(cmat[t * D_STATE + n]), ftz(hidden[(t * dim + d) * D_STATE + n]), acc))
+            y[t * dim + d] = acc
+    return y^
+
+
 def mamba_block_oracle(
     w: MambaWeights,
     x: List[Float32],  # [B, L, d_model] row-major (token-major)
@@ -231,6 +284,10 @@ def mamba_block_oracle(
     refuse_bad_inputs(w, x)
     refuse_nonfinite("state.conv_win", state.conv_win)
     refuse_nonfinite("state.h", state.h)
+    comptime if NN34_AFFINE_PREFIX:
+        refuse_nonfinite("state.affine_boundary", state.nn34_boundary)
+        refuse_nonfinite("state.affine_a", state.nn34_sa)
+        refuse_nonfinite("state.affine_b", state.nn34_sb)
     var dims = w.dims.copy()
     var dm = dims.d_model
     var di = dims.d_inner
@@ -337,9 +394,12 @@ def mamba_block_oracle(
             st.softplus_out.append(ftz(identical_softplus(biased)))
 
     # ---- the scan (selective_scan_ref:160-187) ---------------------------
-    st.scan_y = selective_scan_oracle(
-        st.silu_out, st.softplus_out, st.a_out, bmat, cmat, state.h, b, l, di
-    )
+    comptime if NN34_AFFINE_PREFIX:
+        st.scan_y = nn34_mamba_host_scan(st.silu_out, st.softplus_out, st.a_out, bmat, cmat, state, b, l, di)
+    else:
+        st.scan_y = selective_scan_oracle(
+            st.silu_out, st.softplus_out, st.a_out, bmat, cmat, state.h, b, l, di
+        )
     for i in range(b * di * D_STATE):
         st.scan_h.append(state.h[i])
 

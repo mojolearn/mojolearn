@@ -16,8 +16,8 @@ from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add
 from gemm.contract import CONTRACT_K_LEAF_MIN
 from gemm.experiments.neural_profile import (
-    NEURAL_EXPERIMENTS_ALLOWED,neural_partition,neural_strides,neural_validate,
-    neural_fold_push,neural_fold_drain,
+    NEURAL_EXPERIMENTS_ALLOWED, NEURAL_LEAF, NEURAL_CHAINS,neural_partition,neural_strides,neural_validate,
+    neural_fold_push,neural_fold_drain,neural_merge_chains,
 )
 
 comptime NN09 = NEURAL_EXPERIMENTS_ALLOWED and is_defined["MOJOLEARN_IDN_NEURAL_NN09"]()
@@ -55,7 +55,7 @@ def neural_tiled_kernel[DEPTH: Int,PAD: Int,SWIZZLE: Bool,TRANSPOSE_THREADS: Boo
     for t in range(Int(leaves)):
         var begin = t*Int(leaf)
         var end = min((t+1)*Int(leaf),Int(k))
-        var acc = Float32(0)
+        var acc = SIMD[DType.float32,NEURAL_CHAINS](0.0)
         for start in range(begin,end,DEPTH*16):
             comptime for page in range(DEPTH):
                 var p0 = start+page*16
@@ -80,10 +80,11 @@ def neural_tiled_kernel[DEPTH: Int,PAD: Int,SWIZZLE: Bool,TRANSPOSE_THREADS: Boo
                     # Mask ARITHMETIC tails. Multiplying padded zero by an
                     # infinity would alter NaN behavior; do not do that.
                     if live and start+page*16+p<end:
-                        acc = rtf_mul_add(as_[page*8*(16+PAD)+ri*(16+PAD)+p],
-                            bs_[page*16*(16+PAD)+_neural_b_stage_addr[PAD,SWIZZLE](p,ci)],acc)
+                        var chain = (start+page*16+p-begin)%NEURAL_CHAINS
+                        acc[chain] = rtf_mul_add(as_[page*8*(16+PAD)+ri*(16+PAD)+p],
+                            bs_[page*16*(16+PAD)+_neural_b_stage_addr[PAD,SWIZZLE](p,ci)],acc[chain])
             barrier()
-        neural_fold_push[16](stack,occupied,ftz(acc))
+        neural_fold_push[16](stack,occupied,neural_merge_chains[NEURAL_CHAINS](acc))
     if live:
         c.unsafe_store(row*Int(n)+col,neural_fold_drain[16](stack,occupied))
 
@@ -110,7 +111,7 @@ def neural_tiled_ab[
     comptime P = PAD if CANDIDATE and NN09 else 0
     comptime S = SWIZZLE and CANDIDATE and NN09
     comptime T = TRANSPOSE_THREADS and CANDIDATE and NN15
-    var part = neural_partition[CONTRACT_K_LEAF_MIN](k)
+    var part = neural_partition[NEURAL_LEAF](k)
     var st = neural_strides(op,m,n,k)
     ctx.enqueue_function[neural_tiled_kernel[D,P,S,T]](c,a,b,
         Int32(m),Int32(n),Int32(k),Int32(part[0]),Int32(part[1]),

@@ -27,7 +27,7 @@ from checks.numerics import (
     identical_softplus,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )

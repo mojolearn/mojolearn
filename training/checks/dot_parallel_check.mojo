@@ -5,7 +5,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from solver.checks.profile_dot import profile_dot_into, profile_dot_workspace_floats
 from solver.host.profile_dot_host import profile_dot_host
-from gemm.checks.gemm_identical import GEMM_PLAN_COUNT
+from gemm.neural_dispatch import GEMM_PLAN_COUNT
 from metrics.checks.device_io import upload_f32, download_f32
 
 

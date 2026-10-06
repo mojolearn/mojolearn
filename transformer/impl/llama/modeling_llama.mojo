@@ -8,7 +8,12 @@ Reference: `src/transformers/models/llama/modeling_llama.py`
 (huggingface/transformers `d56c55b`), read on disk at
 `/Users/andrewhendel/CascadeProjects/upstream/transformers/` on 2026-08-24.
 Partial, inference only, eager attention only. What is implemented here, symbol
-by symbol (line numbers verified against that checkout, not quoted from the
+by symbol (line numbers verified against that checkout, not quoted from transformer.experiments.summary_model import model_summary_forward
+from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY_TREE
+from transformer.experiments.norm_profile import (
+    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+)
+from the
 contract):
 
 | reference | lines | here |
@@ -306,7 +311,8 @@ from core.step_glue import (
 from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
-from gemm.checks.gemm_identical import GemmWorkspace
+from gemm.neural_dispatch import GemmWorkspace, NEURAL_PAIR_ENABLED
+from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 # lane/lowbit-blocks (2026-09-29): the block's products under
 # `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
 from transformer.impl.llama.int15_block import (
@@ -2022,6 +2028,8 @@ def llama_rms_norm_kernel(
             j0 = j1
         acc = acc_b
 
+    comptime if NN24_NORM_LANES8:
+        acc = norm_profile_dot[NN24_LANES](x, x, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
 
     # S2: the mean through `identical_div` (row 49) and the reciprocal
@@ -2070,6 +2078,8 @@ def residual_rms_norm_kernel(
         var r = ftz(ftz(a.unsafe_load(i)) + ftz(b.unsafe_load(i)))
         residual.unsafe_store(i, r)
         acc = ftz(identical_mul_add(r, r, acc))
+    comptime if NN24_NORM_LANES8:
+        acc = norm_profile_dot[NN24_LANES](residual, residual, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
     var mean = ftz(identical_div(acc, Float32(dm)))
     var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
@@ -2217,11 +2227,15 @@ def llama_norm_variant_kernel(
         var acc = Float32(0.0)
         for j in range(dm):
             acc = ftz(ftz(acc) + ftz(x.unsafe_load(t * dm + j)))
+        comptime if NN24_NORM_LANES8:
+            acc = _sum[NN24_LANES](x, t * dm, dm)
         var mean = ftz(identical_div(acc, Float32(dm)))
         var acc2 = Float32(0.0)
         for j in range(dm):
             var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
             acc2 = ftz(identical_mul_add(dev, dev, acc2))
+        comptime if NN24_NORM_LANES8:
+            acc2 = _square[NN24_LANES](x, t * dm, dm, mean)
         sumsq.unsafe_store(t, acc2)
         var variance = ftz(identical_div(acc2, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(variance + eps_in)))
@@ -2237,6 +2251,8 @@ def llama_norm_variant_kernel(
     for j in range(dm):
         var xj = ftz(x.unsafe_load(t * dm + j))
         acc = ftz(identical_mul_add(xj, xj, acc))
+    comptime if NN24_NORM_LANES8:
+        acc = norm_profile_dot[NN24_LANES](x, x, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
     var mean = ftz(identical_div(acc, Float32(dm)))
     var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
@@ -3960,6 +3976,9 @@ def attention_path_choice(plant_at: Int) -> Int:
     UNFUSED path and ran slower than the default while promising less. The
     transformer lane is IDENTICAL-only as of 2026-09-10 and the branch is
     gone."""
+    comptime if NEURAL_PROFILE_CHANGED:
+        # Incumbent fused QK embeds v1 GEMM; new profiles use shared dispatcher.
+        return ATTN_PATH_EAGER
     comptime if BLOCK_ANY_SABOTAGE:
         return ATTN_PATH_EAGER
     if plant_at != PLANT_AT_NONE:
@@ -4012,6 +4031,31 @@ def eager_attention_forward(
     corner says so. Returns the fused status (`FUSED_RAN` when the fused
     bits are the ones in `stages.ctxv`; -1 when the fused path was not
     attempted)."""
+    comptime if NN20_BALANCED_SUMMARY_TREE:
+        if softcap != Float32(0.0) or stages.int15_on or plant_at != PLANT_AT_NONE:
+            raise Error("NN20 summary profile refuses softcap, INT15 and legacy score plants")
+        var record_stages = materialize or trace.enabled
+        if record_stages:
+            ensure_attention_stage_capacity(ctx, stages, l, s)
+        model_summary_forward(ctx, stages.ctxv, stages.amax, stages.denom,
+            stages.scores, stages.masked, stages.aexp, stages.weights,
+            stages.q_rope, stages.k_cache, stages.v_cache, b, l,
+            dims.n_heads, dims.n_kv, dims.head_dim, s, pos0, key_lo, window,
+            llama_attention_scale(dims.head_dim), record_stages)
+        stages.attn_materialized = record_stages
+        stages.attn_estash_cells = 0
+        stages.attn_fwd_scan.clear()
+        stages.attn_forward_status = 20  # explicit new arithmetic version
+        if trace.enabled:
+            var cells = b * dims.n_heads * l * s
+            trace.record_device[DType.float32](ctx,prefix+".attn.scores",stages.scores,cells)
+            trace.record_device[DType.float32](ctx,prefix+".attn.masked",stages.masked,cells)
+            trace.record_device[DType.float32](ctx,prefix+".attn.max",stages.amax,b*dims.n_heads*l)
+            trace.record_device[DType.float32](ctx,prefix+".attn.exp",stages.aexp,cells)
+            trace.record_device[DType.float32](ctx,prefix+".attn.denom",stages.denom,b*dims.n_heads*l)
+            trace.record_device[DType.float32](ctx,prefix+".attn.weights",stages.weights,cells)
+        trace.record_device[DType.float32](ctx,prefix+".attn.ctx",stages.ctxv,b*l*dims.n_heads*dims.head_dim)
+        return 20
     var choice = attention_path_choice(plant_at)
     if choice == ATTN_PATH_AUTO and stages.attn_prefer_eager:
         choice = ATTN_PATH_EAGER
@@ -4992,11 +5036,18 @@ def llama_mlp_forward(
     var bias_silu_fused = opts.mlp_bias and opts.act_is_silu()
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
+    var projections_paired = False
+    comptime if NEURAL_PAIR_ENABLED:
+        if gated and not w.int15:
+            stages.gemm_workspace.run_pair(ctx, stages.gate_proj, stages.up_proj,
+                stages.norm2_out, w.w_gate, w.w_up, m, it, dm, _gemm_op_nt())
+            projections_paired = True
     if gated:
-        llama_proj(
-            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
-            stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
-        )
+        if not projections_paired:
+            llama_proj(
+                ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
+                stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
+            )
         if bias_silu_fused:
             step_count_launch()
             ctx.enqueue_function[bias_silu_kernel](
@@ -5032,10 +5083,11 @@ def llama_mlp_forward(
         var no_gate = List[Float32]()
         trace.record_list_f32(prefix + ".gate_proj.out", no_gate)
     pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
-    llama_proj(
-        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
-        stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
-    )
+    if not projections_paired:
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
+            stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
+        )
     if bias_gelu_fused and not gated:
         step_count_launch()
         ctx.enqueue_function[bias_gelu_kernel](

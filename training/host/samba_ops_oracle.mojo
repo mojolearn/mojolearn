@@ -63,6 +63,8 @@ pairwise addition has no fold-order fault (addition commutes), and the public
 ordered-shard reduction reaches no GEMM. Its independent oracle must catch
 the changed native result, including the cancellation fixture ending at three.
 """
+from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.host_lanes import all_finite
 from std.math import isfinite
 from std.sys.compile import is_defined
@@ -88,8 +90,8 @@ from gemm.checks.gemm_backward import (
     gemm_backward_b_call,
 )
 from gemm.contract import OP_NN, OP_NT, GEMM_ORACLE_HOST_SABOTAGE
-from gemm.host.identical_gemm import gemm_oracle
-from gemm.host.gemm_host_rows import gemm_host_rows
+from gemm.host.neural_gemm import gemm_oracle
+from gemm.host.neural_gemm import gemm_host_rows
 from training.checks.optimizer_contract import microbatch_split_is_identical
 
 
@@ -184,6 +186,8 @@ def host_rms_row_sumsq(x: List[Float32], m: Int, dm: Int) -> List[Float32]:
             for j in range(dm):
                 var xj = ftz(xp.unsafe_load(t * dm + j))
                 acc = ftz(identical_mul_add(xj, xj, acc))
+            comptime if NN24_NORM_LANES8:
+                acc = norm_profile_dot[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](xp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
             sp.unsafe_store(t, acc)
 
     if tasks == 1:
@@ -288,6 +292,8 @@ def host_samba_rms_norm_backward(
                 )
                 dhp.unsafe_store(cell, dhj)
                 c = ftz(identical_mul_add(dhj, ftz(xp.unsafe_load(cell)), c))
+            comptime if NN24_NORM_LANES8:
+                c = norm_profile_dot[NN24_LANES](rebind[MutPointer[Float32, MutAnyOrigin]](dhp), rebind[MutPointer[Float32, MutAnyOrigin]](xp), t * dm, t * dm, dm)
             c = ftz(c)
             var mean = ftz(identical_div(ftz(sp.unsafe_load(t)), Float32(dm)))
             var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
@@ -413,6 +419,7 @@ def host_samba_accumulate(
         for i in range(n):
             single.append(ftz(cur[i]))
         return single^
+    var first_nonfinite = n
     var pieces = a
     while pieces > 1:
         var pairs = pieces // 2
@@ -421,9 +428,15 @@ def host_samba_accumulate(
             for e in range(n):
                 var left = ftz(cur[(2 * j) * n + e])
                 var right = ftz(cur[(2 * j + 1) * n + e])
-                nxt.append(ftz(identical_mul_add(Float32(1.0), left, right)))
+                var value = ftz(identical_mul_add(Float32(1.0), left, right))
+                nxt.append(value)
+                comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN58_ACCUMULATE_STATUS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+                    if not isfinite(value):
+                        first_nonfinite = min(first_nonfinite, e)
         cur = nxt^
         pieces = pairs
+    if first_nonfinite < n:
+        raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(first_nonfinite))
     comptime if GEMM_ORACLE_HOST_SABOTAGE:
         # Pairwise addition has no fold-order fault. Corrupt the actual native
         # result so the ordered-shard reduction's independent oracle can prove

@@ -11,16 +11,11 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
-from core.philox_neural import neural_unit_at
+from training.residual_dropout_contract import NN59_DROPOUT_RESIDUAL,nn_dropout_cell,nn_dropout_residual_cell
 
 comptime NN58_ACCUMULATE_STATUS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_NN58_ACCUMULATE_STATUS"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime NN59_DROPOUT_RESIDUAL = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN59_DROPOUT_RESIDUAL"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime _FP = MutPointer[Float32, MutAnyOrigin]
@@ -56,20 +51,6 @@ def nn_accumulate_status_into(ctx: DeviceContext, mut dst: DeviceBuffer[DType.fl
     if n == 0:
         return
     ctx.enqueue_function[nn_accumulate_status_kernel](dst.unsafe_ptr(), left.unsafe_ptr(), right.unsafe_ptr(), status.unsafe_ptr(), Int32(n), grid_dim=((n + 127) // 128, 1, 1), block_dim=(128, 1, 1))
-
-
-@always_inline
-def nn_dropout_cell(value: Float32, p: Float32, scale: Float32, seed_lo: UInt32, seed_hi: UInt32, stream: UInt32, index: Int) -> Float32:
-    if neural_unit_at(seed_lo, seed_hi, stream, index) >= p:
-        return ftz(identical_mul(ftz(value), ftz(scale)))
-    return Float32(0.0)
-
-
-@always_inline
-def nn_dropout_residual_cell(value: Float32, residual: Float32, p: Float32, scale: Float32, seed_lo: UInt32, seed_hi: UInt32, stream: UInt32, index: Int) -> Float32:
-    var dropped = nn_dropout_cell(value, p, scale, seed_lo, seed_hi, stream, index)
-    # Two operations, including the exact dropout materialization seam.
-    return ftz(ftz(residual) + ftz(dropped))
 
 
 def nn_dropout_residual_kernel(dst: _FP, x: _FP, residual: _FP, n_in: Int32, offset: Int64, p: Float32, scale: Float32, seed_lo: UInt32, seed_hi: UInt32, stream: UInt32):

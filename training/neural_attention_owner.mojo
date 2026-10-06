@@ -2,7 +2,8 @@
 """NN31/NN32 native retained-forward and bounded checkpoint components.
 
 SOURCE DRAFT ONLY: no compilation, verification, quality or timing performed.
-Public Samba and byte-LM entrypoints do not instantiate this owner yet.
+The public TransformerBlock tape API now uses BorrowedAttentionTape below.
+Direct ByteTrainer/Samba optimizer ownership remains an optional extension.
 
 The owner MOVES IN a context, weights and RoPE table. It snapshots the input
 on device and owns every forward/backward buffer. It returns a single-use
@@ -16,7 +17,7 @@ Only the default FP32 transformer training profile is supported here. There
 is no dropout, prefix/decode state, changed reduction graph, Python data
 comparison, host tensor arithmetic, graph capture or asynchronous offload.
 The explicit full-prefill restriction prevents guessing how a cache prefix
-or a new option changes replay. Public model integration must supply its
+or a new option changes replay. Any broader training integration must supply its
 real weight/config mutation hooks and retain model-wide RNG metadata before
 broadening that scope.
 """
@@ -38,15 +39,8 @@ from transformer.checks.transformer_backward import (
 # NN32 isolates retention vs replay in one native layer owner. NN31 admits
 # retention by actual retained bytes and replay cost; budget misses replay.
 # Never choose a rule from a dataset, board size or hardware vendor.
-comptime NN32_RETAIN_FORWARD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN32_RETAIN_FORWARD"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
-comptime NN31_BOUNDED_CHECKPOINTS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_NN31_BOUNDED_CHECKPOINTS"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+from transformer.experiments.checkpoint_contract import (
+    NN32_RETAIN_FORWARD, NN31_BOUNDED_CHECKPOINTS, attention_checkpoint_retain,
 )
 
 comptime OWNER_EMPTY = 0
@@ -579,3 +573,95 @@ struct NeuralAttentionOwner(Movable):
     def close(mut self, mut budget: AttentionCheckpointBudget) raises:
         self.invalidate(budget)
         self.state = OWNER_CLOSED
+
+
+struct BorrowedAttentionTape(Movable):
+    """Actual public-session tape; borrows context/weights only during calls.
+
+    The binding owns the context and uploaded weight snapshot. It invalidates
+    this tape BEFORE any weight/config/session operation. No saved host or
+    Python pointers exist: input, rotary table, cache and stages are owned.
+    One epoch labels forward/input/weight/config generations; backward checks
+    each and consumes the ticket before enqueueing work. Failure is terminal.
+    """
+    var dims: LlamaDims
+    var b: Int
+    var l: Int
+    var window: Int
+    var forward_generation: Int
+    var input_generation: Int
+    var weight_generation: Int
+    var config_generation: Int
+    var live: Bool
+    var retained: Bool
+    var retained_bytes: Int
+    var input: DeviceBuffer[DType.float32]
+    var rope: LlamaRopeTable
+    var cache: LlamaKVCache
+    var stages: Optional[LlamaDeviceStages]
+
+    def __init__(out self, ctx: DeviceContext, mut w: LlamaDeviceWeights,
+                 var input: DeviceBuffer[DType.float32], b: Int, l: Int,
+                 window: Int, generation: Int) raises:
+        if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or b <= 0 or l <= 0 or window < 0:
+            raise Error("NN31/NN32 tape requires IDENTICAL and positive full-prefill shape")
+        if not w.opts.is_default() or w.int15:
+            raise Error("NN31/NN32 tape requires default FP32 transformer options")
+        if len(input) != b*l*w.dims.d_model or generation <= 0:
+            raise Error("NN31/NN32 tape input shape or generation mismatch")
+        self.dims = w.dims.copy()
+        self.b = b
+        self.l = l
+        self.window = window
+        self.forward_generation = generation
+        self.input_generation = generation
+        self.weight_generation = generation
+        self.config_generation = generation
+        self.live = True
+        self.retained = False
+        self.retained_bytes = 0
+        self.input = input^
+        self.rope = LlamaRopeTable(ctx,self.dims,w.opts,l)
+        self.cache = LlamaKVCache(ctx,b,self.dims,l,window,w.opts.max_positions)
+        self.stages = None
+        self.replay(ctx,w)
+
+    def replay(mut self, ctx: DeviceContext, mut w: LlamaDeviceWeights) raises:
+        self.cache.s = 0
+        self.cache.k.enqueue_fill(Float32(0.0))
+        self.cache.v.enqueue_fill(Float32(0.0))
+        self.stages = LlamaDeviceStages(ctx,self.b,self.l,self.l,self.dims,self.window,lean=True)
+        var trace = IdentityTrace.disabled()
+        llama_decoder_layer_forward(ctx,self.stages.value(),self.cache,self.rope,
+            w,self.input,self.b,self.l,0,trace,String("tape"),forward_only=False)
+        ctx.synchronize()
+
+    def seal(mut self, ctx: DeviceContext, budget: Int, minimum_ops_per_byte: Int) raises:
+        if budget < 0 or minimum_ops_per_byte < 0:
+            raise Error("NN31 tape budget and cost threshold must be nonnegative")
+        self.retained_bytes = _forward_bytes(self.stages.value())
+        self.retained = attention_checkpoint_retain(self.retained_bytes,budget,
+            attention_replay_operation_estimate(self.b,self.l,self.dims),minimum_ops_per_byte)
+        ctx.synchronize()
+        if not self.retained:
+            self.stages = None
+            ctx.synchronize()
+
+    def backward_into(mut self, ctx: DeviceContext, mut w: LlamaDeviceWeights,
+                      mut bst: LlamaBackwardStages, mut dy: DeviceBuffer[DType.float32],
+                      generation: Int, input_generation: Int,
+                      weight_generation: Int, config_generation: Int) raises:
+        if (not self.live or generation != self.forward_generation
+                or input_generation != self.input_generation
+                or weight_generation != self.weight_generation
+                or config_generation != self.config_generation):
+            raise Error("NN31/NN32 stale, foreign or already consumed forward tape")
+        self.live = False
+        if not self.stages:
+            self.replay(ctx,w)
+        var trace = IdentityTrace.disabled()
+        llama_decoder_layer_backward_device(ctx,bst,self.stages.value(),w,
+            self.rope.cos,self.rope.sin,self.input,dy,self.b,self.l,0,trace,String("tape.bwd"))
+        ctx.synchronize()
+        self.stages = None
+        ctx.synchronize()
