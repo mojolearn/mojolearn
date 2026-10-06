@@ -42,10 +42,13 @@ the columns; the tail finds them by their pad-row cell and ranks the real
 columns only (`rb_rank_real`).
 
 EXPERIMENTAL ONLY: the default is disabled after the IDENTICAL 4096 rank-one
-quality fixture produced an intrinsically unconverged local pivot (outer
+quality fixture produced an unconverged uncentered local pivot (outer
 sweep 0, round 183, group 71). Exact-word host replay also refuses after
 60/120/180/240 sweeps at the required local tolerance. Do not relax that
 tolerance or the final convergence/accuracy gates to enable this candidate.
+The guarded centering repair below passes the retained pivot and host block
+cases through 513, with shifts restored before outer updates. Original4096
+quality and GPU identity remain unqualified; the default stays disabled.
 
 BITS: a different solver, so different words from the rotation solver at
 n >= RB_MIN_N, on NVIDIA, AMD, Apple and the host column together (the gate
