@@ -72,6 +72,14 @@ def _worse(da: Float32, ia: UInt32, db: Float32, ib: UInt32) -> Bool:
 # One warmup/one score; caller67d0efb29; exact cases/builds/hashes:
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F14/default.
 # Compilation/identity reused. No combined-toggle/full-board claim.
+# Full-workload setup audit, 2026-10-06: the retained F14 job003/job063
+# pair leaves FAST_MMA_KNN enabled. Its preceding dispatch accepts the
+# eligible d<=32, k<=16 region, so that pair does not reach this QPT choice.
+# Prior small-caller timings above lacked route evidence and do not establish
+# a QUERY_GROUP4 gain or loss. Full candidate measurement remains pending;
+# do not time identical routes or invent reach from the compile define alone.
+# Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
+# f14-full-dispatch-blockers.json. No dispatch/default change from this audit.
 comptime FKT_QPT = 4 if (FAST_TOPK_KNN_ENABLED and is_defined["MOJOLEARN_KNN_FAST_QUERY_GROUP4"]()) else 2
 """Queries per thread: each loaded index row is reused across them."""
 

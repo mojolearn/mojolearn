@@ -26,7 +26,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F11 | fast | PARTIAL_MEASUREMENTS_RETAINED | 2 |
 | F12 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
 | F13 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
-| F14 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
+| F14 | fast | NO_DISTINCT_CANDIDATE_ROUTE, REMAINING_FULL_WORKLOAD_COVERAGE_PENDING, UNSUPPORTED_FULL_QUERY_COUNT | 0 |
 | F15 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
 | F16 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
 | F17 | fast | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | 0 |
@@ -115,6 +115,8 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 | F12 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | F13 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | F14 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
+| F14 | apple/default | default-grouped-query | full_workload | NO_DISTINCT_CANDIDATE_ROUTE | — | experiments/performance_ideas/measurements/full_ab_20261006/f14-full-dispatch-blockers.json |
+| F14 | apple/default | ann-full-query | full_workload | UNSUPPORTED_FULL_QUERY_COUNT | — | experiments/performance_ideas/measurements/full_ab_20261006/f14-full-dispatch-blockers.json |
 | F15 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | F16 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
 | F17 | apple/default | candidate-to-full-workload mapping pending | full_workload | REMAINING_FULL_WORKLOAD_COVERAGE_PENDING | — | /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json |
@@ -228,3 +230,4 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 - Final frozen main SHA is retained in /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/freeze.json after push.
 - Apple FAST now proceeds independently. Current measured PCA subsets do not close downstream LLE, other adapters or interaction coverage.
 - Ten full Apple FAST A/B pairs captured: PCA and compensated PCA on uncapped Istella/taxi; paired gather, tiled gather and their combined configuration on both full datasets. Original failed PCA receipt remains separate. No default promotion or opponent comparison inferred.
+- F14 grouped-query pair has no distinct route under retained flags; ANN rejects the full query count. No F14 GPU test or reduced substitute was run.

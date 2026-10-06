@@ -1008,6 +1008,10 @@
             "A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
             "B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3"
           },
+          "adapter_variants": {
+            "A": "default",
+            "B": "default"
+          },
           "quality": {
             "exact_resample": {
               "ok": true,
@@ -1226,6 +1230,10 @@
           "indices_hashes": {
             "A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
             "B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb"
+          },
+          "adapter_variants": {
+            "A": "default",
+            "B": "default"
           },
           "quality": {
             "exact_resample": {
@@ -1892,9 +1900,33 @@
           "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
+        },
+        {
+          "id": "F14",
+          "mode": "fast",
+          "vendor": "apple",
+          "scope": "full_workload",
+          "case": "default-grouped-query",
+          "status": "NO_DISTINCT_CANDIDATE_ROUTE",
+          "reason": "Retained pair is shadowed by preceding MMA dispatch",
+          "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/f14-full-dispatch-blockers.json",
+          "producer": "f14-source-audit",
+          "measurement_executed": false
+        },
+        {
+          "id": "F14",
+          "mode": "fast",
+          "vendor": "apple",
+          "scope": "full_workload",
+          "case": "ann-full-query",
+          "status": "UNSUPPORTED_FULL_QUERY_COUNT",
+          "reason": "Existing native scratch bound rejects full query count",
+          "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/f14-full-dispatch-blockers.json",
+          "producer": "f14-source-audit",
+          "measurement_executed": false
         }
       ],
-      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
+      "status": "NO_DISTINCT_CANDIDATE_ROUTE, REMAINING_FULL_WORKLOAD_COVERAGE_PENDING, UNSUPPORTED_FULL_QUERY_COUNT"
     },
     {
       "id": "F15",
@@ -2097,6 +2129,13 @@
           "steady_state_claim": false,
           "model_hash_policy": "Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim",
           "promotion": false,
+          "variant": "wait-pair+tiled",
+          "interaction_candidates": [
+            "F04",
+            "F19"
+          ],
+          "comparison_scope": "combined proposed WAIT_PAIR+TILED configuration vs GATHER-only baseline",
+          "adapter_variant_note": "Frozen adapter variant=default names public replacement workload; experiment variant is this receipt metadata, not isolated F19",
           "retained_runs": [
             {
               "phase": "warmup",
@@ -2173,6 +2212,10 @@
             "A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
             "B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3"
           },
+          "adapter_variants": {
+            "A": "default",
+            "B": "default"
+          },
           "quality": {
             "exact_resample": {
               "ok": true,
@@ -2206,7 +2249,6 @@
               "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-istella-full/B/package/mojolearn/_mojolearn_resample.so": "2711f69cf522e906ec44ee117ec7e43e0619713257bb42d27c2785e45a23b6f0"
             }
           },
-          "variant": "default",
           "pending_coverage": [
             "other affected public operations and interacting candidate combinations",
             "F19 permutation variant is separate and remains unmeasured here"
@@ -2318,6 +2360,13 @@
           "steady_state_claim": false,
           "model_hash_policy": "Stateless resampling has no fitted model; UNAVAILABLE is explicit, no model identity claim",
           "promotion": false,
+          "variant": "wait-pair+tiled",
+          "interaction_candidates": [
+            "F04",
+            "F19"
+          ],
+          "comparison_scope": "combined proposed WAIT_PAIR+TILED configuration vs GATHER-only baseline",
+          "adapter_variant_note": "Frozen adapter variant=default names public replacement workload; experiment variant is this receipt metadata, not isolated F19",
           "retained_runs": [
             {
               "phase": "warmup",
@@ -2394,6 +2443,10 @@
             "A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
             "B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb"
           },
+          "adapter_variants": {
+            "A": "default",
+            "B": "default"
+          },
           "quality": {
             "exact_resample": {
               "ok": true,
@@ -2427,7 +2480,6 @@
               "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-fast-resample/265872c2922e/F19-combined-wait-tiled-taxi-full/B/package/mojolearn/_mojolearn_resample.so": "2711f69cf522e906ec44ee117ec7e43e0619713257bb42d27c2785e45a23b6f0"
             }
           },
-          "variant": "default",
           "pending_coverage": [
             "other affected public operations and interacting candidate combinations",
             "F19 permutation variant is separate and remains unmeasured here"
@@ -2615,6 +2667,10 @@
           "indices_hashes": {
             "A": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3",
             "B": "31afc2afa1b8092c0bfe2fe8bbec53c8b0ba4fb6e5adefcad0e838781c101ba3"
+          },
+          "adapter_variants": {
+            "A": "default",
+            "B": "default"
           },
           "quality": {
             "exact_resample": {
@@ -2837,6 +2893,10 @@
           "indices_hashes": {
             "A": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb",
             "B": "e26e21ab7186c2112d0a457f1c328e727a124e5f2a2a48bb6935ddd6a75cc9eb"
+          },
+          "adapter_variants": {
+            "A": "default",
+            "B": "default"
           },
           "quality": {
             "exact_resample": {
@@ -3591,7 +3651,8 @@
     "Model/output SHA256 capture added to actual workload drivers; unavailable model exports remain explicit. No compilation or separate identity validation run.",
     "Final frozen main SHA is retained in /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/freeze.json after push.",
     "Apple FAST now proceeds independently. Current measured PCA subsets do not close downstream LLE, other adapters or interaction coverage.",
-    "Ten full Apple FAST A/B pairs captured: PCA and compensated PCA on uncapped Istella/taxi; paired gather, tiled gather and their combined configuration on both full datasets. Original failed PCA receipt remains separate. No default promotion or opponent comparison inferred."
+    "Ten full Apple FAST A/B pairs captured: PCA and compensated PCA on uncapped Istella/taxi; paired gather, tiled gather and their combined configuration on both full datasets. Original failed PCA receipt remains separate. No default promotion or opponent comparison inferred.",
+    "F14 grouped-query pair has no distinct route under retained flags; ANN rejects the full query count. No F14 GPU test or reduced substitute was run."
   ],
   "decisions": []
 }

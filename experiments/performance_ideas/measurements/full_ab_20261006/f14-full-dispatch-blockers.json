@@ -1,0 +1,143 @@
+{
+  "updated_at": 1791285692.382414,
+  "status": "NO_SUPPORTED_FULL_F14_LAUNCH_WITH_RETAINED_PAIRS",
+  "numerical_source": "c58945cd08380400c7b0276945c480efa0fc5398",
+  "default": {
+    "artifacts": [
+      "job003",
+      "job063"
+    ],
+    "status": "NO_DISTINCT_CANDIDATE_ROUTE",
+    "reason": "FAST_MMA_KNN dispatch precedes FAST_TOPK_KNN; its d<=32,k<=32 domain includes entire grouped-topk d<=32,k<=16 domain. Neither retained arm defines MOJOLEARN_KNN_FAST_MMA_OFF.",
+    "source": [
+      "neighbors/impl/detail/knn_brute_force.mojo:1959",
+      "neighbors/impl/detail/fast_mma_knn.mojo:129",
+      "neighbors/impl/detail/fast_topk_knn.mojo:52"
+    ],
+    "adapter_guard_commit": "b5310a941",
+    "prior_component_note": "Previous F14 default caller lacks positive group-candidate dispatch evidence; its small public times must not qualify querygroup performance."
+  },
+  "ann": {
+    "artifacts": [
+      "job061",
+      "job062"
+    ],
+    "status": "UNSUPPORTED_FULL_QUERY_SCRATCH_BOUND",
+    "actual_candidate_route": "IVF_APPLE_FAST_BALANCED with exported ivf_fast_balanced_hits, genuinely distinct from baseline",
+    "reason": "Existing native maximum task guard rejects500000queries on both full training datasets regardless observed list balance.",
+    "guard": "nq*(ceil(index_rows/256)+n_probes) <= INT32_MAX/KM",
+    "source": "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo:118",
+    "public_entrypoint": "python/mojolearn/_ivf_impl.py:261 passes every query in one native call; no internal query batching",
+    "full_recipe_evidence": "tools/bench_board_more.py:512 IVF-Flat params1024lists32probes,k10,20iterations,seed7; original F14 caller17lists probes5/8/17,k8,8iterations,seed141 also refused",
+    "cases": [
+      {
+        "dataset": "istella",
+        "index_rows": 2043304,
+        "features": 220,
+        "query_rows": 500000,
+        "recipe": "board",
+        "n_probes": 32,
+        "k": 10,
+        "KM": 16,
+        "maximum_tasks_bound": 4007000000,
+        "limit": 134217727,
+        "refused": true
+      },
+      {
+        "dataset": "istella",
+        "index_rows": 2043304,
+        "features": 220,
+        "query_rows": 500000,
+        "recipe": "caller-approx5",
+        "n_probes": 5,
+        "k": 8,
+        "KM": 8,
+        "maximum_tasks_bound": 3993500000,
+        "limit": 268435455,
+        "refused": true
+      },
+      {
+        "dataset": "istella",
+        "index_rows": 2043304,
+        "features": 220,
+        "query_rows": 500000,
+        "recipe": "caller-approx8",
+        "n_probes": 8,
+        "k": 8,
+        "KM": 8,
+        "maximum_tasks_bound": 3995000000,
+        "limit": 268435455,
+        "refused": true
+      },
+      {
+        "dataset": "istella",
+        "index_rows": 2043304,
+        "features": 220,
+        "query_rows": 500000,
+        "recipe": "caller-fullprobe17",
+        "n_probes": 17,
+        "k": 8,
+        "KM": 8,
+        "maximum_tasks_bound": 3999500000,
+        "limit": 268435455,
+        "refused": true
+      },
+      {
+        "dataset": "taxi",
+        "index_rows": 5250086,
+        "features": 11,
+        "query_rows": 500000,
+        "recipe": "board",
+        "n_probes": 32,
+        "k": 10,
+        "KM": 16,
+        "maximum_tasks_bound": 10270500000,
+        "limit": 134217727,
+        "refused": true
+      },
+      {
+        "dataset": "taxi",
+        "index_rows": 5250086,
+        "features": 11,
+        "query_rows": 500000,
+        "recipe": "caller-approx5",
+        "n_probes": 5,
+        "k": 8,
+        "KM": 8,
+        "maximum_tasks_bound": 10257000000,
+        "limit": 268435455,
+        "refused": true
+      },
+      {
+        "dataset": "taxi",
+        "index_rows": 5250086,
+        "features": 11,
+        "query_rows": 500000,
+        "recipe": "caller-approx8",
+        "n_probes": 8,
+        "k": 8,
+        "KM": 8,
+        "maximum_tasks_bound": 10258500000,
+        "limit": 268435455,
+        "refused": true
+      },
+      {
+        "dataset": "taxi",
+        "index_rows": 5250086,
+        "features": 11,
+        "query_rows": 500000,
+        "recipe": "caller-fullprobe17",
+        "n_probes": 17,
+        "k": 8,
+        "KM": 8,
+        "maximum_tasks_bound": 10263000000,
+        "limit": 268435455,
+        "refused": true
+      }
+    ]
+  },
+  "no_go_policy": "No synthetic/reduced substitute, Python runtime query batching, native guard bypass or compilation attempted. Current source adapter remains guarded for future appropriately retained artifacts.",
+  "gpu_measurements": 0,
+  "compilation": 0,
+  "device_preverification": 0
+}

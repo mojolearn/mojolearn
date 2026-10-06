@@ -99,3 +99,4 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 - Final frozen main SHA is retained in /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/freeze.json after push.
 - Apple FAST now proceeds independently. Current measured PCA subsets do not close downstream LLE, other adapters or interaction coverage.
 - Ten full Apple FAST A/B pairs captured: PCA and compensated PCA on uncapped Istella/taxi; paired gather, tiled gather and their combined configuration on both full datasets. Original failed PCA receipt remains separate. No default promotion or opponent comparison inferred.
+- F14 grouped-query pair has no distinct route under retained flags; ANN rejects the full query count. No F14 GPU test or reduced substitute was run.
