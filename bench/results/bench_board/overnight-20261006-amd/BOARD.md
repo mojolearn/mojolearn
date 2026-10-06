@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T06:58:55Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:00:52Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,9 +36,9 @@ Generated 2026-10-06T06:58:55Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 84 planned, 0 done, 3 failed, 0 unsupported, 81 pending. Cells: 3 (REFUSED 3).
+Races: 84 planned, 6 done, 10 failed, 0 unsupported, 68 pending. Cells: 18 (REFUSED 9, ok 9).
 
-Inference cells: 6 (UNKNOWN 6).
+Inference cells: 26 (UNKNOWN 18, ok 8).
 
 ## Quality at a glance
 
@@ -46,6 +46,18 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 
 | family | lane | dataset | metric | ours FAST | ours IDENTICAL | opponents |
 |---|---|---|---|---|---|---|
+| classical | kmeans | istella | inertia (lower is better) | - | - | torch-gpu 5.991e+17 |
+| classical | kmeans | istella | n_iter | - | - | torch-gpu 91 |
+| classical | kmeans | taxi | inertia (lower is better) | - | - | torch-gpu 3.06e+08 |
+| classical | kmeans | taxi | n_iter | - | - | torch-gpu 54 |
+| classical | knn | taxi | recall_at_k (higher is better) | - | - | torch-gpu 0.999730 |
+| classical | knn | taxi | rows_with_repeated_ids | - | - | torch-gpu 0 |
+| classical | ols | istella | r2 (higher is better) | - | - | torch-gpu nan; torch-gpu-eigh 0.151604 |
+| classical | ols | istella | rmse (lower is better) | - | - | torch-gpu nan; torch-gpu-eigh 0.768589 |
+| classical | ols | taxi | r2 (higher is better) | - | - | torch-gpu 0.908840; torch-gpu-eigh 0.908822 |
+| classical | ols | taxi | rmse (lower is better) | - | - | torch-gpu 4.696376; torch-gpu-eigh 4.696849 |
+| classical | pca | istella | explained_variance_ratio_sum (higher is better) | - | - | torch-gpu 1.000000 |
+| classical | pca | taxi | explained_variance_ratio_sum (higher is better) | - | - | torch-gpu 0.999997 |
 
 ## Inference at a glance
 
@@ -53,14 +65,51 @@ Batch prediction, each arm with its own fitted model from the same race; medians
 
 | family | lane | dataset | batch | rows | ours FAST ms | ours IDENTICAL ms | FAST = IDENTICAL bits | opponents |
 |---|---|---|---|---|---|---|---|---|
+| classical | kmeans | istella | Xq | - | - | - | - | torch-gpu 0.6 ms (IDENTICAL/arm -) |
+| classical | kmeans | taxi | Xq | - | - | - | - | torch-gpu 0.5 ms (IDENTICAL/arm -) |
+| classical | ols | istella | Xq | - | - | - | - | torch-gpu 0.5 ms (IDENTICAL/arm -); torch-gpu-eigh 0.5 ms (IDENTICAL/arm -) |
+| classical | ols | taxi | Xq | - | - | - | - | torch-gpu 0.5 ms (IDENTICAL/arm -); torch-gpu-eigh 0.5 ms (IDENTICAL/arm -) |
+| classical | pca | istella | Xq | - | - | - | - | torch-gpu 0.6 ms (IDENTICAL/arm -) |
+| classical | pca | taxi | Xq | - | - | - | - | torch-gpu 0.3 ms (IDENTICAL/arm -) |
+| trees | gbdt-categorical | taxi | test | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-categorical | taxi | large | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
 | trees | gbdt-depthwise | istella | test | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
 | trees | gbdt-depthwise | istella | large | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
 | trees | gbdt-depthwise | taxi | test | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
 | trees | gbdt-depthwise | taxi | large | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-lossguide | istella | test | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-lossguide | istella | large | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
 | trees | gbdt-lossguide | taxi | test | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
 | trees | gbdt-lossguide | taxi | large | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-multiclass | istella | test | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-multiclass | istella | large | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-multiclass | taxi | test | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-multiclass | taxi | large | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-rank-pairlogit | istella | test | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-rank-pairlogit | istella | large | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-rank-yetirank | istella | test | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
+| trees | gbdt-rank-yetirank | istella | large | - | - | - | - | xgboost-gpu - ms (IDENTICAL/arm -) |
 
 ## Trees
+
+### gbdt-categorical / taxi (rows full, shape -)
+
+race: failed, driver rc 1, log `raw/trees/gbdt-categorical.taxi.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | xgboost | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | REFUSED(asked for by --arms and not built here; built: xgboost-cpu) (measured this run) |
+
+config: NVIDIA gbm-bench, xgb/lgbm/cat shared_params, ntrees 500 (binary task) (https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py)
+
+parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | test | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+| xgboost-gpu | large | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
 
 ### gbdt-depthwise / istella (rows full, shape -)
 
@@ -100,6 +149,25 @@ Inference (each arm predicts with its own model from the fit rounds above):
 | xgboost-gpu | test | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
 | xgboost-gpu | large | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
 
+### gbdt-lossguide / istella (rows full, shape -)
+
+race: failed, driver rc 1, log `raw/trees/gbdt-lossguide.istella.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | xgboost | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | REFUSED(asked for by --arms and not built here; built: xgboost-cpu) (measured this run) |
+
+config: NVIDIA gbm-bench, xgb/lgbm/cat shared_params, ntrees 500 (https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py)
+
+parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | test | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+| xgboost-gpu | large | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+
 ### gbdt-lossguide / taxi (rows full, shape -)
 
 race: failed, driver rc 1, log `raw/trees/gbdt-lossguide.taxi.rows-full.log`, ran on mojolearn-steward-do-amd
@@ -118,6 +186,351 @@ Inference (each arm predicts with its own model from the fit rounds above):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | xgboost-gpu | test | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
 | xgboost-gpu | large | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+
+### gbdt-multiclass / istella (rows full, shape -)
+
+race: failed, driver rc 1, log `raw/trees/gbdt-multiclass.istella.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | xgboost | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | REFUSED(asked for by --arms and not built here; built: xgboost-cpu) (measured this run) |
+
+config: NVIDIA gbm-bench, xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task) (https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py)
+
+parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | test | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+| xgboost-gpu | large | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+
+### gbdt-multiclass / taxi (rows full, shape -)
+
+race: failed, driver rc 1, log `raw/trees/gbdt-multiclass.taxi.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | xgboost | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | REFUSED(asked for by --arms and not built here; built: xgboost-cpu) (measured this run) |
+
+config: NVIDIA gbm-bench, xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task) (https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py)
+
+parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | test | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+| xgboost-gpu | large | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+
+### gbdt-rank-pairlogit / istella (rows full, shape -)
+
+race: failed, driver rc 1, log `raw/trees/gbdt-rank-pairlogit.istella.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | xgboost | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | REFUSED(asked for by --arms and not built here; built: xgboost-cpu) (measured this run) |
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | test | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+| xgboost-gpu | large | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+
+### gbdt-rank-yetirank / istella (rows full, shape -)
+
+race: failed, driver rc 1, log `raw/trees/gbdt-rank-yetirank.istella.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | xgboost | gpu | opponent | - | - | 0 | - | - | - | - | - | - | UNKNOWN | - | REFUSED(asked for by --arms and not built here; built: xgboost-cpu) (measured this run) |
+
+config: the board's own settings (no NVIDIA harness entry)
+
+parameters: NOT CHECKED (the driver printed no BOARD-PARAMS line)
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| xgboost-gpu | test | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+| xgboost-gpu | large | - | - | - | 0 | - | - | - | - | UNKNOWN | UNKNOWN(no inference lines) |
+
+## Classical
+
+### kmeans / istella (rows full, shape 2043304x220)
+
+race: done, driver rc 0, log `logs/classical.kmeans.istella.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 3406.3 | 3406.3..3406.3 | 1 | - | - | 5132.4 | 3460.8 | inertia=5.991e+17, n_iter=91 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic sequential seeding), tol=1e-7, metric='euclidean', Lloyd; seed 7 (ours, scikit-learn and cuML random_state=7, torch a generator seeded 7). Rows: big block: 4,000,000 taxi rows or the Istella-S train split, raw. Timed: fit (the k-means++ seeding included on every arm).
+
+mismatch: k-means++: each library draws its own start from its own generator seeded 7, so the starts differ; scikit-learn greedy k-means++ (2 + log k candidates per center), ours and cuML the sequential k-means++ of cuML (oversampling_factor=0), torch-gpu scikit-learn's greedy rule written out
+
+mismatch: tol=1e-7 on ours, scikit-learn and cuML (ours and cuML refuse 0); each library applies it through its own convergence test; torch-gpu stops by scikit-learn's (center shift <= tol x mean feature variance). n_iter is in every quality cell
+
+mismatch: algorithm: scikit-learn algorithm='lloyd'; ours and cuML have no such parameter (Lloyd); torch-gpu is written as Lloyd
+
+config: cuML benchmark (RAPIDS), KMeans (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | torch-gpu |
+|---|---|
+| library (source) | torch (declared) |
+| init | "k-means++" |
+| max_iter | 300 |
+| metric | "euclidean" |
+| n_clusters | 8 |
+| n_init | 1 |
+| seed | 7 |
+| tol | 1e-07 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | Xq | 500000 | 0.6 | 0.6..0.6 | 1 | - | - | eval_inertia=1.402e+17, label_agreement_own_centers=1.000000 | yes | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-gpu: torch chunked addmm(//c//^2, Xq, c.T, alpha -2).argmin over the fitted centers; Xq uploaded before the clock, which ends at the device synchronize
+
+### kmeans / taxi (rows full, shape 4000000x11)
+
+race: done, driver rc 0, log `logs/classical.kmeans.taxi.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 538.0 | 538.0..538.0 | 1 | - | - | 3194.4 | 459.9 | inertia=3.06e+08, n_iter=54 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic sequential seeding), tol=1e-7, metric='euclidean', Lloyd; seed 7 (ours, scikit-learn and cuML random_state=7, torch a generator seeded 7). Rows: big block: 4,000,000 taxi rows or the Istella-S train split, raw. Timed: fit (the k-means++ seeding included on every arm).
+
+mismatch: k-means++: each library draws its own start from its own generator seeded 7, so the starts differ; scikit-learn greedy k-means++ (2 + log k candidates per center), ours and cuML the sequential k-means++ of cuML (oversampling_factor=0), torch-gpu scikit-learn's greedy rule written out
+
+mismatch: tol=1e-7 on ours, scikit-learn and cuML (ours and cuML refuse 0); each library applies it through its own convergence test; torch-gpu stops by scikit-learn's (center shift <= tol x mean feature variance). n_iter is in every quality cell
+
+mismatch: algorithm: scikit-learn algorithm='lloyd'; ours and cuML have no such parameter (Lloyd); torch-gpu is written as Lloyd
+
+config: cuML benchmark (RAPIDS), KMeans (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | torch-gpu |
+|---|---|
+| library (source) | torch (declared) |
+| init | "k-means++" |
+| max_iter | 300 |
+| metric | "euclidean" |
+| n_clusters | 8 |
+| n_init | 1 |
+| seed | 7 |
+| tol | 1e-07 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | Xq | 500000 | 0.5 | 0.5..0.5 | 1 | - | - | eval_inertia=4.572e+07, label_agreement_own_centers=1.000000 | yes | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-gpu: torch chunked addmm(//c//^2, Xq, c.T, alpha -2).argmin over the fitted centers; Xq uploaded before the clock, which ends at the device synchronize
+
+### knn / taxi (rows full, shape 400000x11)
+
+race: done, driver rc 0, log `logs/classical.knn.taxi.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 27.2 | 27.2..27.2 | 1 | - | - | 2866.0 | 3242.7 | recall_at_k=0.999730, rows_with_repeated_ids=0 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', algorithm='brute' (ours, scikit-learn, cuML); torch cdist p=2 plus topk. Rows: knn block: 400,000 index rows, 4,000 queries, raw. Timed: kneighbors; the fit (index) is before the clock on every arm.
+
+mismatch: seed: no arm has a seed argument (exact search); torch-gpu torch.manual_seed(7)
+
+mismatch: query_tile: ours only (tiling, results unchanged); n_jobs=-1: scikit-learn only
+
+config: cuML benchmark (RAPIDS), NearestNeighbors (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | torch-gpu |
+|---|---|
+| library (source) | torch (declared) |
+| algorithm | "brute" |
+| metric | "euclidean" |
+| n_neighbors | 64 |
+| p | 2 |
+| seed | 7 |
+
+### ols / istella (rows full, shape 2043304x220)
+
+race: failed, driver rc 0, log `logs/classical.ols.istella.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 2340.8 | 2340.8..2340.8 | 1 | - | - | 5648.2 | 5303.6 | finite=False, r2=nan, rmse=nan | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-gpu-eigh | torch | gpu | opponent | 42.8 | 42.8..42.8 | 1 | - | - | 5051.5 | 3649.4 | finite=True, r2=0.151604, rmse=0.768589 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu, torch-gpu-eigh: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: fit_intercept=True. Rows: big block, raw; R2 and RMSE on the 500,000 eval rows. Timed: fit.
+
+mismatch: seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)
+
+mismatch: solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff
+
+mismatch: scikit-learn positive=False and copy_X=True: parameters ours does not have
+
+config: cuML benchmark (RAPIDS), LinearRegression (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | torch-gpu | torch-gpu-eigh |
+|---|---||---|---|
+| library (source) | torch (declared) | torch (declared) |
+| fit_intercept | true | true |
+| seed | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | Xq | 500000 | 0.5 | 0.5..0.5 | 1 | - | - | predict_max_rel_err_own_fp64=nan, r2_eval=nan, rmse_eval=nan | yes | LIKE-FOR-LIKE-SPAN | ok |
+| torch-gpu-eigh | Xq | 500000 | 0.5 | 0.5..0.5 | 1 | - | - | predict_max_rel_err_own_fp64=4.831e-07, r2_eval=0.151604, rmse_eval=0.768589 | yes | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-gpu: torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize
+
+inference call, torch-gpu-eigh: torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize
+
+### ols / taxi (rows full, shape 4000000x11)
+
+race: done, driver rc 0, log `logs/classical.ols.taxi.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 100.7 | 100.7..100.7 | 1 | - | - | 3535.9 | 695.3 | finite=True, r2=0.908840, rmse=4.696376 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+| torch-gpu-eigh | torch | gpu | opponent | 34.0 | 34.0..34.0 | 1 | - | - | 3018.3 | 572.0 | finite=True, r2=0.908822, rmse=4.696849 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu, torch-gpu-eigh: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: fit_intercept=True. Rows: big block, raw; R2 and RMSE on the 500,000 eval rows. Timed: fit.
+
+mismatch: seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)
+
+mismatch: solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff
+
+mismatch: scikit-learn positive=False and copy_X=True: parameters ours does not have
+
+config: cuML benchmark (RAPIDS), LinearRegression (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | torch-gpu | torch-gpu-eigh |
+|---|---||---|---|
+| library (source) | torch (declared) | torch (declared) |
+| fit_intercept | true | true |
+| seed | 7 | 7 |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | Xq | 500000 | 0.5 | 0.5..0.5 | 1 | - | - | predict_max_rel_err_own_fp64=5.913e-08, r2_eval=0.908840, rmse_eval=4.696376 | yes | LIKE-FOR-LIKE-SPAN | ok |
+| torch-gpu-eigh | Xq | 500000 | 0.5 | 0.5..0.5 | 1 | - | - | predict_max_rel_err_own_fp64=8.007e-08, r2_eval=0.908822, rmse_eval=4.696849 | yes | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-gpu: torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize
+
+inference call, torch-gpu-eigh: torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize
+
+### pca / istella (rows full, shape 2043304x220)
+
+race: done, driver rc 0, log `logs/classical.pca.istella.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 19.9 | 19.9..19.9 | 1 | - | - | 5044.4 | 3505.8 | explained_variance_ratio_sum=1.000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'. Rows: big block, raw. Timed: fit.
+
+mismatch: svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'
+
+mismatch: torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)
+
+mismatch: random_state is read by none of the covariance solvers; set to 7 on every arm
+
+config: cuML benchmark (RAPIDS), PCA (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | torch-gpu |
+|---|---|
+| library (source) | torch (declared) |
+| n_components | 10 |
+| seed | 7 |
+| svd_solver | "covariance_eigh" |
+| whiten | false |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | Xq | 500000 | 0.6 | 0.6..0.6 | 1 | - | - | transform_max_rel_err_own_fp64=3.575e-07 | yes | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-gpu: torch (Xq - mean) @ components.T; Xq uploaded before the clock, which ends at the device synchronize
+
+### pca / taxi (rows full, shape 4000000x11)
+
+race: done, driver rc 0, log `logs/classical.pca.taxi.rows-full.log`, ran on mojolearn-steward-do-amd
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | torch | gpu | opponent | 10.9 | 10.9..10.9 | 1 | - | - | 3009.5 | 412.0 | explained_variance_ratio_sum=0.999997 | yes | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, torch-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+
+settings: n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'. Rows: big block, raw. Timed: fit.
+
+mismatch: svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'
+
+mismatch: torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)
+
+mismatch: random_state is read by none of the covariance solvers; set to 7 on every arm
+
+config: cuML benchmark (RAPIDS), PCA (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `torch-gpu`, seed 7): MATCHED
+
+| parameter | torch-gpu |
+|---|---|
+| library (source) | torch (declared) |
+| n_components | 10 |
+| seed | 7 |
+| svd_solver | "covariance_eigh" |
+| whiten | false |
+
+Inference (each arm predicts with its own model from the fit rounds above):
+
+| arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | quality | hash stable | comparability | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| torch-gpu | Xq | 500000 | 0.3 | 0.3..0.3 | 1 | - | - | transform_max_rel_err_own_fp64=9.597e-08 | yes | LIKE-FOR-LIKE-SPAN | ok |
+
+inference call, torch-gpu: torch (Xq - mean) @ components.T; Xq uploaded before the clock, which ends at the device synchronize
 
 ## Not covered by this board
 

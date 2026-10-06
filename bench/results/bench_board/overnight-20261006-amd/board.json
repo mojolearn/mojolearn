@@ -167,6 +167,7 @@
     "data_root": "/root/datasets/gbm-bench",
     "data_sha256": {
       "istella": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+      "istella-rank": "7d2be6c13f3930a026561eea5fa629644bf52c2295d5a5f8c15ff84e3cec3fd4",
       "taxi": "10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15"
     },
     "datasets": [
@@ -288,6 +289,2343 @@
     "neural/gemm-bf16/gaussian/shape=full"
   ],
   "races": {
+    "classical/kmeans/istella/rows=full": {
+      "arms": [
+        "torch-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 186.04203699942445
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "classical",
+          "hash": "98b06aa7f5d960f5",
+          "hash_stable": true,
+          "lane": "kmeans",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 3406.3073150009586,
+          "median_ms": 3406.3073150009586,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3460.8,
+            "peak_host_mb": 5132.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3445.2,
+            "warmup_host_mb": 5132.4
+          },
+          "min_ms": 3406.3073150009586,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "init": "k-means++",
+              "max_iter": 300,
+              "metric": "euclidean",
+              "n_clusters": 8,
+              "n_init": 1,
+              "seed": 7,
+              "tol": 1e-07
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3460.8,
+          "peak_host_mb": 5132.4,
+          "quality": {
+            "inertia": 5.991151653260293e+17,
+            "n_iter": 91
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "KMeans",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "2043304x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            3406.3073150009586
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2540.1259509999363
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "kmeans",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "torch-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--infer"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T06:59:56Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "classical/kmeans/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "torch-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch chunked addmm(||c||^2, Xq, c.T, alpha -2).argmin over the fitted centers; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 186.04203699942445
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 11.898085000211722
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "a481fe3fa51daa50",
+          "hash_stable": true,
+          "lane": "kmeans",
+          "library": "torch",
+          "max_ms": 0.5768779992649797,
+          "median_ms": 0.5768779992649797,
+          "memory": {},
+          "min_ms": 0.5768779992649797,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "eval_inertia": 1.4022724789581435e+17,
+            "label_agreement_own_centers": 1.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "KMeans",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.5768779992649797
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.5836180007463554
+        }
+      ],
+      "lane": "kmeans",
+      "lane_config": {
+        "mismatches": [
+          "k-means++: each library draws its own start from its own generator seeded 7, so the starts differ; scikit-learn greedy k-means++ (2 + log k candidates per center), ours and cuML the sequential k-means++ of cuML (oversampling_factor=0), torch-gpu scikit-learn's greedy rule written out",
+          "tol=1e-7 on ours, scikit-learn and cuML (ours and cuML refuse 0); each library applies it through its own convergence test; torch-gpu stops by scikit-learn's (center shift <= tol x mean feature variance). n_iter is in every quality cell",
+          "algorithm: scikit-learn algorithm='lloyd'; ours and cuML have no such parameter (Lloyd); torch-gpu is written as Lloyd"
+        ],
+        "params": "n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic sequential seeding), tol=1e-7, metric='euclidean', Lloyd; seed 7 (ours, scikit-learn and cuML random_state=7, torch a generator seeded 7)",
+        "rows": "big block: 4,000,000 taxi rows or the Istella-S train split, raw",
+        "timed": "fit (the k-means++ seeding included on every arm)"
+      },
+      "log": "logs/classical.kmeans.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "init": "k-means++",
+              "max_iter": 300,
+              "metric": "euclidean",
+              "n_clusters": 8,
+              "n_init": 1,
+              "seed": 7,
+              "tol": 1e-07
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "kmeans",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/kmeans-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T06:59:41Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 14.9
+    },
+    "classical/kmeans/taxi/rows=full": {
+      "arms": [
+        "torch-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 146.40910600064672
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "classical",
+          "hash": "21ce74869489f3e5",
+          "hash_stable": true,
+          "lane": "kmeans",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 537.9826789994695,
+          "median_ms": 537.9826789994695,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 459.9,
+            "peak_host_mb": 3194.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 429.8,
+            "warmup_host_mb": 3194.4
+          },
+          "min_ms": 537.9826789994695,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "init": "k-means++",
+              "max_iter": 300,
+              "metric": "euclidean",
+              "n_clusters": 8,
+              "n_init": 1,
+              "seed": 7,
+              "tol": 1e-07
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 459.9,
+          "peak_host_mb": 3194.4,
+          "quality": {
+            "inertia": 306002944.5976963,
+            "n_iter": 54
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "KMeans",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "4000000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            537.9826789994695
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1349.836081999456
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "kmeans",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "torch-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T06:59:41Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "classical/kmeans/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "torch-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch chunked addmm(||c||^2, Xq, c.T, alpha -2).argmin over the fitted centers; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 146.40910600064672
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 1.0013299997808645
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "75952b70b39a4de9",
+          "hash_stable": true,
+          "lane": "kmeans",
+          "library": "torch",
+          "max_ms": 0.47731000086059794,
+          "median_ms": 0.47731000086059794,
+          "memory": {},
+          "min_ms": 0.47731000086059794,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "eval_inertia": 45716336.33523417,
+            "label_agreement_own_centers": 1.0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "KMeans",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.47731000086059794
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.48798999887367245
+        }
+      ],
+      "lane": "kmeans",
+      "lane_config": {
+        "mismatches": [
+          "k-means++: each library draws its own start from its own generator seeded 7, so the starts differ; scikit-learn greedy k-means++ (2 + log k candidates per center), ours and cuML the sequential k-means++ of cuML (oversampling_factor=0), torch-gpu scikit-learn's greedy rule written out",
+          "tol=1e-7 on ours, scikit-learn and cuML (ours and cuML refuse 0); each library applies it through its own convergence test; torch-gpu stops by scikit-learn's (center shift <= tol x mean feature variance). n_iter is in every quality cell",
+          "algorithm: scikit-learn algorithm='lloyd'; ours and cuML have no such parameter (Lloyd); torch-gpu is written as Lloyd"
+        ],
+        "params": "n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic sequential seeding), tol=1e-7, metric='euclidean', Lloyd; seed 7 (ours, scikit-learn and cuML random_state=7, torch a generator seeded 7)",
+        "rows": "big block: 4,000,000 taxi rows or the Istella-S train split, raw",
+        "timed": "fit (the k-means++ seeding included on every arm)"
+      },
+      "log": "logs/classical.kmeans.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "init": "k-means++",
+              "max_iter": 300,
+              "metric": "euclidean",
+              "n_clusters": 8,
+              "n_init": 1,
+              "seed": 7,
+              "tol": 1e-07
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "kmeans",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/kmeans-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T06:59:31Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 9.6
+    },
+    "classical/knn/taxi/rows=full": {
+      "arms": [
+        "torch-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 147.93662800002494
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "classical",
+          "hash": "e05f9e516ffe1ba4",
+          "hash_stable": true,
+          "lane": "knn",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 27.223525999943377,
+          "median_ms": 27.223525999943377,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3242.7,
+            "peak_host_mb": 2866.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3240.7,
+            "warmup_host_mb": 2865.5
+          },
+          "min_ms": 27.223525999943377,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "algorithm": "brute",
+              "metric": "euclidean",
+              "n_neighbors": 64,
+              "p": 2,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3242.7,
+          "peak_host_mb": 2866.0,
+          "quality": {
+            "recall_at_k": 0.99973046875,
+            "rows_with_repeated_ids": 0
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "knn",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "NearestNeighbors",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "400000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            27.223525999943377
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 296.51339200063376
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "knn",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "torch-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T07:00:52Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "classical/knn/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "knn",
+      "lane_config": {
+        "mismatches": [
+          "seed: no arm has a seed argument (exact search); torch-gpu torch.manual_seed(7)",
+          "query_tile: ours only (tiling, results unchanged); n_jobs=-1: scikit-learn only"
+        ],
+        "params": "n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', algorithm='brute' (ours, scikit-learn, cuML); torch cdist p=2 plus topk",
+        "rows": "knn block: 400,000 index rows, 4,000 queries, raw",
+        "timed": "kneighbors; the fit (index) is before the clock on every arm"
+      },
+      "log": "logs/classical.knn.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "algorithm": "brute",
+              "metric": "euclidean",
+              "n_neighbors": 64,
+              "p": 2,
+              "seed": 7
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "knn",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/knn-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:00:40Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 11.6
+    },
+    "classical/ols/istella/rows=full": {
+      "arms": [
+        "torch-gpu",
+        "torch-gpu-eigh"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 182.41579700043076
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "classical",
+          "hash": "4790df48ab58d6f7",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 2340.8357789994625,
+          "median_ms": 2340.8357789994625,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 5303.6,
+            "peak_host_mb": 5648.2,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 5167.8,
+            "warmup_host_mb": 5623.9
+          },
+          "min_ms": 2340.8357789994625,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 5303.6,
+          "peak_host_mb": 5648.2,
+          "quality": {
+            "finite": false,
+            "r2": NaN,
+            "rmse": NaN
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "2043304x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            2340.8357789994625
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2481.773940000494
+        },
+        {
+          "arm": "torch-gpu-eigh",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 179.54594399998314
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "classical",
+          "hash": "ed0aeeb4e81348b3",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 42.80535699945176,
+          "median_ms": 42.80535699945176,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3649.4,
+            "peak_host_mb": 5051.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3576.6,
+            "warmup_host_mb": 5051.4
+          },
+          "min_ms": 42.80535699945176,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3649.4,
+          "peak_host_mb": 5051.5,
+          "quality": {
+            "finite": true,
+            "r2": 0.15160442468223645,
+            "rmse": 0.768589451732933
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "2043304x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            42.80535699945176
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 466.75968899944564
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "ols",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "torch-gpu,torch-gpu-eigh",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--infer"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T07:00:40Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "classical/ols/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "torch-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 182.41579700043076
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 13.463080998917576
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "4ee5bdd76f2f6acb",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "max_ms": 0.4937900012009777,
+          "median_ms": 0.4937900012009777,
+          "memory": {},
+          "min_ms": 0.4937900012009777,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "predict_max_rel_err_own_fp64": NaN,
+            "r2_eval": NaN,
+            "rmse_eval": NaN
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.4937900012009777
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.4540509999060305
+        },
+        {
+          "arm": "torch-gpu-eigh",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 179.54594399998314
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 13.86707299934642
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "5c86cf435ce11afa",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "max_ms": 0.4969100009475369,
+          "median_ms": 0.4969100009475369,
+          "memory": {},
+          "min_ms": 0.4969100009475369,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "predict_max_rel_err_own_fp64": 4.830889852005885e-07,
+            "r2_eval": 0.15160442674867136,
+            "rmse_eval": 0.7685894507969073
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.4969100009475369
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.4388409997773124
+        }
+      ],
+      "lane": "ols",
+      "lane_config": {
+        "mismatches": [
+          "seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)",
+          "solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff",
+          "scikit-learn positive=False and copy_X=True: parameters ours does not have"
+        ],
+        "params": "fit_intercept=True",
+        "rows": "big block, raw; R2 and RMSE on the 500,000 eval rows",
+        "timed": "fit"
+      },
+      "log": "logs/classical.ols.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-gpu-eigh": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-gpu-eigh",
+            "ours": true,
+            "param": "fit_intercept",
+            "same": true,
+            "theirs": true
+          }
+        ],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "ols",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/ols-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:00:24Z",
+      "status": "failed",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 16.4
+    },
+    "classical/ols/taxi/rows=full": {
+      "arms": [
+        "torch-gpu",
+        "torch-gpu-eigh"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 143.01071600129944
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "classical",
+          "hash": "74354d51a9f3ee3f",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 100.68839700034005,
+          "median_ms": 100.68839700034005,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 695.3,
+            "peak_host_mb": 3535.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 552.0,
+            "warmup_host_mb": 3527.4
+          },
+          "min_ms": 100.68839700034005,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 695.3,
+          "peak_host_mb": 3535.9,
+          "quality": {
+            "finite": true,
+            "r2": 0.9088404812427905,
+            "rmse": 4.696375620395093
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "4000000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            100.68839700034005
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 140.67725200038694
+        },
+        {
+          "arm": "torch-gpu-eigh",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 142.60881299924222
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "classical",
+          "hash": "1e89f47bcf39398c",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 33.975004000240006,
+          "median_ms": 33.975004000240006,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 572.0,
+            "peak_host_mb": 3018.3,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 496.0,
+            "warmup_host_mb": 3018.0
+          },
+          "min_ms": 33.975004000240006,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 572.0,
+          "peak_host_mb": 3018.3,
+          "quality": {
+            "finite": true,
+            "r2": 0.9088221193366598,
+            "rmse": 4.696848582886799
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "4000000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            33.975004000240006
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 306.0280600002443
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "ols",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "torch-gpu,torch-gpu-eigh",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T07:00:24Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "classical/ols/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "torch-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 143.01071600129944
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 0.8442029993602773
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "4aa67414adbff68e",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "max_ms": 0.46559099973819684,
+          "median_ms": 0.46559099973819684,
+          "memory": {},
+          "min_ms": 0.46559099973819684,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "predict_max_rel_err_own_fp64": 5.913188393898881e-08,
+            "r2_eval": 0.9088404818285976,
+            "rmse_eval": 4.696375605305225
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.46559099973819684
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 22.52232200044091
+        },
+        {
+          "arm": "torch-gpu-eigh",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 142.60881299924222
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 1.005750000331318
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "7ef985ecec50464a",
+          "hash_stable": true,
+          "lane": "ols",
+          "library": "torch",
+          "max_ms": 0.4783709991897922,
+          "median_ms": 0.4783709991897922,
+          "memory": {},
+          "min_ms": 0.4783709991897922,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "predict_max_rel_err_own_fp64": 8.007014592904859e-08,
+            "r2_eval": 0.9088221185260053,
+            "rmse_eval": 4.696848603766433
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "LinearRegression",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.4783709991897922
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 0.4301310000300873
+        }
+      ],
+      "lane": "ols",
+      "lane_config": {
+        "mismatches": [
+          "seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)",
+          "solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff",
+          "scikit-learn positive=False and copy_X=True: parameters ours does not have"
+        ],
+        "params": "fit_intercept=True",
+        "rows": "big block, raw; R2 and RMSE on the 500,000 eval rows",
+        "timed": "fit"
+      },
+      "log": "logs/classical.ols.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          },
+          "torch-gpu-eigh": {
+            "library": "torch",
+            "params": {
+              "fit_intercept": true,
+              "seed": 7
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-gpu-eigh",
+            "ours": true,
+            "param": "fit_intercept",
+            "same": true,
+            "theirs": true
+          }
+        ],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "ols",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/ols-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:00:13Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 10.5
+    },
+    "classical/pca/istella/rows=full": {
+      "arms": [
+        "torch-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 186.77711000054842
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "classical",
+          "hash": "d96d7ff1148d4df6",
+          "hash_stable": true,
+          "lane": "pca",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 19.897697000487824,
+          "median_ms": 19.897697000487824,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 3505.8,
+            "peak_host_mb": 5044.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 3505.8,
+            "warmup_host_mb": 5044.1
+          },
+          "min_ms": 19.897697000487824,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "n_components": 10,
+              "seed": 7,
+              "svd_solver": "covariance_eigh",
+              "whiten": false
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 3505.8,
+          "peak_host_mb": 5044.4,
+          "quality": {
+            "explained_variance_ratio_sum": 1.0000000599950392
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PCA",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "2043304x220",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            19.897697000487824
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 422.8637810010696
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "pca",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "torch-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--infer"
+      ],
+      "dataset": "istella",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T07:00:13Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "classical/pca/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "torch-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch (Xq - mean) @ components.T; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 186.77711000054842
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 10.946573998808162
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "f6c02865a5974085",
+          "hash_stable": true,
+          "lane": "pca",
+          "library": "torch",
+          "max_ms": 0.5761379998148186,
+          "median_ms": 0.5761379998148186,
+          "memory": {},
+          "min_ms": 0.5761379998148186,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "transform_max_rel_err_own_fp64": 3.5752282302694053e-07
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PCA",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.5761379998148186
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 137.99192899932677
+        }
+      ],
+      "lane": "pca",
+      "lane_config": {
+        "mismatches": [
+          "svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'",
+          "torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)",
+          "random_state is read by none of the covariance solvers; set to 7 on every arm"
+        ],
+        "params": "n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'",
+        "rows": "big block, raw",
+        "timed": "fit"
+      },
+      "log": "logs/classical.pca.istella.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "n_components": 10,
+              "seed": 7,
+              "svd_solver": "covariance_eigh",
+              "whiten": false
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "pca",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/pca-istella.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:00:03Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 10.0
+    },
+    "classical/pca/taxi/rows=full": {
+      "arms": [
+        "torch-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 141.80573600060598
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "family": "classical",
+          "hash": "02b88ed9e74aabf6",
+          "hash_stable": true,
+          "lane": "pca",
+          "library": "torch",
+          "library_version": "2.6.0+rocm6.4.1.git1ded221d",
+          "max_ms": 10.87206500051252,
+          "median_ms": 10.87206500051252,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 412.0,
+            "peak_host_mb": 3009.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 412.0,
+            "warmup_host_mb": 3009.3
+          },
+          "min_ms": 10.87206500051252,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "n_components": 10,
+              "seed": 7,
+              "svd_solver": "covariance_eigh",
+              "whiten": false
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 412.0,
+          "peak_host_mb": 3009.5,
+          "quality": {
+            "explained_variance_ratio_sum": 0.9999966805916526
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PCA",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "shape": "4000000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            10.87206500051252
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 248.78178400103934
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/classical_two_datasets.py",
+        "race",
+        "--lane",
+        "pca",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/ctd-data/rows-full",
+        "--out",
+        "/root/overnight-ab/results/opponents/board/raw/classical/rows-full",
+        "--work",
+        "/root/overnight-ab/results/opponents/board/work",
+        "--root",
+        "/root/opponent-harness",
+        "--arms",
+        "torch-gpu",
+        "--rounds",
+        "1",
+        "--round-seconds",
+        "900",
+        "--warmup-seconds",
+        "900",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "classical",
+      "finished": "2026-10-06T07:00:03Z",
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "classical/pca/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "torch-gpu",
+          "batch": "Xq",
+          "batch_rows": 500000,
+          "call": "torch (Xq - mean) @ components.T; Xq uploaded before the clock, which ends at the device synchronize",
+          "comparability": {
+            "span": {
+              "fit_ms_untimed": null,
+              "input_home": "device",
+              "inside_clock": "call",
+              "library": "torch",
+              "pre_clock_fit": false,
+              "pre_clock_fit_source": "declared",
+              "upload_ms_untimed": 141.80573600060598
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 0.8123640000121668
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "classical",
+          "hash": "8ef2c26f0e99fef1",
+          "hash_stable": true,
+          "lane": "pca",
+          "library": "torch",
+          "max_ms": 0.3106040003331145,
+          "median_ms": 0.3106040003331145,
+          "memory": {},
+          "min_ms": 0.3106040003331145,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {
+            "transform_max_rel_err_own_fp64": 9.597462222210207e-08
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "block": "big",
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "PCA",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/classical_two_datasets.py",
+            "interleaved": true,
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "shape_rule": "the lane's own shape (kmeans/pca/ols 4,000,000 rows or the Istella train split; knn 400,000 x 4,000 queries, k=64; kde 100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)",
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.3106040003331145
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 138.43004400041536
+        }
+      ],
+      "lane": "pca",
+      "lane_config": {
+        "mismatches": [
+          "svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'",
+          "torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)",
+          "random_state is read by none of the covariance solvers; set to 7 on every arm"
+        ],
+        "params": "n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'",
+        "rows": "big block, raw",
+        "timed": "fit"
+      },
+      "log": "logs/classical.pca.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "n_components": 10,
+              "seed": 7,
+              "svd_solver": "covariance_eigh",
+              "whiten": false
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "classical",
+        "lane": "pca",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/classical/rows-full/pca-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T06:59:56Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 7.5
+    },
+    "trees/gbdt-categorical/taxi/rows=full": {
+      "arms": [
+        "xgboost-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "xgboost-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": null
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-categorical",
+          "library": "xgboost",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "mismatches": [
+                "categorical method: ours follows CatBoost's dispatch (one-hot at or below one_hot_max_size, CTR target statistics above), CatBoost runs its own at its defaults: two libraries, one algorithm, on the same declared columns",
+                "categorical method: XGBoost partition search (enable_categorical, max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): different algorithms from CTR",
+                "input conversion inside the fit clock: CatBoost gets the declared columns as int64 (it refuses float categorical columns), XGBoost a pandas frame with one CategoricalDtype per column; ours and LightGBM take the float32 codes",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+                "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense categorical column); a test value unseen in training shares one unknown bucket k per column"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "Logloss",
+                "lightgbm": "binary",
+                "mojolearn": "Logloss",
+                "xgboost": "binary:logistic"
+              },
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7,
+              "task": "binary"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "REFUSED(asked for by --arms and not built here; built: xgboost-cpu)",
+          "store": "not stored (key fields missing: device, library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "gbdt-categorical",
+        "--dataset",
+        "taxicat",
+        "--devices",
+        "cpu,gpu",
+        "--arms",
+        "xgboost-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "hip",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T06:59:31Z",
+      "fit_verdict_line": null,
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "trees/gbdt-categorical/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "xgboost-gpu",
+          "batch": "test",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-categorical",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "mismatches": [
+                "categorical method: ours follows CatBoost's dispatch (one-hot at or below one_hot_max_size, CTR target statistics above), CatBoost runs its own at its defaults: two libraries, one algorithm, on the same declared columns",
+                "categorical method: XGBoost partition search (enable_categorical, max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): different algorithms from CTR",
+                "input conversion inside the fit clock: CatBoost gets the declared columns as int64 (it refuses float categorical columns), XGBoost a pandas frame with one CategoricalDtype per column; ours and LightGBM take the float32 codes",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+                "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense categorical column); a test value unseen in training shares one unknown bucket k per column"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "Logloss",
+                "lightgbm": "binary",
+                "mojolearn": "Logloss",
+                "xgboost": "binary:logistic"
+              },
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7,
+              "task": "binary"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        },
+        {
+          "arm": "xgboost-gpu",
+          "batch": "large",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-categorical",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (binary task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "loss": "Logloss",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "mismatches": [
+                "categorical method: ours follows CatBoost's dispatch (one-hot at or below one_hot_max_size, CTR target statistics above), CatBoost runs its own at its defaults: two libraries, one algorithm, on the same declared columns",
+                "categorical method: XGBoost partition search (enable_categorical, max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): different algorithms from CTR",
+                "input conversion inside the fit clock: CatBoost gets the declared columns as int64 (it refuses float categorical columns), XGBoost a pandas frame with one CategoricalDtype per column; ours and LightGBM take the float32 codes",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+                "codes are dense 0..k-1 within the train slice (our fit refuses a non-dense categorical column); a test value unseen in training shares one unknown bucket k per column"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "Logloss",
+                "lightgbm": "binary",
+                "mojolearn": "Logloss",
+                "xgboost": "binary:logistic"
+              },
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7,
+              "task": "binary"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "lane": "gbdt-categorical",
+      "log": "raw/trees/gbdt-categorical.taxi.rows-full.log",
+      "notes": [
+        "lane=gbdt-categorical arms=cpu,gpu metric=devices delta=2.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); every arm name carries its device",
+        "lane=gbdt-categorical arms=* metric=mismatch delta=1.000000 reason=categorical method: ours follows CatBoost's dispatch (one-hot at or below one_hot_max_size, CTR target statistics above), CatBoost runs its own at its defaults: two libraries, one algorithm, on the same declared columns",
+        "lane=gbdt-categorical arms=* metric=mismatch delta=2.000000 reason=categorical method: XGBoost partition search (enable_categorical, max_cat_to_onehot 1), LightGBM its own categorical split (categorical_feature) at its defaults (max_cat_to_onehot, cat_smooth, cat_l2): different algorithms from CTR",
+        "lane=gbdt-categorical arms=* metric=mismatch delta=3.000000 reason=input conversion inside the fit clock: CatBoost gets the declared columns as int64 (it refuses float categorical columns), XGBoost a pandas frame with one CategoricalDtype per column; ours and LightGBM take the float32 codes",
+        "lane=gbdt-categorical arms=* metric=mismatch delta=4.000000 reason=LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first categorical tree",
+        "lane=gbdt-categorical arms=* metric=mismatch delta=5.000000 reason=codes are dense 0..k-1 within the train slice (our fit refuses a non-dense categorical column); a test value unseen in training shares one unknown bucket k per column",
+        "lane=gbdt-categorical arms=* metric=objectives delta=4.000000 reason=catboost Logloss; lightgbm binary; mojolearn Logloss; xgboost binary:logistic",
+        "lane=gbdt-categorical arms=ours metric=devices delta=2.000000 reason=devices=cpu,gpu (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); the arm name says which"
+      ],
+      "our_arms": {},
+      "params_check": "NOT CHECKED (the driver printed no BOARD-PARAMS line)",
+      "rc": 1,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T06:59:25Z",
+      "status": "failed",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 6.5
+    },
     "trees/gbdt-depthwise/istella/rows=full": {
       "arms": [
         "xgboost-gpu"
@@ -888,6 +3226,306 @@
       "stored_now": 0,
       "wall_s": 5.9
     },
+    "trees/gbdt-lossguide/istella/rows=full": {
+      "arms": [
+        "xgboost-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "xgboost-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": null
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-lossguide",
+          "library": "xgboost",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "REFUSED(asked for by --arms and not built here; built: xgboost-cpu)",
+          "store": "not stored (key fields missing: device, library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "gbdt-lossguide",
+        "--dataset",
+        "istella",
+        "--devices",
+        "cpu,gpu",
+        "--arms",
+        "xgboost-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "istella",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "hip",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T06:59:00Z",
+      "fit_verdict_line": null,
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "trees/gbdt-lossguide/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "xgboost-gpu",
+          "batch": "test",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-lossguide",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        },
+        {
+          "arm": "xgboost-gpu",
+          "batch": "large",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-lossguide",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "Lossguide",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": 0.0,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": 0.0,
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "random_strength": 0.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "NewtonL2",
+              "seed": 7
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "lane": "gbdt-lossguide",
+      "log": "raw/trees/gbdt-lossguide.istella.rows-full.log",
+      "notes": [
+        "lane=gbdt-lossguide arms=cpu,gpu metric=devices delta=2.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); every arm name carries its device",
+        "lane=gbdt-lossguide arms=ours metric=devices delta=2.000000 reason=devices=cpu,gpu (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); the arm name says which"
+      ],
+      "our_arms": {},
+      "params_check": "NOT CHECKED (the driver printed no BOARD-PARAMS line)",
+      "rc": 1,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T06:58:55Z",
+      "status": "failed",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 5.7
+    },
     "trees/gbdt-lossguide/taxi/rows=full": {
       "arms": [
         "xgboost-gpu"
@@ -1187,8 +3825,1381 @@
       "stored_arms": [],
       "stored_now": 0,
       "wall_s": 5.6
+    },
+    "trees/gbdt-multiclass/istella/rows=full": {
+      "arms": [
+        "xgboost-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "xgboost-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": null
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-multiclass",
+          "library": "xgboost",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "MultiClass",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other policy for a multiclass loss); XGBoost depthwise at depth 8, LightGBM leaf-wise capped at depth 8 and 256 leaves, because neither has an oblivious grower",
+                "model shape: ours and CatBoost grow ONE tree per round with a vector of class values in each leaf; XGBoost and LightGBM grow one tree PER CLASS per round, so the fit verdict divides their tree and leaf counts by n_classes",
+                "the loss is the same softmax cross-entropy on every arm; gbm-bench itself gives CatBoost MultiClassOneVsAll beside XGBoost multi:softmax, two different losses, so the board keeps one loss on every arm",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "MultiClass",
+                "lightgbm": "multiclass",
+                "mojolearn": "MultiClass",
+                "xgboost": "multi:softprob"
+              },
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "multiclass",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "REFUSED(asked for by --arms and not built here; built: xgboost-cpu)",
+          "store": "not stored (key fields missing: device, library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "gbdt-multiclass",
+        "--dataset",
+        "istellamc",
+        "--devices",
+        "cpu,gpu",
+        "--arms",
+        "xgboost-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "istella",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "hip",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T06:59:25Z",
+      "fit_verdict_line": null,
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "trees/gbdt-multiclass/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "xgboost-gpu",
+          "batch": "test",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-multiclass",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "MultiClass",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other policy for a multiclass loss); XGBoost depthwise at depth 8, LightGBM leaf-wise capped at depth 8 and 256 leaves, because neither has an oblivious grower",
+                "model shape: ours and CatBoost grow ONE tree per round with a vector of class values in each leaf; XGBoost and LightGBM grow one tree PER CLASS per round, so the fit verdict divides their tree and leaf counts by n_classes",
+                "the loss is the same softmax cross-entropy on every arm; gbm-bench itself gives CatBoost MultiClassOneVsAll beside XGBoost multi:softmax, two different losses, so the board keeps one loss on every arm",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "MultiClass",
+                "lightgbm": "multiclass",
+                "mojolearn": "MultiClass",
+                "xgboost": "multi:softprob"
+              },
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "multiclass",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        },
+        {
+          "arm": "xgboost-gpu",
+          "batch": "large",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-multiclass",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "MultiClass",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other policy for a multiclass loss); XGBoost depthwise at depth 8, LightGBM leaf-wise capped at depth 8 and 256 leaves, because neither has an oblivious grower",
+                "model shape: ours and CatBoost grow ONE tree per round with a vector of class values in each leaf; XGBoost and LightGBM grow one tree PER CLASS per round, so the fit verdict divides their tree and leaf counts by n_classes",
+                "the loss is the same softmax cross-entropy on every arm; gbm-bench itself gives CatBoost MultiClassOneVsAll beside XGBoost multi:softmax, two different losses, so the board keeps one loss on every arm",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "MultiClass",
+                "lightgbm": "multiclass",
+                "mojolearn": "MultiClass",
+                "xgboost": "multi:softprob"
+              },
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "multiclass",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "lane": "gbdt-multiclass",
+      "log": "raw/trees/gbdt-multiclass.istella.rows-full.log",
+      "notes": [
+        "lane=gbdt-multiclass arms=cpu,gpu metric=devices delta=2.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); every arm name carries its device",
+        "lane=gbdt-multiclass arms=* metric=mismatch delta=1.000000 reason=grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other policy for a multiclass loss); XGBoost depthwise at depth 8, LightGBM leaf-wise capped at depth 8 and 256 leaves, because neither has an oblivious grower",
+        "lane=gbdt-multiclass arms=* metric=mismatch delta=2.000000 reason=model shape: ours and CatBoost grow ONE tree per round with a vector of class values in each leaf; XGBoost and LightGBM grow one tree PER CLASS per round, so the fit verdict divides their tree and leaf counts by n_classes",
+        "lane=gbdt-multiclass arms=* metric=mismatch delta=3.000000 reason=the loss is the same softmax cross-entropy on every arm; gbm-bench itself gives CatBoost MultiClassOneVsAll beside XGBoost multi:softmax, two different losses, so the board keeps one loss on every arm",
+        "lane=gbdt-multiclass arms=* metric=mismatch delta=4.000000 reason=LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
+        "lane=gbdt-multiclass arms=* metric=objectives delta=4.000000 reason=catboost MultiClass; lightgbm multiclass; mojolearn MultiClass; xgboost multi:softprob",
+        "lane=gbdt-multiclass arms=ours metric=devices delta=2.000000 reason=devices=cpu,gpu (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); the arm name says which"
+      ],
+      "our_arms": {},
+      "params_check": "NOT CHECKED (the driver printed no BOARD-PARAMS line)",
+      "rc": 1,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T06:59:18Z",
+      "status": "failed",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 6.1
+    },
+    "trees/gbdt-multiclass/taxi/rows=full": {
+      "arms": [
+        "xgboost-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "xgboost-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": null
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-multiclass",
+          "library": "xgboost",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "MultiClass",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other policy for a multiclass loss); XGBoost depthwise at depth 8, LightGBM leaf-wise capped at depth 8 and 256 leaves, because neither has an oblivious grower",
+                "model shape: ours and CatBoost grow ONE tree per round with a vector of class values in each leaf; XGBoost and LightGBM grow one tree PER CLASS per round, so the fit verdict divides their tree and leaf counts by n_classes",
+                "the loss is the same softmax cross-entropy on every arm; gbm-bench itself gives CatBoost MultiClassOneVsAll beside XGBoost multi:softmax, two different losses, so the board keeps one loss on every arm",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "MultiClass",
+                "lightgbm": "multiclass",
+                "mojolearn": "MultiClass",
+                "xgboost": "multi:softprob"
+              },
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "multiclass",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "REFUSED(asked for by --arms and not built here; built: xgboost-cpu)",
+          "store": "not stored (key fields missing: device, library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "gbdt-multiclass",
+        "--dataset",
+        "taximc",
+        "--devices",
+        "cpu,gpu",
+        "--arms",
+        "xgboost-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "taxi",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "hip",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T06:59:18Z",
+      "fit_verdict_line": null,
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "trees/gbdt-multiclass/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "xgboost-gpu",
+          "batch": "test",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-multiclass",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "MultiClass",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other policy for a multiclass loss); XGBoost depthwise at depth 8, LightGBM leaf-wise capped at depth 8 and 256 leaves, because neither has an oblivious grower",
+                "model shape: ours and CatBoost grow ONE tree per round with a vector of class values in each leaf; XGBoost and LightGBM grow one tree PER CLASS per round, so the fit verdict divides their tree and leaf counts by n_classes",
+                "the loss is the same softmax cross-entropy on every arm; gbm-bench itself gives CatBoost MultiClassOneVsAll beside XGBoost multi:softmax, two different losses, so the board keeps one loss on every arm",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "MultiClass",
+                "lightgbm": "multiclass",
+                "mojolearn": "MultiClass",
+                "xgboost": "multi:softprob"
+              },
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "multiclass",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        },
+        {
+          "arm": "xgboost-gpu",
+          "batch": "large",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-multiclass",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+              "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+              "harness": "NVIDIA gbm-bench",
+              "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+            },
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "harness": {
+                "commit": "73a976b036249ff9d8cb30cf9082bb414b911379",
+                "entry": "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)",
+                "harness": "NVIDIA gbm-bench",
+                "url": "https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py"
+              },
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "MultiClass",
+              "max_depth": 8,
+              "max_leaves": 256,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other policy for a multiclass loss); XGBoost depthwise at depth 8, LightGBM leaf-wise capped at depth 8 and 256 leaves, because neither has an oblivious grower",
+                "model shape: ours and CatBoost grow ONE tree per round with a vector of class values in each leaf; XGBoost and LightGBM grow one tree PER CLASS per round, so the fit verdict divides their tree and leaf counts by n_classes",
+                "the loss is the same softmax cross-entropy on every arm; gbm-bench itself gives CatBoost MultiClassOneVsAll beside XGBoost multi:softmax, two different losses, so the board keeps one loss on every arm",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 500,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "MultiClass",
+                "lightgbm": "multiclass",
+                "mojolearn": "MultiClass",
+                "xgboost": "multi:softprob"
+              },
+              "random_strength": 1.0,
+              "scale_pos_weight": "gbm-bench",
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "multiclass",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "lane": "gbdt-multiclass",
+      "log": "raw/trees/gbdt-multiclass.taxi.rows-full.log",
+      "notes": [
+        "lane=gbdt-multiclass arms=cpu,gpu metric=devices delta=2.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); every arm name carries its device",
+        "lane=gbdt-multiclass arms=* metric=mismatch delta=1.000000 reason=grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other policy for a multiclass loss); XGBoost depthwise at depth 8, LightGBM leaf-wise capped at depth 8 and 256 leaves, because neither has an oblivious grower",
+        "lane=gbdt-multiclass arms=* metric=mismatch delta=2.000000 reason=model shape: ours and CatBoost grow ONE tree per round with a vector of class values in each leaf; XGBoost and LightGBM grow one tree PER CLASS per round, so the fit verdict divides their tree and leaf counts by n_classes",
+        "lane=gbdt-multiclass arms=* metric=mismatch delta=3.000000 reason=the loss is the same softmax cross-entropy on every arm; gbm-bench itself gives CatBoost MultiClassOneVsAll beside XGBoost multi:softmax, two different losses, so the board keeps one loss on every arm",
+        "lane=gbdt-multiclass arms=* metric=mismatch delta=4.000000 reason=LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
+        "lane=gbdt-multiclass arms=* metric=objectives delta=4.000000 reason=catboost MultiClass; lightgbm multiclass; mojolearn MultiClass; xgboost multi:softprob",
+        "lane=gbdt-multiclass arms=ours metric=devices delta=2.000000 reason=devices=cpu,gpu (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); the arm name says which"
+      ],
+      "our_arms": {},
+      "params_check": "NOT CHECKED (the driver printed no BOARD-PARAMS line)",
+      "rc": 1,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T06:59:13Z",
+      "status": "failed",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 5.8
+    },
+    "trees/gbdt-rank-pairlogit/istella/rows=full": {
+      "arms": [
+        "xgboost-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "xgboost-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": null
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-rank-pairlogit",
+          "library": "xgboost",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "PairLogit",
+              "max_depth": 6,
+              "max_leaves": 64,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit PairLogit on symmetric trees (ours has no other policy for a ranking loss); XGBoost depthwise at depth 6",
+                "objective: XGBoost rank:pairwise is the same pairwise logistic loss, but it samples its pairs (lambdarank_pair_method and lambdarank_num_pair_per_sample at their defaults) where CatBoost and ours generate them from the grades",
+                "LightGBM is not raced here: it has no pairwise logistic objective without NDCG weighting (its lambdarank races in gbdt-rank-yetirank)",
+                "XGBoost is handed each query renumbered by order of appearance (it refuses unsorted qids); the same partition of the same rows in the same order",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 100,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "PairLogit",
+                "mojolearn": "PairLogit",
+                "xgboost": "rank:pairwise"
+              },
+              "random_strength": 1.0,
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "ranking",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "REFUSED(asked for by --arms and not built here; built: xgboost-cpu)",
+          "store": "not stored (key fields missing: device, library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "gbdt-rank-pairlogit",
+        "--dataset",
+        "istellarank",
+        "--devices",
+        "cpu,gpu",
+        "--arms",
+        "xgboost-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "istella",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "hip",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T06:59:13Z",
+      "fit_verdict_line": null,
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "trees/gbdt-rank-pairlogit/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "xgboost-gpu",
+          "batch": "test",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-rank-pairlogit",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "PairLogit",
+              "max_depth": 6,
+              "max_leaves": 64,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit PairLogit on symmetric trees (ours has no other policy for a ranking loss); XGBoost depthwise at depth 6",
+                "objective: XGBoost rank:pairwise is the same pairwise logistic loss, but it samples its pairs (lambdarank_pair_method and lambdarank_num_pair_per_sample at their defaults) where CatBoost and ours generate them from the grades",
+                "LightGBM is not raced here: it has no pairwise logistic objective without NDCG weighting (its lambdarank races in gbdt-rank-yetirank)",
+                "XGBoost is handed each query renumbered by order of appearance (it refuses unsorted qids); the same partition of the same rows in the same order",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 100,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "PairLogit",
+                "mojolearn": "PairLogit",
+                "xgboost": "rank:pairwise"
+              },
+              "random_strength": 1.0,
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "ranking",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        },
+        {
+          "arm": "xgboost-gpu",
+          "batch": "large",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-rank-pairlogit",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "PairLogit",
+              "max_depth": 6,
+              "max_leaves": 64,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit PairLogit on symmetric trees (ours has no other policy for a ranking loss); XGBoost depthwise at depth 6",
+                "objective: XGBoost rank:pairwise is the same pairwise logistic loss, but it samples its pairs (lambdarank_pair_method and lambdarank_num_pair_per_sample at their defaults) where CatBoost and ours generate them from the grades",
+                "LightGBM is not raced here: it has no pairwise logistic objective without NDCG weighting (its lambdarank races in gbdt-rank-yetirank)",
+                "XGBoost is handed each query renumbered by order of appearance (it refuses unsorted qids); the same partition of the same rows in the same order",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 100,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "PairLogit",
+                "mojolearn": "PairLogit",
+                "xgboost": "rank:pairwise"
+              },
+              "random_strength": 1.0,
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "ranking",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "lane": "gbdt-rank-pairlogit",
+      "log": "raw/trees/gbdt-rank-pairlogit.istella.rows-full.log",
+      "notes": [
+        "lane=gbdt-rank-pairlogit arms=cpu,gpu metric=devices delta=2.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); every arm name carries its device",
+        "lane=gbdt-rank-pairlogit arms=* metric=mismatch delta=1.000000 reason=grower: ours and CatBoost fit PairLogit on symmetric trees (ours has no other policy for a ranking loss); XGBoost depthwise at depth 6",
+        "lane=gbdt-rank-pairlogit arms=* metric=mismatch delta=2.000000 reason=objective: XGBoost rank:pairwise is the same pairwise logistic loss, but it samples its pairs (lambdarank_pair_method and lambdarank_num_pair_per_sample at their defaults) where CatBoost and ours generate them from the grades",
+        "lane=gbdt-rank-pairlogit arms=* metric=mismatch delta=3.000000 reason=LightGBM is not raced here: it has no pairwise logistic objective without NDCG weighting (its lambdarank races in gbdt-rank-yetirank)",
+        "lane=gbdt-rank-pairlogit arms=* metric=mismatch delta=4.000000 reason=XGBoost is handed each query renumbered by order of appearance (it refuses unsorted qids); the same partition of the same rows in the same order",
+        "lane=gbdt-rank-pairlogit arms=* metric=objectives delta=3.000000 reason=catboost PairLogit; mojolearn PairLogit; xgboost rank:pairwise",
+        "lane=gbdt-rank-pairlogit arms=ours metric=devices delta=2.000000 reason=devices=cpu,gpu (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); the arm name says which"
+      ],
+      "our_arms": {},
+      "params_check": "NOT CHECKED (the driver printed no BOARD-PARAMS line)",
+      "rc": 1,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T06:59:07Z",
+      "status": "failed",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 6.2
+    },
+    "trees/gbdt-rank-yetirank/istella/rows=full": {
+      "arms": [
+        "xgboost-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "xgboost-gpu",
+          "comparability": {
+            "fit_verdict": "UNKNOWN",
+            "fit_verdict_line": null
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "device_name": null,
+          "family": "trees",
+          "fit": null,
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-rank-yetirank",
+          "library": "xgboost",
+          "library_version": null,
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {
+            "gpu_method": "not sampled",
+            "host_method": "not sampled"
+          },
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "YetiRank",
+              "max_depth": 6,
+              "max_leaves": 64,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit YetiRank on symmetric trees (ours has no other policy for a ranking loss); XGBoost depthwise at depth 6, LightGBM leaf-wise capped at depth 6 and 64 leaves, because neither has an oblivious grower",
+                "objective: XGBoost rank:ndcg and LightGBM lambdarank are LambdaMART (NDCG-weighted pairwise gradients), a different loss from YetiRank's sampled permutations; each is that library's closest listwise objective, labeled",
+                "l2 1.0 is pinned on every arm; the YetiRank default in CatBoost (and ours) is 0",
+                "YetiRank draws its permutations from each library's own seeded generator (seed 7); the streams are not shared, so the fits differ by construction",
+                "XGBoost pair construction (lambdarank_pair_method, lambdarank_num_pair_per_sample) and LightGBM's lambdarank_truncation_level (30) and label_gain (2^g - 1) are left at their defaults; no library exposes the others' pair sampling",
+                "XGBoost is handed each query renumbered by order of appearance (it refuses unsorted qids); the same partition of the same rows in the same order",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first lambdarank tree",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 100,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "YetiRank",
+                "lightgbm": "lambdarank",
+                "mojolearn": "YetiRank",
+                "xgboost": "rank:ndcg"
+              },
+              "random_strength": 1.0,
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "ranking",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "REFUSED(asked for by --arms and not built here; built: xgboost-cpu)",
+          "store": "not stored (key fields missing: device, library_version, params_sha256)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/bench/speed/forest_speed_arm.py",
+        "--lane",
+        "gbdt-rank-yetirank",
+        "--dataset",
+        "istellarank",
+        "--devices",
+        "cpu,gpu",
+        "--arms",
+        "xgboost-gpu",
+        "--opponents-only",
+        "--mem",
+        "--infer"
+      ],
+      "dataset": "istella",
+      "env": {
+        "MOJOLEARN_NUMERIC_MODE": "identical",
+        "MOJOLEARN_SPEED_BUDGET_S": "3600",
+        "MOJOLEARN_SPEED_DEADLINE_S": "21600",
+        "MOJOLEARN_SPEED_EXPECTED_VENDOR": "hip",
+        "MOJOLEARN_SPEED_ROUNDS": "1",
+        "MOJOLEARN_SPEED_SIZE": "shipped"
+      },
+      "family": "trees",
+      "finished": "2026-10-06T06:59:06Z",
+      "fit_verdict_line": null,
+      "host": {
+        "hostname": "mojolearn-steward-do-amd",
+        "pod_id": null
+      },
+      "id": "trees/gbdt-rank-yetirank/istella/rows=full",
+      "infer_cells": [
+        {
+          "arm": "xgboost-gpu",
+          "batch": "test",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-rank-yetirank",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "YetiRank",
+              "max_depth": 6,
+              "max_leaves": 64,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit YetiRank on symmetric trees (ours has no other policy for a ranking loss); XGBoost depthwise at depth 6, LightGBM leaf-wise capped at depth 6 and 64 leaves, because neither has an oblivious grower",
+                "objective: XGBoost rank:ndcg and LightGBM lambdarank are LambdaMART (NDCG-weighted pairwise gradients), a different loss from YetiRank's sampled permutations; each is that library's closest listwise objective, labeled",
+                "l2 1.0 is pinned on every arm; the YetiRank default in CatBoost (and ours) is 0",
+                "YetiRank draws its permutations from each library's own seeded generator (seed 7); the streams are not shared, so the fits differ by construction",
+                "XGBoost pair construction (lambdarank_pair_method, lambdarank_num_pair_per_sample) and LightGBM's lambdarank_truncation_level (30) and label_gain (2^g - 1) are left at their defaults; no library exposes the others' pair sampling",
+                "XGBoost is handed each query renumbered by order of appearance (it refuses unsorted qids); the same partition of the same rows in the same order",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first lambdarank tree",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 100,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "YetiRank",
+                "lightgbm": "lambdarank",
+                "mojolearn": "YetiRank",
+                "xgboost": "rank:ndcg"
+              },
+              "random_strength": 1.0,
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "ranking",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        },
+        {
+          "arm": "xgboost-gpu",
+          "batch": "large",
+          "batch_rows": null,
+          "call": null,
+          "comparability": {
+            "clock": "host rows in, host predictions out",
+            "fit_verdict": "UNKNOWN"
+          },
+          "dataset": "istella",
+          "device": "gpu",
+          "family": "trees",
+          "hash": null,
+          "hash_stable": null,
+          "lane": "gbdt-rank-yetirank",
+          "library": "xgboost",
+          "max_ms": null,
+          "median_ms": null,
+          "memory": {},
+          "min_ms": null,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 0,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "devices": "cpu,gpu",
+            "driver": "bench/speed/forest_speed_arm.py",
+            "interleaved": true,
+            "lane_config": {
+              "boosting_type": "Plain",
+              "borders": 254,
+              "feature_border_type": "GreedyLogSum",
+              "grow_policy": "SymmetricTree",
+              "l2": 1.0,
+              "leaf_estimation_iterations": 1,
+              "leaf_estimation_method": "Newton",
+              "learning_rate": 0.1,
+              "lightgbm_leafwise": true,
+              "loss": "YetiRank",
+              "max_depth": 6,
+              "max_leaves": 64,
+              "min_child_hessian": null,
+              "min_child_weight": 0.0,
+              "min_data_in_leaf": 1,
+              "min_split_gain": null,
+              "mismatches": [
+                "grower: ours and CatBoost fit YetiRank on symmetric trees (ours has no other policy for a ranking loss); XGBoost depthwise at depth 6, LightGBM leaf-wise capped at depth 6 and 64 leaves, because neither has an oblivious grower",
+                "objective: XGBoost rank:ndcg and LightGBM lambdarank are LambdaMART (NDCG-weighted pairwise gradients), a different loss from YetiRank's sampled permutations; each is that library's closest listwise objective, labeled",
+                "l2 1.0 is pinned on every arm; the YetiRank default in CatBoost (and ours) is 0",
+                "YetiRank draws its permutations from each library's own seeded generator (seed 7); the streams are not shared, so the fits differ by construction",
+                "XGBoost pair construction (lambdarank_pair_method, lambdarank_num_pair_per_sample) and LightGBM's lambdarank_truncation_level (30) and label_gain (2^g - 1) are left at their defaults; no library exposes the others' pair sampling",
+                "XGBoost is handed each query renumbered by order of appearance (it refuses unsorted qids); the same partition of the same rows in the same order",
+                "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first lambdarank tree",
+                "random_strength 1.0 on ours and CatBoost (the symmetric-grower default on both, each from its own seeded generator); XGBoost and LightGBM have no split-score noise",
+                "split floors: ours takes min_split_gain and min_child_hessian off the symmetric grower only, so here ours and CatBoost have no hessian floor or gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM min_split_gain 0"
+              ],
+              "n_estimators": 100,
+              "nan_mode": "Min",
+              "objectives": {
+                "catboost": "YetiRank",
+                "lightgbm": "lambdarank",
+                "mojolearn": "YetiRank",
+                "xgboost": "rank:ndcg"
+              },
+              "random_strength": 1.0,
+              "score_function": "Cosine",
+              "seed": 7,
+              "task": "ranking",
+              "xgboost_grow_policy": "depthwise"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "UNKNOWN(no inference lines)",
+          "times_ms": [],
+          "verdict": "UNKNOWN",
+          "warmup_ms": null
+        }
+      ],
+      "lane": "gbdt-rank-yetirank",
+      "log": "raw/trees/gbdt-rank-yetirank.istella.rows-full.log",
+      "notes": [
+        "lane=gbdt-rank-yetirank arms=cpu,gpu metric=devices delta=2.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); every arm name carries its device",
+        "lane=gbdt-rank-yetirank arms=* metric=mismatch delta=1.000000 reason=grower: ours and CatBoost fit YetiRank on symmetric trees (ours has no other policy for a ranking loss); XGBoost depthwise at depth 6, LightGBM leaf-wise capped at depth 6 and 64 leaves, because neither has an oblivious grower",
+        "lane=gbdt-rank-yetirank arms=* metric=mismatch delta=2.000000 reason=objective: XGBoost rank:ndcg and LightGBM lambdarank are LambdaMART (NDCG-weighted pairwise gradients), a different loss from YetiRank's sampled permutations; each is that library's closest listwise objective, labeled",
+        "lane=gbdt-rank-yetirank arms=* metric=mismatch delta=3.000000 reason=l2 1.0 is pinned on every arm; the YetiRank default in CatBoost (and ours) is 0",
+        "lane=gbdt-rank-yetirank arms=* metric=mismatch delta=4.000000 reason=YetiRank draws its permutations from each library's own seeded generator (seed 7); the streams are not shared, so the fits differ by construction",
+        "lane=gbdt-rank-yetirank arms=* metric=mismatch delta=5.000000 reason=XGBoost pair construction (lambdarank_pair_method, lambdarank_num_pair_per_sample) and LightGBM's lambdarank_truncation_level (30) and label_gain (2^g - 1) are left at their defaults; no library exposes the others' pair sampling",
+        "lane=gbdt-rank-yetirank arms=* metric=mismatch delta=6.000000 reason=XGBoost is handed each query renumbered by order of appearance (it refuses unsorted qids); the same partition of the same rows in the same order",
+        "lane=gbdt-rank-yetirank arms=* metric=mismatch delta=7.000000 reason=LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first lambdarank tree",
+        "lane=gbdt-rank-yetirank arms=* metric=objectives delta=4.000000 reason=catboost YetiRank; lightgbm lambdarank; mojolearn YetiRank; xgboost rank:ndcg",
+        "lane=gbdt-rank-yetirank arms=ours metric=devices delta=2.000000 reason=devices=cpu,gpu (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); the arm name says which"
+      ],
+      "our_arms": {},
+      "params_check": "NOT CHECKED (the driver printed no BOARD-PARAMS line)",
+      "rc": 1,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T06:59:00Z",
+      "status": "failed",
+      "stored_arms": [],
+      "stored_now": 0,
+      "wall_s": 6.2
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T06:58:55Z"
+  "updated": "2026-10-06T07:00:52Z"
 }
