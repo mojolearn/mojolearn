@@ -102,6 +102,15 @@ comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F11/grid.
 # No combined-switch or full-board default claim from these component cases.
+# I22 2026-10-06 IDENTICAL rollback MIXED, source 5b467815b51b. Generated
+# TSQR helper pipeline, rows/features=65537/33,65539/34,131073/17 (factor
+# width=features+1), three Q*C applications k=1/2/3. GRID_OFF/incumbent
+# elapsed ratios AMD 1.072/1.077/0.984, NVIDIA L40S 1.063/1.050/0.983:
+# two losses and one small gain per vendor. Grid+norm both OFF loses all:
+# AMD 1.182/1.183/1.090, NVIDIA 1.122/1.109/1.044. Keep existing IDN grid
+# ON; single-sample component evidence does not qualify a full caller change.
+# All arms: one excluded same-context warmup/one score, rc=0, prior identity
+# reused without revalidation; measurements/20261006/index.json has receipts.
 comptime TS_GRID_UPDATE = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_GRID"]())
 # Scored FAST quality: 9/9 metrics within the existing bands; PASS.
 # F11/default M3 2026-10-06: 6 retained public-caller timings;
@@ -110,10 +119,18 @@ comptime TS_GRID_UPDATE = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_
 # Scored quality metrics and per-arm build/hash provenance retained at
 # ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F11/default.
 # No combined-switch or full-board default claim from these component cases.
+# I22 same freeze/helper cases above: NORM_OFF/incumbent ratios AMD
+# 1.108/1.102/1.096, NVIDIA L40S 1.035/1.032/1.032 (all rollback LOSS).
+# Fused norm chains and grid remain ON. Full-estimator qualification remains
+# separate; these are factor/apply helper timings, not a dataset board run.
 comptime TS_NORM_FUSED = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"]())
-# I22 new candidate remains default off. Qualification is pending: native
-# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
-# NEVER RUN — PENDING MEASUREMENT
+# I22 STRIP-only LOSS/neutral, same freeze/cases/protocol: candidate/incumbent
+# AMD 1.100/1.097/1.001, NVIDIA L40S 1.082/1.075/1.000. The explicit
+# ts_leaf_update_kernel[2] groups two trailing chunks; width18 has only one
+# trailing chunk, so it offers no two-chunk amortization in that fixture.
+# REUSE+STRIP bundle wins vs refactoring: AMD 0.564/0.564/0.541, NVIDIA
+# 0.571/0.573/0.555. REUSE alone below is faster on both wider cases; the
+# bundle does not demonstrate a strip improvement. STRIP stays OFF.
 comptime TS_STRIP_UPDATE = _TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_STRIP_UPDATE"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime TS_SMEM_OK = lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_BYTES]()
 
@@ -739,7 +756,22 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
         ts_free_device()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
     if keep:
-        # NEVER RUN — PENDING MEASUREMENT
+        # I22 2026-10-06 scoped REUSE WIN, source5b467815b51b, same helper
+        # cases/protocol above: reuse/incumbent AMD 0.535/0.535/0.541,
+        # NVIDIA L40S 0.543/0.548/0.556. Source audit: each timed phase
+        # factors once vs control three times, but BOTH perform all three
+        # Q*C applies with different k=1/2/3 and coefficient matrices.
+        # Each apply allocates/copies its RHS and output, launches tree/leaf
+        # kernels and synchronizes. Final keep=False frees the state; the
+        # next scored phase factors fresh, never reusing warmup factors.
+        # This explicitly reuses an unchanged factor, not cached outputs.
+        # Four retained factor buffers are limited to16MiB below. The driver
+        # also holds one packed matrix vs control three until phase end;
+        # timings therefore include allocation/lifetime amortization too.
+        # Counts are source-audited: no runtime factor/apply count or result
+        # download is emitted. No new identity/quality validation performed.
+        # Keep opt-in: helper-only synthetic gains need actual estimator/
+        # full-dataset qualification before default promotion.
         comptime if not (_TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_REUSE"]()):
             raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
         var retained_bytes = 0

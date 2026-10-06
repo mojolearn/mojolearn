@@ -28,7 +28,10 @@ def main() raises:
         var factors = 0
         for rhs in range(3):
             var reuse = False
-            # NEVER RUN — PENDING MEASUREMENT
+            # I22 source5b component WIN with explicit immutable-factor reuse:
+            # three different Q*C applications remain inside every timed phase.
+            # Factor/apply counts are source-audited; this driver emits elapsed
+            # time only. Full estimator/dataset qualification remains pending.
             comptime if is_defined["MOJOLEARN_IDN_TSQR_REUSE"]():
                 reuse=True
             if not reuse or rhs==0:
