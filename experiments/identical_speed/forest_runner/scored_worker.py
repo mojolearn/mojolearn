@@ -1,6 +1,14 @@
 """Run the real forest driver and retain same-process untimed provenance."""
 import argparse,json,os,pathlib,runpy,sys,time
 
+def require_family(actual,manifest,name):
+ rows=[r for r in actual['loaded_files'] if r['file']==name]
+ if not rows or any(r['sha256']!=manifest['files'][name] for r in rows):
+  raise ValueError('required timed family missing or mismatched: '+name)
+ # _backend aliases one loaded extension under canonical and _sets names.
+ # Verify every alias; alias count is not a count of distinct binary loads.
+ return rows
+
 def main():
  p=argparse.ArgumentParser();p.add_argument('--fixture',action='store_true');p.add_argument('--artifact-manifest',required=True);p.add_argument('--required-binding',required=True);p.add_argument('--receipt',required=True);p.add_argument('--harness',required=True);p.add_argument('driver_args',nargs=argparse.REMAINDER);a=p.parse_args()
  args=a.driver_args[1:] if a.driver_args[:1]==['--'] else a.driver_args
@@ -27,8 +35,8 @@ def main():
  receipt={'started_at':started,'finished_at':time.time(),'driver_exit':code,'driver_error':error,'argv':sys.argv,'artifact_manifest_sha256':guard.sha(a.artifact_manifest)}
  try:
   actual=guard.collect(manifest)
-  required=[row for row in actual['loaded_files'] if row['file']==a.required_binding]
-  assert len(required)==1 and required[0]['sha256']==manifest['files'][a.required_binding]
+  receipt['observed_provenance']=actual
+  require_family(actual,manifest,a.required_binding)
   assert guard.hardware_receipt(manifest['vendor'])==before
   receipt.update(provenance=actual,hardware_before=before,provenance_verified=True)
  except BaseException as exc:receipt.update(provenance_verified=False,provenance_error=repr(exc));code=1
