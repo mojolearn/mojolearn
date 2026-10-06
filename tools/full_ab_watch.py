@@ -65,7 +65,7 @@ def tick(config, state):
         if changed:
             message = ('Full dataset A/B campaign update: ' + ', '.join(
                 row['name'] + '=' + row['status'] for row in changed) + '. Inspect ' + str(state / 'status.json') +
-                '. Keep the recorded main freeze; NVIDIA/AMD/Apple IDENTICAL, M3 FAST only after IDENTICAL. '
+                '. Keep the recorded main freeze; run IDENTICAL on NVIDIA/AMD and Apple FAST independently. '
                 'Repair actual failures with scoped subagents and resume only affected cells; preserve original evidence. '
                 'Do not compile or rerun verification; never substitute component fixtures for full workloads. '
                 'Keep logs out of context: save complete output to files, use targeted rg/grep with bounded '
