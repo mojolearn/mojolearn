@@ -1,0 +1,27 @@
+{
+  "coverage": {
+    "cell_statuses": {
+      "REFUSED": 3
+    },
+    "cells": 3,
+    "done": 0,
+    "failed": 3,
+    "pending": 81,
+    "planned": 84,
+    "race_statuses": {
+      "failed": 3
+    },
+    "unsupported": 0
+  },
+  "harness_repairs": [],
+  "harness_source_sha": "b0f5242d244ef75cd9ba7d78ca92e10008d75510",
+  "policy": "Exact opponent-only source files, hardware and failures retained. No A/B component ratios are derived.",
+  "published_at": 1791269984.467155,
+  "schema": "mojolearn-opponent-publication/1",
+  "source_directory": "/Users/andrewhendel/mojolearn-evidence/overnight-ab-20261006/amd/live/opponents/board",
+  "source_sha256": {
+    "board_json": "c4b5607f788865968cc52445e4d0bdb81bdc40a5781106837d47a03a380433b4",
+    "board_markdown": "e4feed3c6cb304e3dc554b1a18273990f06b1134dc4ee3ccb78ef23a1c28b7ed"
+  },
+  "source_updated": "2026-10-06T06:58:55Z"
+}
