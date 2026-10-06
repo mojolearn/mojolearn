@@ -39709,8 +39709,241 @@
       "stored_arms": [],
       "stored_now": 1,
       "wall_s": 2.8
+    },
+    "algos/tsne/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit_transform(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 4.717519506812096
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "fd29df8f874cea65",
+          "hash_stable": null,
+          "lane": "tsne",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 396.9017006456852,
+          "median_ms": 396.9017006456852,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 448.0,
+            "peak_host_mb": 918.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 448.0,
+            "warmup_host_mb": 918.1
+          },
+          "min_ms": 396.9017006456852,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "early_exaggeration": 12.0,
+              "init": "random",
+              "learning_rate": 200.0,
+              "max_iter": 1000,
+              "metric": "euclidean",
+              "n_components": 2,
+              "n_neighbors": 90,
+              "perplexity": 30.0,
+              "seed": 7
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 448.0,
+          "peak_host_mb": 918.1,
+          "quality": {
+            "trustworthiness_k15": 0.9983528354274082
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "TSNE",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "manifold",
+              "cuml": "cuml.manifold:TSNE",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "ann",
+              "kind": "est",
+              "mismatches": [
+                "gradients: ours exact repulsion over k-NN affinities (no Barnes-Hut atomics under IDENTICAL); scikit-learn Barnes-Hut (angle=0.5, scikit-learn only); cuML FFT",
+                "init: ours and scikit-learn start from the SAME array, ours' 'random' rule (default_rng(7).uniform(-5e-5, 5e-5, (n, 2)) float32); cuML takes only 'random' and draws its own start",
+                "scikit-learn's early stop is switched off (n_iter_without_progress=1000, min_grad_norm=0.0): ours runs exactly max_iter steps"
+              ],
+              "notes": [],
+              "ours_class": "mojolearn.TSNE",
+              "params": {
+                "early_exaggeration": 12.0,
+                "init": "seeded",
+                "learning_rate": "auto",
+                "max_iter": 1000,
+                "n_components": 2,
+                "perplexity": 30.0,
+                "random_state": 7
+              },
+              "quality": "trustworthiness k=15 over every embedded row",
+              "sklearn": "sklearn.manifold:TSNE",
+              "task": "embed",
+              "timed_fit": "fit_transform(X)",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 20000x11; Xq 2000x11",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            396.9017006456852
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 632.8146625310183
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "tsne",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:53:57Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/tsne/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "tsne",
+      "lane_config": {
+        "block": "manifold",
+        "cuml": "cuml.manifold:TSNE",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "ann",
+        "kind": "est",
+        "mismatches": [
+          "gradients: ours exact repulsion over k-NN affinities (no Barnes-Hut atomics under IDENTICAL); scikit-learn Barnes-Hut (angle=0.5, scikit-learn only); cuML FFT",
+          "init: ours and scikit-learn start from the SAME array, ours' 'random' rule (default_rng(7).uniform(-5e-5, 5e-5, (n, 2)) float32); cuML takes only 'random' and draws its own start",
+          "scikit-learn's early stop is switched off (n_iter_without_progress=1000, min_grad_norm=0.0): ours runs exactly max_iter steps"
+        ],
+        "notes": [],
+        "ours_class": "mojolearn.TSNE",
+        "params": {
+          "early_exaggeration": 12.0,
+          "init": "seeded",
+          "learning_rate": "auto",
+          "max_iter": 1000,
+          "n_components": 2,
+          "perplexity": 30.0,
+          "random_state": 7
+        },
+        "quality": "trustworthiness k=15 over every embedded row",
+        "sklearn": "sklearn.manifold:TSNE",
+        "task": "embed",
+        "timed_fit": "fit_transform(X)",
+        "timed_infer": null
+      },
+      "log": "logs/algos.tsne.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "early_exaggeration": 12.0,
+              "init": "random",
+              "learning_rate": 200.0,
+              "max_iter": 1000,
+              "metric": "euclidean",
+              "n_components": 2,
+              "n_neighbors": 90,
+              "perplexity": 30.0,
+              "seed": 7
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/tsne",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/tsne-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:53:21Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 36.0
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T07:53:21Z"
+  "updated": "2026-10-06T07:53:57Z"
 }

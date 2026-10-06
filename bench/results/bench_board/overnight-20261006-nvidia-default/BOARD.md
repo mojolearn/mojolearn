@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-06T07:53:21Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-06T07:53:57Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 ## Box
 
@@ -36,7 +36,7 @@ Generated 2026-10-06T07:53:21Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Coverage
 
-Races: 113 planned, 70 done, 2 failed, 0 unsupported, 41 pending. Cells: 162 (REFUSED 2, ok 160).
+Races: 113 planned, 71 done, 2 failed, 0 unsupported, 40 pending. Cells: 163 (REFUSED 2, ok 161).
 
 Inference cells: 132 (REFUSED 2, ok 130).
 
@@ -132,6 +132,7 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | svgp | taxi | r2 (higher is better) | - | - | gpytorch-gpu -0.209527 |
 | algos | svgp | taxi | rmse (lower is better) | - | - | gpytorch-gpu 17.831018 |
 | algos | tree-shap | taxi | max_additivity_error | - | - | xgboost-gpu 5.402e-05 |
+| algos | tsne | taxi | trustworthiness_k15 (higher is better, 1 at most) | - | - | cuml-gpu 0.998353 |
 
 ## Inference at a glance
 
@@ -2716,6 +2717,41 @@ parameters (tools/bench_board_params.py, read back from each constructed arm; re
 | learning_rate | 0.1 |
 | max_depth | 6 |
 | n_estimators | 100 |
+| seed | 7 |
+
+### tsne / taxi (rows full, shape X 20000x11; Xq 2000x11)
+
+race: done, driver rc 0, log `logs/algos.tsne.taxi.rows-full.log`, ran on cc560ebdaf91
+
+| arm | library | device | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cuml-gpu | cuml | gpu | opponent | 396.9 | 396.9..396.9 | 1 | - | - | 918.1 | 448.0 | trustworthiness_k15=0.998353 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
+
+memory, cuml-gpu: host Linux VmHWM after clear_refs 5 (peak RSS over the round); GPU nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)
+
+settings: {'early_exaggeration': 12.0, 'init': 'seeded', 'learning_rate': 'auto', 'max_iter': 1000, 'n_components': 2, 'perplexity': 30.0, 'random_state': 7}. Rows: None. Timed: None.
+
+mismatch: gradients: ours exact repulsion over k-NN affinities (no Barnes-Hut atomics under IDENTICAL); scikit-learn Barnes-Hut (angle=0.5, scikit-learn only); cuML FFT
+
+mismatch: init: ours and scikit-learn start from the SAME array, ours' 'random' rule (default_rng(7).uniform(-5e-5, 5e-5, (n, 2)) float32); cuML takes only 'random' and draws its own start
+
+mismatch: scikit-learn's early stop is switched off (n_iter_without_progress=1000, min_grad_norm=0.0): ours runs exactly max_iter steps
+
+config: cuML benchmark (RAPIDS), TSNE (https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py)
+
+parameters (tools/bench_board_params.py, read back from each constructed arm; reference `cuml-gpu`, seed 7): MATCHED
+
+| parameter | cuml-gpu |
+|---|---|
+| library (source) | cuml (get_params) |
+| early_exaggeration | 12.0 |
+| init | "random" |
+| learning_rate | 200.0 |
+| max_iter | 1000 |
+| metric | "euclidean" |
+| n_components | 2 |
+| n_neighbors | 90 |
+| perplexity | 30.0 |
 | seed | 7 |
 
 ## Not covered by this board
