@@ -7842,6 +7842,7 @@ comptime AMD_SHORT_K_MAX = 1024
 # A03: physical LDS stride experiment only. Vector-aligned padding leaves
 # every logical staged address and the accumulator traversal unchanged.
 # Compare 0/4/8 words; resource counters decide, never dataset dimensions.
+# A03 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
 # A03 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
 # LDS padding overrides require explicit IDENTICAL define; incumbent padding retained.
 comptime GEMM_KPACK_PAD = (
