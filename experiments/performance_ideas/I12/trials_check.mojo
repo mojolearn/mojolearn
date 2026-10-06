@@ -101,6 +101,7 @@ def check_exact_trial_schedule(ctx: DeviceContext) raises:
             if actual.words[i]!=expected.words[i]:
                 raise Error("I12 selected trial/objective/gradient/cache word differs at "+String(i))
         var should_reach=False
+        # NEVER RUN — PENDING VALIDATION
         comptime if is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]():
             should_reach=fixture!=3
         if (actual.physical>0)!=should_reach or expected.physical!=0:
