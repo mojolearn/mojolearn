@@ -1,5 +1,12 @@
 # Performance experiment implementations
 
+The newer neural-only NN01–NN64 source arms are indexed alongside this registry
+in [the experiment/file inventory](../../docs/plans/NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md).
+Their [selector](../../tools/neural_identical_ab.py) writes exact native-builder
+and neural-board configurations; the [neural README](../neural_identical_ab/README.md)
+describes that interface. These new drafts have no compilation, identity,
+quality or timing evidence and do not inherit acceptance from the experiments here.
+
 This directory implements the cards in
 [`PERFORMANCE_EXPERIMENT_IDEAS_2026-10-05.md`](../../docs/plans/PERFORMANCE_EXPERIMENT_IDEAS_2026-10-05.md).
 Each card has its own source changes and manifest. Candidates remain opt-in;

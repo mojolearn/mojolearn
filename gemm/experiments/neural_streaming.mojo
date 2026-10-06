@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """NN02/NN11/NN16: bounded leaf batches, exact stack capacity, write ownership.
 
-Both arms compute the incumbent FP32 profile. The bounded arm reuses a
+Both arms compute the selected common FP32 profile. The bounded arm reuses a
 GROUP-leaf plane and saves the canonical streaming stack between launches.
 The control writes ALL leaf partials once and folds them in a single pass.
 Scratch ownership is one in-order context; no allocation is shared globally.
-Uncompiled and unverified by explicit request. Public callers remain pending.
+Neural model dispatch reaches these opt-in arms. Uncompiled and unverified.
 """
 from gemm.experiments.neural_profile_device import neural_profile_device
 from std.sys.compile import is_defined
@@ -182,7 +182,8 @@ def neural_streaming_ab[
     toggles exact global state slots independently. NN16 toggles the redundant
     scratch clear independently in BOTH arms. NN16 has an intentionally
     explicit component B; this does not claim a redundant clear was found in
-    a production model. NN03/NN04 are not mixed into this first implementation.
+    a production model. Public NN16 instead removes the existing ByteLMScratch
+    head-workspace clear. NN03/NN04 select the shared leaf/chain profile here.
     """
     comptime assert GROUP > 0, "positive bounded leaf group"
     neural_validate(m,n,k,op)

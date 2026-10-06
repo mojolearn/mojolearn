@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""NN09/NN15: physical staging layouts under the incumbent neural profile.
+"""NN09/NN15: physical staging layouts under the selected neural profile.
 
 128 threads own an 8x16 output tile. Shared operands feed ascending scalar
 FMA chains; no native matrix instruction defines an undocumented sum. Page
 depth, padded rows, XOR addresses and thread mapping are independent arms.
-No build or verification has been run. No production dispatcher imports this.
+Neural-only dispatch reaches these opt-in arms. No build or verification run.
 """
 from std.sys.compile import is_defined
 from std.gpu import block_idx,thread_idx
@@ -100,7 +100,7 @@ def neural_tiled_ab[
     NN09 gates depth/padding/swizzle; NN15 gates output-thread mapping. Each
     may be isolated before combinations. This is synchronous shared staging,
     not a claim of asynchronous overlap. Existing A02/A03 evidence does not
-    validate this new tile. Host mirror: neural_profile_host, one chain.
+    validate this new tile. Host mirrors use the selected leaf/chain profile.
     """
     neural_validate(m,n,k,op)
     if len(c)<m*n or len(a)<m*k or len(b)<n*k:

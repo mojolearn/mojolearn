@@ -60,7 +60,10 @@ def residual_dropout_admit(n: Int,offset: Int,p: Float32,
 @always_inline
 def nn_dropout_cell(value: Float32,p: Float32,scale: Float32,
     seed_lo: UInt32,seed_hi: UInt32,stream: UInt32,index: Int) -> Float32:
-    if nn59_unit(seed_lo,seed_hi,stream,index)>=p:
+    # Probability is part of the portable FP32/FTZ contract too. In particular
+    # a subnormal positive threshold must not compare differently against a
+    # zero Philox draw on host and a device with denormal-flushing comparisons.
+    if nn59_unit(seed_lo,seed_hi,stream,index)>=ftz(p):
         return ftz(identical_mul(ftz(value),ftz(scale)))
     return Float32(0)
 

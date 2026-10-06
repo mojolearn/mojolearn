@@ -2,6 +2,7 @@
 """Host-only shape and registry for the configured decoder language model."""
 
 from training.neural_arithmetic_profile import neural_arithmetic_suffix
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 comptime BYTE_CONFIG_LIMIT = 2147483647
 comptime BYTE_DEFAULT_PROFILE = "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1"
@@ -67,6 +68,10 @@ struct ByteConfig(Copyable, Movable):
         for value in fields:
             if value <= 0 or value > 1048576:
                 raise Error("byte LM: shape fields must be in [1,1048576]")
+        if self.chunked_lm_head_v2 and self.vocab_size < 2:
+            raise Error("byte LM: chunked head v2 requires vocabulary size >= 2")
+        if self.chunked_lm_head_v2 and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            raise Error("byte LM: chunked head v2 requires IDENTICAL mode")
         if self.length > BYTE_MAX_ABS_POSITION:
             raise Error(
                 String("byte LM: length ")

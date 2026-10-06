@@ -66,7 +66,7 @@ This ledger summarizes source authoring, not verification. No compilation, tests
 | NN56 | Batch optimizer parameter groups with per-group scalars | training: wired_draft | [training.json](lanes/training.json) |
 | NN57 | Versioned global gradient-norm reduction | training: wired_draft | [training.json](lanes/training.json) |
 | NN58 | Fuse accumulation with gradient finishing | training: wired_draft | [training.json](lanes/training.json) |
-| NN59 | Fuse neural dropout RNG and pointwise consumers | residual: wired_draft; training: wired_draft | [residual.json](lanes/residual.json); [training.json](lanes/training.json) |
+| NN59 | Fuse neural dropout RNG and pointwise consumers | training: wired_draft; residual: wired_draft | [training.json](lanes/training.json); [residual.json](lanes/residual.json) |
 | NN60 | Parameter/gradient views with generation-safe ownership | training: wired_draft | [training.json](lanes/training.json) |
 | NN61 | One final neural step status/readback boundary | training: reused_existing | [training.json](lanes/training.json) |
 | NN62 | Live-range neural scratch and activation arenas | training: wired_draft | [training.json](lanes/training.json) |
@@ -84,6 +84,6 @@ This ledger summarizes source authoring, not verification. No compilation, tests
 
 ## Source evidence
 
-The [idea list](../../docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md), [catalog](catalog.json), lane JSON/Markdown files and actual Mojo changes are the retained evidence. There are no newly produced build/test/GPU logs or performance results to cite. The metadata-only [planner](../../tools/neural_identical_ab.py) is authored but unexecuted.
+The [idea list](../../docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md), [experiment/file inventory](../../docs/plans/NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md), [catalog](catalog.json), [concrete arm selectors](arms.json), lane JSON/Markdown files and actual Mojo changes are the retained evidence. There are no newly produced build/test/GPU logs or performance results to cite. The [selector](../../tools/neural_identical_ab.py) authors configurations for the native builders and neural board; it does not execute or verify them.
 
 For cross-owner NN13/NN14, read both GEMM and state/CNN handoffs: the GEMM owner records its boundary; the state/CNN supplement records the actual caller work. This ledger preserves both rather than erasing partial coverage.

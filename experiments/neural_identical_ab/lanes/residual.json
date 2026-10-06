@@ -39,7 +39,7 @@
         "A": "One forward producer for dropout then rounded residual; one backward producer for dValues and raw-word dResidual.",
         "B": "Dropout temporary plus separate residual addition; backward dropout kernel plus separate gradient copy. CPU baseline uses separate passes."
       },
-      "numeric_contract": "Philox4x32-10 counter=(block low,block high,stream,0), key=(seed low,seed high), word index=(offset+i)%4; 24-bit uniform. Shared pure Mojo FP32 dropout product seam, residual add seam, portable scale. Backward regenerates same mask for identical coordinates.",
+      "numeric_contract": "Philox4x32-10 counter=(block low,block high,stream,0), key=(seed low,seed high), word index=(offset+i)%4; 24-bit uniform. Shared pure Mojo FP32 dropout product seam, residual add seam, portable scale. Backward regenerates same mask for identical coordinates. Probability is explicitly FTZ-normalized before mask comparison in both columns.",
       "admission": [
         "IDENTICAL only; native float32 C-contiguous equal-shape inputs",
         "Finite input/residual/gradient and finite output checked in Mojo",
@@ -61,7 +61,8 @@
       "quality": "not_run_by_request",
       "timing": "not_run_by_request",
       "registration_status": "GPU/host builder functions and public training.py exports authored by root; no execution evidence.",
-      "selected_arm_programming_remaining": []
+      "selected_arm_programming_remaining": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     }
   ],
   "experiments": [
@@ -101,7 +102,7 @@
         "A": "One forward producer for dropout then rounded residual; one backward producer for dValues and raw-word dResidual.",
         "B": "Dropout temporary plus separate residual addition; backward dropout kernel plus separate gradient copy. CPU baseline uses separate passes."
       },
-      "numeric_contract": "Philox4x32-10 counter=(block low,block high,stream,0), key=(seed low,seed high), word index=(offset+i)%4; 24-bit uniform. Shared pure Mojo FP32 dropout product seam, residual add seam, portable scale. Backward regenerates same mask for identical coordinates.",
+      "numeric_contract": "Philox4x32-10 counter=(block low,block high,stream,0), key=(seed low,seed high), word index=(offset+i)%4; 24-bit uniform. Shared pure Mojo FP32 dropout product seam, residual add seam, portable scale. Backward regenerates same mask for identical coordinates. Probability is explicitly FTZ-normalized before mask comparison in both columns.",
       "admission": [
         "IDENTICAL only; native float32 C-contiguous equal-shape inputs",
         "Finite input/residual/gradient and finite output checked in Mojo",
@@ -123,7 +124,8 @@
       "quality": "not_run_by_request",
       "timing": "not_run_by_request",
       "registration_status": "GPU/host builder functions and public training.py exports authored by root; no execution evidence.",
-      "selected_arm_programming_remaining": []
+      "selected_arm_programming_remaining": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     }
   ],
   "compilation": "not_run_by_request",

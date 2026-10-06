@@ -8,12 +8,7 @@ Reference: `src/transformers/models/llama/modeling_llama.py`
 (huggingface/transformers `d56c55b`), read on disk at
 `/Users/andrewhendel/CascadeProjects/upstream/transformers/` on 2026-08-24.
 Partial, inference only, eager attention only. What is implemented here, symbol
-by symbol (line numbers verified against that checkout, not quoted from transformer.experiments.summary_model import model_summary_forward
-from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY_TREE
-from transformer.experiments.norm_profile import (
-    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
-)
-from the
+by symbol (line numbers verified against that checkout, not quoted from the
 contract):
 
 | reference | lines | here |
@@ -272,6 +267,11 @@ agreement with HuggingFace, PyTorch or MAX: the fold orders,
 transcendentals and division below are OURS.
 """
 
+from transformer.experiments.summary_model import model_summary_forward
+from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY_TREE
+from transformer.experiments.norm_profile import (
+    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+)
 from transformer.experiments.attention_schedules import (
     NN25_RMS_SPLIT_SCALE, NN26_TRAIN_SWIGLU, NN29_RING_PAIR,
     rms_sumsq_kernel, rms_parallel_scale_kernel, training_swiglu_kernel,

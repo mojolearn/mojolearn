@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """NN01/NN08/NN10/NN12: explicit schedules and bounded model-owned plans.
 
-All entry points are neural component adapters, not production dispatch.
+Neural model dispatch reaches these adapters; standalone plan classes also
+remain available as components.
 NN01 and NN08 deliberately reuse existing implementations; no old component
 win is relabelled as a new full-model result. This source is uncompiled and
-unverified by request. Public model ownership and full recipes remain pending.
+unverified by request. Model ownership is in gemm.neural_dispatch; future
+full-workload recipes and execution evidence remain pending.
 """
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer,DeviceContext

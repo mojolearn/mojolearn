@@ -52,10 +52,14 @@ comptime _PAIR_CONTROL = is_defined["MOJOLEARN_IDN_NEURAL_PAIR_CONTROL"]()
 comptime NEURAL_WORKSPACE_REUSE_ENABLED = NN12 and not _CONTROL
 comptime _STREAM = NN02
 comptime _STAGING = NN09 or NN15
-comptime _ROUTES = Int(NN01)+Int(NN08)+Int(NN10)+Int(_STREAM)+Int(_STAGING)
-comptime assert _ROUTES <= 1, "select one GEMM schedule family per A/B; NN11/NN12/profile/pair controls compose"
+# NN11 has two real placements: global fold slots inside NN02, or a
+# standalone register/shared fold kernel. Other schedule families do not
+# implement its storage arm; reject those combinations instead of masking it.
+comptime _ROUTES = Int(NN01)+Int(NN08)+Int(NN10)+Int(_STREAM)+Int(_STAGING)+Int(NN11 and not _STREAM)
+comptime assert _ROUTES <= 1, "select one GEMM schedule family; NN11 composes only with NN02; NN12/profile/pair controls compose"
 comptime assert not (NN01 and NEURAL_PROFILE_CHANGED), "legacy NN01 instruction geometry is v1-only; do not silently mix arithmetic profiles"
 comptime assert not NN10 or is_defined["MOJOLEARN_IDN_NEURAL_FILL_BLOCKS"](), "NN10 requires a recorded device-fill budget, never guessed hardware"
+comptime assert not NN10 or _FILL_BLOCKS>0, "NN10 device-fill budget must be positive"
 comptime assert _STREAM_GROUP>0 and _RETAINED>0, "positive neural resource budgets"
 
 
@@ -77,6 +81,19 @@ def identical_gemm_workspace_max_floats(m: Int,n: Int,k: Int) -> Int:
     comptime if NEURAL_PROFILE_CHANGED or _STAGING or NN08 or NN11:
         return 1
     return _incumbent_workspace(m,n,k)
+
+
+def _admit_product(mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
+    """Admission shared by direct and model-owned cached-plan routes."""
+    neural_validate(m,n,k,op)
+    if len(c)<m*n or len(a)<m*k or len(b)<n*k or len(ws)<identical_gemm_workspace_max_floats(m,n,k):
+        raise Error("neural GEMM operand/workspace storage too short")
+    if (_overlaps(c,m*n,a,m*k) or _overlaps(c,m*n,b,n*k)
+        or _overlaps(ws,len(ws),c,m*n) or _overlaps(ws,len(ws),a,m*k)
+        or _overlaps(ws,len(ws),b,n*k)):
+        raise Error("neural GEMM output/workspace must not overlap inputs or each other")
 
 
 def _profile_or_cost_into(ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
@@ -117,15 +134,9 @@ def identical_gemm_into[allow_vendor: Bool = True](
     comptime if not NEURAL_GEMM_EXPERIMENT_ENABLED:
         _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
         return
-    neural_validate(m,n,k,op)
-    if len(c)<m*n or len(a)<m*k or len(b)<n*k or len(ws)<identical_gemm_workspace_max_floats(m,n,k):
-        raise Error("neural GEMM operand/workspace storage too short")
+    _admit_product(c,a,b,ws,m,n,k,op)
     if m==0 or n==0:
         return
-    if (_overlaps(c,m*n,a,m*k) or _overlaps(c,m*n,b,n*k)
-        or _overlaps(ws,len(ws),c,m*n) or _overlaps(ws,len(ws),a,m*k)
-        or _overlaps(ws,len(ws),b,n*k)):
-        raise Error("neural GEMM output/workspace must not overlap inputs or each other")
     comptime if NN01:
         _ = neural_schedule_ab[not _CONTROL](ctx,c,a,b,ws,m,n,k,op,_ARM)
     elif _STREAM:
@@ -162,6 +173,7 @@ def identical_gemm[allow_vendor: Bool = True](
     comptime if not NEURAL_GEMM_EXPERIMENT_ENABLED:
         _incumbent_gemm[allow_vendor](ctx,c,a,b,m,n,k,op)
         return
+    neural_validate(m,n,k,op)
     var workspace = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m,n,k))
     try:
         identical_gemm_into[allow_vendor](ctx,c,a,b,workspace,m,n,k,op)
@@ -288,6 +300,13 @@ struct GemmWorkspace(Movable):
     def run[allow_vendor: Bool = True](mut self,ctx: DeviceContext,
         mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
         mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
+        comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
+            neural_validate(m,n,k,op)
+        comptime if NN12 and _CONTROL:
+            # B charges fresh scratch and its last-consumer wait per product.
+            # OFF keeps the pre-existing model workspace reuse unchanged.
+            identical_gemm[allow_vendor](ctx,c,a,b,m,n,k,op)
+            return
         var required = identical_gemm_workspace_max_floats(m,n,k)
         comptime if NN12 and not _CONTROL:
             if required>_RETAINED:
@@ -295,6 +314,9 @@ struct GemmWorkspace(Movable):
                 return
         self._ensure(ctx,required)
         comptime if NN12 and NN10 and not _CONTROL:
+            _admit_product(c,a,b,self.buffer,m,n,k,op)
+            if m==0 or n==0:
+                return
             if self.last_m!=m or self.last_n!=n or self.last_k!=k:
                 self.cached_plan = _selected_cost_plan(m,n,k)
                 self.last_m = m
@@ -308,7 +330,18 @@ struct GemmWorkspace(Movable):
         mut c2: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
         mut b1: DeviceBuffer[DType.float32],mut b2: DeviceBuffer[DType.float32],
         m: Int,n: Int,k: Int,op: Int) raises:
+        neural_validate(m,n,k,op)
         var required = identical_gemm_pair_workspace_max_floats(m,n,k)
+        comptime if NN12 and _CONTROL:
+            var temporary = ctx.enqueue_create_buffer[DType.float32](required)
+            try:
+                identical_gemm_pair_into(ctx,c1,c2,a,b1,b2,temporary,m,n,k,op)
+            except error:
+                ctx.synchronize()
+                raise error
+            ctx.synchronize()
+            _ = temporary^
+            return
         comptime if NN12 and not _CONTROL:
             if required>_RETAINED:
                 var temporary = ctx.enqueue_create_buffer[DType.float32](required)

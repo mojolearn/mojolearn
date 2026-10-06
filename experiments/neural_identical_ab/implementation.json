@@ -35,11 +35,14 @@
           "candidate_defines": [
             "MOJOLEARN_NUMERIC_IDENTICAL=1",
             "MOJOLEARN_IDN_NEURAL_NN01=1",
-            "MOJOLEARN_GEMM_ARM_TRIAL=1"
+            "MOJOLEARN_GEMM_ARM_TRIAL=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_ARM=10"
           ],
           "baseline_defines": [
             "MOJOLEARN_NUMERIC_IDENTICAL=1",
             "MOJOLEARN_IDN_NEURAL_NN01=1",
+            "MOJOLEARN_GEMM_ARM_TRIAL=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_ARM=10",
             "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
           ],
           "runtime_env": {},
@@ -75,6 +78,7 @@
             "MOJOLEARN_IDN_NEURAL_GEMM_ARM": "explicit existing step-arm enum; default GEMM_ARM_KPACK"
           },
           "supported_combinations": "One legacy schedule family; NN01 rejects NN03/NN04 because existing native geometries implement the incumbent arithmetic profile.",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -142,6 +146,7 @@
             "x_cnn/device.mojo"
           ],
           "optional_variants": [],
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -176,10 +181,13 @@
           ],
           "candidate_defines": [
             "MOJOLEARN_NUMERIC_IDENTICAL=1",
-            "MOJOLEARN_IDN_NEURAL_NN03=1"
+            "MOJOLEARN_IDN_NEURAL_NN03=1",
+            "MOJOLEARN_IDN_NEURAL_LEAF=64"
           ],
           "baseline_defines": [
-            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN03=1",
+            "MOJOLEARN_IDN_NEURAL_LEAF=128"
           ],
           "runtime_env": {},
           "entry_points": [
@@ -188,8 +196,8 @@
             "SmallMLPTrainer._matmul via training.neural_gemm binding"
           ],
           "arms": {
-            "A": "CANDIDATE=True with LEAF=64,128,256 as separate profiles; NN03 define permits LEAF",
-            "B": "CANDIDATE=False: incumbent CONTRACT_K_LEAF_MIN, one chain, same scalar schedule"
+            "A": "Selected scalar/profile dispatcher with leaf minimum 64, one chain.",
+            "B": "Same selected scalar/profile dispatcher with leaf minimum 128, one chain; no absent-flag schedule confound."
           },
           "default_enabled": false,
           "remaining": [
@@ -223,6 +231,7 @@
             ]
           },
           "component_profile_scope": "Dense projection forward/backward uses the selected profile. Mamba M2/M3 SSD/SISO internal contractions keep their separately declared fixed 128-term graph on host and device; host SSD/SISO oracles deliberately keep incumbent GEMM helpers. Sequence recurrent/internal algorithm graphs likewise retain their declared arithmetic.",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -255,10 +264,13 @@
           ],
           "candidate_defines": [
             "MOJOLEARN_NUMERIC_IDENTICAL=1",
-            "MOJOLEARN_IDN_NEURAL_NN04=1"
+            "MOJOLEARN_IDN_NEURAL_NN04=1",
+            "MOJOLEARN_IDN_NEURAL_CHAINS=2"
           ],
           "baseline_defines": [
-            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN04=1",
+            "MOJOLEARN_IDN_NEURAL_CHAINS=1"
           ],
           "runtime_env": {},
           "entry_points": [
@@ -267,8 +279,8 @@
             "SmallMLPTrainer._matmul via training.neural_gemm binding"
           ],
           "arms": {
-            "A": "CANDIDATE=True with CHAINS=2 or 4; interleaved membership and fixed adjacent-pair merge",
-            "B": "CANDIDATE=False: one ascending dependent FMA chain per incumbent leaf"
+            "A": "Selected common profile with two independent accumulator chains per leaf.",
+            "B": "Same selected dispatcher/profile with one chain, same leaf and fold."
           },
           "default_enabled": false,
           "remaining": [
@@ -300,6 +312,7 @@
             ]
           },
           "component_profile_scope": "Dense projection forward/backward uses the selected profile. Mamba M2/M3 SSD/SISO internal contractions keep their separately declared fixed 128-term graph on host and device; host SSD/SISO oracles deliberately keep incumbent GEMM helpers. Sequence recurrent/internal algorithm graphs likewise retain their declared arithmetic.",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -362,6 +375,7 @@
             "transformer/impl/llama/modeling_llama.mojo::llama_mlp_forward"
           ],
           "optional_variants": [],
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -424,6 +438,7 @@
           "optional_variants": [
             "Additional residual/scale/nonlinear epilogues already exist as components; further model placements are optional separately attributed arms."
           ],
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -487,6 +502,7 @@
           "optional_variants": [
             "Persistent cross-step immutable-weight transpose cache is a separate optional arm, not needed by the completed pair-scoped sharing arm."
           ],
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -557,6 +573,7 @@
           "upstream_blockers": [
             "Native AMD/Apple asynchronous-copy variants require supported Modular primitives; no workaround added."
           ],
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -586,12 +603,16 @@
           ],
           "candidate_defines": [
             "MOJOLEARN_NUMERIC_IDENTICAL=1",
-            "MOJOLEARN_IDN_NEURAL_NN09=1"
+            "MOJOLEARN_IDN_NEURAL_NN09=1",
+            "MOJOLEARN_IDN_NEURAL_STAGE_DEPTH=2",
+            "MOJOLEARN_IDN_NEURAL_STAGE_PAD=0"
           ],
           "baseline_defines": [
             "MOJOLEARN_NUMERIC_IDENTICAL=1",
             "MOJOLEARN_IDN_NEURAL_NN09=1",
-            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1",
+            "MOJOLEARN_IDN_NEURAL_STAGE_DEPTH=2",
+            "MOJOLEARN_IDN_NEURAL_STAGE_PAD=0"
           ],
           "runtime_env": {},
           "entry_points": [
@@ -623,6 +644,7 @@
             "x_cnn/device.mojo"
           ],
           "optional_variants": [],
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -695,6 +717,10 @@
           "required_recipe_parameters": [
             "MOJOLEARN_IDN_NEURAL_FILL_BLOCKS from a recorded supported/calibrated device profile; no guessed default admitted"
           ],
+          "required_compile_parameters": {
+            "MOJOLEARN_IDN_NEURAL_FILL_BLOCKS": "Positive recorded device-fill budget in both arms; selector must require an explicit value."
+          },
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -767,6 +793,8 @@
           "candidate_parameters": {
             "MOJOLEARN_IDN_NEURAL_FOLD_SHARED": "optional; otherwise register capacity specialization"
           },
+          "supported_combinations": "Standalone register/shared capacity or NN02 global-state capacity. Refuses other GEMM schedule families; NN12 and selected numerical profiles may compose.",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -796,12 +824,14 @@
           ],
           "candidate_defines": [
             "MOJOLEARN_NUMERIC_IDENTICAL=1",
-            "MOJOLEARN_IDN_NEURAL_NN12=1"
+            "MOJOLEARN_IDN_NEURAL_NN12=1",
+            "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS=16777216"
           ],
           "baseline_defines": [
             "MOJOLEARN_NUMERIC_IDENTICAL=1",
             "MOJOLEARN_IDN_NEURAL_NN12=1",
-            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1",
+            "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS=16777216"
           ],
           "runtime_env": {},
           "entry_points": [
@@ -809,8 +839,8 @@
             "training.dev_tensors._DevPool handle-owned workspace"
           ],
           "arms": {
-            "A": "Retain bounded scratch by model/context or output-handle lifetime; cache NN10 plan where selected",
-            "B": "Original model ownership; dev-tensor API re-provisions scratch per call"
+            "A": "Model-owned bounded retained scratch; selected NN10 plan cached when combined.",
+            "B": "Fresh scratch and its last-consumer synchronization per product/pair; DevPool already provisions per operation."
           },
           "default_enabled": false,
           "remaining": [
@@ -824,15 +854,17 @@
           "timing": "not_run_by_request",
           "wired_callers": [
             "training/dev_tensors.mojo",
-            "training/mlp_ops.mojo",
-            "training/byte_lm.mojo",
-            "training/byte_lm_logits.mojo",
             "transformer/impl/llama/modeling_llama.mojo",
-            "transformer/checks/transformer_backward.mojo",
-            "mamba/impl/modules/idn_gemm_ws.mojo",
-            "x_cnn/device.mojo"
+            "transformer/checks/transformer_backward.mojo"
           ],
-          "optional_variants": [],
+          "optional_variants": [
+            "Mamba custom workspace growth is separate NN40; CNN and ByteLM-head manual scratch caches retain their existing policies."
+          ],
+          "selected_arm_scope": "GemmWorkspace owners and training DevPool output-handle owners. Manual Mamba/CNN/ByteLM-head scratch caches are not changed by this flag.",
+          "candidate_parameters": {
+            "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS": "Positive owner resource budget; representative 16777216 floats (64 MiB)."
+          },
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -875,6 +907,7 @@
           "identity": "not_run_by_request",
           "quality": "not_run_by_request",
           "timing": "not_run_by_request",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         },
         {
@@ -935,6 +968,7 @@
           "identity": "not_run_by_request",
           "quality": "not_run_by_request",
           "timing": "not_run_by_request",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         },
         {
@@ -1035,6 +1069,7 @@
             "x_cnn/device.mojo"
           ],
           "optional_variants": [],
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -1095,6 +1130,7 @@
           "optional_variants": [
             "Component scratch-clear comparison retained separately; it is not the production B or evidence of an existing redundant clear."
           ],
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "gemm.json"
         }
       ]
@@ -1132,6 +1168,7 @@
           "mechanism": "64 logical rows interleave four query heads, 16 positions each, sharing the same K/V shared page. Every score/value fold unchanged.",
           "prior_evidence": "I06 corrected MI325X ratios 1.211/1.212 and L40S 1.147/1.108 were two-head component LOSERS. New four-head schedule is not that arm.",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1169,6 +1206,7 @@
           "new_implementation": true,
           "selectable": true,
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1192,11 +1230,14 @@
             "MOJOLEARN_ATTN_ARM_TRIAL=1",
             "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
           ],
-          "runtime_env": {},
+          "runtime_env": {
+            "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+            "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+          },
           "remaining": [
-            "Reuse corrected I07 retained/recompute source and accepted fixture identity; no unchanged component rerun.",
-            "Full LM/transformer/Samba workloads, memory budget/lifetimes, cold vs repeated and complete configuration remain pending.",
-            "Preserve earlier no-distinct-arm and confounded evidence."
+            "Both model arms explicitly request the same supported estash schedule. A must report positive kept cells; B forced-recompute must report zero. HD64/QRES/PF/kvgrid and finite-regime reach are required.",
+            "Reuse corrected I07 retained/recompute source and accepted prior receipts. New model source remains uncompiled/unexecuted; full workloads, quality, identity and memory lifetime/retention qualification are unrun.",
+            "Keep earlier no-distinct-arm and confounded evidence separate."
           ],
           "default_enabled": false,
           "compilation": "not_run_by_request",
@@ -1206,6 +1247,8 @@
           "prior_evidence": "I07 corrected component retained/recompute ratios MI325X .560/.586, L40S .666/.665; no full application promotion.",
           "new_implementation": false,
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "mechanism": "Actual model requests an estash arm in BOTH builds. A retains forward exponents; MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD makes the same forward request call the existing nonretaining launcher and backward reconstructs state. Runtime arm is explicit to prevent vendor defaults silently erasing the comparison.",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1255,6 +1298,7 @@
           "arithmetic_profile": "attn-summary32-tree-v1",
           "arm_scope": "Model A: summary tree. Model B: incumbent attention. Standalone component B still offers left-fold summaries and must not be labeled the model B.",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1288,6 +1332,7 @@
           "timing": "not_run_by_request",
           "mechanism": "Eager scale+mask one pass; writes both intermediates, keeps mandatory +0 add; softcap/plants/sabotage preserve old route.",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1321,6 +1366,7 @@
           "timing": "not_run_by_request",
           "mechanism": "Two eager K/V accumulators share addressing/traversal, each includes all h-then-t terms and signed-zero masked contributions.",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1354,6 +1400,7 @@
           "timing": "not_run_by_request",
           "mechanism": "One eager row owner folds z then writes dS; preserves both stage outputs without a global barrier or recomputation.",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1400,6 +1447,7 @@
           "arithmetic_profile": "norm-lanes8-v1",
           "public_route": "TransformerBlock forward/step/backward and tape; ByteLM transformer training/inference; shared Samba transformer norms",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1431,6 +1479,7 @@
           "timing": "not_run_by_request",
           "mechanism": "First kernel writes original sequential sumsq; second parallelizes each scaled/weighted output cell, retaining exact arithmetic and no extra scalar scratch.",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1463,6 +1512,7 @@
           "timing": "not_run_by_request",
           "mechanism": "One training forward kernel writes both SiLU and gate product with original rounding; existing fused bwd_mul2_silu_backward_kernel consumes identical saved stages.",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1493,6 +1543,7 @@
           "timing": "not_run_by_request",
           "mechanism": "A Q-grid cell also rotates the corresponding KV-head cell where present, sharing its immutable sin/cos pair, all products/adds unchanged.",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1507,7 +1558,6 @@
           "implementation_paths": [
             "transformer/experiments/attention_schedules.mojo",
             "transformer/impl/llama/modeling_llama.mojo",
-            "training/byte_lm.mojo",
             "training/byte_lm.mojo"
           ],
           "candidate_defines": [
@@ -1526,6 +1576,7 @@
           "timing": "not_run_by_request",
           "mechanism": "Skip only final stage-to-decode cache copy/ring update and cache.s increment; capability defaults True and flag defaults OFF.",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1556,6 +1607,7 @@
           "timing": "not_run_by_request",
           "mechanism": "One traversal selects last new token per ring slot and writes both K/V, preserving gather-before-update stream order.",
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1588,6 +1640,7 @@
           "new_implementation": false,
           "inherited_default_enabled": true,
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1634,6 +1687,7 @@
             "metadata": "tape.retained, tape.stage_bytes, tape.profile"
           },
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1680,6 +1734,7 @@
             "metadata": "tape.retained, tape.stage_bytes, tape.profile"
           },
           "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+          "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json",
           "handoff": "attention.json"
         }
       ]
@@ -1779,7 +1834,7 @@
           "remaining": [
             "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
           ],
-          "reason": "Actual source component now replaces the earlier design-only status; the complete model/backward/checkpoint migration remains pending.",
+          "reason": "Selected Mamba-1 prefill/decode, zero-state prefill backward and checkpoint source integration authored; execution-based acceptance remains not run.",
           "modular_ask": null,
           "arithmetic_profile": "mojolearn.neural-ab.affine-prefix.fp32.v2; new same-version graph, previous-version sequential bits need not match.",
           "selected_arm_scope": "Mamba-1 full prefill/decode and zero-state prefill backward affine-prefix numerical profile; public checkpoint and host inference integration.",
@@ -2002,7 +2057,8 @@
           "implemented": [
             "Projection workspace grow-ahead capacity (25%, at most16MiB) retains context ownership and wait-before-replacement.",
             "Explicit Mamba3Block.install_owned_weights creates an immutable copied snapshot; generation-owned fresh forward/backward never trust mutable external pointers; reinstall after optimizer/load mutation invalidates device stages.",
-            "Host implements the same snapshot semantics; export reads installed bytes; pickle stores those bytes and lazily reinstalls a new generation. Binding changes, stale generation, busy/unusable sessions and disabled ownership arm refuse by name. Ordinary borrowed-buffer calls retain byte validation."
+            "Host implements the same snapshot semantics; export reads installed bytes; pickle stores those bytes and lazily reinstalls a new generation. Binding changes, stale generation, busy/unusable sessions and disabled ownership arm refuse by name. Ordinary borrowed-buffer calls retain byte validation.",
+            "Host reports-optional/session-info exports added for shared Python/Samba callers; counters explicitly show no retained device stages."
           ],
           "remaining": [
             "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
@@ -2479,18 +2535,28 @@
           "implementation_status": "wired_draft",
           "implementation_paths": [
             "training/chunked_lm_head_v2.mojo",
-            "training/byte_lm_config.mojo"
+            "training/byte_lm_config.mojo",
+            "training/chunked_lm_head_profile.mojo",
+            "training/chunked_lm_head_gemm_host.mojo",
+            "training/byte_lm.mojo",
+            "training/byte_lm_host.mojo",
+            "training/byte_lm_host_backward.mojo",
+            "bindings/_mojolearn_byte_lm.mojo",
+            "bindings/_mojolearn_byte_lm_host.mojo",
+            "python/mojolearn/_byte_lm_config.py",
+            "python/mojolearn/_byte_lm_host.py",
+            "tools/bench_board_neural.py"
           ],
           "candidate_defines": [
             "MOJOLEARN_NN53_HEAD_CHUNK512=1"
           ],
           "baseline_defines": [],
           "runtime_env": {},
-          "scope": "Existing opt-in chunked head gains separate 512/2048 panel arms versus incumbent 1024. This is a storage/launch extension to the existing profile, not initial head implementation.",
+          "scope": "Public ByteLanguageModelConfig.chunked_lm_head_v2, optional native tenth shape integer and checkpoint profile admit the explicit complete ByteTrainer head in both arms. GPU panels use the selected neural GEMM; bounded pure-host GEMM panels supply the matching v2 loss, dHidden and dWeight graph. Scalar public chunked-head oracles remain a distinct operation. Shared panel flags select 512/1024/2048 storage, and device scratch includes full plus tail dispatcher requirements.",
           "remaining": [
-            "ByteConfig.chunked_lm_head_v2=True in BOTH arms; normal head does not reach these panels.",
-            "Complete old-head-versus-v2 arithmetic/model qualification is not supplied by panel geometry.",
-            "Host/head/loss/gradient and full-model quality remain unrun."
+            "Both arms set chunked_lm_head_v2=True through the actual lm-train-step workload selector. Panel width is storage only, so its profile remains the existing -lmhead-chunk256-v2 identifier.",
+            "The existing full LM board control shape has intrinsic limits; its name full does not establish every intended target workload or corpus coverage.",
+            "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
           ],
           "arms": [
             {
@@ -2700,6 +2766,38 @@
         {
           "id": "NN59",
           "implementation_status": "wired_draft",
+          "implementation_paths": [
+            "training/neural_ab_pointwise.mojo",
+            "training/residual_dropout.mojo",
+            "training/residual_dropout_contract.mojo",
+            "training/residual_dropout_host.mojo",
+            "bindings/residual_dropout_boundary.mojo",
+            "bindings/residual_dropout_boundary_host.mojo",
+            "python/mojolearn/_residual_dropout_impl.py",
+            "python/mojolearn/training.py"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1"
+          ],
+          "baseline_defines": [],
+          "runtime_env": {},
+          "scope": "Public residual_dropout and residual_dropout_backward execute a complete explicit residual/dropout layer with the shared Philox mapping, native shape/finite/probability/stream admission and paired input/residual gradients. NN59 selects fused A versus materialized B on GPU; host uses the same scalar contract. Both native training builders register the operations and Python only passes buffers/metadata.",
+          "remaining": [
+            "Existing transformer dropout refusal is preserved. This is an explicit callable layer; arbitrary CNN/transformer residual-model adoption is an additional experiment.",
+            "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+          ],
+          "arms": [],
+          "default_enabled": false,
+          "compilation": "not_run_by_request",
+          "verification": "not_run_by_request",
+          "identity": "not_run_by_request",
+          "quality": "not_run_by_request",
+          "timing": "not_run_by_request",
+          "handoff": "training.json"
+        },
+        {
+          "id": "NN59",
+          "implementation_status": "wired_draft",
           "default_enabled": false,
           "implementation_paths": [
             "training/residual_dropout_contract.mojo",
@@ -2733,7 +2831,7 @@
             "A": "One forward producer for dropout then rounded residual; one backward producer for dValues and raw-word dResidual.",
             "B": "Dropout temporary plus separate residual addition; backward dropout kernel plus separate gradient copy. CPU baseline uses separate passes."
           },
-          "numeric_contract": "Philox4x32-10 counter=(block low,block high,stream,0), key=(seed low,seed high), word index=(offset+i)%4; 24-bit uniform. Shared pure Mojo FP32 dropout product seam, residual add seam, portable scale. Backward regenerates same mask for identical coordinates.",
+          "numeric_contract": "Philox4x32-10 counter=(block low,block high,stream,0), key=(seed low,seed high), word index=(offset+i)%4; 24-bit uniform. Shared pure Mojo FP32 dropout product seam, residual add seam, portable scale. Backward regenerates same mask for identical coordinates. Probability is explicitly FTZ-normalized before mask comparison in both columns.",
           "admission": [
             "IDENTICAL only; native float32 C-contiguous equal-shape inputs",
             "Finite input/residual/gradient and finite output checked in Mojo",
@@ -2756,39 +2854,8 @@
           "timing": "not_run_by_request",
           "registration_status": "GPU/host builder functions and public training.py exports authored by root; no execution evidence.",
           "selected_arm_programming_remaining": [],
+          "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json",
           "handoff": "residual.json"
-        },
-        {
-          "id": "NN59",
-          "implementation_status": "wired_draft",
-          "implementation_paths": [
-            "training/neural_ab_pointwise.mojo",
-            "training/residual_dropout.mojo",
-            "training/residual_dropout_contract.mojo",
-            "training/residual_dropout_host.mojo",
-            "bindings/residual_dropout_boundary.mojo",
-            "bindings/residual_dropout_boundary_host.mojo",
-            "python/mojolearn/_residual_dropout_impl.py",
-            "python/mojolearn/training.py"
-          ],
-          "candidate_defines": [
-            "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1"
-          ],
-          "baseline_defines": [],
-          "runtime_env": {},
-          "scope": "Public residual_dropout and residual_dropout_backward execute a complete explicit residual/dropout layer with the shared Philox mapping, native shape/finite/probability/stream admission and paired input/residual gradients. NN59 selects fused A versus materialized B on GPU; host uses the same scalar contract. Both native training builders register the operations and Python only passes buffers/metadata.",
-          "remaining": [
-            "Existing transformer dropout refusal is preserved. This is an explicit callable layer; arbitrary CNN/transformer residual-model adoption is an additional experiment.",
-            "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
-          ],
-          "arms": [],
-          "default_enabled": false,
-          "compilation": "not_run_by_request",
-          "verification": "not_run_by_request",
-          "identity": "not_run_by_request",
-          "quality": "not_run_by_request",
-          "timing": "not_run_by_request",
-          "handoff": "training.json"
         }
       ]
     },

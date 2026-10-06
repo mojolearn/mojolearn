@@ -1238,17 +1238,26 @@ class TransformerBlock(NumericModeMixin):
                     "directory it sits in disagree, rebuild it with "
                     "bash bindings/build_transformer.sh"
                 )
-        if want == "identical" and _exports(mod, "transformer_arithmetic_profile"):
+        saved = getattr(self, "_arithmetic_profile", None)
+        saved_mode = getattr(self, "_arithmetic_profile_mode", "identical" if saved else None)
+        if _exports(mod, "transformer_arithmetic_profile"):
             profile = str(mod.transformer_arithmetic_profile())
-            saved = getattr(self, "_arithmetic_profile", None)
-            if saved is not None and saved != profile:
+            if saved is not None and saved_mode == want and saved != profile:
                 raise ValueError(
                     f"mojolearn {type(self).__name__}: saved arithmetic profile {saved!r} "
                     f"does not match binding profile {profile!r}; explicitly construct a new "
                     "block from the weights to migrate versions"
                 )
+            # A caller may explicitly change numeric_mode. Tag the new mode
+            # so its KV state cannot later masquerade as the old mode's bits.
             self._arithmetic_profile = profile
+            self._arithmetic_profile_mode = want
             self._arithmetic_profile_changed = bool(mod.transformer_arithmetic_profile_changed())
+        elif saved is not None:
+            raise ValueError(
+                f"mojolearn {type(self).__name__}: a tagged model requires a binding "
+                "that reports its arithmetic profile; this binary cannot admit the saved version"
+            )
         return mod
 
     def forward(self, x, state=None, *, lengths=None):

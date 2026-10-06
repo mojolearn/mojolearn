@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "kind": "source_integration_inventory",
+  "lane": "gemm_nn53_followup",
+  "branch": "ideas/neural-identical-ab-20261006-r3",
+  "starting_commit": "d39587b1d",
+  "inventory": [
+    {
+      "id": "NN53",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "python/mojolearn/_byte_lm_config.py",
+        "bindings/_mojolearn_byte_lm.mojo",
+        "bindings/_mojolearn_byte_lm_host.mojo",
+        "training/byte_lm_config.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/byte_lm_host_backward.mojo",
+        "training/chunked_lm_head_profile.mojo",
+        "training/chunked_lm_head_gemm_host.mojo",
+        "training/chunked_lm_head_v2.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_byte_lm_impl.py",
+        "python/mojolearn/_byte_lm_config.py",
+        "bindings/_mojolearn_byte_lm.mojo",
+        "bindings/_mojolearn_byte_lm_host.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/byte_lm_host_backward.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": ["MOJOLEARN_NUMERIC_IDENTICAL=1", "MOJOLEARN_NN53_HEAD_CHUNK512=1"],
+          "environment": {},
+          "runtime_settings": {"operation": "lm_chunked_head_v2", "chunked_lm_head_v2": true, "neural_workload": "lm-train-step"}
+        },
+        "baseline": {
+          "compile_defines": ["MOJOLEARN_NUMERIC_IDENTICAL=1"],
+          "environment": {},
+          "runtime_settings": {"operation": "lm_chunked_head_v2", "chunked_lm_head_v2": true, "neural_workload": "lm-train-step"}
+        }
+      },
+      "additional_arm": {"candidate_compile_define": "MOJOLEARN_NN53_HEAD_CHUNK2048=1", "baseline_panel_columns": 1024, "incompatible_with": "MOJOLEARN_NN53_HEAD_CHUNK512"},
+      "public_api": "ByteLanguageModelConfig(..., chunked_lm_head_v2=True); default False preserves existing profile and nine-field ABI.",
+      "configuration_contract": "7/9 legacy native shape integers remain accepted; optional tenth integer is exactly0/1. Python serialized config gains strict boolean field and accepts older dictionaries without it. Profile includes existing -lmhead-chunk256-v2 marker, which names arithmetic, not selected storage-panel width. IDENTICAL only; vocab>=2.",
+      "numeric_contract": "Selected neural GEMM logits; global ascending vocabulary maximum/denominator and dHidden FMA chains; ascending row dWeight FMA chain; existing v2 loss leaves256 and fixed pair tree. Same host/device panel selector. The separately public scalar-logit chunked head oracle is preserved and is not used as this model's wide-K oracle.",
+      "workspace_contract": "One bounded rows*min(vocab,panel) logits panel plus row statistics. GEMM scratch is max of actual full-panel and final-tail dispatcher requirements. Local device loss-fold buffers now wait for their raw-pointer consumers on success/error before release. Full model parameters, gradient outputs and transformer state remain owned as before.",
+      "inference_contract": "Full-vocabulary logits remain full selected-GEMM outputs; chunked choice governs training/loss storage and gradient profile, not output cardinality.",
+      "remaining_integration_limitations": [
+        "New selected host loss uses the normative block-hidden composition; host task scheduling performance is unmeasured.",
+        "Full workload corpus hash, shapes, model settings, cold/repeated boundaries and all quality/performance evidence remain future work.",
+        "No source-only claim of compilation, bitwise identity, quality or performance."
+      ],
+      "execution_evidence": "not_run_by_request"
+    }
+  ],
+  "compilation": "not_run_by_request",
+  "verification": "not_run_by_request",
+  "identity": "not_run_by_request",
+  "quality": "not_run_by_request",
+  "timing": "not_run_by_request"
+}

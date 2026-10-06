@@ -52,17 +52,48 @@ unverified and unmeasured for this work. Full end-to-end campaign recipes are
 also pending; the catalog maps their authoritative source locations and does
 not manufacture dataset hashes, full-size coverage or timing results.
 
-## Metadata-only interface
+## Experiment index and concrete arm selection
+
+The [experiment/file inventory](../../docs/plans/NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md)
+lists all 64 NN cards, the 60 existing I/A/N/F manifests, and additional A/B suites
+found in the checkout. [arms.json](arms.json) records exact selected controls,
+callers, prior experiment relationships and limitations; [experiment_inventory.json](experiment_inventory.json)
+is the combined machine-readable index.
 
 These commands are available for a later user invocation; they only read
-metadata and print a plan. There is deliberately no execute/build/check/run
+metadata or author a concrete arm configuration. There is no execute/build/check/run
 subcommand:
 
 ```sh
 python3 tools/neural_identical_ab.py list
+python3 tools/neural_identical_ab.py list --include-existing
 python3 tools/neural_identical_ab.py show NN52
 python3 tools/neural_identical_ab.py plan NN52 --vendor amd --arm candidate
+python3 tools/neural_identical_ab.py configure NN52 --vendor amd --arm candidate \
+  --output /outside/repo/nn52-a.json --env-output /outside/repo/nn52-a.env
 ```
+
+The optional environment file supplies `MOJOLEARN_MOJO_BUILD_FLAGS` to the
+existing binding builders and clears declared conflicting runtime controls.
+Use one frozen source and the same profile settings for **all** affected GPU
+and host bindings. Select B separately with `--arm baseline`; do not disable
+`is_defined` flags by setting them to zero. NN10 requires an explicit recorded
+`--parameter MOJOLEARN_IDN_NEURAL_FILL_BLOCKS=...` hardware budget; NN53 and NN60
+expose named `--variant` options. The selector does not build or install binaries.
+
+For a future authorized run, the existing neural board accepts the resulting
+JSON with `--neural-ab-config`. It propagates runtime environment and explicit
+operation settings and retains them in the output. This connects new tape,
+owned-snapshot, chunked-head, residual/dropout and MLP-session APIs to selectable
+workloads. A recorded config means **configured**, not proof that a binary was
+built with those flags or that every affected model reached a candidate. The
+full workload's recipe/hash, build provenance, identity and quality requirements
+still apply. Distinct operations use our own arms only and do not invent
+opponent ratios from different boundaries.
+
+The existing I/A/N/F frozen-source executor remains
+[`tools/performance_ideas.py`](../../tools/performance_ideas.py). Its retained
+evidence protocol and historical receipts are not relabeled as NN results.
 
 The idea inventory is in [catalog.json](catalog.json), authored by
 [catalog_source.py](catalog_source.py). Implementation facts live separately

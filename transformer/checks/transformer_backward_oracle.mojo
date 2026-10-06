@@ -8,12 +8,7 @@ the routing document `archive/plans/transformer/IDENTICAL_BACKWARD_PLAN.md`.
 file compiled cleanly on the FIRST attempt alongside the device file and
 `transformer_backward_check.mojo`, whose preflight assertions all passed.
 The check then REFUSED TO CERTIFY, because its `d_out` fixture cannot
-separate a fused multiply-add chain from transformer.experiments.summary_model_host import model_summary_host_backward
-from transformer.experiments.attention_summary_contract import NN20_BALANCED_SUMMARY_TREE
-from transformer.experiments.norm_profile_contract import (
-    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
-)
-from an unfused one and three sabotage
+separate a fused multiply-add chain from an unfused one and three sabotage
 arms are therefore unfalsifiable. Every sentence that says what two runs
 will AGREE ON is still a PREDICTION. The word "identical" appears here only
 as the name of the profile and of the imported functions. It is not a claim
@@ -134,6 +129,11 @@ RISK: WHAT IS LEAST LIKELY TO COMPILE
     is `^`.
 """
 
+from transformer.experiments.summary_model_host import model_summary_host_backward
+from transformer.experiments.attention_summary_contract import NN20_BALANCED_SUMMARY_TREE
+from transformer.experiments.norm_profile_contract import (
+    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+)
 from std.math import min
 from std.memory import bitcast
 

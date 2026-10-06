@@ -8,7 +8,10 @@ HERE = Path(__file__).resolve().parent
 def write_status():
     catalog = json.loads((HERE / "catalog.json").read_text())
     handoffs = {}
-    for path in sorted((HERE / "lanes").glob("*.json")):
+    for name in ("gemm", "attention", "state_cnn", "training", "residual"):
+        path = HERE / "lanes" / (name + ".json")
+        if not path.exists():
+            continue
         lane = json.loads(path.read_text())
         rows = lane.get("experiments", []) + lane.get("cross_owner_experiments", [])
         seen_ids = set()
@@ -35,7 +38,7 @@ def write_status():
                   "- Full dataset/corpus hashes, intrinsic-cap audits, settings, exact workload commands and transitive affected-model coverage must be resolved before a future campaign. No diagnostic fixture substitutes for those recipes.",
                   "- All compilation, same-version four-column identity, model-quality and joint NVIDIA/AMD full-workload A/B measurements are intentionally unrun. Apple does not vote on IDENTICAL timing.", "",
                   "## Source evidence", "",
-                  "The [idea list](../../docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md), [catalog](catalog.json), lane JSON/Markdown files and actual Mojo changes are the retained evidence. There are no newly produced build/test/GPU logs or performance results to cite. The metadata-only [planner](../../tools/neural_identical_ab.py) is authored but unexecuted.", "",
+                  "The [idea list](../../docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md), [experiment/file inventory](../../docs/plans/NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md), [catalog](catalog.json), [concrete arm selectors](arms.json), lane JSON/Markdown files and actual Mojo changes are the retained evidence. There are no newly produced build/test/GPU logs or performance results to cite. The [selector](../../tools/neural_identical_ab.py) authors configurations for the native builders and neural board; it does not execute or verify them.", "",
                   "For cross-owner NN13/NN14, read both GEMM and state/CNN handoffs: the GEMM owner records its boundary; the state/CNN supplement records the actual caller work. This ledger preserves both rather than erasing partial coverage.", ""])
     (HERE / "IMPLEMENTATION_STATUS.md").write_text("\n".join(lines))
     record = dict(schema=1, branch="ideas/neural-identical-ab-20261006-r3",

@@ -1,0 +1,3249 @@
+{
+  "schema": 1,
+  "lane": "attention",
+  "branch": "ideas/neural-identical-ab-20261006-r3",
+  "forked_from_main": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
+  "qualification": "uncompiled_unverified_unmeasured",
+  "experiments": [
+    {
+      "id": "NN17",
+      "title": "64 logical rows interleave four query heads, 16 positions each, sharing the same K/V shared page. Every score/value fold unchanged.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+          "MOJOLEARN_NUMERIC_MODE": "identical",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {
+          "operation": "transformer_configured_forward",
+          "transformer_config": {
+            "batch": 1,
+            "length": 2048,
+            "d_model": 512,
+            "n_heads": 8,
+            "n_kv": 2,
+            "head_dim": 64,
+            "intermediate": 1536
+          }
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1",
+          "MOJOLEARN_NN17_GQA_FOUR_HEADS=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+          "MOJOLEARN_NUMERIC_MODE": "identical",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {
+          "operation": "transformer_configured_forward",
+          "transformer_config": {
+            "batch": 1,
+            "length": 2048,
+            "d_model": 512,
+            "n_heads": 8,
+            "n_kv": 2,
+            "head_dim": 64,
+            "intermediate": 1536
+          }
+        }
+      },
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "_try_launch_shared_heads",
+        "fused_attn_forward_r2_kernel[...,HEAD_GROUP=4]"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "I06",
+          "title": "Two-query-head grouped-query page reuse",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo",
+            "experiments/performance_ideas/I06/native_arms.json",
+            "experiments/performance_ideas/I06/check.mojo",
+            "experiments/performance_ideas/I06/coverage.md",
+            "experiments/performance_ideas/I06/manifest.json",
+            "experiments/performance_ideas/I06/compile_matrix.json"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+              "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1",
+              "MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+              "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Corrected two-head component LOSER: MI325X candidate/baseline 1.211/1.212 and L40S 1.147/1.108.",
+            "Earlier ratio-three GQA case had no distinct arm; earlier bundled kvgrid comparison was confounded.",
+            "NN17 is four-head sharing, not a relabeling of this loss."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "ATTN_RUNTIME_ARMS",
+          "title": "Existing stash, tiling, query residency and retained-state runtime family",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo",
+            "core/step_phase.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "baseline"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Runtime names only take effect in a trial-compiled build; keep per-arm geometry and refusals in evidence."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution",
+          "additional_runtime_values": [
+            "bwd_stash",
+            "fwd_sstash",
+            "bwd_stash_tiled",
+            "stash",
+            "stash_tiled_ztiled",
+            "stash_tiled_pf",
+            "stash_tiled_fgrid_r32",
+            "stash_tiled_fgrid_r32_qres",
+            "stash_tiled_fgrid_r32_qres_pf_kvrecompute",
+            "stash_tiled_fgrid_r32_qres_pf_kvsplit",
+            "stash_tiled_fgrid_r32_qres_pf_zlag",
+            "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+            "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32"
+          ]
+        }
+      ],
+      "limitations": [
+        "Full GQA callers must actually reach HD64/TQ32/QRES/PF non-swizzled arm and GQA ratio divisible by four; otherwise record no-distinct-runtime-arm.",
+        "Retain I06 two-head LOSER evidence; no unchanged repeat is proposed.",
+        "Measure full forward+backward and complete default interactions.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed.",
+        "The ordinary full transformer fixture has GQA ratio one. The explicit saved NN17-full-gqa recipe uses ratio four in both arms and reaches the public configured model; it is a supplemental full block workload, not full LM corpus coverage. Its input hash, branch reach and all execution evidence remain pending."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_IDN_NEURAL_NN03",
+        "MOJOLEARN_IDN_NEURAL_NN04",
+        "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed.",
+      "required_runtime_model": {
+        "head_dim": 64,
+        "query_heads_per_kv_head_multiple": 4,
+        "attention_arm": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+        "four_head_shared_page_admission": true
+      },
+      "workloads": [
+        {
+          "schema": 1,
+          "id": "NN17",
+          "harness": "tools/bench_board_neural.py",
+          "lane": "transformer-forward",
+          "shape": "full",
+          "seed": 7,
+          "runtime": {
+            "operation": "transformer_configured_forward",
+            "transformer_config": {
+              "batch": 1,
+              "length": 2048,
+              "d_model": 512,
+              "n_heads": 8,
+              "n_kv": 2,
+              "head_dim": 64,
+              "intermediate": 1536
+            }
+          },
+          "input_source": "make_inputs: complete declared Gaussian block input and initialized weights, same saved file for both arms",
+          "scope": "supplemental full-block GQA workload; does not replace complete LM corpus training/quality or every affected estimator",
+          "input_hash": "pending_future_fixture_authoring",
+          "execution": "not_run_by_request",
+          "recipe_path": "experiments/neural_identical_ab/workloads/NN17-full-gqa.json"
+        }
+      ]
+    },
+    {
+      "id": "NN18",
+      "title": "A reuses structural K-page bounds. B widens native tiled K-page traversal to the complete key span while retaining identical per-row mask predicates, finite admission and corner replay. Isolates existing masked page skipping without altering default arithmetic.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1",
+          "MOJOLEARN_NN18_DENSE_TILE_CONTROL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled",
+          "MOJOLEARN_NUMERIC_MODE": "identical",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled",
+          "MOJOLEARN_NUMERIC_MODE": "identical",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "nn18_key_tile_bounds",
+        "fused tiled forward/dQ/dKdV key-page loops"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "ATTN_RUNTIME_ARMS",
+          "title": "Existing stash, tiling, query residency and retained-state runtime family",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo",
+            "core/step_phase.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "baseline"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Runtime names only take effect in a trial-compiled build; keep per-arm geometry and refusals in evidence."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution",
+          "additional_runtime_values": [
+            "bwd_stash",
+            "fwd_sstash",
+            "bwd_stash_tiled",
+            "stash",
+            "stash_tiled_ztiled",
+            "stash_tiled_pf",
+            "stash_tiled_fgrid_r32",
+            "stash_tiled_fgrid_r32_qres",
+            "stash_tiled_fgrid_r32_qres_pf_kvrecompute",
+            "stash_tiled_fgrid_r32_qres_pf_kvsplit",
+            "stash_tiled_fgrid_r32_qres_pf_zlag",
+            "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+            "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32"
+          ]
+        },
+        {
+          "id": "ATTN_MASKED_TAIL_REPAIR",
+          "title": "Existing exact omitted-tail replay",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_LEGACY_CORNER=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_REPAIR_MASKED_TAIL=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Historical correctness repair: old legacy arm may refuse supported inputs.",
+            "MOJOLEARN_ATTN_NO_BWD_CORNER and *_SABOTAGE are diagnostic bit-changing arms, excluded from quality-preserving candidates."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        }
+      ],
+      "limitations": [
+        "Compile/identity/quality/timing unrun. Full tiled forward/backward model reach and refusal rate must accompany future measurements.",
+        "More aggressive task compaction is an optional separate variant; this selected arm isolates existing structural tile bounds.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_IDN_NEURAL_NN03",
+        "MOJOLEARN_IDN_NEURAL_NN04",
+        "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed."
+    },
+    {
+      "id": "NN19",
+      "title": "Actual model requests an estash arm in BOTH builds. A retains forward exponents; MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD makes the same forward request call the existing nonretaining launcher and backward reconstructs state. Runtime arm is explicit to prevent vendor defaults silently erasing the comparison.",
+      "implementation_status": "reused_existing",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1",
+          "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused",
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused",
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo",
+        "experiments/performance_ideas/I07/state_cost.mojo",
+        "experiments/performance_ideas/I07/check.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "fused_forward_launch_estash_ran",
+        "fused_backward_launch_estash_ran",
+        "fused_backward_launch_erecomp_report"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "I07",
+          "title": "Retained forward exponents versus backward recomputation",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo",
+            "experiments/performance_ideas/I07/native_arms.json",
+            "experiments/performance_ideas/I07/check.mojo",
+            "experiments/performance_ideas/I07/state_cost.mojo",
+            "experiments/performance_ideas/I07/coverage.md",
+            "experiments/performance_ideas/I07/manifest.json",
+            "experiments/performance_ideas/I07/compile_matrix.json"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1",
+              "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+              "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+              "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Corrected retained/recompute component ratios MI325X .560/.586; L40S .666/.665. No full-model promotion follows.",
+            "Earlier kept_cells=0 in both arms was invalid evidence; retained A must prove positive kept cells, B zero."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "ATTN_V1_PACKED_ESTASH",
+          "title": "Packed retained exponent storage",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+              "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1",
+              "MOJOLEARN_ATTN_V1_PACKED_ESTASH=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+              "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Supported native geometry and finite-regime admission still required."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "ATTN_V1_ALIAS_Y_ESTASH",
+          "title": "Reuse output storage for retained exponents",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1",
+              "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+              "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1",
+              "MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+              "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "The explicit override requests alias storage; source also has inherited vendor default. This baseline compares recompute, not an isolated alias-versus-packed storage experiment.",
+            "Lifetime and allocation reach must be recorded, not inferred from a define."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "ATTN_APPLE_ERECOMP",
+          "title": "Apple gated exponent recomputation",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_APPLE_ERECOMP=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Admission can deny the route; no source define proves execution. Apple timing cannot promote IDENTICAL switches."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        }
+      ],
+      "limitations": [
+        "Both model arms explicitly request the same supported estash schedule. A must report positive kept cells; B forced-recompute must report zero. HD64/QRES/PF/kvgrid and finite-regime reach are required.",
+        "Reuse corrected I07 retained/recompute source and accepted prior receipts. New model source remains uncompiled/unexecuted; full workloads, quality, identity and memory lifetime/retention qualification are unrun.",
+        "Keep earlier no-distinct-arm and confounded evidence separate.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_IDN_NEURAL_NN03",
+        "MOJOLEARN_IDN_NEURAL_NN04",
+        "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed.",
+      "required_native_receipts": {
+        "candidate_kept_cells": "positive",
+        "baseline_kept_cells": 0,
+        "note": "generic harness has no branch counter; these receipts remain required"
+      }
+    },
+    {
+      "id": "NN20",
+      "title": "Actual public transformer/LM forward, backward, trace, prefill and decode select fixed absolute 32-key leaves and anchored adjacent-pair summary merges; common host/device scalar graph and closed-form backward. Native finite/overflow/index admission and versioned model/cache metadata. Projection GEMM profiles compose explicitly; QK is the summary profile scalar chain.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/attention_summary_contract.mojo",
+        "transformer/experiments/attention_summary_tree.mojo",
+        "transformer/experiments/summary_model_contract.mojo",
+        "transformer/experiments/summary_model.mojo",
+        "transformer/experiments/summary_model_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "transformer/checks/transformer_oracle.mojo",
+        "transformer/checks/transformer_backward_oracle.mojo",
+        "transformer/experiments/profile.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "python/mojolearn/_transformer_impl.py",
+        "training/byte_lm_host.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "transformer/checks/transformer_oracle.mojo",
+        "transformer/checks/transformer_backward_oracle.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "summary_attention_forward_row[True]",
+        "summary_attention_rowdot",
+        "summary_attention_dq_cell",
+        "summary_attention_dkdv_cell",
+        "model_summary_forward",
+        "model_summary_backward",
+        "model_summary_host_forward",
+        "model_summary_host_backward"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "ATTENTION_V2",
+          "title": "Prior fixed-tile online summary profile",
+          "implementation_paths": [
+            "transformer/impl/llama/attention_v2.mojo",
+            "transformer/ATTENTION_V2_CONTRACT.md",
+            "transformer/checks/attention_v2_forward_bench.mojo",
+            "transformer/checks/attention_v2_backward_bench.mojo",
+            "transformer/checks/attention_v1_memory_profile_check.mojo",
+            "tools/attention_v2_oracle.py"
+          ],
+          "baseline": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {
+              "operation": "component_driver",
+              "profile": "v1"
+            }
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {
+              "operation": "component_driver",
+              "profile": "v2"
+            }
+          },
+          "limitations": [
+            "Component executable selection only; no claimed public model switch.",
+            "Prior exact fixtures were qualified on Apple/NVIDIA/AMD; retained contract says large-shape memory/speed tradeoff is not promotable.",
+            "NN20 balanced absolute summary tree is a different graph; old qualification and large-shape failures do not qualify NN20."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "ATTN_RUNTIME_ARMS",
+          "title": "Existing stash, tiling, query residency and retained-state runtime family",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo",
+            "core/step_phase.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "baseline"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Runtime names only take effect in a trial-compiled build; keep per-arm geometry and refusals in evidence."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution",
+          "additional_runtime_values": [
+            "bwd_stash",
+            "fwd_sstash",
+            "bwd_stash_tiled",
+            "stash",
+            "stash_tiled_ztiled",
+            "stash_tiled_pf",
+            "stash_tiled_fgrid_r32",
+            "stash_tiled_fgrid_r32_qres",
+            "stash_tiled_fgrid_r32_qres_pf_kvrecompute",
+            "stash_tiled_fgrid_r32_qres_pf_kvsplit",
+            "stash_tiled_fgrid_r32_qres_pf_zlag",
+            "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+            "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32"
+          ]
+        },
+        {
+          "id": "TRANSFORMER_HOST_FUSED_ATTENTION",
+          "title": "Host staged versus fused attention",
+          "implementation_paths": [
+            "transformer/checks/transformer_oracle.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_TRANSFORMER_HOST_STAGED_ATTENTION=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Incumbent shortcut disabled under NN03/04; NN20 selects its own coherent host graph first."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        }
+      ],
+      "limitations": [
+        "No compilation, four-column identity, derivative/task quality or timing admission has been run. Existing attention_v2 large-shape failures remain visible and do not qualify this new graph.",
+        "Public arm refuses softcap, INT15 and legacy planted-score calls. Dropout/nondefault-options training remain the existing API refusal.",
+        "One owner per row is a concrete graph implementation, not a throughput claim; cooperative/tree scheduling is an optional later variant.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "attn-summary32-tree-v1",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed.",
+      "model_baseline": "incumbent attention graph; standalone left-fold summary baseline is a different component comparison"
+    },
+    {
+      "id": "NN21",
+      "title": "Eager scale+mask one pass; writes both intermediates, keeps mandatory +0 add; softcap/plants/sabotage preserve old route.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager",
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN21_SCALE_MASK=1"
+        ],
+        "environment": {
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager",
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "score_scale_mask_kernel"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "ATTN_MASKED_TAIL_REPAIR",
+          "title": "Existing exact omitted-tail replay",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_LEGACY_CORNER=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_REPAIR_MASKED_TAIL=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Historical correctness repair: old legacy arm may refuse supported inputs.",
+            "MOJOLEARN_ATTN_NO_BWD_CORNER and *_SABOTAGE are diagnostic bit-changing arms, excluded from quality-preserving candidates."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        }
+      ],
+      "limitations": [
+        "Eager/fallback scope only; an automatic fused-only full model run cannot establish candidate reach.",
+        "Full affected model E2E, task quality, vendor+host bits and performance remain unrun.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed."
+    },
+    {
+      "id": "NN22",
+      "title": "Two eager K/V accumulators share addressing/traversal, each includes all h-then-t terms and signed-zero masked contributions.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager",
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN22_EAGER_DKDV_PAIR=1"
+        ],
+        "environment": {
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager",
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "eager_dkdv_pair_kernel"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "ATTN_RUNTIME_ARMS",
+          "title": "Existing stash, tiling, query residency and retained-state runtime family",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo",
+            "core/step_phase.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "baseline"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Runtime names only take effect in a trial-compiled build; keep per-arm geometry and refusals in evidence."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution",
+          "additional_runtime_values": [
+            "bwd_stash",
+            "fwd_sstash",
+            "bwd_stash_tiled",
+            "stash",
+            "stash_tiled_ztiled",
+            "stash_tiled_pf",
+            "stash_tiled_fgrid_r32",
+            "stash_tiled_fgrid_r32_qres",
+            "stash_tiled_fgrid_r32_qres_pf_kvrecompute",
+            "stash_tiled_fgrid_r32_qres_pf_kvsplit",
+            "stash_tiled_fgrid_r32_qres_pf_zlag",
+            "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+            "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32"
+          ]
+        },
+        {
+          "id": "ATTN_LAUNCH_GEOMETRY",
+          "title": "Existing explicit forward/dQ/dKdV and retained-exponent tile arms",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_TILE_RULE_OFF=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Explicit overrides can suppress the hardware/row-rule dispatcher. Preserve each experiment as a separate arm; do not bundle all listed flags."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution",
+          "separate_compile_options": [
+            "MOJOLEARN_ATTN_FWD_TQ16=1",
+            "MOJOLEARN_ATTN_FWD_TQ_RULE=1",
+            "MOJOLEARN_ATTN_DQ_TQ16=1",
+            "MOJOLEARN_ATTN_DQ_TQ32=1",
+            "MOJOLEARN_ATTN_DQ_TQ64=1",
+            "MOJOLEARN_ATTN_DKDV_BJ16=1",
+            "MOJOLEARN_ATTN_DKDV_BJ32=1",
+            "MOJOLEARN_ATTN_ES_TQ8=1",
+            "MOJOLEARN_ATTN_ES_TQ16=1"
+          ]
+        }
+      ],
+      "limitations": [
+        "Eager/fallback scope only; an automatic fused-only full model run cannot establish candidate reach.",
+        "Full affected model E2E, task quality, vendor+host bits and performance remain unrun.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed."
+    },
+    {
+      "id": "NN23",
+      "title": "One eager row owner folds z then writes dS; preserves both stage outputs without a global barrier or recomputation.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager",
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN23_ROWDOT_DS=1"
+        ],
+        "environment": {
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager",
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "eager_rowdot_ds_kernel"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "ATTN_RUNTIME_ARMS",
+          "title": "Existing stash, tiling, query residency and retained-state runtime family",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo",
+            "core/step_phase.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "baseline"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Runtime names only take effect in a trial-compiled build; keep per-arm geometry and refusals in evidence."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution",
+          "additional_runtime_values": [
+            "bwd_stash",
+            "fwd_sstash",
+            "bwd_stash_tiled",
+            "stash",
+            "stash_tiled_ztiled",
+            "stash_tiled_pf",
+            "stash_tiled_fgrid_r32",
+            "stash_tiled_fgrid_r32_qres",
+            "stash_tiled_fgrid_r32_qres_pf_kvrecompute",
+            "stash_tiled_fgrid_r32_qres_pf_kvsplit",
+            "stash_tiled_fgrid_r32_qres_pf_zlag",
+            "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+            "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32"
+          ]
+        },
+        {
+          "id": "ATTN_APPLE_MMA",
+          "title": "Apple dKdV and zdot matrix-instruction trials",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_DKDV_AMMA=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Apple never votes IDENTICAL performance. Prior zdot M4 component was slower: 2119 ms versus 1808\u20131860 ms per step."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution",
+          "separate_compile_options": [
+            "MOJOLEARN_ATTN_STASH_ZDOT_AMMA=1"
+          ]
+        }
+      ],
+      "limitations": [
+        "Eager/fallback scope only; an automatic fused-only full model run cannot establish candidate reach.",
+        "Full affected model E2E, task quality, vendor+host bits and performance remain unrun.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed."
+    },
+    {
+      "id": "NN24",
+      "title": "Actual transformer RMS forward/backward, residual RMS, q/k RMS and RMS/centered LayerNorm inference use common eight logical FMA/sum chains and fixed adjacent pair tree; one profile label across host/GPU/decode/checkpoint. Parameter reductions continue through the selected neural GEMM profile.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN24_NORM_LANES8=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/norm_profile_contract.mojo",
+        "transformer/experiments/norm_profile.mojo",
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "transformer/checks/transformer_oracle.mojo",
+        "transformer/checks/transformer_backward_oracle.mojo",
+        "transformer/experiments/profile.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "python/mojolearn/_transformer_impl.py",
+        "training/host/samba_ops_oracle.mojo",
+        "training/byte_lm_host.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "transformer/checks/transformer_oracle.mojo",
+        "transformer/checks/transformer_backward_oracle.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "norm_profile_dot[8]",
+        "_sum[8]",
+        "_square[8]",
+        "llama_rms_norm_kernel",
+        "llama_layer_norm_kernel",
+        "bwd_norm_dot_kernel",
+        "bwd_norm_dh_dot_kernel"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "BWD_RMS_DH_DOT_FUSION",
+          "title": "Existing RMS backward dh and row-dot fusion",
+          "implementation_paths": [
+            "transformer/checks/transformer_backward.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_BWD_NORM_SPLIT_TRIAL=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_BWD_NORM_FUSED_TRIAL=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Forced fused source option now actually forces fusion; prior explicit arm still obeyed exact-size thresholds."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "BWD_NORM2_RESIDUAL_FUSION",
+          "title": "Post-attention RMS backward and residual gradient fusion",
+          "implementation_paths": [
+            "transformer/checks/transformer_backward.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_BWD_NORM2_RESIDUAL_SPLIT_TRIAL=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_BWD_NORM2_RESIDUAL_FUSED_TRIAL=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "RESIDUAL1_NORM2_FUSION",
+          "title": "Attention residual plus post-attention RMS forward",
+          "implementation_paths": [
+            "transformer/impl/llama/modeling_llama.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_FUSE_RESIDUAL1_NORM2=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Apple already has an inherited admitted default under its working-set cap; explicit force is not a distinct Apple arm everywhere. NN24 migrated both spellings."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "RESIDUAL2_NEXT_NORM",
+          "title": "Cross-layer residual plus next RMS norm",
+          "implementation_paths": [
+            "transformer/impl/llama/modeling_llama.mojo",
+            "training/byte_lm.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Existing Apple-specific working-set rule, not a new default."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        }
+      ],
+      "limitations": [
+        "Compilation, identity, task/gradient quality and full-workload timings unrun.",
+        "Extended-options LayerNorm training remains the existing explicit refusal. Standalone LN derivative helper is an optional component, not newly advertised public training.",
+        "Independent sequence/Mamba norm graphs remain their existing versions; transformer-side Samba norms are migrated together by root.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "norm-lanes8-v1",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed.",
+      "host_and_device_profile_paths": [
+        "transformer/experiments/norm_profile_contract.mojo",
+        "transformer/experiments/profile.mojo",
+        "training/neural_arithmetic_profile.mojo",
+        "transformer/checks/transformer_oracle.mojo",
+        "transformer/checks/transformer_backward_oracle.mojo",
+        "training/byte_lm_host.mojo",
+        "training/host/samba_ops_oracle.mojo"
+      ]
+    },
+    {
+      "id": "NN25",
+      "title": "First kernel writes original sequential sumsq; second parallelizes each scaled/weighted output cell, retaining exact arithmetic and no extra scalar scratch.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN25_RMS_SPLIT_SCALE=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "rms_sumsq_kernel",
+        "rms_parallel_scale_kernel"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "BWD_RMS_DH_DOT_FUSION",
+          "title": "Existing RMS backward dh and row-dot fusion",
+          "implementation_paths": [
+            "transformer/checks/transformer_backward.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_BWD_NORM_SPLIT_TRIAL=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_BWD_NORM_FUSED_TRIAL=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Forced fused source option now actually forces fusion; prior explicit arm still obeyed exact-size thresholds."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "BWD_RMS_SHAPE_RULE_REMOVAL",
+          "title": "Remove benchmark-dimension backward RMS dispatcher",
+          "implementation_paths": [
+            "transformer/checks/transformer_backward.mojo",
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Old Apple m>=8192,dm>=768 / NVIDIA m>=32768,dm>=768 kept only in explicit historical B.",
+            "A uses row grid >= 2 * reported SM/CU; unknown hardware splits. Existing fixed-order arithmetic is unchanged.",
+            "New source is uncompiled/unverified/unmeasured. Must time neighboring sizes and one non-board full dataset on both voting vendors before a performance claim.",
+            "The removed rule also governed FAST with AFN_LM_BWD_FUSE enabled; no new NN switch enables FAST."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "STEP_GLUE_ROWS",
+          "title": "Existing RMS launch row geometry",
+          "implementation_paths": [
+            "core/step_glue.mojo",
+            "transformer/impl/llama/modeling_llama.mojo",
+            "transformer/checks/transformer_backward.mojo",
+            "checks/kernel_matrix.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_STEP_GLUE_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_STEP_GLUE_ARM": "shipped"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_STEP_GLUE_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_STEP_GLUE_ARM": "rows16"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Additional separate choices rows8 and rows4; rows tokens can compose with optskip/noshadow in documented parser order.",
+            "Some columns have inherited shipped rows; compare explicit metadata, not an assumed all-vendor default."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        }
+      ],
+      "limitations": [
+        "RMSNorm launcher scope; existing fused residual-norm and non-RMSNorm variants remain outside this arm.",
+        "Repeated scalar div/rsqrt in flat cell kernel may regress; record loss and full operation timing.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed."
+    },
+    {
+      "id": "NN26",
+      "title": "One training forward kernel writes both SiLU and gate product with original rounding; existing fused bwd_mul2_silu_backward_kernel consumes identical saved stages.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN26_TRAIN_SWIGLU=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "training_swiglu_kernel",
+        "bwd_gated_silu_kernel"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "SWIGLU_FORWARD_ONLY",
+          "title": "Existing forward-only SiLU multiply fusion",
+          "implementation_paths": [
+            "transformer/impl/llama/modeling_llama.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [],
+            "environment": {
+              "MOJOLEARN_SWIGLU_FUSED": "0"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {
+              "MOJOLEARN_SWIGLU_FUSED": "1"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "No saved silu intermediate: requires forward_only; NN26 separately implements training storage."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "BWD_GATED_SILU_FUSION",
+          "title": "Existing backward gated SiLU fusion",
+          "implementation_paths": [
+            "transformer/checks/transformer_backward.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_BWD_GATED_SILU_SPLIT_TRIAL=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_BWD_GATED_SILU_FUSED_TRIAL=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        }
+      ],
+      "limitations": [
+        "Plain gated SiLU training only; bias/GELU/ungated/forward-only calls preserve old routes.",
+        "Saved sigmoid/derivative extension is not implemented; this arm reuses existing paired backward and existing SiLU saved stage.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed.",
+      "required_runtime_model": {
+        "forward_only": false,
+        "gated_mlp": true,
+        "activation": "SiLU",
+        "bias_activation_fusion": false
+      }
+    },
+    {
+      "id": "NN27",
+      "title": "A Q-grid cell also rotates the corresponding KV-head cell where present, sharing its immutable sin/cos pair, all products/adds unchanged.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN27_QK_ROPE_PAIR=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "transformer-forward or lm-forward; full saved affected-estimator recipes still required"
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "qk_rope_pair_kernel"
+      ],
+      "legacy_experiments": [],
+      "limitations": [
+        "All compilation/identity/quality/timing unrun. Session-wide cross-layer RoPE ownership and scan elision are optional separate variants.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed."
+    },
+    {
+      "id": "NN28",
+      "title": "Skip only final stage-to-decode cache copy/ring update and cache.s increment; capability defaults True and flag defaults OFF.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN28_DEAD_TRAINING_CACHE=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "caller_paths": [
+        "training/byte_lm.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "llama_attention_forward(retain_kv_cache=False)"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "IDN_LLAMA_REFUSE_BATCH",
+          "title": "Batch ordered nonfinite refusals",
+          "implementation_paths": [
+            "transformer/impl/llama/modeling_llama.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Inherited IDENTICAL default; retains first refusal ordering."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "IDN_ATTN_CACHE_NOWAIT",
+          "title": "Omit redundant same-stream cache wait",
+          "implementation_paths": [
+            "transformer/impl/llama/modeling_llama.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Alias B flag MOJOLEARN_ATTN_CACHE_WAIT=1; inherited IDENTICAL default."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        }
+      ],
+      "limitations": [
+        "Root wired the four _byte_forward_loss full-prefill calls with explicit empty-cache reset and retain_kv_cache=False under NN28. All backward and trace stages remain populated.",
+        "Compilation/identity/quality/timing unrun; broader owners are optional extension.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed.",
+      "required_runtime_model": {
+        "caller": "_byte_forward_loss",
+        "pos0": 0,
+        "cache_s_before_call": 0,
+        "retain_kv_cache": false
+      }
+    },
+    {
+      "id": "NN29",
+      "title": "One traversal selects last new token per ring slot and writes both K/V, preserving gather-before-update stream order.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "transformer_windowed_forward",
+          "transformer_window": 256,
+          "caller_workload": "transformer-forward on full saved x; explicit consumed window cache, zero logical position each repeat"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN29_RING_PAIR=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "transformer_windowed_forward",
+          "transformer_window": 256,
+          "caller_workload": "transformer-forward on full saved x; explicit consumed window cache, zero logical position each repeat"
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "kv_ring_pair_kernel"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "IDN_ATTN_CACHE_NOWAIT",
+          "title": "Omit redundant same-stream cache wait",
+          "implementation_paths": [
+            "transformer/impl/llama/modeling_llama.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Alias B flag MOJOLEARN_ATTN_CACHE_WAIT=1; inherited IDENTICAL default."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        }
+      ],
+      "limitations": [
+        "Compilation/identity/quality/timing unrun. Direct-to-final projection/cache layout and multi-request batching are optional broader variants.",
+        "Both arms use explicit window=256 model semantics, adjustable through the frozen full-workload recipe, never a hardware/benchmark dimension dispatch.",
+        "Model/harness consumes saved K/V ring outputs; carried-state decode and nonzero starting-position continuation still require separate full-workload recipes.",
+        "Existing window=0 comparator is deliberately not run for this operation; qualification remains pending matching window/cache reference.",
+        "Do not combine a dead-cache NN28 caller with an experiment claiming ring-commit reach.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed."
+    },
+    {
+      "id": "NN30",
+      "title": "Existing production backward passes a read-only sub-buffer of incoming gradient; traced/materialized calls retain copies.",
+      "implementation_status": "reused_existing",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "model_default",
+          "caller_workload": "lm-train-step (and all other affected transformer/Samba training recipes); forward-only board execution does not cover this candidate"
+        }
+      },
+      "implementation_paths": [
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "llama_decoder_layer_backward_stages: IDN_BWD_ENTRY_ALIAS"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "IDN_ATTN_SCAN_CACHE",
+          "title": "Reuse finite-scan scratch",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Inherited IDENTICAL default; ALL_OFF disables it. No new promotion."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "IDN_ATTN_BWD_SCAN_REUSE",
+          "title": "Reuse admitted forward finite-scan result",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Inherited IDENTICAL default; ALL_OFF disables it. No new promotion."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "IDN_ATTN_SCRATCH_CACHE",
+          "title": "Retain attention scratch owners",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Inherited IDENTICAL default; ALL_OFF disables it. No new promotion."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "IDN_ATTN_ONE_FLAG_WAIT",
+          "title": "Share scan/status completion wait",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Inherited IDENTICAL default; ALL_OFF disables it. No new promotion."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "IDN_BWD_ENTRY_ALIAS",
+          "title": "Read-only incoming-gradient view",
+          "implementation_paths": [
+            "transformer/checks/transformer_backward.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF=1"
+            ],
+            "environment": {},
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {},
+            "runtime": {}
+          },
+          "limitations": [
+            "Inherited IDENTICAL default; traced/materialized paths retain copies; ALL_OFF disables."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        }
+      ],
+      "limitations": [
+        "Existing IDN_BWD_ENTRY_ALIAS remains shipped ON; ALL_OFF disables it. No new default was promoted. Reuse accepted existing receipts for unchanged source.",
+        "Further alias/ownership transfer is an optional broader variant.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed."
+    },
+    {
+      "id": "NN31",
+      "title": "Public native tape chooses actual retain versus stage release/replay from allocated stage bytes, activation budget and optional shape-derived replay cost per byte. Both host and GPU use the same selection policy; original native ledger also supports shared layer ownership and refuses resets while any ticket is outstanding.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "transformer_forward_vjp_tape",
+          "activation_budget_bytes": 536870912,
+          "minimum_replay_ops_per_byte": 0,
+          "caller_workload": "transformer-forward full saved x; VJP cotangent is the same immutable full x; no optimizer/loss",
+          "expect_retained": false
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN31_BOUNDED_CHECKPOINTS=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "transformer_forward_vjp_tape",
+          "activation_budget_bytes": 536870912,
+          "minimum_replay_ops_per_byte": 0,
+          "caller_workload": "transformer-forward full saved x; VJP cotangent is the same immutable full x; no optimizer/loss",
+          "expect_retained": true
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/checkpoint_contract.mojo",
+        "training/neural_attention_owner.mojo",
+        "transformer/host/attention_tape.mojo",
+        "transformer/experiments/profile.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "python/mojolearn/_transformer_impl.py"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "training/neural_attention_owner.mojo",
+        "transformer/host/attention_tape.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "transformer/checks/transformer_oracle.mojo",
+        "transformer/checks/transformer_backward_oracle.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "attention_checkpoint_retain",
+        "BorrowedAttentionTape",
+        "HostAttentionTape"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "TRANSFORMER_SESSION_REUSE",
+          "title": "Existing public native session and fresh-prefill reuse",
+          "implementation_paths": [
+            "python/mojolearn/_transformer_impl.py",
+            "bindings/_mojolearn_transformer.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [],
+            "environment": {
+              "MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {
+              "MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "0"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Cold construction and repeated calls are different boundaries; saved tape API explicitly requires its native owner."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution",
+          "separate_runtime_options": {
+            "MOJOLEARN_TRANSFORMER_SESSION_FRESH": [
+              "0",
+              "1"
+            ],
+            "MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS": [
+              "0",
+              "1"
+            ],
+            "MOJOLEARN_TRANSFORMER_STAGE_RESET": [
+              "0",
+              "1"
+            ],
+            "MOJOLEARN_TRANSFORMER_RETAIN_MB": [
+              "0",
+              "512"
+            ]
+          },
+          "separate_compile_options": [
+            "MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER=1",
+            "MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY=1"
+          ]
+        }
+      ],
+      "limitations": [
+        "No compilation, stale-ticket/failure-lifetime execution, four-column identity, quality, memory-capacity measurement or timing has been run.",
+        "Chosen public scope is default FP32 IDENTICAL zero-state prefill, including sliding windows. Nondefault options, dropout, INT15 and carried-state training remain explicit refusals.",
+        "Per-block activation budget covers retained forward buffers including GEMM workspace. Immutable input/weight snapshots, transient forward/backward storage and process caches are outside that bound.",
+        "Multi-layer global budget scheduling and direct ByteTrainer/Samba optimizer adoption are optional broader integrations; the chosen public TransformerBlock model route is implemented.",
+        "Candidate must fit the explicitly frozen retention budget; otherwise harness refuses expected retained=true. Raising a budget requires a new recipe and retained memory evidence.",
+        "Native retained metadata is recorded; ordinary forward quality does not qualify the VJP, stale-owner behavior or full model training.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed.",
+      "optional_policy_subarms": [
+        {
+          "name": "budget_miss_replay",
+          "compile_defines": [
+            "MOJOLEARN_NN31_BOUNDED_CHECKPOINTS=1"
+          ],
+          "runtime": {
+            "operation": "transformer_forward_vjp_tape",
+            "activation_budget_bytes": 0,
+            "minimum_replay_ops_per_byte": 0,
+            "caller_workload": "transformer-forward full saved x; VJP cotangent is the same immutable full x; no optimizer/loss",
+            "expect_retained": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "NN32",
+      "title": "GPU borrowed tape lives in existing TransformerSession; host owns matching native snapshots. Actual forward stages are retained under A or released and recomputed under B before the same VJP. Session cookie and forward/input/weight/config epoch checks enforce single use. Mutation/other calls invalidate; close of an old ticket cannot discard a newer tape. Failure clears state; no Python tensor comparison or numerical work.",
+      "implementation_status": "wired_draft",
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "transformer_forward_vjp_tape",
+          "activation_budget_bytes": 536870912,
+          "minimum_replay_ops_per_byte": 0,
+          "caller_workload": "transformer-forward full saved x; VJP cotangent is the same immutable full x; no optimizer/loss",
+          "expect_retained": false
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN32_RETAIN_FORWARD=1"
+        ],
+        "environment": {
+          "MOJOLEARN_NUMERIC_MODE": "identical"
+        },
+        "runtime": {
+          "operation": "transformer_forward_vjp_tape",
+          "activation_budget_bytes": 536870912,
+          "minimum_replay_ops_per_byte": 0,
+          "caller_workload": "transformer-forward full saved x; VJP cotangent is the same immutable full x; no optimizer/loss",
+          "expect_retained": true
+        }
+      },
+      "implementation_paths": [
+        "transformer/experiments/checkpoint_contract.mojo",
+        "training/neural_attention_owner.mojo",
+        "transformer/host/attention_tape.mojo",
+        "transformer/experiments/profile.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "python/mojolearn/_transformer_impl.py"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "training/neural_attention_owner.mojo",
+        "transformer/host/attention_tape.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "transformer/checks/transformer_oracle.mojo",
+        "transformer/checks/transformer_backward_oracle.mojo",
+        "tools/bench_board_neural.py"
+      ],
+      "kernels": [
+        "BorrowedAttentionTape",
+        "HostAttentionTape",
+        "transformer_session_forward_tape_binding",
+        "transformer_session_backward_tape_binding"
+      ],
+      "legacy_experiments": [
+        {
+          "id": "I07",
+          "title": "Retained forward exponents versus backward recomputation",
+          "implementation_paths": [
+            "transformer/impl/llama/fused_attention.mojo",
+            "experiments/performance_ideas/I07/native_arms.json",
+            "experiments/performance_ideas/I07/check.mojo",
+            "experiments/performance_ideas/I07/state_cost.mojo",
+            "experiments/performance_ideas/I07/coverage.md",
+            "experiments/performance_ideas/I07/manifest.json",
+            "experiments/performance_ideas/I07/compile_matrix.json"
+          ],
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1",
+              "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+              "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_ATTN_ARM_TRIAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+              "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Corrected retained/recompute component ratios MI325X .560/.586; L40S .666/.665. No full-model promotion follows.",
+            "Earlier kept_cells=0 in both arms was invalid evidence; retained A must prove positive kept cells, B zero."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution"
+        },
+        {
+          "id": "TRANSFORMER_SESSION_REUSE",
+          "title": "Existing public native session and fresh-prefill reuse",
+          "implementation_paths": [
+            "python/mojolearn/_transformer_impl.py",
+            "bindings/_mojolearn_transformer.mojo"
+          ],
+          "baseline": {
+            "compile_defines": [],
+            "environment": {
+              "MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1"
+            },
+            "runtime": {}
+          },
+          "candidate": {
+            "compile_defines": [],
+            "environment": {
+              "MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "0"
+            },
+            "runtime": {}
+          },
+          "limitations": [
+            "Cold construction and repeated calls are different boundaries; saved tape API explicitly requires its native owner."
+          ],
+          "evidence_status": "historical_source_record_only_no_new_execution",
+          "separate_runtime_options": {
+            "MOJOLEARN_TRANSFORMER_SESSION_FRESH": [
+              "0",
+              "1"
+            ],
+            "MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS": [
+              "0",
+              "1"
+            ],
+            "MOJOLEARN_TRANSFORMER_STAGE_RESET": [
+              "0",
+              "1"
+            ],
+            "MOJOLEARN_TRANSFORMER_RETAIN_MB": [
+              "0",
+              "512"
+            ]
+          },
+          "separate_compile_options": [
+            "MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER=1",
+            "MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY=1"
+          ]
+        }
+      ],
+      "limitations": [
+        "No compilation, stale-ticket/failure-lifetime execution, four-column identity, quality, memory-capacity measurement or timing has been run.",
+        "Chosen public scope is default FP32 IDENTICAL zero-state prefill, including sliding windows. Nondefault options, dropout, INT15 and carried-state training remain explicit refusals.",
+        "Per-block activation budget covers retained forward buffers including GEMM workspace. Immutable input/weight snapshots, transient forward/backward storage and process caches are outside that bound.",
+        "Multi-layer global budget scheduling and direct ByteTrainer/Samba optimizer adoption are optional broader integrations; the chosen public TransformerBlock model route is implemented.",
+        "Candidate must fit the explicitly frozen retention budget; otherwise harness refuses expected retained=true. Raising a budget requires a new recipe and retained memory evidence.",
+        "Native retained metadata is recorded; ordinary forward quality does not qualify the VJP, stale-owner behavior or full model training.",
+        "Source-only by user request: compilation, host/NVIDIA/AMD/Apple identity, independent quality, timing, neighboring shapes, non-board workload and full affected-estimator coverage have not been executed."
+      ],
+      "required_mode": "identical",
+      "incompatible_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "define_semantics": "Mojo is_defined tests presence: omit disabled flags; NAME=0 still defines a flag.",
+      "profile": "incumbent arithmetic; scheduling/storage only",
+      "qualification": "uncompiled_unverified_unmeasured",
+      "new_default_promoted": false,
+      "serialized_model_and_state": "Public transformer checkpoint/cache tags include arithmetic profile; live tapes refuse serialization. Scheduling-only flags do not alter the arithmetic profile.",
+      "coverage_evidence": "Source call connections only; no loaded-binary attestation or kernel execution observed.",
+      "optional_policy_subarms": [
+        {
+          "name": "budget_miss_replay",
+          "compile_defines": [
+            "MOJOLEARN_NN32_RETAIN_FORWARD=1"
+          ],
+          "runtime": {
+            "operation": "transformer_forward_vjp_tape",
+            "activation_budget_bytes": 0,
+            "minimum_replay_ops_per_byte": 0,
+            "caller_workload": "transformer-forward full saved x; VJP cotangent is the same immutable full x; no optimizer/loss",
+            "expect_retained": false
+          }
+        }
+      ]
+    }
+  ],
+  "source_integration_corrections": [
+    "NN19 now requests the same explicit estash schedule in both arms so vendor defaults cannot silently erase the comparison.",
+    "NN20/24 imports moved out of three module docstrings into real imports after source-call tracing found the insertion error.",
+    "Arithmetic profile metadata tags actual FAST versus IDENTICAL binding mode and refuses saved model/cache mismatches.",
+    "Removed exact benchmark-size RMS backward default dispatch; isolated historical B retained for neighboring/non-board full-workload A/B."
+  ],
+  "harness_contract": {
+    "path": "tools/bench_board_neural.py",
+    "selector_argument": "--neural-ab-config <selected-json>",
+    "configuration_fields": [
+      "id",
+      "arm",
+      "mode",
+      "compile_defines",
+      "environment",
+      "environment_unset",
+      "runtime"
+    ],
+    "requested_flags_are_not_binary_evidence": true,
+    "configured_vs_executed": "ready receipt holds configuration; round receipt marks actual public operation completion; unobserved kernel branches remain explicitly unproven",
+    "build_environment": "Selector build metadata only; harness does not build or attest installed binaries.",
+    "experimental_opponents": "Nondefault operations require ours-only until a matched opponent operation exists.",
+    "full_workloads": "Saved entire input is used without new caps. Ordinary board routes do not prove every affected estimator or every conditional kernel branch.",
+    "cold_boundary": "Model construction, weights/native owner installation, synchronization and consumed outputs are recorded in preparation/cold-total; dataset creation/loading excluded and stated separately."
+  },
+  "not_run": [
+    "compilation",
+    "verification",
+    "static_checkers",
+    "syntax_checks",
+    "tests",
+    "candidate_execution",
+    "identity",
+    "quality",
+    "timing"
+  ],
+  "log_policy": "Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output.",
+  "existing_experiments": [
+    {
+      "id": "I06",
+      "title": "Two-query-head grouped-query page reuse",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo",
+        "experiments/performance_ideas/I06/native_arms.json",
+        "experiments/performance_ideas/I06/check.mojo",
+        "experiments/performance_ideas/I06/coverage.md",
+        "experiments/performance_ideas/I06/manifest.json",
+        "experiments/performance_ideas/I06/compile_matrix.json"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1",
+          "MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {}
+      },
+      "limitations": [
+        "Corrected two-head component LOSER: MI325X candidate/baseline 1.211/1.212 and L40S 1.147/1.108.",
+        "Earlier ratio-three GQA case had no distinct arm; earlier bundled kvgrid comparison was confounded.",
+        "NN17 is four-head sharing, not a relabeling of this loss."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "I07",
+      "title": "Retained forward exponents versus backward recomputation",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo",
+        "experiments/performance_ideas/I07/native_arms.json",
+        "experiments/performance_ideas/I07/check.mojo",
+        "experiments/performance_ideas/I07/state_cost.mojo",
+        "experiments/performance_ideas/I07/coverage.md",
+        "experiments/performance_ideas/I07/manifest.json",
+        "experiments/performance_ideas/I07/compile_matrix.json"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1",
+          "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {}
+      },
+      "limitations": [
+        "Corrected retained/recompute component ratios MI325X .560/.586; L40S .666/.665. No full-model promotion follows.",
+        "Earlier kept_cells=0 in both arms was invalid evidence; retained A must prove positive kept cells, B zero."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "ATTN_V1_PACKED_ESTASH",
+      "title": "Packed retained exponent storage",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1",
+          "MOJOLEARN_ATTN_V1_PACKED_ESTASH=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {}
+      },
+      "limitations": [
+        "Supported native geometry and finite-regime admission still required."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "ATTN_V1_ALIAS_Y_ESTASH",
+      "title": "Reuse output storage for retained exponents",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1",
+          "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1",
+          "MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+          "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+        },
+        "runtime": {}
+      },
+      "limitations": [
+        "The explicit override requests alias storage; source also has inherited vendor default. This baseline compares recompute, not an isolated alias-versus-packed storage experiment.",
+        "Lifetime and allocation reach must be recorded, not inferred from a define."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "ATTENTION_V2",
+      "title": "Prior fixed-tile online summary profile",
+      "implementation_paths": [
+        "transformer/impl/llama/attention_v2.mojo",
+        "transformer/ATTENTION_V2_CONTRACT.md",
+        "transformer/checks/attention_v2_forward_bench.mojo",
+        "transformer/checks/attention_v2_backward_bench.mojo",
+        "transformer/checks/attention_v1_memory_profile_check.mojo",
+        "tools/attention_v2_oracle.py"
+      ],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {
+          "operation": "component_driver",
+          "profile": "v1"
+        }
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {
+          "operation": "component_driver",
+          "profile": "v2"
+        }
+      },
+      "limitations": [
+        "Component executable selection only; no claimed public model switch.",
+        "Prior exact fixtures were qualified on Apple/NVIDIA/AMD; retained contract says large-shape memory/speed tradeoff is not promotable.",
+        "NN20 balanced absolute summary tree is a different graph; old qualification and large-shape failures do not qualify NN20."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "ATTN_RUNTIME_ARMS",
+      "title": "Existing stash, tiling, query residency and retained-state runtime family",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo",
+        "core/step_phase.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "baseline"
+        },
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_ARM_TRIAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_ATTN_ARM": "stash_tiled"
+        },
+        "runtime": {}
+      },
+      "limitations": [
+        "Runtime names only take effect in a trial-compiled build; keep per-arm geometry and refusals in evidence."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution",
+      "additional_runtime_values": [
+        "bwd_stash",
+        "fwd_sstash",
+        "bwd_stash_tiled",
+        "stash",
+        "stash_tiled_ztiled",
+        "stash_tiled_pf",
+        "stash_tiled_fgrid_r32",
+        "stash_tiled_fgrid_r32_qres",
+        "stash_tiled_fgrid_r32_qres_pf_kvrecompute",
+        "stash_tiled_fgrid_r32_qres_pf_kvsplit",
+        "stash_tiled_fgrid_r32_qres_pf_zlag",
+        "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+        "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32"
+      ]
+    },
+    {
+      "id": "ATTN_LAUNCH_GEOMETRY",
+      "title": "Existing explicit forward/dQ/dKdV and retained-exponent tile arms",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_TILE_RULE_OFF=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Explicit overrides can suppress the hardware/row-rule dispatcher. Preserve each experiment as a separate arm; do not bundle all listed flags."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution",
+      "separate_compile_options": [
+        "MOJOLEARN_ATTN_FWD_TQ16=1",
+        "MOJOLEARN_ATTN_FWD_TQ_RULE=1",
+        "MOJOLEARN_ATTN_DQ_TQ16=1",
+        "MOJOLEARN_ATTN_DQ_TQ32=1",
+        "MOJOLEARN_ATTN_DQ_TQ64=1",
+        "MOJOLEARN_ATTN_DKDV_BJ16=1",
+        "MOJOLEARN_ATTN_DKDV_BJ32=1",
+        "MOJOLEARN_ATTN_ES_TQ8=1",
+        "MOJOLEARN_ATTN_ES_TQ16=1"
+      ]
+    },
+    {
+      "id": "ATTN_STICKY",
+      "title": "Direction-specific sticky refusal latch",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_STICKY=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "OFF: prior 700-step H100 control regressed throughput by 3.6%; intermittent refusals mean a permanent latch loses work."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "ATTN_MASKED_TAIL_REPAIR",
+      "title": "Existing exact omitted-tail replay",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_LEGACY_CORNER=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_REPAIR_MASKED_TAIL=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Historical correctness repair: old legacy arm may refuse supported inputs.",
+        "MOJOLEARN_ATTN_NO_BWD_CORNER and *_SABOTAGE are diagnostic bit-changing arms, excluded from quality-preserving candidates."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "IDN_ATTN_SCAN_CACHE",
+      "title": "Reuse finite-scan scratch",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_IDN_ATTN_SCAN_CACHE_OFF=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Inherited IDENTICAL default; ALL_OFF disables it. No new promotion."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "IDN_ATTN_BWD_SCAN_REUSE",
+      "title": "Reuse admitted forward finite-scan result",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_IDN_ATTN_BWD_SCAN_REUSE_OFF=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Inherited IDENTICAL default; ALL_OFF disables it. No new promotion."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "IDN_ATTN_SCRATCH_CACHE",
+      "title": "Retain attention scratch owners",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_IDN_ATTN_SCRATCH_CACHE_OFF=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Inherited IDENTICAL default; ALL_OFF disables it. No new promotion."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "IDN_ATTN_ONE_FLAG_WAIT",
+      "title": "Share scan/status completion wait",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_IDN_ATTN_ONE_FLAG_WAIT_OFF=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Inherited IDENTICAL default; ALL_OFF disables it. No new promotion."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "ATTN_SPECULATIVE",
+      "title": "Speculative fused enqueue admission",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_ATTN_SPECULATIVE": "0"
+        },
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_ATTN_SPECULATIVE": "1"
+        },
+        "runtime": {}
+      },
+      "limitations": [
+        "Record refusal/replay rate as well as timing."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "ATTN_AMD_MFMA_DQ",
+      "title": "AMD dQ matrix-instruction trial",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_DQ_MFMA=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Vendor-specific physical kernel; still owes same arithmetic graph and four-column admission."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "ATTN_APPLE_MMA",
+      "title": "Apple dKdV and zdot matrix-instruction trials",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_DKDV_AMMA=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Apple never votes IDENTICAL performance. Prior zdot M4 component was slower: 2119 ms versus 1808\u20131860 ms per step."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution",
+      "separate_compile_options": [
+        "MOJOLEARN_ATTN_STASH_ZDOT_AMMA=1"
+      ]
+    },
+    {
+      "id": "ATTN_AMD_MODE_FLUSH",
+      "title": "AMD hardware flush-mode seam spelling",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_NO_MODE_FLUSH=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "AMD-only physical spelling; software-seam control retained."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "ATTN_APPLE_ERECOMP",
+      "title": "Apple gated exponent recomputation",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_ATTN_APPLE_ERECOMP=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Admission can deny the route; no source define proves execution. Apple timing cannot promote IDENTICAL switches."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "IDN_LLAMA_REFUSE_BATCH",
+      "title": "Batch ordered nonfinite refusals",
+      "implementation_paths": [
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_IDN_LLAMA_REFUSE_BATCH_OFF=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Inherited IDENTICAL default; retains first refusal ordering."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "IDN_ATTN_CACHE_NOWAIT",
+      "title": "Omit redundant same-stream cache wait",
+      "implementation_paths": [
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_IDN_ATTN_CACHE_NOWAIT_OFF=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Alias B flag MOJOLEARN_ATTN_CACHE_WAIT=1; inherited IDENTICAL default."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "SWIGLU_FORWARD_ONLY",
+      "title": "Existing forward-only SiLU multiply fusion",
+      "implementation_paths": [
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_SWIGLU_FUSED": "0"
+        },
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_SWIGLU_FUSED": "1"
+        },
+        "runtime": {}
+      },
+      "limitations": [
+        "No saved silu intermediate: requires forward_only; NN26 separately implements training storage."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "BWD_GATED_SILU_FUSION",
+      "title": "Existing backward gated SiLU fusion",
+      "implementation_paths": [
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_BWD_GATED_SILU_SPLIT_TRIAL=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_BWD_GATED_SILU_FUSED_TRIAL=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "BWD_RMS_DH_DOT_FUSION",
+      "title": "Existing RMS backward dh and row-dot fusion",
+      "implementation_paths": [
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_BWD_NORM_SPLIT_TRIAL=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_BWD_NORM_FUSED_TRIAL=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Forced fused source option now actually forces fusion; prior explicit arm still obeyed exact-size thresholds."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "BWD_RMS_SHAPE_RULE_REMOVAL",
+      "title": "Remove benchmark-dimension backward RMS dispatcher",
+      "implementation_paths": [
+        "transformer/checks/transformer_backward.mojo",
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Old Apple m>=8192,dm>=768 / NVIDIA m>=32768,dm>=768 kept only in explicit historical B.",
+        "A uses row grid >= 2 * reported SM/CU; unknown hardware splits. Existing fixed-order arithmetic is unchanged.",
+        "New source is uncompiled/unverified/unmeasured. Must time neighboring sizes and one non-board full dataset on both voting vendors before a performance claim.",
+        "The removed rule also governed FAST with AFN_LM_BWD_FUSE enabled; no new NN switch enables FAST."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "BWD_NORM2_RESIDUAL_FUSION",
+      "title": "Post-attention RMS backward and residual gradient fusion",
+      "implementation_paths": [
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_BWD_NORM2_RESIDUAL_SPLIT_TRIAL=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_BWD_NORM2_RESIDUAL_FUSED_TRIAL=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "RESIDUAL1_NORM2_FUSION",
+      "title": "Attention residual plus post-attention RMS forward",
+      "implementation_paths": [
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_FUSE_RESIDUAL1_NORM2=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Apple already has an inherited admitted default under its working-set cap; explicit force is not a distinct Apple arm everywhere. NN24 migrated both spellings."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "RESIDUAL2_NEXT_NORM",
+      "title": "Cross-layer residual plus next RMS norm",
+      "implementation_paths": [
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Existing Apple-specific working-set rule, not a new default."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "STEP_GLUE_ROWS",
+      "title": "Existing RMS launch row geometry",
+      "implementation_paths": [
+        "core/step_glue.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "checks/kernel_matrix.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_STEP_GLUE_TRIAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_STEP_GLUE_ARM": "shipped"
+        },
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_STEP_GLUE_TRIAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_STEP_GLUE_ARM": "rows16"
+        },
+        "runtime": {}
+      },
+      "limitations": [
+        "Additional separate choices rows8 and rows4; rows tokens can compose with optskip/noshadow in documented parser order.",
+        "Some columns have inherited shipped rows; compare explicit metadata, not an assumed all-vendor default."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "IDN_BWD_ENTRY_ALIAS",
+      "title": "Read-only incoming-gradient view",
+      "implementation_paths": [
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Inherited IDENTICAL default; traced/materialized paths retain copies; ALL_OFF disables."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "TRANSFORMER_HOST_FUSED_ATTENTION",
+      "title": "Host staged versus fused attention",
+      "implementation_paths": [
+        "transformer/checks/transformer_oracle.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_TRANSFORMER_HOST_STAGED_ATTENTION=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Incumbent shortcut disabled under NN03/04; NN20 selects its own coherent host graph first."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution"
+    },
+    {
+      "id": "TRANSFORMER_SESSION_REUSE",
+      "title": "Existing public native session and fresh-prefill reuse",
+      "implementation_paths": [
+        "python/mojolearn/_transformer_impl.py",
+        "bindings/_mojolearn_transformer.mojo"
+      ],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1"
+        },
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [],
+        "environment": {
+          "MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "0"
+        },
+        "runtime": {}
+      },
+      "limitations": [
+        "Cold construction and repeated calls are different boundaries; saved tape API explicitly requires its native owner."
+      ],
+      "evidence_status": "historical_source_record_only_no_new_execution",
+      "separate_runtime_options": {
+        "MOJOLEARN_TRANSFORMER_SESSION_FRESH": [
+          "0",
+          "1"
+        ],
+        "MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS": [
+          "0",
+          "1"
+        ],
+        "MOJOLEARN_TRANSFORMER_STAGE_RESET": [
+          "0",
+          "1"
+        ],
+        "MOJOLEARN_TRANSFORMER_RETAIN_MB": [
+          "0",
+          "512"
+        ]
+      },
+      "separate_compile_options": [
+        "MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER=1",
+        "MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY=1"
+      ]
+    }
+  ]
+}

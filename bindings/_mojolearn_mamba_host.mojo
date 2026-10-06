@@ -610,6 +610,8 @@ def PyInit__mojolearn_mamba_host() abi("C") -> PythonObject:
         m.def_function[mamba2_backward_binding]("mamba2_backward")
         m.def_function[mamba3_owned_weights_enabled_binding]("mamba3_owned_weights_enabled")
         m.def_function[mamba3_owned_create_binding]("mamba3_prefill_session_create")
+        m.def_function[mamba3_owned_reports_optional_binding]("mamba3_prefill_session_reports_optional")
+        m.def_function[mamba3_owned_info_binding]("mamba3_prefill_session_info")
         m.def_function[mamba3_owned_close_binding]("mamba3_prefill_session_close")
         m.def_function[mamba3_owned_install_binding]("mamba3_prefill_session_install_weights")
         m.def_function[mamba3_owned_forward_binding]("mamba3_prefill_session_forward_owned")
@@ -636,12 +638,16 @@ struct M3OwnedHostSession(Movable, Writable):
     var generation: Int
     var busy: Bool
     var usable: Bool
+    var weight_reuses: Int
+    var backward_recomputes: Int
 
     def __init__(out self):
         self.weights = None
         self.generation = 0
         self.busy = False
         self.usable = True
+        self.weight_reuses = 0
+        self.backward_recomputes = 0
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("M3OwnedHostSession")
@@ -722,6 +728,7 @@ def mamba3_owned_forward_binding(session: PythonObject, addrs: PythonObject, par
         owner[].usable = False
         raise error
     owner[].busy = False
+    owner[].weight_reuses += 1
     return PythonObject(0)
 
 
@@ -755,6 +762,8 @@ def mamba3_owned_backward_binding(session: PythonObject, addrs: PythonObject, pa
         owner[].usable = False
         raise error
     owner[].busy = False
+    owner[].weight_reuses += 1
+    owner[].backward_recomputes += 1
     return PythonObject(0)
 
 
@@ -784,3 +793,25 @@ def mamba3_owned_export_binding(session: PythonObject, addrs: PythonObject, gene
         raise error
     owner[].busy = False
     return PythonObject(generation)
+
+
+def mamba3_owned_reports_optional_binding() -> PythonObject:
+    """The host owner currently materializes every report. Advertising the
+    capability explicitly keeps Samba's discard-report probe callable."""
+    return PythonObject(False)
+
+
+def mamba3_owned_info_binding(session: PythonObject) raises -> PythonObject:
+    """Same six-field public metadata schema; host backward recomputes and
+    holds no saved stages. Counters report snapshot use, not device traffic."""
+    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
+    if owner[].busy:
+        raise Error("mamba3 owned host info: session busy")
+    var result = Python.list()
+    result.append(PythonObject(owner[].generation))
+    result.append(PythonObject(0))
+    result.append(PythonObject(owner[].weight_reuses))
+    result.append(PythonObject(0))
+    result.append(PythonObject(owner[].backward_recomputes))
+    result.append(PythonObject(0))
+    return result

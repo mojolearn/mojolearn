@@ -2,7 +2,7 @@
   "lane": "state_cnn",
   "branch": "ideas/neural-identical-ab-20261006-r3",
   "base_commit": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
-  "commit": "working_tree_after_88c68d132_root_commit_pending",
+  "commit": "working_tree_after_d39587b1d_root_commit_pending",
   "experiments": [
     {
       "id": "NN33",
@@ -88,7 +88,7 @@
       "remaining": [
         "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
       ],
-      "reason": "Actual source component now replaces the earlier design-only status; the complete model/backward/checkpoint migration remains pending.",
+      "reason": "Selected Mamba-1 prefill/decode, zero-state prefill backward and checkpoint source integration authored; execution-based acceptance remains not run.",
       "modular_ask": null,
       "arithmetic_profile": "mojolearn.neural-ab.affine-prefix.fp32.v2; new same-version graph, previous-version sequential bits need not match.",
       "selected_arm_scope": "Mamba-1 full prefill/decode and zero-state prefill backward affine-prefix numerical profile; public checkpoint and host inference integration.",
@@ -269,7 +269,8 @@
       "implemented": [
         "Projection workspace grow-ahead capacity (25%, at most16MiB) retains context ownership and wait-before-replacement.",
         "Explicit Mamba3Block.install_owned_weights creates an immutable copied snapshot; generation-owned fresh forward/backward never trust mutable external pointers; reinstall after optimizer/load mutation invalidates device stages.",
-        "Host implements the same snapshot semantics; export reads installed bytes; pickle stores those bytes and lazily reinstalls a new generation. Binding changes, stale generation, busy/unusable sessions and disabled ownership arm refuse by name. Ordinary borrowed-buffer calls retain byte validation."
+        "Host implements the same snapshot semantics; export reads installed bytes; pickle stores those bytes and lazily reinstalls a new generation. Binding changes, stale generation, busy/unusable sessions and disabled ownership arm refuse by name. Ordinary borrowed-buffer calls retain byte validation.",
+        "Host reports-optional/session-info exports added for shared Python/Samba callers; counters explicitly show no retained device stages."
       ],
       "remaining": [
         "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
@@ -642,5 +643,6 @@
     "exit_code": 0,
     "log": "/tmp/neural_mamba_source_authoring.log",
     "verification": "disabled_by_request; post-generation device-construct scan/stale comparison/check mode not executed"
-  }
+  },
+  "integration_inventory": "experiments/neural_identical_ab/lanes/state_cnn_integration_inventory.json"
 }

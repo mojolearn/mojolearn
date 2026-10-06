@@ -86,6 +86,7 @@ from transformer.impl.llama.fused_attention import (
     FUSED_RAN,
     FUSED_SKIPPED_STICKY,
     device_first_nonfinite,
+    attn_device_units,
     fused_attention_arm_estash_runs,
     fused_attention_arm_from_env,
     fused_backward_launch,
@@ -453,6 +454,13 @@ comptime BWD_NORM_SPLIT_TRIAL = is_defined[
 comptime BWD_NORM_FUSED_TRIAL = is_defined[
     "MOJOLEARN_BWD_NORM_FUSED_TRIAL"
 ]()
+# Historical exact-size dispatch is an explicit B arm only. Its old board
+# thresholds are preserved to attribute the removal, never a default route.
+comptime BWD_NORM_LEGACY_SHAPE_RULE = (
+    is_defined["MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
 comptime BWD_NORM2_RESIDUAL_SPLIT_TRIAL = is_defined[
     "MOJOLEARN_BWD_NORM2_RESIDUAL_SPLIT_TRIAL"
 ]()
@@ -3001,17 +3009,25 @@ def _bwd_rms_norm_kernels[which: Int](
             block_dim=(dot_threads, 1, 1),
         )
     else:
-        # The row-owned fusion wins at the repeated GPT training sizes but
-        # not on Apple's small curve. Keep the original cell-parallel path
-        # below that measured boundary; this is scheduling only and both
-        # paths produce the same complete-stage hash.
+        # Each fused row already owns the serial dot performed by the split
+        # route. Fusion additionally computes dh locally and avoids its
+        # separate launch/reread. Require two independent row blocks per
+        # reported SM/CU to cover scheduling latency; this depends on actual
+        # row parallelism, row launch geometry and hardware, not a board
+        # shape or feature threshold. Unknown hardware conservatively splits.
+        # No timing qualification is implied by removing the old size rule.
         var use_fused = False
         comptime if BWD_NORM_FUSED_TRIAL:
-            use_fused = m >= 8192 and dm >= 768
-        elif TARGET_COLUMN == COLUMN_APPLE:
-            use_fused = m >= 8192 and dm >= 768
-        elif TARGET_COLUMN == COLUMN_NVIDIA:
-            use_fused = m >= 32768 and dm >= 768
+            use_fused = True  # explicit experiment really forces the row owner
+        elif BWD_NORM_LEGACY_SHAPE_RULE:
+            # Historical B only: retained verbatim for neighbor/full-workload A/B.
+            comptime if TARGET_COLUMN == COLUMN_APPLE:
+                use_fused = m >= 8192 and dm >= 768
+            elif TARGET_COLUMN == COLUMN_NVIDIA:
+                use_fused = m >= 32768 and dm >= 768
+        elif not is_defined["MOJOLEARN_IDN_ALL_OFF"]():
+            var units = attn_device_units(ctx)
+            use_fused = units > 0 and dot_blocks >= 2 * units
         if use_fused:
             ctx.enqueue_function[bwd_norm_dh_dot_kernel](
                 dh.unsafe_ptr(), dot_out.unsafe_ptr(), rstd.unsafe_ptr(),

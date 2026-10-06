@@ -80,6 +80,7 @@ from training.checks.loss_contract import REDUCTION_MEAN, CeConfig
 from training.chunked_lm_head_v2 import (
     LM_HEAD_V2_CHUNK,
     chunked_lm_head_v2_gemm_forward_into, chunked_lm_head_v2_gemm_backward_into,
+    chunked_lm_head_v2_gemm_workspace_floats,
 )
 from training.checks.optimizer import (
     ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
@@ -442,6 +443,7 @@ def _byte_validate_allocations(config: ByteConfig) raises:
         widths.append(config.vocab_size)
     else:
         _byte_check_gemm(m, min(config.vocab_size, LM_HEAD_V2_CHUNK), config.d_model)
+        _byte_check_workspace(chunked_lm_head_v2_gemm_workspace_floats(m,config.vocab_size,config.d_model))
     for width in widths:
         _byte_check_gemm(m, width, config.d_model)
     _byte_check_gemm(m, config.d_model, config.intermediate)
@@ -680,7 +682,9 @@ struct ByteBuffers(Movable):
         else:
             self.ce_ws = _zeros(ctx, ce_cells)
 
-        self.head_ws = _zeros(ctx, identical_gemm_workspace_max_floats(M, min(V, LM_HEAD_V2_CHUNK) if config.chunked_lm_head_v2 else V, DM))
+        var head_scratch = (chunked_lm_head_v2_gemm_workspace_floats(M,V,DM) if config.chunked_lm_head_v2
+            else identical_gemm_workspace_max_floats(M,V,DM))
+        self.head_ws = _zeros(ctx, head_scratch)
         self.head_bwd_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_gemm_backward_workspace_max_floats(OP_NT, M, V, DM, False))
 
         var scratch = emb_run_scratch_ints(V, M)

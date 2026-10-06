@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """NN06: rounded bias/scale/residual/ReLU stages with shared host mirrors.
 
-Explicit component API, uncompiled/unverified. Public model activation and
-backward integration are pending; this module does not redefine any caller's
-activation. Order is product -> bias -> scale -> residual -> optional ReLU.
+Generic component API, uncompiled/unverified. The selected public NN06
+placement is training.mlp_ops, with its existing activation/backward rules;
+this generic component does not redefine another caller's activation. Order is product -> bias -> scale -> residual -> optional ReLU.
 Each enabled stage owns an explicit FP32/FTZ boundary in both A and B.
 """
 from gemm.experiments.neural_profile_device import neural_profile_device

@@ -70,6 +70,7 @@ from core.host_lanes import host_f32_uninit
 from gemm.contract import OP_NT
 from gemm.host.neural_gemm import gemm_oracle
 from gemm.host.neural_gemm import gemm_host_rows
+from training.chunked_lm_head_gemm_host import byte_chunked_head_backward
 from embedding.checks.embedding_oracle import (
     EmbConfig,
     emb_backward_oracle,
@@ -211,27 +212,34 @@ def byte_host_gradient(params: List[Float32], ids: List[Int32],
     # ---- head, loss, and the loss gradient --------------------------------
     var head_id = config.n_tensors() - 1
     var lm_w = _byte_host_slice(params, offsets, head_id)
-    var logits = gemm_host_rows(x, lm_w, OP_NT, m, v, dm)
     var loss: Float32
-    var dlogits: List[Float32]
-    if byte_host_step_rows():
-        var got = ce_host_rows(logits, targets, ce_cfg)
-        loss = got[0]
-        dlogits = got[1].copy()
+    var d_h: List[Float32]
+    var dw_lm: List[Float32]
+    if config.chunked_lm_head_v2:
+        # ByteLM's device route forms each panel with selected neural GEMM,
+        # then uses the v2 serial vocabulary/row gradient chains. The public
+        # scalar-logit head oracle has a different wide-K graph and is not
+        # a valid replacement for this model composition.
+        var head = byte_chunked_head_backward(x,lm_w,targets,m,v,dm)
+        loss = head.loss
+        d_h = head.d_hidden.copy()
+        dw_lm = head.d_weight.copy()
     else:
-        var ce = ce_forward_oracle(logits, targets, ce_cfg)
-        ce_backward_oracle(ce, targets, ce_cfg)
-        loss = ce.loss[0]
-        dlogits = ce.dlogits.copy()
-    _ = logits^
-
-    # ---- the head's two GEMM backwards ------------------------------------
-    # `x` is still the LAST layer's residual2, which is the head's forward `A`
-    # operand, so dB reads it unchanged. dA arrives as the last layer's
-    # incoming cotangent.
-    var d_h = _gemm_bwd_a(dlogits, lm_w, OP_NT, m, v, dm)
-    var dw_lm = _gemm_bwd_b(dlogits, x, OP_NT, m, v, dm)
-    _ = dlogits^
+        var logits = gemm_host_rows(x, lm_w, OP_NT, m, v, dm)
+        var dlogits: List[Float32]
+        if byte_host_step_rows():
+            var got = ce_host_rows(logits, targets, ce_cfg)
+            loss = got[0]
+            dlogits = got[1].copy()
+        else:
+            var ce = ce_forward_oracle(logits, targets, ce_cfg)
+            ce_backward_oracle(ce, targets, ce_cfg)
+            loss = ce.loss[0]
+            dlogits = ce.dlogits.copy()
+        d_h = _gemm_bwd_a(dlogits, lm_w, OP_NT, m, v, dm)
+        dw_lm = _gemm_bwd_b(dlogits, x, OP_NT, m, v, dm)
+        _ = logits^
+        _ = dlogits^
 
     # ---- the blocks, in reverse -------------------------------------------
     # Each gradient tensor lands at its registry offset directly (lane

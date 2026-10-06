@@ -55,6 +55,7 @@ from gemm.host.neural_gemm import GhrPtr
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
 from gemm.host.neural_gemm import gemm_oracle
 from training.byte_lm_config import ByteConfig
+from training.chunked_lm_head_gemm_host import byte_chunked_head_forward
 from training.byte_lm_host_kernels import (
     all_finite_span,
     ce_causal_mean_loss_fast,
@@ -216,6 +217,9 @@ def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
     var x = _byte_host_hidden(params, inputs, batch, length, config)
     var head = _slice(params, config.offsets(), config.n_tensors() - 1)
     var m = batch * length
+    # chunked_lm_head_v2 selects the loss/gradient storage contract. The
+    # public inference API still returns the complete selected-GEMM logits,
+    # whose cells have the same contraction graph as each chunked panel.
     comptime if BYTE_HOST_SABOTAGE:
         return _sabotaged_head(x, head, m, config.vocab_size, config.d_model)
     return gemm_oracle(x, head, OP_NT, m, config.vocab_size, config.d_model)
@@ -952,6 +956,12 @@ def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig,
         for li in range(l):
             inputs.append(ids[bi * (l + 1) + li])
             targets.append(ids[bi * (l + 1) + li + 1])
+    if config.chunked_lm_head_v2:
+        _validate_logits_inputs(params,inputs,b,l,config)
+        var hidden = _byte_host_hidden(params,inputs,b,l,config)
+        var head = _slice(params,config.offsets(),config.n_tensors()-1)
+        var result = byte_chunked_head_forward(hidden,head,targets,b*l,config.vocab_size,config.d_model)
+        return result.loss
     if threaded:
         var fast_logits = byte_host_logits_threaded(params, inputs, b, l, config, threads)
         return ce_causal_mean_loss_fast(fast_logits, targets, config.vocab_size)

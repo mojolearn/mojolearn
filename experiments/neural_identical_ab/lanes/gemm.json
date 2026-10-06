@@ -27,11 +27,14 @@
       "candidate_defines": [
         "MOJOLEARN_NUMERIC_IDENTICAL=1",
         "MOJOLEARN_IDN_NEURAL_NN01=1",
-        "MOJOLEARN_GEMM_ARM_TRIAL=1"
+        "MOJOLEARN_GEMM_ARM_TRIAL=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_ARM=10"
       ],
       "baseline_defines": [
         "MOJOLEARN_NUMERIC_IDENTICAL=1",
         "MOJOLEARN_IDN_NEURAL_NN01=1",
+        "MOJOLEARN_GEMM_ARM_TRIAL=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_ARM=10",
         "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
       ],
       "runtime_env": {},
@@ -66,7 +69,8 @@
       "candidate_parameters": {
         "MOJOLEARN_IDN_NEURAL_GEMM_ARM": "explicit existing step-arm enum; default GEMM_ARM_KPACK"
       },
-      "supported_combinations": "One legacy schedule family; NN01 rejects NN03/NN04 because existing native geometries implement the incumbent arithmetic profile."
+      "supported_combinations": "One legacy schedule family; NN01 rejects NN03/NN04 because existing native geometries implement the incumbent arithmetic profile.",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN02",
@@ -126,7 +130,8 @@
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
-      "optional_variants": []
+      "optional_variants": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN03",
@@ -154,10 +159,13 @@
       ],
       "candidate_defines": [
         "MOJOLEARN_NUMERIC_IDENTICAL=1",
-        "MOJOLEARN_IDN_NEURAL_NN03=1"
+        "MOJOLEARN_IDN_NEURAL_NN03=1",
+        "MOJOLEARN_IDN_NEURAL_LEAF=64"
       ],
       "baseline_defines": [
-        "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN03=1",
+        "MOJOLEARN_IDN_NEURAL_LEAF=128"
       ],
       "runtime_env": {},
       "entry_points": [
@@ -166,8 +174,8 @@
         "SmallMLPTrainer._matmul via training.neural_gemm binding"
       ],
       "arms": {
-        "A": "CANDIDATE=True with LEAF=64,128,256 as separate profiles; NN03 define permits LEAF",
-        "B": "CANDIDATE=False: incumbent CONTRACT_K_LEAF_MIN, one chain, same scalar schedule"
+        "A": "Selected scalar/profile dispatcher with leaf minimum 64, one chain.",
+        "B": "Same selected scalar/profile dispatcher with leaf minimum 128, one chain; no absent-flag schedule confound."
       },
       "default_enabled": false,
       "remaining": [
@@ -200,7 +208,8 @@
           256
         ]
       },
-      "component_profile_scope": "Dense projection forward/backward uses the selected profile. Mamba M2/M3 SSD/SISO internal contractions keep their separately declared fixed 128-term graph on host and device; host SSD/SISO oracles deliberately keep incumbent GEMM helpers. Sequence recurrent/internal algorithm graphs likewise retain their declared arithmetic."
+      "component_profile_scope": "Dense projection forward/backward uses the selected profile. Mamba M2/M3 SSD/SISO internal contractions keep their separately declared fixed 128-term graph on host and device; host SSD/SISO oracles deliberately keep incumbent GEMM helpers. Sequence recurrent/internal algorithm graphs likewise retain their declared arithmetic.",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN04",
@@ -226,10 +235,13 @@
       ],
       "candidate_defines": [
         "MOJOLEARN_NUMERIC_IDENTICAL=1",
-        "MOJOLEARN_IDN_NEURAL_NN04=1"
+        "MOJOLEARN_IDN_NEURAL_NN04=1",
+        "MOJOLEARN_IDN_NEURAL_CHAINS=2"
       ],
       "baseline_defines": [
-        "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN04=1",
+        "MOJOLEARN_IDN_NEURAL_CHAINS=1"
       ],
       "runtime_env": {},
       "entry_points": [
@@ -238,8 +250,8 @@
         "SmallMLPTrainer._matmul via training.neural_gemm binding"
       ],
       "arms": {
-        "A": "CANDIDATE=True with CHAINS=2 or 4; interleaved membership and fixed adjacent-pair merge",
-        "B": "CANDIDATE=False: one ascending dependent FMA chain per incumbent leaf"
+        "A": "Selected common profile with two independent accumulator chains per leaf.",
+        "B": "Same selected dispatcher/profile with one chain, same leaf and fold."
       },
       "default_enabled": false,
       "remaining": [
@@ -270,7 +282,8 @@
           4
         ]
       },
-      "component_profile_scope": "Dense projection forward/backward uses the selected profile. Mamba M2/M3 SSD/SISO internal contractions keep their separately declared fixed 128-term graph on host and device; host SSD/SISO oracles deliberately keep incumbent GEMM helpers. Sequence recurrent/internal algorithm graphs likewise retain their declared arithmetic."
+      "component_profile_scope": "Dense projection forward/backward uses the selected profile. Mamba M2/M3 SSD/SISO internal contractions keep their separately declared fixed 128-term graph on host and device; host SSD/SISO oracles deliberately keep incumbent GEMM helpers. Sequence recurrent/internal algorithm graphs likewise retain their declared arithmetic.",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN05",
@@ -325,7 +338,8 @@
       "wired_callers": [
         "transformer/impl/llama/modeling_llama.mojo::llama_mlp_forward"
       ],
-      "optional_variants": []
+      "optional_variants": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN06",
@@ -380,7 +394,8 @@
       ],
       "optional_variants": [
         "Additional residual/scale/nonlinear epilogues already exist as components; further model placements are optional separately attributed arms."
-      ]
+      ],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN07",
@@ -436,7 +451,8 @@
       ],
       "optional_variants": [
         "Persistent cross-step immutable-weight transpose cache is a separate optional arm, not needed by the completed pair-scoped sharing arm."
-      ]
+      ],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN08",
@@ -499,7 +515,8 @@
       "optional_variants": [],
       "upstream_blockers": [
         "Native AMD/Apple asynchronous-copy variants require supported Modular primitives; no workaround added."
-      ]
+      ],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN09",
@@ -522,12 +539,16 @@
       ],
       "candidate_defines": [
         "MOJOLEARN_NUMERIC_IDENTICAL=1",
-        "MOJOLEARN_IDN_NEURAL_NN09=1"
+        "MOJOLEARN_IDN_NEURAL_NN09=1",
+        "MOJOLEARN_IDN_NEURAL_STAGE_DEPTH=2",
+        "MOJOLEARN_IDN_NEURAL_STAGE_PAD=0"
       ],
       "baseline_defines": [
         "MOJOLEARN_NUMERIC_IDENTICAL=1",
         "MOJOLEARN_IDN_NEURAL_NN09=1",
-        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1",
+        "MOJOLEARN_IDN_NEURAL_STAGE_DEPTH=2",
+        "MOJOLEARN_IDN_NEURAL_STAGE_PAD=0"
       ],
       "runtime_env": {},
       "entry_points": [
@@ -558,7 +579,8 @@
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
-      "optional_variants": []
+      "optional_variants": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN10",
@@ -623,7 +645,11 @@
       ],
       "required_recipe_parameters": [
         "MOJOLEARN_IDN_NEURAL_FILL_BLOCKS from a recorded supported/calibrated device profile; no guessed default admitted"
-      ]
+      ],
+      "required_compile_parameters": {
+        "MOJOLEARN_IDN_NEURAL_FILL_BLOCKS": "Positive recorded device-fill budget in both arms; selector must require an explicit value."
+      },
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN11",
@@ -688,7 +714,9 @@
       "optional_variants": [],
       "candidate_parameters": {
         "MOJOLEARN_IDN_NEURAL_FOLD_SHARED": "optional; otherwise register capacity specialization"
-      }
+      },
+      "supported_combinations": "Standalone register/shared capacity or NN02 global-state capacity. Refuses other GEMM schedule families; NN12 and selected numerical profiles may compose.",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN12",
@@ -711,12 +739,14 @@
       ],
       "candidate_defines": [
         "MOJOLEARN_NUMERIC_IDENTICAL=1",
-        "MOJOLEARN_IDN_NEURAL_NN12=1"
+        "MOJOLEARN_IDN_NEURAL_NN12=1",
+        "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS=16777216"
       ],
       "baseline_defines": [
         "MOJOLEARN_NUMERIC_IDENTICAL=1",
         "MOJOLEARN_IDN_NEURAL_NN12=1",
-        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1",
+        "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS=16777216"
       ],
       "runtime_env": {},
       "entry_points": [
@@ -724,8 +754,8 @@
         "training.dev_tensors._DevPool handle-owned workspace"
       ],
       "arms": {
-        "A": "Retain bounded scratch by model/context or output-handle lifetime; cache NN10 plan where selected",
-        "B": "Original model ownership; dev-tensor API re-provisions scratch per call"
+        "A": "Model-owned bounded retained scratch; selected NN10 plan cached when combined.",
+        "B": "Fresh scratch and its last-consumer synchronization per product/pair; DevPool already provisions per operation."
       },
       "default_enabled": false,
       "remaining": [
@@ -739,15 +769,17 @@
       "timing": "not_run_by_request",
       "wired_callers": [
         "training/dev_tensors.mojo",
-        "training/mlp_ops.mojo",
-        "training/byte_lm.mojo",
-        "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
-        "mamba/impl/modules/idn_gemm_ws.mojo",
-        "x_cnn/device.mojo"
+        "transformer/checks/transformer_backward.mojo"
       ],
-      "optional_variants": []
+      "optional_variants": [
+        "Mamba custom workspace growth is separate NN40; CNN and ByteLM-head manual scratch caches retain their existing policies."
+      ],
+      "selected_arm_scope": "GemmWorkspace owners and training DevPool output-handle owners. Manual Mamba/CNN/ByteLM-head scratch caches are not changed by this flag.",
+      "candidate_parameters": {
+        "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS": "Positive owner resource budget; representative 16777216 floats (64 MiB)."
+      },
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN13",
@@ -782,7 +814,8 @@
       "verification": "not_run_by_request",
       "identity": "not_run_by_request",
       "quality": "not_run_by_request",
-      "timing": "not_run_by_request"
+      "timing": "not_run_by_request",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN14",
@@ -810,7 +843,8 @@
       "verification": "not_run_by_request",
       "identity": "not_run_by_request",
       "quality": "not_run_by_request",
-      "timing": "not_run_by_request"
+      "timing": "not_run_by_request",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN15",
@@ -870,7 +904,8 @@
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
-      "optional_variants": []
+      "optional_variants": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     },
     {
       "id": "NN16",
@@ -923,7 +958,8 @@
       ],
       "optional_variants": [
         "Component scratch-clear comparison retained separately; it is not the production B or evidence of an existing redundant clear."
-      ]
+      ],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
     }
   ],
   "compilation": "not_run_by_request",

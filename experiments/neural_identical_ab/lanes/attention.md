@@ -2,7 +2,7 @@
 
 Branch `ideas/neural-identical-ab-20261006-r3`, forked from `main` at
 `fd6cf80453a6f18eb02e81566c824e7da106ccf0`. This continuation adds source
-integration after root's `88c68d132` snapshot. Root owns the final commit.
+integration after root's `d39587b1d` snapshot. Root owns the final commit.
 
 The selected native/public scope for all 16 cards is now written or attributed
 to existing native source. These are **uncompiled, unverified source drafts**.
@@ -17,7 +17,7 @@ The necessary evidence that implementations meet this contract is unrun.
 
 | Card | Concrete selected implementation | Scope / optional broader variants |
 |---|---|---|
-| NN17 | Four adjacent query heads share the same K/V page in the actual tiled forward/backward arm, 64 logical rows and 16 positions/head. | Existing HD64/TQ32/QRES/PF non-swizzled reach and GQA ratio divisible by four. Retain I06 two-head losses. |
+| NN17 | Four adjacent query heads share the same K/V page in the actual tiled forward kernel, 64 logical rows and 16 positions/head. Existing backward consumes that forward graph. | Existing HD64/TQ32/QRES/PF non-swizzled reach and GQA ratio divisible by four. Retain I06 two-head losses. |
 | NN18 | Existing structural K-page bounds are the A arm; new native dense-page B control traverses every page with the same per-row masks, admission and replay. | `MOJOLEARN_NN18_DENSE_TILE_CONTROL=1` only in B. Both arms select the same tiled model path. General task compaction is optional. |
 | NN19 | Reuse actual I07 retained/recompute fused attention source and native model callers. | Retain corrected component evidence, invalid-arm history and pending full-task qualification. |
 | NN20 | Public model host/GPU forward, backward, trace, prefill, decode and window paths now select the shared stable-summary graph. Finite/overflow/index admission and profile metadata are native. | Fixed absolute 32-key leaves and every merge level anchored to absolute key zero. Existing attention_v2 failures remain. Softcap/INT15/legacy plants refuse. Cooperative scheduling is optional. |
@@ -88,3 +88,52 @@ Keep logs out of context: save complete output to files, use targeted rg/grep
 with bounded surrounding lines and short tails, and summarize exit status,
 coverage, failures, and evidence paths. Expand only relevant diagnostic blocks;
 never hide failures or infer full success from filtered output.
+
+## Source integration inventory continuation
+
+`attention_integration_inventory.json` records every NN17–NN32 A/B arm, exact
+bare compile definitions, environment, runtime operation, model callers,
+required reach, historical experiment families and limitations. It also retains
+existing I06/I07 controls, old v2 nonpromotion, launch geometries, caches, waits,
+norm/activation fusions and session experiments. These are source records, not
+new execution evidence.
+
+The public runner now accepts `--neural-ab-config`, clears declared managed
+environment variables, applies IDENTICAL before imports, freezes configuration
+metadata and propagates it to workers. Requested compile definitions stay
+separate from loaded-binary and kernel-reach evidence. Ordinary model runs
+remain available; nondefault operations are explicitly named and own-only.
+
+For NN31/32, `transformer_forward_vjp_tape` consumes full saved inputs and all
+forward/input-gradient/weight-gradient outputs; native retained-stage metadata
+is recorded, and unexpected retention refuses the declared arm. The existing
+forward quality reference does not qualify the VJP or a training operation.
+The chosen 512 MiB retention budget must fit the frozen workload or be replaced
+by an explicit new memory-qualified recipe.
+
+For NN29, `transformer_windowed_forward` passes a positive `transformer_window`
+(model parameter, currently 256 in both recipe arms), consumes full input and
+explicit K/V ring state, and resets logical position to zero per repeat. It
+covers full prefill cache commit; carried decode needs its own full-workload
+recipe. The old window-zero quality comparator is refused as a qualification
+for this operation. NN17's ordinary board fixture has GQA ratio one and cannot
+reach four-head reuse. The explicit [full GQA block recipe](../workloads/NN17-full-gqa.json)
+selects the same ratio-four model in both arms through `transformer_configured_forward`.
+The harness applies those declared dimensions before writing the complete input,
+weights and shape metadata. This supplemental block workload does not replace
+LM corpus training or all affected-estimator coverage; input hashes, execution,
+branch reach and quality/performance evidence remain pending.
+
+Source tracing corrected NN20/24 imports that had landed inside long module
+docstrings, moved NN19 to explicit matched estash requests, and made serialized
+arithmetic tags reflect the actual FAST/IDENTICAL binding mode. It also removed
+an existing backward RMS dispatcher tied to exact board dimensions: the new
+rule uses independent row blocks versus reported SM/CU capacity, with the old
+rule retained only under `MOJOLEARN_BWD_NORM_LEGACY_SHAPE_RULE=1` as historical B.
+Neighboring/non-board full-workload A/B remains unrun, including the pre-existing
+FAST fusion route to which that dispatch rule also applied.
+
+The harness source also connects NN40 explicit owned-weight installation and
+NN53 public chunked-head configuration; root and the other lanes own those
+inventories. All compilation, syntax/static checks, tests, identity, quality,
+execution and timing remain unrun at the user's request. Root owns commit/push.

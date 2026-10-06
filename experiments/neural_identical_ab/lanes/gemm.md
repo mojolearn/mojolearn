@@ -73,3 +73,24 @@ performance evidence; no new default was promoted.
 > with bounded surrounding lines and short tails, and summarize exit status,
 > coverage, failures, and evidence paths. Expand only relevant diagnostic blocks;
 > never hide failures or infer full success from filtered output.
+
+## Source integration continuation, 2026-10-06
+
+The file-by-file A/B inventory is `gemm_integration_inventory.json` (top-level
+`inventory`, separate from the planner's `experiments` handoff collection).
+It records each selected arm, exact defines, caller paths, workspace policy,
+legacy experiment relationships and additional placement limits. NN03 now
+records leaf64 versus leaf128 with the selected profile enabled in both arms;
+NN04 similarly compares chains2 versus chains1. These isolate the arithmetic
+choice from absent-flag dispatcher changes. NN10 requires an explicit positive
+recorded fill budget in both configurations.
+
+Source fixes in this continuation share direct/cached GEMM admission, reject
+NN11 schedule combinations that would silently skip its arm (NN02+NN11 global
+fold slots remain supported), and make NN12 owned-workspace B actually allocate
+and wait per operation. NN12's chosen scope is GemmWorkspace and DevPool owners;
+Mamba/CNN/ByteLM-head manual caches retain their separate policies. NN59 now
+explicitly FTZ-normalizes probability before comparing a Philox draw.
+
+No source change or inventory entry is execution evidence. No compiler,
+checker, test, identity, quality or timing run was performed.

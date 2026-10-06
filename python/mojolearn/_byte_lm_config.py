@@ -12,6 +12,9 @@ class ByteLanguageModelConfig:
 
     The defaults preserve the published small model's registry and profile.
     Shape admission is not a performance or cross-vendor qualification.
+    ``chunked_lm_head_v2=True`` selects the explicit IDENTICAL loss/gradient
+    profile with bounded vocabulary panels. Logits prediction still returns
+    the full vocabulary; its per-cell GEMM contraction is unchanged.
     """
     batch: int = 2
     length: int = 32
@@ -22,10 +25,15 @@ class ByteLanguageModelConfig:
     intermediate: int = 64
     n_layers: int = 2
     vocab_size: int = 256
+    chunked_lm_head_v2: bool = False
 
     def __post_init__(self):
         for field in fields(self):  # glue: validates config dataclass fields
             value = getattr(self, field.name)
+            if field.name == 'chunked_lm_head_v2':
+                if not isinstance(value, bool):
+                    raise ValueError('chunked_lm_head_v2 must be a boolean')
+                continue
             if isinstance(value, bool) or type(value).__name__ in ('bool', 'bool_'):
                 raise ValueError('Byte-LM shape requires integer dimensions')
             try:
@@ -38,7 +46,9 @@ class ByteLanguageModelConfig:
         if (self.length > 8192 or self.d_model != self.n_heads * self.head_dim
                 or self.n_heads % self.n_kv or self.head_dim % 2):
             raise ValueError('Byte-LM requires L <= 8192, DM = H*HD, H divisible by KV, and even HD')
-        b, l, dm, h, kv, hd, ff, layers, vocab = self.native_shape
+        if self.chunked_lm_head_v2 and self.vocab_size < 2:
+            raise ValueError('chunked_lm_head_v2 requires vocabulary size >= 2')
+        b, l, dm, h, kv, hd, ff, layers, vocab = self.native_shape[:9]
         spans = (self.n_total, b * l * vocab, b * l * dm, b * l * ff,
                  b * h * l * l, b * kv * l * hd, b * (l + 1))
         if max(spans) > 2147483647:  # glue: max over seven shape spans
@@ -46,16 +56,20 @@ class ByteLanguageModelConfig:
 
     @property
     def native_shape(self):
-        return tuple(getattr(self, field.name) for field in fields(self))  # glue: config dataclass field values
+        dimensions = tuple(getattr(self, field.name) for field in fields(self)
+                           if field.name != 'chunked_lm_head_v2')  # glue: shape metadata
+        # Preserve the existing nine-integer ABI when the opt-in is absent.
+        return dimensions + (1,) if self.chunked_lm_head_v2 else dimensions
 
     @property
     def profile(self):
         if self.native_shape == (2, 32, 32, 4, 2, 8, 64, 2, 256):
             return _DEFAULT_PROFILE
-        b, l, dm, h, kv, hd, ff, layers, vocab = self.native_shape
+        b, l, dm, h, kv, hd, ff, layers, vocab = self.native_shape[:9]
         suffix = '-v256-blocks2.fp32.v2' if (layers, vocab) == (2, 256) else f'-v{vocab}-blocks{layers}.fp32.v3'
+        head = '-lmhead-chunk256-v2' if self.chunked_lm_head_v2 else ''
         return (f'mojolearn.byte-lm.b{b}-l{l}-d{dm}-h{h}-kv{kv}-hd{hd}'
-                f'-ff{ff}{suffix}')
+                f'-ff{ff}{suffix}{head}')
 
     @property
     def parameter_shapes(self):
@@ -102,6 +116,9 @@ def state_shape(state):
         return ByteLanguageModelConfig()
     value = state['model_shape']
     expected = {field.name for field in fields(ByteLanguageModelConfig)}  # glue: config dataclass field names
-    if not isinstance(value, dict) or set(value) not in (expected, expected - {'n_layers', 'vocab_size'}):
+    accepted = (expected, expected - {'chunked_lm_head_v2'},
+                expected - {'n_layers', 'vocab_size'},
+                expected - {'n_layers', 'vocab_size', 'chunked_lm_head_v2'})
+    if not isinstance(value, dict) or set(value) not in accepted:
         raise ValueError('Byte-LM model_shape has missing or unknown dimensions')
     return ByteLanguageModelConfig(**value)

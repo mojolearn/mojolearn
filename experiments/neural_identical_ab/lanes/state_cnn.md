@@ -233,3 +233,36 @@ Sources: `x_cnn/ops.mojo`, `x_cnn/device.mojo`, `x_cnn/host/ops_host.mojo`, `x_c
 All compile/static checks, same-version host/NVIDIA/AMD/Apple identity, checkpoint/resume and gradient behavior, estimator quality, and full-dataset end-to-end NVIDIA+AMD timing remain unrun. Sample count0. Mathematical equivalence or shared source is not executed evidence. NN34 changes the scan graph and requires particular attention to long sequences, cancellation, strong decay and multi-step training before any promotion.
 
 No unsupported compiler workaround was introduced. NN41 still needs a documented vendor workgroup barrier ordering guarantee if its existing team-barrier semantics prove insufficient; request Modular support rather than add cross-block spin protocols.
+
+Integration follow-up after `d39587b1d` (source only)
+
+The machine-readable `state_cnn_integration_inventory.json` maps NN33–48 and
+NN13/14 to exact baseline/candidate defines, runtime APIs, callers, generated
+host files, existing experiment IDs/files and full-workload recipe coverage.
+Inherited I08/I09 routes, the recurrent scan quality failure, inactive
+combinations and unsupported Modular requests remain explicit. No source read
+is presented as a compilation, reachability or numerical acceptance result.
+
+The dedicated Mamba host binding now exports the owned-session report and
+counter probes used by the shared Python/Samba caller. Host counters describe
+snapshot generations, reuse and backward recomputation; they do not claim
+retained device stages or GPU transfers.
+
+`tools/bench_board_algos.py race/worker --neural-ab-config PATH` consumes the
+selector's schema1 IDENTICAL JSON, propagates a frozen copy and environment to
+workers, and retains requested source flags in receipts. It never builds or
+admits a binary. Classical lanes and ordinary invocations do not opt in.
+The NN45 recipe applies `runtime.estimator_settings.pool_size=1` to both ours
+and Torch CNN construction; both arms use the full existing image dataset and
+common `MOJOLEARN_XCNN_NO_DIRECT_CONV=1`. Torch skips a pool of size1 to match
+our public CNN model semantics. NN14 is absent for this selected fusion arm.
+Runtime `training` applies to BN/ResNet layer mode; GraphSAGE's optional
+`graphsage_aggregator="mean"` applies only to that lane. An explicit config
+refuses smoke-row caps and ours-fast relabeling and uses the existing whole
+operation boundary. Original dataset sizes and intrinsic caps are unchanged.
+Compilation flags in the receipt are requests, not proof of the loaded build.
+
+No compilation, checker/static/syntax verification, tests, ML execution,
+identity, gradient/quality or timing was run. Source generation was unnecessary
+for this binding-only follow-up. All acceptance and default promotion remain
+pending, including the unresolved inherited recurrent-scan failure.

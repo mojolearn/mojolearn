@@ -83,8 +83,11 @@ def _load():
 
 
 def _native_shape(shape):
-    return [shape.batch, shape.length, shape.d_model, shape.n_heads, shape.n_kv,
-            shape.head_dim, shape.intermediate, shape.n_layers, shape.vocab_size]
+    if not isinstance(shape, ByteLanguageModelConfig):
+        raise TypeError('shape must be a ByteLanguageModelConfig')
+    # The config owns the ABI, including its optional chunked-head selector.
+    # Both inference and trainer adapters must pass the same complete shape.
+    return list(shape.native_shape)
 
 
 _MAX_THREADS = 1024

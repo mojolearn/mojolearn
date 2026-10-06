@@ -105,18 +105,28 @@
       "implementation_status": "wired_draft",
       "implementation_paths": [
         "training/chunked_lm_head_v2.mojo",
-        "training/byte_lm_config.mojo"
+        "training/byte_lm_config.mojo",
+        "training/chunked_lm_head_profile.mojo",
+        "training/chunked_lm_head_gemm_host.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/byte_lm_host_backward.mojo",
+        "bindings/_mojolearn_byte_lm.mojo",
+        "bindings/_mojolearn_byte_lm_host.mojo",
+        "python/mojolearn/_byte_lm_config.py",
+        "python/mojolearn/_byte_lm_host.py",
+        "tools/bench_board_neural.py"
       ],
       "candidate_defines": [
         "MOJOLEARN_NN53_HEAD_CHUNK512=1"
       ],
       "baseline_defines": [],
       "runtime_env": {},
-      "scope": "Existing opt-in chunked head gains separate 512/2048 panel arms versus incumbent 1024. This is a storage/launch extension to the existing profile, not initial head implementation.",
+      "scope": "Public ByteLanguageModelConfig.chunked_lm_head_v2, optional native tenth shape integer and checkpoint profile admit the explicit complete ByteTrainer head in both arms. GPU panels use the selected neural GEMM; bounded pure-host GEMM panels supply the matching v2 loss, dHidden and dWeight graph. Scalar public chunked-head oracles remain a distinct operation. Shared panel flags select 512/1024/2048 storage, and device scratch includes full plus tail dispatcher requirements.",
       "remaining": [
-        "ByteConfig.chunked_lm_head_v2=True in BOTH arms; normal head does not reach these panels.",
-        "Complete old-head-versus-v2 arithmetic/model qualification is not supplied by panel geometry.",
-        "Host/head/loss/gradient and full-model quality remain unrun."
+        "Both arms set chunked_lm_head_v2=True through the actual lm-train-step workload selector. Panel width is storage only, so its profile remains the existing -lmhead-chunk256-v2 identifier.",
+        "The existing full LM board control shape has intrinsic limits; its name full does not establish every intended target workload or corpus coverage.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
       ],
       "arms": [
         {

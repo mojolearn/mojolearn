@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """NN03/NN04: explicit neural research profiles; never a global GEMM switch.
 
-These entry points are component APIs. No public model imports this module.
+The pure profile is shared by neural model dispatch and its host mirrors.
 Every profile uses this SAME scalar arithmetic body on host and device. A
 profile may change bits across versions, never between vendors in one run.
 No compilation, identity, quality or timing has been run for this source.

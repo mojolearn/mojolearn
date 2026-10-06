@@ -39,12 +39,7 @@ clause. The point is that a reader can put contract section 4's
 twenty-three-row table beside this file and check it line by line. Where a
 faster spelling exists and would give the same bits, this file still writes
 the slow one, because "would give the same bits" is exactly the kind of
-sentence an oracle exists to stop people from transformer.experiments.summary_model_host import model_summary_host_forward
-from transformer.experiments.attention_summary_contract import NN20_BALANCED_SUMMARY_TREE
-from transformer.experiments.norm_profile_contract import (
-    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
-)
-from having to believe.
+sentence an oracle exists to stop people from having to believe.
 
 ## The three things this file adds that the contract did not pin
 
@@ -107,6 +102,11 @@ torch, on the `mamba/corpus/` pattern, so that the tolerance instrument is
 not our own code twice.
 """
 
+from transformer.experiments.summary_model_host import model_summary_host_forward
+from transformer.experiments.attention_summary_contract import NN20_BALANCED_SUMMARY_TREE
+from transformer.experiments.norm_profile_contract import (
+    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+)
 from core.host_lanes import all_finite
 from std.math import min
 from std.memory import bitcast

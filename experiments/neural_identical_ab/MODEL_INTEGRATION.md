@@ -57,3 +57,12 @@ candidates remain recorded; they do not become wins because new callers exist.
 The complete source-authoring output for the Mamba host refresh is retained at
 [source_authoring/mamba_host_20261006.log](source_authoring/mamba_host_20261006.log).
 It is an authoring log, not build, verification, identity or timing evidence.
+
+The follow-up A/B integration adds concrete arm inputs in [arms.json](arms.json),
+written by `tools/neural_identical_ab.py configure` for the native builders and
+`tools/bench_board_neural.py --neural-ab-config`. Explicit operation settings are
+necessary for newly exposed APIs: merely compiling a flag cannot make an
+ordinary forward call retain a tape or install owned weights. The
+[experiment/file inventory](../../docs/plans/NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md)
+links those selectors to each source/caller and the existing experiment registries.
+Configured flags, authored callers and runtime reach evidence remain distinct.

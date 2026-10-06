@@ -15,6 +15,16 @@ def neural_arithmetic_suffix() -> String:
             result += ".nn-attention-v2-tree"
         comptime if is_defined["MOJOLEARN_NN24_NORM_LANES8"]():
             result += ".nn-norm-v2-lanes8"
+        # State/gradient graphs also belong to the serialized arithmetic
+        # version, even when a particular model does not consume that graph.
+        # Keep this module CPU-safe: mirror the pure compile-time guards,
+        # without importing a device scan implementation into host bindings.
+        comptime if is_defined["MOJOLEARN_NN34_AFFINE_PREFIX"]():
+            result += ".nn-mamba1-v2-affine32"
+        comptime if is_defined["MOJOLEARN_NN39_M2_GRAD_TREE"]():
+            result += ".nn-mamba2-grad-v2-tree"
+        comptime if is_defined["MOJOLEARN_NN43_WGRAD_FIXED128"]() and not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]():
+            result += ".nn-recurrent-grad-v2-fixed128"
         comptime if NN54_LOSS_PROFILE:
             result += ".nn-loss-v2-leaf128"
         comptime if NN57_NORM_PROFILE:

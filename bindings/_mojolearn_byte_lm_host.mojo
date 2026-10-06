@@ -67,13 +67,21 @@ def _index(value: PythonObject) raises -> Int:
 
 
 def _host_config(shape: PythonObject) raises -> ByteConfig:
-    if len(shape) != 9:
-        raise Error("byte LM host: expected 9 shape integers (B,L,DM,H,KV,HD,FF,layers,vocab)")
+    if len(shape) != 7 and len(shape) != 9 and len(shape) != 10:
+        raise Error("byte LM host: expected 7, 9 or 10 shape integers (B,L,DM,H,KV,HD,FF[,layers,vocab[,chunked_head_v2]])")
     var values = List[Int]()
-    for i in range(9):
+    for i in range(len(shape)):
         values.append(_index(shape[i]))
+    if len(values) == 7:
+        values.append(2)
+        values.append(256)
+    var chunked = False
+    if len(values) == 10:
+        if values[9] != 0 and values[9] != 1:
+            raise Error("byte LM host: chunked head selector must be 0 or 1")
+        chunked = values[9] == 1
     var cfg = ByteConfig(values[0], values[1], values[2], values[3],
-                         values[4], values[5], values[6], values[7], values[8])
+                         values[4], values[5], values[6], values[7], values[8], chunked)
     cfg.validate()
     return cfg^
 
