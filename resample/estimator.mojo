@@ -2300,7 +2300,9 @@ def resample_indices_host(
 # docs/apple-fast/ab/resample-gpu-recovery.md; no new board promotion.
 comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
+    # three shapes; quality equal, expected refusal recovered. Mixed, keep OFF.
+    # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
     and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER"]())
 
 
@@ -2310,7 +2312,9 @@ comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 # float32 all-GPU gather entrance, never the hybrid narrow route.
 comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+    # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
+    # three shapes; quality equal, expected refusal recovered. Mixed, keep OFF.
+    # One warmup+score; ab-20261006/repairs-54c1f35a5/results/F04.
     and is_defined["MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"]())
 
 # F19 M3 2026-10-06 public resample shapes(1,37)/(3,129)/(1,7,67):

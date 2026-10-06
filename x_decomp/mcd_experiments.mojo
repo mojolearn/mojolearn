@@ -19,10 +19,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from neighbors.impl.ball_cover.scan import (rbc_exclusive_scan_kernel, rbc_pscan_local_kernel, rbc_pscan_chunks_kernel, rbc_pscan_add_kernel, RBC_PSCAN_CHUNK, RBC_SCAN_TPB)
 from x_decomp.cells import F32Ptr, I32Ptr
 
-# F06 PENDING: default off. Source builds do not qualify fit quality/speed.
-# NEVER RUN — PENDING MEASUREMENT: active-candidate compaction.
+# F06 M3 2026-10-06 MEASURED, one warmup+score, quality equal; remain OFF.
+# Eight task timings per arm: active compact B/A0.9848..1.2258; covariance
+# reuse1.0059..1.1238; combined0.9935..1.0784. Mostly regressions. Evidence
+# ab-20261006/repairs-54c1f35a5/results/F06.
+# MEASURED M3: active-candidate compaction remains OFF.
 comptime MCD_FAST_ACTIVE_COMPACT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_MCD_FAST_ACTIVE_COMPACT"]()
-# NEVER RUN — PENDING MEASUREMENT: phase-local covariance reuse.
+# MEASURED M3: phase-local covariance reuse remains OFF.
 comptime MCD_FAST_COV_REUSE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_MCD_FAST_COV_REUSE"]()
 # Three Int32 candidate planes occupy at most768KiB; larger phases retain
 # the incumbent route. This resource limit is independent of dataset shapes.

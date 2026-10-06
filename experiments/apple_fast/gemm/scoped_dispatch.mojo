@@ -21,13 +21,13 @@ from gemm.afn_apple_fast import AFN_GEMM_APPLE
 # G2 narrow1.203750->0.865625ms; different baseline from this AFN adapter.
 # Separate shared G1/G5 PCA transforms were faster, inverses slower; none
 # supplies PCA-fit or broad-regime admission. See GEMM_INLINE_OUTCOMES.md.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# MEASURED scoped M3 callers; mixed results, defaults OFF.
 comptime TALL = is_defined["MOJOLEARN_SCOPED_GEMM_G1_TALL"]()
 comptime DENSE = is_defined["MOJOLEARN_SCOPED_GEMM_G1_DENSE"]()
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# MEASURED scoped M3 callers; mixed results, defaults OFF.
 comptime GRAM = is_defined["MOJOLEARN_SCOPED_GEMM_G1_GRAM"]()
 comptime NARROW = is_defined["MOJOLEARN_SCOPED_GEMM_G2_NARROW"]()
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# MEASURED scoped M3 callers; mixed results, defaults OFF.
 comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
 # HOLD-quality, scoped-pca-fit-istella-q-v1, compiled201fe736, zero allowance:
 # singular_relative1.964589033e-5->1.964642456e-5 and noise_relative
@@ -35,14 +35,14 @@ comptime SPLITS = is_defined["MOJOLEARN_SCOPED_GEMM_SPLIT"]()
 # Saved report serialization is INCOMPLETE; preserved fields show HOLD,
 # never PASS inferred from process rc. Rejudge saved captures (no GPU replay)
 # is owed; no fit timing/default admission. Mechanism PASS above is separate.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
-# M3 measurement 2026-10-06, F01/default and F02/pca: candidate warmup
-# failed actual-route reach assertions; no scored pair admitted. F02/sdk
-# matrix-call A/B had A_over_B 0.654..1.432 (mixed; one warmup/one score),
-# so no full-caller promotion. Identity/compile evidence reused, not rerun.
-# Harness 67d0efb29; per-arm builds/hashes and captures:
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/{F01,F02}.
-# Keep PCA and scoped candidate toggles OFF pending affected measurement repair.
+# MEASURED scoped M3 callers; mixed results, defaults OFF.
+# M3 2026-10-06 F01/default and F02/pca repaired positive-reach fixtures:
+# complete A/B pairs measured, original failed attempts retained. F01 task
+# timings B/A0.4756..1.2118; F02 PCA0.8741..1.1872; SDK0.6982..1.5301.
+# Mixed component outcomes; quality differs within captured FAST contracts,
+# prior broad fit-quality HOLD is not waived. Keep scoped/PCA defaults OFF.
+# One excluded warmup+one scored call. Evidence ab-20261006/repairs-54c1f35a5
+# results/F01 and F02/pca; original results/F02/sdk. No validation retests.
 comptime PCA = is_defined["MOJOLEARN_SCOPED_GEMM_PCA"]()
 comptime AUDIT = is_defined["MOJOLEARN_SCOPED_GEMM_AUDIT"]()
 # LEGACY, default OFF: the old per-route windows (TALL M>=4096 N32..128

@@ -35,23 +35,15 @@ from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
 from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, McdCompactWorkspace, compact_candidate_count, mcd_experiment_hit
 
-# SOURCE-READY / UNBUILT, 2026-10-04, lane/apple-fast-mcd-g1-gram-remote
-# source35c712d9c: no matrix/fitted quality or timing evidence. Default OFF.
-# Non-split self-Gram of any shape (no window since 2026-10-04); split plans
-# keep the incumbent atomic path.
-# Admission requires gated batched FP64/no-regression checks, actual MCD/EE
-# fitted-state/support/rank gates, positive caller reach, then M3 A/B timing.
-# Existing ordered-covariance HOLD is not waived by this separate candidate.
-# See docs/apple-fast/ab/mcd-g1-gram.md and EXPERIMENTS.md (MCD_FAST_G1_GRAM).
-# NEVER RUN — PENDING MEASUREMENT: opt-in MCD self-Gram route.
-# M3 F02/mcd 2026-10-06 measurement attempt failed in baseline score:
-# metric input reached classification with floating labels; origin needs repair.
-# No A/B timing admitted; retain OFF pending fixture repair (not an identity
-# or compilation failure). Caller 67d0efb29; reused artifact provenance and
-# retained log: ~/mojolearn-evidence/ab-overnight-20261006/m3/
-# artifacts/results/F02/mcd. No compile/identity retest was run.
+# M3 F02/mcd 2026-10-06 MEASURED after real score/prerequisite repair:
+# eight EE/MCD fit timings B/A0.8322/0.9304/0.9215/0.9316/0.9202/0.9333/
+# 0.9409/0.9472, captured task quality equal, sharedGram reach positive.
+# One warmup+score; promising scoped winner, default OFF pending existing
+# broader fitted-state/support/rank admission. Separate ordered-covariance
+# HOLD is not waived. Original failures retained; no identity/compile retest.
+# Evidence ab-20261006/repairs-next-5ae0c6f7a/results/F02/mcd.
 comptime MCD_G1_GRAM = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM"]()
-# NEVER RUN — PENDING MEASUREMENT: opt-in MCD self-Gram reach audit.
+# M3 measured reach audit; opt-in only, no production timing default.
 comptime MCD_G1_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"]()
 # LEGACY, default OFF: the old window admitted only d 129..256 features and
 # K 128..1023 selected rows, which brackets the board (istella 220 features).
@@ -109,6 +101,9 @@ comptime MCD_ORDERED_COV = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 # scheduling experiment preserves inactive-candidate gates and input strides;
 # it changes neither support selection nor candidate count.
 # NEVER RUN — PENDING MEASUREMENT: bounded MCD candidate batches.
+# F06 M3 2026-10-06 MEASURED bounded batching: eight task timings B/A
+# 0.9859..1.1788, quality equal; mostly regression, keep OFF. One warmup+score,
+# ab-20261006/repairs-54c1f35a5/results/F06/default.
 comptime MCD_FAST_BOUND_BATCH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_MCD_FAST_BOUND_BATCH"]())

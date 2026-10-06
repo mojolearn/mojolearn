@@ -12,13 +12,10 @@ from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from core.gemm import gemm_nt
 from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
 
-# SOURCE-READY / UNBUILT, 2026-10-04, source4bfc1424a: default OFF.
-# No actual softmax quality or timing result exists for this algorithm flag.
-# Resident G2 32768x8x220 1.203750->0.865625ms is a matrix probe only;
-# scoped-r2-all-q-v1 PASS covers the shared kernel, not this optimizer caller.
-# Require M2 A/B compile, actual fit/predict reach and all zero-regression
-# gates in docs/apple-fast/ab/softmax-g2-narrow.md before timing/promotion.
-# NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
+# F05 M3 2026-10-06 MEASURED binary logistic control plus multiclass
+# softmax tasks; actual softmax reach asserted. Eight fit/predict timings
+# B/A1.1163/1.0155/0.9965/1.0046/0.9649/1.0315/0.9327/0.8884, quality equal.
+# Mixed; keep OFF. One warmup+score; ab-20261006/repairs-54c1f35a5/results/F05.
 comptime SOFTMAX_G2 = AFN_GEMM_APPLE and is_defined["MOJOLEARN_SOFTMAX_FAST_G2_NARROW"]()
 comptime SOFTMAX_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_SOFTMAX_G2_AUDIT"]()
 # LEGACY, default OFF: the old window admitted only M>=4096, C 2..16, D 128..512,
