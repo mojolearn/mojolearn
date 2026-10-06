@@ -41,12 +41,34 @@
     "exhaustive exact neighbor candidate certification",
     "same k/search contract",
     "neighbor distance error tolerance, no digest gate",
-    "approximate ANN compaction is separately owed"
+    "Approximate ANN variant is independently labeled: same probes/filters/candidatecounts, exactfullprobes control and no recall regression"
   ],
   "timing_contract": "Exact public kneighbors through distance/index output reads; fit/index construction remains explicit",
   "blocker": null,
   "output_kind": "directory",
   "binding": "core",
   "prerequisite_bindings": [],
-  "build_uses_compile_slot": true
+  "build_uses_compile_slot": true,
+  "variants": {
+    "ann": [
+      "MOJOLEARN_IVF_FAST_BALANCED_TASKS",
+      "MOJOLEARN_IVF_FAST_BALANCED_AUDIT"
+    ]
+  },
+  "variant_baseline_defines": {
+    "ann": [
+      "MOJOLEARN_IVF_FAST_BALANCED_AUDIT"
+    ]
+  },
+  "variant_bindings": {
+    "ann": "ivf"
+  },
+  "variant_callers": {
+    "ann": "ann_caller.py"
+  },
+  "variant_prerequisite_bindings": {
+    "ann": [
+      "core"
+    ]
+  }
 }

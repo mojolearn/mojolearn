@@ -48,7 +48,7 @@ def main():
         shutil.copy2(binary,destination)
         return hashlib.sha256(destination.read_bytes()).hexdigest()
     (a.output/'dependencies').mkdir()
-    for prerequisite in card.get('prerequisite_bindings',['core']):
+    for prerequisite in card.get('variant_prerequisite_bindings',{}).get(a.variant,card.get('prerequisite_bindings',['core'])):
         name='_mojolearn.so' if prerequisite=='core' else '_mojolearn_'+prerequisite+'.so'
         destination=a.output/'dependencies'/name
         digest=build(prerequisite,[],destination)
