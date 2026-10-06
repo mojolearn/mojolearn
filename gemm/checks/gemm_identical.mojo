@@ -7744,7 +7744,16 @@ comptime AMD_SHORT_K_MAX = 1024
 #: the packed page. `VEC` (4) turns the 128-word group stride of the 128x128
 #: geometry into 132, `4 mod 32`, so the per-step B loads of a warp's 16
 #: column threads spread over eight bank groups (the kernel's docstring).
-comptime GEMM_KPACK_PAD = TUNED_VECLEN
+# A03: physical LDS stride experiment only. Vector-aligned padding leaves
+# every logical staged address and the accumulator traversal unchanged.
+# Compare 0/4/8 words; resource counters decide, never dataset dimensions.
+comptime GEMM_KPACK_PAD = (
+    get_defined_int["MOJOLEARN_IDN_GEMM_LDS_PAD_WORDS", TUNED_VECLEN]()
+    if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else TUNED_VECLEN
+)
+comptime assert GEMM_KPACK_PAD >= 0 and GEMM_KPACK_PAD % TUNED_VECLEN == 0, (
+    "experimental LDS padding must be nonnegative and vector aligned"
+)
 #: DEVIATION 2703, `kpack_padv`: the shared page alignment in bytes at which
 #: the per-step loads become `ld.shared.v4` (brief section 15).
 comptime GEMM_KPACK_ALIGN = 16
