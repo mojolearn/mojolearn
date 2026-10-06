@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# F20: qualification pending. Build every independent variant; device quality,
+# complete-call speed, peak scratch and opponent admission remain separate gates.
+# New experiment mechanisms remain opt-in; existing promoted defaults are retained.
 """Task-qualified multi-tensor optimizer and separate cancellation LayerNorm arm."""
 import sys
 from pathlib import Path
