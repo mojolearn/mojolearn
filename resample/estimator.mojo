@@ -34,7 +34,7 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32, f32_ptr, i32_ptr
-from resample.gather_fast import gather_rows_f32_kernel
+from resample.gather_fast import gather_rows_f32_kernel, gather_rows_tiled_f32_kernel
 from resample.fast_apple import (
     RESAMPLE_FAST_APPLE,
     bootstrap_mean_fast,
@@ -2311,6 +2311,11 @@ comptime RESAMPLE_FAST_WAIT_PAIR = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"]())
 
+comptime RESAMPLE_FAST_TILED_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_RESAMPLE_FAST_TILED_GATHER"]())
+
+
 def resample_gather_grouped(
     ctx: DeviceContext, rows: DeviceBuffer[DType.int32], n: Int, count: Int,
     srcs: List[Int], dsts: List[Int], widths: List[Int],
@@ -2321,10 +2326,16 @@ def resample_gather_grouped(
         var source = ctx.enqueue_create_buffer[DType.float32](n * d)
         var output = ctx.enqueue_create_buffer[DType.float32](count * d)
         ctx.enqueue_copy(dst_buf=source, src_ptr=f32_ptr(srcs[a]))
-        ctx.enqueue_function[gather_rows_f32_kernel](
-            output.unsafe_ptr(), source.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
-            grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
-        )
+        comptime if RESAMPLE_FAST_TILED_GATHER:
+            ctx.enqueue_function[gather_rows_tiled_f32_kernel](
+                output.unsafe_ptr(), source.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
+                grid_dim=(ceildiv(d, 32), ceildiv(count, 8), 1), block_dim=(256, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[gather_rows_f32_kernel](
+                output.unsafe_ptr(), source.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
+                grid_dim=(ceildiv(count * d, 256), 1, 1), block_dim=(256, 1, 1),
+            )
         ctx.enqueue_copy(dst_ptr=f32_ptr(dsts[a]), src_buf=output)
         keep.append(source^)
         keep.append(output^)
