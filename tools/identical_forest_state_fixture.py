@@ -51,6 +51,19 @@ def fixtures(kind):
                        u16_eligible=(kind == 'et' and 2*k >= d))
 
 
+def model_params(kind, case):
+    # Actual M2 validation: RF has a level-order max_leaves cap; ET exposes
+    # the distinct best-first max_leaf_nodes API. The original shared keyword
+    # was refused before any ET fit; do not alias their semantics.
+    params = dict(n_estimators=3, max_depth=8, max_features=case["max_features"],
+                  random_state=7, device="gpu", bootstrap=kind == "rf")
+    if kind == "rf":
+        params.update(n_bins=128, max_leaves=case["max_leaves"])
+    else:
+        params["max_leaf_nodes"] = None if case["max_leaves"] == -1 else case["max_leaves"]
+    return params
+
+
 def run(args):
     out = Path(args.out); out.mkdir(parents=True, exist_ok=False)
     import mojolearn as ml
@@ -68,10 +81,7 @@ def run(args):
             inputs={k:case[k] for k in ('X','y','Xq','yq')}; np.savez(dest/'inputs.npz',**inputs)
             rec['input_hash']=arrays_hash(inputs)
             cls=ml.RandomForestClassifier if kind=='rf' else ml.ExtraTreesRegressor
-            params=dict(n_estimators=3,max_depth=8,max_leaves=case['max_leaves'],
-                        max_features=case['max_features'],random_state=7,device='gpu',
-                        bootstrap=kind=='rf')
-            if kind=='rf': params['n_bins']=128
+            params=model_params(kind,case)
             rec['params']=params; model=cls(**params); model.fit(case['X'],case['y'])
             model.save(dest/'model.npz')
             with np.load(dest/'model.npz',allow_pickle=False) as z:

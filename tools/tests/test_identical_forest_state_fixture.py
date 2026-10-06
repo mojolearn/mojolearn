@@ -25,7 +25,6 @@ class FixtureTests(unittest.TestCase):
         h=m.arrays_hash(a);b={k:v.copy() for k,v in a.items()};b['leaves'][1]=0.
         self.assertNotEqual(h,m.arrays_hash(b))
         b={**a,'offsets':a['offsets'].astype(np.int64)};self.assertNotEqual(h,m.arrays_hash(b))
-if __name__=='__main__':unittest.main()
 
 class ScoredExportTests(unittest.TestCase):
     def test_existing_score_export_no_fit_or_prediction(self):
@@ -50,3 +49,17 @@ class ScoredExportTests(unittest.TestCase):
             with np.load(out/'ours/predictions.npz') as z: self.assertEqual(float(z['0:rmse'][0]),float(np.float32(.1)))
             self.assertEqual(len(json.loads((out/'receipt.json').read_text())['ours']['model_state_hash']),64)
         self.assertEqual(calls,[1])
+
+class PublicSurfaceTests(unittest.TestCase):
+    def test_family_constructor_keywords(self):
+        import ast
+        root=Path(__file__).parents[2]/'python/mojolearn'
+        for kind,file,cls in [('rf','randomforest.py','RandomForestClassifier'),('et','extratrees.py','ExtraTreesRegressor')]:
+            tree=ast.parse((root/file).read_text())
+            node=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name==cls)
+            init=next(n for n in node.body if isinstance(n,ast.FunctionDef) and n.name=='__init__')
+            keywords={a.arg for a in init.args.args+init.args.kwonlyargs}
+            for case in m.fixtures(kind):
+                self.assertFalse(set(m.model_params(kind,case))-keywords)
+
+if __name__=='__main__':unittest.main()
