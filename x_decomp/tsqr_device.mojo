@@ -96,6 +96,8 @@ comptime _TS_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime _TS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime TS_GRID_UPDATE = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_GRID"]())
 comptime TS_NORM_FUSED = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"]())
+# I22 new candidate remains default off. Qualification is pending: native
+# compilation is not four-column identity or NVIDIA+AMD full-operation speed.
 comptime TS_STRIP_UPDATE = _TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_STRIP_UPDATE"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime TS_SMEM_OK = lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_BYTES]()
 
