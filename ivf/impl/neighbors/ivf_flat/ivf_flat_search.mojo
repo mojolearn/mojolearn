@@ -901,6 +901,8 @@ def ivf_flat_search_prepared(
                 comptime for KM in [8, 16, 32]:
                     if k <= KM and (KM == 8 or k > KM // 2):
                         comptime if IVF_IDENTICAL_SCAN or IVF_APPLE_FAST_BALANCED:
+                            # I16 new candidate remains default off. Qualification is pending: native
+                            # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
                             if IVF_APPLE_FAST_BALANCED or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
                                 comptime if IVF_APPLE_FAST_BALANCED and is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
                                     _BALANCED_AUDIT.get_or_create_ptr()[].hits += 1
