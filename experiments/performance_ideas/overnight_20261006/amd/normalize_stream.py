@@ -5,7 +5,7 @@ def run():
  if not P.exists():return
  results=json.loads(P.read_text());f=R/'normalized-measurements.json';data=json.loads(f.read_text());rows=[r for r in data['rows'] if r.get('measurement_stage')!='streamed_driver'];indexed={}
  def common(r):
-  machine='DigitalOcean-606508222-MI325X';s=r['source_sha'];row=dict(id=r['candidate_id'],vendor='amd',route='gfx942',scope='component' if r['candidate_id'] in ['I02','I04','I06','I07'] else r['scope'],machine=machine,baseline_machine=machine,candidate_machine=machine,source_sha=s,baseline_source_sha=s,candidate_source_sha=s,evidence=str(P),warmups=1,scored_samples=1,warmup_scope='same_process',measurement_stage='streamed_driver',limitation='Representative generated production caller/components; named-dataset full-board promotion is separate')
+  machine='DigitalOcean-606508222-MI325X';s=r['source_sha'];row=dict(id=r['candidate_id'],vendor='amd',route='gfx942',scope='component' if r['candidate_id'] in ['I02','I04','I06','I07','N06','N08'] else r['scope'],machine=machine,baseline_machine=machine,candidate_machine=machine,source_sha=s,baseline_source_sha=s,candidate_source_sha=s,evidence=str(P),warmups=1,scored_samples=1,warmup_scope='same_process',measurement_stage='streamed_driver',limitation='Representative generated production caller/components; named-dataset full-board promotion is separate')
   if r['candidate_id']=='I06' and s.startswith('cbcc8dcd'):
    row.update(comparison_kind='confounded_schedule_bundle',promotion=False,limitation='Driver enabled GQA head reuse AND changed backward schedule to kvgrid_r32. Raw component timings represent this bundle, not isolated GQA toggle evidence. Corrected same-schedule driver pending.')
   if r['candidate_id']=='I06' and s.startswith('e80a1d0'):

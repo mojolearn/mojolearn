@@ -633,10 +633,16 @@ comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 # candidate round"). The candidate arm is P = 4.
 # =========================================================
 # `-D MOJOLEARN_2012_SMEM_COPIES4=1` selects P = 4; 1 is shipped.
-# N07 2026-10-06 L40S representative RF caller: LOSS. Candidate 161.308 vs
-# 124.758 ms and 131.878 vs 107.524 ms (0.773x/0.815x baseline/candidate).
-# One same-process warmup/score; default OFF; full dataset qualification owed.
-# Evidence: overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json.
+# N07 2026-10-06 representative RF caller LOSS, source cbcc8dcd3303.
+# rows/features=100000/32: AMD 335.854582 -> 347.276258 ms
+# (candidate/baseline 1.034); NVIDIA L40S 124.757991 -> 161.308000 ms
+# (1.293). NVIDIA neighbor 131071/17: 107.523736 -> 131.878435 ms
+# (1.227); matching AMD neighbor pending. Flag changes histogram COPIES=4
+# and TILE=4; the 128-bin fixture admits the bounded shared-memory route.
+# No per-fit launch counter was emitted by this timing driver. One excluded
+# same-context warmup and one scored fit, rc=0; prior identity evidence reused.
+# Default OFF: generated representative fits do not qualify the full datasets.
+# Evidence: measurements/20261006/index.json.
 comptime IDN_RF_STREAM_REPLICAS = BUILD_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_STREAM_REPLICAS"]()
 
 struct _StreamReplicaAudit(Defaultable, Movable):
