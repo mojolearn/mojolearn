@@ -152,8 +152,10 @@ def prepare(args):
             raise ValueError('Source contract changed: ' + path)
     if doc['canonical_lock'] != LOCK or doc['prerequisite_status_paths'] != WAIT:
         raise ValueError('Canonical queue prerequisites cannot be redirected')
+    if args.output.resolve().is_relative_to(ROOT.resolve()):
+        raise ValueError('Preparation outputs must be outside the frozen checkout')
     prerequisites(WAIT)
-    with open(LOCK, 'a') as lock:
+    with open(LOCK, 'r+b') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         states = prerequisites(WAIT)
         # All source archive reads and CPU preprocessing occur under the same lock.
@@ -240,6 +242,8 @@ def prepare(args):
                 if digest(archive) != before:
                     raise ValueError('Source archive changed during preparation: ' + ds)
                 del xtr, xte, ytr, yte
+            if doc['source_sha'] != git('rev-parse', 'HEAD') or git('status', '--porcelain', '--untracked-files=no'):
+                raise ValueError('Source freeze changed during preparation; retain failed attempt')
             manifest.update(status='PREPARED_NOT_MEASURED_NOT_ADMITTED', finished_at=time.time())
             write(args.output / 'receipt.json', manifest)
         except BaseException as exc:
