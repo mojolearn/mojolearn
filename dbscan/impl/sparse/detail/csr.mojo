@@ -109,6 +109,9 @@ comptime IDN_DBSCAN_CC_GATED = (
 
 #: Passes per flag read under `IDN_DBSCAN_CC_GATED`. CANDIDATE ARMS (default
 #: 8): `-D MOJOLEARN_IDN_DBSCAN_CC_CHUNK4=1`, `..._CHUNK16=1`, `..._CHUNK32=1`.
+# I14 experiment qualification pending: compile/fixtures do not establish
+# four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
+# defaults stay unchanged; this campaign attributes explicit experiment arms.
 comptime IDN_DBSCAN_CC_CHUNK = (
     4 if is_defined["MOJOLEARN_IDN_DBSCAN_CC_CHUNK4"]()
     else (
