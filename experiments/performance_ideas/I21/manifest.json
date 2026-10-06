@@ -17,10 +17,7 @@
   "candidate_defines": [
     "MOJOLEARN_IDN_GMM_COMPONENT_BATCH=1"
   ],
-  "baseline_defines": [
-    "MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF=1",
-    "MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF=1"
-  ],
+  "baseline_defines": [],
   "build_argv": [
     "{python}",
     "{repo}/gemm/experiments/native_build.py",
@@ -65,11 +62,7 @@
     "--mojo",
     "{mojo}",
     "--output",
-    "{output}",
-    "--define",
-    "MOJOLEARN_IDN_GMM_FUSED_CHOL_OFF=1",
-    "--define",
-    "MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF=1"
+    "{output}"
   ],
   "validation_argv": [
     "{output}"
