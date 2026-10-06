@@ -156,7 +156,7 @@ def work_id(w):
 
 def expand_workload(value):
     if isinstance(value,str):
-        for prefix,source in [('classical:', 'tools/classical_two_datasets.py'),('more:', 'tools/bench_board_more.py'),('expanded:', 'tools/bench_board_algos.py'),('classical2/','tools/bench_board_more.py'),('algos/','tools/bench_board_algos.py')]:
+        for prefix,source in [('classical:', 'tools/classical_two_datasets.py'),('classical/', 'tools/classical_two_datasets.py'),('more:', 'tools/bench_board_more.py'),('expanded:', 'tools/bench_board_algos.py'),('classical2/','tools/bench_board_more.py'),('algos/','tools/bench_board_algos.py')]:
             if value.startswith(prefix):
                 return [dict(id=value+'@dataset='+dataset,source_workload=value,harness=source,dataset=dataset,recipe='Saved full '+dataset+' race; intrinsic caps and additional operation suffixes remain unresolved') for dataset in ('taxi','istella')]
     if isinstance(value,dict) and value.get('affected_models'):
@@ -240,7 +240,7 @@ def build_plan(doc,mat):
         paths=unique([p for mid in c['members'] if mid in entries for p in binding_paths(entries[mid],c['mode'])])
         if not paths:blocked.append(dict(configuration=c['id'],status='MISSING_BINDING_MAP'));continue
         for path in paths:
-            supported=['host'] if path.endswith('_host.mojo') else (['apple','nvidia'] if c['mode']=='identical' else ['apple'])
+            supported=['host'] if path.endswith('_host.mojo') else (['apple','nvidia','amd'] if c['mode']=='identical' else ['apple'])
             for vendor in supported:
               if vendor not in c['vendors']:continue
               for arm in ('B','A'):
@@ -250,9 +250,9 @@ def build_plan(doc,mat):
                   if c['mode']=='identical':defines=defines+['MOJOLEARN_NUMERIC_IDENTICAL=1']
                   defines=unique(sorted(defines))
                   key=sha_value([path,vendor,c['mode'],defines])[:20]
-                  job=jobs.setdefault(key,dict(key=key,binding=path,vendor=vendor,mode=c['mode'],defines=defines,configurations=[],status='NOT_COMPILED',target={'host':'native CPU host binding','apple':'Apple Metal on local Apple silicon','nvidia':'native NVIDIA CUDA target on authorized RunPod worker'}[vendor],runtime_reach='NOT_VERIFIED'))
+                  job=jobs.setdefault(key,dict(key=key,binding=path,vendor=vendor,mode=c['mode'],defines=defines,configurations=[],status='NOT_COMPILED',target={'host':'native CPU host binding','apple':'Apple Metal on local Apple silicon','nvidia':'NVIDIA shipped/default or native architecture on authorized worker','amd':'native AMD gfx architecture on authorized worker'}[vendor],runtime_reach='NOT_VERIFIED'))
                   job['configurations'].append(dict(configuration=c['id'],arm=arm))
-    return dict(schema='mojolearn.six-lane-build-plan/1',jobs=list(jobs.values()),blocked=blocked,unsupported=[dict(vendor='amd',status='NOT_COMPILED',reason='No supported local AMD target; AMD remote work is not authorized')],policy='Deduplicated by binding, mode, vendor and exact defines. Compile success is not runtime reach; no import, smoke, quality, timing or identity execution.')
+    return dict(schema='mojolearn.six-lane-build-plan/1',jobs=list(jobs.values()),blocked=blocked,unsupported=[],policy='Deduplicated by binding, mode, vendor and exact defines. Compile success is not runtime reach; no import, smoke, quality, timing or identity execution.')
 
 
 def frozen(manifest=None):
@@ -270,12 +270,42 @@ def frozen(manifest=None):
     return git('rev-parse','HEAD')
 
 
+def comparable_compile_argv(values, binding):
+    """Ignore relocation only; callers still compare compiler and closure hashes.
+
+    Source archives and Apple build/timing machines use different checkout
+    roots. Only the known compiler, source-root includes, binding input and
+    output locations are relocatable. Preserve all target/define/other flags.
+    """
+    values = list(values)
+    if len(values) < 4 or values[-2] != '-o':
+        return values
+    source = Path(values[-3])
+    suffix = Path(binding)
+    if source.parts[-len(suffix.parts):] != suffix.parts:
+        return values
+    root = source
+    for _ in suffix.parts:
+        root = root.parent
+    normalized = ['<compiler>', *values[1:-2]]
+    normalized[-1] = '<source>/' + binding
+    for index in range(1, len(normalized)-1):
+        if normalized[index-1] == '-I':
+            if normalized[index] == str(root):
+                normalized[index] = '<source>'
+            elif normalized[index] == str(root/'bindings'):
+                normalized[index] = '<source>/bindings'
+    return normalized
+
+
 def compile_jobs(args):
     apple=platform.system()=='Darwin' and platform.machine()=='arm64'
     linux=platform.system()=='Linux' and platform.machine()=='x86_64'
     if not (apple or linux):raise ValueError('Supported compile hosts are Apple arm64 or Linux x86_64')
-    if linux and args.vendor not in ('nvidia','host'):raise ValueError('Linux compilation requires an explicit nvidia or host selection')
-    if apple and args.vendor=='nvidia':raise ValueError('NVIDIA compilation requires the authorized native Linux worker')
+    if linux and args.vendor not in ('nvidia','amd','host'):raise ValueError('Linux compilation requires an explicit nvidia, amd or host selection')
+    if apple and args.vendor in ('nvidia','amd'):raise ValueError('NVIDIA/AMD compilation requires an authorized Linux worker')
+    if args.vendor=='amd' and not re.fullmatch(r'gfx[0-9a-f]+',args.accelerator or ''):raise ValueError('AMD requires an explicit supported native gfx architecture; no generic/portable target')
+    if args.vendor!='amd' and args.accelerator:raise ValueError('--accelerator is only for the native AMD target')
     source=frozen(args.source_manifest);check_benchmark();plan=json.loads(args.plan.read_text());compiler=args.compiler.resolve()
     if not compiler.is_file():raise ValueError('Compiler missing')
     out=args.output.resolve()
@@ -303,7 +333,11 @@ def compile_jobs(args):
             caps={line.rsplit(',',1)[1].strip().replace('.','') for line in hardware['gpu'].splitlines()}
             if len(caps)!=1:raise ValueError('Need one native NVIDIA architecture')
             accelerator='sm_'+caps.pop()
-    manifest=dict(schema='mojolearn.six-lane-build-campaign/1',source_sha=source,compiler=str(compiler),compiler_sha256=digest(compiler),compiler_version=version,hardware=hardware,build_plan_sha256=digest(args.plan),records=[],qualification='No runtime, identity, quality or performance execution')
+        if args.vendor=='amd':
+            accelerator=args.accelerator
+            hardware['requested_native_accelerator']=accelerator
+    target_track=('nvidia-'+args.nvidia_target if args.vendor=='nvidia' else 'amd-'+args.accelerator if args.vendor=='amd' else args.vendor or 'apple-host')
+    manifest=dict(target_track=target_track,schema='mojolearn.six-lane-build-campaign/1',source_sha=source,compiler=str(compiler),compiler_sha256=digest(compiler),compiler_version=version,hardware=hardware,build_plan_sha256=digest(args.plan),records=[],qualification='No runtime, identity, quality or performance execution')
     closures,_=source_graph()
     reusable=[]
     for root in args.reuse or []:
@@ -318,7 +352,7 @@ def compile_jobs(args):
         receipt=directory/'receipt.json'
         if receipt.exists():
             old=json.loads(receipt.read_text())
-            if old.get('source_sha')==source and old.get('status')=='COMPILED' and digest(old['artifact'])==old['artifact_sha256']:
+            if old.get('source_sha')==source and old.get('target_track')==target_track and old.get('compiler_sha256')==manifest['compiler_sha256'] and old.get('status')=='COMPILED' and digest(old['artifact'])==old['artifact_sha256']:
                 manifest['records'].append(old);continue
             raise ValueError('Evidence already exists; choose a new campaign directory for repairs')
         artifact=directory/(Path(job['binding']).stem+'.so');log=directory/'build.log'
@@ -328,22 +362,20 @@ def compile_jobs(args):
         # Match inspected shipped Darwin builders. Neural AOT builders deliberately
         # omit --target-accelerator; expansion bindings explicitly use metal:1.
         if apple and job['vendor']=='apple' and wrapper.exists() and '--target-accelerator metal:1' in wrapper.read_text():flags+=['--target-accelerator','metal:1']
-        if linux and job['vendor']=='nvidia':flags+=['--target-accelerator',accelerator]
-        flags+=['-D',{'host':'MOJOLEARN_COLUMN_CPU','apple':'MOJOLEARN_COLUMN_APPLE','nvidia':'MOJOLEARN_COLUMN_NVIDIA'}[job['vendor']]]
+        if linux and (job['vendor']=='amd' or (job['vendor']=='nvidia' and args.nvidia_target=='native')):flags+=['--target-accelerator',accelerator]
+        flags+=['-D',{'host':'MOJOLEARN_COLUMN_CPU','apple':'MOJOLEARN_COLUMN_APPLE','nvidia':'MOJOLEARN_COLUMN_NVIDIA','amd':'MOJOLEARN_COLUMN_AMD'}[job['vendor']]]
         if apple:flags+=['-Xlinker','-platform_version','-Xlinker','macos','-Xlinker','11.0','-Xlinker',sdk]
         argv=[str(compiler),'build','-j',str(args.jobs),'--emit','shared-lib',*flags,'-I',str(ROOT),'-I',str(ROOT/'bindings')]
         for define in job['defines']:argv+=['-D',define]
         argv += [str(ROOT/job['binding']),'-o',str(artifact)]
         dep_hash={p:digest(ROOT/p) for p in sorted(closures.get(job['binding'],{job['binding']}))}
-        record=dict(job,source_sha=source,compiler=version,compiler_sha256=manifest['compiler_sha256'],hardware=hardware,argv=argv,source_closure_sha256=sha_value(dep_hash),source_files=dep_hash,artifact=str(artifact),log=str(log),wrapper=str(wrapper),wrapper_sha256=digest(wrapper) if wrapper.exists() else None)
+        record=dict(job,target_track=target_track,source_sha=source,compiler=version,compiler_sha256=manifest['compiler_sha256'],hardware=hardware,argv=argv,source_closure_sha256=sha_value(dep_hash),source_files=dep_hash,artifact=str(artifact),log=str(log),wrapper=str(wrapper),wrapper_sha256=digest(wrapper) if wrapper.exists() else None)
         write(directory/'input.json',record)
-        def comparable_argv(values):
-            return values[:-2]  # only -o and the artifact destination may differ
         match=next(((path,old) for path,old in reusable if old.get('key')==job['key']
             and old.get('source_closure_sha256')==record['source_closure_sha256']
             and old.get('compiler_sha256')==record['compiler_sha256']
             and old.get('compiler')==version
-            and comparable_argv(old.get('argv',[]))==comparable_argv(argv)
+            and comparable_compile_argv(old.get('argv',[]),job['binding'])==comparable_compile_argv(argv,job['binding'])
             and Path(old.get('artifact','')).is_file()
             and digest(old['artifact'])==old.get('artifact_sha256')),None)
         if match:
@@ -362,9 +394,45 @@ def compile_jobs(args):
     return 1 if any(r['status']=='FAILED' for r in manifest['records']) else 0
 
 
+def runtime_requirements(configuration, workload_id, configurations):
+    """Only controls declared for this workload can require a runtime adapter.
+
+    Combined candidates include controls for unrelated estimators. Keep unknown
+    member mappings blocked, and never invent an operation to reach a control.
+    """
+    pending = {}
+    targets = [w for value in configuration.get('workloads', []) for w in expand_workload(value) if work_id(w)==workload_id]
+    target_harnesses = {w['harness'] for w in targets if isinstance(w, dict) and w.get('harness')}
+    if configuration['A']['runtime']:
+        pending[configuration['id']] = configuration['A']['runtime']
+    for member, controls in configuration.get('runtime_by_member', {}).items():
+        selected = configurations.get(member)
+        if selected is None or not selected.get('workloads'):
+            pending[member] = controls
+            continue
+        affected = [w for value in selected['workloads'] for w in expand_workload(value)]
+        # A declared neural-only caller cannot require a control in a classical
+        # PCA race. Unmapped callers within the same harness remain ambiguous.
+        declared_harnesses = set()
+        all_scoped = True
+        for value in selected['workloads']:
+            if isinstance(value, dict) and value.get('harness'):
+                declared_harnesses.add(value['harness'])
+            elif isinstance(value, dict) and value.get('board_lanes') and len(set(value.get('recipe_paths', [])) & {'tools/bench_board_algos.py', 'tools/bench_board_neural.py'}) == 1:
+                declared_harnesses.update(set(value['recipe_paths']) & {'tools/bench_board_algos.py', 'tools/bench_board_neural.py'})
+            else:
+                all_scoped = False
+        if all_scoped and target_harnesses and declared_harnesses.isdisjoint(target_harnesses):
+            continue
+        ambiguous = any(isinstance(w, dict) and not (w.get('id') or w.get('key') or w.get('lane')) for w in affected)
+        if ambiguous or workload_id in {work_id(w) for w in affected}:
+            pending[member] = controls
+    return pending
+
+
 def queue(args):
     """Write the existing queue contract; never launch a worker or a build."""
-    check_benchmark();mat=read('experiments/six_lane_integration/matrix.json')
+    check_benchmark();mat=json.loads(args.matrix.read_text())
     recipes=json.loads(args.recipes.read_text()) if args.recipes else {}
     configs={c['id']:c for c in mat['configurations']};jobs=[];source=git('rev-parse','HEAD')
     for cell in mat['cells']:
@@ -380,7 +448,7 @@ def queue(args):
             if recipe.get('source_sha')!=source:raise ValueError('Recipe names a different source freeze')
             if recipe.get('changes_frozen_race') or recipe['full_dataset_coverage'] is not True:raise ValueError('Recipe changes frozen race or lacks full coverage')
             if c['problems'] or cell['status']!='PENDING_COVERAGE':raise ValueError('Incompatible, historical, rejected or alias-only selection')
-            if c['A']['runtime'] or c.get('runtime_by_member'):raise ValueError('This source API needs a saved matching race; the master never alters one')
+            if runtime_requirements(c,cell['workload_id'],configs):raise ValueError('This source API needs a saved matching race; the master never alters one')
             resolutions=recipe['coverage_resolutions']
             if set(resolutions)!=set(job['blocked']):raise ValueError('Resolve each recorded coverage gap explicitly; removing blockers is not evidence')
             for reason,evidence in resolutions.items():
@@ -414,8 +482,8 @@ def main(argv=None):
     sh=s.add_parser('show');sh.add_argument('id')
     b=s.add_parser('compile',help='compile shared libraries only, never import or execute')
     b.add_argument('--plan',type=Path,default=STORE/'build_plan.json');b.add_argument('--compiler',type=Path,required=True);b.add_argument('--output',type=Path,required=True);b.add_argument('--binding',action='append');b.add_argument('--key',action='append');b.add_argument('--limit',type=int);b.add_argument('--keep-going',action='store_true');b.add_argument('--reuse',type=Path,action='append',help='Prior compile evidence roots; exact source-closure/toolchain matches only')
-    b.add_argument('--vendor',choices=('apple','host','nvidia'));b.add_argument('--jobs',type=int,default=2);b.add_argument('--source-manifest',type=Path,help='Exact committed-source manifest for a verified archive on the authorized NVIDIA worker')
-    q=s.add_parser('queue',help='write future queue; incomplete cells stay blocked');q.add_argument('--vendor',choices=VENDORS,required=True);q.add_argument('--recipes',type=Path);q.add_argument('--select',action='append');q.add_argument('--output',type=Path,required=True)
+    b.add_argument('--vendor',choices=('apple','host','nvidia','amd'));b.add_argument('--accelerator',help='AMD native gfx target, e.g. gfx942; portable/generic targets forbidden');b.add_argument('--nvidia-target',choices=('native','default'),default='native',help='native pins the observed sm target; default preserves shipped compiler target selection, recorded separately');b.add_argument('--jobs',type=int,default=2);b.add_argument('--source-manifest',type=Path,help='Exact committed-source manifest for a verified archive on the authorized NVIDIA worker')
+    q=s.add_parser('queue',help='write future queue; incomplete cells stay blocked');q.add_argument('--vendor',choices=VENDORS,required=True);q.add_argument('--recipes',type=Path);q.add_argument('--matrix',type=Path,default=STORE/'matrix.json');q.add_argument('--select',action='append');q.add_argument('--output',type=Path,required=True)
     bp=s.add_parser('board-plan',help='write inputs and command for the existing board tool, without invoking it');bp.add_argument('--output',type=Path,required=True)
     args=p.parse_args(argv)
     if args.command=='refresh':
