@@ -45,7 +45,8 @@
     "full clustering fit inertia no material loss",
     "same starts/seeds/batch and stopping policy",
     "iterations and cold/repeated scratch use reported",
-    "DBSCAN/HDBSCAN separate full-fit quality and diagnostic graph/stage timing; no phase-instrumented time counted as scored fit"
+    "DBSCAN/HDBSCAN separate full-fit quality and diagnostic graph/stage timing; no phase-instrumented time counted as scored fit",
+    "Independent promoted center-compaction and cross-fit input-pool controls; verify compiled policy, complete fit task quality and preserved previous outputs"
   ],
   "timing_contract": "Full fit through centers/labels read; cold and repeat distinct",
   "blocker": null,
@@ -76,7 +77,9 @@
     ],
     "hdbscan-core": [
       "MOJOLEARN_HDB_CORE_TILE"
-    ]
+    ],
+    "center-accumulation": [],
+    "scratch-reuse": []
   },
   "variant_bindings": {
     "dbscan-outputs": "estimators",
@@ -95,5 +98,13 @@
     "{output}/arms",
     "--output",
     "{output}/run"
-  ]
+  ],
+  "variant_baseline_defines": {
+    "center-accumulation": [
+      "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"
+    ],
+    "scratch-reuse": [
+      "MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"
+    ]
+  }
 }
