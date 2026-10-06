@@ -98,6 +98,7 @@ comptime TS_GRID_UPDATE = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_GRID_
 comptime TS_NORM_FUSED = (_TS_IDN and not (is_defined["MOJOLEARN_IDN_TSQR_NORM_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())) or (_TS_FAST_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_TSQR_NORM"]())
 # I22 new candidate remains default off. Qualification is pending: native
 # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
+# NEVER RUN — PENDING VALIDATION
 comptime TS_STRIP_UPDATE = _TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_STRIP_UPDATE"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime TS_SMEM_OK = lib_smem_page_fits_for[TARGET_COLUMN, TS_SMEM_BYTES]()
 
@@ -723,6 +724,7 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
         ts_free_device()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
     if keep:
+        # NEVER RUN — PENDING VALIDATION
         comptime if not (_TS_IDN and is_defined["MOJOLEARN_IDN_TSQR_REUSE"]()):
             raise Error("x_decomp tsqr: retained apply requires the explicit reuse experiment")
         var retained_bytes = 0

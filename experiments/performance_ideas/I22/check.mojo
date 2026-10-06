@@ -44,6 +44,7 @@ def check(ctx: DeviceContext,m: Int,d: Int) raises:
     _ = packed^; _ = dx^; _ = db^; _ = dq^
     print("I22 TSQR_PASS rows=",m,"columns=",d,"R_words=",n*n,"Q_words=",m*3)
 
+# NEVER RUN — PENDING VALIDATION
 def main() raises:
     var ctx=DeviceContext()
     for rows in [257,513,1031]:
