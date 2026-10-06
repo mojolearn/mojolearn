@@ -9346,6 +9346,16 @@ def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuf
 # measurements, not isolated toggle evidence. Measurement repair must hold
 # the schedule constant. Existing identity reused; default remains OFF.
 # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I06.
+# Corrected I06 sourcee80a1d0 (2026-10-06), fixed kvgrid schedule, ratio2:
+# scoped LOSER on MI325X1.211/1.212 and L40S1.147/1.108 (candidate/base).
+# Length1024/1536, B1,heads8,kv4,hd64: AMD2.947/4.342 vs2.434/3.581ms;
+# NVIDIA1.311/2.506 vs1.143/2.262ms. Both report schedule word50182.
+# The even-ratio source guard admits reuse at8/4; no dedicated runtime reuse
+# counter is exported. One same-process warmup/score, identity evidence reused.
+# Earlier e80 ratio12/4=3 refused reuse and is NO_DISTINCT_RUNTIME_ARM;
+# earlier cbcc bundled schedule measurements above remain separate history.
+# Representative forward/backward scope only; keep GQA reuse default OFF.
+# Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurements, I06.
 comptime ATTN_GQA_HEAD_REUSE = (
     GLOBAL_NUMERIC_MODE==NUMERIC_IDENTICAL
     # The original bundled timing does not qualify this switch.

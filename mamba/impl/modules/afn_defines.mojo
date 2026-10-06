@@ -119,8 +119,16 @@ comptime IDN_MAMBA_DEVICE_REFUSAL = _IDN_MAMBA_DEVICE and not is_defined[
 #: (batch, channel) walking the sequence. Every output cell is the same
 #: bias-seeded four-tap fma chain over the same inputs (no recurrence), so no
 #: bit moves; the host column keeps the walking kernel (same cells, same bits).
+# I09 sourcecbcc8dcd3303 (2026-10-06) scoped WINNER on both vendors:
+# cell/walking ratios MI325X0.813/0.810 and L40S0.788/0.775 at B1,length512/1025,
+# d_model64. This times the complete Mamba block forward plus output download,
+# not only convolution. Both device columns admit the distinct cell kernel.
+# One same-process warmup/score; accepted identity evidence reused, not rerun.
+# Preserve established default ON; representative fixtures add no new
+# full-workload promotion. Evidence: overnight-ab-20261006/{amd,nvidia}
+# normalized measurement receipts, I09.
 comptime IDN_MAMBA_CONV_CELL = _IDN_MAMBA_DEVICE and not is_defined[
-    # I09 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+    # Existing default is retained after scoped cross-vendor measurements.
     "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF"
 ]()
 #: lane nr-mamba (2026-10-04, roadmap B1) IDN_M2_SSD_TILES (default ON where
