@@ -89,8 +89,8 @@ def scaler_check(ctx: DeviceContext,n: Int,d: Int) raises:
 
 def main() raises:
     var ctx=DeviceContext()
-    for n in [255,257,1031]:
+    for n in [1,255,257,1031]:
         for k in [2,7,33]:
             check(ctx,n,k)
         scaler_check(ctx,n,7)
-    print("I24 PASS joint_count_cases=9 resident_scaler_attributes=3")
+    print("I24 PASS joint_count_cases=12 resident_scaler_attributes=4 empty_class_warning_cases=3")
