@@ -515,7 +515,40 @@ class SmallMLPTrainer:
     @staticmethod
     def _matmul(a, b, **kwargs):
         mode = _require_mode()
-        result = _linalg_impl.matmul(a, b, identical=(mode == 'identical'), **kwargs)
+        if mode != 'identical':
+            result = _linalg_impl.matmul(a, b, identical=False, **kwargs)
+        else:
+            # API shell only: admit layouts, select the neural binding and
+            # borrow buffers. The native entry owns every data operation.
+            unknown = kwargs.keys() - {'transpose_a', 'transpose_b', 'out'}
+            if unknown:
+                raise TypeError('SmallMLPTrainer GEMM received unsupported options')
+            ta, tb = bool(kwargs.get('transpose_a', False)), bool(kwargs.get('transpose_b', False))
+            if ta and tb:
+                raise ValueError('SmallMLPTrainer GEMM supports NN, NT and TN only')
+            left = _linalg_impl._operand(a, 'a')
+            right = _linalg_impl._operand(b, 'b')
+            k, m = left.shape if ta else (left.shape[1], left.shape[0])
+            n, kb = right.shape if tb else (right.shape[1], right.shape[0])
+            if k != kb:
+                raise ValueError('SmallMLPTrainer GEMM contracted dimensions disagree')
+            result = kwargs.get('out')
+            if result is None:
+                result = empty((m, n), '<f4')
+            else:
+                pb = probe(result)
+                if not is_native_f32(pb.format) or pb.shape != (m, n):
+                    raise ValueError('SmallMLPTrainer GEMM output must be float32 with shape (m, n)')
+                if not pb.c_contiguous or pb.readonly:
+                    raise ValueError('SmallMLPTrainer GEMM output must be writable and C-contiguous')
+            binding = _training_impl._load(mode)
+            entry = getattr(binding, 'neural_gemm', None)
+            if not callable(entry):
+                raise ImportError('SmallMLPTrainer requires updated training binding: missing neural_gemm')
+            written = entry(addr_ro(left, name='a'), addr_ro(right, name='b'),
+                            addr(result, name='result'), [m, n, k, 2 if ta else (1 if tb else 0)])
+            if written != m * n:
+                raise RuntimeError('SmallMLPTrainer neural GEMM returned an incomplete result')
         # DEVIATION 2426: the product is a mojolearn.Array; finiteness via
         # the native `all_finite` helper.
         if result.dtype != '<f4' or not all_finite(result):
@@ -547,6 +580,16 @@ class SmallMLPTrainer:
         activation = self._bias(binding, self._matmul(x, w1, transpose_b=True), b1, True)
         logits = self._bias(binding, self._matmul(activation, w2, transpose_b=True), b2, False)
         return activation, logits
+
+    def predict_logits_sessions(self, inputs):
+        """Concatenated logits for independent sessions using the current model.
+
+        NN64 selects one packed model execution; its control runs each session
+        projection separately. The session inputs and all math stay in Mojo.
+        """
+        with self._lock:
+            return _training_impl.mlp_inference_sessions(
+                inputs, *self._opt.params, numeric_mode=_require_mode())
 
     def predict_logits(self, X):
         """Return independent FP32 logits from the current weights."""
@@ -737,6 +780,9 @@ class SmallMLPTrainer:
         payload = _encode_state(state)
         envelope = dict(schema=_FILE_SCHEMA, payload=payload,
                         payload_sha256=hashlib.sha256(_canonical(payload)).hexdigest())
+        profile = str(self._binding().neural_arithmetic_profile())
+        if profile != "mojolearn.neural-training.fp32.v1":
+            envelope["arithmetic_profile"] = profile
         encoded = _canonical(envelope) + b'\n'
         if len(encoded) > _FILE_LIMIT:
             raise ValueError('SmallMLPTrainer checkpoint exceeds its size bound')
@@ -765,12 +811,15 @@ class SmallMLPTrainer:
             envelope = json.loads(encoded, object_pairs_hook=_unique_object)
         except (ValueError, UnicodeDecodeError, RecursionError) as exc:
             raise ValueError('SmallMLPTrainer checkpoint is not valid bounded JSON') from exc
-        if not isinstance(envelope, dict) or set(envelope) != {'schema', 'payload', 'payload_sha256'}:
+        if not isinstance(envelope, dict) or set(envelope) not in ({'schema', 'payload', 'payload_sha256'}, {'schema', 'payload', 'payload_sha256', 'arithmetic_profile'}):
             raise ValueError('SmallMLPTrainer checkpoint envelope mismatch')
         if envelope['schema'] != _FILE_SCHEMA:
             raise ValueError('SmallMLPTrainer checkpoint schema mismatch')
         if hashlib.sha256(_canonical(envelope['payload'])).hexdigest() != envelope['payload_sha256']:
             raise ValueError('SmallMLPTrainer checkpoint integrity mismatch')
+        expected_profile = str(_training_impl._load(_require_mode()).neural_arithmetic_profile())
+        if envelope.get('arithmetic_profile', 'mojolearn.neural-training.fp32.v1') != expected_profile:
+            raise ValueError('SmallMLPTrainer checkpoint arithmetic profile mismatch')
         state = _decode_state(envelope['payload'])
         weights, _, config, schedule = _validate_state(state)
         result = cls(*weights, data_schedule=schedule, lr=config['lr'],

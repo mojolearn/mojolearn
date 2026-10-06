@@ -122,6 +122,9 @@ from checks.numerics import (
     portable_sinf,
 )
 from gemm.contract import OP_NN, OP_NT, OP_TN
+# Dense projections select NN03/04. SSD/SISO internal contraction profiles
+# remain fixed in the device kernels and therefore in these host calls.
+from gemm.host.neural_gemm import gemm_host_rows as neural_gemm_host_rows
 from gemm.checks.gemm_oracle import gemm_oracle, gemm_oracle_right_zero_padded
 from std.math import min
 
@@ -570,7 +573,7 @@ def mamba3_block_oracle(
 
     host_tick(hton, htk, "m3.norm")
     # ---- S4: in_proj (mamba3.py:176; Linear, bias=False), gemm v1 ---------
-    st.in_proj = gemm_host_rows(st.norm_out, w.w_in, OP_NT, m, dip, dm)
+    st.in_proj = neural_gemm_host_rows(st.norm_out, w.w_in, OP_NT, m, dip, dm)
     var ip_p = _p(st.in_proj)
 
     host_tick(hton, htk, "m3.in_proj")
@@ -1539,7 +1542,7 @@ def mamba3_block_oracle(
 
     host_tick(hton, htk, "m3.reports_buffer")
     # ---- S4: out_proj (mamba3.py:277), gemm v1 OP_NT, k = d_inner. ------
-    st.out_proj = gemm_host_rows(st.gate_out, w.w_out, OP_NT, m, dm, di)
+    st.out_proj = neural_gemm_host_rows(st.gate_out, w.w_out, OP_NT, m, dm, di)
 
     host_tick(hton, htk, "m3.out_proj")
     # ---- S23: residual (block.py:52/:67), mamba2 S22 VERBATIM; cells over

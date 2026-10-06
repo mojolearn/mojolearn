@@ -18,15 +18,18 @@ synchronizes across twelve calls before, seven in one call now), which is
 the whole cost of this cell on a Metal box.
 """
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
-from gemm.checks.gemm_identical import (
-    _fast_vendor_gemm,
+from gemm.checks.gemm_identical import _fast_vendor_gemm
+from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_NN, OP_NT, OP_TN
+from gemm.experiments.neural_epilogue import NN06
+from gemm.experiments.neural_profile import NEURAL_LEAF,NEURAL_CHAINS,neural_partition,neural_cell
 from training.checks.loss_contract import CeConfig, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN
 from core.device_scan import device_first_nonfinite
 from training.checks.optimizer import (
@@ -87,6 +90,37 @@ def _add(left: Float32, right: Float32) -> Float32:
     # Existing pinned FP32 arithmetic: fma(1, left, right) is a single
     # rounded addition. Both operands and the result use the IDENTICAL FTZ.
     return ftz(identical_mul_add(Float32(1), ftz(left), ftz(right)))
+
+
+comptime MLP_NN06 = NN06 and not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_CONTROL"]()
+
+
+def _mlp_gemm_epilogue_kernel[ACTIVATE: Bool](
+    output: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,MutAnyOrigin],
+    weight: MutPointer[Float32,MutAnyOrigin],bias: MutPointer[Float32,MutAnyOrigin],
+    m: Int32,n: Int32,k: Int32,leaf: Int32,leaves: Int32,
+):
+    var cell = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if cell<Int(m)*Int(n):
+        # Match this model's actual _add and <=0 ReLU rules, including the
+        # rounded GEMM seam and the activated-output derivative used below.
+        var product = neural_cell[NEURAL_CHAINS](a,weight,cell//Int(n),cell%Int(n),
+            Int(k),Int(leaf),Int(leaves),Int(k),1,1,Int(k))
+        var value = _add(product,bias.unsafe_load(cell%Int(n)))
+        comptime if ACTIVATE:
+            if value<=Float32(0):
+                value = Float32(0)
+        output.unsafe_store(cell,value)
+
+
+def _mlp_fused_projection[ACTIVATE: Bool](ctx: DeviceContext,
+    mut output: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],mut bias: DeviceBuffer[DType.float32],
+    m: Int,n: Int,k: Int) raises:
+    var part = neural_partition[NEURAL_LEAF](k)
+    ctx.enqueue_function[_mlp_gemm_epilogue_kernel[ACTIVATE]](output,a,weight,bias,
+        Int32(m),Int32(n),Int32(k),Int32(part[0]),Int32(part[1]),
+        grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))
 
 
 def _mlp_kernel(
@@ -393,23 +427,27 @@ def mlp_train_step_host(
     ctx.enqueue_copy(dst_buf=w2_v, src_ptr=w2_ptr)
     ctx.enqueue_copy(dst_buf=b2_v, src_ptr=b2_ptr)
     var ws = ctx.enqueue_create_buffer[DType.float32](ws_n)
-    var pre1 = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
+    var pre1 = ctx.enqueue_create_buffer[DType.float32](1 if MLP_NN06 else rows * MLP_HID)
     var act = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
-    var pre2 = ctx.enqueue_create_buffer[DType.float32](rows * MLP_OUT)
+    var pre2 = ctx.enqueue_create_buffer[DType.float32](1 if MLP_NN06 else rows * MLP_OUT)
     var logits = ctx.enqueue_create_buffer[DType.float32](rows * MLP_OUT)
 
     # ---- Forward: `_forward` (two `_matmul(..., transpose_b=True)`, two
     # `_bias`).
-    _gemm(ctx, pre1, x_d, w1_v, ws, rows, MLP_HID, MLP_IN, OP_NT)
-    _launch_mlp(
-        ctx, pre1.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B1, act.unsafe_ptr(),
-        rows, MLP_HID, 1,
-    )
-    _gemm(ctx, pre2, act, w2_v, ws, rows, MLP_OUT, MLP_HID, OP_NT)
-    _launch_mlp(
-        ctx, pre2.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B2, logits.unsafe_ptr(),
-        rows, MLP_OUT, 0,
-    )
+    comptime if MLP_NN06:
+        _mlp_fused_projection[True](ctx,act,x_d,w1_v,b1_v,rows,MLP_HID,MLP_IN)
+        _mlp_fused_projection[False](ctx,logits,act,w2_v,b2_v,rows,MLP_OUT,MLP_HID)
+    else:
+        _gemm(ctx, pre1, x_d, w1_v, ws, rows, MLP_HID, MLP_IN, OP_NT)
+        _launch_mlp(
+            ctx, pre1.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B1, act.unsafe_ptr(),
+            rows, MLP_HID, 1,
+        )
+        _gemm(ctx, pre2, act, w2_v, ws, rows, MLP_OUT, MLP_HID, OP_NT)
+        _launch_mlp(
+            ctx, pre2.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B2, logits.unsafe_ptr(),
+            rows, MLP_OUT, 0,
+        )
     # The loss's refusal scan of the logits runs on the device (one scan
     # launch and its partials read back; cpu-gpu-cleanup n-train-mamba), and
     # the logits come down once, as a result, behind it on the same queue.

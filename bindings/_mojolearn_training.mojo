@@ -59,6 +59,12 @@ DEVIATIONS 1590 through 1599 are this surface's. 1590 is
 `training/estimator.mojo` and this file; 1591 through 1599 are unassigned.
 """
 
+from training.neural_arithmetic_profile import neural_training_profile
+from bindings.residual_dropout_boundary import residual_dropout_binding, residual_dropout_backward_binding
+from bindings.neural_gemm_boundary import neural_gemm_binding
+from training.neural_session_mlp import nn_mlp_sessions_device
+
+
 # DEVIATION 2486: shared byte-preserving host copies.
 from bindings.hostptr import f32_ptr, i32_ptr
 from std.os import abort, getenv
@@ -1411,6 +1417,28 @@ def rms_norm_backward_binding(
     return PythonObject(count)
 
 
+def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
+                         row_counts: PythonObject, dims: PythonObject) raises -> PythonObject:
+    """Native whole-model A/B: shared weights, independent session row batches."""
+    var a = _addrs(addresses, 5, "mlp_sessions")
+    _params(dims, 3, "mlp_sessions")
+    if len(input_addresses) != len(row_counts):
+        raise Error("neural MLP sessions: metadata length mismatch")
+    var inputs = List[Int]()
+    var rows = List[Int]()
+    for i in range(len(row_counts)):
+        inputs.append(Int(py=input_addresses[i]))
+        rows.append(Int(py=row_counts[i]))
+    var in_width = Int(py=dims[0])
+    var hidden = Int(py=dims[1])
+    var out_width = Int(py=dims[2])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = nn_mlp_sessions_device(ctx, inputs, rows, _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]), _f32_ptr(a[4]), _f32_ptr(a[0]), in_width, hidden, out_width)
+    return PythonObject(count)
+
+
 def linear_forward_binding(
     addresses: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -1580,6 +1608,10 @@ def chunked_lm_head_v2_train_binding(
     return PythonObject(count)
 
 
+def neural_arithmetic_profile_binding() raises -> PythonObject:
+    return PythonObject(neural_training_profile())
+
+
 @export
 def PyInit__mojolearn_training() abi("C") -> PythonObject:
     # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
@@ -1599,6 +1631,7 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         )
     try:
         var m = PythonModuleBuilder("_mojolearn_training")
+        m.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")
         m.def_function[training_vendor_binding]("training_vendor")
         m.def_function[training_numeric_mode_binding]("training_numeric_mode")
         m.def_function[clip_pool_fault_available_binding]("clip_pool_fault_available")
@@ -1649,6 +1682,10 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[rms_norm_forward_binding]("rms_norm_forward")
         m.def_function[rms_norm_backward_binding]("rms_norm_backward")
         m.def_function[linear_forward_binding]("linear_forward")
+        m.def_function[neural_gemm_binding]("neural_gemm")
+        m.def_function[mlp_sessions_binding]("mlp_sessions")
+        m.def_function[residual_dropout_binding]("residual_dropout")
+        m.def_function[residual_dropout_backward_binding]("residual_dropout_backward")
         m.def_function[linear_backward_binding]("linear_backward")
         m.def_function[samba_head_loss_binding]("samba_head_loss")
         comptime if AFN_SAMBA_FUSE:

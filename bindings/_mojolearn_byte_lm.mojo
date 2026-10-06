@@ -49,6 +49,7 @@ from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
 from training.checks.optimizer_contract import OptimizerConfig
 from training.checks.train_loop import download_f32, download_f32_into
+from training.neural_arithmetic_profile import neural_arithmetic_suffix
 from training.byte_lm_config import ByteConfig
 from training.byte_lm import (
     BYTE_PROFILE, ByteTrainer, byte_train_step, byte_train_step_resident,
@@ -275,7 +276,7 @@ def byte_lm_vendor_binding() raises -> PythonObject:
 
 
 def byte_lm_profile_binding() raises -> PythonObject:
-    return PythonObject(String(BYTE_PROFILE))
+    return PythonObject(ByteConfig().profile())
 
 
 def _span_cells(index: Int, shape: ByteConfig) raises -> Int:
@@ -1224,8 +1225,8 @@ def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
 
 
 def _byte_config(shape: PythonObject) raises -> ByteConfig:
-    if len(shape) != 7 and len(shape) != 9:
-        raise Error("byte LM: expected 7 or 9 shape integers (B,L,DM,H,KV,HD,FF[,layers,vocab])")
+    if len(shape) != 7 and len(shape) != 9 and len(shape) != 10:
+        raise Error("byte LM: expected 7, 9 or 10 shape integers (B,L,DM,H,KV,HD,FF[,layers,vocab[,chunked_head_v2]])")
     var operator_module = Python.import_module("operator")
     var values = List[Int]()
     for i in range(len(shape)):
@@ -1236,8 +1237,13 @@ def _byte_config(shape: PythonObject) raises -> ByteConfig:
     if len(values) == 7:
         values.append(2)
         values.append(256)
+    var chunked = False
+    if len(values) == 10:
+        if values[9] != 0 and values[9] != 1:
+            raise Error("byte LM: chunked head selector must be 0 or 1")
+        chunked = values[9] == 1
     var cfg = ByteConfig(values[0], values[1], values[2], values[3],
-                         values[4], values[5], values[6], values[7], values[8])
+                         values[4], values[5], values[6], values[7], values[8], chunked)
     cfg.validate()
     return cfg^
 
@@ -1990,10 +1996,15 @@ def byte_lm_launch_probe_binding(count: PythonObject) raises -> PythonObject:
     return out
 
 
+def byte_lm_arithmetic_suffix_binding() raises -> PythonObject:
+    return PythonObject(neural_arithmetic_suffix())
+
+
 @export
 def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_byte_lm")
+        module.def_function[byte_lm_arithmetic_suffix_binding]("byte_lm_arithmetic_suffix")
         module.def_function[byte_lm_numeric_mode_binding]("byte_lm_numeric_mode")
         module.def_function[byte_lm_vendor_binding]("byte_lm_vendor")
         module.def_function[byte_lm_profile_binding]("byte_lm_profile")

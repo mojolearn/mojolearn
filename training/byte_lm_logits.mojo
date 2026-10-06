@@ -51,7 +51,8 @@ from training.byte_lm import (
 from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into, download_f32_into_scanned
 from core.device_arena import arena_begin, arena_end, arena_release
 from core.device_scan import device_first_nonfinite, device_first_token_oob
-from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.experiments.neural_streaming import NN16
 from gemm.contract import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
@@ -163,7 +164,14 @@ struct ByteLogitsScratch(Movable):
         for _ in range(config.n_layers):
             self.stages.append(LlamaDeviceStages(ctx, batch, length, length, dims, lean=True))
         self.logits = _zeros(ctx, m * config.vocab_size)
-        self.head_ws = _zeros(ctx, identical_gemm_workspace_max_floats(m, config.vocab_size, config.d_model))
+        var head_cells = identical_gemm_workspace_max_floats(m, config.vocab_size, config.d_model)
+        comptime if NN16 and not is_defined["MOJOLEARN_IDN_NEURAL_GEMM_CONTROL"]():
+            # Every consumed GEMM scratch cell has an in-order producer. This
+            # removes the real cold owner clear; geometry/allocation bounds
+            # remain those of the selected dispatcher, on every shape/vendor.
+            self.head_ws = ctx.enqueue_create_buffer[DType.float32](head_cells)
+        else:
+            self.head_ws = _zeros(ctx, head_cells)
         arena_end(self.arena_id)
 
     def __deinit__(deinit self):

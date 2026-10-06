@@ -25,7 +25,15 @@ from std.math import fma  # only a sabotage arm (seam 5709) spells the fused for
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from core.philox import philox4x32_10
+from checks.rtf_seam import rtf_mul_add
+from gemm.experiments.neural_profile import NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_cell, neural_merge_chains, neural_fold_push, neural_fold_drain
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
+
+# NN45/46/47: source-only A/B arms; default OFF, no quality/identity/time
+# claim. Shared element functions define every floating seam for host/GPU.
+comptime NN45_CONV_RELU = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN45_CONV_RELU"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime NN46_GATHER_BOUNDS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN46_GATHER_BOUNDS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime NN47_APPLY_RUNNING = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN47_APPLY_RUNNING"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
@@ -244,7 +252,22 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
     var n = _ud(t, C)
     var ckk = C * KH * KW
     var acc = Float32(0)
-    for a in range(KH):
+    # NN46: solve 0 <= h+PH-kh*DH <= (OH-1)*SH (and width)
+    # before the incumbent divisibility tests. This only omits impossible
+    # taps, never a floating term, for arbitrary stride/dilation/padding.
+    var kh0 = 0
+    var kh1 = KH
+    var kw0 = 0
+    var kw1 = KW
+    comptime if NN46_GATHER_BOUNDS:
+        if _g(p, CP_REV) == 0:
+            var low_h = h + PH - (OH - 1) * SH
+            var low_w = w + PW - (OW - 1) * SW
+            kh0 = max(0, (max(0, low_h) + DH - 1) // DH)
+            kh1 = min(KH, (h + PH) // DH + 1)
+            kw0 = max(0, (max(0, low_w) + DW - 1) // DW)
+            kw1 = min(KW, (w + PW) // DW + 1)
+    for a in range(kh0, kh1):
         var kh = KH - 1 - a if _g(p, CP_REV) != 0 else a
         var th = h + PH - kh * DH
         if th < 0 or _um(th, SH) != 0:
@@ -252,7 +275,7 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
         var oh = _ud(th, SH)
         if oh >= OH:
             continue
-        for kw in range(KW):
+        for kw in range(kw0, kw1):
             var tw = w + PW - kw * DW
             if tw < 0 or _um(tw, SW) != 0:
                 continue
@@ -445,7 +468,22 @@ def maxpool_bwd_val(i: Int, dout: FP, idx: IP, p: IP) -> Float32:
                 if idx.unsafe_load(o1) == me:
                     acc = ftz(acc + ftz(dout.unsafe_load(o1)))
             return acc
-    for a in range(KH):
+    # NN46: solve 0 <= h+PH-kh*DH <= (OH-1)*SH (and width)
+    # before the incumbent divisibility tests. This only omits impossible
+    # taps, never a floating term, for arbitrary stride/dilation/padding.
+    var kh0 = 0
+    var kh1 = KH
+    var kw0 = 0
+    var kw1 = KW
+    comptime if NN46_GATHER_BOUNDS:
+        if _g(p, PP_REV) == 0:
+            var low_h = h + PH - (OH - 1) * SH
+            var low_w = w + PW - (OW - 1) * SW
+            kh0 = max(0, (max(0, low_h) + DH - 1) // DH)
+            kh1 = min(KH, (h + PH) // DH + 1)
+            kw0 = max(0, (max(0, low_w) + DW - 1) // DW)
+            kw1 = min(KW, (w + PW) // DW + 1)
+    for a in range(kh0, kh1):
         var kh = KH - 1 - a if _g(p, PP_REV) != 0 else a
         var th = h + PH - kh * DH
         if th < 0 or _um(th, SH) != 0:
@@ -453,7 +491,7 @@ def maxpool_bwd_val(i: Int, dout: FP, idx: IP, p: IP) -> Float32:
         var oh = _ud(th, SH)
         if oh >= OH:
             continue
-        for kw in range(KW):
+        for kw in range(kw0, kw1):
             var tw = w + PW - kw * DW
             if tw < 0 or _um(tw, SW) != 0:
                 continue
@@ -1896,3 +1934,154 @@ def idn2_flags() -> Int:
     comptime if is_defined["MOJOLEARN_IDN_ALL_OFF"]():
         f |= 16
     return f
+
+
+@always_inline
+def nn45_conv_out_relu_at(i: Int, y2: FP, bias: FP, saved: FP, dst: FP, q: IP, p: IP):
+    """Fused layout/bias/ReLU, with the exact preactivation retained for
+    backward. conv_out_val and relu_val preserve the old rounded seams,
+    NaNs and activation-zero policy; saved may alias dst when not retained."""
+    var OC = _g(p, CP_OC)
+    var S = _g(p, CP_OH) * _g(p, CP_OW)
+    var nc = i // S
+    var pos = i - nc * S
+    var oc = nc % OC
+    var n = nc // OC
+    var v = conv_out_val(y2.unsafe_load((n * S + pos) * OC + oc), bias, oc, p)
+    saved.unsafe_store(i, v)
+    dst.unsafe_store(i, relu_val(ftz(v)))
+
+
+@always_inline
+def nn47_bn_apply_running_at(i: Int, x: FP, aux: FP, dst: FP, running: FP, q: IP, p: IP):
+    """One normalization launch also updates each channel's running state
+    exactly once. Statistics are already complete; apply never reads running.
+    The first pixel of each channel of image zero owns its state update.
+    Mean/variance folds, unbiased conversion, momentum and eps stay pinned."""
+    bn_apply_at(i, x, aux, dst, dst, q, p)
+    var C = _g(p, 1)
+    var HW = _g(p, 2)
+    if i < C * HW and i % HW == 0:
+        bn_running_at(i // HW, running, aux, aux, aux, q, p)
+
+
+# NN14: bounded forward/recompute and virtual-im2col backward. OFF/unmeasured.
+# The budget is 8 MiB total cols+y2, except an indivisible single row.
+# All reductions retain the complete K and original per-cell profile;
+# absolute output row positions are restored before NCHW writes.
+comptime NN14_BOUNDED_IM2COL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN14_BOUNDED_IM2COL"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+
+
+def nn14_conv_rows(rows: Int, k: Int, oc: Int) -> Int:
+    return min(rows, max(1, (1 << 21) // max(1, k + oc)))
+
+
+@always_inline
+def nn14_im2col_value(i: Int, x: FP, p: IP) -> Float32:
+    """cols[r, qq], r = (n*OH + oh)*OW + ow, qq = (c*KH + kh)*KW + kw: the
+    input pixel under that tap, or +0.0 in the zero padding. A copy, no
+    arithmetic."""
+    var C = _g(p, CP_C); var H = _g(p, CP_H); var W = _g(p, CP_W)
+    var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
+    var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
+    var ckk = C * KH * KW
+    var r = _ud(i, ckk)
+    var qq = i - r * ckk
+    var n = _ud(r, (OH * OW))
+    var rem = r - n * OH * OW
+    var oh = _ud(rem, OW)
+    var ow = rem - oh * OW
+    var c = _ud(qq, (KH * KW))
+    var t = qq - c * KH * KW
+    var kh = _ud(t, KW)
+    var kw = t - kh * KW
+    var h = oh * _g(p, CP_SH) - _g(p, CP_PH) + kh * _g(p, CP_DH)
+    var w = ow * _g(p, CP_SW) - _g(p, CP_PW) + kw * _g(p, CP_DW)
+    var v = Float32(0)
+    if h >= 0 and h < H and w >= 0 and w < W:
+        v = ftz(x.unsafe_load(((n * C + c) * H + h) * W + w))
+    return v
+
+
+@always_inline
+def nn14_im2col_slice_cell(local: Int, x: FP, cols: FP, p: IP, row0: Int):
+    var width = _g(p, CP_C) * _g(p, CP_KH) * _g(p, CP_KW)
+    cols.unsafe_store(local, nn14_im2col_value(local + row0 * width, x, p))
+
+
+
+@always_inline
+def nn14_conv_slice_cell(i: Int, y2: FP, bias: FP, dst: FP, p: IP, row0: Int):
+    var OC = _g(p, CP_OC)
+    var S = _g(p, CP_OH) * _g(p, CP_OW)
+    var local_row = i // OC
+    var oc = i % OC
+    var row = row0 + local_row
+    var n = row // S
+    var pos = row % S
+    dst.unsafe_store((n * OC + oc) * S + pos, conv_out_val(y2.unsafe_load(i), bias, oc, p))
+
+
+@always_inline
+def nn14_wgrad_at(i: Int, x: FP, grow: FP, dw: FP, f3: FP, q: IP, p: IP):
+    """TN contraction against a virtual im2col operand. The selected GEMM
+    leaf/chain/fold is complete over ALL rows; chunk boundaries never change
+    this reduction. Scratch is fixed per output cell, independent of rows."""
+    var width = _g(p, CP_C) * _g(p, CP_KH) * _g(p, CP_KW)
+    var oc = i // width
+    var qq = i % width
+    var OC = _g(p, CP_OC)
+    var rows = _g(p, CP_N) * _g(p, CP_OH) * _g(p, CP_OW)
+    var part = neural_partition[NEURAL_LEAF](rows)
+    var stack = SIMD[DType.float32, 16](0.0)
+    var occupied = 0
+    for leaf in range(part[1]):
+        var begin = leaf * part[0]
+        var accum = SIMD[DType.float32, NEURAL_CHAINS](0.0)
+        for row in range(begin, min(rows, begin + part[0])):
+            var chain = (row - begin) % NEURAL_CHAINS
+            accum[chain] = rtf_mul_add(ftz(grow.unsafe_load(row * OC + oc)),
+                nn14_im2col_value(row * width + qq, x, p), accum[chain])
+        neural_fold_push[16](stack, occupied, neural_merge_chains[NEURAL_CHAINS](accum))
+    dw.unsafe_store(i, neural_fold_drain[16](stack, occupied))
+
+
+@always_inline
+def nn14_input_grad_at(i: Int, grow: FP, weights: FP, dx: FP, f3: FP, q: IP, p: IP):
+    """col2im's original tap gather, with each dcols cell generated by the
+    selected complete OC contraction. No scatter/atomics or full dcols."""
+    var C = _g(p, CP_C); var H = _g(p, CP_H); var W = _g(p, CP_W)
+    var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
+    var OH = _g(p, CP_OH); var OW = _g(p, CP_OW); var OC = _g(p, CP_OC)
+    var SH = _g(p, CP_SH); var SW = _g(p, CP_SW)
+    var PH = _g(p, CP_PH); var PW = _g(p, CP_PW)
+    var DH = _g(p, CP_DH); var DW = _g(p, CP_DW)
+    var w = i % W
+    var h = (i // W) % H
+    var c = (i // (W * H)) % C
+    var n = i // (W * H * C)
+    var width = C * KH * KW
+    var part = neural_partition[NEURAL_LEAF](OC)
+    var acc = Float32(0)
+    var kh0 = 0; var kh1 = KH; var kw0 = 0; var kw1 = KW
+    comptime if NN46_GATHER_BOUNDS:
+        if _g(p, CP_REV) == 0:
+            kh0 = max(0, (max(0, h + PH - (OH - 1) * SH) + DH - 1) // DH)
+            kh1 = min(KH, (h + PH) // DH + 1)
+            kw0 = max(0, (max(0, w + PW - (OW - 1) * SW) + DW - 1) // DW)
+            kw1 = min(KW, (w + PW) // DW + 1)
+    for a in range(kh0, kh1):
+        var kh = KH - 1 - a if _g(p, CP_REV) != 0 else a
+        var th = h + PH - kh * DH
+        if th < 0 or th % SH != 0 or th // SH >= OH:
+            continue
+        for kw in range(kw0, kw1):
+            var tw = w + PW - kw * DW
+            if tw < 0 or tw % SW != 0 or tw // SW >= OW:
+                continue
+            var row = (n * OH + th // SH) * OW + tw // SW
+            var qq = (c * KH + kh) * KW + kw
+            var v = neural_cell[NEURAL_CHAINS](grow, weights, row, qq, OC,
+                part[0], part[1], OC, 1, width, 1)
+            acc = ftz(acc + ftz(v))
+    dx.unsafe_store(i, acc)

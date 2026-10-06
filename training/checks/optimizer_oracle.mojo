@@ -3,8 +3,9 @@
 """The IDENTICAL FP32 optimizer step, written out, on the host. The shared contract (ids, constants, refusals, configuration, step scalars) is in `training/checks/optimizer_contract.mojo`. This file's own `opt_refuse_bad_inputs` is now what the device entry point calls, so both sides fail with the same name (DEVIATION 1496)."""
 
 from gemm.contract import OP_NT, contract_leaf_size
-from gemm.checks.gemm_oracle import gemm_oracle
-from gemm.host.gemm_host_rows import gemm_host_rows
+from gemm.host.neural_gemm import gemm_oracle
+from gemm.host.neural_gemm import gemm_host_rows
+from training.neural_ab_profile_contract import NN57_NORM_PROFILE, nn_reduce_host_admitted
 from checks.numerics import (
     ftz,
     identical_div,
@@ -44,6 +45,8 @@ def clip_tensor_sumsq_oracle(
     grads: List[Float32], begin: Int, count: Int
 ) -> Float32:
     """DEVIATION 1178, contract clause 3.2. There `P == 1`, the tree has no arithmetic node, and the v1 answer IS the serial ascending chain, so a hand-written serial fold passes."""
+    comptime if NN57_NORM_PROFILE:
+        return nn_reduce_host_admitted[128, True](rebind[MutPointer[Float32, MutAnyOrigin]](grads.unsafe_ptr()) + begin, count)
     var g = _slice(grads, begin, count)
     var out = gemm_host_rows(g, g, OP_NT, 1, 1, count)
     if len(out) == 0:
@@ -87,8 +90,11 @@ def clip_grad_norm_oracle(
     var norms_copy = _slice(norm_out, 0, len(norm_out))
     var tot = gemm_host_rows(norms_copy, norms_copy, OP_NT, 1, 1, j_count)
     var total_sumsq = Float32(0.0)
-    if len(tot) > 0:
-        total_sumsq = ftz(tot[0])
+    comptime if NN57_NORM_PROFILE:
+        total_sumsq = nn_reduce_host_admitted[128, True](rebind[MutPointer[Float32, MutAnyOrigin]](norms_copy.unsafe_ptr()), j_count)
+    else:
+        if len(tot) > 0:
+            total_sumsq = ftz(tot[0])
     var total_norm = ftz(identical_sqrt(total_sumsq))
 
     var coef = clip_coefficient(total_norm, max_norm)

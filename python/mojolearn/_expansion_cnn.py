@@ -1303,7 +1303,8 @@ class CNNClassifier(_Layer):
         a["out"] = [R.new(p[3]) for p in plans]  # glue: allocates one buffer per conv block
         a["idx"] = [R.new(p[3]) for p in plans]  # glue: allocates one buffer per conv block
         a["gout"] = [R.new(p[3]) for p in plans] if (train or _LEGACY_STEP) else []  # glue: allocates one buffer per conv block
-        a["saved"] = [[R.new(p[4]), R.new(p[5])] if save else [] for p in plans]  # glue: allocates one buffer per conv block
+        bounded = bool(getattr(R.b, "x_cnn_bounded_im2col", lambda: False)())
+        a["saved"] = [[R.new(1 if bounded else p[4]), R.new(p[5])] if save else [] for p in plans]  # glue: allocates one buffer per conv block
         if not plans:  # the head's input gradient, never read, kept apart from glog
             a["ghead"] = R.new(n * self._flat)
         return a

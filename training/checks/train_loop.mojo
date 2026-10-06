@@ -134,11 +134,11 @@ from core.step_phase import (
 from core.identity_trace import FNV_OFFSET, IdentityTrace, fnv1a64_bytes
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_backward import (
+from gemm.neural_backward import (
     identical_gemm_backward_a_into,
     identical_gemm_backward_b_into,
     identical_gemm_backward_workspace_max_floats,

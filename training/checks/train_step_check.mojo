@@ -76,14 +76,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import FNV_OFFSET, IdentityTrace, fnv1a64_bytes
 
 from gemm.contract import OP_NT
-from gemm.checks.gemm_oracle import gemm_oracle
-from gemm.checks.gemm_backward import (
+from gemm.host.neural_gemm import gemm_oracle
+from gemm.neural_backward import (
     BWD_DC_LEFT,
     gemm_backward_a_call,
     gemm_backward_b_call,
     gemm_backward_sabotage_name,
 )
-from gemm.checks.gemm_identical import gemm_sabotage_name
+from gemm.neural_dispatch import gemm_sabotage_name
 
 from embedding.checks.embedding_oracle import (
     EmbConfig,

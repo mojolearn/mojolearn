@@ -27,14 +27,16 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.device_scan import device_first_nonfinite
-from gemm.checks.gemm_backward import (
+from gemm.neural_backward import (
+    BWD_DC_LEFT,gemm_backward_a_call,gemm_backward_b_call,
     identical_gemm_backward_a_into,
     identical_gemm_backward_a_workspace_max_floats,
     identical_gemm_backward_b_into,
     identical_gemm_backward_b_workspace_max_floats,
 )
-from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
-from gemm.contract import OP_NT
+from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats, GemmWorkspace, NEURAL_WORKSPACE_REUSE_ENABLED
+from gemm.experiments.neural_plans import NN12
+from gemm.contract import OP_NN, OP_NT, OP_TN
 from training.estimator import identical_ce_loss_dev
 
 comptime IDN_TRAIN_DEV_TENSORS = (
@@ -51,10 +53,15 @@ struct _DevPool(Defaultable, Movable):
     var b: List[DeviceBuffer[DType.float32]]
     #: floats held by each slot; 0 marks a free slot
     var n: List[Int]
+    # NN12 scratch belongs to an output handle, and dies with that handle.
+    # The existing binding pool already owns one in-order context; this is
+    # not a process-wide cache indexed by raw addresses or shapes.
+    var workspace: List[GemmWorkspace]
 
     def __init__(out self):
         self.b = List[DeviceBuffer[DType.float32]]()
         self.n = List[Int]()
+        self.workspace = List[GemmWorkspace]()
 
 
 comptime _DEV_POOL_NAME = "MojoTrainingDevTensorsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoTrainingDevTensorsFast"
@@ -72,10 +79,15 @@ def train_dev_alloc(ctx: DeviceContext, n: Int) raises -> Int:
         if pool[].n[j] == 0 and h < 0:
             h = j
     if h < 0:
+        comptime if NEURAL_WORKSPACE_REUSE_ENABLED:
+            # Finish context allocations before publishing the new handle.
+            pool[].workspace.append(GemmWorkspace(ctx))
         pool[].b.append(buf^)
         pool[].n.append(n)
         h = len(pool[].n) - 1
     else:
+        comptime if NEURAL_WORKSPACE_REUSE_ENABLED:
+            pool[].workspace[h] = GemmWorkspace(ctx)
         pool[].b[h] = buf^
         pool[].n[h] = n
     return h
@@ -94,6 +106,8 @@ def train_dev_free(ctx: DeviceContext, h: Int) raises:
     _ = train_dev_size(h)
     ctx.synchronize()
     var pool = _DEV_POOL.get_or_create_ptr()
+    comptime if NEURAL_WORKSPACE_REUSE_ENABLED:
+        pool[].workspace[h].close(ctx)
     pool[].b[h] = ctx.enqueue_create_buffer[DType.float32](1)
     pool[].n[h] = 0
 
@@ -145,13 +159,18 @@ def train_linear_forward_dev(ctx: DeviceContext, c_h: Int, a_h: Int, w_h: Int, m
     var c = train_dev_view(ctx, c_h, m * n, "linear output")
     _refuse_dev(ctx, "linear input", a, m * k)
     _refuse_dev(ctx, "linear weight", w, n * k)
-    var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, n, k))
-    identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
-    ctx.synchronize()
+    comptime if NEURAL_WORKSPACE_REUSE_ENABLED:
+        var pool = _DEV_POOL.get_or_create_ptr()
+        pool[].workspace[c_h].run(ctx,c,a,w,m,n,k,OP_NT)
+        ctx.synchronize()
+    else:
+        var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, n, k))
+        identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
+        ctx.synchronize()
+        _ = ws^
     _ = a^
     _ = w^
     _ = c^
-    _ = ws^
     return m * n
 
 
@@ -171,22 +190,36 @@ def train_linear_backward_dev(
     _refuse_dev(ctx, "linear input", a, m * k)
     _refuse_dev(ctx, "linear weight", w, n * k)
     _refuse_dev(ctx, "linear upstream gradient", dc, m * n)
-    var ws_a = ctx.enqueue_create_buffer[DType.float32](
-        identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
-    )
-    var ws_b = ctx.enqueue_create_buffer[DType.float32](
-        identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
-    )
-    identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
-    identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
-    ctx.synchronize()
+    comptime if NEURAL_WORKSPACE_REUSE_ENABLED:
+        var pool = _DEV_POOL.get_or_create_ptr()
+        var ac = gemm_backward_a_call(OP_NT,m,n,k)
+        var bc = gemm_backward_b_call(OP_NT,m,n,k)
+        if ac[4]==BWD_DC_LEFT:
+            pool[].workspace[da_h].run(ctx,da,dc,w,ac[1],ac[2],ac[3],ac[0])
+        else:
+            pool[].workspace[da_h].run(ctx,da,w,dc,ac[1],ac[2],ac[3],ac[0])
+        if bc[4]==BWD_DC_LEFT:
+            pool[].workspace[dw_h].run(ctx,dw,dc,a,bc[1],bc[2],bc[3],bc[0])
+        else:
+            pool[].workspace[dw_h].run(ctx,dw,a,dc,bc[1],bc[2],bc[3],bc[0])
+        ctx.synchronize()
+    else:
+        var ws_a = ctx.enqueue_create_buffer[DType.float32](
+            identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
+        )
+        var ws_b = ctx.enqueue_create_buffer[DType.float32](
+            identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
+        )
+        identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
+        identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
+        ctx.synchronize()
+        _ = ws_a^
+        _ = ws_b^
     _ = a^
     _ = w^
     _ = dc^
     _ = da^
     _ = dw^
-    _ = ws_a^
-    _ = ws_b^
     return m * k
 
 

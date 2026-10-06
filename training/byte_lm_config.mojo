@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host-only shape and registry for the configured decoder language model."""
 
+from training.neural_arithmetic_profile import neural_arithmetic_suffix
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
 comptime BYTE_CONFIG_LIMIT = 2147483647
 comptime BYTE_DEFAULT_PROFILE = "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1"
 
@@ -65,6 +68,10 @@ struct ByteConfig(Copyable, Movable):
         for value in fields:
             if value <= 0 or value > 1048576:
                 raise Error("byte LM: shape fields must be in [1,1048576]")
+        if self.chunked_lm_head_v2 and self.vocab_size < 2:
+            raise Error("byte LM: chunked head v2 requires vocabulary size >= 2")
+        if self.chunked_lm_head_v2 and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            raise Error("byte LM: chunked head v2 requires IDENTICAL mode")
         if self.length > BYTE_MAX_ABS_POSITION:
             raise Error(
                 String("byte LM: length ")
@@ -137,7 +144,7 @@ struct ByteConfig(Copyable, Movable):
         if (not self.chunked_lm_head_v2 and self.batch == 2 and self.length == 32 and self.d_model == 32
             and self.n_heads == 4 and self.n_kv == 2 and self.head_dim == 8
             and self.intermediate == 64 and self.n_layers == 2 and self.vocab_size == 256):
-            return String(BYTE_DEFAULT_PROFILE)
+            return String(BYTE_DEFAULT_PROFILE) + neural_arithmetic_suffix()
         var suffix = String("-v256-blocks2.fp32.v2")
         if self.n_layers != 2 or self.vocab_size != 256:
             suffix = String("-v") + String(self.vocab_size) + "-blocks" + String(self.n_layers) + ".fp32.v3"
@@ -146,4 +153,4 @@ struct ByteConfig(Copyable, Movable):
             + "-l" + String(self.length) + "-d" + String(self.d_model)
             + "-h" + String(self.n_heads) + "-kv" + String(self.n_kv)
             + "-hd" + String(self.head_dim) + "-ff" + String(self.intermediate)
-            + suffix + head)
+            + suffix + head + neural_arithmetic_suffix())

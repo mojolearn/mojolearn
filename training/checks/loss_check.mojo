@@ -16,7 +16,7 @@ from checks.numerics import (
     identical_log,
     identical_mul,
 )
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     PLAN_FLAT,
     PLAN_SPLITK,
     PLAN_SPLITK_STAGED,
@@ -26,7 +26,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_with_plan,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_backward import gemm_backward_sabotage_name
+from gemm.neural_backward import gemm_backward_sabotage_name
 from gemm.contract import OP_NN, contract_leaf_size
 from transformer.checks.transformer_fixture import fixture_splitmix64
 from training.checks.loss import (

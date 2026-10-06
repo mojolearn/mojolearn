@@ -267,6 +267,17 @@ agreement with HuggingFace, PyTorch or MAX: the fold orders,
 transcendentals and division below are OURS.
 """
 
+from transformer.experiments.summary_model import model_summary_forward
+from transformer.experiments.attention_summary_tree import NN20_BALANCED_SUMMARY_TREE
+from transformer.experiments.norm_profile import (
+    NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
+)
+from transformer.experiments.attention_schedules import (
+    NN25_RMS_SPLIT_SCALE, NN26_TRAIN_SWIGLU, NN29_RING_PAIR,
+    rms_sumsq_kernel, rms_parallel_scale_kernel, training_swiglu_kernel,
+    kv_ring_pair_kernel, NN27_QK_ROPE_PAIR, qk_rope_pair_kernel,
+    NN28_DEAD_TRAINING_CACHE, NN21_SCALE_MASK, score_scale_mask_kernel,
+)
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, memcpy
 from std.os import getenv
@@ -300,7 +311,8 @@ from core.step_glue import (
 from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
-from gemm.checks.gemm_identical import GemmWorkspace
+from gemm.neural_dispatch import GemmWorkspace, NEURAL_PAIR_ENABLED
+from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
 # lane/lowbit-blocks (2026-09-29): the block's products under
 # `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
 from transformer.impl.llama.int15_block import (
@@ -2016,6 +2028,8 @@ def llama_rms_norm_kernel(
             j0 = j1
         acc = acc_b
 
+    comptime if NN24_NORM_LANES8:
+        acc = norm_profile_dot[NN24_LANES](x, x, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
 
     # S2: the mean through `identical_div` (row 49) and the reciprocal
@@ -2064,6 +2078,8 @@ def residual_rms_norm_kernel(
         var r = ftz(ftz(a.unsafe_load(i)) + ftz(b.unsafe_load(i)))
         residual.unsafe_store(i, r)
         acc = ftz(identical_mul_add(r, r, acc))
+    comptime if NN24_NORM_LANES8:
+        acc = norm_profile_dot[NN24_LANES](residual, residual, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
     var mean = ftz(identical_div(acc, Float32(dm)))
     var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
@@ -2124,6 +2140,22 @@ def llama_rms_norm(
     `llama_rms_norm_kernel` is deleted. This launcher exists so that the
     swap touches one function and no call site.
     """
+    # NN25 keeps the exact S1 fold; cell work is a second flat launch.
+    # OFF by default. No width threshold: this arm measures the actual
+    # extra launch/repeated-rsqrt cost across neighboring model widths.
+    comptime if NN25_RMS_SPLIT_SCALE and not SAB_S1_FOLD_DESCENDING and not SAB_BATCHINV_NORM_CHUNK_FROM_M:
+        step_count_launch()
+        ctx.enqueue_function[rms_sumsq_kernel](
+            sumsq.unsafe_ptr(), x.unsafe_ptr(), Int32(m), Int32(d_model),
+            grid_dim=(_grid(m), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+        )
+        step_count_launch()
+        ctx.enqueue_function[rms_parallel_scale_kernel](
+            out_buf.unsafe_ptr(), sumsq.unsafe_ptr(), x.unsafe_ptr(),
+            weight.unsafe_ptr(), Int32(m), Int32(d_model), eps,
+            grid_dim=(_grid(m * d_model), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+        )
+        return
     # DEVIATION 2645:
     # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
     # the same kernel at that many threads per block. The kernel owns one
@@ -2195,11 +2227,15 @@ def llama_norm_variant_kernel(
         var acc = Float32(0.0)
         for j in range(dm):
             acc = ftz(ftz(acc) + ftz(x.unsafe_load(t * dm + j)))
+        comptime if NN24_NORM_LANES8:
+            acc = _sum[NN24_LANES](x, t * dm, dm)
         var mean = ftz(identical_div(acc, Float32(dm)))
         var acc2 = Float32(0.0)
         for j in range(dm):
             var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
             acc2 = ftz(identical_mul_add(dev, dev, acc2))
+        comptime if NN24_NORM_LANES8:
+            acc2 = _square[NN24_LANES](x, t * dm, dm, mean)
         sumsq.unsafe_store(t, acc2)
         var variance = ftz(identical_div(acc2, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(variance + eps_in)))
@@ -2215,6 +2251,8 @@ def llama_norm_variant_kernel(
     for j in range(dm):
         var xj = ftz(x.unsafe_load(t * dm + j))
         acc = ftz(identical_mul_add(xj, xj, acc))
+    comptime if NN24_NORM_LANES8:
+        acc = norm_profile_dot[NN24_LANES](x, x, t * dm, t * dm, dm)
     sumsq.unsafe_store(t, acc)
     var mean = ftz(identical_div(acc, Float32(dm)))
     var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
@@ -3938,6 +3976,9 @@ def attention_path_choice(plant_at: Int) -> Int:
     UNFUSED path and ran slower than the default while promising less. The
     transformer lane is IDENTICAL-only as of 2026-09-10 and the branch is
     gone."""
+    comptime if NEURAL_PROFILE_CHANGED:
+        # Incumbent fused QK embeds v1 GEMM; new profiles use shared dispatcher.
+        return ATTN_PATH_EAGER
     comptime if BLOCK_ANY_SABOTAGE:
         return ATTN_PATH_EAGER
     if plant_at != PLANT_AT_NONE:
@@ -3990,6 +4031,31 @@ def eager_attention_forward(
     corner says so. Returns the fused status (`FUSED_RAN` when the fused
     bits are the ones in `stages.ctxv`; -1 when the fused path was not
     attempted)."""
+    comptime if NN20_BALANCED_SUMMARY_TREE:
+        if softcap != Float32(0.0) or stages.int15_on or plant_at != PLANT_AT_NONE:
+            raise Error("NN20 summary profile refuses softcap, INT15 and legacy score plants")
+        var record_stages = materialize or trace.enabled
+        if record_stages:
+            ensure_attention_stage_capacity(ctx, stages, l, s)
+        model_summary_forward(ctx, stages.ctxv, stages.amax, stages.denom,
+            stages.scores, stages.masked, stages.aexp, stages.weights,
+            stages.q_rope, stages.k_cache, stages.v_cache, b, l,
+            dims.n_heads, dims.n_kv, dims.head_dim, s, pos0, key_lo, window,
+            llama_attention_scale(dims.head_dim), record_stages)
+        stages.attn_materialized = record_stages
+        stages.attn_estash_cells = 0
+        stages.attn_fwd_scan.clear()
+        stages.attn_forward_status = 20  # explicit new arithmetic version
+        if trace.enabled:
+            var cells = b * dims.n_heads * l * s
+            trace.record_device[DType.float32](ctx,prefix+".attn.scores",stages.scores,cells)
+            trace.record_device[DType.float32](ctx,prefix+".attn.masked",stages.masked,cells)
+            trace.record_device[DType.float32](ctx,prefix+".attn.max",stages.amax,b*dims.n_heads*l)
+            trace.record_device[DType.float32](ctx,prefix+".attn.exp",stages.aexp,cells)
+            trace.record_device[DType.float32](ctx,prefix+".attn.denom",stages.denom,b*dims.n_heads*l)
+            trace.record_device[DType.float32](ctx,prefix+".attn.weights",stages.weights,cells)
+        trace.record_device[DType.float32](ctx,prefix+".attn.ctx",stages.ctxv,b*l*dims.n_heads*dims.head_dim)
+        return 20
     var choice = attention_path_choice(plant_at)
     if choice == ATTN_PATH_AUTO and stages.attn_prefer_eager:
         choice = ATTN_PATH_EAGER
@@ -4265,14 +4331,26 @@ def attention_eager_core(
         ctx.synchronize()
 
     # ---- S12 (:204's `* scaling`), applied to the FINISHED dot.
-    step_count_launch()
-    ctx.enqueue_function[attn_scale_kernel](
-        stages.scores.unsafe_ptr(),
-        Int32(cells),
-        scale,
-        grid_dim=(_grid(cells), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
+    var scale_mask_fused = False
+    comptime if NN21_SCALE_MASK and not BLOCK_ANY_SABOTAGE:
+        scale_mask_fused = softcap == Float32(0.0) and plant_at == PLANT_AT_NONE
+    if scale_mask_fused:
+        step_count_launch()
+        ctx.enqueue_function[score_scale_mask_kernel](
+            stages.scores.unsafe_ptr(), stages.masked.unsafe_ptr(),
+            Int32(cells), Int32(l), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale, bitcast[DType.float32](UInt32(MASK_FILL_BITS)),
+            grid_dim=(_grid(cells), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        step_count_launch()
+        ctx.enqueue_function[attn_scale_kernel](
+            stages.scores.unsafe_ptr(),
+            Int32(cells),
+            scale,
+            grid_dim=(_grid(cells), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     if fence:
         step_count_sync()
         ctx.synchronize()
@@ -4309,20 +4387,21 @@ def attention_eager_core(
     )
 
     # ---- S13 (:206). An ADD, of -FLT_MAX or of +0.0. Not a select.
-    step_count_launch()
-    ctx.enqueue_function[attn_mask_kernel](
-        stages.masked.unsafe_ptr(),
-        stages.scores.unsafe_ptr(),
-        Int32(b),
-        Int32(nh),
-        Int32(l),
-        Int32(s),
-        Int32(pos0),
-        Int32(key_lo),
-        Int32(window),
-        grid_dim=(_grid(cells), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
+    if not scale_mask_fused:
+        step_count_launch()
+        ctx.enqueue_function[attn_mask_kernel](
+            stages.masked.unsafe_ptr(),
+            stages.scores.unsafe_ptr(),
+            Int32(b),
+            Int32(nh),
+            Int32(l),
+            Int32(s),
+            Int32(pos0),
+            Int32(key_lo),
+            Int32(window),
+            grid_dim=(_grid(cells), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     if fence:
         step_count_sync()
         ctx.synchronize()
@@ -4519,6 +4598,7 @@ def llama_attention_forward(
     mut trace: IdentityTrace,
     prefix: String,
     materialize: Bool,
+    retain_kv_cache: Bool = True,
 ) raises:
     """`LlamaAttention.forward(hidden_states, position_embeddings,
     attention_mask, past_key_values)` (:243-281), eager path, inference
@@ -4551,6 +4631,14 @@ def llama_attention_forward(
     layer normalizes first and this reads `stages.norm1_out`, rather than
     taking a tensor argument.
     """
+    var commit_cache = True
+    comptime if NN28_DEAD_TRAINING_CACHE:
+        if not retain_kv_cache:
+            # Explicit training-only capability, never inferred from size.
+            # Stages retain the exact packed K/V consumed by backward.
+            if pos0 != 0 or kv.s != 0:
+                raise Error("NN28: dead training cache requires an empty prefill")
+            commit_cache = False
     var dims = stages.dims.copy()
     var dm = dims.d_model
     var qw = dims.q_width()
@@ -4679,32 +4767,43 @@ def llama_attention_forward(
 
     # ---- apply_rotary_pos_emb (:257). S9 and S10, q then k. V IS NOT
     #      ROTATED (:257 takes q and k only).
-    apply_rotary_pos_emb(
-        ctx,
-        stages.q_rope,
-        stages.q_proj,
-        rope.cos,
-        rope.sin,
-        m,
-        l,
-        dims.n_heads,
-        hd,
-        pos0,
-        rope.rope_dim,
-    )
-    apply_rotary_pos_emb(
-        ctx,
-        stages.k_rope,
-        stages.k_proj,
-        rope.cos,
-        rope.sin,
-        m,
-        l,
-        nkv,
-        hd,
-        pos0,
-        rope.rope_dim,
-    )
+    comptime if NN27_QK_ROPE_PAIR and not SAB_S07_ROPE_RELATIVE_POSITION and not SAB_S09_ROPE_HALVES_SWAPPED and not SAB_S10_ROPE_FUSED:
+        step_count_launch()
+        ctx.enqueue_function[qk_rope_pair_kernel](
+            stages.q_rope.unsafe_ptr(), stages.k_rope.unsafe_ptr(),
+            stages.q_proj.unsafe_ptr(), stages.k_proj.unsafe_ptr(),
+            rope.cos.unsafe_ptr(), rope.sin.unsafe_ptr(),
+            Int32(m), Int32(l), Int32(dims.n_heads), Int32(nkv),
+            Int32(hd), Int32(pos0), Int32(rope.rope_dim),
+            grid_dim=(_grid(m * qw), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        apply_rotary_pos_emb(
+            ctx,
+            stages.q_rope,
+            stages.q_proj,
+            rope.cos,
+            rope.sin,
+            m,
+            l,
+            dims.n_heads,
+            hd,
+            pos0,
+            rope.rope_dim,
+        )
+        apply_rotary_pos_emb(
+            ctx,
+            stages.k_rope,
+            stages.k_proj,
+            rope.cos,
+            rope.sin,
+            m,
+            l,
+            nkv,
+            hd,
+            pos0,
+            rope.rope_dim,
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -4790,49 +4889,61 @@ def llama_attention_forward(
     # computed. DEVIATION 1022 is why the two buffers are distinct; the rest
     # of THIS call reads `stages.k_cache` and `stages.v_cache`, which hold
     # the same bits.
-    if window == 0:
-        step_count_d2d()
-        ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
-        step_count_d2d()
-        ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
-    else:
-        # The ring takes this call's tokens AFTER the gather above read it.
-        step_count_launch()
-        ctx.enqueue_function[kv_ring_write_kernel](
-            kv.k.unsafe_ptr(),
-            stages.k_rope.unsafe_ptr(),
-            Int32(b),
-            Int32(l),
-            Int32(nkv),
-            Int32(hd),
-            Int32(kv.cap),
-            Int32(s_old),
-            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
-        step_count_launch()
-        ctx.enqueue_function[kv_ring_write_kernel](
-            kv.v.unsafe_ptr(),
-            stages.v_proj.unsafe_ptr(),
-            Int32(b),
-            Int32(l),
-            Int32(nkv),
-            Int32(hd),
-            Int32(kv.cap),
-            Int32(s_old),
-            grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
-    # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
-    # 087231ba3): the hard wait after the cache update ordered nothing.
-    # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
-    # or copy on the same in-order context, and the host reads none of them
-    # before its own later wait (the fused forward's regime scan or flag
-    # read, or the next call's). No buffer local to this call is freed here.
-    comptime if not IDN_ATTN_CACHE_NOWAIT:
-        step_count_sync()
-        ctx.synchronize()
-    kv.s = s_old + l
+    if commit_cache:
+        if window == 0:
+            step_count_d2d()
+            ctx.enqueue_copy(dst_buf=kv.k, src_buf=stages.k_cache)
+            step_count_d2d()
+            ctx.enqueue_copy(dst_buf=kv.v, src_buf=stages.v_cache)
+        else:
+            comptime if NN29_RING_PAIR:
+                step_count_launch()
+                ctx.enqueue_function[kv_ring_pair_kernel](
+                    kv.k.unsafe_ptr(), kv.v.unsafe_ptr(),
+                    stages.k_rope.unsafe_ptr(), stages.v_proj.unsafe_ptr(),
+                    Int32(b), Int32(l), Int32(nkv), Int32(hd),
+                    Int32(kv.cap), Int32(s_old),
+                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+                    block_dim=(LLAMA_TPB, 1, 1),
+                )
+            else:
+                # The ring takes this call's tokens AFTER the gather above read it.
+                step_count_launch()
+                ctx.enqueue_function[kv_ring_write_kernel](
+                    kv.k.unsafe_ptr(),
+                    stages.k_rope.unsafe_ptr(),
+                    Int32(b),
+                    Int32(l),
+                    Int32(nkv),
+                    Int32(hd),
+                    Int32(kv.cap),
+                    Int32(s_old),
+                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+                    block_dim=(LLAMA_TPB, 1, 1),
+                )
+                step_count_launch()
+                ctx.enqueue_function[kv_ring_write_kernel](
+                    kv.v.unsafe_ptr(),
+                    stages.v_proj.unsafe_ptr(),
+                    Int32(b),
+                    Int32(l),
+                    Int32(nkv),
+                    Int32(hd),
+                    Int32(kv.cap),
+                    Int32(s_old),
+                    grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
+                    block_dim=(LLAMA_TPB, 1, 1),
+                )
+        # IDN_ATTN_CACHE_NOWAIT (lane/nr-attn, from lane/neural-pass67
+        # 087231ba3): the hard wait after the cache update ordered nothing.
+        # Every consumer of the cache stages (and of `kv.k`/`kv.v`) is a launch
+        # or copy on the same in-order context, and the host reads none of them
+        # before its own later wait (the fused forward's regime scan or flag
+        # read, or the next call's). No buffer local to this call is freed here.
+        comptime if not IDN_ATTN_CACHE_NOWAIT:
+            step_count_sync()
+            ctx.synchronize()
+        kv.s = s_old + l
     timing_tick(ctx, ton, tk, "attn.rope_and_cache")
 
     # ---- the attention interface (:264-277). Eager or fused, ONE set of
@@ -4925,11 +5036,18 @@ def llama_mlp_forward(
     var bias_silu_fused = opts.mlp_bias and opts.act_is_silu()
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
+    var projections_paired = False
+    comptime if NEURAL_PAIR_ENABLED:
+        if gated and not w.int15:
+            stages.gemm_workspace.run_pair(ctx, stages.gate_proj, stages.up_proj,
+                stages.norm2_out, w.w_gate, w.w_up, m, it, dm, _gemm_op_nt())
+            projections_paired = True
     if gated:
-        llama_proj(
-            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
-            stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
-        )
+        if not projections_paired:
+            llama_proj(
+                ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
+                stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
+            )
         if bias_silu_fused:
             step_count_launch()
             ctx.enqueue_function[bias_silu_kernel](
@@ -4965,10 +5083,11 @@ def llama_mlp_forward(
         var no_gate = List[Float32]()
         trace.record_list_f32(prefix + ".gate_proj.out", no_gate)
     pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
-    llama_proj(
-        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
-        stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
-    )
+    if not projections_paired:
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
+            stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
+        )
     if bias_gelu_fused and not gated:
         step_count_launch()
         ctx.enqueue_function[bias_gelu_kernel](
@@ -5003,7 +5122,19 @@ def llama_mlp_forward(
         swiglu_fused = (forward_only and gated and opts.act_is_silu()
                         and not bias_silu_fused and not bias_gelu_fused
                         and not trace.enabled and swiglu_fused_enabled())
-    if swiglu_fused:
+    var training_swiglu = False
+    comptime if NN26_TRAIN_SWIGLU and not SAB_S20_SILU_MUL_SIGMOID:
+        training_swiglu = (not forward_only and gated and opts.act_is_silu()
+                           and not bias_silu_fused and not bias_gelu_fused)
+    if training_swiglu:
+        step_count_launch()
+        ctx.enqueue_function[training_swiglu_kernel](
+            stages.silu_out.unsafe_ptr(), stages.gated.unsafe_ptr(),
+            stages.gate_proj.unsafe_ptr(), stages.up_proj.unsafe_ptr(),
+            Int32(m * it), grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    elif swiglu_fused:
         step_count_launch()
         ctx.enqueue_function[swiglu_fused_kernel](
             stages.gated.unsafe_ptr(),
@@ -5055,8 +5186,12 @@ def llama_mlp_forward(
     pc.tick(ctx, "fwd.silu")
 
     # ---- the gate product (:175). S21. Absent under an ungated MLP.
-    if swiglu_fused:
-        pass  # written by swiglu_fused_kernel above
+    if training_swiglu:
+        trace.record_device[DType.float32](
+            ctx, prefix + ".mlp.gated", stages.gated, m * it
+        )
+    if swiglu_fused or training_swiglu:
+        pass  # the selected fused kernel already wrote S21
     elif gated:
         step_count_launch()
         ctx.enqueue_function[mlp_gated_kernel](
@@ -5599,6 +5734,7 @@ def llama_decoder_layer_forward_planted(
     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_eps: Optional[Float32] = None,
     forward_only: Bool = False,
+    retain_kv_cache: Bool = True,
 ) raises:
     """`LlamaDecoderLayer.forward(hidden_states, ...)` (:295-324).
 
@@ -5806,7 +5942,7 @@ def llama_decoder_layer_forward_planted(
         ):
             llama_attention_forward(
                 ctx, stages, kv, rope, w, b, l, pos0, plant_at, plant_idx, plant_bits,
-                trace, prefix, materialize,
+                trace, prefix, materialize, retain_kv_cache=retain_kv_cache,
             )
     else:
         llama_attention_forward(
@@ -5824,6 +5960,7 @@ def llama_decoder_layer_forward_planted(
             trace,
             prefix,
             materialize,
+            retain_kv_cache=retain_kv_cache,
         )
     timing_tick(ctx, ton, tk, "block.attention_total")
     pc.mark(ctx)
@@ -6007,6 +6144,7 @@ def llama_decoder_layer_forward(
     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_eps: Optional[Float32] = None,
     forward_only: Bool = False,
+    retain_kv_cache: Bool = True,
 ) raises:
     """THE ORDINARY ENTRY POINT. One block call with NO score plant.
 
@@ -6043,4 +6181,5 @@ def llama_decoder_layer_forward(
         next_norm_weight=next_norm_weight,
         next_norm_eps=next_norm_eps,
         forward_only=forward_only,
+        retain_kv_cache=retain_kv_cache,
     )

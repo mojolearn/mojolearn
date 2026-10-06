@@ -112,6 +112,7 @@ from max.gpu.sync import barrier
 # them because `checks/numerics.mojo`'s own two-arm functions put their
 # stdlib import at FUNCTION scope after the comptime branch, and an import
 # INSIDE a comptime-if body is a spelling nothing in this tree has compiled.
+from training.neural_ab_profiles import NN54_LOSS_PROFILE, nn_reduce_pointer_into, nn_reduce_scratch_floats
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -128,7 +129,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_max_block_size,
 )
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
@@ -354,6 +355,17 @@ comptime ANY_LOSS_SABOTAGE = (
     or SAB_GRAD_RECIPROCAL_MUL
     or SAB_DENOM_SERIAL_CHAIN
     or SAB_REDUCE_SERIAL
+)
+
+# NN52: default OFF. Reuse each probability in its gradient consumer while
+# retaining both output stores and the L14/L16 rounding seams. This is a
+# memory/launch experiment for every row/vocabulary size, never a board route.
+# Compilation, four-column identity, task quality and full-model A/B are pending.
+comptime NN52_CE_WEIGHT_GRAD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN52_CE_WEIGHT_GRAD"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not ANY_LOSS_SABOTAGE
 )
 
 
@@ -1031,6 +1043,39 @@ def ce_weights_kernel(
     )
 
 
+def ce_weights_dlogits_kernel(
+    weights: MutPointer[Float32, MutAnyOrigin],
+    dlogits: MutPointer[Float32, MutAnyOrigin],
+    expo: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    targets: MutPointer[Int32, MutAnyOrigin],
+    t_target: Float32, t_other: Float32, divisor: Float32,
+    n_rows_in: Int32, vocab_in: Int32, ignore_index_in: Int32,
+):
+    """NN52: the clean L14 and L16 cells, with a local probability value.
+
+    Same-cell aliases used by the resident LM remain valid: load expo before
+    either store, store the probability first and the final gradient last.
+    Distinct buffers still receive every probability, including ignored rows.
+    Sabotage builds retain the original kernels at the launcher below.
+    """
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var vocab = Int(vocab_in)
+    if cell >= Int(n_rows_in) * vocab:
+        return
+    var row = cell // vocab
+    var v = cell - row * vocab
+    var w = ftz(identical_div(ftz(expo.unsafe_load(cell)), ftz(denom.unsafe_load(row))))
+    var y = Int(targets.unsafe_load(row))
+    weights.unsafe_store(cell, w)
+    if y == Int(ignore_index_in):
+        dlogits.unsafe_store(cell, Float32(0.0))
+        return
+    var t = t_target if v == y else t_other
+    var d = ftz(ftz(w) - ftz(t))
+    dlogits.unsafe_store(cell, ftz(identical_div(d, divisor)))
+
+
 def ce_dlogits_kernel(
     dlogits: MutPointer[Float32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -1211,6 +1256,8 @@ def identical_ce_workspace_max_floats(
         var wb = identical_gemm_workspace_max_floats(1, 1, n_rows)
         if wb > w:
             w = wb
+    comptime if NN54_LOSS_PROFILE:
+        w = max(w, 2 * nn_reduce_scratch_floats[128](n_rows))
     if w < 1:
         return 1
     return w
@@ -1264,6 +1311,7 @@ def ce_refuse_device_inputs(
     mut targets: DeviceBuffer[DType.int32],
     n_rows: Int,
     cfg: CeConfig,
+    targets_prerefused: Bool = False,
 ) raises:
     """Contract section 8 ON THE DEVICE ENTRY POINT, which is where it was
     missing. DEVIATION 1495; the scan moved to the device at DEVIATION 2514
@@ -1314,6 +1362,8 @@ def ce_refuse_device_inputs(
     if idx >= 0:
         var is_nan = device_classify_nonfinite(ctx, logits, idx)
         raise Error(ce_nonfinite_message("logits", idx, is_nan))
+    if targets_prerefused:
+        return
     step_count_host_alloc()
     var ht = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
     step_count_sync()
@@ -1359,6 +1409,7 @@ def identical_ce_forward_into(
     n_rows: Int,
     count: Int,
     cfg: CeConfig,
+    targets_prerefused: Bool = False,
 ) raises:
     """Seams L1 through L13, enqueued. Nothing waits.
 
@@ -1402,7 +1453,7 @@ def identical_ce_forward_into(
     # `step.ce_forward`, whose wait exists only under the switch.
     var ton = _step_timing_on()
     var tk = Int(perf_counter_ns())
-    ce_refuse_device_inputs(ctx, logits, targets, n_rows, cfg)
+    ce_refuse_device_inputs(ctx, logits, targets, n_rows, cfg, targets_prerefused)
     _step_timing_tick(ctx, ton, tk, "step.ce_refuse_scan")
     if ton:
         # Two four-token lines (`timing <name> <value> bytes`, the shape
@@ -1585,6 +1636,8 @@ def identical_ce_forward_into(
             grid_dim=(1, 1, 1),
             block_dim=(CE_TPB, 1, 1),
         )
+    elif NN54_LOSS_PROFILE:
+        nn_reduce_pointer_into[128, False](ctx, total.unsafe_ptr(), row.unsafe_ptr(), ws.unsafe_ptr(), n_rows)
     else:
         identical_gemm_into(ctx, total, ones, row, ws, 1, 1, n_rows, OP_NN)
 
@@ -1651,6 +1704,16 @@ def identical_ce_backward_into(
     var divisor = ce_divisor(cfg.reduction, count, cfg.num_items)
     comptime if SAB_GRAD_DIVISOR_IS_N:
         divisor = Float32(n_rows)
+
+    comptime if NN52_CE_WEIGHT_GRAD:
+        step_count_launch()
+        ctx.enqueue_function[ce_weights_dlogits_kernel](
+            weights.unsafe_ptr(), dlogits.unsafe_ptr(), expo.unsafe_ptr(),
+            denom.unsafe_ptr(), targets.unsafe_ptr(), tv[0], tv[1], divisor,
+            Int32(n_rows), Int32(vocab), Int32(cfg.ignore_index),
+            grid_dim=(_grid_for(cells), 1, 1), block_dim=(CE_TPB, 1, 1),
+        )
+        return
 
     step_count_launch()
     ctx.enqueue_function[ce_weights_kernel](

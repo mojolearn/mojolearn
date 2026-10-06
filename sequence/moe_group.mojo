@@ -18,6 +18,17 @@ pick order), so the words do not. The products' grids are the upper bound
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
+from std.sys.compile import is_defined
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+# NN44: deterministic ascending-pair grouping; OFF and unmeasured. Each
+# expert scans the pairs once, replacing contended atomic scatter cursors.
+# O(E*P) comparisons is a real cost; measure skew and full MoE operations.
+comptime NN44_STABLE_GROUP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN44_STABLE_GROUP"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 
 from sequence.ops import FP
 from sequence.moe_tiled import TILE_P
@@ -73,3 +84,16 @@ def moe_group_scatter_all_kernel(sel: FP, cnt: FP, poff: FP, order: FP, n_pairs:
         var e = Int(sel.unsafe_load(i))
         var slot = Atomic.fetch_add(cnt.bitcast[Int32]() + Int(n_experts) + e, Int32(1))
         order.unsafe_store(Int(poff.unsafe_load(e)) + Int(slot), Float32(i))
+
+
+def moe_group_stable_all_kernel(sel: FP, poff: FP, order: FP, n_pairs: Int32, n_experts: Int32):
+    """One expert per task. Integer membership only; pair outputs and
+    weighted combine remain in their original token/pick positions."""
+    var e = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if e >= Int(n_experts):
+        return
+    var dst = Int(poff.unsafe_load(e))
+    for pair in range(Int(n_pairs)):
+        if Int(sel.unsafe_load(pair)) == e:
+            order.unsafe_store(dst, Float32(pair))
+            dst += 1

@@ -77,7 +77,7 @@ comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WG
 #: u adds the G partials onto the direct part in g order: a different fold
 #: from the one G H chain (FAST only). Shapes with G H > SCAN_MAX_H keep the
 #: H-lane scan.
-comptime SEQ_LSTM_SCAN_WIDE = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE"]()
+comptime SEQ_LSTM_SCAN_WIDE = _APPLE_FAST and SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE"]()
 
 comptime OP_CELL_FWD_SCAN = 120
 comptime OP_CELL_BWD_SCAN = 121

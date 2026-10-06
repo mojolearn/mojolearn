@@ -11,6 +11,7 @@ plain ascending scan; the host-lane fast path it had in the oracle is gone
 (a scan, same refusals, same messages)."""
 
 from gemm.contract import OP_NT, contract_leaf_size
+from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED,NEURAL_LEAF,neural_partition
 from checks.numerics import (
     ftz,
     identical_div,
@@ -183,6 +184,11 @@ def microbatch_split_is_identical(t_tokens: Int, a: Int) -> Bool:
         return False
     var leaf_full = contract_leaf_size(t_tokens)
     var leaf_piece = contract_leaf_size(t_tokens // a)
+    comptime if NEURAL_PROFILE_CHANGED:
+        # Partition compatibility belongs to this version's neural profile;
+        # the old 128-term graph cannot certify a new 64/256-term profile.
+        leaf_full = neural_partition[NEURAL_LEAF](t_tokens)[0]
+        leaf_piece = neural_partition[NEURAL_LEAF](t_tokens // a)[0]
     if leaf_full != leaf_piece:
         return False
     if leaf_full <= 0:
@@ -198,7 +204,6 @@ def microbatch_split_is_identical(t_tokens: Int, a: Int) -> Bool:
             return False
         q = q // 2
     return True
-
 
 
 

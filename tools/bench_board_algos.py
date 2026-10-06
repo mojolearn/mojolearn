@@ -2286,6 +2286,90 @@ def _cuml_up(arrays):
     return dev, info, ctd._cupy_sync
 
 
+_NEURAL_AB_ORIGINAL_LANES = {}
+
+
+def _configure_neural_ab(path, lane):
+    """Apply an explicitly selected neural source recipe before any builder.
+
+    This reads settings only: requested compilation flags are retained as
+    provenance, never treated as evidence about the installed binary. The
+    descriptor copy is local to this process, shared by ours and opponents.
+    """
+    for name, descriptor in _NEURAL_AB_ORIGINAL_LANES.items():
+        LANES[name] = descriptor
+    _NEURAL_AB_ORIGINAL_LANES.clear()
+    if not path:
+        return None
+    with open(path, encoding="utf-8") as fh:
+        config = json.load(fh)
+    if not isinstance(config, dict) or config.get("schema") != 1 or config.get("mode") != "identical":
+        raise ValueError("neural A/B config requires schema=1 and mode='identical'")
+    if not isinstance(config.get("id"), str) or not isinstance(config.get("arm"), str):
+        raise ValueError("neural A/B config requires string id and arm")
+    descriptor = LANES[lane]
+    if (descriptor["kind"] not in ("seqmodel", "cnnclf", "layer", "optim")
+            and lane not in ("mlp-clf", "mlp-reg")):
+        raise ValueError("--neural-ab-config accepts neural lanes only")
+    definitions = config.get("compile_defines", [])
+    if (not isinstance(definitions, list)
+            or any(not isinstance(v, str) or "=" not in v or v.startswith("-D") for v in definitions)):
+        raise ValueError("neural A/B compile_defines must be bare NAME=value strings")
+    environment = config.get("environment", {})
+    unset = config.get("environment_unset", [])
+    if (not isinstance(environment, dict)
+            or any(not isinstance(k, str) or not isinstance(v, str) for k, v in environment.items())):
+        raise ValueError("neural A/B environment requires string names and values")
+    if not isinstance(unset, list) or any(not isinstance(k, str) for k in unset):
+        raise ValueError("neural A/B environment_unset requires names")
+    if environment.get("MOJOLEARN_NUMERIC_MODE", "identical") != "identical":
+        raise ValueError("neural A/B mode must remain IDENTICAL")
+    runtime = config.get("runtime", {})
+    if not isinstance(runtime, dict):
+        raise ValueError("neural A/B runtime must be an object")
+    if runtime.get("numeric_mode", "identical") != "identical":
+        raise ValueError("neural A/B runtime numeric_mode must be identical")
+    if runtime.get("operation", "model_default") != "model_default" or runtime.get("owned_weights"):
+        raise ValueError("explicit session/owned operations require bench_board_neural.py")
+    settings = runtime.get("estimator_settings", {})
+    if not isinstance(settings, dict) or set(settings) - {"pool_size"}:
+        raise ValueError("algos neural A/B supports estimator_settings.pool_size only")
+    selected = dict(descriptor)
+    selected["params"] = dict(descriptor["params"])
+    if "pool_size" in settings:
+        pool = settings["pool_size"]
+        if lane != "cnn-clf" or not isinstance(pool, int) or isinstance(pool, bool) or pool < 1:
+            raise ValueError("pool_size requires a positive integer on cnn-clf")
+        selected["params"]["pool_size"] = pool
+    if config["id"] == "NN45" and settings.get("pool_size") != 1:
+        raise ValueError("NN45 needs the declared unpooled CNN recipe: pool_size=1 in both arms")
+    if "training" in runtime:
+        if lane not in ("batchnorm1d", "batchnorm2d", "resnet-block") or type(runtime["training"]) is not bool:
+            raise ValueError("training is supported only for neural batchnorm/ResNet layers")
+        selected["_neural_ab_training"] = runtime["training"]
+    if "graphsage_aggregator" in runtime:
+        if lane != "graphsage" or runtime["graphsage_aggregator"] != "mean":
+            raise ValueError("NN48 GraphSAGE recipe requires mean aggregation")
+        selected["params"]["aggr"] = "mean"
+    for name in unset:
+        os.environ.pop(name, None)
+    os.environ.update(environment)
+    os.environ["MOJOLEARN_NUMERIC_MODE"] = "identical"
+    # Complete model construction/preparation stays inside the existing whole
+    # operation clock. No dataset size, intrinsic cap or dataset source changes.
+    os.environ["MOJOLEARN_BENCH_WHOLE_OPERATION"] = "1"
+    if os.environ.get("MOJOLEARN_ALGOS_SMOKE_ROWS"):
+        raise ValueError("neural A/B recipe refuses inherited smoke-row caps")
+    _NEURAL_AB_ORIGINAL_LANES[lane] = descriptor
+    LANES[lane] = selected
+    return config
+
+
+def _neural_ab_layer_mode(layer, descriptor):
+    if "_neural_ab_training" in descriptor:
+        layer.train(descriptor["_neural_ab_training"])
+
+
 def build(lane, arm, D):
     kind = LANES[lane]["kind"]
     fn = {"est": _build_est, "dart": _build_dart, "seqmodel": _build_seqmodel,
@@ -2561,7 +2645,7 @@ def _build_cnnclf(lane, arm, D):
         layers = []
         for co in p["conv_channels"]:
             layers += [nn.Conv2d(c, co, p["kernel_size"], padding=p["kernel_size"] // 2), nn.ReLU()]
-            if h >= p["pool_size"] and w >= p["pool_size"]:
+            if h >= p["pool_size"] and w >= p["pool_size"] and p["pool_size"] > 1:
                 layers.append(nn.MaxPool2d(p["pool_size"]))
                 h, w = h // p["pool_size"], w // p["pool_size"]
             c = co
@@ -3436,6 +3520,7 @@ def _build_layer(lane, arm, D):
     s = LANES[lane]
     make, x_cpu, extra_cpu = _layer_inputs(lane, D, torch)
     ref = make()
+    _neural_ab_layer_mode(ref, s)
     state = {k: v.detach().cpu().numpy() for k, v in ref.state_dict().items()}
     g = torch.Generator().manual_seed(SEED + 1)
     S = {}
@@ -3490,6 +3575,7 @@ def _build_layer(lane, arm, D):
         except (TypeError, ValueError):
             pass
         layer = cls(**kw)
+        _neural_ab_layer_mode(layer, s)
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
         info["weights_loaded"] = False
         if s["task"] == "moe":                # HF's fused layout from the per-expert transcription
@@ -3577,6 +3663,7 @@ def _build_layer(lane, arm, D):
     torch.backends.cuda.matmul.allow_tf32 = prec == "tf32"
     torch.backends.cudnn.allow_tf32 = prec == "tf32"
     mod = make()
+    _neural_ab_layer_mode(mod, s)
     mod.load_state_dict({k: torch.from_numpy(v) for k, v in state.items()})
     mod = mod.to(dev)
     x = x_cpu.to(dev)
@@ -4293,6 +4380,9 @@ def worker(args):
 
     np = _np()
     try:
+        ab_config = _configure_neural_ab(getattr(args, "neural_ab_config", None), args.lane)
+        if ab_config is not None and args.arm == "ours-fast":
+            raise ValueError("neural A/B configuration requires the ours IDENTICAL arm")
         B, rec = _load_block(args.lane, args.dataset, args.data)
         D = lane_arrays(args.lane, B)
         runner = build(args.lane, args.arm, D)
@@ -4306,6 +4396,10 @@ def worker(args):
         return 1
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_tool("bench_board_probe").library_identity(runner.info))
+        if ab_config is not None:
+            runner.info["neural_ab_config"] = ab_config
+            runner.info["neural_ab_lane_config"] = lane_config(args.lane)
+            runner.info["neural_ab_binary_admission"] = "requested source flags only; not established by this config"
     say({"event": "ready", "info": runner.info, "pid": os.getpid(),
          "params_record": getattr(runner, "record", None)})
     mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
@@ -4798,13 +4892,23 @@ def _none_on_both(BP, records, ref="ours"):
 
 
 def race(args):
+    ab_config = _configure_neural_ab(getattr(args, "neural_ab_config", None), args.lane)
+    if ab_config is not None and args.smoke_rows:
+        raise ValueError("neural A/B recipes require full saved workload, without --smoke-rows")
     np = _np()
     ctd = _tool("classical_two_datasets")
     lane, ds = args.lane, args.dataset
     arms = [a for a in args.arms.split(",") if a]
+    if ab_config is not None and "ours-fast" in arms:
+        raise ValueError("neural A/B configuration cannot relabel an ours-fast worker")
     _tool("bench_board_probe").refuse_our_cpu_arms(arms, "bench_board_algos")
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.work, exist_ok=True)
+    frozen_config = None
+    if ab_config is not None:
+        frozen_config = os.path.abspath(os.path.join(args.out, "neural-ab-config.json"))
+        with open(frozen_config, "w", encoding="utf-8") as fh:
+            json.dump(ab_config, fh, indent=2, sort_keys=True)
     if args.smoke_rows:           # the conductor builds the same seeded arrays as its workers
         os.environ["MOJOLEARN_ALGOS_SMOKE_ROWS"] = str(args.smoke_rows)
     B, rec = _load_block(lane, ds, args.data)
@@ -4815,6 +4919,9 @@ def race(args):
               "lane_config": lane_config(lane), "rounds_requested": args.rounds,
               "started": now_utc(), "script": "tools/bench_board_algos.py",
               "commit": os.environ.get("MOJOLEARN_REPO_COMMIT", "unknown")}
+    if ab_config is not None:
+        result["neural_ab_config"] = ab_config
+        result["neural_ab_binary_admission"] = "requested source flags only; identity/quality/timing acceptance separate"
     tag = "%s-%s" % (lane, ds)
     workers = {}
     env_extra = {}
@@ -4825,6 +4932,8 @@ def race(args):
         py = arm_python.get(arm) or (args.ours_python if arm in OURS_ARMS else args.theirs_python)
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm, "--lane", lane,
                                  "--dataset", ds, "--data", args.data]
+        if frozen_config is not None:
+            cmd += ["--neural-ab-config", frozen_config]
         env = _worker_env(arm)
         env.update(env_extra)
         workers[arm] = ctd.Worker(arm, cmd, env, os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO)
@@ -4980,6 +5089,7 @@ def build_parser():
     r.add_argument("--dataset", required=True)
     r.add_argument("--data", required=True)
     r.add_argument("--arms", required=True)
+    r.add_argument("--neural-ab-config", help="selected neural A/B JSON; applies runtime recipe without compiling or admitting the binary")
     r.add_argument("--rounds", type=int, default=5)
     r.add_argument("--out", required=True)
     r.add_argument("--work", required=True)
@@ -4999,6 +5109,7 @@ def build_parser():
     w.add_argument("--lane", required=True, choices=LANE_ORDER)
     w.add_argument("--dataset", required=True)
     w.add_argument("--data", required=True)
+    w.add_argument("--neural-ab-config", help="frozen neural A/B JSON from conductor")
     sub.add_parser("table")
     return p
 

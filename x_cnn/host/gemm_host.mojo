@@ -68,7 +68,8 @@ from gemm.contract import (
     contract_leaf_size,
     leaf_count,
 )
-from gemm.host.identical_gemm import gemm_oracle
+from gemm.host.neural_gemm import gemm_oracle
+from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS, neural_cell, neural_partition, neural_strides
 from x_cnn.ops import FP
 
 comptime GW = simd_width_of[DType.float32]()
@@ -485,6 +486,16 @@ def gemm_host_into(
         var r = gemm_oracle(la, lb, op, m, n, k)
         for x in range(m * n):
             c.unsafe_store(x, r[x])
+        return
+    comptime if NEURAL_PROFILE_CHANGED:
+        var part = neural_partition[NEURAL_LEAF](k)
+        var strides = neural_strides(op, m, n, k)
+        var tasks = tasks_override if tasks_override > 0 else gemm_tasks(m, m * n * k)
+        def selected_rows(task: Int) {imm a, imm b, imm c, imm m, imm n, imm k, imm part, imm strides, imm tasks}:
+            for row in range(task * m // tasks, (task + 1) * m // tasks):
+                for col in range(n):
+                    c.unsafe_store(row * n + col, neural_cell[NEURAL_CHAINS](a, b, row, col, k, part[0], part[1], strides[0], strides[1], strides[2], strides[3]))
+        host_parallelize(selected_rows, tasks)
         return
     var work = m * n * k
     var pcount = leaf_count(k, contract_leaf_size(k))

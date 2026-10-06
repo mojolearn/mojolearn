@@ -369,6 +369,78 @@ def m2_seg_l_kernel(
 # ===========================================================================
 
 
+# NN37 schedules only the inherited lower-triangle arm's live cells.
+# cb_g is explicitly zeroed first because traces/backward may read upper
+# cells. The zero-fill launch and full memory traffic belong in its A/B.
+# OFF, uncompiled/unmeasured; baseline lower-arm disabled means unavailable.
+comptime NN37_TRIANGLE_TASKS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and IDN_M2_CB_LOWER and is_defined["MOJOLEARN_NN37_TRIANGLE_TASKS"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+
+
+def nn37_m2_cb_triangle_kernel(
+    cb_g: MutPointer[Float32, MutAnyOrigin],  # [B, C, Q, Q]
+    xbc: MutPointer[Float32, MutAnyOrigin],  # [B, T, CD]
+    b_in: Int32,
+    t_in: Int32,
+    di_in: Int32,
+    cd_in: Int32,
+    nc_in: Int32,
+    q_in: Int32,
+):
+    var b = Int(b_in)
+    var t_work = Int(t_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    var triangle = qv * (qv + 1) // 2
+    var task = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if task >= b * nc * triangle:
+        return
+    var group = task // triangle
+    var packed = task % triangle
+    var bb = group // nc
+    var c = group % nc
+    # Integer upper-bound search for triangular row starts; never use a
+    # vendor sqrt or precision-dependent inverse-triangle calculation.
+    var low = 0
+    var high = qv
+    while low + 1 < high:
+        var mid = (low + high) // 2
+        if mid * (mid + 1) // 2 <= packed:
+            low = mid
+        else:
+            high = mid
+    var i = low
+    var j = packed - i * (i + 1) // 2
+    var c0 = c * qv
+    var real = t_work - c0
+    if real > qv:
+        real = qv
+    var acc = Float32(0.0)
+    var live = i < real and j < real
+    comptime if IDN_M2_CB_LOWER:
+        # B9: above the diagonal is never read; explicit +0.0 (below).
+        live = live and j <= i
+    if live:
+        var ti = bb * t_work + c0 + i
+        var tj = bb * t_work + c0 + j
+        for n in range(M2_D_STATE):
+            acc = ftz(
+                identical_mul_add(
+                    ftz(xbc.unsafe_load(ti * cd + di + M2_D_STATE + n)),  # C
+                    ftz(xbc.unsafe_load(tj * cd + di + n)),  # B
+                    acc,
+                )
+            )
+        acc = ftz(acc)
+    else:
+        # A padded row's B or C is exact +0.0 everywhere: the leaf is a
+        # fold of exact zeros from a +0.0 seed, which is +0.0 -- written
+        # directly, same bits as the fold (gemm section 9's argument).
+        acc = Float32(0.0)
+    cb_g.unsafe_store(((bb * nc + c) * qv + i) * qv + j, acc)
+
+
 def m2_cb_g_kernel(
     cb_g: MutPointer[Float32, MutAnyOrigin],  # [B, C, Q, Q]
     xbc: MutPointer[Float32, MutAnyOrigin],  # [B, T, CD]
@@ -667,14 +739,23 @@ comptime M2_SSD_TILED = (
 )
 #: Y_diag tile: YD_ROWS rows i of one (b, c, h), all 64 p; X_d staged
 #: YD_JC rows at a time. Page: (4 * 256 + 64 * 64) * 4 = 20,480 bytes.
-comptime M2_YD_ROWS = 4
-comptime M2_YD_JC = 64
+# NN33 independent tile-geometry arms on the inherited I08 kernels.
+# They do not change the 128-term leaves, zero terms or fold. Rows8 trades
+# 512 lanes for reuse of each X tile across twice as many output rows;
+# JC32 keeps its shared page at 16 KiB. CS16 reuses each staged B/decay
+# tile across 16 value channels (18 KiB). Both fit inside the existing
+# conservative 20 KiB resource guard. No dataset/shape-specific dispatch.
+# All newly introduced switches are OFF, uncompiled and unmeasured.
+comptime NN33_YDIAG_ROWS8 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN33_YDIAG_ROWS8"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime NN33_CSTATE_P16 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN33_CSTATE_P16"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime M2_YD_ROWS = 8 if NN33_YDIAG_ROWS8 else 4
+comptime M2_YD_JC = 32 if NN33_YDIAG_ROWS8 else 64
 comptime M2_YD_QMAX = 256
 comptime M2_YD_THREADS = M2_YD_ROWS * M2_HEADDIM
 #: C_state tile: one (b, c, h) and CS_PT columns p, all 128 n (one thread
 #: per n); B * decay staged CS_IC rows at a time. Page: (32 * 128 + 32 * 8)
 #: * 4 = 17,408 bytes.
-comptime M2_CS_PT = 8
+comptime M2_CS_PT = 16 if NN33_CSTATE_P16 else 8
 comptime M2_CS_IC = 32
 
 
@@ -1056,6 +1137,73 @@ def m2_statepass_kernel(
 # ===========================================================================
 
 
+# NN36: OFF and unmeasured. Channel sharing is based on the existing
+# fixed Mamba head layout, not an observed benchmark shape. Host computes
+# the same explicitly rounded exp; no changed arithmetic profile.
+comptime NN36_SHARED_DECAY = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN36_SHARED_DECAY"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+
+
+def nn36_m2_yoff_shared_exp_kernel(
+    yoff: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
+    y_out: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
+    ydiag: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
+    xbc: MutPointer[Float32, MutAnyOrigin],  # [B, T, CD]
+    pass_states: MutPointer[Float32, MutAnyOrigin],  # [B, C, H, P, N]
+    dacs: MutPointer[Float32, MutAnyOrigin],  # [B, H, C, Q]
+    b_in: Int32,
+    t_in: Int32,
+    nh_in: Int32,
+    di_in: Int32,
+    cd_in: Int32,
+    nc_in: Int32,
+    q_in: Int32,
+):
+    var b = Int(b_in)
+    var t_work = Int(t_in)
+    var nh = Int(nh_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var nc = Int(nc_in)
+    var qv = Int(q_in)
+    comptime n_state = M2_D_STATE
+    var pn = M2_HEADDIM * n_state
+    # One block owns a logical token/head; one lane owns each value
+    # channel. The same exp word is reused without changing the dot chain.
+    var logical = Int(block_idx.x)
+    var p = Int(thread_idx.x)
+    var hh = logical % nh
+    var ti = logical // nh
+    var bb = ti // t_work
+    var t = ti % t_work
+    var c = t // qv
+    var i = t % qv
+    var shared_scale = stack_allocation[1, Float32, address_space=AddressSpace.SHARED]()
+    if p == 0:
+        shared_scale[0] = ftz(identical_exp(ftz(dacs.unsafe_load(((bb * nh + hh) * nc + c) * qv + i))))
+    barrier()
+    var cell = logical * M2_HEADDIM + p
+
+    # C . h_prev over n: one serial ascending leaf (k = 128).
+    var acc = Float32(0.0)
+    for n in range(n_state):
+        acc = ftz(
+            identical_mul_add(
+                ftz(xbc.unsafe_load(ti * cd + di + n_state + n)),
+                ftz(
+                    pass_states.unsafe_load(
+                        (((bb * nc + c) * nh + hh) * pn) + p * n_state + n
+                    )
+                ),
+                acc,
+            )
+        )
+    acc = ftz(acc)
+    var sc = shared_scale[0]
+    var yo = ftz(identical_mul(acc, sc))
+    yoff.unsafe_store(cell, yo)
+    y_out.unsafe_store(cell, ftz(ftz(ydiag.unsafe_load(cell)) + yo))
+
+
 def m2_yoff_y_kernel(
     yoff: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
     y_out: MutPointer[Float32, MutAnyOrigin],  # [B, T, H, P]
@@ -1204,18 +1352,33 @@ def ssd_forward(
         afn_m2_cb_g_mma(ctx, cb_g, xbc_work, b, t_work, di, cd, nc, qv)
         afn_m2_ydiag_mma(ctx, ydiag, cb_g, seg_l, xd, b, t_work, nh, nc, qv)
     else:
-        ctx.enqueue_function[m2_cb_g_kernel](
-            cb_g.unsafe_ptr(),
-            xbc_work.unsafe_ptr(),
-            Int32(b),
-            Int32(t_work),
-            Int32(di),
-            Int32(cd),
-            Int32(nc),
-            Int32(qv),
-            grid_dim=(_grid(b * nc * qv * qv), 1, 1),
-            block_dim=(MAMBA2_TPB, 1, 1),
-        )
+        comptime if NN37_TRIANGLE_TASKS:
+            cb_g.enqueue_fill(Float32(0.0))
+            ctx.enqueue_function[nn37_m2_cb_triangle_kernel](
+                cb_g.unsafe_ptr(),
+                xbc_work.unsafe_ptr(),
+                Int32(b),
+                Int32(t_work),
+                Int32(di),
+                Int32(cd),
+                Int32(nc),
+                Int32(qv),
+                grid_dim=(_grid(b * nc * (qv * (qv + 1) // 2)), 1, 1),
+                block_dim=(MAMBA2_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[m2_cb_g_kernel](
+                cb_g.unsafe_ptr(),
+                xbc_work.unsafe_ptr(),
+                Int32(b),
+                Int32(t_work),
+                Int32(di),
+                Int32(cd),
+                Int32(nc),
+                Int32(qv),
+                grid_dim=(_grid(b * nc * qv * qv), 1, 1),
+                block_dim=(MAMBA2_TPB, 1, 1),
+            )
         comptime if M2_SSD_TILED:
             var n_it = (qv + M2_YD_ROWS - 1) // M2_YD_ROWS
             var use_retained = False
@@ -1315,23 +1478,42 @@ def ssd_forward(
         grid_dim=(_grid(b * nh * M2_HEADDIM * M2_D_STATE), 1, 1),
         block_dim=(MAMBA2_TPB, 1, 1),
     )
-    ctx.enqueue_function[m2_yoff_y_kernel](
-        yoff.unsafe_ptr(),
-        y_out.unsafe_ptr(),
-        ydiag.unsafe_ptr(),
-        xbc_work.unsafe_ptr(),
-        pass_states.unsafe_ptr(),
-        dacs.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(nh),
-        Int32(di),
-        Int32(cd),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(_grid(b * t_work * nh * M2_HEADDIM), 1, 1),
-        block_dim=(MAMBA2_TPB, 1, 1),
-    )
+    comptime if NN36_SHARED_DECAY:
+        ctx.enqueue_function[nn36_m2_yoff_shared_exp_kernel](
+            yoff.unsafe_ptr(),
+            y_out.unsafe_ptr(),
+            ydiag.unsafe_ptr(),
+            xbc_work.unsafe_ptr(),
+            pass_states.unsafe_ptr(),
+            dacs.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(di),
+            Int32(cd),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(b * t_work * nh, 1, 1),
+            block_dim=(M2_HEADDIM, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[m2_yoff_y_kernel](
+            yoff.unsafe_ptr(),
+            y_out.unsafe_ptr(),
+            ydiag.unsafe_ptr(),
+            xbc_work.unsafe_ptr(),
+            pass_states.unsafe_ptr(),
+            dacs.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(di),
+            Int32(cd),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(_grid(b * t_work * nh * M2_HEADDIM), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
     # Materialization is a lifetime experiment: its buffer cannot be
     # released before the consumer drains, even on the otherwise async
     # production block path. Count this additional wait in whole-op timing.

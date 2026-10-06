@@ -219,10 +219,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace, read_trace_lines
 from mamba.checks.mamba_fixture import corpus_splitmix64
 from checks.numerics import ftz, identical_mul, identical_sqrt
-from gemm.checks.gemm_identical import gemm_sabotage_name
-from gemm.checks.gemm_backward import gemm_backward_sabotage_name
+from gemm.neural_dispatch import gemm_sabotage_name
+from gemm.neural_backward import gemm_backward_sabotage_name
 from gemm.contract import OP_NT, contract_leaf_size
-from gemm.checks.gemm_oracle import gemm_oracle
+from gemm.host.neural_gemm import gemm_oracle
 from transformer.checks.transformer_fixture import fixture_splitmix64
 from training.checks.loss_fixture import ce_splitmix64
 from training.checks.optimizer import (

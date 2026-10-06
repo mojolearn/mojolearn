@@ -37,6 +37,15 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.math import fma as _std_fma
 from std.memory import bitcast
 
+# NN42: unmeasured, default OFF. Only neural recurrent callers mark i5.
+# The input projection is rounded by GEMM, biased with op_bias's add, then
+# stored before the gate reads it. The same body runs on host and every GPU.
+comptime NN42_INPUT_BIAS_FUSED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN42_INPUT_BIAS_FUSED"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
 comptime FP = MutPointer[Float32, MutUntrackedOrigin]
 
 #: lane/apple-fast-tier (2026-10-02). Under FAST `identical_mul_add` is the
@@ -638,6 +647,9 @@ def op_cell_fwd_h(t: Int, a: Args):
     var u = t - b * H
     for g in range(gates_of(a.i0)):
         var n = g * H + u
+        comptime if NN42_INPUT_BIAS_FUSED:
+            if a.i5 != 0:
+                st(a.p0, b * GH + n, add(ld(a.p0, b * GH + n), ld(a.p9, n)))
         var acc = gemm_dot(a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
         st(a.p1, b * GH + n, add(ftz(acc), ld(a.p8, n)))
     op_cell_fwd(t, a)

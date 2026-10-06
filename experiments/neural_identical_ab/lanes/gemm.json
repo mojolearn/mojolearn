@@ -1,0 +1,977 @@
+{
+  "lane": "gemm",
+  "branch": "ideas/neural-identical-ab-20261006-r3",
+  "baseline_commit": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
+  "worktree": "/Users/andrewhendel/CascadeProjects/mojolearn-neural-identical-ab-20261006-r3",
+  "experiments": [
+    {
+      "id": "NN01",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_plans.mojo",
+        "gemm/checks/gemm_identical.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN01=1",
+        "MOJOLEARN_GEMM_ARM_TRIAL=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_ARM=10"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN01=1",
+        "MOJOLEARN_GEMM_ARM_TRIAL=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_ARM=10",
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "neural_schedule_ab[CANDIDATE](..., arm)"
+      ],
+      "arms": {
+        "A": "CANDIDATE=True with explicit existing step arm; returns actual geometry label",
+        "B": "CANDIDATE=False calls shipped dispatch and returns dispatch label"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "wired_callers": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "optional_variants": [],
+      "candidate_parameters": {
+        "MOJOLEARN_IDN_NEURAL_GEMM_ARM": "explicit existing step-arm enum; default GEMM_ARM_KPACK"
+      },
+      "supported_combinations": "One legacy schedule family; NN01 rejects NN03/NN04 because existing native geometries implement the incumbent arithmetic profile.",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN02",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_streaming.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN02=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN02=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "neural_streaming_ab[CANDIDATE, GROUP=8, SPECIALIZE=False, ELIDE_CLEAR=False]",
+        "neural_streaming_floats[GROUP,SPECIALIZE]"
+      ],
+      "arms": {
+        "A": "CANDIDATE=True: bounded GROUP-leaf plane plus persistent binary-counter tree state",
+        "B": "CANDIDATE=False: full leaf plane then one fold"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "host_mirror": "neural_profile_host[CONTRACT_K_LEAF_MIN,1]",
+      "wired_callers": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "optional_variants": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN03",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "bindings/neural_gemm_boundary_common.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/optimizer_contract.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN03=1",
+        "MOJOLEARN_IDN_NEURAL_LEAF=64"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN03=1",
+        "MOJOLEARN_IDN_NEURAL_LEAF=128"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "gemm.neural_dispatch.identical_gemm_into",
+        "gemm.host.neural_gemm.gemm_oracle",
+        "SmallMLPTrainer._matmul via training.neural_gemm binding"
+      ],
+      "arms": {
+        "A": "Selected scalar/profile dispatcher with leaf minimum 64, one chain.",
+        "B": "Same selected scalar/profile dispatcher with leaf minimum 128, one chain; no absent-flag schedule confound."
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "identity_contract": "One shared host/device leaf and adjacent-pair fold; logical partition depends only on k and profile constants.",
+      "wired_callers": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "optional_variants": [
+        "Changing M2/M3 SSD/SISO internal dot profiles is a separately scoped arithmetic-version experiment requiring all host/device specialized contractions together."
+      ],
+      "candidate_parameters": {
+        "MOJOLEARN_IDN_NEURAL_LEAF": [
+          64,
+          128,
+          256
+        ]
+      },
+      "component_profile_scope": "Dense projection forward/backward uses the selected profile. Mamba M2/M3 SSD/SISO internal contractions keep their separately declared fixed 128-term graph on host and device; host SSD/SISO oracles deliberately keep incumbent GEMM helpers. Sequence recurrent/internal algorithm graphs likewise retain their declared arithmetic.",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN04",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "training/byte_lm_host_kernels.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN04=1",
+        "MOJOLEARN_IDN_NEURAL_CHAINS=2"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN04=1",
+        "MOJOLEARN_IDN_NEURAL_CHAINS=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "gemm.neural_dispatch.identical_gemm_into",
+        "gemm.host.neural_gemm.gemm_oracle",
+        "SmallMLPTrainer._matmul via training.neural_gemm binding"
+      ],
+      "arms": {
+        "A": "Selected common profile with two independent accumulator chains per leaf.",
+        "B": "Same selected dispatcher/profile with one chain, same leaf and fold."
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "wired_callers": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "optional_variants": [
+        "Changing M2/M3 SSD/SISO internal dot profiles is a separately scoped arithmetic-version experiment requiring all host/device specialized contractions together."
+      ],
+      "candidate_parameters": {
+        "MOJOLEARN_IDN_NEURAL_CHAINS": [
+          2,
+          4
+        ]
+      },
+      "component_profile_scope": "Dense projection forward/backward uses the selected profile. Mamba M2/M3 SSD/SISO internal contractions keep their separately declared fixed 128-term graph on host and device; host SSD/SISO oracles deliberately keep incumbent GEMM helpers. Sequence recurrent/internal algorithm graphs likewise retain their declared arithmetic.",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN05",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_grouped.mojo",
+        "gemm/experiments/grouped_jobs.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN05=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN05=1",
+        "MOJOLEARN_IDN_NEURAL_PAIR_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "GemmWorkspace.run_pair",
+        "identical_gemm_pair_into",
+        "llama_mlp_forward gate/up projections"
+      ],
+      "arms": {
+        "A1": "CANDIDATE=True, SHARE_LEFT=False: existing I03 grouped grid for independent products",
+        "A2": "CANDIDATE=True, SHARE_LEFT=True: new common-A load feeds 1-4 independent job chains per thread",
+        "B": "CANDIDATE=False: independent launches with identical leaf/fold arithmetic"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "wired_callers": [
+        "transformer/impl/llama/modeling_llama.mojo::llama_mlp_forward"
+      ],
+      "optional_variants": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN06",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_epilogue.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN06=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN06=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "training.mlp_ops._mlp_fused_projection",
+        "mlp_train_step_host forward projections"
+      ],
+      "arms": {
+        "A": "CANDIDATE=True: producer returns rounded dot and performs selected epilogue stages before final store",
+        "B": "CANDIDATE=False: dot store followed by separate kernel for each enabled stage",
+        "stage_mask": "BIAS=1, SCALE=2, RESIDUAL=4, RELU=8; exact order bias/scale/residual/ReLU"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "wired_callers": [
+        "training/mlp_ops.mojo::mlp_train_step_host"
+      ],
+      "optional_variants": [
+        "Additional residual/scale/nonlinear epilogues already exist as components; further model placements are optional separately attributed arms."
+      ],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN07",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_grouped.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN07=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN07=1",
+        "MOJOLEARN_IDN_NEURAL_PAIR_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "GemmWorkspace.run_pair",
+        "identical_gemm_pair_into",
+        "llama_mlp_forward gate/up projections"
+      ],
+      "arms": {
+        "A": "Stage common logical input once for transformer gate/up products, scoped to pair lifetime",
+        "B": "Repack that same input before each separate projection"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "identity_contract": "Raw-word copies only; consuming GEMM owns FTZ. No arithmetic graph change.",
+      "wired_callers": [
+        "transformer/impl/llama/modeling_llama.mojo::llama_mlp_forward"
+      ],
+      "optional_variants": [
+        "Persistent cross-step immutable-weight transpose cache is a separate optional arm, not needed by the completed pair-scoped sharing arm."
+      ],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN08",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_plans.mojo",
+        "gemm/experiments/async_operand_pipeline.mojo",
+        "gemm/experiments/async_api_probe.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN08=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN08=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "neural_async_ab[CANDIDATE]"
+      ],
+      "arms": {
+        "A": "Supported NVIDIA async pipeline at real neural calls; AMD/Apple retain synchronous same-profile graph",
+        "B": "Synchronous pipeline at those same calls"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "wired_callers": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "optional_variants": [],
+      "upstream_blockers": [
+        "Native AMD/Apple asynchronous-copy variants require supported Modular primitives; no workaround added."
+      ],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN09",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_tiled.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN09=1",
+        "MOJOLEARN_IDN_NEURAL_STAGE_DEPTH=2",
+        "MOJOLEARN_IDN_NEURAL_STAGE_PAD=0"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN09=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1",
+        "MOJOLEARN_IDN_NEURAL_STAGE_DEPTH=2",
+        "MOJOLEARN_IDN_NEURAL_STAGE_PAD=0"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "neural_tiled_ab[CANDIDATE,DEPTH,PAD,SWIZZLE,TRANSPOSE_THREADS=False]"
+      ],
+      "arms": {
+        "A": "DEPTH=2 and/or PAD=1 and/or SWIZZLE=True as isolated then combined staging arms",
+        "B": "DEPTH=1,PAD=0,SWIZZLE=False with same 8x16 output tile"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "host_mirror": "neural_profile_host[CONTRACT_K_LEAF_MIN,1]",
+      "wired_callers": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "optional_variants": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN10",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_plans.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN10=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN10=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "neural_cost_plan",
+        "NeuralGemmPlan(...,cost_candidate=True)",
+        "NeuralPlanWorkspace.run[COST_CANDIDATE=True]"
+      ],
+      "arms": {
+        "A": "Byte/reuse, padded-work and explicit device-fill cost selects existing flat/32/64/128 plans",
+        "B": "Frozen choose_gemm_plan selector"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "wired_callers": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "optional_variants": [
+        "Additional isolated removal of each legacy route is a separate future arm; implemented chosen arm compares the full old selector with an explicit cost selector."
+      ],
+      "required_recipe_parameters": [
+        "MOJOLEARN_IDN_NEURAL_FILL_BLOCKS from a recorded supported/calibrated device profile; no guessed default admitted"
+      ],
+      "required_compile_parameters": {
+        "MOJOLEARN_IDN_NEURAL_FILL_BLOCKS": "Positive recorded device-fill budget in both arms; selector must require an explicit value."
+      },
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN11",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_streaming.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN11=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN11=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "neural_fold_capacity_ab[CANDIDATE]",
+        "neural_streaming_ab[SPECIALIZE]"
+      ],
+      "arms": {
+        "A1": "CANDIDATE=True register stack uses smallest supported SIMD extent 1/2/4/8/16 for logical tree height",
+        "A2": "SPECIALIZE=True with NN02 bounded streaming allocates exactly floor(log2(P))+1 global state planes",
+        "B": "16-slot capacity",
+        "A3": "Shared-memory fold slots per output thread, sized to logical tree height; no physical-lane arithmetic dependency."
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "host_mirror": "neural_profile_host[CONTRACT_K_LEAF_MIN,1]",
+      "wired_callers": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "optional_variants": [],
+      "candidate_parameters": {
+        "MOJOLEARN_IDN_NEURAL_FOLD_SHARED": "optional; otherwise register capacity specialization"
+      },
+      "supported_combinations": "Standalone register/shared capacity or NN02 global-state capacity. Refuses other GEMM schedule families; NN12 and selected numerical profiles may compose.",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN12",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_plans.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN12=1",
+        "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS=16777216"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN12=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1",
+        "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS=16777216"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "GemmWorkspace.run/run_pair",
+        "training.dev_tensors._DevPool handle-owned workspace"
+      ],
+      "arms": {
+        "A": "Model-owned bounded retained scratch; selected NN10 plan cached when combined.",
+        "B": "Fresh scratch and its last-consumer synchronization per product/pair; DevPool already provisions per operation."
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "wired_callers": [
+        "training/dev_tensors.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "optional_variants": [
+        "Mamba custom workspace growth is separate NN40; CNN and ByteLM-head manual scratch caches retain their existing policies."
+      ],
+      "selected_arm_scope": "GemmWorkspace owners and training DevPool output-handle owners. Manual Mamba/CNN/ByteLM-head scratch caches are not changed by this flag.",
+      "candidate_parameters": {
+        "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS": "Positive owner resource budget; representative 16777216 floats (64 MiB)."
+      },
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN13",
+      "implementation_status": "reused_existing",
+      "implementation_paths": [
+        "sequence/gemm_tiled.mojo",
+        "sequence/ops.mojo",
+        "sequence/exec_device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "seq_gemm_tiled_kernel",
+        "sequence exec_device existing OP_GEMM routing"
+      ],
+      "arms": {
+        "A": "Existing sequence same-chain tiled kernel plus proposed independent batching",
+        "B": "Sequence per-output original chain"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Additional sequence batching variants are optional research; existing same-chain tiled caller is already reused.",
+        "All new compilation/identity/quality/timing is not_run_by_request."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN14",
+      "implementation_status": "delegated_source_owner",
+      "implementation_paths": [
+        "gemm/experiments/grouped_jobs.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [],
+      "arms": {
+        "A": "Proposed bounded im2col production immediately consumed by independent grouped products",
+        "B": "Caller frozen full-im2col/independent launch route"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Primary bounded CNN producer/contraction integration is owned by neural_state_cnn; its lane record supersedes this source anchor.",
+        "No compilation or verification run by GEMM lane."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN15",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_tiled.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/subwave_membership.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN15=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN15=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "neural_tiled_ab[CANDIDATE,DEPTH=1,PAD=0,SWIZZLE=False,TRANSPOSE_THREADS]"
+      ],
+      "arms": {
+        "A": "TRANSPOSE_THREADS=True remaps independent cells to output-thread columns",
+        "B": "Row-major physical output-thread ownership"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "host_mirror": "neural_profile_host[CONTRACT_K_LEAF_MIN,1]",
+      "wired_callers": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "optional_variants": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    },
+    {
+      "id": "NN16",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "gemm/experiments/neural_streaming.mojo",
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo",
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN16=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_IDN_NEURAL_NN16=1",
+        "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "training.byte_lm_logits.ByteLMScratch.__init__ head_ws allocation"
+      ],
+      "arms": {
+        "A": "Allocate real head GEMM scratch without the old zero producer",
+        "B": "Existing _zeros call at the identical required workspace count"
+      },
+      "default_enabled": false,
+      "remaining": [
+        "Compilation, identity across NVIDIA/AMD/Apple/host, neural quality and full-dataset timing remain explicitly forbidden in this session.",
+        "No measurement/default promotion claim; future admitted full-workload recipes still require dataset hashes and hardware provenance."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "wired_callers": [
+        "training/byte_lm_logits.mojo"
+      ],
+      "optional_variants": [
+        "Component scratch-clear comparison retained separately; it is not the production B or evidence of an existing redundant clear."
+      ],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    }
+  ],
+  "compilation": "not_run_by_request",
+  "verification": "not_run_by_request",
+  "timing": "not_run_by_request",
+  "commit": "root will commit source only; subagent did not commit",
+  "new_production_caller_reach": true,
+  "evidence_paths": [
+    "experiments/neural_identical_ab/lanes/gemm.json",
+    "experiments/neural_identical_ab/lanes/gemm.md"
+  ],
+  "log_policy": "Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output.",
+  "integration_note": "Selected neural profile spans forward/backward, host mirrors, CPU pointer GEMM, SmallMLP native matmul, and microbatch partition admission. Full public caller edits in other owned lanes were reported by their owners; no static checks or execution performed.",
+  "supported_combinations": "One GEMM scheduling family per freeze; orthogonal profile, pair, fold-capacity and workspace arms compose where declared. Invalid legacy-profile combinations fail explicitly instead of silently falling back."
+}

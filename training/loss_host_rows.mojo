@@ -53,7 +53,7 @@ from core.host_lanes import (
 )
 from core.host_parallel import host_parallelize
 from gemm.contract import OP_NN
-from gemm.host.gemm_host_rows import gemm_host_rows
+from gemm.host.neural_gemm import gemm_host_rows
 from training.checks.loss_contract import (
     CeConfig,
     REDUCTION_NONE,
@@ -64,7 +64,7 @@ from training.checks.loss_contract import (
     neg_by_bits,
 )
 from training.checks.loss_contract import ce_ones
-from training.checks.loss_oracle import _row_max, ce_fold
+from training.checks.loss_oracle import _row_max, ce_fold, ce_total_fold
 
 
 def ce_host_rows(
@@ -145,7 +145,7 @@ def ce_host_rows(
     if n > wide:
         wide = n
     var ones = ce_ones(wide)
-    var total = ce_fold(row, 0, n, ones)
+    var total = ce_total_fold(row, n, ones)
     var divisor = ce_divisor(cfg.reduction, count, cfg.num_items)
     var loss = ftz(identical_div(ftz(total), divisor))
 

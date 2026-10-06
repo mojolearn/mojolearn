@@ -1,0 +1,517 @@
+{
+  "lane": "attention",
+  "branch": "ideas/neural-identical-ab-20261006-r3",
+  "baseline": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
+  "experiments": [
+    {
+      "id": "NN17",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_ATTN_ARM_TRIAL=1",
+        "MOJOLEARN_NN17_GQA_FOUR_HEADS=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_ATTN_ARM_TRIAL=1"
+      ],
+      "runtime_env": {
+        "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"
+      },
+      "remaining": [
+        "Full GQA callers must actually reach HD64/TQ32/QRES/PF non-swizzled arm and GQA ratio divisible by four; otherwise record no-distinct-runtime-arm.",
+        "Retain I06 two-head LOSER evidence; no unchanged repeat is proposed.",
+        "Measure full forward+backward and complete default interactions."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "64 logical rows interleave four query heads, 16 positions each, sharing the same K/V shared page. Every score/value fold unchanged.",
+      "prior_evidence": "I06 corrected MI325X ratios 1.211/1.212 and L40S 1.147/1.108 were two-head component LOSERS. New four-head schedule is not that arm.",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN18",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_ATTN_ARM_TRIAL=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_ATTN_ARM_TRIAL=1",
+        "MOJOLEARN_NN18_DENSE_TILE_CONTROL=1"
+      ],
+      "runtime_env": {
+        "MOJOLEARN_ATTN_ARM": "stash_tiled"
+      },
+      "remaining": [
+        "Compile/identity/quality/timing unrun. Full tiled forward/backward model reach and refusal rate must accompany future measurements.",
+        "More aggressive task compaction is an optional separate variant; this selected arm isolates existing structural tile bounds."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "A reuses structural K-page bounds. B widens native tiled K-page traversal to the complete key span while retaining identical per-row mask predicates, finite admission and corner replay. Isolates existing masked page skipping without altering default arithmetic.",
+      "new_implementation": true,
+      "selectable": true,
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN19",
+      "implementation_status": "reused_existing",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo",
+        "experiments/performance_ideas/I07/state_cost.mojo",
+        "experiments/performance_ideas/I07/check.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_ATTN_ARM_TRIAL=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_ATTN_ARM_TRIAL=1",
+        "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+      ],
+      "runtime_env": {
+        "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32",
+        "MOJOLEARN_TRANSFORMER_ATTN_PATH": "fused"
+      },
+      "remaining": [
+        "Both model arms explicitly request the same supported estash schedule. A must report positive kept cells; B forced-recompute must report zero. HD64/QRES/PF/kvgrid and finite-regime reach are required.",
+        "Reuse corrected I07 retained/recompute source and accepted prior receipts. New model source remains uncompiled/unexecuted; full workloads, quality, identity and memory lifetime/retention qualification are unrun.",
+        "Keep earlier no-distinct-arm and confounded evidence separate."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "prior_evidence": "I07 corrected component retained/recompute ratios MI325X .560/.586, L40S .666/.665; no full application promotion.",
+      "new_implementation": false,
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "mechanism": "Actual model requests an estash arm in BOTH builds. A retains forward exponents; MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD makes the same forward request call the existing nonretaining launcher and backward reconstructs state. Runtime arm is explicit to prevent vendor defaults silently erasing the comparison.",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN20",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_summary_contract.mojo",
+        "transformer/experiments/attention_summary_tree.mojo",
+        "transformer/experiments/summary_model_contract.mojo",
+        "transformer/experiments/summary_model.mojo",
+        "transformer/experiments/summary_model_host.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "transformer/checks/transformer_oracle.mojo",
+        "transformer/checks/transformer_backward_oracle.mojo",
+        "transformer/experiments/profile.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "python/mojolearn/_transformer_impl.py",
+        "training/byte_lm_host.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "No compilation, four-column identity, derivative/task quality or timing admission has been run. Existing attention_v2 large-shape failures remain visible and do not qualify this new graph.",
+        "Public arm refuses softcap, INT15 and legacy planted-score calls. Dropout/nondefault-options training remain the existing API refusal.",
+        "One owner per row is a concrete graph implementation, not a throughput claim; cooperative/tree scheduling is an optional later variant."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "new_implementation": true,
+      "selectable": true,
+      "mechanism": "Actual public transformer/LM forward, backward, trace, prefill and decode select fixed absolute 32-key leaves and anchored adjacent-pair summary merges; common host/device scalar graph and closed-form backward. Native finite/overflow/index admission and versioned model/cache metadata. Projection GEMM profiles compose explicitly; QK is the summary profile scalar chain.",
+      "public_route": "TransformerBlock forward/step/backward; GPU/host native tape routes; ByteLM and Samba transformer paths through actual model/oracle",
+      "arithmetic_profile": "attn-summary32-tree-v1",
+      "arm_scope": "Model A: summary tree. Model B: incumbent attention. Standalone component B still offers left-fold summaries and must not be labeled the model B.",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN21",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN21_SCALE_MASK=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {
+        "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager"
+      },
+      "remaining": [
+        "Eager/fallback scope only; an automatic fused-only full model run cannot establish candidate reach.",
+        "Full affected model E2E, task quality, vendor+host bits and performance remain unrun."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Eager scale+mask one pass; writes both intermediates, keeps mandatory +0 add; softcap/plants/sabotage preserve old route.",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN22",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN22_EAGER_DKDV_PAIR=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {
+        "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager"
+      },
+      "remaining": [
+        "Eager/fallback scope only; an automatic fused-only full model run cannot establish candidate reach.",
+        "Full affected model E2E, task quality, vendor+host bits and performance remain unrun."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Two eager K/V accumulators share addressing/traversal, each includes all h-then-t terms and signed-zero masked contributions.",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN23",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN23_ROWDOT_DS=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {
+        "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager"
+      },
+      "remaining": [
+        "Eager/fallback scope only; an automatic fused-only full model run cannot establish candidate reach.",
+        "Full affected model E2E, task quality, vendor+host bits and performance remain unrun."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "One eager row owner folds z then writes dS; preserves both stage outputs without a global barrier or recomputation.",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN24",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/norm_profile_contract.mojo",
+        "transformer/experiments/norm_profile.mojo",
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "transformer/checks/transformer_oracle.mojo",
+        "transformer/checks/transformer_backward_oracle.mojo",
+        "transformer/experiments/profile.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "python/mojolearn/_transformer_impl.py",
+        "training/host/samba_ops_oracle.mojo",
+        "training/byte_lm_host.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN24_NORM_LANES8=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Compilation, identity, task/gradient quality and full-workload timings unrun.",
+        "Extended-options LayerNorm training remains the existing explicit refusal. Standalone LN derivative helper is an optional component, not newly advertised public training.",
+        "Independent sequence/Mamba norm graphs remain their existing versions; transformer-side Samba norms are migrated together by root."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Actual transformer RMS forward/backward, residual RMS, q/k RMS and RMS/centered LayerNorm inference use common eight logical FMA/sum chains and fixed adjacent pair tree; one profile label across host/GPU/decode/checkpoint. Parameter reductions continue through the selected neural GEMM profile.",
+      "selectable": true,
+      "arithmetic_profile": "norm-lanes8-v1",
+      "public_route": "TransformerBlock forward/step/backward and tape; ByteLM transformer training/inference; shared Samba transformer norms",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN25",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN25_RMS_SPLIT_SCALE=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "RMSNorm launcher scope; existing fused residual-norm and non-RMSNorm variants remain outside this arm.",
+        "Repeated scalar div/rsqrt in flat cell kernel may regress; record loss and full operation timing."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "First kernel writes original sequential sumsq; second parallelizes each scaled/weighted output cell, retaining exact arithmetic and no extra scalar scratch.",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN26",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN26_TRAIN_SWIGLU=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Plain gated SiLU training only; bias/GELU/ungated/forward-only calls preserve old routes.",
+        "Saved sigmoid/derivative extension is not implemented; this arm reuses existing paired backward and existing SiLU saved stage."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "One training forward kernel writes both SiLU and gate product with original rounding; existing fused bwd_mul2_silu_backward_kernel consumes identical saved stages.",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN27",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN27_QK_ROPE_PAIR=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "All compilation/identity/quality/timing unrun. Session-wide cross-layer RoPE ownership and scan elision are optional separate variants."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "A Q-grid cell also rotates the corresponding KV-head cell where present, sharing its immutable sin/cos pair, all products/adds unchanged.",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN28",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN28_DEAD_TRAINING_CACHE=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Root wired the four _byte_forward_loss full-prefill calls with explicit empty-cache reset and retain_kv_cache=False under NN28. All backward and trace stages remain populated.",
+        "Compilation/identity/quality/timing unrun; broader owners are optional extension."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Skip only final stage-to-decode cache copy/ring update and cache.s increment; capability defaults True and flag defaults OFF.",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN29",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN29_RING_PAIR=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Compilation/identity/quality/timing unrun. Direct-to-final projection/cache layout and multi-request batching are optional broader variants."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "One traversal selects last new token per ring slot and writes both K/V, preserving gather-before-update stream order.",
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN30",
+      "implementation_status": "reused_existing",
+      "implementation_paths": [
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF=1"
+      ],
+      "runtime_env": {},
+      "remaining": [
+        "Existing IDN_BWD_ENTRY_ALIAS remains shipped ON; ALL_OFF disables it. No new default was promoted. Reuse accepted existing receipts for unchanged source.",
+        "Further alias/ownership transfer is an optional broader variant."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Existing production backward passes a read-only sub-buffer of incoming gradient; traced/materialized calls retain copies.",
+      "new_implementation": false,
+      "inherited_default_enabled": true,
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN31",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/checkpoint_contract.mojo",
+        "training/neural_attention_owner.mojo",
+        "transformer/host/attention_tape.mojo",
+        "transformer/experiments/profile.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "python/mojolearn/_transformer_impl.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN31_BOUNDED_CHECKPOINTS=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "No compilation, stale-ticket/failure-lifetime execution, four-column identity, quality, memory-capacity measurement or timing has been run.",
+        "Chosen public scope is default FP32 IDENTICAL zero-state prefill, including sliding windows. Nondefault options, dropout, INT15 and carried-state training remain explicit refusals.",
+        "Per-block activation budget covers retained forward buffers including GEMM workspace. Immutable input/weight snapshots, transient forward/backward storage and process caches are outside that bound.",
+        "Multi-layer global budget scheduling and direct ByteTrainer/Samba optimizer adoption are optional broader integrations; the chosen public TransformerBlock model route is implemented."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "selectable": true,
+      "mechanism": "Public native tape chooses actual retain versus stage release/replay from allocated stage bytes, activation budget and optional shape-derived replay cost per byte. Both host and GPU use the same selection policy; original native ledger also supports shared layer ownership and refuses resets while any ticket is outstanding.",
+      "public_route": "TransformerBlock.forward_with_tape -> TransformerBlock.backward_from_tape",
+      "runtime_api": {
+        "forward": "forward_with_tape(x, activation_budget_bytes=536870912, minimum_replay_ops_per_byte=0)",
+        "backward": "backward_from_tape(tape, grad_output)",
+        "discard": "tape.close()",
+        "metadata": "tape.retained, tape.stage_bytes, tape.profile"
+      },
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    },
+    {
+      "id": "NN32",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/checkpoint_contract.mojo",
+        "training/neural_attention_owner.mojo",
+        "transformer/host/attention_tape.mojo",
+        "transformer/experiments/profile.mojo",
+        "bindings/_mojolearn_transformer.mojo",
+        "bindings/_mojolearn_transformer_host.mojo",
+        "python/mojolearn/_transformer_impl.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN32_RETAIN_FORWARD=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "No compilation, stale-ticket/failure-lifetime execution, four-column identity, quality, memory-capacity measurement or timing has been run.",
+        "Chosen public scope is default FP32 IDENTICAL zero-state prefill, including sliding windows. Nondefault options, dropout, INT15 and carried-state training remain explicit refusals.",
+        "Per-block activation budget covers retained forward buffers including GEMM workspace. Immutable input/weight snapshots, transient forward/backward storage and process caches are outside that bound.",
+        "Multi-layer global budget scheduling and direct ByteTrainer/Samba optimizer adoption are optional broader integrations; the chosen public TransformerBlock model route is implemented."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "selectable": true,
+      "mechanism": "GPU borrowed tape lives in existing TransformerSession; host owns matching native snapshots. Actual forward stages are retained under A or released and recomputed under B before the same VJP. Session cookie and forward/input/weight/config epoch checks enforce single use. Mutation/other calls invalidate; close of an old ticket cannot discard a newer tape. Failure clears state; no Python tensor comparison or numerical work.",
+      "public_route": "TransformerBlock.forward_with_tape -> TransformerBlock.backward_from_tape",
+      "runtime_api": {
+        "forward": "forward_with_tape(x, activation_budget_bytes=536870912, minimum_replay_ops_per_byte=0)",
+        "backward": "backward_from_tape(tape, grad_output)",
+        "discard": "tape.close()",
+        "metadata": "tape.retained, tape.stage_bytes, tape.profile"
+      },
+      "programming_scope": "selected_native_public_arm_written_or_existing_arm_reused",
+      "integration_inventory": "experiments/neural_identical_ab/lanes/attention_integration_inventory.json"
+    }
+  ],
+  "compilation": "not_run_by_request",
+  "verification": "not_run_by_request",
+  "quality": "not_run_by_request",
+  "timing": "not_run_by_request",
+  "evidence": "Source integration and retained historical receipts only. No new compilation, verification, quality or timing logs.",
+  "log_policy": "Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output.",
+  "integration_notes": [
+    "Neural GEMM dispatcher/backward/host imports wired through transformer projections, derivatives and norm parameter reductions.",
+    "NN05/07 gate/up paired caller uses GemmWorkspace.run_pair; NN03/04 disable incumbent fused QK shortcuts on both GPU and host. NN20 has an explicitly separate shared scalar QK graph.",
+    "NN20 summary tree anchors all levels at absolute key zero for prefill/decode/window consistency; empty summaries are bit-copy identities.",
+    "Host scalar contracts contain no GPU runtime dependencies; root migrated optimized ByteLM host profile routes to the shared transformer oracle.",
+    "No compilation, tests/checkers/static/lint/syntax verification, benchmark, candidate execution, external GPU job or commit was performed by this lane.",
+    "NN19 now requests the same explicit estash schedule in both arms so vendor defaults cannot silently erase the comparison.",
+    "NN20/24 imports moved out of three module docstrings into real imports after source-call tracing found the insertion error.",
+    "Arithmetic profile metadata tags actual FAST versus IDENTICAL binding mode and refuses saved model/cache mismatches.",
+    "Removed exact benchmark-size RMS backward default dispatch; isolated historical B retained for neighboring/non-board full-workload A/B.",
+    "tools/bench_board_neural.py reads selected A/B JSON, records actual public tape/window/owned-weight/chunked-head operation metadata separately from requested compile flags; no harness execution was performed."
+  ]
+}

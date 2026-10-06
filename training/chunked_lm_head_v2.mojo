@@ -2,22 +2,30 @@
 """Opt-in device forward/loss/backward for chunked LM-head v2."""
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL,
     ftz, identical_div, identical_exp, identical_fmax, identical_log,
     identical_mul_add,
 )
 from training.checks.loss_contract import CE_NEG_INF_BITS, neg_by_bits
 from std.memory import bitcast
-from gemm.checks.gemm_identical import identical_gemm_into
+from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
 
 # Four passes visit every vocabulary chunk (max, denominator/loss, dHidden,
 # dWeight). 1024 keeps the workspace bounded while quartering the launch
 # count versus the original 256-cell slice; chunk boundaries do not alter
 # any row/token fold order.
-comptime LM_HEAD_V2_CHUNK = 1024
+# NN53: independently selectable storage/launch experiments, default OFF.
+# 512 halves panel storage; 2048 halves panel launches versus 1024. These
+# powers-of-two arise from workspace/launch tradeoffs, not a vocabulary row.
+# The canonical vocabulary loop and GEMM contraction are unchanged. Existing
+# chunked_lm_head_v2 must also be selected; no ordinary head changes profile.
+# All compilation/identity/quality/full-model A/B remain intentionally unrun.
+from training.chunked_lm_head_profile import NN53_CHUNK512, NN53_CHUNK2048, LM_HEAD_V2_CHUNK
 comptime LM_HEAD_V2_TPB = 256
 
 
@@ -143,30 +151,37 @@ def _enqueue_loss_total(
     var leaves = (rows + LM_HEAD_V2_LOSS_LEAF - 1) // LM_HEAD_V2_LOSS_LEAF
     var a = ctx.enqueue_create_buffer[DType.float32](max(1, leaves))
     var b = ctx.enqueue_create_buffer[DType.float32](max(1, (leaves + 1) // 2))
-    ctx.enqueue_function[chunked_lm_head_v2_loss_leaf_kernel](
-        loss.unsafe_ptr(), a.unsafe_ptr(), row_loss.unsafe_ptr(), Int32(rows),
-        grid_dim=(leaves + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB,
-        block_dim=LM_HEAD_V2_TPB,
-    )
-    var width = leaves
-    var from_a = True
-    while width > 1:
-        var out_width = (width + 1) // 2
-        var grid = (out_width + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
-        if from_a:
-            ctx.enqueue_function[chunked_lm_head_v2_loss_level_kernel](
-                loss.unsafe_ptr(), b.unsafe_ptr(), a.unsafe_ptr(),
-                Int32(width), Int32(rows),
-                grid_dim=grid, block_dim=LM_HEAD_V2_TPB,
-            )
-        else:
-            ctx.enqueue_function[chunked_lm_head_v2_loss_level_kernel](
-                loss.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
-                Int32(width), Int32(rows),
-                grid_dim=grid, block_dim=LM_HEAD_V2_TPB,
-            )
-        from_a = not from_a
-        width = out_width
+    try:
+        ctx.enqueue_function[chunked_lm_head_v2_loss_leaf_kernel](
+            loss.unsafe_ptr(), a.unsafe_ptr(), row_loss.unsafe_ptr(), Int32(rows),
+            grid_dim=(leaves + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB,
+            block_dim=LM_HEAD_V2_TPB,
+        )
+        var width = leaves
+        var from_a = True
+        while width > 1:
+            var out_width = (width + 1) // 2
+            var grid = (out_width + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
+            if from_a:
+                ctx.enqueue_function[chunked_lm_head_v2_loss_level_kernel](
+                    loss.unsafe_ptr(), b.unsafe_ptr(), a.unsafe_ptr(),
+                    Int32(width), Int32(rows),
+                    grid_dim=grid, block_dim=LM_HEAD_V2_TPB,
+                )
+            else:
+                ctx.enqueue_function[chunked_lm_head_v2_loss_level_kernel](
+                    loss.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                    Int32(width), Int32(rows),
+                    grid_dim=grid, block_dim=LM_HEAD_V2_TPB,
+                )
+            from_a = not from_a
+            width = out_width
+    except error:
+        ctx.synchronize()
+        raise error
+    # Raw-pointer consumers do not retain these local scratch owners. Charge
+    # their last-consumer wait to the complete operation before destruction.
+    ctx.synchronize()
     _ = a^
     _ = b^
 
@@ -471,7 +486,21 @@ def _chunk_dweight_kernel(d_weight: MutPointer[Float32, MutAnyOrigin], logits: M
         d_weight.unsafe_store(cell, ftz(d_weight.unsafe_load(cell)))
 
 
+def chunked_lm_head_v2_gemm_workspace_floats(rows: Int,vocab: Int,width: Int) -> Int:
+    # Dispatcher scratch need is not monotone in the output width: a short
+    # final panel may select a split plan while full panels select a tile.
+    # Size both actual panel widths; do not assume the largest panel wins.
+    var panel = min(vocab,LM_HEAD_V2_CHUNK)
+    var required = identical_gemm_workspace_max_floats(rows,panel,width)
+    var tail = vocab%LM_HEAD_V2_CHUNK
+    if tail>0 and tail!=panel:
+        required = max(required,identical_gemm_workspace_max_floats(rows,tail,width))
+    return max(1,required)
+
+
 def chunked_lm_head_v2_gemm_forward_into(ctx: DeviceContext, mut loss: DeviceBuffer[DType.float32], mut maxima: DeviceBuffer[DType.float32], mut denom: DeviceBuffer[DType.float32], mut row_loss: DeviceBuffer[DType.float32], mut chunk: DeviceBuffer[DType.float32], mut ws: DeviceBuffer[DType.float32], mut hidden: DeviceBuffer[DType.float32], mut weight: DeviceBuffer[DType.float32], mut targets: DeviceBuffer[DType.int32], rows: Int, vocab: Int, width: Int) raises:
+    if len(ws)<chunked_lm_head_v2_gemm_workspace_floats(rows,vocab,width):
+        raise Error("chunked GEMM head workspace does not cover every actual panel")
     var grid = (rows + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
     for chunk0 in range(0, vocab, LM_HEAD_V2_CHUNK):
         var n = min(LM_HEAD_V2_CHUNK, vocab - chunk0)
@@ -490,6 +519,8 @@ def chunked_lm_head_v2_gemm_forward_into(ctx: DeviceContext, mut loss: DeviceBuf
 
 
 def chunked_lm_head_v2_gemm_backward_into(ctx: DeviceContext, mut d_hidden: DeviceBuffer[DType.float32], mut d_weight: DeviceBuffer[DType.float32], mut chunk: DeviceBuffer[DType.float32], mut ws: DeviceBuffer[DType.float32], mut hidden: DeviceBuffer[DType.float32], mut weight: DeviceBuffer[DType.float32], mut targets: DeviceBuffer[DType.int32], mut maxima: DeviceBuffer[DType.float32], mut denom: DeviceBuffer[DType.float32], rows: Int, vocab: Int, width: Int) raises:
+    if len(ws)<chunked_lm_head_v2_gemm_workspace_floats(rows,vocab,width):
+        raise Error("chunked GEMM head workspace does not cover every actual panel")
     var row_grid = (rows + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
     for chunk0 in range(0, vocab, LM_HEAD_V2_CHUNK):
         var n = min(LM_HEAD_V2_CHUNK, vocab - chunk0)

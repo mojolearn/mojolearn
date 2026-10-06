@@ -16,9 +16,11 @@ from max.gpu.host import DeviceBuffer,DeviceContext
 from gemm.checks.gemm_identical import GEMM_FOLD_SLOTS,_fold_push,_fold_drain,contract_partition,gemm_operand_strides
 from checks.numerics import ftz
 from checks.rtf_seam import rtf_mul_add
+from gemm.contract import CONTRACT_K_LEAF_MIN
+from gemm.experiments.neural_profile import neural_partition, neural_merge_chains
 
 
-def pipeline_kernel[ASYNC: Bool](c: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,MutAnyOrigin],
+def pipeline_kernel[ASYNC: Bool, CHAINS: Int = 1](c: MutPointer[Float32,MutAnyOrigin],a: MutPointer[Float32,MutAnyOrigin],
     b: MutPointer[Float32,MutAnyOrigin],m: Int32,n: Int32,k: Int32,leaf: Int32,leaves: Int32,
     asi: Int32,asp: Int32,bsp: Int32,bsj: Int32):
     var tid = Int(thread_idx.x)
@@ -34,7 +36,7 @@ def pipeline_kernel[ASYNC: Bool](c: MutPointer[Float32,MutAnyOrigin],a: MutPoint
     for t in range(Int(leaves)):
         var begin = t*Int(leaf)
         var end = min(begin+Int(leaf),Int(k))
-        var acc = Float32(0.0)
+        var acc = SIMD[DType.float32,CHAINS](0.0)
         var slot = 0
         var ap = a.unsafe_offset(row*Int(asi)+begin*Int(asp))
         var bp = b.unsafe_offset(begin*Int(bsp)+col*Int(bsj))
@@ -58,12 +60,13 @@ def pipeline_kernel[ASYNC: Bool](c: MutPointer[Float32,MutAnyOrigin],a: MutPoint
                 else:
                     as_[nextslot*128+tid]=ap.unsafe_load()
                     bs_[nextslot*128+tid]=bp.unsafe_load()
-            acc = rtf_mul_add(ftz(as_[slot*128+tid]),ftz(bs_[slot*128+tid]),acc)
+            var chain = (p-begin)%CHAINS
+            acc[chain] = rtf_mul_add(ftz(as_[slot*128+tid]),ftz(bs_[slot*128+tid]),acc[chain])
             comptime if ASYNC and is_nvidia_gpu():
                 if p+1 < end:
                     async_copy_wait_all()
             slot = nextslot
-        _ = _fold_push(stack,occ,ftz(acc))
+        _ = _fold_push(stack,occ,neural_merge_chains[CHAINS](acc))
     c.unsafe_store(cell,ftz(_fold_drain(stack,occ)))
 
 
@@ -72,12 +75,12 @@ def pipeline_kernel[ASYNC: Bool](c: MutPointer[Float32,MutAnyOrigin],a: MutPoint
 # third near parity (1.009x). One warmup/score per layout; default unchanged.
 # Evidence: overnight-ab-20261006/nvidia/specific-repair-normalized-measurements.json.
 # Explicit NVIDIA-only async adapter; no production default or unsupported vendor fallback.
-def pipeline_gemm[ASYNC: Bool](ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
+def pipeline_gemm[ASYNC: Bool, LEAF: Int = CONTRACT_K_LEAF_MIN, CHAINS: Int = 1](ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int) raises:
     if m<1 or n<1 or k<1 or len(c)<m*n or len(a)<m*k or len(b)<n*k:
         raise Error("invalid async pipeline geometry")
-    var part = contract_partition(k)
+    var part = neural_partition[LEAF](k)
     var st = gemm_operand_strides(op,m,n,k)
-    ctx.enqueue_function[pipeline_kernel[ASYNC]](c,a,b,Int32(m),Int32(n),Int32(k),
+    ctx.enqueue_function[pipeline_kernel[ASYNC,CHAINS]](c,a,b,Int32(m),Int32(n),Int32(k),
         Int32(part[0]),Int32(part[1]),Int32(st[0]),Int32(st[1]),Int32(st[2]),Int32(st[3]),
         grid_dim=((m*n+127)//128,1,1),block_dim=(128,1,1))

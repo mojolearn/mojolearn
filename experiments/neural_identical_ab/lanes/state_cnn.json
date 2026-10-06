@@ -1,0 +1,648 @@
+{
+  "lane": "state_cnn",
+  "branch": "ideas/neural-identical-ab-20261006-r3",
+  "base_commit": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
+  "commit": "working_tree_after_d39587b1d_root_commit_pending",
+  "experiments": [
+    {
+      "id": "NN33",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "mamba/impl/modules/ssd_minimal.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN33_YDIAG_ROWS8",
+        "MOJOLEARN_NN33_CSTATE_P16"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "New independent geometries on inherited I08 SSD tiles: eight Ydiag rows with 32-column input staging; sixteen Cstate value channels.",
+        "Existing per-cell leaves, order, padded terms and saved stages retained."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "arms": [
+        {
+          "name": "ydiag_rows8",
+          "candidate_defines": [
+            "MOJOLEARN_NN33_YDIAG_ROWS8"
+          ]
+        },
+        {
+          "name": "cstate_p16",
+          "candidate_defines": [
+            "MOJOLEARN_NN33_CSTATE_P16"
+          ]
+        },
+        {
+          "name": "combined",
+          "candidate_defines": [
+            "MOJOLEARN_NN33_YDIAG_ROWS8",
+            "MOJOLEARN_NN33_CSTATE_P16"
+          ]
+        }
+      ],
+      "requires": [
+        "Inherited M2_SSD_TILED route active; the existing shared-memory resource guard still applies."
+      ],
+      "prior_work": "I08 shared tiles/defaults and optional retained G*L already existed; no duplicate implementation or measurement claim.",
+      "selected_arm_scope": "Mamba-2 inherited tiled Ydiag rows8 and Cstate value-width16 geometries.",
+      "additional_research_directions": [
+        "Mamba-3 SISO geometry extension."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN34",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "mamba/impl/ops/neural_scan_profile.mojo",
+        "mamba/impl/ops/neural_mamba_scan.mojo",
+        "mamba/impl/ops/selective_scan_backward.mojo",
+        "mamba/impl/modeling/modeling_mamba.mojo",
+        "mamba/checks/mamba_oracle.mojo",
+        "mamba/checks/mamba_backward.mojo",
+        "mamba/host/gen/neural_scan_profile.mojo",
+        "mamba/host/gen/neural_mamba_scan.mojo",
+        "mamba/host/gen/selective_scan_backward.mojo",
+        "mamba/host/gen/modeling_mamba.mojo",
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "bindings/_mojolearn_neural_host.mojo",
+        "python/mojolearn/_mamba_impl.py",
+        "experiments/neural_identical_ab/NN34_AFFINE_PREFIX_CONTRACT.md"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN34_AFFINE_PREFIX"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Fixed absolute32 prefix tree and shared compose/evaluate; actual Mamba-1 factor preparation, emission, D skip and complete model forward/decode route.",
+        "Optional device-owned boundary and affine slots; profile id and scalar absolute position in Python checkpoint schema; host and resident GPU session open/export/load; scalar metadata and named finite refusal for added state.",
+        "Real canonical-tree VJP for zero-state prefill: descending prefix losses, reverse node creation order, chunk-boundary adjoints, separate prepared-factor A/B gradients feeding all existing downstream parameter/input gradients.",
+        "Public Mamba host generated model plus alternate neural-host inference/oracle share new profile. Source-only generator refresh; no check or compilation execution."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "reason": "Selected Mamba-1 prefill/decode, zero-state prefill backward and checkpoint source integration authored; execution-based acceptance remains not run.",
+      "modular_ask": null,
+      "arithmetic_profile": "mojolearn.neural-ab.affine-prefix.fp32.v2; new same-version graph, previous-version sequential bits need not match.",
+      "selected_arm_scope": "Mamba-1 full prefill/decode and zero-state prefill backward affine-prefix numerical profile; public checkpoint and host inference integration.",
+      "additional_research_directions": [
+        "Parallel-prefix subtree reuse; segmented training/checkpoint VJP beyond the established zero-state prefill-backward API; Mamba-2/3 numerical profiles; independent-position ragged carried-state API (existing ragged fresh inference still invokes independent rows)."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "checkpoint": {
+        "profile_id": 2,
+        "absolute_chunk": 32,
+        "arrays": [
+          "conv_window[B,di,4]",
+          "h[B,di,16]",
+          "affine_boundary[B,di,16]",
+          "affine_a[B,di,16,6]",
+          "affine_b[B,di,16,6]"
+        ],
+        "metadata": [
+          "profile_id",
+          "absolute_position"
+        ],
+        "backward_scope": "existing public zero-state prefill backward; no new state cotangent API"
+      }
+    },
+    {
+      "id": "NN35",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "mamba/impl/modeling/modeling_mamba.mojo",
+        "mamba/impl/modules/mamba2.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN35_CONV_PAIR"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Two adjacent independent time cells share input windows and weight loads for Mamba-1 and Mamba-2 causal depthwise convolution.",
+        "Original bias-seeded ordered FMA taps, portable SiLU, retained preactivation and separate window-state update remain.",
+        "Odd tail loads only the inputs used by its one live output."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "prior_work": "I09 token-parallel cell arms are inherited. Pair window reuse is the new arm.",
+      "selected_arm_scope": "Mamba-1/2 paired causal-convolution time outputs with shared window loads.",
+      "additional_research_directions": [
+        "Additional standalone neural Conv1d callers and gradient-specific window reuse."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN36",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "mamba/impl/modules/ssd_minimal.mojo",
+        "tools/mamba_host_gen.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN36_SHARED_DECAY"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Mamba-2 off-diagonal SSD output uses one block per batch/token/head, sharing one explicitly rounded exp word across value channels.",
+        "No retained global scratch or extra synchronization lifetime.",
+        "Generator substitution selects unchanged host cell exp/dot expression for the shared-memory kernel."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "prior_work": "Existing retained decay stages and I08 reuse are not claimed as new.",
+      "selected_arm_scope": "Mamba-2 off-diagonal SSD output shares the rounded token/head exp across value channels.",
+      "additional_research_directions": [
+        "Remaining Mamba-2 inter-chunk/backward and Mamba-3 decay consumers."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN37",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "mamba/impl/modules/ssd_minimal.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN37_TRIANGLE_TASKS"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Mamba-2 CB tasks enumerate only lower-triangle coordinates using exact integer upper-bound search.",
+        "Explicit full cb_g zero-fill preserves upper and padded stage cells for traces/backward; include its launch and traffic in A/B."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "requires": [
+        "Inherited IDN_M2_CB_LOWER must remain enabled."
+      ],
+      "prior_work": "I08 lower-triangle arithmetic pruning already existed. Compact task indexing and explicit clearing are new.",
+      "selected_arm_scope": "Mamba-2 lower-triangle CB task enumeration with explicit upper/padded stage zeroing.",
+      "additional_research_directions": [
+        "Mamba-3 causal task scheduling."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN38",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "mamba/impl/modules/mamba3_backward.mojo",
+        "mamba/host/gen/mamba3_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Reuse each descending chunk-summary chain once to create exclusive suffix seeds in place before replaying token chunks.",
+        "Device and direct host source mirror include seed scratch transformation and retain inherited angle/rate/dt operations."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "arithmetic_profile": "The fixed-64 chunk angle suffix profile already exists and is default-on; this new extension changes only repeated computation scheduling.",
+      "requires": [
+        "Inherited IDN_M3_ANGLE_DT_SUFFIX active."
+      ],
+      "selected_arm_scope": "Mamba-3 existing angle/dt suffix profile reuses descending chunk-summary seeds before replay.",
+      "additional_research_directions": [],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN39",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "mamba/impl/ops/neural_gradient_profile.mojo",
+        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "mamba/host/gen/mamba2_ssd_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN39_M2_GRAD_TREE"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "New shared pure Mojo Mamba-2 gradient fold profile uses existing row leaves and adjacent binary subtree merges, with explicitly carried odd tails and no added zero leaf.",
+        "Device and host import the same arithmetic helper; single leaf is returned verbatim.",
+        "Reaches existing Mamba-2 conv weight/bias, A/A_log and dt_bias terminal-gradient merge caller."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "arithmetic_profile": "mojolearn.neural-ab.mamba2.gradient-fold.fp32.v2; version-to-version bits may change, within-version columns share the exact helper.",
+      "prior_work": "Mamba-2 fixed 256-row gradient leaves and serial partial merge were already default-on; the balanced merge is new.",
+      "selected_arm_scope": "Mamba-2 existing fixed256-row conv/A/dt gradient partials merge with one shared adjacent-pair tree.",
+      "additional_research_directions": [
+        "Mamba-1/Mamba-3 parameter families and separately attributable per-family switches."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN40",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN40_WS_HEADROOM",
+        "MOJOLEARN_NN40_OWNED_WEIGHTS"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Projection workspace grow-ahead capacity (25%, at most16MiB) retains context ownership and wait-before-replacement.",
+        "Explicit Mamba3Block.install_owned_weights creates an immutable copied snapshot; generation-owned fresh forward/backward never trust mutable external pointers; reinstall after optimizer/load mutation invalidates device stages.",
+        "Host implements the same snapshot semantics; export reads installed bytes; pickle stores those bytes and lazily reinstalls a new generation. Binding changes, stale generation, busy/unusable sessions and disabled ownership arm refuse by name. Ordinary borrowed-buffer calls retain byte validation.",
+        "Host reports-optional/session-info exports added for shared Python/Samba callers; counters explicitly show no retained device stages."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "requires": [
+        "Workspace arm requires inherited projection workspace route.",
+        "Owned arm requires explicit install_owned_weights(), and reinstall after each intended optimizer/load mutation. It is an ownership API, never an automatic stale-pointer cache; define alone intentionally does not transfer ownership."
+      ],
+      "prior_work": "Existing decode sessions already own copied weights; ordinary external mutable buffers are not trusted by this arm.",
+      "selected_arm_scope": "Retained projection workspace headroom plus explicit Mamba-3 immutable snapshot install/update/export and generation-owned fresh forward/backward on GPU and host.",
+      "additional_research_directions": [
+        "Packed/pretransposed immutable weight layouts with additional retained-memory accounting; Mamba-1/2 snapshot-generation APIs."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "arms": [
+        {
+          "name": "workspace_headroom",
+          "candidate_defines": [
+            "MOJOLEARN_NN40_WS_HEADROOM"
+          ]
+        },
+        {
+          "name": "owned_weights",
+          "candidate_defines": [
+            "MOJOLEARN_NN40_OWNED_WEIGHTS"
+          ],
+          "caller_protocol": "Call block.install_owned_weights() before fresh forward/backward; explicit reinstall after any intended parameter update. B uses ordinary borrowed-buffer forward/backward. Include install/reinstall/export in declared cold/update boundaries."
+        }
+      ]
+    },
+    {
+      "id": "NN41",
+      "implementation_status": "reused_existing",
+      "implementation_paths": [
+        "sequence/recurrent_scan.mojo",
+        "sequence/recurrent.mojo",
+        "sequence/exec_device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_IDN_SEQ_LSTM_SCAN"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Existing IDENTICAL whole-sequence scan is reused rather than reimplemented.",
+        "Source repair restricts SCAN_WIDE to FAST because its backward folds are a different graph and the host scan uses the original graph."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request.",
+        "Inherited FAST scan constant-predictor quality failure is still unresolved; no executed evidence establishes IDENTICAL quality or a cause. The FAST-wide exclusion is a source routing fix, not a claimed quality repair."
+      ],
+      "prior_failure": "Source records constant-predictor quality collapse in FAST scan even after Args repair; NOT repaired or qualified by this lane.",
+      "modular_ask": "If the existing team_barrier memory ordering is insufficient on a vendor, request a documented supported workgroup barrier that orders device-memory stores/loads across loop iterations, or a supported persistent launch primitive. No cross-block spin barrier or compiler workaround.",
+      "selected_arm_scope": "Existing IDENTICAL whole-sequence LSTM scan and source correction preventing FAST-wide backward from entering IDENTICAL.",
+      "additional_research_directions": [
+        "Explicit bounded-segment launch/state contract beyond existing whole-sequence scan."
+      ],
+      "source_programming_status": "reused_existing_with_identical_scope_fix"
+    },
+    {
+      "id": "NN42",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "sequence/ops.mojo",
+        "sequence/recurrent.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN42_INPUT_BIAS_FUSED"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Fold input projection bias materialization into the per-step recurrent hidden/gate kernel.",
+        "Each owner stores the same rounded GX word before reading its gates; shared host/GPU element body.",
+        "Saved GX, gate activations, hidden/cell words and derivative inputs keep their seams."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "requires": [
+        "Per-step recurrent path; when SEQ_LSTM_SCAN is compiled, this arm deliberately yields to the existing bias path."
+      ],
+      "selected_arm_scope": "Sequence per-step recurrent input-bias materialization fused into gate/hidden operation.",
+      "additional_research_directions": [
+        "Scan path deliberately retains its separate bias launch.",
+        "Sequence MLP-specific fusion and further derivative-state fusions."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN43",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "sequence/recurrent.mojo",
+        "sequence/checks/oracle.mojo",
+        "sequence/ops.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN43_WGRAD_FIXED128"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "New recurrent weight/bias profile uses absolute 128-row leaves, incumbent per-leaf chain and ascending partial merges.",
+        "Host and GPU execute the same generic Exec split-K operations; independent oracle source states the same partition.",
+        "For exceptional K whose single-cell partials exceed the fixed scratch budget, double the leaf identically on every column until it fits."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "arithmetic_profile": "mojolearn.neural-ab.recurrent.gradient-leaves.fp32.v2; numerical profile may change previous-version bits.",
+      "requires": [
+        "Existing blocked recurrent weight-gradient route enabled."
+      ],
+      "prior_work": "The default square-root/512-minimum blocked gradient profile already existed; this arm is a distinct profile.",
+      "selected_arm_scope": "Recurrent weight and bias gradients use fixed128-row leaves, with size-derived portable scratch-cap growth.",
+      "additional_research_directions": [
+        "Separate dWeight/dBias attribution switches.",
+        "Non-recurrent sequence MLP gradient profile caller coverage."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN44",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "sequence/moe_group.mojo",
+        "sequence/moe_tiled.mojo",
+        "sequence/exec_device.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN44_STABLE_GROUP",
+        "MOJOLEARN_NN44_EXPERT_BISECT"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Stable per-expert ascending pair scatter reuses existing device counts/offsets and preserves original pair output positions.",
+        "Independent integer binary-search expert lookup handles empty experts and retains scheduling semantics.",
+        "Router/top-k/weighted combine arithmetic remains inherited."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "arms": [
+        {
+          "name": "stable_group",
+          "candidate_defines": [
+            "MOJOLEARN_NN44_STABLE_GROUP"
+          ]
+        },
+        {
+          "name": "expert_bisect",
+          "candidate_defines": [
+            "MOJOLEARN_NN44_EXPERT_BISECT"
+          ]
+        },
+        {
+          "name": "combined",
+          "candidate_defines": [
+            "MOJOLEARN_NN44_STABLE_GROUP",
+            "MOJOLEARN_NN44_EXPERT_BISECT"
+          ]
+        }
+      ],
+      "risk": "Stable scatter does E*pair_count comparisons; it may lose despite less cursor contention. Existing FP32 pair indices/range contract is inherited, not enlarged.",
+      "selected_arm_scope": "Neural MoE stable expert-local ascending pair grouping and upper-bound expert tile lookup.",
+      "additional_research_directions": [
+        "Scalable parallel stable grouping with explicit workspace for large expert counts.",
+        "Additional expert gradient/training grouped caller coverage."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN45",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN45_CONV_RELU"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Fuse GEMM-output layout, bias, retained preactivation and ReLU for unpooled CNN blocks.",
+        "Shared host/device element function preserves canonical NaNs, bias rounding and ReLU derivative inputs.",
+        "Existing direct-convolution path still uses its original separate ReLU."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "selected_arm_scope": "CNN unpooled conv-layout/bias/preactivation/ReLU fusion, with inherited direct convolution continuing its established path.",
+      "additional_research_directions": [
+        "Residual epilogue fusion and additional Conv1d/ResNet callers.",
+        "Pooled block path already has inherited ReLU/maxpool fusion; no new claim."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN46",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "x_cnn/ops.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN46_GATHER_BOUNDS"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Derive exact candidate tap intervals for col2im and maxpool-backward gathers from stride/dilation/padding inequalities.",
+        "Keep all original divisibility checks, tap order and floating operations; reversed negative-control path keeps incumbent bounds.",
+        "Fused pool-ReLU backward consumers share the same maxpool value helper."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "prior_work": "Maxpool value/arg-index already fused; tiled pool and several bounded backward paths were inherited.",
+      "selected_arm_scope": "CNN col2im and maxpool backward gathers prune impossible taps using exact stride/dilation bounds.",
+      "additional_research_directions": [
+        "New dWeight tree and shared-memory gather tiling.",
+        "Host optimized plane routines retain the same old fold; new host scheduling is not claimed."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN47",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN47_APPLY_RUNNING"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Training normalization output and running-state updates share one launch using the same element helper on host/GPU.",
+        "Exactly one first-image pixel per channel owns running updates after existing statistics; output does not read running state.",
+        "Existing mean/centered variance folds, biased/unbiased conversions, momentum and epsilon unchanged."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "selected_arm_scope": "CNN training batchnorm apply also owns running-stat updates once/channel; statistics unchanged.",
+      "additional_research_directions": [
+        "Separate centered fixed-tree moment profile and additional statistics-load reuse."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN48",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "x_cnn/device.mojo",
+        "x_cnn/ops.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN48_CSR_TILES"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Neural CSR aggregation stages 32 edge columns/weights once per 128-feature tile, preserving ascending edge folds.",
+        "Weighted, mean, inverse-weight and backward normalization modes retain original floating seams; inactive feature lanes still join barriers.",
+        "Host retains the incumbent exact arithmetic definition."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "selected_arm_scope": "Neural weighted/mean/inverse/normalized CSR SpMM shares index/value tiles across feature lanes.",
+      "additional_research_directions": [
+        "GraphSAGE max-specific tiles and degree-normalization fusion."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    }
+  ],
+  "cross_owner_experiments": [
+    {
+      "id": "NN13",
+      "implementation_status": "reused_existing",
+      "implementation_paths": [
+        "sequence/gemm_tiled.mojo",
+        "sequence/exec_device.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF"
+      ],
+      "runtime_env": {},
+      "implemented": [
+        "Inherited same-chain sequence tiled GEMM serves neural recurrent/MLP projections; source was not changed by this lane."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "selected_arm_scope": "Existing sequence tiled same-chain GEMM callers reused; independent sequence numerical profile retained.",
+      "additional_research_directions": [
+        "GEMM lane owns any new neural caller/profile API."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled"
+    },
+    {
+      "id": "NN14",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN14_BOUNDED_IM2COL"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "implemented": [
+        "Forward and CNNClassifier training/recompute tile complete-K GEMMs over bounded row slabs (8MiB cols+y2 target, one indivisible row minimum), scattering to absolute NCHW coordinates.",
+        "Backward dWeight contracts against generated im2col values using full-row selected GEMM leaf/chain/tree; dInput generates each dcols contraction within the incumbent tap-ordered gather. No full cols/dcols materialization.",
+        "Standalone Conv2d and resident CNNClassifier block backward select the same shared host/device element functions. Bias gradients stay routed to selected GEMM. Saved-column owner allocates one sentinel word under the native compile-flag query; saved preactivation remains full."
+      ],
+      "remaining": [
+        "Compilation, static verification, tests, same-version host/NVIDIA/AMD/Apple identity, gradient/quality acceptance, and full-dataset end-to-end NVIDIA+AMD A/B timing are not run by request."
+      ],
+      "selected_arm_scope": "Bounded-im2col full Conv2d/CNNClassifier forward/recompute, virtual-im2col dWeight and dInput backward, and reduced saved-column allocation.",
+      "additional_research_directions": [
+        "Tiling/caching generated backward operands for speed without changing the fixed contraction graph."
+      ],
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "memory_scope": "Bounds requested im2col scratch and removes full saved cols/dcols. Full inputs/outputs/preactivation/grow remain; process-retained historical workspace may still be larger. This is not a claim of a total-process VRAM cap."
+    }
+  ],
+  "compilation": "not_run_by_request",
+  "verification": "not_run_by_request",
+  "identity": "not_run_by_request",
+  "quality": "not_run_by_request",
+  "timing": "not_run_by_request",
+  "sample_count": 0,
+  "defaults_promoted": false,
+  "generated_source_refresh": "authored_source_only_mode_no_validation",
+  "log_evidence": "No build/test/GPU logs exist. Source-authoring log only: /tmp/neural_mamba_source_authoring.log.",
+  "authoring_note": "Only source reads/edits, explicit source-writing transformation and git status. Python file-authoring scripts and API metadata glue contain no model numerical runtime.",
+  "shared_gemm_integration": {
+    "device": [
+      "Mamba projection workspace",
+      "Mamba linear-gradient call tables",
+      "Mamba2 backward routed GEMMs",
+      "CNN forward/dInput/dWeight/dBias including former forced/direct bypasses"
+    ],
+    "host": [
+      "Mamba projection oracles",
+      "generated Mamba backward shim",
+      "CNN GEMM and generated-im2col contractions"
+    ],
+    "independent_profiles": [
+      "Sequence recurrent same-chain GEMM",
+      "Mamba2/3 SSD/SISO specialized internal forward contraction graphs remain incumbent on every column; host SSD calls deliberately retain corresponding incumbent helpers."
+    ]
+  },
+  "source_generation": {
+    "command": "python3 tools/mamba_host_gen.py --source-write-only",
+    "exit_code": 0,
+    "log": "/tmp/neural_mamba_source_authoring.log",
+    "verification": "disabled_by_request; post-generation device-construct scan/stale comparison/check mode not executed"
+  },
+  "integration_inventory": "experiments/neural_identical_ab/lanes/state_cnn_integration_inventory.json"
+}

@@ -210,7 +210,7 @@ from transformer.impl.llama.modeling_llama import _zeros as _llama_zeros
 # OP_NT), so its bits are the per-call route's.
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
-from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.contract import OP_NT
 from transformer.impl.llama.modeling_llama import llama_rms_norm
 from std.math import isfinite
@@ -719,6 +719,10 @@ struct TransformerBackwardWorkspace(Movable):
         return True
 
 
+from training.neural_attention_owner import BorrowedAttentionTape
+from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
+
+
 struct TransformerSession(Movable, Writable):
     """One Python-owned context/workspace; no retained host pointers or
     float32 weights. Under `numeric_profile="fixed15_v1"` it RETAINS the
@@ -752,6 +756,8 @@ struct TransformerSession(Movable, Writable):
     (no reset exists or is needed: every cell the backward reads it wrote
     this call). Dropped with the forward workspace under the same budget."""
     var backward_workspaces: Int
+    var tape: Optional[BorrowedAttentionTape]
+    var tape_generation: Int
     var busy: Bool
     var closed: Bool
     var contexts: Int
@@ -770,6 +776,8 @@ struct TransformerSession(Movable, Writable):
         self.weight_reuses = 0
         self.backward = Optional[TransformerBackwardWorkspace]()
         self.backward_workspaces = 0
+        self.tape = None
+        self.tape_generation = 1
         self.busy = False
         self.closed = False
         self.contexts = 0
@@ -784,6 +792,7 @@ struct TransformerSession(Movable, Writable):
     def __deinit__(deinit self):
         # Same teardown order as ByteLMSession (DEVIATION 2520): buffer
         # destruction enqueues frees, which must drain before context death.
+        _ = self.tape^
         _ = self.backward^
         _ = self.workspace^
         _ = self.planes^
@@ -795,7 +804,19 @@ struct TransformerSession(Movable, Writable):
                 pass
         _ = self.ctx^
 
+    def invalidate_tape(mut self) raises:
+        # Ordinary calls with no explicit tape retain their previous launch
+        # and synchronization schedule; only live tape owners need fences.
+        if self.tape:
+            if self.ctx:
+                self.ctx.value().synchronize()
+            self.tape = None
+            if self.ctx:
+                self.ctx.value().synchronize()
+        self.tape_generation += 1
+
     def clear(mut self) raises:
+        self.invalidate_tape()
         if self.ctx:
             self.ctx.value().synchronize()
         self.backward = None
@@ -923,6 +944,7 @@ def _session_weights(
     into the retained buffers when they differ, a fresh upload otherwise.
     Options blocks (a non-default record or any tail address) take the
     per-call upload as before; nothing is retained for them."""
+    session.invalidate_tape()
     ref ctx = session.ctx.value()
     var extended = not opts.is_default()
     for i in range(len(tail)):  # small-loop(tail: the 11 optional block addresses): checks address presence, not data
@@ -1394,6 +1416,7 @@ def _transformer_run_session_int15(
     """`_transformer_run_session` under the profile: the same stages, cache
     handling and downloads, with the weights' seven projections as the
     session's retained planes."""
+    session.invalidate_tape()
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
     opts.validate(hd)
@@ -3042,6 +3065,158 @@ def transformer_backward_binding(
     return PythonObject(0)
 
 
+
+def transformer_session_discard_tape_binding(session: PythonObject,ticket: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy:
+        raise Error("transformer tape: session is busy")
+    if len(ticket) != 2:
+        raise Error("transformer tape: owner and epoch required")
+    var cookie = Int(py=ticket[0])
+    var epoch = Int(py=ticket[1])
+    if cookie != Int(owner):
+        raise Error("transformer tape: foreign session")
+    # Closing an older ticket cannot discard a newer forward in this session.
+    if not owner[].closed and epoch == owner[].tape_generation:
+        owner[].invalidate_tape()
+    return PythonObject(0)
+
+
+def transformer_session_invalidate_tape_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy or owner[].closed:
+        raise Error("transformer tape: session is busy or closed")
+    owner[].invalidate_tape()
+    return PythonObject(0)
+
+
+def transformer_arithmetic_profile_changed_binding() raises -> PythonObject:
+    return PythonObject(Int(transformer_arithmetic_profile_changed()))
+
+
+def transformer_arithmetic_profile_binding() raises -> PythonObject:
+    return PythonObject(transformer_arithmetic_profile())
+
+
+def transformer_session_forward_tape_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """11 buffers x/9 weights/y; ten scalars shape/window/budget/cost.
+
+    Returns native session cookie, epoch, retained flag, counted stage bytes.
+    Copies finish before return. The weight snapshot belongs to this epoch;
+    any subsequent session operation invalidates the unconsumed ticket.
+    """
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy or owner[].closed:
+        raise Error("transformer tape: session is busy or closed")
+    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("transformer tape: IDENTICAL only")
+    if len(addrs) != 11 or len(params) != 10:
+        raise Error("transformer tape: expected 11 addresses and 10 scalars")
+    var a = List[Int]()
+    var p = List[Int]()
+    for i in range(11):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("transformer tape: null buffer address")
+        a.append(address)
+    for i in range(10):
+        p.append(Int(py=params[i]))
+    if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
+        raise Error("transformer tape: invalid shape/window/activation budget/cost")
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            try:
+                var dims = LlamaDims(p[2],p[3],p[4],p[5],p[6])
+                dims.validate()
+                if not owner[].ctx:
+                    owner[].ctx = neural_ctx[_NEURAL_CTX]()
+                    owner[].contexts += 1
+                var opts = BlockOptions()
+                _session_weights(owner[],dims,a,opts,List[Int]())
+                ref ctx = owner[].ctx.value()
+                ref w = owner[].weights.value()
+                var input = _upload_addr(ctx,a[0],p[0]*p[1]*p[2])
+                owner[].tape = BorrowedAttentionTape(ctx,w,input^,p[0],p[1],p[7],owner[].tape_generation)
+                ref tape = owner[].tape.value()
+                _download_addr(ctx,tape.stages.value().residual2,p[0]*p[1]*p[2],a[10])
+                tape.seal(ctx,p[8],p[9])
+            except error:
+                owner[].clear()
+                raise error
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    var ticket = Python.list()
+    ticket.append(PythonObject(Int(owner)))
+    ticket.append(PythonObject(owner[].tape_generation))
+    ticket.append(PythonObject(Int(owner[].tape.value().retained)))
+    ticket.append(PythonObject(owner[].tape.value().retained_bytes))
+    return ticket
+
+
+def transformer_session_backward_tape_binding(
+    session: PythonObject, addrs: PythonObject, ticket: PythonObject,
+) raises -> PythonObject:
+    """Eleven addresses: dy, dx, norm1,norm2,Q,K,V,O,gate,up,down gradients."""
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy or owner[].closed:
+        raise Error("transformer tape: session is busy or closed")
+    if len(addrs) != 11 or len(ticket) != 2:
+        raise Error("transformer tape backward: expected 11 addresses and owner/epoch")
+    var cookie = Int(py=ticket[0])
+    var generation = Int(py=ticket[1])
+    if cookie != Int(owner) or generation != owner[].tape_generation or not owner[].tape:
+        raise Error("transformer tape: stale, foreign or already consumed ticket")
+    var a = List[Int]()
+    for i in range(11):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("transformer tape backward: null buffer address")
+        a.append(address)
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            try:
+                ref ctx = owner[].ctx.value()
+                ref tape = owner[].tape.value()
+                var dims = tape.dims.copy()
+                var dm = dims.d_model
+                var qw = dims.q_width()
+                var kw = dims.kv_width()
+                var it = dims.intermediate
+                var m = tape.b*tape.l
+                var dy = _upload_addr(ctx,a[0],m*dm)
+                var bst = LlamaBackwardStages(ctx,tape.b,tape.l,tape.l,dims,lean=True)
+                tape.backward_into(ctx,owner[].weights.value(),bst,dy,generation,
+                    owner[].tape_generation,owner[].tape_generation,owner[].tape_generation)
+                _download_addr[False](ctx,bst.d_x,m*dm,a[1])
+                _download_addr[False](ctx,bst.dw_norm1,dm,a[2])
+                _download_addr[False](ctx,bst.dw_norm2,dm,a[3])
+                _download_addr[False](ctx,bst.dw_q,qw*dm,a[4])
+                _download_addr[False](ctx,bst.dw_k,kw*dm,a[5])
+                _download_addr[False](ctx,bst.dw_v,kw*dm,a[6])
+                _download_addr[False](ctx,bst.dw_o,dm*qw,a[7])
+                _download_addr[False](ctx,bst.dw_gate,it*dm,a[8])
+                _download_addr[False](ctx,bst.dw_up,it*dm,a[9])
+                _download_addr[False](ctx,bst.dw_down,dm*it,a[10])
+                ctx.synchronize()
+                owner[].tape = None
+                owner[].tape_generation += 1
+                ctx.synchronize()
+            except error:
+                owner[].clear()
+                raise error
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
     # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
@@ -3086,6 +3261,12 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         )
     try:
         var m = PythonModuleBuilder("_mojolearn_transformer")
+        m.def_function[transformer_session_discard_tape_binding]("transformer_session_discard_tape")
+        m.def_function[transformer_session_invalidate_tape_binding]("transformer_session_invalidate_tape")
+        m.def_function[transformer_arithmetic_profile_changed_binding]("transformer_arithmetic_profile_changed")
+        m.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
+        m.def_function[transformer_session_forward_tape_binding]("transformer_session_forward_tape")
+        m.def_function[transformer_session_backward_tape_binding]("transformer_session_backward_tape")
         m.def_function[transformer_vendor_binding]("transformer_vendor")
         m.def_function[transformer_flash_call_count_binding]("transformer_flash_call_count")
         m.def_function[transformer_numeric_mode_binding](

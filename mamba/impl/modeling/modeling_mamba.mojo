@@ -165,6 +165,8 @@ launches. FAST makes no identity claim (contract section 8's last sentence).
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.step_phase import step_count_sync
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -220,6 +222,8 @@ from mamba.impl.modules.afn_proj_gemm import (
     afn_proj_gemm_into,
     afn_proj_gemm_resid_into,
 )
+from mamba.impl.ops.neural_scan_profile import NN34_AFFINE_PREFIX, NN34_LEVELS
+from mamba.impl.ops.neural_mamba_scan import nn34_mamba_forward
 from mamba.impl.ops.selective_scan_interface import (
     selective_scan_fn,
 )
@@ -740,10 +744,22 @@ struct MambaDeviceState(Movable):
     var d_inner: Int
     var conv_win: DeviceBuffer[DType.float32]
     var h: DeviceBuffer[DType.float32]
+    var nn34_position: Int
+    var nn34_boundary: Optional[DeviceBuffer[DType.float32]]
+    var nn34_sa: Optional[DeviceBuffer[DType.float32]]
+    var nn34_sb: Optional[DeviceBuffer[DType.float32]]
 
     def __init__(out self, ctx: DeviceContext, b: Int, dims: MambaDims) raises:
         self.b = b
         self.d_inner = dims.d_inner
+        self.nn34_position = 0
+        self.nn34_boundary = None
+        self.nn34_sa = None
+        self.nn34_sb = None
+        comptime if NN34_AFFINE_PREFIX:
+            self.nn34_boundary = mamba_zeros(ctx, b * dims.d_inner * D_STATE)
+            self.nn34_sa = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
+            self.nn34_sb = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
         self.conv_win = mamba_zeros(ctx, b * dims.d_inner * D_CONV)
         self.h = mamba_zeros(ctx, b * dims.d_inner * D_STATE)
 
@@ -754,6 +770,14 @@ struct MambaDeviceState(Movable):
         caller's arena (its one fill is the zeros)."""
         self.b = b
         self.d_inner = dims.d_inner
+        self.nn34_position = 0
+        self.nn34_boundary = None
+        self.nn34_sa = None
+        self.nn34_sb = None
+        comptime if NN34_AFFINE_PREFIX:
+            self.nn34_boundary = mamba_zeros(ctx, b * dims.d_inner * D_STATE)
+            self.nn34_sa = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
+            self.nn34_sb = mamba_zeros(ctx, b * dims.d_inner * D_STATE * NN34_LEVELS)
         var s = _m1_state_sizes(b, dims)
         self.conv_win = arena.take(ctx, s[0])
         self.h = arena.take(ctx, s[1])
@@ -1192,6 +1216,68 @@ def causal_conv1d_fn_kernel(
         silu_out.unsafe_store((bb * l + li) * di + d, ftz(identical_silu(acc)))
 
 
+# NN35: two adjacent tokens share their convolution input window and
+# weights. Two is a fixed reuse tile, independent of datasets/dimensions;
+# it saves D_CONV-1 loads per pair without changing either tap chain.
+# OFF, uncompiled/unmeasured; host keeps the identical per-cell expression.
+comptime NN35_CONV_PAIR = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN35_CONV_PAIR"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def nn35_causal_pair_kernel(
+    conv_out: MutPointer[Float32, MutAnyOrigin],
+    silu_out: MutPointer[Float32, MutAnyOrigin],
+    in_proj: MutPointer[Float32, MutAnyOrigin],
+    conv_w: MutPointer[Float32, MutAnyOrigin],
+    conv_b: MutPointer[Float32, MutAnyOrigin],
+    win: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, di_in: Int32,
+):
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var di = Int(di_in)
+    var nt = (l + 1) // 2
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * nt * di:
+        return
+    var d = cell % di
+    var ti = cell // di
+    var bb = ti // nt
+    var li = (ti % nt) * 2
+    var inputs = stack_allocation[D_CONV + 1, Float32]()
+    var weights = stack_allocation[D_CONV, Float32]()
+    var valid = min(2, l - li)
+    # Only valid outputs' taps are loaded; no read past the odd tail.
+    for k in range(D_CONV + valid - 1):
+        var pos = li - (D_CONV - 1) + k
+        var v: Float32
+        if pos >= 0:
+            v = in_proj.unsafe_load((bb * l + pos) * (2 * di) + d)
+        else:
+            v = win.unsafe_load((bb * di + d) * D_CONV + D_CONV + pos)
+        inputs[k] = ftz(v)
+    for k in range(D_CONV):
+        weights[k] = ftz(conv_w.unsafe_load(d * D_CONV + k))
+    var bias = ftz(conv_b.unsafe_load(d))
+    for j in range(valid):
+        var acc = bias
+        comptime if SAB_S13_BIAS_LAST:
+            acc = Float32(0.0)
+        for kk in range(D_CONV):
+            var k = kk
+            comptime if SAB_S13_TAPS_REVERSED:
+                k = D_CONV - 1 - kk
+            acc = ftz(identical_mul_add(weights[k], inputs[j + k], acc))
+        comptime if SAB_S13_BIAS_LAST:
+            acc = ftz(acc + bias)
+        var out_i = (bb * l + li + j) * di + d
+        conv_out.unsafe_store(out_i, acc)
+        silu_out.unsafe_store(out_i, ftz(identical_silu(acc)))
+
+
 def causal_conv1d_cell_kernel(
     conv_out: MutPointer[Float32, MutAnyOrigin],
     silu_out: MutPointer[Float32, MutAnyOrigin],
@@ -1291,7 +1377,21 @@ def causal_conv1d_fn(
     """`causal_conv1d_fn(hidden_states, weight, bias, activation="silu")`
     (:81-100) plus the cache's window update (`update_conv_state`, MM:415).
     ASYNCHRONOUS."""
-    comptime if IDN_MAMBA_CONV_CELL:
+    comptime if NN35_CONV_PAIR:
+        ctx.enqueue_function[nn35_causal_pair_kernel](
+            conv_out.unsafe_ptr(),
+            silu_out.unsafe_ptr(),
+            in_proj.unsafe_ptr(),
+            conv_w.unsafe_ptr(),
+            conv_b.unsafe_ptr(),
+            old_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(d_inner),
+            grid_dim=(_grid(b * ((l + 1) // 2) * d_inner), 1, 1),
+            block_dim=(MAMBA_TPB, 1, 1),
+        )
+    elif IDN_MAMBA_CONV_CELL:
         ctx.enqueue_function[causal_conv1d_cell_kernel](
             conv_out.unsafe_ptr(),
             silu_out.unsafe_ptr(),
@@ -1506,27 +1606,40 @@ def mamba_selective_scan(
     # because `delta` arrives post-softplus; `return_last_state` True because
     # `h_state` is in-and-out on every call (contract section 5).
     # It emits `scan.y`, `skip.out` and `scan.h` itself.
-    selective_scan_fn(
-        ctx,
-        stages.skip_out,
-        stages.scan_y,
-        state.h,
-        stages.silu_out,
-        stages.softplus_out,
-        stages.a_out,
-        stages.b_mat,
-        stages.c_mat,
-        w.d_skip,
-        b,
-        l,
-        di,
-        False,
-        False,
-        False,
-        True,
-        trace,
-        prefix,
-    )
+    comptime if NN34_AFFINE_PREFIX:
+        if state.nn34_position == 0:
+            ctx.enqueue_copy(dst_buf=state.nn34_boundary.value(), src_buf=state.h)
+        nn34_mamba_forward(ctx, stages.silu_out.unsafe_ptr(), stages.softplus_out.unsafe_ptr(),
+            stages.a_out.unsafe_ptr(), stages.b_mat.unsafe_ptr(), stages.c_mat.unsafe_ptr(),
+            w.d_skip.unsafe_ptr(), stages.scan_y.unsafe_ptr(), stages.skip_out.unsafe_ptr(),
+            state.nn34_boundary.value().unsafe_ptr(), state.h.unsafe_ptr(),
+            state.nn34_sa.value().unsafe_ptr(), state.nn34_sb.value().unsafe_ptr(), b, l, di, state.nn34_position)
+        state.nn34_position += l
+        trace.record_device[DType.float32](ctx, prefix + ".scan.y", stages.scan_y, m * di)
+        trace.record_device[DType.float32](ctx, prefix + ".skip.out", stages.skip_out, m * di)
+        trace.record_device[DType.float32](ctx, prefix + ".scan.h", state.h, b * di * D_STATE)
+    else:
+        selective_scan_fn(
+            ctx,
+            stages.skip_out,
+            stages.scan_y,
+            state.h,
+            stages.silu_out,
+            stages.softplus_out,
+            stages.a_out,
+            stages.b_mat,
+            stages.c_mat,
+            w.d_skip,
+            b,
+            l,
+            di,
+            False,
+            False,
+            False,
+            True,
+            trace,
+            prefix,
+        )
     _m1_stage_sync(ctx, trace)
 
     # `scan_output = scan_output * F.silu(z)` (:271). S12.
@@ -1670,7 +1783,7 @@ def mamba_refuse_bad_inputs(
     comptime if AFN_MAMBA_DEVICE_REFUSAL:
         # lane afn-mamba: the same names in the same order, reduced on the
         # device, ONE readback (afn_refusal.mojo).
-        var batch = AfnRefusalBatch(ctx, 13)
+        var batch = AfnRefusalBatch(ctx, 16 if NN34_AFFINE_PREFIX else 13)
         batch.add(ctx, String("x"), x, b * l * dm)
         if not w.weights_checked:
             batch.add(ctx, String("norm.weight"), w.norm_w, dm)
@@ -1686,6 +1799,10 @@ def mamba_refuse_bad_inputs(
             w.weights_checked = True
         batch.add(ctx, String("state.conv_win"), state.conv_win, b * di * D_CONV)
         batch.add(ctx, String("state.h"), state.h, b * di * D_STATE)
+        comptime if NN34_AFFINE_PREFIX:
+            batch.add(ctx, String("state.affine_boundary"), state.nn34_boundary.value(), b * di * D_STATE)
+            batch.add(ctx, String("state.affine_a"), state.nn34_sa.value(), b * di * D_STATE * NN34_LEVELS)
+            batch.add(ctx, String("state.affine_b"), state.nn34_sb.value(), b * di * D_STATE * NN34_LEVELS)
         batch.finish(ctx)
         return
     # `x` CHANGES ON EVERY CALL and is always walked.
@@ -1725,6 +1842,11 @@ def mamba_refuse_bad_inputs(
     _refuse_nonfinite_named_host(
         "state.h", mamba_download(ctx, state.h, b * di * D_STATE)
     )
+    comptime if NN34_AFFINE_PREFIX:
+        _refuse_nonfinite_named_host("state.affine_boundary", mamba_download(ctx, state.nn34_boundary.value(), b * di * D_STATE))
+        _refuse_nonfinite_named_host("state.affine_a", mamba_download(ctx, state.nn34_sa.value(), b * di * D_STATE * NN34_LEVELS))
+        _refuse_nonfinite_named_host("state.affine_b", mamba_download(ctx, state.nn34_sb.value(), b * di * D_STATE * NN34_LEVELS))
+
 
 
 def mamba_mixer_forward(

@@ -7,7 +7,7 @@ from training.chunked_lm_head_v2 import (
     chunked_lm_head_v2_gemm_backward_into,
 )
 from training.checks.chunked_lm_head_oracle import chunked_lm_head_v2_oracle
-from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
+from gemm.neural_dispatch import identical_gemm_workspace_max_floats
 
 
 def main() raises:

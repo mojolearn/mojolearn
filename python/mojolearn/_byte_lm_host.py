@@ -83,8 +83,11 @@ def _load():
 
 
 def _native_shape(shape):
-    return [shape.batch, shape.length, shape.d_model, shape.n_heads, shape.n_kv,
-            shape.head_dim, shape.intermediate, shape.n_layers, shape.vocab_size]
+    if not isinstance(shape, ByteLanguageModelConfig):
+        raise TypeError('shape must be a ByteLanguageModelConfig')
+    # The config owns the ABI, including its optional chunked-head selector.
+    # Both inference and trainer adapters must pass the same complete shape.
+    return list(shape.native_shape)
 
 
 _MAX_THREADS = 1024
@@ -230,8 +233,9 @@ class LanguageModelInference:
         self._native = _native_shape(shape)
         self._binding = _load()
         compiled = str(self._binding.byte_lm_host_profile(self._native))
-        if compiled != shape.profile:
-            raise RuntimeError(f'byte LM host profile mismatch: {compiled} != {shape.profile}')
+        expected = shape.profile + str(self._binding.byte_lm_host_arithmetic_suffix())
+        if compiled != expected:
+            raise RuntimeError(f'byte LM host profile mismatch: {compiled} != {expected}')
 
     @classmethod
     def from_checkpoint(cls, path, *, threaded=True, threads=None):
@@ -258,7 +262,7 @@ class LanguageModelInference:
 
     @property
     def profile(self):
-        return self._shape.profile
+        return str(self._binding.byte_lm_host_profile(self._native))
 
     def parameters_sha256(self):
         return hashlib.sha256(le_bytes(self._parameters, 'f')).hexdigest()
@@ -434,7 +438,7 @@ class LanguageModelHostTrainer:
 
     @property
     def profile(self):
-        return self._shape.profile
+        return str(self._binding.byte_lm_host_profile(self._native))
 
     @property
     def completed_steps(self):
