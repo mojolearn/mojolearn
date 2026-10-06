@@ -42,7 +42,7 @@ def facts_for(cell, source, receipt_path, plan_path, data_directory):
                    original_preparation_caps=meta['original_preparation_caps'],preparation_caps=meta['preparation_caps']),
         seed=row['seed'],output_paths=row['output_paths'],output_schema=row['output_schema'],
         repeated_operations=row['repeated_operations'],
-        runtime_vendor={'apple':'metal','nvidia':'cuda'}[cell['vendor']],
+        runtime_vendor={'apple':'metal','nvidia':'cuda','amd':'hip'}[cell['vendor']],
         quality_gate_source=row['quality_gate_source'],
         capture_limitation=row['limitations'],
         intrinsic_cap_audit=dict(reviewed=True,unresolved=[],evidence=str(receipt_path)))
@@ -95,7 +95,7 @@ def main():
     p.add_argument('--preparation-plan',type=Path,required=True)
     p.add_argument('--data-directory',type=Path,required=True)
     p.add_argument('--deployments',type=Path,required=True)
-    p.add_argument('--vendor',choices=['apple','nvidia'],required=True)
+    p.add_argument('--vendor',choices=['apple','nvidia','amd'],required=True)
     p.add_argument('--target-track',required=True)
     p.add_argument('--workload',action='append',help='Exact original workload ID subset; no inferred cases')
     p.add_argument('--output',type=Path,required=True)
