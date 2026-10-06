@@ -35,12 +35,14 @@ from ._training_impl import (
     embedding_forward,
     linear_backward,
     linear_forward,
+    mlp_inference_sessions,
     numeric_mode_used,
     rms_norm_backward,
     rms_norm_forward,
     vendor_used,
 )
 from ._samba_impl import SambaConfig, SambaStack
+from ._residual_dropout_impl import residual_dropout, residual_dropout_backward
 
 # THE SIX TRAINING PRIMITIVES (workstream D, 2026-09-14). `embedding_forward`
 # and `embedding_backward` (the gather and the run-sorted ascending fold,
@@ -69,4 +71,4 @@ __all__ = ['SGD', 'Adam', 'AdamW', 'clip_grad_norm_', 'cross_entropy',
            'SambaStack',
            'embedding_forward', 'embedding_backward',
            'rms_norm_forward', 'rms_norm_backward',
-           'linear_forward', 'linear_backward', 'chunked_lm_head_loss']
+           'linear_forward', 'linear_backward', 'chunked_lm_head_loss', 'mlp_inference_sessions', 'residual_dropout', 'residual_dropout_backward']

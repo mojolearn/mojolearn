@@ -1,0 +1,315 @@
+{
+  "schema": 1,
+  "id": "C16",
+  "title": "Fuse GLM response, residual and objective production",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "x_linear/glm.mojo",
+    "x_linear/device.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_CLASSICAL_C16_GLM_FUSED"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Objective/gradient, first accepted step, convergence iterations, coefficients, probabilities and deviance.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C16",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C16",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C16",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C16",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C16",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/linear_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/linear_controls.mojo"
+  ],
+  "default_configuration": "glm_fused",
+  "configurations": {
+    "glm_fused": {
+      "name": "glm_fused",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C16_GLM_FUSED"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C16"
+      ],
+      "source_gaps": [
+        "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+        "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm."
+      ],
+      "scope": "Produce accepted/trial response loss, gradient and Hessian together with shared link terms",
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:poisson",
+        "expanded:gamma",
+        "expanded:tweedie"
+      ]
+    },
+    "interaction_linear_trials": {
+      "name": "interaction_linear_trials",
+      "selectable": true,
+      "candidate_ids": [
+        "C16",
+        "C17",
+        "C19"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
+        "MOJOLEARN_CLASSICAL_C17_OVR",
+        "MOJOLEARN_CLASSICAL_C17_LS_TRIALS",
+        "MOJOLEARN_CLASSICAL_C19_ORDERED_128"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+        "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+        "OVR arm changes scheduling waves, not full model-state allocation.",
+        "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+        "Do not claim unchanged old I12 OVR/exact-trial experiments as new.",
+        "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+        "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter."
+      ],
+      "required_workload_keys": [
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:poisson",
+        "expanded:gamma",
+        "expanded:tweedie",
+        "expanded:logreg-cv",
+        "expanded:sgd-clf",
+        "expanded:sgd-reg",
+        "expanded:perceptron",
+        "expanded:pa-clf",
+        "expanded:pa-reg",
+        "expanded:sgd-ocsvm"
+      ],
+      "component_arms": [
+        {
+          "id": "C16",
+          "configuration": "glm_fused"
+        },
+        {
+          "id": "C17",
+          "configuration": "combined"
+        },
+        {
+          "id": "C19",
+          "configuration": "ordered_128"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c16_c17": {
+      "name": "interaction_c16_c17",
+      "selectable": true,
+      "candidate_ids": [
+        "C16",
+        "C17"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
+        "MOJOLEARN_CLASSICAL_C17_OVR"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+        "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+        "OVR arm changes scheduling waves, not full model-state allocation.",
+        "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+        "Do not claim unchanged old I12 OVR/exact-trial experiments as new."
+      ],
+      "required_workload_keys": [
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:poisson",
+        "expanded:gamma",
+        "expanded:tweedie",
+        "expanded:logreg-cv"
+      ],
+      "component_arms": [
+        {
+          "id": "C16",
+          "configuration": "glm_fused"
+        },
+        {
+          "id": "C17",
+          "configuration": "ovr_waves"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c16_c19": {
+      "name": "interaction_c16_c19",
+      "selectable": true,
+      "candidate_ids": [
+        "C16",
+        "C19"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
+        "MOJOLEARN_CLASSICAL_C19_ORDERED_128"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+        "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+        "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+        "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter."
+      ],
+      "required_workload_keys": [
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:poisson",
+        "expanded:gamma",
+        "expanded:tweedie",
+        "expanded:sgd-clf",
+        "expanded:sgd-reg",
+        "expanded:perceptron",
+        "expanded:pa-clf",
+        "expanded:pa-reg",
+        "expanded:sgd-ocsvm"
+      ],
+      "component_arms": [
+        {
+          "id": "C16",
+          "configuration": "glm_fused"
+        },
+        {
+          "id": "C19",
+          "configuration": "ordered_128"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+    "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm."
+  ],
+  "catalog_estimators": [
+    "LogisticRegression",
+    "PoissonRegressor",
+    "GammaRegressor",
+    "TweedieRegressor",
+    "LinearSVC/SVR"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "more:logreg",
+    "more:linearsvc",
+    "more:linearsvr",
+    "expanded:poisson",
+    "expanded:gamma",
+    "expanded:tweedie"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

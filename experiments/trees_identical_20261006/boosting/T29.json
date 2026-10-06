@@ -1,0 +1,217 @@
+{
+  "id": "T29",
+  "title": "Canonical query scheduling and shared generated-PairLogit fold",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "source_integrated_uncompiled_scoped",
+  "default": "OFF",
+  "contract": "S scheduling; V1 independently selected generated-PairLogit arithmetic",
+  "controls": [
+    {
+      "name": "T29",
+      "A": [
+        "MOJOLEARN_TREES_T29=1"
+      ],
+      "B": [],
+      "scope": "PairLogit launches separate short/long query work classes at one shared tile, retaining logical group IDs and original per-query arithmetic; YetiRank subarm reuses exact block task schedule on Apple IDENTICAL.",
+      "production_callers": [
+        "gbdt/targets/kernel/pair_logit_group.mojo",
+        "gbdt/targets/kernel/yeti_rank.mojo",
+        "gbdt/methods/doc_parallel_boosting.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "recipe_keys": [
+        "gbdt-rank-pairlogit"
+      ],
+      "full_dataset_recipes": [
+        "gbdt-rank-pairlogit:istellarank"
+      ]
+    },
+    {
+      "name": "T29_YETI",
+      "A": [
+        "MOJOLEARN_TREES_T29_YETI=1"
+      ],
+      "B": [],
+      "scope": "Exact YetiRank block schedule; new on Apple IDENTICAL, existing on NVIDIA/AMD",
+      "production_callers": [
+        "gbdt/targets/kernel/pair_logit_group.mojo",
+        "gbdt/targets/kernel/yeti_rank.mojo",
+        "gbdt/methods/doc_parallel_boosting.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "recipe_keys": [
+        "gbdt-rank-yetirank"
+      ],
+      "full_dataset_recipes": [
+        "gbdt-rank-yetirank:istellarank"
+      ]
+    },
+    {
+      "name": "T29_VERSIONED",
+      "A": [
+        "MOJOLEARN_TREES_T29_VERSIONED=1"
+      ],
+      "B": [],
+      "scope": "Generated-pair PairLogit V1 shared host/all-GPU partner and group fold; search derivatives/curvature, estimation including search reuse, group magnitudes and final learn loss. GROUP_VERSIONED additionally selects the independent short/long launch classification. Explicit supplied pairs and other objectives keep the incumbent.",
+      "production_callers": [
+        "gbdt/targets/kernel/pair_logit.mojo:_launch_pair_logit_group_layout",
+        "gbdt/targets/kernel/pair_logit_group.mojo:launch_pair_logit_group",
+        "gbdt/targets/kernel/tree_t29_pair.mojo:pair_logit_group_versioned_kernel",
+        "gbdt/targets/tree_t29_units.mojo:t29_pair_row",
+        "gbdt/host/gbdt_oracle_pair.mojo:_group_values_t29",
+        "gbdt/host/gbdt_oracle_pair.mojo:_group_search_pass",
+        "gbdt/host/gbdt_oracle_pair.mojo:pair_logit_eval",
+        "gbdt/host/gbdt_oracle_pair.mojo:pair_logit_value",
+        "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:BinOptimizedOracle"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "recipe_keys": [
+        "gbdt-rank-pairlogit"
+      ],
+      "contract": "V1",
+      "full_dataset_recipes": [
+        "gbdt-rank-pairlogit:istellarank"
+      ]
+    },
+    {
+      "name": "T29_GROUP_VERSIONED",
+      "A": [
+        "MOJOLEARN_TREES_T29=1",
+        "MOJOLEARN_TREES_T29_VERSIONED=1"
+      ],
+      "B": [],
+      "scope": "Generated-pair PairLogit V1 shared host/all-GPU partner and group fold; search derivatives/curvature, estimation including search reuse, group magnitudes and final learn loss. GROUP_VERSIONED additionally selects the independent short/long launch classification. Explicit supplied pairs and other objectives keep the incumbent.",
+      "production_callers": [
+        "gbdt/targets/kernel/pair_logit.mojo:_launch_pair_logit_group_layout",
+        "gbdt/targets/kernel/pair_logit_group.mojo:launch_pair_logit_group",
+        "gbdt/targets/kernel/tree_t29_pair.mojo:pair_logit_group_versioned_kernel",
+        "gbdt/targets/tree_t29_units.mojo:t29_pair_row",
+        "gbdt/host/gbdt_oracle_pair.mojo:_group_values_t29",
+        "gbdt/host/gbdt_oracle_pair.mojo:_group_search_pass",
+        "gbdt/host/gbdt_oracle_pair.mojo:pair_logit_eval",
+        "gbdt/host/gbdt_oracle_pair.mojo:pair_logit_value",
+        "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:BinOptimizedOracle"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "recipe_keys": [
+        "gbdt-rank-pairlogit"
+      ],
+      "contract": "V1",
+      "full_dataset_recipes": [
+        "gbdt-rank-pairlogit:istellarank"
+      ]
+    }
+  ],
+  "supported_estimators": [
+    "gbdt-rank-pairlogit",
+    "gbdt-rank-yetirank"
+  ],
+  "production_callers": [
+    "gbdt/targets/kernel/pair_logit_group.mojo",
+    "gbdt/targets/kernel/yeti_rank.mojo",
+    "gbdt/methods/doc_parallel_boosting.mojo",
+    "gbdt/targets/kernel/pair_logit.mojo:_launch_pair_logit_group_layout",
+    "gbdt/targets/kernel/pair_logit_group.mojo:launch_pair_logit_group",
+    "gbdt/targets/kernel/tree_t29_pair.mojo:pair_logit_group_versioned_kernel",
+    "gbdt/targets/tree_t29_units.mojo:t29_pair_row",
+    "gbdt/host/gbdt_oracle_pair.mojo:_group_values_t29",
+    "gbdt/host/gbdt_oracle_pair.mojo:_group_search_pass",
+    "gbdt/host/gbdt_oracle_pair.mojo:pair_logit_eval",
+    "gbdt/host/gbdt_oracle_pair.mojo:pair_logit_value",
+    "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:BinOptimizedOracle"
+  ],
+  "implementation": "PairLogit launches separate short/long query work classes at one shared tile, retaining logical group IDs and original per-query arithmetic; YetiRank subarm reuses exact block task schedule on Apple IDENTICAL. T29_VERSIONED uses shared GPU-free numerical units in actual generated-PairLogit host and device callers. Consecutive 32-partner chunks merge by a binary carry tree; fixed logical 256-lane summaries share exact software-rounded arithmetic and portable exp/log. Group construction, pairs, weights, tie decisions and seeds stay unchanged.",
+  "overlap_ids": [],
+  "remaining_gaps": [
+    "Explicit supplied PairLogit pairs keep incumbent path.",
+    "PairLogit classes filter existing descriptors, not an independent compacted descriptor cache.",
+    "YetiRank NVIDIA/AMD may already use the block schedule; mark no-difference rather than speedup.",
+    "T29_VERSIONED requires the existing generated-pair group layout (IDN_PAIRLOGIT_GROUP). An explicit pair list or legacy group-layout OFF/master-OFF selects the incumbent instead; no generated pairs replace a supplied list.",
+    "The host public ranking fitter supports its incumbent SymmetricTree/Cosine scope in gbdt/host/gbdt_oracle_losses.mojo. This candidate does not introduce a missing host ranking policy/score implementation.",
+    "YetiRank keeps its existing S schedule: permutation sampling and position-derived pair weights form a separate graph in gbdt/targets/kernel/yeti_rank.mojo and gbdt/host/gbdt_oracle_yeti.mojo. The PairLogit V1 helper is not substituted for that objective."
+  ],
+  "demonstrated_runtime_reach": false,
+  "qualification": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false
+  },
+  "harness": {
+    "entry": "bench/speed/forest_speed_arm.py",
+    "selection": "tools/trees_identical_ideas.py",
+    "arguments": [
+      "--trees-experiment",
+      "T29",
+      "--trees-arm",
+      "A|B",
+      "--trees-recipe",
+      "<full-workload-recipe>",
+      "--trees-artifact",
+      "<frozen-artifact>",
+      "--trees-recipe-facts",
+      "<retained-facts.json>",
+      "--trees-result",
+      "<result.json>"
+    ],
+    "execution": "FORBIDDEN in this source-only task",
+    "whole_operation": "tools/trees_identical_workload.py",
+    "separate_spans": [
+      "fit",
+      "cold inference",
+      "repeated inference"
+    ]
+  },
+  "recipes": {
+    "saved_sources": [
+      "tools/bench_board.py:TREE_LANES/TREE_TASK_LANES/TREE_TASK_DATASETS",
+      "tools/speed_gbdt_arm.py:lane_config/TASK_LANES",
+      "experiments/performance_ideas/README.md"
+    ],
+    "lanes": [
+      "gbdt-rank-pairlogit",
+      "gbdt-rank-yetirank"
+    ],
+    "dataset_version": null,
+    "dataset_hash": null,
+    "actual_dimensions": null,
+    "estimator_settings": null,
+    "full_dataset_intrinsic_caps_audited": false,
+    "coverage_status": "PENDING full retained recipe facts; no reduced substitution"
+  },
+  "modular_prerequisites": "No unsupported compiler/runtime technique introduced; toolchain support not demonstrated because compilation is forbidden.",
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_keys": [
+    "gbdt-rank-pairlogit",
+    "gbdt-rank-yetirank"
+  ],
+  "full_dataset_recipes": [
+    "gbdt-rank-yetirank:istellarank",
+    "gbdt-rank-pairlogit:istellarank"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "numerical_contract_path": "experiments/trees_identical_20261006/boosting/T29_NUMERICAL_CONTRACT.md",
+  "numerical_contract": {
+    "version": "T29 generated PairLogit V1",
+    "membership": "unchanged original query intervals and every unequal-grade partner; winner is original grade comparison",
+    "row_graph": "consecutive 32-partner serial chunks; adjacent binary-carry chunk merges; remaining subtrees oldest first",
+    "group_graph": "256 fixed logical lanes (row-begin)%256, ascending rows per lane; halving strides 128,64,32,16,8,4,2,1",
+    "primitive_arithmetic": "software binary64 add/subtract/multiply/divide on FTZ Float32 inputs, rounded to Float32 plus FTZ and +0 normalization; existing portable identical_exp/log",
+    "host_gpu_source_shared": true,
+    "runtime_identity_demonstrated": false,
+    "quality_verified": false,
+    "no_new_row_or_query_cap": true
+  },
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

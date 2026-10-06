@@ -1,0 +1,114 @@
+{
+  "schema": "mojolearn.scoped-source-quality-audit/1",
+  "observed_at": "2026-10-06T17:09:41.634558+00:00",
+  "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+  "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/expanded-reg/runs/4fa48ab7783acc171486/attempts/attempt-0001/receipt.json",
+  "receipt_sha256": "6e77defcc4b744f1db1334e299761ea8b9d8236350374aa071da4397067f04c5",
+  "workload": "algos/huber@dataset=istella",
+  "status": "QUALITY_FAILED",
+  "no_compile_fit_or_numerical_verification": true,
+  "dimensions": {
+    "X": [
+      2043304,
+      220
+    ],
+    "Xq": [
+      500000,
+      220
+    ],
+    "y": [
+      2043304
+    ],
+    "yq": [
+      500000
+    ]
+  },
+  "settings": {
+    "__record__": true,
+    "library": "mojolearn",
+    "params": {
+      "alpha": 0.0001,
+      "epsilon": 1.35,
+      "fit_intercept": true,
+      "max_iter": 100,
+      "tol": 1e-05
+    },
+    "source": "get_params"
+  },
+  "metrics": {
+    "A": {
+      "ours-fast": {
+        "finite": true,
+        "r2": -0.007089342908900065,
+        "rmse": 0.8373928001448464
+      }
+    },
+    "B": {
+      "ours-fast": {
+        "finite": true,
+        "r2": -0.005952189726329049,
+        "rmse": 0.836919896299495
+      }
+    }
+  },
+  "loaded_artifacts": {
+    "A": {
+      "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-repair1/A/mojolearn/_mojolearn.so": "9ca15115c4e098c0f5435251fbc2993788dc3307c480873a54911e684cfa7d61",
+      "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-repair1/A/mojolearn/_mojolearn_x_linear.so": "aa54c1bcd8ca2cae3a06f93571975b90ac7382f18363f43400cc3890bf57b9f3"
+    },
+    "B": {
+      "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-repair1/B/mojolearn/_mojolearn.so": "4c6fcc6c36feda05054e19672696fa0aa21aad41faa9dab99fac0a53fbcc6ebf",
+      "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-repair1/B/mojolearn/_mojolearn_x_linear.so": "dd201072ea3c210c574f7e0994775da3ef15fa786b6bc637ba820ce5d1b7e657"
+    }
+  },
+  "controls": {
+    "candidate": "Combined Apple FAST retained binary has MOJOLEARN_AFCL_L04=1 along with other bundle defines; baseline has no experiment defines. Both retain prior default Huber device L-BFGS and 512-block path unless L04 overrides it.",
+    "direct_huber_change": "AFCL_L04 compile-time switch changes HF_FOLD from512 to256; alters floating-point partial/final reduction order and feeds the same L-BFGS objective/line search. Settings, tolerances, stopping budget unchanged.",
+    "attribution_limit": "Combined A/B does not isolate single switch. Source identifies L04 as direct Huber-fit numerical change; causality is not proven by additional executions.",
+    "runtime_only_change": "Recorded ENETCV_FAST and PREP_FAST_II_CONV environment toggles do not select Huber fit; source dispatch enters huber_fit_fast. No environment rollback exists for compile-time HF_FOLD."
+  },
+  "decision": "Keep this combined candidate unadmitted for Huber/Istella. Do not relax existing quality gate or blindly retry timing. Reverting/repairing HF_FOLD in the candidate requires a new frozen numerical binding and accepted build evidence; compilation currently forbidden. Existing B is available as the preserved baseline; routing selectively or relabeling B as repaired A would change the experiment.",
+  "sources": {
+    "x_linear/huber_fast.mojo": {
+      "sha256": "80208b97942b6d9c4fd895cacee57869863e8c88eb3d0b9d211b3a4467d05f9e",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/huber-audit-x_linear__huber_fast.mojo",
+      "relevant_lines": [
+        {
+          "line": 91,
+          "text": "comptime AFCL_L04 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()"
+        },
+        {
+          "line": 92,
+          "text": "                    and is_defined[\"MOJOLEARN_AFCL_L04\"]())"
+        },
+        {
+          "line": 93,
+          "text": "comptime HF_FOLD = 256 if AFCL_L04 else (512 if HUBER_FAST_BLOCK512 else FOLD_BLOCK)"
+        }
+      ]
+    },
+    "x_linear/device.mojo": {
+      "sha256": "51bf979dd41a21818136782e0e7448d0e2813343d151678f40e4a47df6fa6630",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/huber-audit-x_linear__device.mojo",
+      "relevant_lines": [
+        {
+          "line": 4778,
+          "text": "        if algo == ALGO_HUBER and n > 0:"
+        },
+        {
+          "line": 4779,
+          "text": "            huber_fit_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)"
+        },
+        {
+          "line": 4781,
+          "text": "    if algo == ALGO_HUBER and n > 0:"
+        }
+      ]
+    },
+    "python/mojolearn/_expansion_linear.py": {
+      "sha256": "06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/huber-audit-python__mojolearn___expansion_linear.py",
+      "relevant_lines": []
+    }
+  }
+}

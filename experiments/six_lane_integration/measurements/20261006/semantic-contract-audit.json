@@ -1,0 +1,1397 @@
+{
+  "observed_at": "2026-10-06T17:49:44.144767+00:00",
+  "rules_implementation": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-opponent-contracts.py",
+    "sha256": "ca7939ad18af863eac050b3a0ebd3a1780c006395aa82d2e347788a09653d8ba",
+    "bytes": 4767
+  },
+  "source_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+  "same_full_npz_and_array_metadata_required": true,
+  "same_relevant_constructor_fields_required_except_explicit_audited_equivalences": true,
+  "metric_tolerances_unchanged": {
+    "relative": 0.001,
+    "absolute": 1e-06
+  },
+  "numerical_work_performed": false,
+  "notes": [
+    "Direct function params_record is supported schema; resample kwargs were present, not missing.",
+    "KMeans sequential and greedy initialization are intentionally different frozen board references on the same inertia task; no identical-initialization claim.",
+    "Ridge/CD solver stopping and arithmetic differences remain judged by existing task metrics.",
+    "New task-metric passes do not promote defaults or complete NVIDIA/AMD identity requirements.",
+    "TSVD and selector roots discovered recursively; saved output scope and unknown metric directions remain pending."
+  ],
+  "rows": [
+    {
+      "vendor": "apple",
+      "lane": "kmeans",
+      "dataset": "taxi",
+      "receipt_sha256": "b2c6d03ae74c71ae5da6741702eb585b2c581e362543eb7ff3de1ff0b6d6fb7c",
+      "quality_assessment": "PENDING",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "torch-gpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-04/board/raw/classical/rows-full/kmeans-taxi.json",
+            "receipt_sha256": "43216fc65acd803cda3036337b5053d2885e491da7f3d600ec3947b93b99d81a",
+            "input_npz_sha256": "0db47891038cb000a320470f8f6f7172285118e9c0697bc3e118dab2bc4921e0",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
+              "random_state": [
+                7,
+                null
+              ],
+              "init_centroids": [
+                null,
+                null
+              ],
+              "oversampling_factor": [
+                0.0,
+                null
+              ]
+            },
+            "semantic_equivalences": [
+              {
+                "field": "init_centroids",
+                "recorded_values": [
+                  null,
+                  null
+                ],
+                "reason": "Explicit-centroid buffer is inactive under k-means++ in frozen KMeans source.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "random_state",
+                "recorded_values": [
+                  7,
+                  null
+                ],
+                "reason": "Frozen TorchKMeans creates a per-fit torch.Generator and manual_seed(7); declared seed7 matches our random_state7, without claiming identical RNG draws.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "oversampling_factor",
+                "recorded_values": [
+                  0.0,
+                  null
+                ],
+                "reason": "Frozen classical lane explicitly pairs our sequential k-means++ (oversampling0) with reference greedy k-means++ on the same Lloyd/inertia task. Initialization algorithms intentionally differ and are recorded; independent inertia quality remains mandatory.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "inertia": 401662517.47630227,
+              "n_iter": 69
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "inertia": [
+                  "SAME",
+                  401987663.1286732,
+                  401662517.47630227,
+                  -0.0008088448531985248
+                ],
+                "n_iter": [
+                  "INFO",
+                  84.0,
+                  69.0,
+                  null
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "inertia": [
+                  "SAME",
+                  401987663.1286732,
+                  401662517.47630227,
+                  -0.0008088448531985248
+                ],
+                "n_iter": [
+                  "INFO",
+                  84.0,
+                  69.0,
+                  null
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu",
+          "torch-gpu"
+        ],
+        "matched_arms": [
+          "torch-gpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "kmeans",
+      "dataset": "taxi",
+      "receipt_sha256": "042a2e7b8368aa935b1fe93171d733143111a143fcb216f7da2be7178fecaaf9",
+      "quality_assessment": "PENDING",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "torch-gpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-04/board/raw/classical/rows-full/kmeans-taxi.json",
+            "receipt_sha256": "43216fc65acd803cda3036337b5053d2885e491da7f3d600ec3947b93b99d81a",
+            "input_npz_sha256": "0db47891038cb000a320470f8f6f7172285118e9c0697bc3e118dab2bc4921e0",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
+              "random_state": [
+                7,
+                null
+              ],
+              "init_centroids": [
+                null,
+                null
+              ],
+              "oversampling_factor": [
+                0.0,
+                null
+              ]
+            },
+            "semantic_equivalences": [
+              {
+                "field": "init_centroids",
+                "recorded_values": [
+                  null,
+                  null
+                ],
+                "reason": "Explicit-centroid buffer is inactive under k-means++ in frozen KMeans source.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "random_state",
+                "recorded_values": [
+                  7,
+                  null
+                ],
+                "reason": "Frozen TorchKMeans creates a per-fit torch.Generator and manual_seed(7); declared seed7 matches our random_state7, without claiming identical RNG draws.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "oversampling_factor",
+                "recorded_values": [
+                  0.0,
+                  null
+                ],
+                "reason": "Frozen classical lane explicitly pairs our sequential k-means++ (oversampling0) with reference greedy k-means++ on the same Lloyd/inertia task. Initialization algorithms intentionally differ and are recorded; independent inertia quality remains mandatory.",
+                "source_sha256": {
+                  "python/mojolearn/cluster.py": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+                  "tools/classical_two_datasets.py": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "inertia": 401662517.47630227,
+              "n_iter": 69
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "inertia": [
+                  "SAME",
+                  401879537.12380916,
+                  401662517.47630227,
+                  -0.0005400116887266005
+                ],
+                "n_iter": [
+                  "INFO",
+                  51.0,
+                  69.0,
+                  null
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "inertia": [
+                  "SAME",
+                  401987663.1286732,
+                  401662517.47630227,
+                  -0.0008088448531985248
+                ],
+                "n_iter": [
+                  "INFO",
+                  84.0,
+                  69.0,
+                  null
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu",
+          "torch-gpu"
+        ],
+        "matched_arms": [
+          "torch-gpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "ridge",
+      "dataset": "taxi",
+      "receipt_sha256": "3fdfedcb9c1daa65b02fa6884c774fa22b0e5ec5d66fdb3dc8e72b32c37de32f",
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "sklearn-cpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-05/board/raw/classical2/rows-full/ridge-taxi.json",
+            "receipt_sha256": "a2ae38c0d1472c2d2b9245073bc97a97f77656eeefdf2baff2afb5440e475ed7",
+            "input_npz_sha256": "ec1b39f38b116f78dff51d67f41c7bbdfcd56508562445274d4c4dfb7bb2387f",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
+              "solver": [
+                "eig",
+                "cholesky"
+              ],
+              "normalize": [
+                false,
+                null
+              ]
+            },
+            "semantic_equivalences": [
+              {
+                "field": "solver",
+                "recorded_values": [
+                  "eig",
+                  "cholesky"
+                ],
+                "reason": "Frozen board explicitly compares eig and Cholesky implementations of min ||y-Xw||\u00b2+alpha||w||\u00b2; same alpha/intercept. Existing task metric gate judges numerical differences.",
+                "source_sha256": {
+                  "python/mojolearn/linear_model.py": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_ridge.py": "a0a8c5e26611c1bc91a97ae85d6add59b98a2fa5c92ff7c25467ea88bd6e4ce3",
+                  "sklearn/linear_model/_base.py": "1d2ffdba0cb4509d11983fa87ba4187d4469c9c1ae9fd9193461281b20b35133"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "normalize",
+                "recorded_values": [
+                  false,
+                  null
+                ],
+                "reason": "Our normalize=False adds no variance scaling; installed sklearn _preprocess_data only centers when fitting intercept and sets X_scale=ones. The removed option is semantically false here.",
+                "source_sha256": {
+                  "python/mojolearn/linear_model.py": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_ridge.py": "a0a8c5e26611c1bc91a97ae85d6add59b98a2fa5c92ff7c25467ea88bd6e4ce3",
+                  "sklearn/linear_model/_base.py": "1d2ffdba0cb4509d11983fa87ba4187d4469c9c1ae9fd9193461281b20b35133"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "finite": true,
+              "r2": 0.9088773731335543,
+              "rmse": 4.695425222063106
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9087715562840102,
+                  0.9088773731335543,
+                  -0.00011642588172187765
+                ],
+                "rmse": [
+                  "SAME",
+                  4.698150730319623,
+                  4.695425222063106,
+                  -0.0005801236301184656
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9087715562840102,
+                  0.9088773731335543,
+                  -0.00011642588172187765
+                ],
+                "rmse": [
+                  "SAME",
+                  4.698150730319623,
+                  4.695425222063106,
+                  -0.0005801236301184656
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu"
+        ],
+        "matched_arms": [
+          "sklearn-cpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "ridge",
+      "dataset": "istella",
+      "receipt_sha256": "0ef319b7b718eace211c38e70fa505e353e508d2c93d3cd939183a07e8ffa58f",
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "sklearn-cpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-06/board/raw/classical2/rows-full/ridge-istella.json",
+            "receipt_sha256": "506857f987f0c54233374a77ab3ef2149a8220e12cd1f9ec3962cf8d254906d6",
+            "input_npz_sha256": "f1708d9b22fa874af0ee9b2dfb00de1f5d2dea848c910332ee496775dfc2f724",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
+              "solver": [
+                "eig",
+                "cholesky"
+              ],
+              "normalize": [
+                false,
+                null
+              ]
+            },
+            "semantic_equivalences": [
+              {
+                "field": "solver",
+                "recorded_values": [
+                  "eig",
+                  "cholesky"
+                ],
+                "reason": "Frozen board explicitly compares eig and Cholesky implementations of min ||y-Xw||\u00b2+alpha||w||\u00b2; same alpha/intercept. Existing task metric gate judges numerical differences.",
+                "source_sha256": {
+                  "python/mojolearn/linear_model.py": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_ridge.py": "a0a8c5e26611c1bc91a97ae85d6add59b98a2fa5c92ff7c25467ea88bd6e4ce3",
+                  "sklearn/linear_model/_base.py": "1d2ffdba0cb4509d11983fa87ba4187d4469c9c1ae9fd9193461281b20b35133"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "normalize",
+                "recorded_values": [
+                  false,
+                  null
+                ],
+                "reason": "Our normalize=False adds no variance scaling; installed sklearn _preprocess_data only centers when fitting intercept and sets X_scale=ones. The removed option is semantically false here.",
+                "source_sha256": {
+                  "python/mojolearn/linear_model.py": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_ridge.py": "a0a8c5e26611c1bc91a97ae85d6add59b98a2fa5c92ff7c25467ea88bd6e4ce3",
+                  "sklearn/linear_model/_base.py": "1d2ffdba0cb4509d11983fa87ba4187d4469c9c1ae9fd9193461281b20b35133"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "finite": true,
+              "r2": 0.33252128046410945,
+              "rmse": 0.6817323995521324
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.3325260597629055,
+                  0.33252128046410945,
+                  1.4372704501600431e-05
+                ],
+                "rmse": [
+                  "SAME",
+                  0.6817299588685769,
+                  0.6817323995521324,
+                  3.5801196438453804e-06
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.3325260597629055,
+                  0.33252128046410945,
+                  1.4372704501600431e-05
+                ],
+                "rmse": [
+                  "SAME",
+                  0.6817299588685769,
+                  0.6817323995521324,
+                  3.5801196438453804e-06
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu"
+        ],
+        "matched_arms": [
+          "sklearn-cpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "lasso",
+      "dataset": "taxi",
+      "receipt_sha256": "32ac494cdb2dc082aba8d18aa3f0034c36ff5cc900b7994499268a3303c52a1e",
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "sklearn-cpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-07/board/raw/classical2/rows-full/lasso-taxi.json",
+            "receipt_sha256": "38c034c88da3dd0e3fccd490659bebbb1fb321173b237d7e9390b21dbbebf4dd",
+            "input_npz_sha256": "ec1b39f38b116f78dff51d67f41c7bbdfcd56508562445274d4c4dfb7bb2387f",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
+              "solver": [
+                "cd",
+                null
+              ],
+              "random_state": [
+                null,
+                7
+              ]
+            },
+            "semantic_equivalences": [
+              {
+                "field": "random_state",
+                "recorded_values": [
+                  null,
+                  7
+                ],
+                "reason": "Both frozen implementations update cyclically; random_state only selects random coordinate order, which is not selected. Their documented stopping differences remain subject to unchanged quality gate.",
+                "source_sha256": {
+                  "python/mojolearn/_solver_impl.py": "653d620ac11759ebce595925657b68fef741031b2b5a5bf9eed60114caf498e1",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_coordinate_descent.py": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "solver",
+                "recorded_values": [
+                  "cd",
+                  null
+                ],
+                "reason": "Our explicit cd and sklearn Lasso/ElasticNet path both use coordinate descent on the same documented penalty objective; sklearn exposes no solver selector. No equal stopping trajectory is claimed.",
+                "source_sha256": {
+                  "python/mojolearn/_solver_impl.py": "653d620ac11759ebce595925657b68fef741031b2b5a5bf9eed60114caf498e1",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_coordinate_descent.py": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "finite": true,
+              "r2": 0.9087918632048009,
+              "rmse": 4.6976278107092675
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9087904321273814,
+                  0.9087918632048009,
+                  -1.5747031607537805e-06
+                ],
+                "rmse": [
+                  "SAME",
+                  4.697664664015075,
+                  4.6976278107092675,
+                  -7.845026932262873e-06
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9087904321273814,
+                  0.9087918632048009,
+                  -1.5747031607537805e-06
+                ],
+                "rmse": [
+                  "SAME",
+                  4.697664664015075,
+                  4.6976278107092675,
+                  -7.845026932262873e-06
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu"
+        ],
+        "matched_arms": [
+          "sklearn-cpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "elasticnet",
+      "dataset": "taxi",
+      "receipt_sha256": "fbf191894b5c4a303edf219a0e47159e58d8fb7d0a703a96f0dcb8c6c0671668",
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "sklearn-cpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-09/board/raw/classical2/rows-full/elasticnet-taxi.json",
+            "receipt_sha256": "8770eafa363ec52f7440f880c5324b4d7a598401975d735929efaa16d93e4105",
+            "input_npz_sha256": "ec1b39f38b116f78dff51d67f41c7bbdfcd56508562445274d4c4dfb7bb2387f",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
+              "solver": [
+                "cd",
+                null
+              ],
+              "random_state": [
+                null,
+                7
+              ]
+            },
+            "semantic_equivalences": [
+              {
+                "field": "random_state",
+                "recorded_values": [
+                  null,
+                  7
+                ],
+                "reason": "Both frozen implementations update cyclically; random_state only selects random coordinate order, which is not selected. Their documented stopping differences remain subject to unchanged quality gate.",
+                "source_sha256": {
+                  "python/mojolearn/_solver_impl.py": "653d620ac11759ebce595925657b68fef741031b2b5a5bf9eed60114caf498e1",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_coordinate_descent.py": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "solver",
+                "recorded_values": [
+                  "cd",
+                  null
+                ],
+                "reason": "Our explicit cd and sklearn Lasso/ElasticNet path both use coordinate descent on the same documented penalty objective; sklearn exposes no solver selector. No equal stopping trajectory is claimed.",
+                "source_sha256": {
+                  "python/mojolearn/_solver_impl.py": "653d620ac11759ebce595925657b68fef741031b2b5a5bf9eed60114caf498e1",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_coordinate_descent.py": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "finite": true,
+              "r2": 0.9085646881404393,
+              "rmse": 4.70347443934687
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9085667183561519,
+                  0.9085646881404393,
+                  2.234525733254193e-06
+                ],
+                "rmse": [
+                  "SAME",
+                  4.703422221442629,
+                  4.70347443934687,
+                  1.1101985333174979e-05
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9085667183561519,
+                  0.9085646881404393,
+                  2.234525733254193e-06
+                ],
+                "rmse": [
+                  "SAME",
+                  4.703422221442629,
+                  4.70347443934687,
+                  1.1101985333174979e-05
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu"
+        ],
+        "matched_arms": [
+          "sklearn-cpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "lasso",
+      "dataset": "istella",
+      "receipt_sha256": "58c6cac6d1a0e706376db7dcb57f6daa29b537c648c764e9897365deff5efc86",
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "sklearn-cpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-08/board/raw/classical2/rows-full/lasso-istella.json",
+            "receipt_sha256": "17fa07849ef8bba4d2f39118defe3725002e45b540d13071f51e3ab235f90384",
+            "input_npz_sha256": "f1708d9b22fa874af0ee9b2dfb00de1f5d2dea848c910332ee496775dfc2f724",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
+              "solver": [
+                "cd",
+                null
+              ],
+              "random_state": [
+                null,
+                7
+              ]
+            },
+            "semantic_equivalences": [
+              {
+                "field": "random_state",
+                "recorded_values": [
+                  null,
+                  7
+                ],
+                "reason": "Both frozen implementations update cyclically; random_state only selects random coordinate order, which is not selected. Their documented stopping differences remain subject to unchanged quality gate.",
+                "source_sha256": {
+                  "python/mojolearn/_solver_impl.py": "653d620ac11759ebce595925657b68fef741031b2b5a5bf9eed60114caf498e1",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_coordinate_descent.py": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "solver",
+                "recorded_values": [
+                  "cd",
+                  null
+                ],
+                "reason": "Our explicit cd and sklearn Lasso/ElasticNet path both use coordinate descent on the same documented penalty objective; sklearn exposes no solver selector. No equal stopping trajectory is claimed.",
+                "source_sha256": {
+                  "python/mojolearn/_solver_impl.py": "653d620ac11759ebce595925657b68fef741031b2b5a5bf9eed60114caf498e1",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_coordinate_descent.py": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "finite": true,
+              "r2": 0.31467944628233346,
+              "rmse": 0.6907837313711119
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.3146792341895772,
+                  0.31467944628233346,
+                  -6.739962166333251e-07
+                ],
+                "rmse": [
+                  "SAME",
+                  0.690783838262853,
+                  0.6907837313711119,
+                  -1.547397826835194e-07
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.3146792341895772,
+                  0.31467944628233346,
+                  -6.739962166333251e-07
+                ],
+                "rmse": [
+                  "SAME",
+                  0.690783838262853,
+                  0.6907837313711119,
+                  -1.547397826835194e-07
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu"
+        ],
+        "matched_arms": [
+          "sklearn-cpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "elasticnet",
+      "dataset": "istella",
+      "receipt_sha256": "e3d080542065c87c62e05809ddd176c2e1f1daffab266122ac97ab67537f348e",
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "sklearn-cpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-10/board/raw/classical2/rows-full/elasticnet-istella.json",
+            "receipt_sha256": "6c8fc964664141448eee97e3fb3f95e0228f0f24092fdd92ae5ae7bcefbe8d01",
+            "input_npz_sha256": "f1708d9b22fa874af0ee9b2dfb00de1f5d2dea848c910332ee496775dfc2f724",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
+              "solver": [
+                "cd",
+                null
+              ],
+              "random_state": [
+                null,
+                7
+              ]
+            },
+            "semantic_equivalences": [
+              {
+                "field": "random_state",
+                "recorded_values": [
+                  null,
+                  7
+                ],
+                "reason": "Both frozen implementations update cyclically; random_state only selects random coordinate order, which is not selected. Their documented stopping differences remain subject to unchanged quality gate.",
+                "source_sha256": {
+                  "python/mojolearn/_solver_impl.py": "653d620ac11759ebce595925657b68fef741031b2b5a5bf9eed60114caf498e1",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_coordinate_descent.py": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "solver",
+                "recorded_values": [
+                  "cd",
+                  null
+                ],
+                "reason": "Our explicit cd and sklearn Lasso/ElasticNet path both use coordinate descent on the same documented penalty objective; sklearn exposes no solver selector. No equal stopping trajectory is claimed.",
+                "source_sha256": {
+                  "python/mojolearn/_solver_impl.py": "653d620ac11759ebce595925657b68fef741031b2b5a5bf9eed60114caf498e1",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_coordinate_descent.py": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "finite": true,
+              "r2": 0.2646344245592238,
+              "rmse": 0.715561342386721
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.264634955806502,
+                  0.2646344245592238,
+                  2.0074720535282004e-06
+                ],
+                "rmse": [
+                  "SAME",
+                  0.7155610839165826,
+                  0.715561342386721,
+                  3.6121311073247137e-07
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.264634955806502,
+                  0.2646344245592238,
+                  2.0074720535282004e-06
+                ],
+                "rmse": [
+                  "SAME",
+                  0.7155610839165826,
+                  0.715561342386721,
+                  3.6121311073247137e-07
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu"
+        ],
+        "matched_arms": [
+          "sklearn-cpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "apple",
+      "lane": "resample",
+      "dataset": "taxi",
+      "receipt_sha256": "55240fda290de6eb4c74dad86ef94de7c019d9214247ff63f2229d3a60523758",
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "sklearn-cpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-11/board/raw/algos/rows-full/resample-taxi.json",
+            "receipt_sha256": "0e341c5d52134a4fe3082e83d67bc55fe0fc6b882f884f47b963616ee2a83e7d",
+            "input_npz_sha256": "ec1b39f38b116f78dff51d67f41c7bbdfcd56508562445274d4c4dfb7bb2387f",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {},
+            "semantic_equivalences": [],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "max_mean_shift_over_std": 0.0010264748022140665
+            },
+            "candidate": {
+              "verdict": "BETTER",
+              "metrics": {
+                "max_mean_shift_over_std": [
+                  "BETTER",
+                  0.0008182939412305245,
+                  0.0010264748022140665,
+                  0.20281146749487075
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "BETTER",
+              "metrics": {
+                "max_mean_shift_over_std": [
+                  "BETTER",
+                  0.0008182939412305245,
+                  0.0010264748022140665,
+                  0.20281146749487075
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu"
+        ],
+        "matched_arms": [
+          "sklearn-cpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "apple",
+      "lane": "resample",
+      "dataset": "istella",
+      "receipt_sha256": "7526baa0cad3655b0ebb5e7e8b34bfdd387287e33c12fccc5ec06dfe9da36188",
+      "quality_assessment": "QUALITY_FAILED",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "sklearn-cpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-12/board/raw/algos/rows-full/resample-istella.json",
+            "receipt_sha256": "4d41392e14bd5cdf54a1ee1f41763b4a20fe8ce3d1f841db14b40fce1281b070",
+            "input_npz_sha256": "f1708d9b22fa874af0ee9b2dfb00de1f5d2dea848c910332ee496775dfc2f724",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {},
+            "semantic_equivalences": [],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "max_mean_shift_over_std": 0.0015666546468173469
+            },
+            "candidate": {
+              "verdict": "WORSE",
+              "metrics": {
+                "max_mean_shift_over_std": [
+                  "WORSE",
+                  0.001946923534707672,
+                  0.0015666546468173469,
+                  -0.19531783406553865
+                ]
+              },
+              "unknown": [],
+              "worst": -0.19531783406553865
+            },
+            "baseline": {
+              "verdict": "WORSE",
+              "metrics": {
+                "max_mean_shift_over_std": [
+                  "WORSE",
+                  0.001946923534707672,
+                  0.0015666546468173469,
+                  -0.19531783406553865
+                ]
+              },
+              "unknown": [],
+              "worst": -0.19531783406553865
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu"
+        ],
+        "matched_arms": [
+          "sklearn-cpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "apple",
+      "lane": "ridge",
+      "dataset": "taxi",
+      "receipt_sha256": "850186c3601325cac3adc57e9cfb0e75169b9108de107dd231b64e09b6624842",
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "sklearn-cpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-05/board/raw/classical2/rows-full/ridge-taxi.json",
+            "receipt_sha256": "a2ae38c0d1472c2d2b9245073bc97a97f77656eeefdf2baff2afb5440e475ed7",
+            "input_npz_sha256": "ec1b39f38b116f78dff51d67f41c7bbdfcd56508562445274d4c4dfb7bb2387f",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
+              "solver": [
+                "eig",
+                "cholesky"
+              ],
+              "normalize": [
+                false,
+                null
+              ]
+            },
+            "semantic_equivalences": [
+              {
+                "field": "solver",
+                "recorded_values": [
+                  "eig",
+                  "cholesky"
+                ],
+                "reason": "Frozen board explicitly compares eig and Cholesky implementations of min ||y-Xw||\u00b2+alpha||w||\u00b2; same alpha/intercept. Existing task metric gate judges numerical differences.",
+                "source_sha256": {
+                  "python/mojolearn/linear_model.py": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_ridge.py": "a0a8c5e26611c1bc91a97ae85d6add59b98a2fa5c92ff7c25467ea88bd6e4ce3",
+                  "sklearn/linear_model/_base.py": "1d2ffdba0cb4509d11983fa87ba4187d4469c9c1ae9fd9193461281b20b35133"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "normalize",
+                "recorded_values": [
+                  false,
+                  null
+                ],
+                "reason": "Our normalize=False adds no variance scaling; installed sklearn _preprocess_data only centers when fitting intercept and sets X_scale=ones. The removed option is semantically false here.",
+                "source_sha256": {
+                  "python/mojolearn/linear_model.py": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_ridge.py": "a0a8c5e26611c1bc91a97ae85d6add59b98a2fa5c92ff7c25467ea88bd6e4ce3",
+                  "sklearn/linear_model/_base.py": "1d2ffdba0cb4509d11983fa87ba4187d4469c9c1ae9fd9193461281b20b35133"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "finite": true,
+              "r2": 0.9088773731335543,
+              "rmse": 4.695425222063106
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9087715577966976,
+                  0.9088773731335543,
+                  -0.00011642421737477817
+                ],
+                "rmse": [
+                  "SAME",
+                  4.698150691368868,
+                  4.695425222063106,
+                  -0.0005801153442713471
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.9087715577966976,
+                  0.9088773731335543,
+                  -0.00011642421737477817
+                ],
+                "rmse": [
+                  "SAME",
+                  4.698150691368868,
+                  4.695425222063106,
+                  -0.0005801153442713471
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu"
+        ],
+        "matched_arms": [
+          "sklearn-cpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    },
+    {
+      "vendor": "apple",
+      "lane": "ridge",
+      "dataset": "istella",
+      "receipt_sha256": "8ad1ba53be89b4fc9eadb38c57d8ff0a37975d01a65146aee8fc11ee031496a0",
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "new_full_opponent_review": {
+        "qualified": [
+          {
+            "arm": "sklearn-cpu",
+            "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-06/board/raw/classical2/rows-full/ridge-istella.json",
+            "receipt_sha256": "506857f987f0c54233374a77ab3ef2149a8220e12cd1f9ec3962cf8d254906d6",
+            "input_npz_sha256": "f1708d9b22fa874af0ee9b2dfb00de1f5d2dea848c910332ee496775dfc2f724",
+            "parameter_mismatches": {},
+            "recorded_parameter_differences": {
+              "solver": [
+                "eig",
+                "cholesky"
+              ],
+              "normalize": [
+                false,
+                null
+              ]
+            },
+            "semantic_equivalences": [
+              {
+                "field": "solver",
+                "recorded_values": [
+                  "eig",
+                  "cholesky"
+                ],
+                "reason": "Frozen board explicitly compares eig and Cholesky implementations of min ||y-Xw||\u00b2+alpha||w||\u00b2; same alpha/intercept. Existing task metric gate judges numerical differences.",
+                "source_sha256": {
+                  "python/mojolearn/linear_model.py": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_ridge.py": "a0a8c5e26611c1bc91a97ae85d6add59b98a2fa5c92ff7c25467ea88bd6e4ce3",
+                  "sklearn/linear_model/_base.py": "1d2ffdba0cb4509d11983fa87ba4187d4469c9c1ae9fd9193461281b20b35133"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              },
+              {
+                "field": "normalize",
+                "recorded_values": [
+                  false,
+                  null
+                ],
+                "reason": "Our normalize=False adds no variance scaling; installed sklearn _preprocess_data only centers when fitting intercept and sets X_scale=ones. The removed option is semantically false here.",
+                "source_sha256": {
+                  "python/mojolearn/linear_model.py": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
+                  "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+                  "sklearn/linear_model/_ridge.py": "a0a8c5e26611c1bc91a97ae85d6add59b98a2fa5c92ff7c25467ea88bd6e4ce3",
+                  "sklearn/linear_model/_base.py": "1d2ffdba0cb4509d11983fa87ba4187d4469c9c1ae9fd9193461281b20b35133"
+                },
+                "audit_manifest": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/source-manifest.json",
+                "scope": "Task/objective comparison only; no numerical-identity or equal solver trajectory claim"
+              }
+            ],
+            "parameter_record_schema": "nested get_params or direct declared function kwargs",
+            "metrics": {
+              "finite": true,
+              "r2": 0.33252128046410945,
+              "rmse": 0.6817323995521324
+            },
+            "candidate": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.3325338446311392,
+                  0.33252128046410945,
+                  3.778312262833969e-05
+                ],
+                "rmse": [
+                  "SAME",
+                  0.6817259832876175,
+                  0.6817323995521324,
+                  9.411705412760572e-06
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            },
+            "baseline": {
+              "verdict": "SAME",
+              "metrics": {
+                "finite": [
+                  "SAME",
+                  1.0,
+                  1.0,
+                  0.0
+                ],
+                "r2": [
+                  "SAME",
+                  0.3325338446311392,
+                  0.33252128046410945,
+                  3.778312262833969e-05
+                ],
+                "rmse": [
+                  "SAME",
+                  0.6817259832876175,
+                  0.6817323995521324,
+                  9.411705412760572e-06
+                ]
+              },
+              "unknown": [],
+              "worst": 0.0
+            }
+          }
+        ],
+        "unqualified": [],
+        "expected_arms": [
+          "sklearn-cpu"
+        ],
+        "matched_arms": [
+          "sklearn-cpu"
+        ],
+        "scope": "Saved task-quality only; no opponent ratios or default promotion"
+      }
+    }
+  ]
+}

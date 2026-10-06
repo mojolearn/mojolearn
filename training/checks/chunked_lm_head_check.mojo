@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Executable CPU checks for the chunked LM-head v2 foundation."""
 from gemm.contract import OP_NN, OP_NT, OP_TN
-from gemm.checks.gemm_oracle import gemm_oracle
+from gemm.host.neural_gemm import gemm_oracle
 from checks.numerics import ftz, identical_div, identical_exp, identical_fmax, identical_log
 from training.checks.chunked_lm_head_oracle import (
     chunked_lm_head_v2_oracle,

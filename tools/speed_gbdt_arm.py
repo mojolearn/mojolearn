@@ -3880,7 +3880,7 @@ def emit_scale_reminder(data, stage):
 
 
 def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
-        fit_context=None, cfg=None):
+        fit_context=None, cfg=None, operation_prepare=None, operation_capture=False, skip_warmup=False):
     """One untimed warm-up per arm, then `n_rounds` timed rounds in which
     every surviving arm takes one turn before any arm takes its second.
     Optional rotate_order advances the first arm each round to distribute
@@ -3904,12 +3904,15 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
     deadline = time.time() + process_deadline_s()
     spent = {a.name: 0.0 for a in arms}
     last_model = {}
+    operation_scores = {}
 
     for arm in arms:
         emit_header(lane, arm.name, dev, n_rounds, size)
 
-    live = []
-    for arm in arms:
+    # The AFT full queue supplies its excluded warmup as a separate capture.
+    # Historical callers retain the in-process warmup by default.
+    live = list(arms) if skip_warmup else []
+    for arm in (() if skip_warmup else arms):
         if time.time() > deadline:
             emit_refused(lane, arm.name, "process deadline reached before "
                                          "warm-up")
@@ -3917,6 +3920,8 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
         try:
             with (fit_context(arm.name, 0) if fit_context is not None
                   else contextlib.nullcontext()):
+                if operation_prepare is not None:
+                    operation_prepare(arm, data)
                 t0 = time.perf_counter()
                 model = arm.make()
                 arm.fit(model, data)
@@ -3955,6 +3960,9 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
             try:
                 with (fit_context(arm.name, r) if fit_context is not None
                       else contextlib.nullcontext()):
+                    operation_start = time.perf_counter() if operation_capture else None
+                    if operation_prepare is not None:
+                        operation_prepare(arm, data)
                     t0 = time.perf_counter()
                     model = arm.make()
                     arm.fit(model, data)
@@ -3971,6 +3979,19 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
             digest = None
             try:
                 triples = arm.score(model, data)
+                if operation_capture:
+                    # AFT source-only integration: consume every requested
+                    # scored output, while keeping the historical fit clock.
+                    # This is benchmark glue, never product runtime.
+                    hashes = [hash_predictions(vec) for _, _, vec in triples if vec is not None]
+                    operation_scores[arm.name] = triples
+                    operation_end = time.perf_counter()
+                    print("FSPEED-OPERATION " + json.dumps({
+                        "lane": lane, "arm": arm.name, "round": r, "status": "CAPTURED",
+                        "ms": (operation_end - operation_start) * 1000.0,
+                        "prepare_ms": (t0 - operation_start) * 1000.0,
+                        "fit_ms": ms, "consumed_output_hashes": hashes,
+                    }, sort_keys=True), flush=True)
                 for _, _, vec in triples:
                     if vec is not None:
                         digest = hash_predictions(vec)
@@ -3988,7 +4009,8 @@ def run(lane, arms, data, n_rounds, size, dev=None, *, rotate_order=False,
         if model is None:
             continue
         try:
-            for metric, value, _ in arm.score(model, data):
+            final_triples = operation_scores[arm.name] if operation_capture and arm.name in operation_scores else arm.score(model, data)
+            for metric, value, _ in final_triples:
                 emit_acc(lane, arm.name, metric, value)
                 scores.setdefault((arm.library, metric), []).append(
                     (arm.name, value))

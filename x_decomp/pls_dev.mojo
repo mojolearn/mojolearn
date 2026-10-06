@@ -4,6 +4,8 @@
 py-runtime-b): the driver text of pls.mojo on `DKit` (the same cells and
 reads; the SVD is DevExec's solve with its order home). GPU binding only."""
 from std.python import Python, PythonObject
+from experiments.classical_identical_ideas.linear_controls import C27_NORM_VECTOR
+from x_decomp.cells import OP_CLASSICAL_NORM
 from std.python._cpython import GILReleased
 from x_decomp.api import _f, _n
 from x_decomp.kit import (
@@ -81,14 +83,20 @@ def power_dev(mut k: DKit, X: DMat, Y: DMat, a: PlsArgs, mut xw: DMat, mut yw: D
             xw = k.mm(Xp, y_score, False, False)
         else:
             xw = k.ew2(OP_DIV, k.mm(X, y_score, True, False), _dot_dev(k, y_score, y_score))
-        xw = k.ew2(OP_DIV, xw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot_dev(k, xw, xw), 0.0), eps))
+        comptime if C27_NORM_VECTOR:
+            xw = k.ew3(OP_CLASSICAL_NORM, xw, _dot_dev(k, xw, xw), k.zeros(1, 1), eps)
+        else:
+            xw = k.ew2(OP_DIV, xw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot_dev(k, xw, xw), 0.0), eps))
         var x_score = k.mm(X, xw, False, False)
         if a.mode_b:
             yw = k.mm(Yp, x_score, False, False)
         else:
             yw = k.ew2(OP_DIV, k.mm(Y, x_score, True, False), _dot_dev(k, x_score, x_score))
         if a.norm_y:
-            yw = k.ew2(OP_DIV, yw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot_dev(k, yw, yw), 0.0), eps))
+            comptime if C27_NORM_VECTOR:
+                yw = k.ew3(OP_CLASSICAL_NORM, yw, _dot_dev(k, yw, yw), k.zeros(1, 1), eps)
+            else:
+                yw = k.ew2(OP_DIV, yw, k.ew1(OP_ADDS, k.ew1(OP_SQRT, _dot_dev(k, yw, yw), 0.0), eps))
         y_score = k.ew2(OP_DIV, k.mm(Y, yw, False, False), k.ew1(OP_ADDS, _dot_dev(k, yw, yw), eps))
         if Y.c == 1:
             break

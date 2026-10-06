@@ -56,7 +56,10 @@ comptime STAGE_SKIP = -1
 comptime STAGE_NO_BAD = Int32(0x7FFFFFFF)
 
 comptime STAGE_BLOCK = 256
-comptime LINK_BLOCK = 256
+# P06: source-only alternate link block. Lower per-block register demand for
+# soft binary64 math; quality and performance remain entirely unmeasured.
+from core.apple_fast_tree_experiments import AFT_P06
+comptime LINK_BLOCK = 128 if AFT_P06 else 256
 
 
 def resident_stage_kernel(

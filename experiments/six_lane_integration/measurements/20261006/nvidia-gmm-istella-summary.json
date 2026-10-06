@@ -1,0 +1,56 @@
+[
+  {
+    "key": "f579c55ac28cfd6fb99a",
+    "status": "MEASURED_FULL",
+    "worker_exit_codes": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+    "receipt": "/root/campaign-results/measurements-gmm-istella/f579c55ac28cfd6fb99a/attempts/attempt-0001/receipt.json",
+    "candidate_seconds": 39.17117511700053,
+    "incumbent_seconds": 23.084857726003975,
+    "candidate_over_incumbent": 1.6968341577811024,
+    "output_sha256": {
+      "A": "e874c1ace9a7b86792998056e20eb90e996ed71b72638d150b7d6bac45b80691",
+      "B": "8a776de33a8bcfe3ac09e61aac71c57061f5dda40517513d346263d77adb1b65"
+    },
+    "model_state": {
+      "A": {
+        "missing_state": [
+          "reviewed complete typed fitted-state export"
+        ],
+        "partial_export": {
+          "class": "GaussianMixture",
+          "complete_export_sha256": "23ae55e54aea8725c64c315fb2a6d7482dc95bc0dfc1c802d9bb022089a878b3",
+          "excluded_metadata": [],
+          "schema": "mojolearn-benchmark-state-v1",
+          "sha256": "23ae55e54aea8725c64c315fb2a6d7482dc95bc0dfc1c802d9bb022089a878b3",
+          "source": "public save npz",
+          "status": "ok"
+        },
+        "reason": "Public export is not a reviewed complete fitted-state contract",
+        "status": "UNAVAILABLE"
+      },
+      "B": {
+        "missing_state": [
+          "reviewed complete typed fitted-state export"
+        ],
+        "partial_export": {
+          "class": "GaussianMixture",
+          "complete_export_sha256": "2cb370a5e04b6460d45b62225cea388b0ab783ceb131f972919c081990b3088b",
+          "excluded_metadata": [],
+          "schema": "mojolearn-benchmark-state-v1",
+          "sha256": "2cb370a5e04b6460d45b62225cea388b0ab783ceb131f972919c081990b3088b",
+          "source": "public save npz",
+          "status": "ok"
+        },
+        "reason": "Public export is not a reviewed complete fitted-state contract",
+        "status": "UNAVAILABLE"
+      }
+    },
+    "quality": "PENDING; A/B hash equality not an IDENTICAL vendor acceptance gate"
+  }
+]

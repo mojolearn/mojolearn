@@ -1,0 +1,1472 @@
+{
+  "schema_version": 1,
+  "kind": "source_integration_inventory",
+  "lane": "gemm_and_residual",
+  "branch": "ideas/neural-identical-ab-20261006-r3",
+  "starting_commit": "d39587b1d",
+  "scope": "NN01-NN16 and NN59, source integration only",
+  "catalog": "experiments/neural_identical_ab/catalog.json",
+  "planner": "tools/neural_identical_ab.py",
+  "legacy_registry": "experiments/performance_ideas/README.md",
+  "inventory_rows_key": "inventory",
+  "caller_groups": {
+    "dense_model_products": [
+      "training/dev_tensors.mojo",
+      "training/mlp_ops.mojo",
+      "training/byte_lm.mojo",
+      "training/byte_lm_logits.mojo",
+      "transformer/impl/llama/modeling_llama.mojo",
+      "transformer/checks/transformer_backward.mojo",
+      "mamba/impl/modules/idn_gemm_ws.mojo",
+      "x_cnn/device.mojo"
+    ],
+    "dense_host_mirrors": [
+      "gemm/host/neural_gemm.mojo",
+      "training/byte_lm_host_kernels.mojo",
+      "training/checks/optimizer_contract.mojo",
+      "x_cnn/host/gemm_host.mojo"
+    ],
+    "small_mlp_native_boundary": [
+      "python/mojolearn/_mlp_impl.py",
+      "bindings/neural_gemm_boundary.mojo",
+      "bindings/neural_gemm_boundary_host.mojo",
+      "bindings/neural_gemm_boundary_common.mojo",
+      "bindings/_mojolearn_training.mojo",
+      "bindings/_mojolearn_training_host.mojo"
+    ],
+    "llama_gate_up": [
+      "transformer/impl/llama/modeling_llama.mojo",
+      "gemm/neural_dispatch.mojo"
+    ],
+    "fused_mlp_step": [
+      "python/mojolearn/_mlp_impl.py",
+      "bindings/_mojolearn_training.mojo",
+      "training/mlp_ops.mojo"
+    ],
+    "owned_workspace": [
+      "training/dev_tensors.mojo",
+      "transformer/impl/llama/modeling_llama.mojo",
+      "transformer/checks/transformer_backward.mojo"
+    ],
+    "sequence_same_chain": [
+      "sequence/ops.mojo",
+      "sequence/exec_device.mojo",
+      "sequence/gemm_tiled.mojo"
+    ],
+    "cnn_bounded_im2col": [
+      "x_cnn/ops.mojo",
+      "x_cnn/device.mojo",
+      "x_cnn/host/ops_host.mojo",
+      "x_cnn/host/gemm_host.mojo",
+      "bindings/_mojolearn_x_cnn.mojo",
+      "bindings/_mojolearn_x_cnn_host.mojo",
+      "python/mojolearn/_expansion_cnn.py"
+    ],
+    "byte_lm_logits_owner": [
+      "training/byte_lm_logits.mojo",
+      "bindings/_mojolearn_training.mojo"
+    ],
+    "residual_public_layer": [
+      "training/residual_dropout_contract.mojo",
+      "training/residual_dropout.mojo",
+      "training/residual_dropout_host.mojo",
+      "training/neural_ab_pointwise.mojo",
+      "bindings/residual_dropout_common.mojo",
+      "bindings/residual_dropout_boundary.mojo",
+      "bindings/residual_dropout_boundary_host.mojo",
+      "python/mojolearn/_residual_dropout_impl.py",
+      "bindings/_mojolearn_training.mojo",
+      "bindings/_mojolearn_training_host.mojo",
+      "python/mojolearn/training.py"
+    ]
+  },
+  "source_fixes_this_continuation": [
+    "Shared shape/storage/alias admission for cached NN10+NN12 plans; metadata admission before owned allocation.",
+    "Refuse NN11 combinations silently shadowed by unrelated schedule families; retain real NN02+NN11 global-state composition.",
+    "NN12 owned GemmWorkspace baseline now explicitly provisions and synchronizes per operation; OFF unchanged.",
+    "Explicit positive NN10 fill-budget admission.",
+    "NN59 probability FTZ normalization before mask comparison.",
+    "Concrete NN03 leaf64 versus128 and NN04 chains2 versus1 use same selected dispatcher in both arms."
+  ],
+  "inventory": [
+    {
+      "id": "NN01",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/experiments/neural_plans.mojo",
+        "gemm/checks/gemm_identical.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "dense_model_products",
+        "dense_host_mirrors",
+        "small_mlp_native_boundary"
+      ],
+      "caller_paths": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/optimizer_contract.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "bindings/neural_gemm_boundary_common.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN01=1",
+            "MOJOLEARN_GEMM_ARM_TRIAL=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_ARM=10"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN01=1",
+            "MOJOLEARN_GEMM_ARM_TRIAL=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_ARM=10",
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "Incumbent maximum dispatched workspace; full actual model operation owns allocation/staging/synchronization.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "I01",
+          "manifest": "experiments/performance_ideas/I01/manifest.json",
+          "relationship": "reuses existing schedule attribution and dispatch",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        },
+        {
+          "id": "N01",
+          "manifest": "experiments/performance_ideas/N01/manifest.json",
+          "relationship": "reuses packed-body implementation",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        },
+        {
+          "id": "N04",
+          "manifest": "experiments/performance_ideas/N04/manifest.json",
+          "relationship": "reuses explicit step-arm staging routes",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        },
+        {
+          "id": "A01",
+          "manifest": "experiments/performance_ideas/A01/manifest.json",
+          "relationship": "legacy AMD dispatch is part of frozen control",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [
+        "Legacy explicit geometry applies only where existing step-arm routing admits it; inherited shipped routes remain B. NN01 refuses NN03/NN04."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN02",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/experiments/neural_streaming.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "dense_model_products",
+        "dense_host_mirrors",
+        "small_mlp_native_boundary"
+      ],
+      "caller_paths": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/optimizer_contract.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "bindings/neural_gemm_boundary_common.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN02=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN02=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "P=selected leaf count, cells=m*n: A max(1,(min(group,P)+levels)*cells), B max(1,P*cells); levels=16 or exact logical height with NN11. Scratch <=Int32 launch span is admitted.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "I02",
+          "manifest": "experiments/performance_ideas/I02/manifest.json",
+          "relationship": "related bounded-memory goal; new leaf-plane streaming implementation",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN03",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "dense_model_products",
+        "dense_host_mirrors",
+        "small_mlp_native_boundary"
+      ],
+      "caller_paths": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/optimizer_contract.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "bindings/neural_gemm_boundary_common.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN03=1",
+            "MOJOLEARN_IDN_NEURAL_LEAF=64"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN03=1",
+            "MOJOLEARN_IDN_NEURAL_LEAF=128"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "One sentinel scratch word for selected scalar profile; output/input owners remain caller-owned.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "I04",
+          "manifest": "experiments/performance_ideas/I04/manifest.json",
+          "relationship": "related leaf64 arithmetic version; neural-only flags and host/model dispatch are new",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [
+        "Dense projection graph only; M2/M3 SSD/SISO and sequence internal algorithms keep separately pinned profiles on every column. Additional leaf256 variant is selectable."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN04",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "dense_model_products",
+        "dense_host_mirrors",
+        "small_mlp_native_boundary"
+      ],
+      "caller_paths": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/optimizer_contract.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "bindings/neural_gemm_boundary_common.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN04=1",
+            "MOJOLEARN_IDN_NEURAL_CHAINS=2"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN04=1",
+            "MOJOLEARN_IDN_NEURAL_CHAINS=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "One sentinel scratch word; chain/register arithmetic changes do not allocate leaf planes.",
+      "performance_ideas_equivalents": [],
+      "remaining_integration_limitations": [
+        "Dense projection graph only; specialized SSD/SISO/sequence internal profiles stay pinned. Additional chains4 variant is selectable."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN05",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/experiments/neural_grouped.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "llama_gate_up"
+      ],
+      "caller_paths": [
+        "transformer/impl/llama/modeling_llama.mojo",
+        "gemm/neural_dispatch.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN05=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing.",
+            "model_options": "Llama gate/up same shape; existing options/INT15 fallback admission preserved."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN05=1",
+            "MOJOLEARN_IDN_NEURAL_PAIR_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing.",
+            "model_options": "Llama gate/up same shape; existing options/INT15 fallback admission preserved."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "Selected dispatcher scratch; pair keeps two independent accumulators/output tensors. Caller owner retains scratch through last consumer.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "I03",
+          "manifest": "experiments/performance_ideas/I03/manifest.json",
+          "relationship": "related independent-job batching; selected two-projection shared-left kernel is new",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        },
+        {
+          "id": "N05",
+          "manifest": "experiments/performance_ideas/N05/manifest.json",
+          "relationship": "related compatible jobs; selected caller is Llama gate/up",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [
+        "Chosen model placement is compatible Llama gate/up projection pair; arbitrary QKV/dX/dW grouping is separate future placement. Pair route retains existing option/INT15 fallbacks."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN06",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "training/mlp_ops.mojo",
+        "gemm/experiments/neural_epilogue.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "fused_mlp_step"
+      ],
+      "caller_paths": [
+        "python/mojolearn/_mlp_impl.py",
+        "bindings/_mojolearn_training.mojo",
+        "training/mlp_ops.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN06=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN06=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "Fused public MLP pre1/pre2 scratch reduced to one sentinel word; saved activated output remains for backward. Generic epilogue component supports additional placements but is not silently wired.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "I05",
+          "manifest": "experiments/performance_ideas/I05/manifest.json",
+          "relationship": "related rounded bias seam; selected MLP bias/ReLU producer is new",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [
+        "Chosen model placement is native fused SmallMLP training forward; host and separate backward keep same declared arithmetic. Generic residual/scale epilogue placements remain component APIs."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN07",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/experiments/neural_grouped.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "llama_gate_up"
+      ],
+      "caller_paths": [
+        "transformer/impl/llama/modeling_llama.mojo",
+        "gemm/neural_dispatch.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN07=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing.",
+            "model_options": "Llama gate/up same shape; existing options/INT15 fallback admission preserved."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN07=1",
+            "MOJOLEARN_IDN_NEURAL_PAIR_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing.",
+            "model_options": "Llama gate/up same shape; existing options/INT15 fallback admission preserved."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "Pair scratch includes m*k packed logical-A words plus selected GEMM scratch; A packs once, B repacks before second product. No cross-call operand cache.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "N04",
+          "manifest": "experiments/performance_ideas/N04/manifest.json",
+          "relationship": "related staging attribution; selected pair-local immutable stage sharing is new",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [
+        "Chosen placement is pair-local shared A staging in Llama gate/up; generation-keyed cross-call stage component is not implicitly used by models."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN08",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/experiments/neural_plans.mojo",
+        "gemm/experiments/async_operand_pipeline.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "dense_model_products",
+        "dense_host_mirrors",
+        "small_mlp_native_boundary"
+      ],
+      "caller_paths": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/optimizer_contract.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "bindings/neural_gemm_boundary_common.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN08=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN08=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "One sentinel external scratch word; bounded kernel staging is internal. Other vendors run the synchronous graph in both arms.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "N03",
+          "manifest": "experiments/performance_ideas/N03/manifest.json",
+          "relationship": "reuses pipeline_gemm with selected leaf/chain parameters added",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [
+        "NVIDIA asynchronous path only; AMD/Apple execute synchronous selected profile and require future upstream support for equivalent native async scheduling."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN09",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/experiments/neural_tiled.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "dense_model_products",
+        "dense_host_mirrors",
+        "small_mlp_native_boundary"
+      ],
+      "caller_paths": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/optimizer_contract.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "bindings/neural_gemm_boundary_common.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN09=1",
+            "MOJOLEARN_IDN_NEURAL_STAGE_DEPTH=2",
+            "MOJOLEARN_IDN_NEURAL_STAGE_PAD=0"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN09=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1",
+            "MOJOLEARN_IDN_NEURAL_STAGE_DEPTH=2",
+            "MOJOLEARN_IDN_NEURAL_STAGE_PAD=0"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "One sentinel external scratch word; shared footprint DEPTH*24*(16+PAD)*4 <=32KiB; pages=1/2, PAD=0/1.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "A02",
+          "manifest": "experiments/performance_ideas/A02/manifest.json",
+          "relationship": "related page-count experiment; new 8x16 tile",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        },
+        {
+          "id": "A03",
+          "manifest": "experiments/performance_ideas/A03/manifest.json",
+          "relationship": "related bank-layout experiment; new tile/address mapping",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN10",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/experiments/neural_plans.mojo",
+        "gemm/neural_dispatch.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "dense_model_products",
+        "dense_host_mirrors",
+        "small_mlp_native_boundary"
+      ],
+      "caller_paths": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/optimizer_contract.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "bindings/neural_gemm_boundary_common.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN10=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN10=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {
+        "MOJOLEARN_IDN_NEURAL_FILL_BLOCKS": "Positive recorded device-fill budget in both arms; selector must require an explicit value."
+      },
+      "workspace_and_whole_operation": "Selected-profile one word or incumbent max workspace for available plans; positive explicitly recorded fill budget required. No guessed hardware or benchmark-row condition.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "I01",
+          "manifest": "experiments/performance_ideas/I01/manifest.json",
+          "relationship": "reuses incumbent plan dispatch as control; new traffic/fill cost selector",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [
+        "Selector must require positive recorded MOJOLEARN_IDN_NEURAL_FILL_BLOCKS for both arms; full dataset neighboring-shape/non-board evidence remains future work."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN11",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/experiments/neural_streaming.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "dense_model_products",
+        "dense_host_mirrors",
+        "small_mlp_native_boundary"
+      ],
+      "caller_paths": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/optimizer_contract.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "bindings/neural_gemm_boundary_common.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN11=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN11=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "Standalone one sentinel external scratch word; per-thread stack extent1/2/4/8/16 or corresponding shared storage. NN02 placement stores exact global logical tree levels.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "N02",
+          "manifest": "experiments/performance_ideas/N02/manifest.json",
+          "relationship": "related fold-capacity specialization; selected-profile kernels/global-state placement are new",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [
+        "Standalone capacity family refuses NN01/NN08/NN09/NN10/NN15; NN02 global-capacity placement is the supported composition."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN12",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "training/dev_tensors.mojo",
+        "gemm/experiments/neural_plans.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "owned_workspace"
+      ],
+      "caller_paths": [
+        "training/dev_tensors.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN12=1",
+            "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS=16777216"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN12=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1",
+            "MOJOLEARN_IDN_NEURAL_RETAINED_FLOATS=16777216"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "A retains up to explicit per-owner float budget, synchronizes growth, per-call temporary above budget. B per-product/per-pair temporary includes synchronization before release. OFF retains incumbent ownership.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "I02",
+          "manifest": "experiments/performance_ideas/I02/manifest.json",
+          "relationship": "related bounded owned scratch; real model dispatcher and control wiring are new",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [
+        "Mamba custom idn_gemm_ws, CNN slot caches and ByteLM-head manual scratch ownership are excluded; NN40 separately changes Mamba growth."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN13",
+      "source_status": "reused_existing",
+      "primary_source_paths": [
+        "sequence/ops.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/gemm_tiled.mojo"
+      ],
+      "shared_source_paths": [],
+      "caller_groups": [
+        "sequence_same_chain"
+      ],
+      "caller_paths": [
+        "sequence/ops.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/gemm_tiled.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "Existing sequence tile shared storage and owner lifetimes; no new global workspace.",
+      "performance_ideas_equivalents": [],
+      "remaining_integration_limitations": [
+        "Reused inherited default; no new NN13 switch or new evidence. Extra sequence batching variants remain separate."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN14",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "cnn_bounded_im2col"
+      ],
+      "caller_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_NN14_BOUNDED_IM2COL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "Bounds requested im2col scratch and removes full saved cols/dcols. Full inputs/outputs/preactivation/grow remain; process-retained historical workspace may still be larger. This is not a claim of a total-process VRAM cap.",
+      "performance_ideas_equivalents": [],
+      "remaining_integration_limitations": [
+        "State/CNN owner is authoritative; full input/output/preactivation/grow and previously retained owner capacity remain."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN15",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "gemm/experiments/neural_tiled.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "dense_model_products",
+        "dense_host_mirrors",
+        "small_mlp_native_boundary"
+      ],
+      "caller_paths": [
+        "training/dev_tensors.mojo",
+        "training/mlp_ops.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_logits.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo",
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "x_cnn/device.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "training/byte_lm_host_kernels.mojo",
+        "training/checks/optimizer_contract.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "python/mojolearn/_mlp_impl.py",
+        "bindings/neural_gemm_boundary.mojo",
+        "bindings/neural_gemm_boundary_host.mojo",
+        "bindings/neural_gemm_boundary_common.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN15=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN15=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "Same8x16 shared tile/profile as B, transposed physical output-thread assignment; no vendor-dependent mathematical partition.",
+      "performance_ideas_equivalents": [
+        {
+          "id": "A04",
+          "manifest": "experiments/performance_ideas/A04/manifest.json",
+          "relationship": "related physical membership concept; new output-thread transpose in shared 8x16 tile",
+          "evidence_reuse": "No old compile/component timing admits this changed full-neural source or workload."
+        }
+      ],
+      "remaining_integration_limitations": [
+        "Chosen arm changes generic output-thread mapping; vendor-specific tuned geometry variants are optional research, not claimed as wired."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN16",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "training/byte_lm_logits.mojo",
+        "gemm/experiments/neural_streaming.mojo"
+      ],
+      "shared_source_paths": [
+        "gemm/neural_dispatch.mojo",
+        "gemm/neural_backward.mojo",
+        "gemm/host/neural_gemm.mojo",
+        "gemm/experiments/neural_profile.mojo",
+        "gemm/experiments/neural_profile_device.mojo"
+      ],
+      "caller_groups": [
+        "byte_lm_logits_owner"
+      ],
+      "caller_paths": [
+        "training/byte_lm_logits.mojo",
+        "bindings/_mojolearn_training.mojo"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN16=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_IDN_NEURAL_NN16=1",
+            "MOJOLEARN_IDN_NEURAL_GEMM_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "ByteLMScratch.head_ws exact selected workspace count is allocated without clear in A; B existing _zeros. Outputs/logits remain initialized as before.",
+      "performance_ideas_equivalents": [],
+      "remaining_integration_limitations": [
+        "Chosen model arm removes real ByteLM-head cold scratch clear; standalone synthetic-clear component is diagnostic only."
+      ],
+      "execution_evidence": "not_run_by_request"
+    },
+    {
+      "id": "NN59",
+      "source_status": "wired_draft",
+      "primary_source_paths": [
+        "training/residual_dropout_contract.mojo",
+        "training/residual_dropout.mojo",
+        "training/residual_dropout_host.mojo",
+        "training/neural_ab_pointwise.mojo",
+        "bindings/residual_dropout_common.mojo",
+        "bindings/residual_dropout_boundary.mojo",
+        "bindings/residual_dropout_boundary_host.mojo",
+        "python/mojolearn/_residual_dropout_impl.py",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo",
+        "python/mojolearn/training.py"
+      ],
+      "shared_source_paths": [],
+      "caller_groups": [
+        "residual_public_layer"
+      ],
+      "caller_paths": [
+        "training/residual_dropout_contract.mojo",
+        "training/residual_dropout.mojo",
+        "training/residual_dropout_host.mojo",
+        "training/neural_ab_pointwise.mojo",
+        "bindings/residual_dropout_common.mojo",
+        "bindings/residual_dropout_boundary.mojo",
+        "bindings/residual_dropout_boundary_host.mojo",
+        "python/mojolearn/_residual_dropout_impl.py",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo",
+        "python/mojolearn/training.py"
+      ],
+      "ab": {
+        "candidate": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing.",
+            "api": "mojolearn.training.residual_dropout and residual_dropout_backward",
+            "p": 0.5,
+            "seed": 0,
+            "stream": 0,
+            "offset": 0,
+            "inputs": "Caller-owned full-shape native float32 C-contiguous finite values/residual/upstream-gradient buffers; same coordinates for both arms and backward."
+          }
+        },
+        "baseline": {
+          "compile_defines": [
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1",
+            "MOJOLEARN_NN59_CONTROL=1"
+          ],
+          "environment": {},
+          "runtime_settings": {
+            "numeric_mode": "identical",
+            "caller_workload": "Saved full workload for selected public caller; no smaller substitute or inherited component timing.",
+            "api": "mojolearn.training.residual_dropout and residual_dropout_backward",
+            "p": 0.5,
+            "seed": 0,
+            "stream": 0,
+            "offset": 0,
+            "inputs": "Caller-owned full-shape native float32 C-contiguous finite values/residual/upstream-gradient buffers; same coordinates for both arms and backward."
+          }
+        },
+        "common_admission": {
+          "required_absent_defines": [
+            "MOJOLEARN_IDN_ALL_OFF",
+            "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64"
+          ],
+          "schedule_family": "At most one of NN01,NN02,NN08,NN09/NN15,NN10,standaloneNN11. NN11+NN02 is supported. NN12/profiles/pairs are orthogonal except NN01+profiles refused.",
+          "baseline_is_exactly_declared_arm": "Do not interpret *=0 as disabling is_defined flags; omit an off define."
+        }
+      },
+      "required_compile_parameters": {},
+      "workspace_and_whole_operation": "Binding owns uploads, output(s), finite scans, scratch and waits. B forward has n-word dropout temporary; A uses sentinel. Both backward arms return dValues and dResidual.",
+      "performance_ideas_equivalents": [],
+      "remaining_integration_limitations": [
+        "Explicit public residual layer; no existing transformer/CNN behavior is silently changed. Caller supplies identical p/seed/stream/offset to forward and backward."
+      ],
+      "execution_evidence": "not_run_by_request"
+    }
+  ],
+  "compilation": "not_run_by_request",
+  "verification": "not_run_by_request",
+  "identity": "not_run_by_request",
+  "quality": "not_run_by_request",
+  "timing": "not_run_by_request",
+  "future_recipe_requirements": [
+    "Dataset/corpus version and hash, full dimensions, estimator/model options, intrinsic caps, seed/RNG coordinates, exact arm defines and runtime environment.",
+    "Whole operation includes preparation, allocation, upload, launches, required synchronization, output download/consumption; cold/repeated and fit/inference separate.",
+    "Existing legacy experiment evidence stays attributed to its own source/flags/workload; no transfer of qualification by ID similarity."
+  ]
+}

@@ -1,0 +1,508 @@
+{
+  "id": "a7b048e240b683d4ce48",
+  "workload_id": "more:linearsvr@dataset=taxi",
+  "configuration_id": "I.X.complete-proposed",
+  "mode": "identical",
+  "qualified_identity": false,
+  "accepted": false,
+  "promoted": false,
+  "receipt_histories": {
+    "amd": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/capture-attempt-01/artifacts/measurements-next-reg/7dd901a2404f91036f56/attempts/attempt-0001/receipt.json",
+        "sha256": "76eb6b3d350a82bacb7d7b6d3fd65418a02a3e12b1764a09dbaf150b4c52118b",
+        "status": "MEASURED_FULL",
+        "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-next-reg/7dd901a2404f91036f56/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-next-reg/7dd901a2404f91036f56/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-next-reg/7dd901a2404f91036f56/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-next-reg/7dd901a2404f91036f56/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ],
+    "nvidia-native": [
+      {
+        "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/49c28f55539ef700a59f/attempts/attempt-0001/receipt.json",
+        "sha256": "0fc42ce3ba28b97247caf0296d3caec109747b0bc7195df349529874e044fc12",
+        "status": "MEASURED_FULL",
+        "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+        "runs": [
+          {
+            "phase": "warmup",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-next-reg/49c28f55539ef700a59f/attempts/attempt-0001/warmup-A.log"
+          },
+          {
+            "phase": "warmup",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": true,
+            "error": null,
+            "log": "/root/campaign-results/measurements-next-reg/49c28f55539ef700a59f/attempts/attempt-0001/warmup-B.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "A",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-next-reg/49c28f55539ef700a59f/attempts/attempt-0001/scored-A.log"
+          },
+          {
+            "phase": "scored",
+            "arm": "B",
+            "returncode": 0,
+            "excluded": false,
+            "error": null,
+            "log": "/root/campaign-results/measurements-next-reg/49c28f55539ef700a59f/attempts/attempt-0001/scored-B.log"
+          }
+        ]
+      }
+    ]
+  },
+  "arms": {
+    "A": {
+      "status": "AGREE",
+      "qualified_identity": false,
+      "observations": {
+        "amd": {
+          "status": "OBSERVED_ONLY",
+          "outputs": {
+            "sha256": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db",
+            "scope": "all declared consumed outputs",
+            "encoding": "mojolearn-benchmark-state-v1",
+            "manifest": [
+              {
+                "path": "$.pred",
+                "dtype": "<f8",
+                "encoding": "C-order raw bytes; dtype endian preserved",
+                "shape": [
+                  500000
+                ],
+                "bytes": 4000000
+              }
+            ]
+          },
+          "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+          "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+          "qualified_identity": false
+        },
+        "nvidia-native": {
+          "status": "OBSERVED_ONLY",
+          "outputs": {
+            "sha256": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db",
+            "scope": "all declared consumed outputs",
+            "encoding": "mojolearn-benchmark-state-v1",
+            "manifest": [
+              {
+                "path": "$.pred",
+                "dtype": "<f8",
+                "encoding": "C-order raw bytes; dtype endian preserved",
+                "shape": [
+                  500000
+                ],
+                "bytes": 4000000
+              }
+            ]
+          },
+          "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+          "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+          "qualified_identity": false
+        }
+      },
+      "source_and_harness_differences": {
+        "source_sha": {
+          "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+          "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+        }
+      },
+      "model_state": {
+        "amd": {
+          "status": "UNAVAILABLE",
+          "sha256": null,
+          "scope": null,
+          "completeness": null,
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "retained_values": null
+        },
+        "nvidia-native": {
+          "status": "UNAVAILABLE",
+          "sha256": null,
+          "scope": null,
+          "completeness": null,
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "retained_values": null
+        }
+      },
+      "timings": {
+        "amd": {
+          "cold_seconds": 1.0138924409993706,
+          "consumed_output_seconds": 0.01565817499977129,
+          "fit_or_training_seconds": 0.5644757029995162,
+          "full_operation_seconds": 1.0138924409993706,
+          "preparation_seconds": 0.43375551299959625
+        },
+        "nvidia-native": {
+          "cold_seconds": 1.897447600000305,
+          "consumed_output_seconds": 0.027847042998473626,
+          "fit_or_training_seconds": 1.109289654996246,
+          "full_operation_seconds": 1.897447600000305,
+          "preparation_seconds": 0.7603081120032584
+        }
+      },
+      "task_quality": {
+        "amd": {
+          "gate_source": "tools/bench_board_more.py:quality/linearsvr; independent saved gate pending",
+          "metrics": {
+            "ours": {
+              "finite": true,
+              "r2": 0.8992843220884433,
+              "rmse": 4.936400107880937
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "nvidia-native": {
+          "gate_source": "tools/bench_board_more.py:quality/linearsvr; independent saved gate pending",
+          "metrics": {
+            "ours": {
+              "finite": true,
+              "r2": 0.8992843220884433,
+              "rmse": 4.936400107880937
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "repeated": [
+        {
+          "index": 0,
+          "status": "AGREE",
+          "hashes": {
+            "amd": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db",
+            "nvidia-native": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db"
+          },
+          "qualified_identity": false
+        }
+      ]
+    },
+    "B": {
+      "status": "AGREE",
+      "qualified_identity": false,
+      "observations": {
+        "amd": {
+          "status": "OBSERVED_ONLY",
+          "outputs": {
+            "sha256": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db",
+            "scope": "all declared consumed outputs",
+            "encoding": "mojolearn-benchmark-state-v1",
+            "manifest": [
+              {
+                "path": "$.pred",
+                "dtype": "<f8",
+                "encoding": "C-order raw bytes; dtype endian preserved",
+                "shape": [
+                  500000
+                ],
+                "bytes": 4000000
+              }
+            ]
+          },
+          "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+          "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+          "qualified_identity": false
+        },
+        "nvidia-native": {
+          "status": "OBSERVED_ONLY",
+          "outputs": {
+            "sha256": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db",
+            "scope": "all declared consumed outputs",
+            "encoding": "mojolearn-benchmark-state-v1",
+            "manifest": [
+              {
+                "path": "$.pred",
+                "dtype": "<f8",
+                "encoding": "C-order raw bytes; dtype endian preserved",
+                "shape": [
+                  500000
+                ],
+                "bytes": 4000000
+              }
+            ]
+          },
+          "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+          "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+          "qualified_identity": false
+        }
+      },
+      "source_and_harness_differences": {
+        "source_sha": {
+          "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+          "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+        }
+      },
+      "model_state": {
+        "amd": {
+          "status": "UNAVAILABLE",
+          "sha256": null,
+          "scope": null,
+          "completeness": null,
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "retained_values": null
+        },
+        "nvidia-native": {
+          "status": "UNAVAILABLE",
+          "sha256": null,
+          "scope": null,
+          "completeness": null,
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "retained_values": null
+        }
+      },
+      "timings": {
+        "amd": {
+          "cold_seconds": 1.0344244029993206,
+          "consumed_output_seconds": 0.016904929999327578,
+          "fit_or_training_seconds": 0.5564955479994751,
+          "full_operation_seconds": 1.0344244029993206,
+          "preparation_seconds": 0.46102124499975616
+        },
+        "nvidia-native": {
+          "cold_seconds": 1.8769762910014833,
+          "consumed_output_seconds": 0.02702662099909503,
+          "fit_or_training_seconds": 1.0845526329940185,
+          "full_operation_seconds": 1.8769762910014833,
+          "preparation_seconds": 0.7653937450013473
+        }
+      },
+      "task_quality": {
+        "amd": {
+          "gate_source": "tools/bench_board_more.py:quality/linearsvr; independent saved gate pending",
+          "metrics": {
+            "ours": {
+              "finite": true,
+              "r2": 0.8992843220884433,
+              "rmse": 4.936400107880937
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "nvidia-native": {
+          "gate_source": "tools/bench_board_more.py:quality/linearsvr; independent saved gate pending",
+          "metrics": {
+            "ours": {
+              "finite": true,
+              "r2": 0.8992843220884433,
+              "rmse": 4.936400107880937
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        }
+      },
+      "repeated": [
+        {
+          "index": 0,
+          "status": "AGREE",
+          "hashes": {
+            "amd": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db",
+            "nvidia-native": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db"
+          },
+          "qualified_identity": false
+        }
+      ]
+    }
+  },
+  "full_identity": {
+    "status": "INCOMPLETE",
+    "error": "pin nonempty complete output and applicable model-state path sets",
+    "missing_columns": null,
+    "freeze_equivalence": "NOT PROVIDED; none invented",
+    "column_issues": {}
+  },
+  "pinned_scope": {
+    "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+    "workload_id": "more:linearsvr@dataset=taxi",
+    "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+    "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+    "dataset_split": {
+      "evaluation_rows": 500000,
+      "fit": [
+        0,
+        5250086
+      ]
+    },
+    "seed": 7,
+    "mode": "identical",
+    "dimensions": {
+      "X": [
+        5250086,
+        11
+      ],
+      "Xq": [
+        500000,
+        11
+      ],
+      "y": [
+        5250086
+      ],
+      "yq": [
+        500000
+      ]
+    },
+    "estimator_settings": {
+      "__record__": true,
+      "library": "mojolearn",
+      "params": {
+        "C": 1.0,
+        "epsilon": 0.0,
+        "fit_intercept": true,
+        "lbfgs_memory": 5,
+        "linesearch_max_iter": 100,
+        "loss": "epsilon_insensitive",
+        "max_iter": 1000,
+        "penalized_intercept": false,
+        "penalty": "l2",
+        "tol": 0.0001
+      },
+      "source": "get_params"
+    },
+    "harness_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+    "timed_boundary": "load saved full standardized input + unchanged lane preparation + estimator construction + full fit + predict every saved query + synchronize + consume all prediction outputs; independent quality outside timer"
+  },
+  "pinned_capture_paths": {
+    "outputs": [
+      "$.pred"
+    ]
+  },
+  "source_shas": {
+    "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+    "nvidia-native": "55a815e13728392be41903769c33ece8948cad4a"
+  },
+  "artifact_provenance": {
+    "amd": {
+      "A": [
+        {
+          "path": "/root/six-lane-full-ab-20261006/packages/A-next-reg-retained/mojolearn/identical/_mojolearn.so",
+          "sha256": "a6ae46e66fe2c6658e8088c73c667e5215c3932c535411d61fff34624d116521",
+          "numerical_source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "target": "amd-gfx942",
+          "defines_sha256": "e79ccb2f1f492af080cacc46d40daa4d1f14e759d5c7d82387544f5cad4e538f"
+        },
+        {
+          "path": "/root/six-lane-full-ab-20261006/packages/A-next-reg-retained/mojolearn/identical/_mojolearn_estimators.so",
+          "sha256": "a87333d739708bd119a82605b9594a86b7653fc406bfcabb908fa72e83c663e9",
+          "numerical_source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "target": "amd-gfx942",
+          "defines_sha256": "e79ccb2f1f492af080cacc46d40daa4d1f14e759d5c7d82387544f5cad4e538f"
+        }
+      ],
+      "B": [
+        {
+          "path": "/root/six-lane-full-ab-20261006/packages/B-next-reg-retained/mojolearn/identical/_mojolearn.so",
+          "sha256": "29b7af646d9af36374eacf87203e90930729eb085f3ea2d21fae10e5f4f6701c",
+          "numerical_source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "target": "amd-gfx942",
+          "defines_sha256": "11a2d08fedeb8d060f290e0fd5f8c7c4618a9ee2a66bc2d67a7d2ce9a36b907d"
+        },
+        {
+          "path": "/root/six-lane-full-ab-20261006/packages/B-next-reg-retained/mojolearn/identical/_mojolearn_estimators.so",
+          "sha256": "310021db232b072f8445279b1213cd40e452c96c75b868a220d430fd443b12e6",
+          "numerical_source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "compiler": "Mojo 1.0.0 (ed45d567)",
+          "target": "amd-gfx942",
+          "defines_sha256": "11a2d08fedeb8d060f290e0fd5f8c7c4618a9ee2a66bc2d67a7d2ce9a36b907d"
+        }
+      ]
+    },
+    "nvidia-native": {
+      "A": [
+        {
+          "path": "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn.so",
+          "sha256": "b3660479b5de3b69c2c5a954521afc1e89fa9eefa6db032647941d74d89059d5",
+          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+          "compiler": "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
+          "target": "nvidia-native",
+          "defines_sha256": "e79ccb2f1f492af080cacc46d40daa4d1f14e759d5c7d82387544f5cad4e538f"
+        },
+        {
+          "path": "/root/six-lane-full-ab-20261006/packages/A/mojolearn/identical/_mojolearn_estimators.so",
+          "sha256": "9df14311faae93419a226d81995ac43577016df4ff7a3ee8b1e09796c4bdfa22",
+          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+          "compiler": "498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53be00000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
+          "target": "nvidia-native",
+          "defines_sha256": "e79ccb2f1f492af080cacc46d40daa4d1f14e759d5c7d82387544f5cad4e538f"
+        }
+      ],
+      "B": [
+        {
+          "path": "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn_estimators.so",
+          "sha256": "e89e1ab1ae07f38d72ce44698fb20339148ec96a9a79cc5ba7fe6551811a78b0",
+          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+          "compiler": "496 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1339c0000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
+          "target": "nvidia-native",
+          "defines_sha256": "11a2d08fedeb8d060f290e0fd5f8c7c4618a9ee2a66bc2d67a7d2ce9a36b907d"
+        },
+        {
+          "path": "/root/six-lane-full-ab-20261006/packages/B/mojolearn/identical/_mojolearn.so",
+          "sha256": "66c7ae5c2acbc59bb9fcbd19c7895b5d26a57ae62c1f33148dd36b93f0b1b06f",
+          "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+          "compiler": "498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53be00000000, nodemask=1)\nMojo 1.0.0 (ed45d567)",
+          "target": "nvidia-native",
+          "defines_sha256": "11a2d08fedeb8d060f290e0fd5f8c7c4618a9ee2a66bc2d67a7d2ce9a36b907d"
+        }
+      ]
+    }
+  },
+  "status": "OBSERVED_OUTPUTS_WITH_INCOMPLETE_FULL_IDENTITY"
+}

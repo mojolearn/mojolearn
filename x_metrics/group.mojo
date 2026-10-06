@@ -96,3 +96,24 @@ def pair_key_unit(t: Int, f: FP, q: IP):
         sti(f, OUT + t, a * k + b if ok else -1)
     else:
         sti(f, OUT + t, a if ok and a == b else -1)
+
+
+# C12 materializes exact dense offsets only at the public output boundary.
+# Row order is stable (key,row) from the shared sort; invalid keys sort last.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+def sparse_group_offsets_unit(t: Int, f: FP, q: IP):
+    # q=[K,n,m,ORD,OFF]; t=group boundary 0..m.
+    var n = p(q, 1)
+    var m = p(q, 2)
+    if t > m:
+        return
+    var lo = 0
+    var hi = n
+    while lo < hi:
+        var mid = (lo+hi)//2
+        var k = ldi(f, p(q, 0)+ldi(f, p(q, 3)+mid))
+        if k >= 0 and k < m and k < t:
+            lo = mid+1
+        else:
+            hi = mid
+    sti(f, p(q, 4)+t, lo)

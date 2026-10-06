@@ -1555,7 +1555,7 @@ def __getattr__(name):
 # THE METRICS LANE'S FUNCTIONS (lane/metrics, 2026-09-27), computed by the
 # x_metrics binding; see python/mojolearn/_expansion_metrics.py.
 from ._expansion_metrics import (  # noqa: E402
-    balanced_accuracy_score, class_likelihood_ratios, classification_report, cohen_kappa_score,
+    ranking_report, regression_report, balanced_accuracy_score, class_likelihood_ratios, classification_report, cohen_kappa_score,
     fbeta_score, hamming_loss, jaccard_score, matthews_corrcoef, multilabel_confusion_matrix,
     precision_recall_fscore_support, zero_one_loss,
     d2_absolute_error_score, d2_pinball_score, d2_tweedie_score, explained_variance_score, max_error, mean_absolute_percentage_error, mean_gamma_deviance, mean_pinball_loss, mean_poisson_deviance, mean_squared_log_error, mean_tweedie_deviance, median_absolute_error, root_mean_squared_log_error,

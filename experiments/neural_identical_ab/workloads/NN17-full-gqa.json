@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "NN17",
+  "harness": "tools/bench_board_neural.py",
+  "lane": "transformer-forward",
+  "shape": "full",
+  "seed": 7,
+  "runtime": {
+    "operation": "transformer_configured_forward",
+    "transformer_config": {
+      "batch": 1,
+      "length": 2048,
+      "d_model": 512,
+      "n_heads": 8,
+      "n_kv": 2,
+      "head_dim": 64,
+      "intermediate": 1536
+    }
+  },
+  "input_source": "make_inputs: complete declared Gaussian block input and initialized weights, same saved file for both arms",
+  "scope": "supplemental full-block GQA workload; does not replace complete LM corpus training/quality or every affected estimator",
+  "input_hash": "pending_future_fixture_authoring",
+  "execution": "not_run_by_request"
+}

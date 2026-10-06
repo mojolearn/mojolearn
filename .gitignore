@@ -159,3 +159,6 @@ EXPERIMENTS.md
 
 # the committed Apple FAST experiments record (CLAUDE.md Experiments rule)
 !docs/apple-fast/EXPERIMENTS.md
+
+# Canonical planning matrix is tracked as lossless deterministic gzip.
+/experiments/six_lane_integration/matrix.json

@@ -20,6 +20,20 @@ from x_prep.prims import add, sub, mul, div
 from x_prep.transform import PT_STATE, pt_finish, log1pf
 from x_prep.prims import logf
 from x_prep.fastpt import PT_FOLD_NOX
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+
+# AFCL-P01: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Two independent sums shorten each lane's dependency chain; the same rows,
+# NaN policy and centered second pass remain. Extra registers may cost occupancy.
+comptime AFCL_P01 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P01"]()
+
+# AFCL-P13: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Independent class-filtered sums shorten arithmetic dependencies while the
+# same label mask/counts and centered-variance pass remain. More registers can
+# cost occupancy; class imbalance does not alter the dispatch.
+comptime AFCL_P13 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P13"]()
 
 comptime TGR = 256
 
@@ -40,6 +54,7 @@ def col_stats_fast_kernel(f: FP, X: Int32, n: Int32, d: Int32, O: Int32):
     var inf = Float32(3.4028235e38)
     var cnt = Float32(0)
     var s = Float32(0)
+    var s_odd = Float32(0)
     var lo = inf
     var hi = -inf
     var ma = Float32(0)
@@ -48,10 +63,18 @@ def col_stats_fast_kernel(f: FP, X: Int32, n: Int32, d: Int32, O: Int32):
         if is_nan(v):
             continue
         cnt += 1
-        s = add(s, v)
+        comptime if AFCL_P01:
+            if (i // TGR) % 2 == 0:
+                s = add(s, v)
+            else:
+                s_odd = add(s_odd, v)
+        else:
+            s = add(s, v)
         lo = min(lo, v)
         hi = max(hi, v)
         ma = max(ma, abs(v))
+    comptime if AFCL_P01:
+        s = add(s, s_odd)
     sh_s[tid] = s
     sh_c[tid] = cnt
     sh_lo[tid] = lo
@@ -74,13 +97,22 @@ def col_stats_fast_kernel(f: FP, X: Int32, n: Int32, d: Int32, O: Int32):
         mean = div(sh_s[0], total)
     barrier()
     var ss = Float32(0)
+    var ss_odd = Float32(0)
     if total > 0:
         for i in range(tid, nn, TGR):
             var v = f[Int(X) + i * dd + c]
             if is_nan(v):
                 continue
             var e = sub(v, mean)
-            ss = add(ss, mul(e, e))
+            comptime if AFCL_P01:
+                if (i // TGR) % 2 == 0:
+                    ss = add(ss, mul(e, e))
+                else:
+                    ss_odd = add(ss_odd, mul(e, e))
+            else:
+                ss = add(ss, mul(e, e))
+    comptime if AFCL_P01:
+        ss = add(ss, ss_odd)
     sh_s[tid] = ss
     barrier()
     var w2 = TGR // 2
@@ -205,11 +237,20 @@ def class_stats_fast_kernel(f: FP, q: IP):
     var sh_c = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
     var cnt = Float32(0)
     var s = Float32(0)
+    var s_odd = Float32(0)
     for i in range(tid, nn, TGR):
         if Int(f[Y + i]) != k:
             continue
-        s = add(s, f[X + i * dd + c])
+        comptime if AFCL_P13:
+            if (i // TGR) % 2 == 0:
+                s = add(s, f[X + i * dd + c])
+            else:
+                s_odd = add(s_odd, f[X + i * dd + c])
+        else:
+            s = add(s, f[X + i * dd + c])
         cnt += 1
+    comptime if AFCL_P13:
+        s = add(s, s_odd)
     sh_s[tid] = s
     sh_c[tid] = cnt
     barrier()
@@ -227,12 +268,21 @@ def class_stats_fast_kernel(f: FP, q: IP):
         mean = div(sum_, total)
     barrier()
     var ss = Float32(0)
+    var ss_odd = Float32(0)
     if total > 0 and p(q, 7) >= 0:
         for i in range(tid, nn, TGR):
             if Int(f[Y + i]) != k:
                 continue
             var e = sub(f[X + i * dd + c], mean)
-            ss = add(ss, mul(e, e))
+            comptime if AFCL_P13:
+                if (i // TGR) % 2 == 0:
+                    ss = add(ss, mul(e, e))
+                else:
+                    ss_odd = add(ss_odd, mul(e, e))
+            else:
+                ss = add(ss, mul(e, e))
+    comptime if AFCL_P13:
+        ss = add(ss, ss_odd)
     sh_s[tid] = ss
     barrier()
     var w2 = TGR // 2

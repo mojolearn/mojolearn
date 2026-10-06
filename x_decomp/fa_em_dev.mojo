@@ -8,6 +8,8 @@ transposes are exact copies of d x d words (`svd_desc`, `rev_cols`), and the
 log-likelihood's float32 words come home for `_dsum`, as Python read them.
 GPU binding only."""
 from std.math import inf, sqrt
+from experiments.classical_identical_ideas.linear_controls import C27_FA_COMPONENTS
+from x_decomp.cells import OP_CLASSICAL_FA_LOAD
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from x_decomp.api import _f, _n
@@ -53,8 +55,11 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
         var sk = k.rows(k.vec_t(k.copy(s2)), 0, nc)
         sk = k.vec_t(sk^)
         var unexp = dsum(s2h, nc, d) if nc < d else 0.0
-        W = k.ew2(OP_MUL, Vt, k.vec_t(k.ew1(OP_SQRT, k.ew1(OP_MAXS, k.ew1(OP_ADDS, sk, -1.0), 0.0), 0.0)))
-        W = k.ew2(OP_MUL, W, sqrt_psi)
+        comptime if C27_FA_COMPONENTS:
+            W = k.ew3(OP_CLASSICAL_FA_LOAD, Vt, k.vec_t(k.copy(sk)), sqrt_psi, 0.0)
+        else:
+            W = k.ew2(OP_MUL, Vt, k.vec_t(k.ew1(OP_SQRT, k.ew1(OP_MAXS, k.ew1(OP_ADDS, sk, -1.0), 0.0), 0.0)))
+            W = k.ew2(OP_MUL, W, sqrt_psi)
         var lskd = k.ew1(OP_LOGS, sk, FA_LOG_FLOOR)
         var lpsd = k.ew1(OP_LOGS, psi, FA_LOG_FLOOR)
         var lsk = k.get(lskd)

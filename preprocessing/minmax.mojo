@@ -34,6 +34,7 @@ comptime PREP_FAST_MINMAX = (
     and not is_defined["MOJOLEARN_PREP_FAST_MINMAX_OFF"]()
 )
 from checks.numerics import ftz, identical_div, identical_mul
+from experiments.classical_identical_ideas.shared_controls import C03_FINITE_EXTREMA
 
 #: lane/apple-fast-gap-cls2 (2026-10-03), FAST + Apple, default ON (below):
 #: `-D MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED` folds the fit's nonfinite scan
@@ -48,7 +49,10 @@ from checks.numerics import ftz, identical_div, identical_mul
 #: quality identical): minmax-scaler istella 104.7 -> 19.1 ms (FUSED+POOL;
 #: POOL alone 106 -> 21.9). `-D MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF` /
 #: `_POOL_OFF` turn them off; the old -D names stay harmless.
-comptime PREP_CLS2_MINMAX_FUSED = PREP_FAST_MINMAX and not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF"]()
+# C03 extends the exact fused status/extrema walk to IDENTICAL, opt-in.
+# Public input refusal is boolean; no output is published before status.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime PREP_CLS2_MINMAX_FUSED = C03_FINITE_EXTREMA or (PREP_FAST_MINMAX and not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED_OFF"]())
 comptime PREP_CLS2_MINMAX_POOL = PREP_FAST_MINMAX and not is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL_OFF"]()
 from metrics.checks.device_io import download_f32
 

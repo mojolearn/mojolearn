@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -24,15 +25,26 @@ import sys
 import time
 from typing import Any
 
+# Keep sibling orchestration modules available when this tool is loaded by path
+# as well as when it is executed directly. No estimator module is imported.
+_TOOLS = str(Path(__file__).resolve().parent)
+if _TOOLS not in sys.path:
+    sys.path.insert(0, _TOOLS)
+from apple_fast_tree_integration import TREE_IDS, manifests as tree_manifests, manifest_path as tree_manifest_path
+
 
 ROOT = Path(__file__).resolve().parent.parent
+AFCL_COUNTS = {"L": 14, "G": 14, "T": 12, "P": 14}
+AFCL_EXPECTED = tuple(f"AFCL-{lane}{n:02d}" for lane, count in AFCL_COUNTS.items() for n in range(1, count + 1))
 EXPECTED = tuple(
     [f"I{n:02d}" for n in range(1, 25)]
     + [f"A{n:02d}" for n in range(1, 9)]
     + [f"N{n:02d}" for n in range(1, 9)]
     + [f"F{n:02d}" for n in range(1, 21)]
-)
-STATUSES = {"source_ready", "build_passed", "blocked_toolchain", "blocked_prerequisite"}
+    + [f"C{n:02d}" for n in range(1, 61)]
+) + AFCL_EXPECTED
+ALL_EXPECTED = EXPECTED + TREE_IDS
+STATUSES = {"source_draft", "source_ready", "build_passed", "blocked_toolchain", "blocked_prerequisite"}
 STAGES = {"build": "build_argv", "validate": "validation_argv", "time": "timing_argv", "run": "run_argv"}
 
 
@@ -40,10 +52,22 @@ class ExperimentError(ValueError):
     """An invalid recipe or evidence prerequisite."""
 
 
+def apple_neural_catalog():
+    # not tested: source-only AFN26 cards have a separate namespace/schema.
+    # Load metadata glue only; no compiler, binding, or numerical driver.
+    path = Path(__file__).with_name("apple_fast_neural_ideas.py")
+    spec = importlib.util.spec_from_file_location("performance_afn26_catalog", path)
+    if spec is None or spec.loader is None:
+        raise ExperimentError("Apple FAST neural catalog adapter is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def mode_for(idea: str) -> str:
-    if idea not in EXPECTED:
+    if idea not in ALL_EXPECTED:
         raise ExperimentError(f"Unknown idea: {idea}")
-    return "fast" if idea.startswith("F") else "identical"
+    return "fast" if idea.startswith(("F", "AFCL-", "AFT_")) else "identical"
 
 
 def digest(path: Path) -> str:
@@ -65,15 +89,53 @@ def require_string_list(value: Any, name: str, *, allow_empty: bool = True) -> l
     return value
 
 
-def read_manifest(path: Path, root: Path = ROOT) -> dict[str, Any]:
+def afcl_configuration(record: dict[str, Any], root: Path) -> dict[str, Any]:
+    """Resolve registered AFCL controls from their one authoritative lane entry.
+
+    Registrations supply orchestration, while lane entries own the source scope,
+    arm defines and runtime prerequisites. This prevents the standalone selector
+    and the common runner silently acquiring different A/B configurations.
+    """
+    registration = record.get("afcl_registration")
+    if registration is None:
+        return record
+    if record.get("id") not in AFCL_EXPECTED or not isinstance(registration, str):
+        raise ExperimentError("Invalid Apple FAST classical registration")
     try:
-        record = json.loads(path.read_text())
+        lane = json.loads(inside(root, registration).read_text())
+        matches = [entry for entry in lane["entries"] if entry["id"] == record["id"]]
+        if len(matches) != 1:
+            raise ExperimentError(f"{record['id']}: expected one authoritative lane entry")
+        entry = matches[0]
+        expanded = dict(record)
+        for key in ("baseline_defines", "candidate_defines", "implementation_paths"):
+            expanded[key] = entry[key]
+        for arm in ("baseline", "candidate"):
+            env = entry.get(f"{arm}_env", {})
+            if not isinstance(env, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in env.items()):
+                raise ExperimentError(f"{record['id']}: {arm}_env must map strings to strings")
+            expanded[f"{arm}_env"] = {**env, "MOJOLEARN_NUMERIC_MODE": "fast"}
+        expanded["source_status"] = entry["status"]
+        expanded["mechanism"] = entry["mechanism"]
+        expanded["affected_callers"] = entry.get("affected_callers", [])
+        expanded["limitations"] = entry.get("limitations", [])
+        expanded["task_quality_scope"] = entry.get("quality_scope", entry.get("quality_gates", []))
+        expanded["defines_absent_in_both_arms"] = entry.get("defines_absent_in_both_arms", [])
+        return expanded
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ExperimentError(f"Cannot resolve {record.get('id')} registration: {exc}") from exc
+
+
+def read_manifest(path: Path, root: Path = ROOT, *, document: dict | None = None) -> dict[str, Any]:
+    try:
+        record = json.loads(path.read_text()) if document is None else document
     except (OSError, json.JSONDecodeError) as exc:
         raise ExperimentError(f"Cannot read {path}: {exc}") from exc
     if not isinstance(record, dict) or record.get("schema") != 1:
         raise ExperimentError(f"{path}: expected schema 1 object")
+    record = afcl_configuration(record, root)
     idea = record.get("id")
-    if idea not in EXPECTED or path.parent.name != idea:
+    if idea not in ALL_EXPECTED or (document is None and path.parent.name != idea):
         raise ExperimentError(f"{path}: ID does not match its idea directory")
     if record.get("mode") != mode_for(idea):
         raise ExperimentError(f"{idea}: incorrect numeric mode")
@@ -107,7 +169,7 @@ def read_manifest(path: Path, root: Path = ROOT) -> dict[str, Any]:
                 if not inside(root, name).is_file():
                     raise ExperimentError(f"{idea}: missing validation source: {name}")
         elif key == "depends_on":
-            if any(value not in EXPECTED or value == idea for value in values):
+            if any(value not in ALL_EXPECTED or value == idea for value in values):
                 raise ExperimentError(f"{idea}: invalid dependency")
         elif key.endswith("_defines"):
             if any(not re.fullmatch(r"MOJOLEARN_[A-Z0-9_]+(?:=[A-Za-z0-9_.+-]+)?", x) for x in values):
@@ -121,6 +183,13 @@ def read_manifest(path: Path, root: Path = ROOT) -> dict[str, Any]:
         raise ExperimentError(f"{idea}: build_uses_compile_slot must be boolean")
     if not isinstance(record.get("paired_build", False), bool):
         raise ExperimentError(f"{idea}: paired_build must be boolean")
+    for key in ("paired_run", "output_created_by_recipe"):
+        if not isinstance(record.get(key, False), bool):
+            raise ExperimentError(f"{idea}: {key} must be boolean")
+    if record.get("afcl_registration"):
+        for name in require_string_list(record.get("recipe_sources"), f"{idea}.recipe_sources", allow_empty=False):
+            if not inside(root, name).is_file():
+                raise ExperimentError(f"{idea}: missing linked recipe source: {name}")
     if record.get("output_kind", "file") not in {"file", "directory"}:
         raise ExperimentError(f"{idea}: invalid output_kind")
     if not isinstance(record.get("timing_contract"), str) or not record["timing_contract"].strip():
@@ -128,15 +197,36 @@ def read_manifest(path: Path, root: Path = ROOT) -> dict[str, Any]:
     return record
 
 
+def recipe_digest(path: Path, record: dict[str, Any], root: Path = ROOT) -> str:
+    """Bind quality to resolved AFCL recipes, not just their registration stub."""
+    if not record.get("afcl_registration"):
+        return digest(path)
+    linked = {name: digest(inside(root, name)) for name in record.get("recipe_sources", [])}
+    payload = {"registration_sha256": digest(path), "record": record, "recipe_sources": linked}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def catalog(root: Path = ROOT) -> tuple[dict[str, dict[str, Any]], list[str]]:
     records: dict[str, dict[str, Any]] = {}
     problems: list[str] = []
-    for path in sorted((root / "experiments/performance_ideas").glob("*/manifest.json")):
+    paths = list((root / "experiments/performance_ideas").glob("*/manifest.json"))
+    paths += list((root / "experiments/classical_identical_ideas").glob("*/manifest.json"))
+    for path in sorted(paths):
         try:
             record = read_manifest(path, root)
             records[record["id"]] = record
         except ExperimentError as exc:
             problems.append(str(exc))
+    # Namespaced Apple tree IDs are projections of the lane cards, not copied
+    # manifests that can drift from the ideas. Older roots need not have them.
+    if (root / "experiments/apple_fast_trees").is_dir():
+        try:
+            for document in tree_manifests(root):
+                path = tree_manifest_path(document["id"], root)
+                record = read_manifest(path, root, document=document)
+                records[record["id"]] = record
+        except (ExperimentError, OSError, ValueError, KeyError) as exc:
+            problems.append("Apple FAST trees: " + str(exc))
     return records, problems
 
 
@@ -187,21 +277,29 @@ def mojo_path(root: Path = ROOT) -> str:
 
 
 def command_for(record: dict[str, Any], stage: str, vendor: str, output: Path, source: str,
-                root: Path = ROOT, arm: str = "candidate") -> list[str]:
+                root: Path = ROOT, arm: str = "candidate", *, artifacts: Path | None = None,
+                workloads: Path | None = None) -> list[str]:
     if vendor not in record["vendors"]:
         raise ExperimentError(f"{record['id']}: vendor {vendor} is outside this recipe")
     if record["status"].startswith("blocked_"):
         raise ExperimentError(f"{record['id']}: {record['blocker']}")
     if stage == "build" and arm == "baseline" and record.get("paired_build", False):
         raise ExperimentError(f"{record['id']}: this recipe builds both arms once; use the default build arm")
+    if stage != "build" and arm == "baseline" and record.get("paired_run", False):
+        raise ExperimentError(f"{record['id']}: this recipe processes both arms once; use the default arm")
     key = "baseline_build_argv" if stage == "build" and arm == "baseline" else STAGES[stage]
     command = record.get(key, [])
     if not command:
         raise ExperimentError(f"{record['id']}: no executable {stage} recipe")
+    for token, value in (("artifacts", artifacts), ("workloads", workloads)):
+        if any("{" + token + "}" in argument for argument in command) and value is None:
+            raise ExperimentError(f"{record['id']}: this stage requires --{token}")
     variables = {
         "repo": str(root), "python": sys.executable, "mojo": mojo_path(root),
         "compile_slot": str(Path.home() / "mojolearn-evidence/compile_slot.sh"),
-        "vendor": vendor, "output": str(output), "source_sha": source, "mode": record["mode"], "arm": arm,
+        "vendor": vendor, "output": str(output), "source_sha": source, "mode": record["mode"], "arm": arm, "configuration": record.get("configuration", "default"),
+        "artifacts": str(artifacts.resolve()) if artifacts else "",
+        "workloads": str(workloads.resolve()) if workloads else "",
     }
     try:
         return [argument.format_map(variables) for argument in command]
@@ -209,7 +307,32 @@ def command_for(record: dict[str, Any], stage: str, vendor: str, output: Path, s
         raise ExperimentError(f"{record['id']}: invalid command template: {exc}") from exc
 
 
-def admitted_quality(path: Path, record: dict[str, Any], source: str, vendor: str, manifest_digest: str) -> None:
+def select_configuration(record: dict[str, Any], name: str | None) -> dict[str, Any]:
+    """Select a programmed C-card sub-arm/interaction without changing incumbents.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    Selection changes compile defines and the full-workload coverage requirement.
+    It never imports a candidate or establishes runtime reach.
+    """
+    if not record["id"].startswith("C"):
+        if name is not None:
+            raise ExperimentError("--configuration is a classical C-card selector")
+        return record
+    if record["status"].startswith("blocked_"):
+        raise ExperimentError(f"{record['id']}: {record['blocker']}")
+    selected = name or record.get("default_configuration")
+    configs = record.get("configurations", {})
+    if selected not in configs:
+        raise ExperimentError(f"{record['id']}: configuration is pending or unknown: {selected}")
+    cfg = configs[selected]
+    if not cfg.get("selectable", False):
+        raise ExperimentError(f"{record['id']}/{selected}: source integration pending")
+    return {**record, "configuration": selected,
+            "candidate_defines": cfg["candidate_defines"], "baseline_defines": cfg["baseline_defines"]}
+
+
+def admitted_quality(path: Path, record: dict[str, Any], source: str, vendor: str, manifest_digest: str,
+                     context: dict[str, str] | None = None) -> None:
     try:
         evidence = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
@@ -219,6 +342,7 @@ def admitted_quality(path: Path, record: dict[str, Any], source: str, vendor: st
     expected = {
         "id": record["id"], "mode": record["mode"], "vendor": vendor,
         "source_sha": source, "manifest_sha256": manifest_digest, "status": "PASS",
+        **(context or {}),
     }
     for key, value in expected.items():
         if evidence.get(key) != value:
@@ -229,6 +353,11 @@ def admitted_quality(path: Path, record: dict[str, Any], source: str, vendor: st
     for name in record["quality_gates"]:
         if gates.get(name) != "PASS":
             raise ExperimentError(f"Quality gate has not passed: {name}")
+    if record["id"].startswith("C"):
+        if evidence.get("configuration") != record.get("configuration"):
+            raise ExperimentError("Quality receipt does not name the selected classical configuration")
+        if evidence.get("candidate_defines") != record["candidate_defines"]:
+            raise ExperimentError("Quality receipt does not match the selected classical defines")
     # The actual harness is responsible for task metrics and identity witnesses.
     # Merely exiting zero is never converted into a quality PASS here.
 
@@ -257,19 +386,27 @@ def require_queue_host(stage: str, record: dict[str, Any], vendor: str) -> None:
 
 def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output: Path,
             evidence_dir: Path, quality: Path | None, timeout: float,
-            root: Path = ROOT, arm: str = "candidate") -> dict[str, Any]:
+            root: Path = ROOT, arm: str = "candidate", *, artifacts: Path | None = None,
+            workloads: Path | None = None) -> dict[str, Any]:
     if any(p.resolve().is_relative_to(root.resolve()) for p in (output, evidence_dir)):
         raise ExperimentError("Save run evidence outside the source worktree")
     if git(root, "status", "--porcelain"):
         raise ExperimentError("Commit the source before executing a frozen experiment")
     require_queue_host(stage, record, vendor)
     source = git(root, "rev-parse", "HEAD")
-    manifest_digest = digest(path)
+    manifest_digest = recipe_digest(path, record, root)
+    quality_context: dict[str, str] = {}
+    if record.get("afcl_registration") and stage != "build":
+        if artifacts is None or workloads is None:
+            raise ExperimentError("AFCL device stages require --artifacts and --workloads")
+        quality_context = {"workloads_sha256": digest(workloads),
+                           "paired_build_sha256": digest(artifacts / "paired-build.json")}
     if stage in {"time", "run"}:
         if quality is None:
             raise ExperimentError("A source-matched quality receipt is required before execution")
-        admitted_quality(quality, record, source, vendor, manifest_digest)
-    command = command_for(record, stage, vendor, output, source, root, arm)
+        admitted_quality(quality, record, source, vendor, manifest_digest, quality_context)
+    command = command_for(record, stage, vendor, output, source, root, arm,
+                          artifacts=artifacts, workloads=workloads)
     if stage == "build" and not record.get("build_uses_compile_slot", False):
         semaphore = Path.home() / "mojolearn-evidence/compile_slot.sh"
         if not semaphore.is_file():
@@ -277,7 +414,7 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
         command = ["bash", str(semaphore), *command]
     evidence_dir.mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
-    if record.get("output_kind") == "directory":
+    if record.get("output_kind") == "directory" and not record.get("output_created_by_recipe", False):
         output.mkdir(parents=True, exist_ok=True)
     receipt_path = evidence_dir / f"{record['id']}-{vendor}-{stage}-{arm}-receipt.json"
     log_path = evidence_dir / f"{record['id']}-{vendor}-{stage}-{arm}.log"
@@ -287,6 +424,18 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
     environment["MOJOLEARN_COMPILE_JOBS"] = "1"
     environment["MOJOLEARN_NUMERIC_MODE"] = record["mode"]
     environment["MOJOLEARN_VENDOR"] = vendor
+    if quality is not None and record["id"].startswith("C"):
+        environment["MOJOLEARN_CLASSICAL_QUALITY_RECEIPT"] = str(quality.resolve())
+    if not record.get("afcl_registration") and not (stage == "build" and record.get("paired_build", False)):
+        environment.update(record.get(f"{arm}_env", {}))
+    if record.get("afcl_registration"):
+        # The paired runner installs EACH arm's environment independently.
+        # These fields link a future independently evidenced quality receipt.
+        environment["MOJOLEARN_AFCL_RECIPE_SHA256"] = manifest_digest
+        if quality is not None:
+            environment["MOJOLEARN_AFCL_QUALITY_RECEIPT"] = str(quality.resolve())
+    if record["id"] in TREE_IDS and quality is not None:
+        environment["MOJOLEARN_AFT_QUALITY_RECEIPT"] = str(quality.resolve())
     if stage == "build":
         defines = record["baseline_defines" if arm == "baseline" else "candidate_defines"]
         flags = " ".join(
@@ -309,6 +458,10 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
         "paired_build": stage == "build" and record.get("paired_build", False),
         "argv": command, "log": str(log_path), "status": "RUNNING",
         "quality_receipt": str(quality) if quality else None,
+        "configuration": record.get("configuration"),
+        "candidate_defines": record["candidate_defines"],
+        "baseline_defines": record["baseline_defines"],
+        **quality_context,
     }
     receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
     start = time.monotonic()
@@ -335,14 +488,17 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
         receipt["elapsed_seconds"] = round(time.monotonic() - start, 6)
-        if git(root, "rev-parse", "HEAD") != source or digest(path) != manifest_digest or git(root, "status", "--porcelain"):
+        if git(root, "rev-parse", "HEAD") != source or recipe_digest(path, read_manifest(path, root), root) != manifest_digest or git(root, "status", "--porcelain"):
             receipt.update(status="SOURCE_CHANGED", returncode=125)
         receipt_path.write_text(json.dumps(receipt, indent=2) + "\n")
     return receipt
 
 
 def parser() -> argparse.ArgumentParser:
-    argument = argparse.ArgumentParser(description=__doc__)
+    argument = argparse.ArgumentParser(
+        description=__doc__,
+        epilog="Neural source ideas: performance_ideas.py neural list|show|plan|build-plan|queue-template ...",
+    )
     argument.add_argument("--root", type=Path, default=ROOT)
     commands = argument.add_subparsers(dest="command", required=True)
     listing = commands.add_parser("list", help="List every idea and its honest implementation state")
@@ -353,11 +509,16 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument("--require-ready", action="store_true")
     for name in ["plan", "execute"]:
         command = commands.add_parser(name)
-        command.add_argument("id", choices=EXPECTED)
+        command.add_argument("id", help="legacy idea ID or source-only AFN26-A01/T01/M01/E01/X01 namespace")
+        command.add_argument("--configuration", help="Classical candidate sub-arm or interaction name")
+        command.add_argument("--workload-recipe", type=Path, help="Resolved full-dataset recipe for classical C cards")
+        command.add_argument("--variant", help="named AFN26 A/B variant; required when the card has several")
         command.add_argument("--stage", choices=STAGES, required=True)
         command.add_argument("--vendor", choices=["nvidia", "amd", "apple", "host"], required=True)
         command.add_argument("--output", type=Path, required=True)
         command.add_argument("--arm", choices=["baseline", "candidate"], default="candidate")
+        command.add_argument("--artifacts", type=Path, help="Retained paired artifacts for AFCL device stages")
+        command.add_argument("--workloads", type=Path, help="Audited full-workload configuration for AFCL device stages")
         if name == "execute":
             command.add_argument("--evidence", type=Path, required=True)
             command.add_argument("--quality-receipt", type=Path)
@@ -366,25 +527,65 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parser().parse_args(argv)
+    # The neural catalog keeps its per-lane source records, numerical-version
+    # rules and full-operation queue adapter. Share that implementation instead
+    # of copying 60 manifests and letting their controls drift from the kernels.
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments[:1] == ["master"]:
+        from six_lane_ab import main as master_main
+        return master_main(arguments[1:])
+    if arguments and arguments[0] == "neural":
+        from neural_identical_ideas import main as neural_main
+        return neural_main(arguments[1:])
+    args = parser().parse_args(arguments)
     root = args.root.resolve()
+    # not tested: new ideas/combinations are discoverable and plannable here,
+    # without claiming executable full-workload or quality recipes.
+    if args.command in {"plan", "execute"} and args.id.startswith("AFN26-"):
+        if args.vendor != "apple":
+            raise ExperimentError("AFN26 experiments apply only to Apple GPU FAST")
+        if args.command == "execute":
+            raise ExperimentError(
+                "AFN26 is source-only and not tested: execution is disabled; "
+                "resolve frozen builds, full-workload coverage and quality recipes first"
+            )
+        try:
+            proposal = apple_neural_catalog().plan(args.id, args.variant, root)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise ExperimentError(str(exc)) from exc
+        proposal.update(
+            source_sha=git(root, "rev-parse", "HEAD"),
+            requested_stage=args.stage, requested_arm=args.arm,
+            requested_output=str(args.output.resolve()),
+        )
+        print(json.dumps(proposal, indent=2))
+        return 0
+    if args.command in {"plan", "execute"} and args.variant is not None:
+        raise ExperimentError("--variant selects AFN26 cards; legacy manifest recipes retain their own variant controls")
     records, errors = catalog(root)
     errors.extend(validate_dependencies(records))
     if args.command == "check":
-        missing = [idea for idea in EXPECTED if idea not in records]
+        expected = ALL_EXPECTED if (root / "experiments/apple_fast_trees").is_dir() else EXPECTED
+        missing = [idea for idea in expected if idea not in records]
         if args.require_all and missing:
             errors.append("Missing ideas: " + ", ".join(missing))
         if args.require_ready:
             blocked = [idea for idea, r in records.items() if r["status"].startswith("blocked_")]
             if blocked:
                 errors.append("Unimplemented prerequisites: " + ", ".join(blocked))
-        print(json.dumps({"records": len(records), "missing": missing, "errors": errors}, indent=2))
+        print(json.dumps({"records": len(records), "missing": missing, "errors": errors,
+                          "scope": "legacy executable manifests; AFN26 source-only cards are not validated here"}, indent=2))
         return int(bool(errors))
     if errors:
         raise ExperimentError("; ".join(errors))
     if args.command == "list":
         rows = [{"id": idea, "mode": mode_for(idea), **records.get(idea, {"status": "missing"})}
-                for idea in EXPECTED if args.mode is None or mode_for(idea) == args.mode]
+                for idea in ALL_EXPECTED if (idea in EXPECTED or idea in records) and (args.mode is None or mode_for(idea) == args.mode)]
+        if args.mode in (None, "fast"):
+            try:
+                rows.extend(apple_neural_catalog().cards(root))
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                raise ExperimentError(str(exc)) from exc
         if args.json:
             print(json.dumps(rows, indent=2))
         else:
@@ -393,18 +594,27 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.id not in records:
         raise ExperimentError(f"No implementation manifest for {args.id}")
-    record = records[args.id]
-    manifest = root / f"experiments/performance_ideas/{args.id}/manifest.json"
+    record = select_configuration(records[args.id], args.configuration)
+    family = "classical_identical_ideas" if args.id.startswith("C") else "performance_ideas"
+    manifest = tree_manifest_path(args.id, root) if args.id in TREE_IDS else root / f"experiments/{family}/{args.id}/manifest.json"
+    if args.workload_recipe is not None:
+        os.environ["MOJOLEARN_CLASSICAL_WORKLOAD_RECIPE"] = str(args.workload_recipe.resolve())
     if args.command == "plan":
         source = git(root, "rev-parse", "HEAD")
-        command = command_for(record, args.stage, args.vendor, args.output.resolve(), source, root, args.arm)
+        command = command_for(record, args.stage, args.vendor, args.output.resolve(), source, root, args.arm,
+                              artifacts=args.artifacts, workloads=args.workloads)
         print(json.dumps({"id": args.id, "mode": record["mode"], "source_sha": source,
-                          "stage": args.stage, "vendor": args.vendor, "argv": command}, indent=2))
+                          "configuration": record.get("configuration"), "stage": args.stage, "vendor": args.vendor, "argv": command,
+                          "manifest_sha256": recipe_digest(manifest, record, root),
+                          "quality_gates": record["quality_gates"],
+                          "baseline_defines": record["baseline_defines"], "candidate_defines": record["candidate_defines"],
+                          "baseline_env": record.get("baseline_env", {}), "candidate_env": record.get("candidate_env", {})}, indent=2))
         return 0
     if args.timeout <= 0:
         raise ExperimentError("Timeout must be positive")
     receipt = execute(record, manifest, args.stage, args.vendor, args.output.resolve(),
-                      args.evidence.resolve(), args.quality_receipt, args.timeout, root, args.arm)
+                      args.evidence.resolve(), args.quality_receipt, args.timeout, root, args.arm,
+                      artifacts=args.artifacts, workloads=args.workloads)
     print(json.dumps(receipt, indent=2))
     return 0 if receipt["status"] == "COMPLETED" else int(receipt["returncode"])
 

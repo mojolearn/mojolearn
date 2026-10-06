@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Assign every sample to its nearest centroid, tiled to bound memory.
 
 Reference: `minClusterAndDistanceCompute`,
@@ -48,12 +46,17 @@ One departure of theirs is copied even though it looks like a bug guard:
 The tile is indexed with `IndexT`, so the tile itself, not the dataset, is
 what must fit the index type.
 """
+from experiments.classical_identical_ideas.graph_controls import C36_CENTROID_TILES, C30_DIRECT_DISTANCE
+from cluster.impl.detail.classical_assignment import ASSIGN_ROWS, classical_assign_kernel, classical_assign_gated_kernel
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from cluster.multi_gpu import assignment_device_count, assignment_parallel
 
 from core.gemm import gemm_nt
-from core.row_norms import NORM_TPB, row_norm_kernel
+from core.row_norms import NORM_TPB, row_norm_kernel, enqueue_row_norms
 from cluster.impl.detail.kmeans_common import (
     centroid_norms_take_sqrt,
     metric_is_sqrt,
@@ -95,14 +98,8 @@ def compute_centroid_norms(
 
     Every assignment, not once per fit: the centroids moved.
     """
-    ctx.enqueue_function[row_norm_kernel](
-        centroid_norm.unsafe_ptr(),
-        centroids.unsafe_ptr(),
-        Int32(n_features),
-        Int32(1 if centroid_norms_take_sqrt(metric) else 0),
-        grid_dim=(n_clusters, 1, 1),
-        block_dim=(NORM_TPB, 1, 1),
-    )
+    enqueue_row_norms(ctx, centroid_norm, centroids, n_clusters, n_features,
+                      1 if centroid_norms_take_sqrt(metric) else 0)
 
 
 def _launch_fused[
@@ -140,6 +137,13 @@ def _launch_fused[
     call feeds the occupancy query -- theirs passes the double-buffered
     `P::SmemSize` because that is what their kernel allocates.
     """
+    comptime if C36_CENTROID_TILES or C30_DIRECT_DISTANCE:
+        ctx.enqueue_function[classical_assign_kernel](
+            out_key.unsafe_ptr(), out_value.unsafe_ptr(), x.unsafe_ptr(), centroids.unsafe_ptr(),
+            x_norm.unsafe_ptr(), centroid_norm.unsafe_ptr(), Int32(n_samples), Int32(n_clusters), Int32(n_features), is_sqrt,
+            grid_dim=((n_samples + 128 * ASSIGN_ROWS - 1) // (128 * ASSIGN_ROWS),1,1), block_dim=(128,1,1),
+        )
+        return
     var device_count = assignment_device_count()
     if device_count > 1:
         assignment_parallel[veclen, kblk, tr, tc](ctx, out_key, out_value,
@@ -289,6 +293,13 @@ def _launch_fused_gated[
     """`_launch_fused` on one device with the kernel gated on `gate[0]`
     (fam2-cluster, `IDN_KMEANS_DEVICE_CONV`). The caller has already ruled
     out the multi-device split (`assignment_device_count() == 1`)."""
+    comptime if C36_CENTROID_TILES or C30_DIRECT_DISTANCE:
+        ctx.enqueue_function[classical_assign_gated_kernel](
+            gate.unsafe_ptr(), out_key.unsafe_ptr(), out_value.unsafe_ptr(), x.unsafe_ptr(), centroids.unsafe_ptr(),
+            x_norm.unsafe_ptr(), centroid_norm.unsafe_ptr(), Int32(n_samples), Int32(n_clusters), Int32(n_features), is_sqrt,
+            grid_dim=((n_samples + 128 * ASSIGN_ROWS - 1) // (128 * ASSIGN_ROWS),1,1), block_dim=(128,1,1),
+        )
+        return
     comptime nthreads = tr * tc
     comptime mblk = 4 * tr
     comptime nblk = 4 * tc

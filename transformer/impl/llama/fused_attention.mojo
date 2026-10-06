@@ -1404,8 +1404,14 @@ of the trial tree (the sabotage copies stay trial-only, like
 # tradeoff qualification remain required. Preserve defaults and old exclusions.
 # Evidence: overnight-ab-20261006/amd/normalized-measurements.json and
 # overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json, I07.
-comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
-comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
+comptime ATTN_V1_RECOMPUTE_BACKWARD = (
+    is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime ATTN_V1_PACKED_ESTASH = (
+    is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime ATTN_V1_ALIAS_Y_ESTASH = (
     is_defined["MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH"]()
     or (
@@ -2155,6 +2161,25 @@ def _pmul(a: Float32, b: Float32) -> Float32:
     return _step(a, b, Float32(-0.0))
 
 
+# NN18 counterfactual control isolates the already implemented structural
+# K-tile bounds. OFF by default. A uses the existing visibility bounds; B
+# stages every K page while unchanged per-row predicates exclude every
+# masked term. Only page traffic/barriers/unused score work differ. This
+# does not bypass the existing finite-regime admission or corner replay.
+comptime NN18_DENSE_TILE_CONTROL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN18_DENSE_TILE_CONTROL"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+@always_inline
+def nn18_key_tile_bounds(lo: Int,hi: Int,keys: Int,tile: Int) -> Tuple[Int,Int]:
+    comptime if NN18_DENSE_TILE_CONTROL:
+        return (0,(keys-1)//tile)
+    return (lo//tile,hi//tile)
+
+
 @always_inline
 def _row_range(
     t: Int, pos0: Int, key_lo: Int, window: Int, s: Int
@@ -2737,8 +2762,9 @@ def fused_attn_forward_regblocked_kernel[HD: Int](
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
     var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
@@ -2930,8 +2956,9 @@ def fused_attn_forward_regblocked_sstash_kernel[HD: Int, SABOTAGE: Bool](
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
     var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
@@ -3155,8 +3182,9 @@ def fused_attn_forward_kernel[HD: Int, TQ: Int](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var qbase = (bb * l + tt) * nh * HD + h * HD
@@ -3413,8 +3441,9 @@ def fused_bwd_zdot_kernel[HD: Int, TQ: Int](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -3576,8 +3605,9 @@ def fused_bwd_dq_kernel[HD: Int, TQ: Int](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -3992,8 +4022,9 @@ def fused_bwd_zdot_stash_kernel[HD: Int, TQ: Int](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -4139,8 +4170,9 @@ def fused_bwd_dq_stash_kernel[HD: Int, TQ: Int, SABOTAGE: Bool](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var row = (bb * nh + h) * l + tt
@@ -4624,8 +4656,9 @@ def fused_bwd_dq_tiled_kernel[HD: Int, SABOTAGE: Bool](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // TK
-    var kb_hi = r1[1] // TK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,TK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var hbase = (bb * nh + h) * l
@@ -4953,8 +4986,9 @@ def fused_bwd_ydy_tiled_kernel[HD: Int, TQ: Int, SABOTAGE: Bool](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var hbase = (bb * nh + h) * l
@@ -5240,8 +5274,9 @@ def fused_bwd_zdot_stash_pf_kernel[HD: Int, TQ: Int, SABN: Bool](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -5407,8 +5442,9 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False, TQP: Int = ATTN_DQ_
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // TK
-    var kb_hi = r1[1] // TK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,TK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var hbase = (bb * nh + h) * l
@@ -5680,8 +5716,9 @@ def fused_bwd_dq_mfma_kernel[HD: Int, SWZ: Bool = False](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // TK
-    var kb_hi = r1[1] // TK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,TK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var hbase = (bb * nh + h) * l
@@ -6864,8 +6901,9 @@ def fused_bwd_zdot_sched_pf_kernel[HD: Int, TQ: Int, LAG: Bool, SABN: Bool](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -7046,7 +7084,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     comment above. Instantiated at HD 64 with TQ 64 or 32 only, QRES only
     at TQ 32 (`fused_attention_fwd_rows`); 256 threads per block, grid
     `B * nh * ceil(L / TQ)`; one shared page of `_fwd_r2_page_bytes`."""
-    comptime assert HEAD_SHARE==1 or (HEAD_SHARE==2 and TQ==64 and QRES and PF and not SABN and not SWZ), "attention head reuse: unsupported shared layout"
+    comptime assert HEAD_SHARE==1 or ((HEAD_SHARE==2 or HEAD_SHARE==4) and TQ==64 and QRES and PF and not SABN and not SWZ), "attention head reuse: unsupported shared layout"
     _attn_mode_enter()
     comptime RPT = TQ // 16
     comptime CPT = HD // 16
@@ -7089,8 +7127,9 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     var t1 = min(t0 + TQ//HEAD_SHARE - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
     var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
@@ -7368,8 +7407,9 @@ def fused_attn_forward_r2_mfma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
     var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
@@ -7670,8 +7710,9 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
 
     var kvbase = (bb * nkv + kvh) * s * HD
     var rowbase = (bb * l + tt) * nh * HD + h * HD
@@ -7853,8 +7894,9 @@ def fused_bwd_zdot_kreg_kernel[HD: Int, TQ: Int, SWZ: Bool = False](
         t1 = l - 1
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var kvbase = (bb * nkv + kvh) * s * HD
     var headrow = (bb * nh + h) * l
 
@@ -8586,8 +8628,9 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
     var mpart = SIMD[DType.float32, RPT](negmax)
     var dacc = Float32(0.0)
@@ -8933,8 +8976,9 @@ def fused_bwd_zdot_estash_amma_kernel[HD: Int, SWZ: Bool = False](
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var kvbase = (bb * nkv + kvh) * s * HD
     # The block's dctx rows, flushed once, transposed: dT[p][r].
     var ed = UInt32(0xFF)
@@ -9146,8 +9190,9 @@ def fused_bwd_zdot_stash_amma_kernel[HD: Int](
     var t1 = min(t0 + TQ - 1, l - 1)
     var r0 = _row_range(t0, pos0, key_lo, window, s)
     var r1 = _row_range(t1, pos0, key_lo, window, s)
-    var kb_lo = r0[0] // BK
-    var kb_hi = r1[1] // BK
+    var key_tiles = nn18_key_tile_bounds(r0[0],r1[1],s,BK)
+    var kb_lo = key_tiles[0]
+    var kb_hi = key_tiles[1]
     var kvbase = (bb * nkv + kvh) * s * HD
     for i in range(tid, TQ * HD, FUSED_THREADS):
         var r = i // HD
@@ -9364,6 +9409,18 @@ comptime ATTN_GQA_HEAD_REUSE = (
     and lib_smem_page_fits_for[TARGET_COLUMN,_fwd_r2_page_bytes(64,True)]()
 )
 
+# NN17 extends the rejected I06 two-head schedule by using four query heads
+# per K/V staging group at a fixed 64 logical rows: 16 positions/head. This
+# reduces per-head register residency while reusing the same K/V page four
+# times. Only compatible GQA groups enter, never a benchmark shape/name.
+# OFF; all compilation/identity/quality/full-workload timings are unrun.
+comptime NN17_GQA_FOUR_HEADS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN17_GQA_FOUR_HEADS"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and lib_smem_page_fits_for[TARGET_COLUMN, _fwd_r2_page_bytes(64, True)]()
+)
+
 @always_inline
 def _try_launch_shared_heads[HD: Int,TQ: Int,QRES: Bool,PF: Bool,SABN: Bool,SWZ: Bool](
     ctx: DeviceContext,mut ctxv: DeviceBuffer[DType.float32],mut amax: DeviceBuffer[DType.float32],
@@ -9371,6 +9428,13 @@ def _try_launch_shared_heads[HD: Int,TQ: Int,QRES: Bool,PF: Bool,SABN: Bool,SWZ:
     mut sstash: DeviceBuffer[DType.float32],mut q_rope: DeviceBuffer[DType.float32],
     mut k_cache: DeviceBuffer[DType.float32],mut v_cache: DeviceBuffer[DType.float32],
     b: Int,l: Int,nh: Int,nkv: Int,s: Int,pos0: Int,key_lo: Int,window: Int,scale: Float32) raises -> Bool:
+    comptime if NN17_GQA_FOUR_HEADS and HD==64 and TQ==32 and QRES and PF and not SABN and not SWZ:
+        if nkv > 0 and nh % nkv == 0 and (nh // nkv) % 4 == 0:
+            step_count_launch()
+            ctx.enqueue_function[fused_attn_forward_r2_kernel[64,64,True,True,False,False,4]](
+                ctxv.unsafe_ptr(),amax.unsafe_ptr(),denom.unsafe_ptr(),corner.unsafe_ptr(),sstash.unsafe_ptr(),q_rope.unsafe_ptr(),k_cache.unsafe_ptr(),v_cache.unsafe_ptr(),Int32(b),Int32(l),Int32(nh),Int32(nkv),Int32(s),Int32(pos0),Int32(key_lo),Int32(window),scale,
+                grid_dim=(b*(nh//4)*((l+15)//16),1,1),block_dim=(FUSED_THREADS,1,1))
+            return True
     comptime if ATTN_GQA_HEAD_REUSE and HD==64 and TQ==32 and QRES and PF and not SABN and not SWZ:
         # Two adjacent query heads share one KV head. Logical rows interleave
         # heads while each keeps the original32query tile and all row folds.

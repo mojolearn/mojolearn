@@ -1,0 +1,71 @@
+{
+  "recorded_at": 1791313356.528227,
+  "files": [
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/attempt-02/box_script.sh",
+      "sha256": "7976e7435076be5912fd6c5d723fcd7cc3292c97085afc6f2ee305eac5c423a0"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/build-preparation-fixes.json",
+      "sha256": "c641681129b136b587a8167fb8584e809acd66559a27c24ffbc5d7faa864d872"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/c5-selected64-priority-plan.json",
+      "sha256": "c27f333abec5b11ad8d0545e0a4044023bd45a4b5eb09136ea376718b721cb8b"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/compile-command.sh",
+      "sha256": "303658f736981ed5b3a7fd51cf9080a6a8d2c81daa036905a17587cf178d3d8b"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/do-attempt-03/linker-repair.sh",
+      "sha256": "1d40acb07e4efbee3049f51a87aada6d8b67b7967962f432510f00e030315170"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/do-builder-guardian.py",
+      "sha256": "2218ae628456ef5bc5f2e250089b989773be43528c55ac3d5017a6e521cc5fa2"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/manage-build.py",
+      "sha256": "06c0a4564424e55e6015ff839bd62e62d7c320d548a079859d843d848535325b"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/manage-do-build-02.py",
+      "sha256": "dcb7b7e415d3b7426cb10c0df802117e450db299febeb7a3e24ec53e215c210e"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/manage-do-build-03.py",
+      "sha256": "faf1b8c7b5d2ccc98847506175b64f58fd66fe766b802700d3f1e334e9480b2c"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/manage-do-build.py",
+      "sha256": "c3e9558f612168bc6b47ef8599b9cfba47eda6a9d18aa02b4caa1c54f8b0cc41"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/prepare-cpu-builder.sh",
+      "sha256": "45699788bb24253785928724b46e65d3baacfe926b98eef44f8b7c69d51a28a9"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/resume-linker-build.py",
+      "sha256": "5583a884a504325c22f5fe599c6b6c16f393712a53b6b934e7ccbb08e3d85adb"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/runpod-amd-cpu-leg.sh",
+      "sha256": "582ad3b251a9ad649c7f5b2966d14477d78858f65dca7c0d87dfe980f77cdabe"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/source-manifest.json",
+      "sha256": "391a1403f6a77a9219e0d2a8c67fc56a9cb7b198beb03d945559c42062bf9d31"
+    },
+    {
+      "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/verify-capture.py",
+      "sha256": "f0d6c478eb40eed4fca7f99357115cd0c9a5cb4854a82f9f5d8a98074105bf65"
+    }
+  ],
+  "active_owner": {
+    "script": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/resume-linker-build.py",
+    "pid": 60319,
+    "provider_id": 606712726,
+    "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+  }
+}

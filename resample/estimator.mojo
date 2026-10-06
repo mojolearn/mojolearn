@@ -34,7 +34,8 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32, f32_ptr, i32_ptr
-from resample.gather_fast import gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
+from experiments.classical_identical_ideas.shared_controls import C11_DRAW_GATHER
+from resample.gather_fast import GATHER_COLS, GATHER_ROWS, classical_draw_gather_kernel, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
 from resample.fast_apple import (
     RESAMPLE_FAST_APPLE,
     bootstrap_mean_fast,
@@ -2306,7 +2307,8 @@ def resample_indices_host(
 # Historical wide-row regression retained; no dataset-specific switch.
 # Initial metadata failures produced NO scores. Full receipt hashes are in
 # docs/apple-fast/ab/resample-gpu-recovery.md.
-comptime RESAMPLE_GPU_GATHER = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+# C11 is an independent default-off IDENTICAL arm; Apple FAST retains main's default.
+comptime RESAMPLE_GPU_GATHER = C11_DRAW_GATHER or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     # F04 M3 measured full gather/wait caller B/A0.5109/0.5509/2.3536 across
     # three shapes; quality equal, expected refusal recovered. Historical MIXED.
@@ -2364,7 +2366,7 @@ def resample_gather_grouped(
         comptime if RESAMPLE_FAST_TILED_GATHER:
             ctx.enqueue_function[gather_rows_tiled_f32_kernel](
                 output.unsafe_ptr(), source.unsafe_ptr(), rows.unsafe_ptr(), Int32(count), Int32(d),
-                grid_dim=(ceildiv(d, 32), ceildiv(count, 8), 1), block_dim=(256, 1, 1),
+                grid_dim=(ceildiv(d, GATHER_COLS), ceildiv(count, GATHER_ROWS), 1), block_dim=(256, 1, 1),
             )
         else:
             ctx.enqueue_function[gather_rows_f32_kernel](
@@ -2409,6 +2411,27 @@ def resample_gather_gpu[REPLACE: Bool = True](
                 return False
         var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE if REPLACE else RESAMPLE_KIND_UTILS_PERMUTE)
         var ctx = process_ctx[_DEVCTX_SLOT]()
+        # C11 A regenerates draws at each consumed output. B retains the
+        # materialized index array. Each input owns independent buffers and
+        # every queued copy completes before its buffers leave scope.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        comptime if C11_DRAW_GATHER and REPLACE:
+            for a in range(len(srcs)):
+                var d = widths[a]
+                var source = ctx.enqueue_create_buffer[DType.float32](n*d)
+                var output = ctx.enqueue_create_buffer[DType.float32](count*d)
+                ctx.enqueue_copy(dst_buf=source, src_ptr=f32_ptr(srcs[a]))
+                ctx.enqueue_function[classical_draw_gather_kernel](
+                    output.unsafe_ptr(), source.unsafe_ptr(), key_lo(key), key_hi(key),
+                    Int32(n), Int32(count), Int32(d),
+                    grid_dim=ceildiv(count*d, 256), block_dim=256,
+                )
+                ctx.enqueue_copy(dst_ptr=f32_ptr(dsts[a]), src_buf=output)
+                ctx.synchronize()
+                _ = output^
+                _ = source^
+            _ = ctx^
+            return True
         var draw_count = count if REPLACE else n
         var rows = ctx.enqueue_create_buffer[DType.int32](draw_count)
         var keys = ctx.enqueue_create_buffer[DType.uint64](1 if REPLACE else n)

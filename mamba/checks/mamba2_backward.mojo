@@ -6,8 +6,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
 from gemm.contract import OP_NN, OP_NT, contract_leaf_size, leaf_count
-from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
-from gemm.checks.gemm_backward import (
+from gemm.neural_dispatch import identical_gemm_workspace_max_floats
+from gemm.neural_backward import (
     gemm_backward_a_call,
     gemm_backward_b_call,
     gemm_backward_call_name,
@@ -277,7 +277,7 @@ def mamba2_dd_inner_fold_call(dims: Mamba2Dims) -> Tuple[Int, Int, Int, Int]:
 
 def mamba2_backward_reduce_into(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut src: DeviceBuffer[DType.float32],
     mut ones: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],
@@ -285,9 +285,9 @@ def mamba2_backward_reduce_into(
     dims: Mamba2Dims,
     m: Int,
 ) raises:
-    """`out[w] = sum over the M rows of src[M, W]`, as a v1 `OP_NN` at `(1, W, M)`. For a `RED2_CONV_W_*` id the caller writes into `out[d * M2_D_CONV + mamba2_reduction_tap(which)]` for each `d`, since the conv weight is `[CD, D_CONV]` row-major and this launcher writes a CONTIGUOUS `[W]` vector."""
+    """`output[w] = sum over the M rows of src[M, W]`, as a v1 `OP_NN` at `(1, W, M)`. For a `RED2_CONV_W_*` id the caller writes into `output[d * M2_D_CONV + mamba2_reduction_tap(which)]` for each `d`, since the conv weight is `[CD, D_CONV]` row-major and this launcher writes a CONTIGUOUS `[W]` vector."""
     identical_gemm_backward_bias_into(
-        ctx, out, src, ones, ws, m, mamba2_reduction_width(which, dims)
+        ctx, output, src, ones, ws, m, mamba2_reduction_width(which, dims)
     )
 
 

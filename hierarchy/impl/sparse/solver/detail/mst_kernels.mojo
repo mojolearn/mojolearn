@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Boruvka's kernels, from RAFT.
 
 Reference: `raft/cpp/include/raft/sparse/solver/detail/mst_kernels.cuh`
@@ -28,6 +26,10 @@ in threadgroup memory (`:76-85`). Under a total order the minimum is the
 same whatever the lane count or fold shape, so this kernel is launched at
 their 32 on every vendor and no `kernel_matrix` row is needed for it.
 """
+from experiments.classical_identical_ideas.graph_controls import C34_PARALLEL_EDGES
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
@@ -106,7 +108,7 @@ comptime IDN_MST_PAR_COMPACT = (
 #: `kernel_min_edge_per_vertex`: a power of two, 32..1024. The row minimum
 #: under a total order is the same at any lane count, so this is scheduling
 #: only. Time `-D MOJOLEARN_IDN_MST_SCAN_LANES=64|128|256` against 32.
-comptime IDN_MST_SCAN_LANES = (
+comptime IDN_MST_SCAN_LANES = 128 if C34_PARALLEL_EDGES else (
     get_defined_int["MOJOLEARN_IDN_MST_SCAN_LANES", 32]()
     if _IDN_MST_ON
     else 32

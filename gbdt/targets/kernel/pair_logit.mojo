@@ -74,6 +74,7 @@ from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
+from gbdt.apple_fast_tree_experiments import AFT_N07, AFT_N08
 from checks.soft_f64 import SF64_ZERO, sf64_add, sf64_from_f32
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -95,10 +96,16 @@ from gbdt.targets.kernel.pair_logit_group import (
     launch_pair_logit_group_setup,
 )
 
+# N07 explicit-pair route: four simdgroups per block reduce physical
+# occupancy cost. Buffer sizing and function-value reductions use this
+# exact width. No performance/quality evidence; default OFF.
+comptime AFT_PAIR_BLOCK = 128 if AFT_N07 else MSE_BLOCK_SIZE
+
+
 def pair_blocks(n_pairs: Int) -> Int:
     """Value partials: one per 256 pairs (at least one, so an empty buffer is
     never allocated)."""
-    var b = (n_pairs + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    var b = (n_pairs + AFT_PAIR_BLOCK - 1) // AFT_PAIR_BLOCK
     return b if b > 0 else 1
 
 
@@ -551,7 +558,7 @@ def pair_logit_pair_kernel(
             if isfinite(Float32(1.0) + exp_diff):
                 log_exp_val_plus_one = routed_log(Float32(1.0) + exp_diff)
             score = w * (diff - log_exp_val_plus_one)
-        var total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](score)
+        var total = pinned_block_sum[block_size=AFT_PAIR_BLOCK](score)
         if thread_idx.x == 0:
             function_value.unsafe_store(Int(block_idx.x), total)
 
@@ -584,15 +591,20 @@ def pair_logit_row_kernel[estimation: Bool, second_order: Bool](
     if in_range:
         var k = Int(ep_offsets.unsafe_load(i))
         var end = Int(ep_offsets.unsafe_load(i + 1))
+        # N08 preserves ascending endpoint order, while making two
+        # independent code/direction/scale loads available per loop. No
+        # performance or quality evidence; the odd final endpoint is kept.
         while k < end:
-            var code = ep_codes.unsafe_load(k)
-            var p = Int(code >> UInt32(1))
-            if (code & UInt32(1)) != UInt32(0):
-                acc_der = acc_der + (-pair_dir.unsafe_load(p))
-            else:
-                acc_der = acc_der + pair_dir.unsafe_load(p)
-            acc_der2 = acc_der2 + pair_scale.unsafe_load(p)
-            k += 1
+            comptime for endpoint_lane in range(2 if AFT_N08 else 1):
+                if k < end:
+                    var code = ep_codes.unsafe_load(k)
+                    var p = Int(code >> UInt32(1))
+                    if (code & UInt32(1)) != UInt32(0):
+                        acc_der = acc_der + (-pair_dir.unsafe_load(p))
+                    else:
+                        acc_der = acc_der + pair_dir.unsafe_load(p)
+                    acc_der2 = acc_der2 + pair_scale.unsafe_load(p)
+                    k += 1
         weight = row_weights.unsafe_load(i)
     var der = ftz(acc_der)
     var der2 = ftz(acc_der2)
@@ -659,7 +671,7 @@ def launch_pair_logit_with[estimation: Bool, second_order: Bool](
             Int32(n_pairs), q.d_pair_dir.unsafe_ptr(), q.d_pair_scale.unsafe_ptr(),
             function_value.unsafe_ptr(), Int32(1) if compute_fv else Int32(0),
             grid_dim=(q.blocks(), 1, 1),
-            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+            block_dim=(AFT_PAIR_BLOCK, 1, 1),
         )
         ctx.enqueue_function[pair_logit_row_kernel[estimation, second_order]](
             q.d_ep_offsets.unsafe_ptr(), q.d_ep_codes.unsafe_ptr(),
@@ -677,7 +689,7 @@ def launch_pair_logit_with[estimation: Bool, second_order: Bool](
             Int32(n_pairs), q.d_pair_dir.unsafe_ptr(), q.d_pair_scale.unsafe_ptr(),
             function_value.unsafe_ptr(), Int32(1) if compute_fv else Int32(0),
             grid_dim=(q.blocks(), 1, 1),
-            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+            block_dim=(AFT_PAIR_BLOCK, 1, 1),
         )
         ctx.enqueue_function[pair_logit_row_kernel[estimation, second_order]](
             q.d_ep_offsets.unsafe_ptr(), q.d_ep_codes.unsafe_ptr(),

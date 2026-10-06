@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Brute-force k-nearest-neighbors: their DISPATCH, and their FALLBACK.
 
 Reference: `cuvs/src/neighbors/detail/knn_brute_force.cuh` (cuVS `94c2819`):
@@ -65,6 +63,10 @@ Their `DistanceEpilogue` template, the bitmap/bitset filters at `:229-256`,
 the sparse and non-expanded metrics, `haversine_knn`, and the multi-index
 merge (`knn_merge_parts`). See `neighbors/NOT_IMPLEMENTED.tsv`.
 """
+from experiments.classical_identical_ideas.shared_controls import C06_ROWS2, C06_ROWS4
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
@@ -72,11 +74,13 @@ from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.os import getenv
 
+from experiments.classical_identical_ideas.graph_controls import C29_STREAM_TOPK, C30_DIRECT_DISTANCE
+from neighbors.impl.detail.classical_stream_topk import classical_stream_topk_kernel
 from core.expand_distances import expand_distances_kernel
 from core.device_fold import device_compact_equal_i32
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from core.gemm import gemm_nt
-from core.row_norms import NORM_TPB, row_norm_kernel
+from core.row_norms import NORM_TPB, row_norm_kernel, enqueue_row_norms
 from checks.kernel_matrix import (
     K_LIB_SELECT_WARPSORT,
     TARGET_COLUMN,
@@ -621,14 +625,7 @@ def compute_norms(
     so the defect that sentence described is closed; the parameter stays
     for the callers that already pass it.
     """
-    ctx.enqueue_function[row_norm_kernel](
-        a_norm.unsafe_ptr(),
-        a.unsafe_ptr(),
-        Int32(n_features),
-        Int32(1 if take_sqrt else 0),
-        grid_dim=(n_rows, 1, 1),
-        block_dim=(NORM_TPB, 1, 1),
-    )
+    enqueue_row_norms(ctx, a_norm, a, n_rows, n_features, 1 if take_sqrt else 0)
 
 
 def compute_norms_for_metric(
@@ -657,6 +654,9 @@ def compute_norms_for_metric(
     if not metric_uses_norms(metric):
         return
     if metric_norm_takes_sqrt(metric):
+        comptime if C06_ROWS2 or C06_ROWS4:
+            enqueue_row_norms(ctx, a_norm, a, n_rows, n_features, 1)
+            return
         ctx.enqueue_function[cosine_row_norm_kernel](
             a_norm.unsafe_ptr(),
             a.unsafe_ptr(),
@@ -1931,6 +1931,19 @@ def brute_force_knn_impl(
     # AUTO default asks the launch computation itself which regime this shape
     # is in; see DEVIATION 36 above the constants for the measurements.
     var mtr = resolve_metric(metric, is_sqrt)
+
+    # C29/C30 default OFF, source integration only. All Euclidean callers,
+    # including large k, share this exact list merge; other metrics retain
+    # their configured arithmetic and production route.
+    comptime if C29_STREAM_TOPK or C30_DIRECT_DISTANCE:
+        if row_major_query and row_major_index and (mtr == DIST_L2_EXPANDED or mtr == DIST_L2_SQRT_EXPANDED):
+            ctx.enqueue_function[classical_stream_topk_kernel](
+                queries.unsafe_ptr(), index.unsafe_ptr(), query_norm.unsafe_ptr(), index_norm.unsafe_ptr(),
+                out_dist.unsafe_ptr(), out_idx.unsafe_ptr(), Int32(n_queries), Int32(n_index),
+                Int32(n_features), Int32(k), Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0),
+                grid_dim=((n_queries + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+            )
+            return
 
     comptime if KNN_CERTIFIED_MMA:
         if (

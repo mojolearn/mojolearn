@@ -26,6 +26,8 @@ enqueued launch, with no sync:
 
 Host floats a launch reads are held (`hold_f`, `hold_i`) until the next
 sync, so an enqueued upload never reads freed memory."""
+from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_STATE
+from experiments.classical_identical_ideas.linear_controls import C23_CENTERED_PANELS, C28_BUCKET_SOLVES
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.python import Python, PythonObject
@@ -44,6 +46,7 @@ from x_decomp.device import (
     gamma_kernel,
     gemm_scratch,
     launch_colsum,
+    launch_classical_code_rows,
     launch_ew,
     launch_gemm,
     launch_gemm_ordered,
@@ -67,6 +70,7 @@ from x_decomp.kit import (
     Mat, OP_GTS, OP_SELECT, mat_const, svd_order, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
     mat_from,
 )
+from x_decomp.classical_device import contrast_kernel, centered_gram_kernel
 from std.atomic import Atomic
 from std.builtin.sort import sort
 from core.device_zero import enqueue_fill
@@ -462,6 +466,21 @@ struct DKit(Movable):
         return out^
 
     # ---- the kit's calls (Kit's operands, modes and float32 scalars)
+    def classical_centered_gram(self, X: DMat, means: DMat) raises -> DMat:
+        var out = DMat(X.c, X.c)
+        if X.c > 0:
+            self.ctx.enqueue_function[centered_gram_kernel](X.p(), means.p(), out.p(), Int32(X.r), Int32(X.c),
+                                                           grid_dim=_blocks(X.c * X.c), block_dim=TPB)
+        return out^
+
+    def classical_contrast(self, Y: DMat, fun: Int, alpha: Float64, mut gp: DMat) raises -> DMat:
+        var gx = DMat(Y.r, Y.c)
+        gp = DMat(Y.r, Y.c)
+        if Y.n() > 0:
+            self.ctx.enqueue_function[contrast_kernel](Y.p(), gx.p(), gp.p(), Int32(Y.n()), Int32(fun), Float32(alpha),
+                                                       grid_dim=_blocks(Y.n()), block_dim=TPB)
+        return gx^
+
     def ew1(self, op: Int, A: DMat, s: Float64) raises -> DMat:
         var out = DMat(A.r, A.c)
         if A.n() == 0:
@@ -661,7 +680,13 @@ struct DKit(Movable):
             per = n * (k * k + 3 * k)
         var dn = self.ctx.enqueue_create_buffer[DType.float32](n)
         var ds = self.ctx.enqueue_create_buffer[DType.float32](per)
-        if kind == 0:
+        if C28_BUCKET_SOLVES:
+            if kind != 0:
+                var wsub = self._sub(W)
+                enqueue_fill(self.ctx, wsub, Float32(0.0))
+            launch_classical_code_rows(self.ctx, G.p(), Q.p(), W.p(), rebind[F32Ptr](ds.unsafe_ptr()), rebind[F32Ptr](dn.unsafe_ptr()),
+                                       n, k, kind, a, b, Float32(alpha), Float32(tol))
+        elif kind == 0:
             self.ctx.enqueue_function[lasso_rows_kernel](
                 G.p(), Q.p(), W.p(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k), Float32(alpha), Int32(a),
                 Float32(tol), Int32(1 if b != 0 else 0), grid_dim=_blocks(n), block_dim=TPB,
@@ -956,6 +981,17 @@ struct DMcd:
         var Xc = self.k.ew2(OP_SUB, Xs, self.k.colmean(Xs))
         return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
 
+    def emp_cov_at(self, Xs: DMat, loc: DMat) raises -> DMat:
+        # C57 retains this candidate's just-computed immutable subset mean.
+        # No reuse across support changes; the centered products are unchanged.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        comptime if C23_CENTERED_PANELS:
+            return self.k.ew1(OP_SCALE, self.k.classical_centered_gram(Xs, loc), 1.0 / Float64(Xs.r))
+        comptime if C57_CANDIDATE_STATE:
+            var Xc = self.k.ew2(OP_SUB, Xs, loc)
+            return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
+        return self.emp_cov(Xs)
+
     def mahal(self, X: DMat, loc: DMat, P: DMat) raises -> DMat:
         var Xc = self.k.ew2(OP_SUB, X, loc)
         return self.k.rowsum(self.k.ew2(OP_MUL, self.k.mm(Xc, P, False, False), Xc))
@@ -1002,7 +1038,7 @@ struct DMcd:
             dist = d0^
         var Xs = self.k.gather_dev(X, sel)
         var loc = self.k.colmean(Xs)
-        var cov = self.emp_cov(Xs)
+        var cov = self.emp_cov_at(Xs, loc)
         var det = self.k.lu_logdet(cov)
         var P = DMat(0, 0)
         var has_p = False
@@ -1027,7 +1063,7 @@ struct DMcd:
             dist = dd^
             Xs = self.k.gather_dev(X, sel)
             loc = self.k.colmean(Xs)
-            cov = self.emp_cov(Xs)
+            cov = self.emp_cov_at(Xs, loc)
             det = self.k.lu_logdet(cov)
             iters -= 1
         if not has_p:
@@ -1046,11 +1082,11 @@ struct DMcd:
         return DEst(loc^, cov^, det, sel^, final^)
 
     def select_random(
-        mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, mut out: DCands
+        mut self, X: DMat, h: Int, trials: Int, keep: Int, n_iter: Int, mut output: DCands
     ) raises:
         """`select_candidates` from random subsets: every trial's location
         and covariance packed into one trial arena, then the `keep` best (in
-        `_order_by_det`'s order) appended to `out`. The later stages read
+        `_order_by_det`'s order) appended to `output`. The later stages read
         only a kept candidate's location and covariance."""
         var tr = DCands(trials, X.c)
         var none = DMat(0, 0)
@@ -1060,13 +1096,13 @@ struct DMcd:
         var top = _top_of(tr.det, keep)
         for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
             var j = top[a]
-            out.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
+            output.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
 
     def select_init(
-        mut self, X: DMat, h: Int, inits: DCands, keep: Int, n_iter: Int, mut out: DCands
+        mut self, X: DMat, h: Int, inits: DCands, keep: Int, n_iter: Int, mut output: DCands
     ) raises:
         """`select_candidates` from initial estimates, the `keep` best
-        locations and covariances appended to `out` (packed, as above)."""
+        locations and covariances appended to `output` (packed, as above)."""
         var tr = DCands(inits.count(), X.c)
         for t in range(inits.count()):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
             var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t), False)
@@ -1074,7 +1110,7 @@ struct DMcd:
         var top = _top_of(tr.det, keep)
         for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
             var j = top[a]
-            out.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
+            output.push(self.k, tr.loc(j), tr.cov(j), tr.det[j])
 
     def select_init_best(
         mut self, X: DMat, h: Int, inits: DCands, n_iter: Int, want_dist: Bool

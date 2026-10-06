@@ -10,7 +10,7 @@ import inspect
 import weakref
 
 from ._array import Array
-from ._buffer import _materialize, full, as_f32_c
+from ._buffer import _materialize, full, empty, as_f32_c
 from ._arrays import _addr, _addr_ro
 
 
@@ -313,10 +313,20 @@ class ForestProtocol:
             [int(rows), int(features), dimensions[2]])
 
     def _predict_forest_labels(self, X):
-        """FAST-only resident classifier path returning device argmax codes."""
-        if self._effective_mode() != "fast" or self._prediction_engine() != "parallel_groves":
-            return None
+        """Resident classifier codes; IDENTICAL requires the explicit T38 build."""
         native = self._bind()
+        mode = self._effective_mode()
+        # T38/C50: capability readback selects the real compiled caller. No
+        # environment-only flag can make an incumbent binary claim this arm.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        capability = getattr(native, "forest_identical_fused_labels", None)
+        if mode == "identical":
+            if not callable(capability) or not capability():
+                return None
+            if not self._ordered_resident_auto() and self._prediction_engine() != "parallel_groves":
+                return None
+        elif mode != "fast" or self._prediction_engine() != "parallel_groves":
+            return None
         function = getattr(native, "forest_predict_resident_labels_gpu", None)
         if not callable(function):
             return None
@@ -328,6 +338,54 @@ class ForestProtocol:
         if wrote != rows:
             raise RuntimeError(f"forest label prediction wrote {wrote} of {rows} rows")
         return out
+
+    def _forest_auxiliary(self, X, *, leaves=False, prefixes=False, prediction=False):
+        """T39 buffer/argument plumbing; all walks and reductions are Mojo."""
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        if not hasattr(self, "_offsets"):
+            raise RuntimeError("this estimator is not fitted yet")
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        rows, features = Xa.shape
+        if features != self.n_features_in_:
+            raise ValueError(f"X has {features} features, fit saw {self.n_features_in_}")
+        trees, outputs = int(self._n_trees), int(self._num_outputs)
+        leaf = empty((rows, trees), "<i4") if leaves else None
+        prefix = empty((rows, trees, outputs), "<f4") if prefixes else None
+        raw = empty((rows, outputs), "<f4") if prediction else None
+        native = self._bind("_mojolearn_x_trees")
+        entry = getattr(native, "x_trees_forest_auxiliary", None)
+        if not callable(entry):
+            raise NotImplementedError("this tree binding does not expose combined auxiliary outputs")
+        arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)  # glue: five forest buffers
+        wrote = entry([_addr_ro(a) for a in arrays], _addr_ro(Xa),  # glue: five model addresses
+                      0 if leaf is None else _addr(leaf),
+                      0 if prefix is None else _addr(prefix),
+                      0 if raw is None else _addr(raw),
+                      [rows, features, trees, outputs, int(self._BINDING == "_mojolearn_rf")])
+        if wrote != rows:
+            raise RuntimeError(f"forest auxiliary wrote {wrote} of {rows} rows")
+        return raw, leaf, prefix
+
+    def apply(self, X):
+        """Return tree-relative leaf IDs, shape (rows, trees), from the native walk."""
+        return self._forest_auxiliary(X, leaves=True)[1]
+
+    def predict_with_leaves(self, X):
+        """Return ordered raw mean scores (rows, outputs) and leaf IDs (rows, trees).
+
+        Classifier scores are undecoded class votes. This auxiliary ordered
+        contract is independent of an explicitly selected groves engine.
+        """
+        scores, leaves, _ = self._forest_auxiliary(X, leaves=True, prediction=True)
+        return scores, leaves
+
+    def staged_predict(self, X):
+        """Return eager mean prefixes, shape (rows, trees, outputs), in tree order.
+
+        Each prefix uses the fixed increasing-tree fold through that tree.
+        Only this requested API allocates the complete prefix buffer.
+        """
+        return self._forest_auxiliary(X, prefixes=True)[2]
 
     def _prepare_resident_forest(self, native=None):
         """Prepare the existing immutable parallel-groves snapshot without a query."""

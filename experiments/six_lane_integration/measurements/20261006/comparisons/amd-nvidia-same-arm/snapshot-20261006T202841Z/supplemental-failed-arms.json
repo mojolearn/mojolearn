@@ -1,0 +1,22 @@
+[
+  {
+    "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/native-next-reg/gmm-baseline-followup/receipt.json",
+    "sha256": "9b54631f566a58ddf7a85f4e075c6245d7dec70bd6ae29e9ec731314bb3da59c",
+    "status": "BASELINE_REFUSED",
+    "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+    "runs": [
+      {
+        "phase": "warmup",
+        "arm": "B",
+        "returncode": 1,
+        "excluded": null,
+        "error": "Exception(\"GaussianMixture: fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the number of components, increase reg_covar, or scale the input data. FAILED AT EM iteration 1, COMPONENT 4, LAPACK info=11 (the leading minor of order 11 of that component's covariance is not positive definite). reg_covar was 0x358637bd. THE COMPONENT IS NOT RESET AND THE FIT IS NOT CONTINUED (DEVIATION 1723): the pivot decision is pinned in both halves by cholesky/checks/potrf.mojo's DEVIATION 1634, so this refusal is identical on every vendor -- and a silent reset would turn a decision that is identical into a value that is not, which is the worst outcome this lane can produce\")",
+        "log": "/root/campaign-results/native-next-reg/gmm-baseline-followup/warmup-B.log"
+      }
+    ],
+    "workload_id": "more:gmm@dataset=taxi",
+    "purpose": "Previously unrun baseline; candidate failure preserved, no candidate retry or setting change",
+    "pair_status": "INCOMPLETE_CANDIDATE_FAILED",
+    "qualified_identity": false
+  }
+]

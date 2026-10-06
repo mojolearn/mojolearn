@@ -48,8 +48,14 @@ comptime MEANSHIFT_FAST_GRID = (
     and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF"]()
 )
 comptime MSG_TPB = 256
-comptime MSG_T = 256
-"""Rows per chunk (one row per thread in the bandwidth test)."""
+# AFCL-G12: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Two row passes per block amortize center staging and halve the partial
+# table/final fold work. The existing strided bandwidth test visits both
+# passes, including ragged tails; no seed, neighbor or iteration is removed.
+# More serial row work may lose. FAST partial-sum association can change.
+comptime AFCL_G12 = MEANSHIFT_FAST_GRID and is_defined["MOJOLEARN_AFCL_G12"]()
+comptime MSG_T = 512 if AFCL_G12 else 256
+"""Rows per chunk, strided across MSG_TPB threads in the bandwidth test."""
 comptime MSG_MAX_D = 1024
 comptime MSG_GROUP = 16
 """Shifts enqueued between two reads of the done flags."""

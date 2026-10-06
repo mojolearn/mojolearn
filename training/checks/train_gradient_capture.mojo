@@ -13,8 +13,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from core.identity_trace import IdentityTrace
 from embedding.checks.embedding_identical import ANY_EMB_SABOTAGE
-from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_SABOTAGE
-from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_BWD_SABOTAGE
+from gemm.neural_dispatch import ANY_SABOTAGE as GEMM_SABOTAGE
+from gemm.neural_backward import ANY_BWD_SABOTAGE as GEMM_BWD_SABOTAGE
 from training.checks.loss import ANY_LOSS_SABOTAGE
 from training.checks.optimizer import ANY_SABOTAGE as OPT_SABOTAGE
 from transformer.checks.transformer_backward import BWD_ANY_SABOTAGE

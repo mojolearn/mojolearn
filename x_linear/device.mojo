@@ -37,6 +37,7 @@ from x_linear.sgd import (
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
+from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C17_OVR, C19_ORDERED_128, C19_ORDERED_32, C16_GLM_FUSED
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device, xlin_finite_host
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
@@ -51,11 +52,12 @@ from x_linear.sgd_avg import sgd_avg_acc_kernel, sgd_avg_fin_kernel
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
 from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
+from x_linear.classical_fold_stats import fold_stat_words, kfold_mean_cell, kfold_gram_cell, kfold_combine_unit
 from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve, kf_blocks, kf_ysum_part, kf_sq_part, kf_score_final
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK
 from x_linear.glm import (
-    _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, GLM_LINK_LOG, GLM_STALL_ITERS,
+    _unit, _unit_all, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, GLM_LINK_LOG, GLM_STALL_ITERS,
     glm_g_item, glm_h_item, glm_fwd_col, glm_back_col, glm_slope_part, glm_slope_blocks,
     _glm_cell_part, _glm_cell_store, glm_den, glm_start, glm_start_of,
 )
@@ -658,11 +660,26 @@ def _ridge_fast_gram() -> Bool:
 # The epoch order (`sgd_perm_kernel`), the targets and the epoch end
 # (x_linear/sgd_end.mojo) are the device's; the host enqueues an epoch's
 # batches without a sync and reads two stop words.
+# AFCL-L14: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# Four SIMD groups per independent row-prediction block expose twice as
+# many schedulable blocks as the 256-thread baseline. Training examples,
+# minibatches, seeded order, gradient folds and update/stopping policy do
+# not change. Witness capacities/offsets use the same row-grid helper.
+comptime AFCL_L14 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L14"]())
+comptime SGD_ROW_TPB = 128 if AFCL_L14 else XG_TPB
+
+
+@always_inline
+def _sgd_row_blocks(rows: Int) -> Int:
+    return max((rows + SGD_ROW_TPB - 1) // SGD_ROW_TPB, 1)
+
+
 @always_inline
 def _sgd_mb_rows_kernel_body(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
                        dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32, ocm: Int32):
-    var r = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if r < Int(bs):
         var i = Int(idx.unsafe_load(Int(start) + r))
         if ocm != 0:
@@ -1170,10 +1187,11 @@ comptime SGD_OVR_MAX_CELLS = 1 << 28
 def sgd_mb_chunk_ovr_kernel(
     x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
     dotp: FP, sqp: FP, act: IP, start0: Int32, nbat: Int32, t0: Int32, wf: IP, woff: Int32, nonce: Int32,
+    problem_start: Int32,
 ):
     """`sgd_mb_chunk_kernel`, block c on problem c's words (see
     SGD_IDN_OVR_PAR). `act[c] == 0` is a stopped problem: nothing runs."""
-    var c = Int(block_idx.x)
+    var c = Int(block_idx.x) + Int(problem_start)
     if ldi(act, c) != 0:
         var nn = ldi(ci, 0)
         var batch = ldi(ci, 1)
@@ -1371,14 +1389,20 @@ def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[
                     tt += bs1 if bsum else 1
                     s1 += bs1
                     nbt += 1
-                ctx.enqueue_function[sgd_mb_chunk_ovr_kernel](
-                    dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
-                    dsw.unsafe_ptr(), ddl.unsafe_ptr(), dlv.unsafe_ptr(), dparts.unsafe_ptr(), dobj.unsafe_ptr(),
-                    dci.unsafe_ptr(), dcf.unsafe_ptr(), ddotp.unsafe_ptr(), dsq.unsafe_ptr(), dact.unsafe_ptr(),
-                    Int32(start), Int32(nbt), Int32(t),
-                    wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=SGD_CHUNK_TPB,
-                )
-                wo += problems
+                # C17: bounded class waves reduce simultaneously live model
+                # state. Four is a scheduling budget, never a dataset route.
+                # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+                var wave = 4 if C17_OVR else problems
+                for first_problem in range(0, problems, wave):
+                    var active_problems = min(wave, problems - first_problem)
+                    ctx.enqueue_function[sgd_mb_chunk_ovr_kernel](
+                        dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
+                        dsw.unsafe_ptr(), ddl.unsafe_ptr(), dlv.unsafe_ptr(), dparts.unsafe_ptr(), dobj.unsafe_ptr(),
+                        dci.unsafe_ptr(), dcf.unsafe_ptr(), ddotp.unsafe_ptr(), dsq.unsafe_ptr(), dact.unsafe_ptr(),
+                        Int32(start), Int32(nbt), Int32(t),
+                        wit.p(), Int32(wo), nonce, Int32(first_problem), grid_dim=active_problems, block_dim=SGD_CHUNK_TPB,
+                    )
+                    wo += active_problems
                 t = tt
                 start = s1
             if wit.ok(ctx, wo, "SGD one-vs-rest epoch"):
@@ -1545,7 +1569,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var ws0 = 0
     while ws0 < n:
         var wbs = min(batch, n - ws0)
-        wcap += _xg_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2) + (1 if ocm == 2 else 0)
+        wcap += _sgd_row_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2) + (1 if ocm == 2 else 0)
         ws0 += wbs
     wcap += _xg_blocks(n)
     var wit = Witness(ctx, max(wcap, 1))
@@ -1702,7 +1726,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                                 dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
                                 dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
                                 wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
-                                Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                                Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
                             )
                         else:
                             var w_src = FP(unsafe_from_address=wa if cur == 0 else wb)
@@ -1714,10 +1738,10 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                                 dobj.unsafe_ptr(), dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dsw.unsafe_ptr(),
                                 ddl.unsafe_ptr(), dlv.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), etp, ddlt.unsafe_ptr(),
                                 Int32(start), Int32(bs_prev), Int32(bs), et_prev, Int32(dev_eta),
-                                wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                                wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
                             )
                             cur = 1 - cur
-                        wo += _xg_blocks(bs)
+                        wo += _sgd_row_blocks(bs)
                         if ocm == 2:
                             # the implicit step of this batch (its rows' margins
                             # above), dlt[0] for the step the next launch takes
@@ -1765,9 +1789,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                             dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
                             dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
                             wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
-                            Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                            Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_sgd_row_blocks(bs), block_dim=SGD_ROW_TPB,
                         )
-                        wo += _xg_blocks(bs)
+                        wo += _sgd_row_blocks(bs)
                         if ocm == 2:
                             ctx.enqueue_function[sgd_mb_oc_kernel](
                                 ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(bs), et, alpha, Int32(1 if bsum else 0),
@@ -1904,7 +1928,10 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
 # The epoch order (`sgd_perm_kernel`), the finite check, the stopping and
 # the adaptive rate are the device's (x_linear/sgd_end.mojo, sgd_one's
 # statements); the host reads the live problem count once an epoch.
-comptime SGD_PS_CHUNK = 2048
+# C19: scheduling only; preserve sample order/time index and per-sample updates.
+# Fixed bounded launch budgets, independent of dataset dimensions.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime SGD_PS_CHUNK = 32 if C19_ORDERED_32 else (128 if C19_ORDERED_128 else 2048)
 # the per-problem scalar state ps[SGD_PS_ST c ..]: intercept, u, objective,
 # the one-class intercept's low word, wscale hi, wscale lo
 comptime SGD_PS_ST = 6
@@ -2906,7 +2933,7 @@ def glm_init_finish_kernel(parts: FP, nf: Float32, nb: Int32, d: Int32, fi: Int3
     witness_end(wf, woff, nonce)
 
 def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float32, link: Int32, sw: Int32,
-                       theta: FP, eta: FP, lt: FP, wf: IP, woff: Int32, nonce: Int32):
+                       theta: FP, eta: FP, lt: FP, gr: FP, hr: FP, wf: IP, woff: Int32, nonce: Int32):
     """`_objective_team`'s row statements, one thread a row."""
     var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var nn = Int(n)
@@ -2915,7 +2942,19 @@ def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float
         var b = ld(theta, dd) if fi != 0 else Float32(0)
         var e = fa(row_dot(x, i, dd, theta, 0), b)
         st(eta, i, e)
-        var l = _unit(power, Int(link), ld(y, i), e, 0)
+        var l = Float32(0)
+        comptime if C16_GLM_FUSED:
+            var values = _unit_all(power, Int(link), ld(y, i), e)
+            l = values[0]
+            var gi = values[1]
+            var hi = fmax(Float32(0), values[2])
+            if sw != 0:
+                gi = fm(ld(y, nn + i), gi)
+                hi = fm(ld(y, nn + i), hi)
+            st(gr, i, gi)
+            st(hr, i, hi)
+        else:
+            l = _unit(power, Int(link), ld(y, i), e, 0)
         if sw != 0:
             l = fm(ld(y, nn + i), l)
         st(lt, i, l)
@@ -3132,7 +3171,7 @@ def _glm_grid_objective(
     mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, tw: FP, fparts: FP, sc: FP,
     sc_buf: DeviceBuffer[DType.float32], hsc: FP,
     n: Int, d: Int, fi: Int, power: Float32, link: Int, sw: Int, alpha: Float32, rows_grid: Int,
-    mut wit: Witness,
+    mut wit: Witness, gr: FP, hr: FP,
 ) raises -> Float32:
     """`_objective_team` at theta on the grid (map) and one block (fold); eta
     holds its linear predictor afterwards."""
@@ -3140,7 +3179,7 @@ def _glm_grid_objective(
     while True:
         var nonce = wit.begin()
         ctx.enqueue_function[glm_obj_map_kernel](x, y, Int32(n), Int32(d), Int32(fi), power, Int32(link), Int32(sw),
-                                                 theta, eta, lt, wit.p(), Int32(0), nonce,
+                                                 theta, eta, lt, gr, hr, wit.p(), Int32(0), nonce,
                                                  grid_dim=rows_grid, block_dim=XG_TPB)
         var nb = fold_blocks(n)
         ctx.enqueue_function[glm_obj_parts_kernel](lt, Int32(n), Int32(nb), fparts, wit.p(), Int32(rows_grid), nonce,
@@ -3247,20 +3286,21 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
 
     var iters = 0
     var converged = False
-    var f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit)
+    var f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
     var stall = 0
     for it in range(max_iter):
-        var tries1 = 0
-        while True:
-            var nonce = wit.begin()
-            ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
-                                                   dgr.unsafe_ptr(), dhr.unsafe_ptr(), wit.p(), Int32(0), nonce,
-                                                   grid_dim=rows_grid, block_dim=XG_TPB)
-            if wit.ok(ctx, rows_grid, "GLM derivatives"):
-                break
-            tries1 += 1
-            if tries1 >= WITNESS_TRIES:
-                wit.fail()
+        comptime if not C16_GLM_FUSED:
+            var tries1 = 0
+            while True:
+                var nonce = wit.begin()
+                ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
+                                                       dgr.unsafe_ptr(), dhr.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                       grid_dim=rows_grid, block_dim=XG_TPB)
+                if wit.ok(ctx, rows_grid, "GLM derivatives"):
+                    break
+                tries1 += 1
+                if tries1 >= WITNESS_TRIES:
+                    wit.fail()
         var b0 = 0
         while b0 < nb:
             var bc = min(blocks_slice, nb - b0)
@@ -3312,7 +3352,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
         for _ in range(40):
             ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m), tt,
                                                    grid_dim=_xg_blocks(m), block_dim=XG_TPB)
-            var ft = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit)
+            var ft = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
             if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
                 ctx.enqueue_function[glm_accept_kernel](dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m),
                                                         grid_dim=_xg_blocks(m), block_dim=XG_TPB)
@@ -3325,7 +3365,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
                 break
             tt = fm(tt, Float32(0.5))
         if not accepted:
-            f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit)
+            f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
             break
         if stall >= GLM_STALL_ITERS:
             converged = True
@@ -3494,6 +3534,36 @@ def kf_score_kernel(s: Int32, e: Int32, na: Int32, sp: FP, sums: FP, wf: IP, wof
     _kf_score_kernel_body(s, e, na, sp, sums)
     witness_end(wf, woff, nonce)
 
+def classical_kf_means_kernel(x: FP, y: FP, n: Int32, d: Int32, folds: Int32, fi: Int32, cache: FP,
+                               wf: IP, woff: Int32, nonce: Int32):
+    var u = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var width = Int(d) + 1
+    if u < Int(folds) * width:
+        kfold_mean_cell(x, y, Int(n), Int(d), Int(folds), u // width, u % width, fi != 0, cache)
+    witness_end(wf, woff, nonce)
+
+
+def classical_kf_grams_kernel(x: FP, y: FP, n: Int32, d: Int32, folds: Int32, cache: FP,
+                               wf: IP, woff: Int32, nonce: Int32):
+    var u = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var width = Int(d) + 1
+    if u < Int(folds) * width * width:
+        var f = u // (width * width)
+        var i = (u // width) % width
+        var j = u % width
+        if j >= i:
+            kfold_gram_cell(x, y, Int(n), Int(d), Int(folds), f, i, j, cache)
+    witness_end(wf, woff, nonce)
+
+
+def classical_kf_combine_kernel(cache: FP, d: Int32, folds: Int32, held: Int32, xm: FP, g: FP, xty: FP,
+                                 wf: IP, woff: Int32, nonce: Int32):
+    var u = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if u < Int(d) + 1 + Int(d) * Int(d) + Int(d):
+        kfold_combine_unit(u, cache, Int(d), Int(folds), Int(held), xm, g, xty)
+    witness_end(wf, woff, nonce)
+
+
 def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
                       res: FP) raises:
     var ctx = linear_ctx()
@@ -3503,6 +3573,7 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var stride = n // k + 1
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+    var dcache = ctx.enqueue_create_buffer[DType.float32](k * fold_stat_words(d) if C13_FOLD_STATS else 1)
     var dal = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
     var dxm = ctx.enqueue_create_buffer[DType.float32](d + 1)
     var dg = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
@@ -3544,6 +3615,26 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var wcap = max(_xg_blocks(d + 1) + _xg_blocks(cells + d) + _xg_blocks(na),
                    _xg_blocks(d + 1) + _xg_blocks(max(ff_units - (d + 1), 1)) + na + _xg_blocks(nt_max * na) + _xg_blocks(na)
                    + _xg_blocks(kbm) + _xg_blocks(na * kbm))
+    comptime if C13_FOLD_STATS:
+        wcap = max(wcap, _xg_blocks(d + 1 + d * d + d) + _xg_blocks(na))
+        var prep_wit = Witness(ctx, _xg_blocks(k * (d + 1)) + _xg_blocks(k * (d + 1) * (d + 1)))
+        var attempt = 0
+        while True:
+            var nonce = prep_wit.begin()
+            var wo = 0
+            ctx.enqueue_function[classical_kf_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(k),
+                Int32(fi), dcache.unsafe_ptr(), prep_wit.p(), Int32(wo), nonce,
+                grid_dim=_xg_blocks(k * (d + 1)), block_dim=XG_TPB)
+            wo += _xg_blocks(k * (d + 1))
+            ctx.enqueue_function[classical_kf_grams_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(k),
+                dcache.unsafe_ptr(), prep_wit.p(), Int32(wo), nonce,
+                grid_dim=_xg_blocks(k * (d + 1) * (d + 1)), block_dim=XG_TPB)
+            wo += _xg_blocks(k * (d + 1) * (d + 1))
+            if prep_wit.ok(ctx, wo, "RidgeCV disjoint-fold cache"):
+                break
+            attempt += 1
+            if attempt >= WITNESS_TRIES:
+                prep_wit.fail()
     var wit = Witness(ctx, wcap)
     var dsum_save = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
     # lane/apple-fast-gram (2026-10-02), FAST on Apple (default since the M3 A/B;
@@ -3563,7 +3654,12 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
         while True:
             var nonce = wit.begin()
             var wo = 0
-            if fold_fast_gram:
+            if C13_FOLD_STATS:
+                ctx.enqueue_function[classical_kf_combine_kernel](dcache.unsafe_ptr(), Int32(d), Int32(k), Int32(f),
+                    dxm.unsafe_ptr(), dg.unsafe_ptr(), dxty.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                    grid_dim=_xg_blocks(d + 1 + d * d + d), block_dim=XG_TPB)
+                wo += _xg_blocks(d + 1 + d * d + d)
+            elif fold_fast_gram:
                 var pxm = FP(unsafe_from_address=Int(dxm.unsafe_ptr()))
                 fast_gram_into(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())),
                                Int(s), Int(e) - Int(s), d, 1, fi != 0, pxm, pxm + d,
@@ -3648,6 +3744,7 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     _ = dx^
     _ = dy^
     _ = dal^
+    _ = dcache^
     _ = dxm^
     _ = dg^
     _ = dxty^

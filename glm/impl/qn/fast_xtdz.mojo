@@ -14,6 +14,8 @@ layout; FAST arithmetic (a different summation order).
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -24,6 +26,15 @@ comptime FX_MAX_D = 256
 comptime FX_CELLS_PER_THREAD = 4
 comptime FX_MAX_CELLS = FX_TPB * FX_CELLS_PER_THREAD
 comptime FX_MAX_C = 64
+
+# AFCL-L05: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# Halve rows per partial and double the partial limit: more independent
+# groups, with at most twice the existing partial workspace and fold work.
+# Both workspace sizing and launch planning use this one schedule.
+comptime AFCL_L05 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L05"]())
+comptime FX_CHUNK_ROWS = 1024 if AFCL_L05 else 2048
+comptime FX_BLOCK_LIMIT = 512 if AFCL_L05 else 256
 
 
 #: lane apple-fast-no-narrow-2 (2026-10-04): `d <= FX_MAX_D` (256, which
@@ -126,7 +137,7 @@ def fx_fold_kernel(
 
 def fast_xtdz_workspace_floats(n_rows: Int, d: Int, c: Int) -> Int:
     """The per-block partials `fast_xtdz_into` needs (lane/linear-apple)."""
-    var n_blocks = min(256, max(1, (n_rows + 2047) // 2048))
+    var n_blocks = min(FX_BLOCK_LIMIT, max(1, (n_rows + FX_CHUNK_ROWS - 1) // FX_CHUNK_ROWS))
     return n_blocks * d * c
 
 
@@ -164,7 +175,7 @@ def fast_xtdz_into(
     QN solver calls this once per evaluation, and a buffer allocation per
     call is a Metal cost). The same launches and arithmetic."""
     var cells = d * c
-    var n_blocks = min(256, max(1, (n_rows + 2047) // 2048))
+    var n_blocks = min(FX_BLOCK_LIMIT, max(1, (n_rows + FX_CHUNK_ROWS - 1) // FX_CHUNK_ROWS))
     var chunk = (n_rows + n_blocks - 1) // n_blocks
     ctx.enqueue_function[fx_partial_kernel](
         partial.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),

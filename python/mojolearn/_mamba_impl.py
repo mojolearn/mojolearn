@@ -313,9 +313,38 @@ class Mamba1State:
     `mojolearn.Array` when `allocate_state` made them and may be ANY
     writable float32 buffer (a NumPy array included) when you did."""
 
-    def __init__(self, conv_window, h):
+    def __init__(self, conv_window, h, *, profile_id=1, absolute_position=0,
+                 affine_boundary=None, affine_a=None, affine_b=None):
         self.conv_window = conv_window
         self.h = h
+        self.profile_id = int(profile_id)
+        self.absolute_position = int(absolute_position)
+        self.affine_boundary = affine_boundary
+        self.affine_a = affine_a
+        self.affine_b = affine_b
+        self._nn34_usable = True
+
+
+def _m1_profile(ext):
+    return int(getattr(ext, "mamba1_profile", lambda: 1)())
+
+
+def _m1_affine_buffers(state, b, di, profile, what):
+    """API metadata/buffer validation only; all numerical work stays Mojo."""
+    if int(getattr(state, "profile_id", 1)) != profile:
+        raise ValueError(f"mojolearn {what}: checkpoint numerical profile differs from the binding")
+    if profile != 2:
+        return []
+    if not getattr(state, "_nn34_usable", True):
+        raise ValueError(f"mojolearn {what}: NN34 state was lost after a failed call; restore a checkpoint")
+    position = int(state.absolute_position)
+    if position < 0 or position > (1 << 62) - 32:
+        raise ValueError(f"mojolearn {what}: invalid absolute checkpoint position")
+    return [
+        _state_buf(state.affine_boundary, what, "affine_boundary", (b, di, _M1_D_STATE)),
+        _state_buf(state.affine_a, what, "affine_a", (b, di, _M1_D_STATE, 6)),
+        _state_buf(state.affine_b, what, "affine_b", (b, di, _M1_D_STATE, 6)),
+    ]
 
 
 class Mamba2State:
@@ -538,9 +567,14 @@ class Mamba1Block(_MambaBase):
                 f"mojolearn Mamba1Block: batch_size must be positive, "
                 f"got {batch_size!r}"
             )
+        profile = _m1_profile(self._extension())
         return Mamba1State(
             zeros((b, self.d_inner, _M1_D_CONV), "<f4"),
             zeros((b, self.d_inner, _M1_D_STATE), "<f4"),
+            profile_id=profile,
+            affine_boundary=zeros((b, self.d_inner, _M1_D_STATE), "<f4") if profile == 2 else None,
+            affine_a=zeros((b, self.d_inner, _M1_D_STATE, 6), "<f4") if profile == 2 else None,
+            affine_b=zeros((b, self.d_inner, _M1_D_STATE, 6), "<f4") if profile == 2 else None,
         )
 
     def _call(self, x, state, step):
@@ -573,12 +607,23 @@ class Mamba1Block(_MambaBase):
             + [addr(win, name="conv_window"), addr(h, name="h"),
                addr(y, name="y")]
         )
-        if step:
-            # B, d_model -- the L = 1 shape is the entry's own contract.
-            ext.mamba1_decode_step(addrs, [b, self.d_model])
-        else:
-            # B, L, d_model.
-            ext.mamba1_forward(addrs, [b, l, self.d_model])
+        profile = _m1_profile(ext)
+        affine = _m1_affine_buffers(state, b, self.d_inner, profile, what)
+        addrs += [addr(a, name="affine checkpoint") for a in affine]  # glue: fixed state-buffer list
+        params = [b, self.d_model] if step else [b, l, self.d_model]
+        if profile == 2:
+            params.append(state.absolute_position)
+        try:
+            if step:
+                ext.mamba1_decode_step(addrs, params)
+            else:
+                ext.mamba1_forward(addrs, params)
+        except Exception:
+            if profile == 2:
+                state._nn34_usable = False
+            raise
+        if profile == 2:
+            state.absolute_position += l
         return y
 
     def forward(self, x, state=None, *, lengths=None):
@@ -771,6 +816,9 @@ class Mamba1DecodeSession:
         b = int(pb.shape[0])
         win = _state_buf(state.conv_window, what, "conv_window", (b, block.d_inner, _M1_D_CONV))
         h = _state_buf(state.h, what, "h", (b, block.d_inner, _M1_D_STATE))
+        self._profile = _m1_profile(ext)
+        affine = _m1_affine_buffers(state, b, block.d_inner, self._profile, what)
+        self._position = int(getattr(state, "absolute_position", 0))
         self._block = block
         self._state = state
         self._ext = ext
@@ -784,11 +832,14 @@ class Mamba1DecodeSession:
             self._hw = [_private_copy(a) for a in w]  # glue: private copy per weight tensor
             self._win = _private_copy(win)
             self._h = _private_copy(h)
+            self._affine = [_private_copy(a) for a in affine]  # glue: fixed checkpoint buffer list
         else:
             self._native = create()
             addrs = ([addr_ro(a, name="weight") for a in w]  # glue: one address per weight tensor
                      + [addr(win, name="conv_window"), addr(h, name="h")])
-            ext.mamba1_session_open(self._native, addrs, [b, block.d_model])
+            addrs += [addr(a, name="affine checkpoint") for a in affine]  # glue: fixed buffer list
+            params = [b, block.d_model] + ([self._position] if self._profile == 2 else [])
+            ext.mamba1_session_open(self._native, addrs, params)
         self._open = True
         state._resident_session = self
 
@@ -823,10 +874,13 @@ class Mamba1DecodeSession:
                 [addr_ro(x, name="x")]
                 + [addr_ro(a, name="weight") for a in hw]  # glue: one address per weight tensor
                 + [addr(self._win, name="conv_window"), addr(self._h, name="h"),
-                   addr(y, name="y")],
-                [b, blk.d_model])
+                   addr(y, name="y")]
+                + [addr(a, name="affine checkpoint") for a in self._affine],  # glue: fixed buffer list
+                [b, blk.d_model] + ([self._position] if self._profile == 2 else []))
         else:
             self._ext.mamba1_session_step(self._native, [addr_ro(x, name="x"), addr(y, name="y")])
+        if self._profile == 2:
+            self._position += 1
         return y
 
     def _state_addrs(self, what):
@@ -839,31 +893,46 @@ class Mamba1DecodeSession:
         what = "Mamba1DecodeSession.sync_state"
         self._require_open(what)
         win, h = self._state_addrs(what)
+        affine = _m1_affine_buffers(self._state, self._b, self._block.d_inner, self._profile, what)
         if self._native is None:
             memcopy(addr(win, name="conv_window"), addr_ro(self._win, name="resident"),
                     4 * int(self._win.size))
             memcopy(addr(h, name="h"), addr_ro(self._h, name="resident"), 4 * int(self._h.size))
+            for dst, src in zip(affine, self._affine):  # glue: copies the three state buffers
+                memcopy(addr(dst, name="checkpoint"), addr_ro(src, name="resident"), 4 * int(src.size))
         else:
-            self._ext.mamba1_session_export_state(
-                self._native, [addr(win, name="conv_window"), addr(h, name="h")])
+            position = self._ext.mamba1_session_export_state(
+                self._native, [addr(win, name="conv_window"), addr(h, name="h")]
+                + [addr(a, name="affine checkpoint") for a in affine])  # glue: fixed buffer list
+            if self._profile == 2:
+                self._position = int(position)
+        if self._profile == 2:
+            self._state.absolute_position = self._position
         return self._state
 
     def load_state(self):
         what = "Mamba1DecodeSession.load_state"
         self._require_open(what)
         win, h = self._state_addrs(what)
+        affine = _m1_affine_buffers(self._state, self._b, self._block.d_inner, self._profile, what)
         if self._native is None:
             memcopy(addr(self._win, name="resident"), addr_ro(win, name="conv_window"),
                     4 * int(self._win.size))
             memcopy(addr(self._h, name="resident"), addr_ro(h, name="h"), 4 * int(self._h.size))
+            for dst, src in zip(self._affine, affine):  # glue: copies the three state buffers
+                memcopy(addr(dst, name="resident"), addr_ro(src, name="checkpoint"), 4 * int(src.size))
         else:
             self._ext.mamba1_session_load_state(
-                self._native, [addr(win, name="conv_window"), addr(h, name="h")])
+                self._native, [addr(win, name="conv_window"), addr(h, name="h")]
+                + [addr(a, name="affine checkpoint") for a in affine]
+                + ([self._state.absolute_position] if self._profile == 2 else []))
+        if self._profile == 2:
+            self._position = int(self._state.absolute_position)
         return self._state
 
     def _release(self):
         if self._native is None:
-            self._hw = self._win = self._h = None
+            self._hw = self._win = self._h = self._affine = None
         else:
             self._ext.mamba1_session_close(self._native)
 
@@ -1577,8 +1646,47 @@ class Mamba3Block(_MambaBase):
             False,
         )
 
+    def install_owned_weights(self):
+        """Install/update an immutable NN40 weight snapshot for fresh
+        forward/backward calls and return its generation. Subsequent edits
+        to external arrays take effect only after another explicit install.
+        This is an opt-in API supported by NN40-enabled IDENTICAL bindings.
+        Stateful explicit-state/decode APIs retain their ordinary ownership.
+        """
+        ext = self._extension()
+        enabled = getattr(ext, "mamba3_owned_weights_enabled", None)
+        if enabled is None or not bool(enabled()):
+            raise RuntimeError("Mamba3 owned weights require the NN40 IDENTICAL arm")
+        checked = type(self)(dict(zip(self._W_NAMES, self._w)),
+                             numeric_mode=getattr(self, "numeric_mode", None))
+        if checked.d_model != self.d_model:
+            raise ValueError("Mamba3 owned weights: d_model changed")
+        if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not ext:
+            self._prefill_session = ext.mamba3_prefill_session_create()
+            self._prefill_binding = ext
+        self._owned_generation = int(ext.mamba3_prefill_session_install_weights(
+            self._prefill_session,
+            [_addr_ro(w) for w in checked._w],  # glue: one binding address per tensor
+            self.d_model))
+        self._owned_restore_pending = False
+        return self._owned_generation
+
+    def release_owned_weights(self):
+        """Close the owned snapshot; subsequent calls use current external
+        weight buffers and the ordinary safe byte-comparison path."""
+        session = getattr(self, "_prefill_session", None)
+        binding = getattr(self, "_prefill_binding", None)
+        if session is not None and binding is not None:
+            binding.mamba3_prefill_session_close(session)
+        self._prefill_session = None
+        self._prefill_binding = None
+        self._owned_generation = None
+        self._owned_restore_pending = False
+
     def _call_fresh(self, x, ext):
         """Discard-only prefill: return all reports without a host cache."""
+        if getattr(self, "_owned_restore_pending", False):
+            self.install_owned_weights()
         b, l = int(x.shape[0]), int(x.shape[1])
         nh = self.nheads
         y = _buffers.empty((b, l, self.d_model), '<f4')
@@ -1590,8 +1698,13 @@ class Mamba3Block(_MambaBase):
             session_forward = getattr(ext, "mamba3_prefill_session_forward", None)
         except (ImportError, AttributeError):
             session_forward = None
-        use_session = (session_forward is not None
+        owned = getattr(self, "_owned_generation", None) is not None
+        use_session = ((session_forward is not None or owned)
                        and os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") != "1")
+        if owned and getattr(self, "_prefill_binding", None) is not ext:
+            raise RuntimeError("Mamba3 owned snapshot belongs to another binding; release or explicitly reinstall it")
+        if getattr(self, "_owned_generation", None) is not None and not use_session:
+            raise RuntimeError("Mamba3 owned weights require the installed prefill session; release it before changing binding/setup")
         # lane/fam2-lm (2026-10-04): a block owned by a stack (SambaStack
         # sets `_discard_reports`) reads no report, so where the binding
         # admits it the four report downloads are not requested (address 0)
@@ -1615,7 +1728,13 @@ class Mamba3Block(_MambaBase):
             if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not ext:
                 self._prefill_session = ext.mamba3_prefill_session_create()
                 self._prefill_binding = ext
-            session_forward(self._prefill_session, addrs, [b, l, self.d_model])
+            generation = getattr(self, "_owned_generation", None)
+            if generation is not None:
+                ext.mamba3_prefill_session_forward_owned(
+                    self._prefill_session, [_addr_ro(x), _addr(y)] + report_addrs,
+                    [b, l, self.d_model, generation])
+            else:
+                session_forward(self._prefill_session, addrs, [b, l, self.d_model])
         else:
             ext.mamba3_forward_fresh(addrs, [b, l, self.d_model])
         self.h_last_ = h_last
@@ -1625,6 +1744,8 @@ class Mamba3Block(_MambaBase):
         return y
 
     def _backward_native(self, extension, entry, native):
+        if getattr(self, "_owned_restore_pending", False):
+            self.install_owned_weights()
         # lane/neural-net-experiment (2026-09-30): the backward on the same
         # session as the fresh prefill. The session keeps the weights and
         # the last forward's stages on the device; the backward reuses the
@@ -1637,12 +1758,25 @@ class Mamba3Block(_MambaBase):
             session_backward = getattr(extension, "mamba3_prefill_session_backward", None)
         except (ImportError, AttributeError):
             session_backward = None
+        generation = getattr(self, "_owned_generation", None)
+        if generation is not None:
+            if getattr(self, "_prefill_binding", None) is not extension or os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") == "1":
+                raise RuntimeError("Mamba3 owned snapshot requires its installed binding/setup")
+            session = self._prefill_session
+            return lambda addresses, params: extension.mamba3_prefill_session_backward_owned(
+                session, [addresses[0]] + addresses[10:], list(params) + [generation])
         if session_backward is None or os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") == "1":
             return native
         if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not extension:
             self._prefill_session = extension.mamba3_prefill_session_create()
             self._prefill_binding = extension
         session = self._prefill_session
+        generation = getattr(self, "_owned_generation", None)
+        if generation is not None:
+            # glue: select addresses from the existing binding argument list;
+            # no tensor data is read, compared or computed in Python.
+            return lambda addresses, params: extension.mamba3_prefill_session_backward_owned(
+                session, [addresses[0]] + addresses[10:], list(params) + [generation])
         return lambda addresses, params: session_backward(session, addresses, params)
 
     def session_info(self):
@@ -1659,9 +1793,28 @@ class Mamba3Block(_MambaBase):
                 "backward_reuses", "backward_recomputes", "stages_held")
         return dict(zip(keys, (int(v) for v in values)))  # glue: names six counter values
 
+    def export_owned_weights(self):
+        """Copy the installed snapshot into independent host buffers."""
+        generation = getattr(self, "_owned_generation", None)
+        if generation is None:
+            raise RuntimeError("Mamba3 has no installed owned snapshot")
+        dm, di, nh = self.d_model, self.d_inner, self.nheads
+        shapes = ((dm,), (self.d_in_proj, dm), (nh,), (_M3_D_STATE,),
+                  (_M3_D_STATE,), (nh, _M3_D_STATE), (nh, _M3_D_STATE),
+                  (nh,), (dm, di))
+        arrays = [_buffers.empty(shape, '<f4') for shape in shapes]  # glue: fixed parameter buffer list
+        self._prefill_binding.mamba3_prefill_session_export_weights(
+            self._prefill_session, [_addr(a) for a in arrays], generation)
+        return dict(zip(self._W_NAMES, arrays))
+
     def __getstate__(self):
         state = self.__dict__.copy()
-        for name in ("_prefill_session", "_prefill_binding"):  # glue: drops two cached attributes
+        if getattr(self, "_owned_generation", None) is not None:
+            snapshot = self.export_owned_weights()
+            state["_w"] = [snapshot[name] for name in self._W_NAMES]  # glue: parameter names
+            state["_owned_restore_pending"] = True
+        state["_owned_generation"] = None
+        for name in ("_prefill_session", "_prefill_binding"):  # glue: drops two native handles
             state.pop(name, None)
         return state
 
@@ -1669,6 +1822,7 @@ class Mamba3Block(_MambaBase):
         self.__dict__.update(state)
         self._prefill_session = None
         self._prefill_binding = None
+        self._owned_generation = None
 
     def _call(self, x, state, step):
         what = "Mamba3Block.step" if step else "Mamba3Block.forward"
@@ -1781,6 +1935,46 @@ class Mamba3Block(_MambaBase):
             return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
                                           x, state, lengths, "<f4", what)[0]
         return self._call(x, state, step=False)
+
+    def _forward_with_tape(self, x):
+        """NI48 API shell: actual forward plus an owned native snapshot."""
+        extension = self._extension()
+        enabled = (getattr(extension, "mamba3_forward_tape_enabled")
+                   if _exports(extension, "mamba3_forward_tape_enabled") else None)
+        if enabled is None or not bool(enabled()):
+            return self.forward(x), None
+        what = type(self).__name__ + "._forward_with_tape"
+        x = _batch_tokens(x, what, self.d_model, False)
+        b, l, _ = x.shape
+        if b < 1 or l < 1:
+            raise ValueError(f"mojolearn {what}: B and L must be positive")
+        y = _buffers.empty(x.shape, "<f4")
+        # Glue only: one address/shape per parameter, no tensor data work.
+        weights = self._w
+        addresses = ([addr_ro(x, name="x")]
+                     + [addr_ro(w, name="weight") for w in weights]  # glue: pass parameter buffer addresses
+                     + [addr(y, name="output")])
+        handle = extension.mamba3_forward_tape(addresses, [b, l, self.d_model])
+        tape = (extension, handle, x.shape, tuple(w.shape for w in weights))  # glue: retain parameter shape metadata
+        return y, tape
+
+    def _backward_from_tape(self, tape, grad_output):
+        """Consume the original immutable native input/weight/stage snapshot."""
+        extension, handle, input_shape, weight_shapes = tape
+        what = type(self).__name__ + "._backward_from_tape"
+        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
+                         what, "grad_output", input_shape)
+        gradients = ([_buffers.empty(input_shape, "<f4")]
+                     + [_buffers.empty(shape, "<f4") for shape in weight_shapes])  # glue: allocate native output buffers by shape
+        # Native code checks dy and tape validity before it executes the VJP.
+        extension.mamba3_backward_tape(
+            handle, [addr_ro(dy, name="grad_output")]
+            + [addr(g, name="gradient") for g in gradients])  # glue: pass gradient buffer addresses
+        return dict(zip(("x",) + self._W_NAMES, gradients))
+
+    def _close_forward_tape(self, tape):
+        if tape is not None:
+            tape[0].mamba3_close_tape(tape[1])
 
     def backward(self, x, grad_output):
         """Return the zero-state prefill VJP for x and all nine weights.

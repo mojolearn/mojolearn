@@ -26,9 +26,21 @@ from xtrees.shap import (
     shap_tree_unit, shap_fold_unit, shap_table_unit, shap_table_row_unit,
 )
 from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_tab_row_unit
+from core.apple_fast_tree_experiments import (
+    AFT_P07, AFT_P08, AFT_P09, AFT_SHAP_FOLD_ITEMS,
+)
 
-comptime TPB = 128
-comptime BUF_BYTES = 128 * 1024 * 1024
+comptime TPB = 64 if AFT_P08 else 128
+# AFCL-T11: two SIMD groups per query/fold block reduce private TreeSHAP
+# state per workgroup. This does not enable the rejected row-pair candidate.
+# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
+comptime AFCL_T11 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_T11"]()
+)
+comptime QUERY_TPB = 64 if AFCL_T11 else TPB
+comptime BUF_BYTES = (64 if AFT_P09 else 128) * 1024 * 1024
 comptime UNITS_MAX = 1 << 20
 
 # lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor
@@ -81,6 +93,8 @@ comptime SHAP_TREE_TAB = SHAP_TABLE and not is_defined["MOJOLEARN_SHAP_TREE_TAB_
 # plus one score. Regression. ab-20261006/repairs-shap-3e19f734e/F13/shap.
 # Original wrong-binding failure retained; affected artifacts built fe1864e2c.
 comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
+# P07 is a distinct quartet tile; the existing pair arm and audit stay separate.
+comptime SHAP_ROW_TILE = 4 if AFT_P07 else (2 if SHAP_FAST_ROW_PAIR else 1)
 struct ShapPairAudit(Defaultable, Movable):
     var calls: Int
     def __init__(out self):
@@ -120,6 +134,10 @@ def _uid() -> Int:
 
 def _grid(units: Int) -> Int:
     return (units + TPB - 1) // TPB
+
+
+def _query_grid(units: Int) -> Int:
+    return (units + QUERY_TPB - 1) // QUERY_TPB
 
 
 def parent_kernel(units: Int32, offsets: I32P, n_trees: Int32, colid: I32P, left: I32P, d: Int32, parent: I32P,
@@ -167,12 +185,12 @@ def tree_kernel[W: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slots: In
     """x is the whole input; the chunk's rows start at r0 (offset here, on
     the typed pointer: a pointer rebuilt from an integer misses on Metal)."""
     var group = _uid()
-    comptime if SHAP_FAST_ROW_PAIR:
-        var pairs = (Int(rows) + 1) // 2
+    comptime if SHAP_ROW_TILE > 1:
+        var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
         var tree = group // pairs
-        var row = (group % pairs) * 2
+        var row = (group % pairs) * SHAP_ROW_TILE
         if tree < Int(units) // Int(rows):
-            for offset in range(2):
+            for offset in range(SHAP_ROW_TILE):
                 if row + offset < Int(rows):
                     var u = tree * Int(rows) + row + offset
                     shap_tree_unit[W](u, Int(rows), Int(d), Int(k), Int(slots), offsets, colid, quesval, left, leaves, parent,
@@ -198,12 +216,12 @@ def table_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, sl
                                slot: I32P, leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, x: F32P,
                                r0: Int32, buf: F32P, meta: I32P):
     var group = _uid()
-    comptime if SHAP_FAST_ROW_PAIR:
-        var pairs = (Int(rows) + 1) // 2
+    comptime if SHAP_ROW_TILE > 1:
+        var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
         var tree = group // pairs
-        var row = (group % pairs) * 2
+        var row = (group % pairs) * SHAP_ROW_TILE
         if tree < Int(units) // Int(rows):
-            for offset in range(2):
+            for offset in range(SHAP_ROW_TILE):
                 if row + offset < Int(rows):
                     var u = tree * Int(rows) + row + offset
                     shap_table_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
@@ -236,12 +254,12 @@ def tab_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slot
                              slot: I32P, leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, nint: I32P,
                              needl: U64P, needr: U64P, x: F32P, r0: Int32, buf: F32P, meta: I32P):
     var group = _uid()
-    comptime if SHAP_FAST_ROW_PAIR:
-        var pairs = (Int(rows) + 1) // 2
+    comptime if SHAP_ROW_TILE > 1:
+        var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
         var tree = group // pairs
-        var row = (group % pairs) * 2
+        var row = (group % pairs) * SHAP_ROW_TILE
         if tree < Int(units) // Int(rows):
-            for offset in range(2):
+            for offset in range(SHAP_ROW_TILE):
                 if row + offset < Int(rows):
                     var u = tree * Int(rows) + row + offset
                     shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
@@ -257,9 +275,13 @@ def tab_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slot
 
 def fold_kernel(units: Int32, r0: Int32, rows: Int32, n_trees: Int32, d: Int32, k: Int32, slots: Int32, slot: I32P,
                 buf: F32P, phi: F32P):
-    var u = _uid()
-    if u < Int(units):
-        shap_fold_unit(u, Int(r0), Int(rows), Int(n_trees), Int(d), Int(k), Int(slots), slot, buf, phi)
+    # P10: independent output planes, no skipped contributions or changed fold.
+    var first = Int(block_idx.x) * TPB * AFT_SHAP_FOLD_ITEMS + Int(thread_idx.x)
+    @parameter
+    for tile in range(AFT_SHAP_FOLD_ITEMS):
+        var u = first + tile * TPB
+        if u < Int(units):
+            shap_fold_unit(u, Int(r0), Int(rows), Int(n_trees), Int(d), Int(k), Int(slots), slot, buf, phi)
 
 
 def _up_i32(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
@@ -287,9 +309,28 @@ struct _Forest(Movable):
     var slot: DeviceBuffer[DType.int32]
     var meta: DeviceBuffer[DType.int32]
 
+    var table_width: Int
+    var cached_table: Optional[DeviceBuffer[DType.float32]]
+    var cached_dead: Optional[DeviceBuffer[DType.int32]]
+    var cached_leaf_mf: Optional[DeviceBuffer[DType.int32]]
+    var cached_leaf_n: Optional[DeviceBuffer[DType.int32]]
+    var cached_rank: Optional[DeviceBuffer[DType.int32]]
+    var cached_nint: Optional[DeviceBuffer[DType.int32]]
+    var cached_needl: Optional[DeviceBuffer[DType.uint64]]
+    var cached_needr: Optional[DeviceBuffer[DType.uint64]]
+
     def __init__(out self, ctx: DeviceContext, forest: List[Int], tscale: Int, d: Int, n_trees: Int, k: Int,
                  n_nodes: Int) raises:
         """Uploads the forest and runs parent+mark and slot."""
+        self.table_width = 0
+        self.cached_table = Optional[DeviceBuffer[DType.float32]]()
+        self.cached_dead = Optional[DeviceBuffer[DType.int32]]()
+        self.cached_leaf_mf = Optional[DeviceBuffer[DType.int32]]()
+        self.cached_leaf_n = Optional[DeviceBuffer[DType.int32]]()
+        self.cached_rank = Optional[DeviceBuffer[DType.int32]]()
+        self.cached_nint = Optional[DeviceBuffer[DType.int32]]()
+        self.cached_needl = Optional[DeviceBuffer[DType.uint64]]()
+        self.cached_needr = Optional[DeviceBuffer[DType.uint64]]()
         self.offsets = _up_i32(ctx, forest[0], n_trees + 1)
         self.colid = _up_i32(ctx, forest[1], n_nodes)
         self.quesval = _up_f32(ctx, forest[2], n_nodes)
@@ -370,10 +411,17 @@ def _rows_per_chunk(n: Int, n_trees: Int, slots: Int, k: Int) -> Int:
 
 def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi: Int, n: Int, d: Int, n_trees: Int,
                      k: Int, n_nodes: Int, slots: Int, width: Int) raises:
-    """phi (Float32 n x d x k) = the TreeSHAP values of the n rows of x."""
     var ctx = _ctx()
     var fo = _Forest(ctx, forest, tscale, d, n_trees, k, n_nodes)
     var cover = _up_i32(ctx, cover_in, n_nodes)
+    _tree_shap_values_on(ctx, fo, cover, x, phi, n, d, n_trees, k, n_nodes, slots, width)
+    _ = cover^
+    _ = fo^
+
+
+def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceBuffer[DType.int32],
+                         x: Int, phi: Int, n: Int, d: Int, n_trees: Int, k: Int, n_nodes: Int,
+                         slots: Int, width: Int) raises:
     var dx = _up_f32(ctx, x, n * d)
     var dphi = ctx.enqueue_create_buffer[DType.float32](n * d * k)
     var rows = _rows_per_chunk(n, n_trees, slots, k)
@@ -385,42 +433,43 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
     var use_table = False
     comptime if SHAP_TABLE:
         use_table = width == 8 and n_nodes * tm * (nm + 1) * 4 <= TABLE_BYTES
-    var tsz = n_nodes * tm * nm if use_table else 1
-    var table = ctx.enqueue_create_buffer[DType.float32](tsz)
-    var dead = ctx.enqueue_create_buffer[DType.int32](n_nodes * tm if use_table else 1)
-    var leaf_mf = ctx.enqueue_create_buffer[DType.int32](n_nodes * nm if use_table else 1)
-    var leaf_n = ctx.enqueue_create_buffer[DType.int32](n_nodes if use_table else 1)
-    comptime if SHAP_TABLE:
-        if use_table:
-            var tu0 = n_nodes * tm
-            ctx.enqueue_function[table_kernel[8]](
-                Int32(tu0), Int32(tm), Int32(nm), fo.offsets.unsafe_ptr(), Int32(n_trees), fo.colid.unsafe_ptr(),
-                fo.left.unsafe_ptr(), fo.parent.unsafe_ptr(), cover.unsafe_ptr(), fo.tscale.unsafe_ptr(),
-                leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
-                fo.meta.unsafe_ptr(), grid_dim=_grid(tu0), block_dim=TPB)
-    # SHAP_TREE_TAB: ranks, internal counts and per-element decision masks
     var tt = False
     comptime if SHAP_TREE_TAB:
         tt = use_table
-    var rank = ctx.enqueue_create_buffer[DType.int32](n_nodes if tt else 1)
-    var nint = ctx.enqueue_create_buffer[DType.int32](n_trees if tt else 1)
-    var needl = ctx.enqueue_create_buffer[DType.uint64](n_nodes * nm if tt else 1)
-    var needr = ctx.enqueue_create_buffer[DType.uint64](n_nodes * nm if tt else 1)
-    comptime if SHAP_TREE_TAB:
-        if tt:
-            ctx.enqueue_function[tab_rank_kernel](
-                Int32(n_trees), fo.offsets.unsafe_ptr(), fo.left.unsafe_ptr(), rank.unsafe_ptr(), nint.unsafe_ptr(),
-                grid_dim=_grid(n_trees), block_dim=TPB)
-            ctx.enqueue_function[tab_need_kernel](
-                Int32(n_nodes), Int32(nm), fo.offsets.unsafe_ptr(), Int32(n_trees), fo.colid.unsafe_ptr(),
-                fo.left.unsafe_ptr(), fo.parent.unsafe_ptr(), rank.unsafe_ptr(), leaf_mf.unsafe_ptr(),
-                leaf_n.unsafe_ptr(), nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(),
-                grid_dim=_grid(n_nodes), block_dim=TPB)
+    if fo.table_width != width:
+        var tsz = n_nodes * tm * nm if use_table else 1
+        fo.cached_table = ctx.enqueue_create_buffer[DType.float32](tsz)
+        fo.cached_dead = ctx.enqueue_create_buffer[DType.int32](n_nodes * tm if use_table else 1)
+        fo.cached_leaf_mf = ctx.enqueue_create_buffer[DType.int32](n_nodes * nm if use_table else 1)
+        fo.cached_leaf_n = ctx.enqueue_create_buffer[DType.int32](n_nodes if use_table else 1)
+        comptime if SHAP_TABLE:
+            if use_table:
+                var tu0 = n_nodes * tm
+                ctx.enqueue_function[table_kernel[8]](
+                    Int32(tu0), Int32(tm), Int32(nm), fo.offsets.unsafe_ptr(), Int32(n_trees), fo.colid.unsafe_ptr(),
+                    fo.left.unsafe_ptr(), fo.parent.unsafe_ptr(), cover.unsafe_ptr(), fo.tscale.unsafe_ptr(),
+                    fo.cached_leaf_mf.value().unsafe_ptr(), fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(),
+                    fo.meta.unsafe_ptr(), grid_dim=_grid(tu0), block_dim=TPB)
+        fo.cached_rank = ctx.enqueue_create_buffer[DType.int32](n_nodes if tt else 1)
+        fo.cached_nint = ctx.enqueue_create_buffer[DType.int32](n_trees if tt else 1)
+        fo.cached_needl = ctx.enqueue_create_buffer[DType.uint64](n_nodes * nm if tt else 1)
+        fo.cached_needr = ctx.enqueue_create_buffer[DType.uint64](n_nodes * nm if tt else 1)
+        comptime if SHAP_TREE_TAB:
+            if tt:
+                ctx.enqueue_function[tab_rank_kernel](
+                    Int32(n_trees), fo.offsets.unsafe_ptr(), fo.left.unsafe_ptr(), fo.cached_rank.value().unsafe_ptr(), fo.cached_nint.value().unsafe_ptr(),
+                    grid_dim=_grid(n_trees), block_dim=TPB)
+                ctx.enqueue_function[tab_need_kernel](
+                    Int32(n_nodes), Int32(nm), fo.offsets.unsafe_ptr(), Int32(n_trees), fo.colid.unsafe_ptr(),
+                    fo.left.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.cached_rank.value().unsafe_ptr(), fo.cached_leaf_mf.value().unsafe_ptr(),
+                    fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_nint.value().unsafe_ptr(), fo.cached_needl.value().unsafe_ptr(), fo.cached_needr.value().unsafe_ptr(),
+                    grid_dim=_grid(n_nodes), block_dim=TPB)
+        fo.table_width = width
     var r0 = 0
     while r0 < n:
         var rc = min(rows, n - r0)
         var tu = n_trees * rc
-        var row_units = n_trees * ((rc + 1) // 2) if SHAP_FAST_ROW_PAIR else tu
+        var row_units = n_trees * ((rc + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE)
         comptime if SHAP_FAST_ROW_PAIR:
             SHAP_PAIR_STATE.get_or_create_ptr()[].calls += 1
         var ran = False
@@ -433,33 +482,33 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
                             Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
                             fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(),
                             fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(),
-                            leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
-                            nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
+                            fo.cached_leaf_mf.value().unsafe_ptr(), fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(),
+                            fo.cached_nint.value().unsafe_ptr(), fo.cached_needl.value().unsafe_ptr(), fo.cached_needr.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
+                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_query_grid(row_units), block_dim=QUERY_TPB)
                     else:
                         ctx.enqueue_function[tab_row_kernel[0]](
                             Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
                             fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(),
                             fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(),
-                            leaf_mf.unsafe_ptr(), leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(),
-                            nint.unsafe_ptr(), needl.unsafe_ptr(), needr.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
+                            fo.cached_leaf_mf.value().unsafe_ptr(), fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(),
+                            fo.cached_nint.value().unsafe_ptr(), fo.cached_needl.value().unsafe_ptr(), fo.cached_needr.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
+                            buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_query_grid(row_units), block_dim=QUERY_TPB)
             elif use_table:
                 ran = True
                 if sl * k <= TABLE_ACC:
                     ctx.enqueue_function[table_row_kernel[TABLE_ACC]](
                         Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
                         fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(),
-                        fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), leaf_mf.unsafe_ptr(),
-                        leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
+                        fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), fo.cached_leaf_mf.value().unsafe_ptr(),
+                        fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
+                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_query_grid(row_units), block_dim=QUERY_TPB)
                 else:
                     ctx.enqueue_function[table_row_kernel[0]](
                         Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), Int32(tm), Int32(nm),
                         fo.offsets.unsafe_ptr(), fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(),
-                        fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), leaf_mf.unsafe_ptr(),
-                        leaf_n.unsafe_ptr(), table.unsafe_ptr(), dead.unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
-                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units), block_dim=TPB)
+                        fo.leaves.unsafe_ptr(), fo.parent.unsafe_ptr(), fo.slot.unsafe_ptr(), fo.cached_leaf_mf.value().unsafe_ptr(),
+                        fo.cached_leaf_n.value().unsafe_ptr(), fo.cached_table.value().unsafe_ptr(), fo.cached_dead.value().unsafe_ptr(), dx.unsafe_ptr(), Int32(r0),
+                        buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_query_grid(row_units), block_dim=QUERY_TPB)
         comptime for wi in range(6):
             comptime W = 8 << wi
             if not ran and width == W:
@@ -467,24 +516,71 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
                     Int32(tu), Int32(rc), Int32(d), Int32(k), Int32(sl), fo.offsets.unsafe_ptr(),
                     fo.colid.unsafe_ptr(), fo.quesval.unsafe_ptr(), fo.left.unsafe_ptr(), fo.leaves.unsafe_ptr(),
                     fo.parent.unsafe_ptr(), cover.unsafe_ptr(), fo.tscale.unsafe_ptr(), fo.slot.unsafe_ptr(),
-                    dx.unsafe_ptr(), Int32(r0), buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_grid(row_units),
-                    block_dim=TPB)
+                    dx.unsafe_ptr(), Int32(r0), buf.unsafe_ptr(), fo.meta.unsafe_ptr(), grid_dim=_query_grid(row_units),
+                    block_dim=QUERY_TPB)
         var fu = d * k * rc
         ctx.enqueue_function[fold_kernel](
             Int32(fu), Int32(r0), Int32(rc), Int32(n_trees), Int32(d), Int32(k), Int32(sl), fo.slot.unsafe_ptr(),
-            buf.unsafe_ptr(), dphi.unsafe_ptr(), grid_dim=_grid(fu), block_dim=TPB)
+            buf.unsafe_ptr(), dphi.unsafe_ptr(), grid_dim=_query_grid((fu + AFT_SHAP_FOLD_ITEMS - 1) // AFT_SHAP_FOLD_ITEMS), block_dim=QUERY_TPB)
         r0 += rc
     ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=phi), src_buf=dphi)
     _check_meta(ctx, fo.meta, 0)
-    _ = rank^
-    _ = nint^
-    _ = needl^
-    _ = needr^
-    _ = table^
-    _ = dead^
-    _ = leaf_mf^
-    _ = leaf_n^
     _ = buf^
     _ = dx^
-    _ = cover^
-    _ = fo^
+
+
+
+# T44/C51: registry owns the exact explanation snapshot, never a mutable X
+# address. Handles are monotonic; bindings hold the GIL through synchronous work.
+# Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+struct _CachedShap(Movable):
+    var forest: _Forest
+    var cover: DeviceBuffer[DType.int32]
+    var d: Int
+    var trees: Int
+    var k: Int
+    var nodes: Int
+
+    def __init__(out self, ctx: DeviceContext, forest: List[Int], tscale: Int, cover: Int, d: Int, trees: Int, k: Int, nodes: Int) raises:
+        self.forest = _Forest(ctx, forest, tscale, d, trees, k, nodes)
+        self.cover = _up_i32(ctx, cover, nodes)
+        self.d = d
+        self.trees = trees
+        self.k = k
+        self.nodes = nodes
+        ctx.synchronize()
+
+    def values(mut self, x: Int, phi: Int, n: Int, slots: Int, width: Int) raises:
+        _tree_shap_values_on(_ctx(), self.forest, self.cover, x, phi, n, self.d, self.trees, self.k, self.nodes, slots, width)
+
+struct _ShapCache(Defaultable, Movable):
+    var entries: Dict[Int, _CachedShap]
+    var next_id: Int
+    def __init__(out self):
+        self.entries = Dict[Int, _CachedShap]()
+        self.next_id = 1
+
+comptime _SHAP_CACHE = _Global[StorageType=_ShapCache, name="MojoTreesT44GPUCache", init_fn=_ShapCache.__init__]
+
+def shap_cache_create(forest: List[Int], tscale: Int, cover: Int, d: Int, n_trees: Int, k: Int, n_nodes: Int) raises -> Int:
+    var state = _SHAP_CACHE.get_or_create_ptr()
+    if state[].next_id == 9223372036854775807:
+        raise Error("TreeSHAP cache handle space exhausted")
+    var handle = state[].next_id
+    state[].next_id += 1
+    state[].entries[handle] = _CachedShap(_ctx(), forest, tscale, cover, d, n_trees, k, n_nodes)
+    return handle
+
+def shap_cache_values(handle: Int, x: Int, phi: Int, n: Int, slots: Int, width: Int) raises:
+    var state = _SHAP_CACHE.get_or_create_ptr()
+    if handle not in state[].entries:
+        raise Error("unknown or released TreeSHAP cache handle")
+    state[].entries[handle].values(x, phi, n, slots, width)
+
+def shap_cache_release(handle: Int) raises:
+    var state = _SHAP_CACHE.get_or_create_ptr()
+    if handle not in state[].entries:
+        raise Error("unknown or released TreeSHAP cache handle")
+    _ctx().synchronize()
+    var released = state[].entries.pop(handle)
+    _ = released^

@@ -77,6 +77,9 @@ from checks.numerics import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from gemm.contract import OP_NN, OP_NT, OP_TN
+# Dense projections select NN03/04. SSD/SISO internal contraction profiles
+# remain fixed in the device kernels and therefore in these host calls.
+from gemm.host.neural_gemm import gemm_host_rows as neural_gemm_host_rows
 from mamba.checks.mamba_rms_fold import mamba_rms_row_sumsq_list
 from gemm.checks.gemm_oracle import gemm_oracle, gemm_oracle_right_zero_padded
 from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
@@ -284,7 +287,7 @@ def ssd_core_oracle(
     t_work: Int,
     dims: Mamba2Dims,
     mut h_boundary: List[Float32],  # [B, H, P, N] in: chunk -1 / last boundary;
-    #                                 out: the last COMPLETED boundary
+    #                                 output: the last COMPLETED boundary
     mut st: Mamba2Stages,
 ) raises:
     """Fills the SSD stages of `st` (xd through scan.y, h_last) and advances
@@ -446,7 +449,7 @@ def ssd_core_oracle(
             for hh in range(nh):
                 var lbase = (((bb * nc + c) * nh + hh) * q) * q
                 # M's rows at i >= real reach NOTHING: they produce only
-                # Y_diag rows at i >= real, and the loop below copies out
+                # Y_diag rows at i >= real, and the loop below copies output
                 # i < real. The row stride stays k = Q, which is what the
                 # S14 cell reads.
                 var m_mat = _zeros(real * q)
@@ -641,7 +644,7 @@ def mamba2_block_oracle(
 
     # ---- in_proj (mamba2.py:211; Linear, bias=False), S4: gemm v1 OP_NT,
     #      k = d_model. Columns z | xBC | dt_raw (:211-215 order).
-    st.in_proj = gemm_host_rows(st.norm_out, w.w_in, OP_NT, m, dip, dm)
+    st.in_proj = neural_gemm_host_rows(st.norm_out, w.w_in, OP_NT, m, dip, dm)
 
     # ---- A = -exp(A_log) (mamba2.py:182), S5. PER HEAD.
     for hh in range(nh):
@@ -828,7 +831,7 @@ def mamba2_block_oracle(
             st.gnorm_out.append(ftz(identical_mul(ftz(w.gnorm_w[j]), inner)))
 
     # ---- out_proj (mamba2.py:275), S4: gemm v1 OP_NT, k = d_inner.
-    st.out_proj = gemm_host_rows(st.gnorm_out, w.w_out, OP_NT, m, dm, di)
+    st.out_proj = neural_gemm_host_rows(st.gnorm_out, w.w_out, OP_NT, m, dm, di)
 
     # ---- S22: residual (HF :630).
     for i in range(m * dm):

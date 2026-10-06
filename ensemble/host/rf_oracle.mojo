@@ -113,6 +113,9 @@ moves.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the rf-clf and rf-reg lanes is the measurement.
 """
+from ensemble.tree_identical_ideas import T14, T14_EXACT
+from ensemble.tree_moments import balanced_mse_gain, moment_pair, moment_finish
+from checks.soft_f64 import sf64_from_f32
 from std.math import ceildiv, floor
 from std.memory import bitcast
 from std.builtin.sort import sort
@@ -579,8 +582,8 @@ struct HostFeistel(Movable):
         var total_bits = UInt64(max(8, width))
         self.left_bits = total_bits // UInt64(2)
         self.right_bits = total_bits - self.left_bits
-        self.left_mask = (UInt64(1) << self.left_bits) - UInt64(1)
-        self.right_mask = (UInt64(1) << self.right_bits) - UInt64(1)
+        self.left_mask = (UInt64(1) << UInt64(self.left_bits)) - UInt64(1)
+        self.right_mask = (UInt64(1) << UInt64(self.right_bits)) - UInt64(1)
         # `lcg_seed` (`:137-149`): `s % M`, a zero state rescued to 1.
         var x = UInt64(Int(seed)) % UInt64(2147483647)
         if x == UInt64(0):
@@ -1036,6 +1039,8 @@ def host_mse_gain(
     var inv_len = ftz(Float32(1.0) / parent_weight.cast[DType.float32]())
     var label_sum = ftz(_dequantize(label_sums[n_bins - 1], scale))
     var left_label_sum = ftz(_dequantize(label_sums[i], scale))
+    comptime if T14 and not T14_EXACT:
+        return balanced_mse_gain(parent_weight.cast[DType.float32](),left_weight.cast[DType.float32](),label_sum,left_label_sum)
     var p1 = ftz(-label_sum * label_sum)
     var parent_obj = ftz(p1 * inv_len)
     var lsq = ftz(left_label_sum * left_label_sum)
@@ -1224,6 +1229,8 @@ struct RfHostForest(Movable):
     var quesval: List[Float32]
     var left_child: List[Int32]
     var leaves: List[Float32]
+    var metrics: List[Float32]
+    var counts: List[Int32]
     var n_trees: Int
     var num_outputs: Int
 
@@ -1233,6 +1240,8 @@ struct RfHostForest(Movable):
         self.quesval = List[Float32]()
         self.left_child = List[Int32]()
         self.leaves = List[Float32]()
+        self.metrics = List[Float32]()
+        self.counts = List[Int32]()
         self.n_trees = 0
         self.num_outputs = 1
 
@@ -1614,6 +1623,7 @@ def rf_host_fit(
     label_scale: Float32,
     tree_start: Int = 0,
     weights: List[Float32] = List[Float32](),
+    retain_importance: Bool = False,
 ) raises -> RfHostForest:
     """`fit_forest`, `ensemble/randomforest.mojo:2299-2849`, on the host.
 
@@ -1747,7 +1757,7 @@ def rf_host_fit(
     # of the serial walk at every MOJOLEARN_CPU_THREADS.
     var trees = List[_RfHostTree](capacity=p.n_trees)
     for _ in range(p.n_trees):
-        trees.append(_RfHostTree(List[Int32](), List[Float32](), List[Int32](), List[Float32]()))
+        trees.append(_RfHostTree(List[Int32](), List[Float32](), List[Int32](), List[Float32](), List[Float32](), List[Int32]()))
     var tree_tasks = host_predict_task_count(p.n_trees)
     if tree_tasks <= 1:
         for t in range(p.n_trees):
@@ -1756,14 +1766,14 @@ def rf_host_fit(
                 weighted_rows, weighted_obj, wscale, n_rows, n_cols,
                 n_unique_labels, n_classes, classification, p, criterion,
                 label_scale, tree_start, n_sampled, original_cols, max_rounds,
-                weight_qcdf=weight_qcdf,
+                weight_qcdf=weight_qcdf, retain_importance=retain_importance,
             )
     else:
         var tree_chunk = host_predict_chunk(p.n_trees, tree_tasks)
         var failed = List[Bool](length=tree_tasks, fill=False)
         var messages = List[String](length=tree_tasks, fill=String(""))
         var n_trees = p.n_trees
-        def _tree_task(task: Int) {mut trees, mut failed, mut messages, imm x, imm q, imm labels_i, imm labels_f, imm weights, imm weight_cdf, imm weight_qcdf, imm weighted_rows, imm weighted_obj, imm wscale, imm n_rows, imm n_cols, imm n_unique_labels, imm n_classes, imm classification, imm p, imm criterion, imm label_scale, imm tree_start, imm n_sampled, imm original_cols, imm max_rounds, imm tree_chunk, imm n_trees}:
+        def _tree_task(task: Int) {mut trees, mut failed, mut messages, imm x, imm q, imm labels_i, imm labels_f, imm weights, imm weight_cdf, imm weight_qcdf, imm weighted_rows, imm weighted_obj, imm wscale, imm n_rows, imm n_cols, imm n_unique_labels, imm n_classes, imm classification, imm p, imm criterion, imm label_scale, imm tree_start, imm n_sampled, imm original_cols, imm max_rounds, imm tree_chunk, imm n_trees, imm retain_importance}:
             var lo = task * tree_chunk
             var hi = min(lo + tree_chunk, n_trees)
             try:
@@ -1774,7 +1784,7 @@ def rf_host_fit(
                         n_unique_labels, n_classes, classification, p,
                         criterion, label_scale, tree_start, n_sampled,
                         original_cols, max_rounds,
-                        weight_qcdf=weight_qcdf,
+                        weight_qcdf=weight_qcdf, retain_importance=retain_importance,
                     )
             except e:
                 failed[task] = True
@@ -1791,6 +1801,9 @@ def rf_host_fit(
             forest.colid.append(tr.colid[node])
             forest.quesval.append(tr.quesval[node])
             forest.left_child.append(tr.left_child[node])
+            if retain_importance:
+                forest.metrics.append(tr.metrics[node])
+                forest.counts.append(tr.counts[node])
         for v in range(len(tr.leaves)):
             forest.leaves.append(tr.leaves[v])
         forest.offsets.append(Int32(len(forest.colid)))
@@ -1805,6 +1818,8 @@ struct _RfHostTree(Movable):
     var quesval: List[Float32]
     var left_child: List[Int32]
     var leaves: List[Float32]
+    var metrics: List[Float32]
+    var counts: List[Int32]
 
 
 def _rf_host_tree(
@@ -1831,6 +1846,7 @@ def _rf_host_tree(
     original_cols: Int,
     max_rounds: Int,
     weight_qcdf: List[UInt64] = List[UInt64](),
+    retain_importance: Bool = False,
 ) raises -> _RfHostTree:
     """Tree `t` of `rf_host_fit`: its row sample, `NodeQueue` walk, splits,
     partitions and leaves (`fit_forest`'s per-tree body,
@@ -1855,6 +1871,7 @@ def _rf_host_tree(
     var t_quesval = List[Float32]()
     var t_left = List[Int32]()
     var t_count = List[Int32]()
+    var t_metric = List[Float32]()
     var r_begin = List[Int]()
     var r_count = List[Int]()
     var leaf_counter = 1
@@ -1862,6 +1879,8 @@ def _rf_host_tree(
     t_quesval.append(Float32(0.0))
     t_left.append(Int32(-1))
     t_count.append(Int32(n_root))
+    if retain_importance:
+        t_metric.append(Float32(0))
     r_begin.append(0)
     r_count.append(n_root)
     var work = List[HostWorkItem]()
@@ -1954,12 +1973,16 @@ def _rf_host_tree(
             t_quesval[it.idx] = s.quesval
             t_left[it.idx] = Int32(left_child_id)
             t_count[it.idx] = Int32(parent_count)
+            if retain_importance:
+                t_metric[it.idx] = s.best_metric_val
             leaf_counter += 1
             var left_count = Int(Int32(Int(s.global_n_left)))
             t_colid.append(Int32(0))
             t_quesval.append(Float32(0.0))
             t_left.append(Int32(-1))
             t_count.append(Int32(left_count))
+            if retain_importance:
+                t_metric.append(Float32(0))
             r_begin.append(parent_begin)
             r_count.append(local_left_count)
             if _is_expandable(left_count, it.depth + 1, leaf_counter, p):
@@ -1969,6 +1992,8 @@ def _rf_host_tree(
             t_quesval.append(Float32(0.0))
             t_left.append(Int32(-1))
             t_count.append(Int32(right_count))
+            if retain_importance:
+                t_metric.append(Float32(0))
             r_begin.append(parent_begin + local_left_count)
             r_count.append(parent_count - local_left_count)
             if _is_expandable(right_count, it.depth + 1, leaf_counter, p):
@@ -2022,9 +2047,33 @@ def _rf_host_tree(
         else:
             var label_sum = Int32(0)
             var cnt = UInt32(0)
-            for j in range(begin, begin + count):
-                label_sum = label_sum + Int32(labels_f[Int(row_ids[j])] * label_scale)
-                cnt = cnt + UInt32(1)
+            comptime if T14:
+                # Same V1 row-ID partial membership and reduction as GPU.
+                # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+                var partial = List[Int32](length=128,fill=Int32(0))
+                for j in range(begin,begin+count):
+                    var row = Int(row_ids[j])
+                    partial[row%128] += Int32(labels_f[row]*label_scale)
+                var moments = List[UInt64](length=128,fill=UInt64(0))
+                comptime if not T14_EXACT:
+                    for logical in range(128):
+                        moments[logical] = sf64_from_f32(ftz(_dequantize(partial[logical],label_scale)))
+                var distance = 64
+                while distance > 0:
+                    for logical in range(distance):
+                        partial[logical] += partial[logical+distance]
+                        comptime if not T14_EXACT:
+                            moments[logical] = moment_pair(moments[logical],moments[logical+distance])
+                    distance //= 2
+                label_sum = partial[0]
+                cnt = UInt32(count)
+                comptime if not T14_EXACT:
+                    vleaf[node*n_out] = moment_finish(moments[0],Float32(count))
+                    continue
+            else:
+                for j in range(begin, begin + count):
+                    label_sum = label_sum + Int32(labels_f[Int(row_ids[j])] * label_scale)
+                    cnt = cnt + UInt32(1)
             # `SetLeafVector` (`objectives.mojo:1354-1376`).
             var weight = Int64(Int(cnt))
             if weight > 0:
@@ -2032,4 +2081,6 @@ def _rf_host_tree(
                     _dequantize(label_sum, label_scale) / weight.cast[DType.float32]()
                 )
 
-    return _RfHostTree(t_colid^, t_quesval^, t_left^, vleaf^)
+    if not retain_importance:
+        t_count.clear()
+    return _RfHostTree(t_colid^, t_quesval^, t_left^, vleaf^, t_metric^, t_count^)

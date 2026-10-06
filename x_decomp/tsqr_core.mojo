@@ -44,14 +44,16 @@ way decomposition/host/pca_full_oracle.mojo restates it. A zero column
 (||x|| flushed to 0) is a zero diagonal and tau = 0 (DEVIATION 588): no
 refusal, its reflector's stored tail is zeroed so no later product reads it.
 """
+from experiments.classical_identical_ideas.linear_controls import C24_PANEL8, C24_ROWS2048, C24_TREE4
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 
 #: rows per leaf block (the last block takes the remainder)
-comptime TS_ROWS = 4096
+comptime TS_TREE_ARITY = 4 if C24_TREE4 else 2
+comptime TS_ROWS = 2048 if C24_ROWS2048 else 4096
 #: chains per inner product over a block's rows (the fold width)
 comptime TS_P = 16
 #: columns per panel (also the device's column lanes)
-comptime TS_NB = 16
+comptime TS_NB = 8 if C24_PANEL8 else 16
 #: device threads per block: TS_P row groups x TS_NB column lanes
 comptime TS_TPB = TS_P * TS_NB
 #: the widest matrix the route takes (a leaf block holds >= TS_ROWS rows, a

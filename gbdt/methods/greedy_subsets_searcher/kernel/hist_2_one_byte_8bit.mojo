@@ -205,7 +205,10 @@ def h8_reduce_and_flush(
                         acc_i32.unsafe_store(dst_base + fold, q)
 
 
-def hist2_8bit_kernel[preq: Bool = False, col_map: Bool = False](
+def hist2_8bit_kernel[
+    preq: Bool = False, col_map: Bool = False,
+    stream_slot: Int = 0, streams: Int = 1,
+](
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
     feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_group_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -264,6 +267,15 @@ def hist2_8bit_kernel[preq: Bool = False, col_map: Bool = False](
     )
     if local_block_idx >= active_block_count:
         return
+    # T21: keep the original logical replica IDs, row stripes, dither keys,
+    # and active-block count; enqueue each replica in exactly one wave. The
+    # uniform return precedes shared-memory allocation and every barrier.
+    # A fixed 2/4-wave schedule bounds concurrently active replica work without
+    # changing accumulator range or introducing a shape-specific threshold.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    comptime if streams > 1:
+        if local_block_idx % streams != stream_slot:
+            return
 
     var smem = stack_allocation[
         H8_SMEM,
@@ -417,7 +429,8 @@ def hist2_8bit_kernel[preq: Bool = False, col_map: Bool = False](
 
 
 def hist2_8bit_gather_kernel[
-    ridx_stats: Bool = False, preq: Bool = False, col_map: Bool = False
+    ridx_stats: Bool = False, preq: Bool = False, col_map: Bool = False,
+    stream_slot: Int = 0, streams: Int = 1,
 ](
     feature_folds: MutPointer[UInt32, MutAnyOrigin],
     feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -479,6 +492,15 @@ def hist2_8bit_gather_kernel[
     )
     if local_block_idx >= active_block_count:
         return
+    # T21: keep the original logical replica IDs, row stripes, dither keys,
+    # and active-block count; enqueue each replica in exactly one wave. The
+    # uniform return precedes shared-memory allocation and every barrier.
+    # A fixed 2/4-wave schedule bounds concurrently active replica work without
+    # changing accumulator range or introducing a shape-specific threshold.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    comptime if streams > 1:
+        if local_block_idx % streams != stream_slot:
+            return
 
     var smem = stack_allocation[
         H8_SMEM,

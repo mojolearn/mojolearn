@@ -10,6 +10,8 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from x_cnn.ops import NN14_BOUNDED_IM2COL
+
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, conv_params
 from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, pool_params
 from x_cnn.ops import FP, IP
@@ -33,7 +35,7 @@ from x_cnn.device import gcn_loops_device
 # lane fam-neural (2026-10-04): the `_m` forms of the entries that had none
 from x_cnn.device import idn_flags, adaptive_pool_m, graph_op_m, gcn_norm_m, pad2d_m, chan_copy_m
 # lane fam2-neural (2026-10-04): the device epoch (order, Adam scalars and losses on the device)
-from x_cnn.ops import idn2_flags, epoch_key, adam_hyper_base, AH_ROW
+from x_cnn.ops import idn2_flags, epoch_key, adam_hyper_base, AH_ROW, neural_tape_budget_bytes, neural_numerical_profile
 from x_cnn.device import (
     epoch_rows_download, res_gather_pair_perm, adam_hyper_resident, adam_hyper_download, opt_many_resident_h,
     softmax_xent_res_loss,
@@ -1339,6 +1341,14 @@ def idn2_flags_binding() raises -> PythonObject:
     return PythonObject(idn2_flags())
 
 
+def neural_tape_budget_binding() raises -> PythonObject:
+    return PythonObject(neural_tape_budget_bytes())
+
+
+def neural_numerical_profile_binding() raises -> PythonObject:
+    return PythonObject(neural_numerical_profile())
+
+
 def _seed64(lo: PythonObject, hi: PythonObject) raises -> UInt64:
     return (UInt64(Int(py=hi)) << UInt64(32)) | UInt64(Int(py=lo))
 
@@ -1523,6 +1533,7 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[adam_binding[False]]("x_cnn_adam")
         m.def_function[batchnorm_forward_binding]("x_cnn_batchnorm_forward")
         m.def_function[batchnorm_backward_binding]("x_cnn_batchnorm_backward")
+        m.def_function[nn14_bounded_im2col_binding]("x_cnn_bounded_im2col")
         m.def_function[dropout2d_binding]("x_cnn_dropout2d")
         m.def_function[mul_binding]("x_cnn_mul")
         m.def_function[spmm_binding]("x_cnn_spmm")
@@ -1565,6 +1576,8 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[gcn_loops_binding]("x_cnn_gcn_loops")
         m.def_function[idn_flags_binding]("x_cnn_idn_flags")
         m.def_function[idn2_flags_binding]("x_cnn_idn2_flags")
+        m.def_function[neural_tape_budget_binding]("x_cnn_neural_tape_budget_bytes")
+        m.def_function[neural_numerical_profile_binding]("x_cnn_numerical_profile")
         m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
         m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
         m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
@@ -1577,3 +1590,8 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn: ", e))
+
+
+def nn14_bounded_im2col_binding() -> PythonObject:
+    """Source-arm query for saved-buffer allocation, never data-dependent."""
+    return PythonObject(1 if NN14_BOUNDED_IM2COL else 0)

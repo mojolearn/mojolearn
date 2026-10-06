@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """BisectingKMeans (lane/algos-cluster). Reference: scikit-learn
 `sklearn/cluster/_bisect_k_means.py` (`_BisectingTree` :20-80, `_bisect`
 :300-360, `fit` :362-450, `_predict_recursive` :490-540).
@@ -16,6 +14,10 @@ next draw of the lane's splitmix64 stream. The scores are the per-child
 inertia ('biggest_inertia') or size ('largest_cluster'). Leaves in
 depth-first order are the labels; `predict` descends the tree on the device
 (`bodies.tree_descend`)."""
+from experiments.classical_identical_ideas.graph_controls import C39_RETAIN_STATE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
@@ -167,6 +169,11 @@ def bisect_fit[O: ClusterOps](
     var root_center = List[Float32](length=d, fill=Float32(0))
     _ = tree.add(root_center, Float64(0), all_rows^)
     var kinit = INIT_RANDOM if init == INIT_RANDOM else INIT_KMEANS_PLUS_PLUS
+    # One fit-owned subset arena; capacity follows input storage, not board
+    # dimensions. Ordered split membership and all arithmetic stay intact.
+    var retained_subset = ops.empty(n*d) if C39_RETAIN_STATE else -1
+    var retained_ids = ops.zeros_i(n) if C39_RETAIN_STATE else -1
+    var retained_distances = ops.alloc(n) if C39_RETAIN_STATE else -1
     for _split in range(k - 1):
         var leaves = tree.leaves()
         var pick = leaves[0]
@@ -217,8 +224,10 @@ def bisect_fit[O: ClusterOps](
             var idx = List[Int32](capacity=m)
             for r in rows:
                 idx.append(Int32(r))
-            var idx_s = ops.put_i(idx)
-            sub_s = ops.empty(m * d)
+            var idx_s = retained_ids if C39_RETAIN_STATE else ops.put_i(idx)
+            comptime if C39_RETAIN_STATE:
+                ops.set_i(idx_s,idx)
+            sub_s = retained_subset if C39_RETAIN_STATE else ops.empty(m * d)
             ops.gather_rows(xc_s, d, idx_s, m, sub_s)
             for it in range(n_init):
                 var c = List[Float32]()
@@ -245,7 +254,7 @@ def bisect_fit[O: ClusterOps](
                 # the float-float fold, two 2-float reads in one wait
                 var cs = ops.put(best_c)
                 var lab_s = ops.put_i(best_l)
-                var dsel = ops.alloc(m)
+                var dsel = retained_distances if C39_RETAIN_STATE else ops.alloc(m)
                 var ws_s = -1
                 if weighted:
                     ws_s = ops.put(sub_w)
@@ -258,7 +267,8 @@ def bisect_fit[O: ClusterOps](
                 var ee = ops.gets([e0, e1], [2, 2])
                 sc[0] = Float64(ee[0][0]) + Float64(ee[0][1])
                 sc[1] = Float64(ee[1][0]) + Float64(ee[1][1])
-                ops.shrink(dsel)
+                comptime if not C39_RETAIN_STATE:
+                    ops.shrink(dsel)
         else:
             var cs = ops.put(best_c)
             var ds = ops.zeros(m * 2)
@@ -279,7 +289,8 @@ def bisect_fit[O: ClusterOps](
             for f in range(d):
                 cen.append(ftz(ftz(best_c[j * d + f]) + ftz(mean[f])))
             ids.append(tree.add(cen, sc[j], child_rows[j].copy()))
-        ops.shrink(sub_s)
+        if not C39_RETAIN_STATE or weighted:
+            ops.shrink(sub_s)
         tree.left[pick] = ids[0]
         tree.right[pick] = ids[1]
         tree.rows[pick] = List[Int]()

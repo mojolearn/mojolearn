@@ -95,6 +95,11 @@ from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
+from training.neural_identical_experiments import IDN_CE_GRAD_FUSED, IDN_LOSS_TOKEN_TREE_V2
+from training.loss_reduction_v2 import (
+    LOSS_TOKEN_TREE_V2_LEAF, loss_token_tree_v2_leaf_count,
+    loss_token_tree_v2_leaf, loss_token_tree_v2_add,
+)
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -112,6 +117,7 @@ from max.gpu.sync import barrier
 # them because `checks/numerics.mojo`'s own two-arm functions put their
 # stdlib import at FUNCTION scope after the comptime branch, and an import
 # INSIDE a comptime-if body is a spelling nothing in this tree has compiled.
+from training.neural_ab_profiles import NN54_LOSS_PROFILE, nn_reduce_pointer_into, nn_reduce_scratch_floats
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -128,7 +134,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_max_block_size,
 )
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
@@ -354,6 +360,17 @@ comptime ANY_LOSS_SABOTAGE = (
     or SAB_GRAD_RECIPROCAL_MUL
     or SAB_DENOM_SERIAL_CHAIN
     or SAB_REDUCE_SERIAL
+)
+
+# NN52: default OFF. Reuse each probability in its gradient consumer while
+# retaining both output stores and the L14/L16 rounding seams. This is a
+# memory/launch experiment for every row/vocabulary size, never a board route.
+# Compilation, four-column identity, task quality and full-model A/B are pending.
+comptime NN52_CE_WEIGHT_GRAD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN52_CE_WEIGHT_GRAD"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not ANY_LOSS_SABOTAGE
 )
 
 
@@ -1031,6 +1048,39 @@ def ce_weights_kernel(
     )
 
 
+def ce_weights_dlogits_kernel(
+    weights: MutPointer[Float32, MutAnyOrigin],
+    dlogits: MutPointer[Float32, MutAnyOrigin],
+    expo: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    targets: MutPointer[Int32, MutAnyOrigin],
+    t_target: Float32, t_other: Float32, divisor: Float32,
+    n_rows_in: Int32, vocab_in: Int32, ignore_index_in: Int32,
+):
+    """NN52: the clean L14 and L16 cells, with a local probability value.
+
+    Same-cell aliases used by the resident LM remain valid: load expo before
+    either store, store the probability first and the final gradient last.
+    Distinct buffers still receive every probability, including ignored rows.
+    Sabotage builds retain the original kernels at the launcher below.
+    """
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var vocab = Int(vocab_in)
+    if cell >= Int(n_rows_in) * vocab:
+        return
+    var row = cell // vocab
+    var v = cell - row * vocab
+    var w = ftz(identical_div(ftz(expo.unsafe_load(cell)), ftz(denom.unsafe_load(row))))
+    var y = Int(targets.unsafe_load(row))
+    weights.unsafe_store(cell, w)
+    if y == Int(ignore_index_in):
+        dlogits.unsafe_store(cell, Float32(0.0))
+        return
+    var t = t_target if v == y else t_other
+    var d = ftz(ftz(w) - ftz(t))
+    dlogits.unsafe_store(cell, ftz(identical_div(d, divisor)))
+
+
 def ce_dlogits_kernel(
     dlogits: MutPointer[Float32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -1107,6 +1157,84 @@ def ce_dlogits_kernel(
 # ===========================================================================
 # THE SABOTAGE FOLD (contract 10.1's DENOM_SERIAL_CHAIN and REDUCE_SERIAL)
 # ===========================================================================
+
+
+def ce_token_tree_v2_leaves_kernel(
+    partials: MutPointer[Float32, MutAnyOrigin],
+    values: MutPointer[Float32, MutAnyOrigin], count_in: Int32,
+):
+    """NI35: independent fixed logical leaf owners; geometry only schedules."""
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var count = Int(count_in)
+    var begin = leaf * LOSS_TOKEN_TREE_V2_LEAF
+    if begin >= count:
+        return
+    var end = min(begin + LOSS_TOKEN_TREE_V2_LEAF, count)
+    partials.unsafe_store(leaf, loss_token_tree_v2_leaf(values, begin, end))
+
+
+def ce_token_tree_v2_level_kernel(
+    output: MutPointer[Float32, MutAnyOrigin],
+    previous: MutPointer[Float32, MutAnyOrigin], count_in: Int32,
+):
+    var parent = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var left = parent * 2
+    var count = Int(count_in)
+    if left >= count:
+        return
+    var value = previous.unsafe_load(left)
+    if left + 1 < count:
+        value = loss_token_tree_v2_add(value, previous.unsafe_load(left + 1))
+    # Odd tails are carried bit-for-bit, never added to a padding zero.
+    output.unsafe_store(parent, value)
+
+
+def ce_token_tree_v2_into(
+    ctx: DeviceContext, mut total: DeviceBuffer[DType.float32],
+    mut row: DeviceBuffer[DType.float32], mut ws: DeviceBuffer[DType.float32],
+    count: Int,
+) raises:
+    """NI35 L12 on caller-owned scratch, enqueued on one ordered context.
+
+    Two nonoverlapping leaf-sized slices alternate across levels. The final
+    parent writes directly to total, so no scratch owner dies before a fold.
+    """
+    var leaves = loss_token_tree_v2_leaf_count(count)
+    if leaves == 1:
+        step_count_launch()
+        ctx.enqueue_function[ce_token_tree_v2_leaves_kernel](
+            total.unsafe_ptr(), row.unsafe_ptr(), Int32(count),
+            grid_dim=(1, 1, 1), block_dim=(CE_TPB, 1, 1),
+        )
+        return
+    step_count_launch()
+    ctx.enqueue_function[ce_token_tree_v2_leaves_kernel](
+        ws.unsafe_ptr(), row.unsafe_ptr(), Int32(count),
+        grid_dim=(_grid_for(leaves), 1, 1), block_dim=(CE_TPB, 1, 1),
+    )
+    var active = leaves
+    var input_offset = 0
+    var output_offset = leaves
+    while active > 1:
+        var parents = (active + 1) // 2
+        step_count_launch()
+        if parents == 1:
+            ctx.enqueue_function[ce_token_tree_v2_level_kernel](
+                total.unsafe_ptr(), ws.unsafe_ptr() + input_offset, Int32(active),
+                grid_dim=(1, 1, 1), block_dim=(CE_TPB, 1, 1),
+            )
+        else:
+            # The ping-pong planes are disjoint within the retained owner.
+            var ws_ptr = ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            ctx.enqueue_function[ce_token_tree_v2_level_kernel](
+                ws_ptr + output_offset, ws_ptr + input_offset,
+                Int32(active), grid_dim=(_grid_for(parents), 1, 1),
+                block_dim=(CE_TPB, 1, 1),
+            )
+        active = parents
+        var old_input = input_offset
+        input_offset = output_offset
+        output_offset = old_input
 
 
 def ce_serial_fold_kernel(
@@ -1211,6 +1339,11 @@ def identical_ce_workspace_max_floats(
         var wb = identical_gemm_workspace_max_floats(1, 1, n_rows)
         if wb > w:
             w = wb
+    comptime if NN54_LOSS_PROFILE:
+        w = max(w, 2 * nn_reduce_scratch_floats[128](n_rows))
+    comptime if IDN_LOSS_TOKEN_TREE_V2:
+        # Two ping-pong slices of the logical leaf count; no board cap.
+        w = max(w, 2 * loss_token_tree_v2_leaf_count(n_rows))
     if w < 1:
         return 1
     return w
@@ -1264,6 +1397,7 @@ def ce_refuse_device_inputs(
     mut targets: DeviceBuffer[DType.int32],
     n_rows: Int,
     cfg: CeConfig,
+    targets_prerefused: Bool = False,
 ) raises:
     """Contract section 8 ON THE DEVICE ENTRY POINT, which is where it was
     missing. DEVIATION 1495; the scan moved to the device at DEVIATION 2514
@@ -1314,6 +1448,8 @@ def ce_refuse_device_inputs(
     if idx >= 0:
         var is_nan = device_classify_nonfinite(ctx, logits, idx)
         raise Error(ce_nonfinite_message("logits", idx, is_nan))
+    if targets_prerefused:
+        return
     step_count_host_alloc()
     var ht = ctx.enqueue_create_host_buffer[DType.int32](n_rows)
     step_count_sync()
@@ -1359,6 +1495,7 @@ def identical_ce_forward_into(
     n_rows: Int,
     count: Int,
     cfg: CeConfig,
+    targets_prerefused: Bool = False,
 ) raises:
     """Seams L1 through L13, enqueued. Nothing waits.
 
@@ -1402,7 +1539,7 @@ def identical_ce_forward_into(
     # `step.ce_forward`, whose wait exists only under the switch.
     var ton = _step_timing_on()
     var tk = Int(perf_counter_ns())
-    ce_refuse_device_inputs(ctx, logits, targets, n_rows, cfg)
+    ce_refuse_device_inputs(ctx, logits, targets, n_rows, cfg, targets_prerefused)
     _step_timing_tick(ctx, ton, tk, "step.ce_refuse_scan")
     if ton:
         # Two four-token lines (`timing <name> <value> bytes`, the shape
@@ -1585,6 +1722,12 @@ def identical_ce_forward_into(
             grid_dim=(1, 1, 1),
             block_dim=(CE_TPB, 1, 1),
         )
+    elif NN54_LOSS_PROFILE:
+        nn_reduce_pointer_into[128, False](ctx, total.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), row.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows)
+    elif IDN_LOSS_TOKEN_TREE_V2:
+        # NI35 intentionally versions only the token-total graph. Vocabulary
+        # softmax, label smoothing, count/divisor and logits VJP remain pinned.
+        ce_token_tree_v2_into(ctx, total, row, ws, n_rows)
     else:
         identical_gemm_into(ctx, total, ones, row, ws, 1, 1, n_rows, OP_NN)
 
@@ -1651,6 +1794,16 @@ def identical_ce_backward_into(
     var divisor = ce_divisor(cfg.reduction, count, cfg.num_items)
     comptime if SAB_GRAD_DIVISOR_IS_N:
         divisor = Float32(n_rows)
+
+    comptime if (NN52_CE_WEIGHT_GRAD or IDN_CE_GRAD_FUSED) and not ANY_LOSS_SABOTAGE:
+        step_count_launch()
+        ctx.enqueue_function[ce_weights_dlogits_kernel](
+            weights.unsafe_ptr(), dlogits.unsafe_ptr(), expo.unsafe_ptr(),
+            denom.unsafe_ptr(), targets.unsafe_ptr(), tv[0], tv[1], divisor,
+            Int32(n_rows), Int32(vocab), Int32(cfg.ignore_index),
+            grid_dim=(_grid_for(cells), 1, 1), block_dim=(CE_TPB, 1, 1),
+        )
+        return
 
     step_count_launch()
     ctx.enqueue_function[ce_weights_kernel](

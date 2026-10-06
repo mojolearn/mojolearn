@@ -189,6 +189,13 @@ def _o_wgrad_block(K: Int) -> Int:
     R R >= K."""
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
         return K
+    # NN43: independently restated fixed absolute leaf profile; this is
+    # source only, no oracle/check was executed for the candidate.
+    comptime if is_defined["MOJOLEARN_NN43_WGRAD_FIXED128"]():
+        var leaf = 128
+        while (K + leaf - 1) // leaf > (1 << 22):
+            leaf *= 2
+        return leaf
     var r = 512
     while r * r < K:
         r *= 2
@@ -1363,7 +1370,7 @@ def o_mlp_perm(n: Int, seed: UInt64, epoch: Int, alt: Bool) -> List[Float32]:
     while (1 << bits) < n:
         bits += 1
     var h = UInt32((bits + 1) // 2)
-    var mask = (UInt32(1) << h) - UInt32(1)
+    var mask = (UInt32(1) << UInt32(h)) - UInt32(1)
     var rounds = 5 if alt else 6
     var out = List[Float32]()
     for t in range(n):

@@ -25,7 +25,17 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import ftz, identical_silu
+from std.sys.compile import is_defined
+from checks.numerics import ftz, identical_silu, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+# NN44 independent arm: integer upper-bound search, including empty experts.
+# OFF, unmeasured. O(log E) lookup reduces scheduling overhead as E grows;
+# no floating arithmetic, routing decision, or combine order changes.
+comptime NN44_EXPERT_BISECT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN44_EXPERT_BISECT"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 from sequence.ops import FP, fma3, ld, mul, st
 
 #: pairs (token, pick) per block, outputs (features or d) per block, and the
@@ -39,6 +49,16 @@ comptime MOE_TPB = TILE_P * TILE_Q
 @always_inline
 def _block_expert(boff: FP, n_experts: Int, b: Int) -> Int:
     """The expert whose blocks hold block b (`boff[e] <= b < boff[e + 1]`)."""
+    comptime if NN44_EXPERT_BISECT:
+        var lo = 0
+        var hi = n_experts
+        while lo + 1 < hi:
+            var mid = (lo + hi) // 2
+            if Int(boff.unsafe_load(mid)) <= b:
+                lo = mid
+            else:
+                hi = mid
+        return lo
     var e = 0
     while e + 1 < n_experts and Int(boff.unsafe_load(e + 1)) <= b:
         e += 1

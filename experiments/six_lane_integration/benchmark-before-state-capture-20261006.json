@@ -1,0 +1,162 @@
+{
+  "base_main": "74967f7119a802d30216f4198d1d9c47bc4165fd",
+  "dataset_materialization": "NOT RUN; source recipes are frozen, concrete data hashes remain pending",
+  "drift_policy": "Any mismatch at queue admission blocks. Changed incumbent assignments require semantic repair before freeze.",
+  "files": [
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "c1f135ba251dc9199d489cad4e2e04b5d0c12c57",
+      "base_sha256": "7a02bbed66f1570326565a49da45b3dd643e084c7faca56d219c990411f584a2",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "7a02bbed66f1570326565a49da45b3dd643e084c7faca56d219c990411f584a2",
+      "path": "tools/bench_board.py"
+    },
+    {
+      "added_integration_assignments": [
+        "_NEURAL_AB_TRANSFORMER_FULL"
+      ],
+      "base_git_blob": "1310ac6d46093575af6722a2d4b3eb45e70c3fcd",
+      "base_sha256": "fe20291d1c85726e93a34191c7c342e2caa88a5e94a7c8f960e003176559a7ca",
+      "changed": true,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "b69d254f77826e31df65877d392b282f475b74b63dc613d774814a2823bb5c4c",
+      "path": "tools/bench_board_neural.py"
+    },
+    {
+      "added_integration_assignments": [
+        "AFT_ALGOS_BOUNDARY",
+        "AFT_FULL_TREE_LANES",
+        "_NEURAL_AB_ORIGINAL_LANES"
+      ],
+      "base_git_blob": "3ae1e3c2c9129785436a47457f9ec8659b29ac6e",
+      "base_sha256": "521ed9f02439a3f81c2953d811f92e286cdda9dcb3f22daeacaf6d5c6cd54045",
+      "changed": true,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "dd50603fb00666237f86868db5e3f21420ee6fedf96c18bffeb228ff112f037b",
+      "path": "tools/bench_board_algos.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "d994ad3bc9a317634e06b6b92c798b14de6755c5",
+      "base_sha256": "d2ab5d2d865f136914a4421b0500e25e261024dcce79782c59e135b60bddb159",
+      "changed": true,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+      "path": "tools/bench_board_more.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "cddb8fe74b3d04696dda2cea1da41d95a94f90d6",
+      "base_sha256": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209",
+      "path": "tools/classical_two_datasets.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "fd1d98c5b8996751555fd620780ddf3eb31d40e3",
+      "base_sha256": "efedcab7296dc46e0d3de77994680cf3f74fa155b6d07e16c83eb7da281fc4a9",
+      "changed": true,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "f8ec3a5a608e28662c860f3ef6ccc950cc1c5ab751c476913a05299e331841be",
+      "path": "tools/speed_gbdt_arm.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "310f1c341ef60d8085bb3455d8ca4c1191ee87a3",
+      "base_sha256": "d0e93ec430c52dddb06195bbf103b2831e73ff5251bc5a949e348d36d627d325",
+      "changed": true,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "5f1a400f2e8bc0839cebf744fa7e7ec8dcb2a7a8cedc33bd70e20a3d45adedb2",
+      "path": "bench/speed/forest_speed_arm.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "5662bb3eed74bd3ef4a2a72796fdc550d11e4da4",
+      "base_sha256": "edae178349806cf0de38191aa0104de4fbb066ebc5ba903654755e0379a044e9",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "edae178349806cf0de38191aa0104de4fbb066ebc5ba903654755e0379a044e9",
+      "path": "tools/bench_neural_decode.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "390d47e655502288aa06c69efb4acc1391028250",
+      "base_sha256": "cf11311ca8bf966e99eef2a28cb4973f827b40ef5cbd19fb7860c487ebd3c168",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "cf11311ca8bf966e99eef2a28cb4973f827b40ef5cbd19fb7860c487ebd3c168",
+      "path": "tools/bench_board_state.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "15cf4a3fede14a429ffaab8f029c126a60773afe",
+      "base_sha256": "a71a1717323f1147885328228828b34bc0d42d3391e32c44cab0fbd7e165a3b9",
+      "changed": true,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "051d4699df0ec7f883e7d2802b8757a9de99ac435212af6d6fe4dc932abd9369",
+      "path": "tools/performance_measurement_board.py"
+    },
+    {
+      "base_git_blob": "e3b7174b9023ae64d4f945c24013e1cee51fcc36",
+      "base_sha256": "fbc8ad9daddc31ade361147c7899d062a11aa898ec290f3bd0ee546565cdfaa3",
+      "changed": true,
+      "integrated_sha256": "6c7efab6419f7d401f75bbe13bedffd398ff871f779c426f83b5f455c49f2460",
+      "path": "experiments/performance_ideas/README.md"
+    },
+    {
+      "base_git_blob": "96db5a470ad284291db9393e229475d4c3c57cf8",
+      "base_sha256": "408bd74117e33b874ebfb2327b05b2234617759ab299bb388b032cb509d1e7f9",
+      "changed": false,
+      "integrated_sha256": "408bd74117e33b874ebfb2327b05b2234617759ab299bb388b032cb509d1e7f9",
+      "path": "pixi.lock"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "e5e205d29a369ce2a69288b0546a0f70e4133f7b",
+      "base_sha256": "29b987715722dadc59aea1e6353a8b621ac83f2ea19ba799e8c46b1a250967b5",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "29b987715722dadc59aea1e6353a8b621ac83f2ea19ba799e8c46b1a250967b5",
+      "path": "tools/knn_datasets.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "8cb0a60dc073afbdb77628d2b32d19148f44fcf3",
+      "base_sha256": "b5aa1c7a9d7ab41382e8875513b1d7515b9da0883c1dda593976d58ed30a6d2e",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "b5aa1c7a9d7ab41382e8875513b1d7515b9da0883c1dda593976d58ed30a6d2e",
+      "path": "tools/bench_board_params.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "27738a564ff0c136168ba2d26ebd88862c0af6ed",
+      "base_sha256": "1c0e8872770e0421bf9caba17ff4f4def2d1cc9c2a24be50544590e39fba6c08",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "1c0e8872770e0421bf9caba17ff4f4def2d1cc9c2a24be50544590e39fba6c08",
+      "path": "tools/torch_lm_step_opponent.py"
+    },
+    {
+      "added_integration_assignments": [],
+      "base_git_blob": "89adef8b53bf6cb88e1256f1231906127e4bd561",
+      "base_sha256": "a4aa37b34cb68e784b75a6b6d7459d6d6ad764360babd1e8f34c28072e5f8e27",
+      "changed": false,
+      "changed_incumbent_module_assignments": {},
+      "integrated_sha256": "a4aa37b34cb68e784b75a6b6d7459d6d6ad764360babd1e8f34c28072e5f8e27",
+      "path": "tools/speed_torch_seq.py"
+    }
+  ],
+  "merge_review": "Preserve latest-main LARS/GMM opponent precision repairs and explicit full-GMM saved recipes; master more-runner now forwards the unchanged saved recipe. No measurements executed.",
+  "opponent_execution": "NOT RUN; opponent source/dependencies/results untouched",
+  "policy": "Existing datasets, splits, seeds, preprocessing, workload sizes, estimator settings, modes, quality rules, timing definitions and opponent roster are immutable. Added capture/selector APIs do not authorize alternate races.",
+  "previous_freeze": {
+    "integration_commit": "46bf6fd3ed01b9be272e75568ce086903fa0d8d0",
+    "path": "experiments/six_lane_integration/benchmark.integration-freeze.json",
+    "sha256": "639b705ea1ff176622ae004c5c3f6f22a3bcbdf015c689b019cac99f506e0824"
+  },
+  "schema": "mojolearn.benchmark-freeze/1"
+}

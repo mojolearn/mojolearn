@@ -39,6 +39,8 @@ boosting loop that check does not run. DEVIATION 259.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
+from std.gpu import block_idx, block_dim, thread_idx
+from core.forest_experiments import C50_GB_PACKED
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
@@ -261,7 +263,7 @@ def add_non_symmetric_tree_to_cursor(
 #: on any column and the host column is untouched.
 #: `-D MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF` (or the master
 #: `-D MOJOLEARN_IDN_ALL_OFF`) restores the per-tree loop.
-comptime IDN_NS_PREDICT_PACKED = (
+comptime IDN_NS_PREDICT_PACKED = C50_GB_PACKED or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
         is_defined["MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF"]()
@@ -398,6 +400,43 @@ def add_non_symmetric_trees_packed(
     ctx.enqueue_copy(dst_buf=d_rs, src_ptr=h_rs.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
 
+    comptime if C50_GB_PACKED:
+        if total_slots > 2147483647//8 or total_vals > 2147483647 or n_trees > 2147483647//4:
+            raise Error("C50 GB packed node/metadata offsets exceed Int32")
+        var packed = ctx.enqueue_create_buffer[DType.uint32](8*total_slots)
+        ctx.enqueue_function[_c50_pack_ns_kernel](d_off.unsafe_ptr(), d_mask.unsafe_ptr(), d_shift.unsafe_ptr(), d_oh.unsafe_ptr(),
+            d_bin.unsafe_ptr(), d_ls.unsafe_ptr(), d_rs.unsafe_ptr(), packed.unsafe_ptr(), Int32(total_slots),
+            grid_dim=(total_slots+255)//256, block_dim=256)
+        var hm = ctx.enqueue_create_host_buffer[DType.int32](4*n_trees)
+        for t in range(n_trees):
+            hm.unsafe_ptr().unsafe_store(4*t, Int32(node_at[t]))
+            hm.unsafe_ptr().unsafe_store(4*t+1, Int32(val_at[t]))
+            hm.unsafe_ptr().unsafe_store(4*t+2, Int32(len(trees[t].model_structure.nodes)))
+            hm.unsafe_ptr().unsafe_store(4*t+3, Int32(trees[t].dim))
+        var dm = ctx.enqueue_create_buffer[DType.int32](4*n_trees)
+        ctx.enqueue_copy(dst_buf=dm, src_ptr=hm.unsafe_ptr())
+        var first = 0
+        while first < n_trees:
+            # Cache working set, not benchmark shape, limits the tree group.
+            # A single larger tree remains indivisible; constant trees cost one
+            # record so every group is bounded even in an all-constant forest.
+            var last = first
+            var bytes = 0
+            while last < n_trees:
+                var next_bytes = 32*max(1, len(trees[last].model_structure.nodes))
+                if last > first and bytes+next_bytes > 64*1024:
+                    break
+                bytes += next_bytes
+                last += 1
+            ctx.enqueue_function[_c50_ns_rows_kernel](packed.unsafe_ptr(), dm.unsafe_ptr(), cindex.unsafe_ptr(), d_vals.unsafe_ptr(),
+                cursor.unsafe_ptr(), Int32(n_rows), Int32(first), Int32(last), grid_dim=max(1,(n_rows+127)//128), block_dim=128)
+            first = last
+        ctx.synchronize()
+        _ = dm^
+        _ = hm^
+        _ = packed^
+        return
+
     # ONE bins buffer for the ensemble: the stream runs tree t's add before
     # tree t+1's bins kernel rewrites it
     var bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -458,3 +497,51 @@ def add_non_symmetric_trees_packed(
     _ = h_shift^
     _ = h_mask^
     _ = h_off^
+
+# C50 GB non-symmetric inference: exact packed integer records; no compiler
+# struct lowering or unsupported reinterpretation. Same shift/mask and tree fold.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+def _c50_pack_ns_kernel(offset: MutPointer[UInt32, MutAnyOrigin], mask: MutPointer[UInt32, MutAnyOrigin],
+    shift: MutPointer[UInt32, MutAnyOrigin], equal: MutPointer[UInt8, MutAnyOrigin], value: MutPointer[UInt32, MutAnyOrigin],
+    left: MutPointer[UInt32, MutAnyOrigin], right: MutPointer[UInt32, MutAnyOrigin], packed: MutPointer[UInt32, MutAnyOrigin], n: Int32):
+    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if i < Int(n):
+        packed.unsafe_store(8*i, offset.unsafe_load(i))
+        packed.unsafe_store(8*i+1, mask.unsafe_load(i))
+        packed.unsafe_store(8*i+2, shift.unsafe_load(i))
+        packed.unsafe_store(8*i+3, UInt32(equal.unsafe_load(i)))
+        packed.unsafe_store(8*i+4, value.unsafe_load(i))
+        packed.unsafe_store(8*i+5, left.unsafe_load(i))
+        packed.unsafe_store(8*i+6, right.unsafe_load(i))
+        packed.unsafe_store(8*i+7, UInt32(0))
+
+
+def _c50_ns_rows_kernel(packed: MutPointer[UInt32, MutAnyOrigin], metadata: MutPointer[Int32, MutAnyOrigin],
+    cindex: MutPointer[UInt32, MutAnyOrigin], values: MutPointer[Float32, MutAnyOrigin], cursor: MutPointer[Float32, MutAnyOrigin],
+    rows: Int32, first: Int32, last: Int32):
+    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if row >= Int(rows):
+        return
+    for t in range(Int(first), Int(last)):
+        var desc = metadata.unsafe_load[width=4](4*t)
+        var base = Int(desc[0])
+        var node = 0
+        var leaf = 0
+        var stop = desc[2] == 0
+        while not stop:
+            var feature = packed.unsafe_load[width=4](8*(base+node))
+            var decision = packed.unsafe_load[width=4](8*(base+node)+4)
+            var value = (cindex.unsafe_load(Int(feature[0])+row) >> feature[2]) & feature[1]
+            var split = value == decision[0] if feature[3] != 0 else value > decision[0]
+            if split:
+                leaf += Int(decision[1])
+                stop = decision[2] == 1
+                if not stop:
+                    node += Int(decision[1])
+            else:
+                stop = decision[1] == 1
+                if not stop:
+                    node += 1
+        for d in range(Int(desc[3])):
+            var at = d*Int(rows)+row
+            cursor.unsafe_store(at, cursor.unsafe_load(at)+values.unsafe_load(Int(desc[1])+leaf*Int(desc[3])+d))

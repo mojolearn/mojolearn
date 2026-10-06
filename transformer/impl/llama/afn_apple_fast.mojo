@@ -71,12 +71,15 @@ comptime AFN_ATTN_ON = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 comptime AFN_ATTN_ALL = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN_ATTN_ALL"]()
+# A01: not tested in this campaign; standalone A/B recipe in attention.json.
 comptime AFN_ATTN_NORM_SG = AFN_ATTN_ON and (
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_NORM_SG"]()
 )
+# A02: not tested in this campaign; fresh-prefill fallback remains in place.
 comptime AFN_ATTN_ROPE_CACHE = AFN_ATTN_ON and (
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_ROPE_CACHE"]()
 )
+# A04: not tested in this campaign; compare with FLASH enabled in both arms.
 comptime AFN_ATTN_GQA_TILE = AFN_ATTN_ON and (
     # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 3/3 metrics within the existing bands; PASS.
@@ -89,6 +92,7 @@ comptime AFN_ATTN_GQA_TILE = AFN_ATTN_ON and (
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_GQA_TILE"]()
 )
 #: FLASH is also what GQA_TILE runs (at GROUP 1 when n_kv == n_heads).
+# A03: not tested in this campaign; historical component evidence below stands.
 comptime AFN_ATTN_FLASH = AFN_ATTN_ON and (
     # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 3/3 metrics within the existing bands; PASS.
@@ -100,12 +104,15 @@ comptime AFN_ATTN_FLASH = AFN_ATTN_ON and (
 # No combined-switch or full-board default claim from these component cases.
     AFN_ATTN_ALL or AFN_ATTN_GQA_TILE or is_defined["MOJOLEARN_AFN_ATTN_FLASH"]()
 )
+# A05: not tested in this campaign; retain forward-only and staging guards.
 comptime AFN_ATTN_FUSE_PRE = AFN_ATTN_ON and (
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_FUSE_PRE"]()
 )
+# A06: not tested in this campaign; activation and residual equations unchanged.
 comptime AFN_ATTN_FUSE_MLP = AFN_ATTN_ON and (
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_FUSE_MLP"]()
 )
+# A07: not tested in this campaign; standalone transformer binding allocation arm.
 comptime AFN_ATTN_ARENA = AFN_ATTN_ON and (
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_ARENA"]()
 )
@@ -116,6 +123,12 @@ comptime AFN_ATTN_ANY = (
 )
 
 comptime AFN_TPB = 256
+# A08: not tested. Four/sixteen simdgroups trade block count against occupancy;
+# these opt-in controls affect only RMSNorm, never projection or FLASH geometry.
+# They do not enable a parent mechanism, and ALL does not enable them.
+comptime AFN26_ATTN_NORM_TPB128 = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN26_ATTN_NORM_TPB128"]()
+comptime AFN26_ATTN_NORM_TPB512 = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN26_ATTN_NORM_TPB512"]()
+comptime AFN_NORM_TPB = 128 if AFN26_ATTN_NORM_TPB128 else (512 if AFN26_ATTN_NORM_TPB512 else AFN_TPB)
 #: Apple threadgroup memory per block: every shared page asserts it fits.
 comptime AFN_APPLE_TG_BYTES = 32768
 comptime AFN_NEGMAX_BITS: UInt32 = 0xFF7FFFFF
@@ -212,7 +225,7 @@ def afn_rms_norm_sg_kernel[RESIDUAL: Bool, WRITE_OUT: Bool](
     var tid = Int(thread_idx.x)
     var sg = tid // 32
     var lane = tid % 32
-    var t = Int(block_idx.x) * (AFN_TPB // 32) + sg
+    var t = Int(block_idx.x) * (AFN_NORM_TPB // 32) + sg
     if t >= m:
         return
     var base = t * dm
@@ -257,17 +270,17 @@ def afn_rms_norm_sg(
 ) raises:
     """RMSNorm of `x` into `sumsq` (and `out_buf` when `write_out`)."""
     comptime if AFN_ATTN_ON:
-        var blocks = (m + AFN_TPB // 32 - 1) // (AFN_TPB // 32)
+        var blocks = (m + AFN_NORM_TPB // 32 - 1) // (AFN_NORM_TPB // 32)
         step_count_launch()
         if write_out:
             ctx.enqueue_function[afn_rms_norm_sg_kernel[False, True]](
                 out_buf, sumsq, x, x, x, weight, Int32(m), Int32(dm), eps,
-                grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
+                grid_dim=(blocks, 1, 1), block_dim=(AFN_NORM_TPB, 1, 1),
             )
         else:
             ctx.enqueue_function[afn_rms_norm_sg_kernel[False, False]](
                 out_buf, sumsq, x, x, x, weight, Int32(m), Int32(dm), eps,
-                grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
+                grid_dim=(blocks, 1, 1), block_dim=(AFN_NORM_TPB, 1, 1),
             )
     else:
         raise Error("afn_rms_norm_sg: not compiled on this build")
@@ -289,17 +302,17 @@ def afn_residual_rms_norm_sg(
     """`residual = a + b`, then its RMSNorm (`sumsq`, and `out_buf` when
     `write_out`)."""
     comptime if AFN_ATTN_ON:
-        var blocks = (m + AFN_TPB // 32 - 1) // (AFN_TPB // 32)
+        var blocks = (m + AFN_NORM_TPB // 32 - 1) // (AFN_NORM_TPB // 32)
         step_count_launch()
         if write_out:
             ctx.enqueue_function[afn_rms_norm_sg_kernel[True, True]](
                 out_buf, sumsq, residual, a, b, weight, Int32(m), Int32(dm), eps,
-                grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
+                grid_dim=(blocks, 1, 1), block_dim=(AFN_NORM_TPB, 1, 1),
             )
         else:
             ctx.enqueue_function[afn_rms_norm_sg_kernel[True, False]](
                 out_buf, sumsq, residual, a, b, weight, Int32(m), Int32(dm), eps,
-                grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
+                grid_dim=(blocks, 1, 1), block_dim=(AFN_NORM_TPB, 1, 1),
             )
     else:
         raise Error("afn_residual_rms_norm_sg: not compiled on this build")
@@ -468,9 +481,17 @@ def afn_rope_cache(
 comptime AFN_FLASH_HD_GENERIC_OFF = is_defined["MOJOLEARN_AFN_FLASH_HD_GENERIC_OFF"]()
 comptime AFN_FL_HD = 64
 """The old single head class (kept for the OFF rule and the docs)."""
-comptime AFN_FL_TQ = 32
-comptime AFN_FL_BK = 32
-comptime AFN_FL_NSG = AFN_TPB // 32
+# A09/A10: not tested. Smaller tiles trade shared storage/register occupancy
+# for more key iterations or query blocks; no input-dimension dispatch is added.
+# Each requires its existing FLASH/GQA parent; ALL preserves incumbent geometry.
+comptime AFN26_ATTN_FLASH_BK16 = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN26_ATTN_FLASH_BK16"]()
+comptime AFN26_ATTN_FLASH_TQ16 = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN26_ATTN_FLASH_TQ16"]()
+comptime AFN_FL_TQ = 16 if AFN26_ATTN_FLASH_TQ16 else 32
+comptime AFN_FL_BK = 16 if AFN26_ATTN_FLASH_BK16 else 32
+# A10: not tested. Eight softmax lanes own each row; matching the block width
+# to TQ also keeps every padded head class's context fragments whole.
+comptime AFN_FL_TPB = AFN_FL_TQ * 8
+comptime AFN_FL_NSG = AFN_FL_TPB // 32
 comptime AFN_FL_VST = AFN_FL_BK + 4  # V tile transposed: vT[c * VST + key]
 comptime AFN_FL_QST = AFN_FL_TQ + 4  # Q transposed: qT[p * QST + r]
 comptime AFN_FL_WST = AFN_FL_TQ + 4  # P transposed: wT[key * WST + r]
@@ -545,10 +566,10 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
     scale_in: Float32,
     hd_in: Int32,
 ):
-    """One block per (batch, head group, 32 query rows); 256 threads = 8
-    simdgroups. Row `r` of the tile is head `h0 + r // TQG`, token
-    `t0 + r % TQG` (`TQG = 32 / GROUP`), so at GROUP = n_rep one staged K/V
-    tile serves every head of the KV group. Per key block of 32: K and V
+    """One block per (batch, head group, TQ query rows); TQ * 8 threads.
+    Row `r` of the tile is head `h0 + r // TQG`, token
+    `t0 + r % TQG` (`TQG = TQ / GROUP`), so at GROUP = n_rep one staged K/V
+    tile serves every head of the KV group. Per key block of BK: K and V
     staged (K as [key][p], V transposed as [c][key]), scores = Q K^T on
     the matrix unit (Q fragments held in registers), scaled and masked,
     the per-row running max and sum updated by 8 lanes per row (xor
@@ -567,7 +588,9 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
     comptime TQ = AFN_FL_TQ
     comptime BK = AFN_FL_BK
     comptime TQG = TQ // GROUP
-    comptime assert TQG * GROUP == TQ and TQG >= 8, "flash: GROUP in {1, 2, 4}"
+    # A10: not tested. At TQ16/GROUP4 a row fragment contains two query
+    # heads of the same KV group; head/token addressing remains per row.
+    comptime assert (GROUP == 1 or GROUP == 2 or GROUP == 4) and TQG * GROUP == TQ and TQG >= 4, "flash: integral query rows per KV-sharing head"
     comptime assert AFN_FL_SPS * AFN_FL_NSG == AFN_FL_NFR * AFN_FL_NFK, "flash: whole score fragments"
     comptime assert HD % 16 == 0, "flash: head class a multiple of 16"
     comptime assert afn_fl_page_bytes(HD) <= AFN_APPLE_TG_BYTES, "flash: the threadgroup page fits Apple's 32 KB"
@@ -621,7 +644,7 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
     var negmax = bitcast[DType.float32](AFN_NEGMAX_BITS)
 
     # Q, transposed into the V page, then into this simdgroup's A fragments.
-    for i in range(tid, (TQ * HD) // 4, AFN_TPB):
+    for i in range(tid, (TQ * HD) // 4, AFN_FL_TPB):
         var i4 = i * 4
         var r = i4 // HD
         var p = i4 % HD
@@ -645,7 +668,8 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
         qf[p8] = _sg_load_t(vT + (8 * p8) * QST + fr * 8, QST)
     barrier()
 
-    # The softmax lanes: 8 per row, 4 keys each.
+    # A09: not tested. Keep eight lanes per row; BK16 owns two keys/lane.
+    comptime KEYS_PER_LANE = BK // 8
     var r_s = tid // 8
     var q8 = tid % 8
     var t_s = t0 + r_s % TQG
@@ -655,7 +679,7 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
 
     for kb in range(kb_lo, kb_hi + 1):
         # Stage K [key][p] and V [c][key].
-        for i in range(tid, (BK * HD) // 4, AFN_TPB):
+        for i in range(tid, (BK * HD) // 4, AFN_FL_TPB):
             var i4 = i * 4
             var r = i4 // HD
             var p = i4 % HD
@@ -682,10 +706,10 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
                 tile[(fr * 8 + frow) * TST + fk * 8 + fcol + e] = acc[e]
         barrier()
         # Online softmax: the row's running max and sum.
-        var sv = SIMD[DType.float32, 4](negmax)
-        var vis = SIMD[DType.bool, 4](fill=False)
-        comptime for c in range(4):
-            var jj = q8 * 4 + c
+        var sv = SIMD[DType.float32, KEYS_PER_LANE](negmax)
+        var vis = SIMD[DType.bool, KEYS_PER_LANE](fill=False)
+        comptime for c in range(KEYS_PER_LANE):
+            var jj = q8 * KEYS_PER_LANE + c
             var j = kb * BK + jj
             if t_s < l and j >= rng[0] and j <= rng[1]:
                 sv[c] = tile[r_s * TST + jj] * scale
@@ -696,16 +720,16 @@ def afn_flash_forward_kernel[GROUP: Int, HDP: Int](
         var m_old = stm[r_s]
         var l_old = stl[r_s]
         var m_new = max(m_old, bm)
-        var p4 = SIMD[DType.float32, 4](0.0)
-        comptime for c in range(4):
+        var p4 = SIMD[DType.float32, KEYS_PER_LANE](0.0)
+        comptime for c in range(KEYS_PER_LANE):
             if vis[c]:
                 p4[c] = exp(sv[c] - m_new)
         var ps = p4.reduce_add()
         comptime for sh in range(3):
             ps = ps + shuffle_xor(ps, UInt32(1 << sh))
         var alpha = exp(m_old - m_new)
-        comptime for c in range(4):
-            wT[(q8 * 4 + c) * WST + r_s] = p4[c]
+        comptime for c in range(KEYS_PER_LANE):
+            wT[(q8 * KEYS_PER_LANE + c) * WST + r_s] = p4[c]
         barrier()
         if q8 == 0:
             stm[r_s] = m_new
@@ -789,21 +813,21 @@ def _afn_flash_launch[HDP: Int](
             ctxv, amax, denom, q_rope, k_cache, v_cache, Int32(b), Int32(l),
             Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
             Int32(window), scale, Int32(hd),
-            grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
+            grid_dim=(blocks, 1, 1), block_dim=(AFN_FL_TPB, 1, 1),
         )
     elif group == 2:
         ctx.enqueue_function[afn_flash_forward_kernel[2, HDP]](
             ctxv, amax, denom, q_rope, k_cache, v_cache, Int32(b), Int32(l),
             Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
             Int32(window), scale, Int32(hd),
-            grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
+            grid_dim=(blocks, 1, 1), block_dim=(AFN_FL_TPB, 1, 1),
         )
     else:
         ctx.enqueue_function[afn_flash_forward_kernel[1, HDP]](
             ctxv, amax, denom, q_rope, k_cache, v_cache, Int32(b), Int32(l),
             Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
             Int32(window), scale, Int32(hd),
-            grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
+            grid_dim=(blocks, 1, 1), block_dim=(AFN_FL_TPB, 1, 1),
         )
 
 
@@ -888,9 +912,14 @@ def afn_flash_forward(
 # 32 x 16 cells (4 x 2 fragments).
 # ---------------------------------------------------------------------------
 
-comptime AFN_GEMM_BM = 64
+# A11/A12: not tested. Smaller neural projection tiles trade staging/barriers
+# or accumulator occupancy for more blocks. They require FUSE_PRE/FUSE_MLP;
+# neither define changes generic GEMM, enables its parent, or matches a shape.
+comptime AFN26_ATTN_PROJ_KB16 = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN26_ATTN_PROJ_KB16"]()
+comptime AFN26_ATTN_PROJ_BM32 = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN26_ATTN_PROJ_BM32"]()
+comptime AFN_GEMM_BM = 32 if AFN26_ATTN_PROJ_BM32 else 64
 comptime AFN_GEMM_BN = 64
-comptime AFN_GEMM_KB = 32
+comptime AFN_GEMM_KB = 16 if AFN26_ATTN_PROJ_KB16 else 32
 comptime AFN_GEMM_SGM = 2
 comptime AFN_GEMM_SGN = 4
 comptime AFN_GEMM_FM = AFN_GEMM_BM // (8 * AFN_GEMM_SGM)
@@ -901,7 +930,10 @@ comptime AFN_GEMM_ASZ = AFN_GEMM_KB * AFN_GEMM_AST
 comptime AFN_GEMM_BSZ = AFN_GEMM_BN * AFN_GEMM_BST
 comptime AFN_GEMM_CST = AFN_GEMM_BN + 1  # the epilogue's C tile: ct[i * CST + j]
 comptime AFN_GEMM_CSZ = AFN_GEMM_BM * AFN_GEMM_CST
-comptime AFN_GEMM_PAGE = AFN_GEMM_ASZ + 2 * AFN_GEMM_BSZ
+# A11: not tested. RoPE reuses the completed operand page; with KB16 its
+# output tile can exceed all operand tiles, so allocate the larger lifetime.
+comptime AFN_GEMM_STAGING_PAGE = AFN_GEMM_ASZ + 2 * AFN_GEMM_BSZ
+comptime AFN_GEMM_PAGE = max(AFN_GEMM_STAGING_PAGE, AFN_GEMM_CSZ)
 comptime AFN_GEMM_PAGE_BYTES = 4 * (AFN_GEMM_PAGE + AFN_GEMM_BM)
 
 #: epilogues
@@ -952,7 +984,7 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
     is in the staged C tile): q -> `c` (`q_rope`, token-major); k -> `c2`
     (`k_rope`), `c3` (`stages.k_cache`) and `c4` (`kv.k`); v -> `c5`
     (`stages.v_cache`) and `c6` (`kv.v`). Fresh prefill (`s_old == 0`): the
-    packed cache stride is `l`. `k % 32 == 0`; rows past `m` and columns
+    packed cache stride is `l`. `k % KB == 0`; rows past `m` and columns
     past `n` are never stored."""
     comptime BM = AFN_GEMM_BM
     comptime BN = AFN_GEMM_BN
@@ -967,7 +999,7 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
     comptime CST = AFN_GEMM_CST
     comptime NF = FM * FN
     comptime DUAL = EPI == AFN_EPI_SWIGLU
-    comptime assert AFN_GEMM_CSZ <= AFN_GEMM_ASZ + AFN_GEMM_BSZ, "afn gemm: the C tile fits the A and first W pages"
+    comptime assert AFN_GEMM_CSZ <= AFN_GEMM_PAGE, "afn gemm: the epilogue C tile fits the shared page"
     comptime assert AFN_GEMM_PAGE_BYTES <= AFN_APPLE_TG_BYTES, "afn gemm: the threadgroup page fits Apple's 32 KB"
     var pg = stack_allocation[AFN_GEMM_PAGE, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
     var rs = stack_allocation[BM, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
@@ -1019,21 +1051,23 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
     var windows = k // KB
     for w in range(windows):
         var k0 = w * KB
-        # A: (BM * KB) / 4 slots, two per thread: (row i, 4 consecutive p).
-        comptime for sl in range((BM * KB) // (4 * AFN_TPB)):
+        # A11+A12: not tested. Round staging slots up and predicate the final
+        # group; BM32/KB16 has fewer float4 slots than the 256-thread block.
+        comptime for sl in range((BM * KB + 4 * AFN_TPB - 1) // (4 * AFN_TPB)):
             var sidx = sl * AFN_TPB + tid
             var i = sidx // (KB // 4)
             var p4 = (sidx % (KB // 4)) * 4
             var gi = m0 + i
             var x4 = SIMD[DType.float32, 4](0.0)
-            if gi < m:
-                x4 = a.unsafe_load[width=4](gi * k + k0 + p4)
-                comptime if ANORM:
-                    x4 = x4 * rs[i] * nw.unsafe_load[width=4](k0 + p4)
-            at[p4 * AST + i] = x4[0]
-            at[(p4 + 1) * AST + i] = x4[1]
-            at[(p4 + 2) * AST + i] = x4[2]
-            at[(p4 + 3) * AST + i] = x4[3]
+            if i < BM:
+                if gi < m:
+                    x4 = a.unsafe_load[width=4](gi * k + k0 + p4)
+                    comptime if ANORM:
+                        x4 = x4 * rs[i] * nw.unsafe_load[width=4](k0 + p4)
+                at[p4 * AST + i] = x4[0]
+                at[(p4 + 1) * AST + i] = x4[1]
+                at[(p4 + 2) * AST + i] = x4[2]
+                at[(p4 + 3) * AST + i] = x4[3]
         # W: (BN * KB) / 4 slots, two per thread: (row j, 4 consecutive p).
         comptime for sl in range((BN * KB) // (4 * AFN_TPB)):
             var sidx = sl * AFN_TPB + tid

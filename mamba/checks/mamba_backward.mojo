@@ -5,9 +5,10 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
+from mamba.impl.ops.neural_scan_profile import NN34_AFFINE_PREFIX
 from gemm.contract import OP_NT
-from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
-from gemm.checks.gemm_backward import (
+from gemm.neural_dispatch import identical_gemm_workspace_max_floats
+from gemm.neural_backward import (
     gemm_backward_a_call,
     gemm_backward_b_call,
     gemm_backward_call_name,
@@ -278,7 +279,7 @@ def mamba_reduction_needs_preproduct(which: Int) -> Bool:
 
 def mamba_backward_reduce_into(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut src: DeviceBuffer[DType.float32],
     mut ones: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],
@@ -286,9 +287,9 @@ def mamba_backward_reduce_into(
     dims: MambaDims,
     m: Int,
 ) raises:
-    """`out[w] = sum over the M rows of src[M, W]`, as a v1 `OP_NN` at `(1, W, M)`. For a `RED_CONV_W_*` id the caller writes into `out[d * D_CONV + mamba_reduction_tap(which)]` for each `d`, since the conv weight is `[d_inner, D_CONV]` row-major, and this launcher writes a CONTIGUOUS `[W]` vector."""
+    """`output[w] = sum over the M rows of src[M, W]`, as a v1 `OP_NN` at `(1, W, M)`. For a `RED_CONV_W_*` id the caller writes into `output[d * D_CONV + mamba_reduction_tap(which)]` for each `d`, since the conv weight is `[d_inner, D_CONV]` row-major, and this launcher writes a CONTIGUOUS `[W]` vector."""
     identical_gemm_backward_bias_into(
-        ctx, out, src, ones, ws, m, mamba_reduction_width(which, dims)
+        ctx, output, src, ones, ws, m, mamba_reduction_width(which, dims)
     )
 
 
@@ -370,7 +371,7 @@ comptime T3_DB_PREFORMS_DELTA_TIMES_U = True
 
 def t3_dh_floats(b: Int, l: Int, dims: MambaDims) -> Int:
     """`B * d_inner * L * D_STATE`, the materialized `dh`. The declared spelling is GATE-SCALE; a blocked variant is phase K and its tiling must be `contract_partition(d_inner)`'s leaf boundary, never a VRAM budget, or the answer becomes a function of the machine."""
-    return b * dims.d_inner * l * D_STATE
+    return (2 if NN34_AFFINE_PREFIX else 1) * b * dims.d_inner * l * D_STATE
 
 
 comptime T4_DIRECTION_IS_DESCENDING_IN_T = True

@@ -51,6 +51,7 @@ kernel that allocates one asserts it fits (`ETL_SHARED_FITS`); cross-thread
 data inside one launch goes through threadgroup memory only.
 """
 
+from ensemble.tree_identical_ideas import T02
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -352,6 +353,7 @@ def etl_stage_kernel[
     part_tile: Int32,
     blocks_bound: Int32,
     scalar_tree: Int32,
+    search_phase: Int32,
 ):
     """`stage_batch` on the device. ONE block.
 
@@ -393,7 +395,17 @@ def etl_stage_kernel[
         var large = Int32(0)
         var pb = Int32(0)
         if count > 0:
-            nb = Int32(etl_blocks(count, Int(tile)))
+            var effective_tile = Int(tile)
+            comptime if T02:
+                if search_phase != Int32(0):
+                    # Bound live feature-task state by a 16KiB logical page.
+                    # 320 bytes conservatively covers two 32-class count
+                    # vectors and range/status metadata per feature task.
+                    # Coarsening only: incumbent allocation/grid bounds hold.
+                    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+                    var tasks = max(1,16384//max(320,320*Int(k)))
+                    effective_tile = max(effective_tile,(count+tasks-1)//tasks)
+            nb = Int32(etl_blocks(count,effective_tile))
             pb = Int32(etl_blocks(count, Int(part_tile)))
             if nb > Int32(1):
                 large = Int32(1)

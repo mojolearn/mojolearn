@@ -29,7 +29,7 @@ from std.memory import bitcast
 
 from checks.numerics import ftz, identical_fmax, identical_mul_add
 from gemm.contract import OP_NT
-from gemm.checks.gemm_oracle import gemm_oracle
+from gemm.host.neural_gemm import gemm_oracle
 from training.byte_lm_host_kernels import (
     block_fast,
     ce_causal_mean_loss_fast,

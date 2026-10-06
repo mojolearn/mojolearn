@@ -1,0 +1,13 @@
+{
+  "race": "algos/lars-stable/istella/rows=full",
+  "arm": "sklearn-cpu",
+  "status": "QUALITY_FAILED",
+  "acceptance_rule": "finite predictions, finite RMSE >= 0, R2 >= 0 (held-out constant-mean baseline)",
+  "quality": {
+    "finite": true,
+    "r2": -2.0354618272041775e+27,
+    "rmse": 37646681816235.69
+  },
+  "original_board_receipt": "board.json",
+  "default_promotion": false
+}

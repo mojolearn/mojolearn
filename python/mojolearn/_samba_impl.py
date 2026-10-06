@@ -411,7 +411,7 @@ class SambaStack(object):
         return _buffers.as_i32_c(x, ndim=2, name=what)[0]
 
     def _forward(self, inputs, dropout_stream=None, token_offset=0, head=True,
-                 norm=True):
+                 norm=True, retain_tapes=False):
         """The forward with every block input kept for the backward.
         `head=False` stops after the final norm (`logits` is None): the
         fused `samba_head_loss` runs the head itself. `norm=False` (with
@@ -431,9 +431,16 @@ class SambaStack(object):
                                             offset=token_offset * c.d_model,
                                             stream=dropout_stream)
         xs = []
+        tapes = []
         for i in range(len(c.layers)):  # glue: dispatches each layer block
             xs.append(x)
-            x = self._block(i).forward(x)
+            block = self._block(i)
+            forward_tape = getattr(block, "_forward_with_tape", None)
+            if retain_tapes and callable(forward_tape):
+                x, tape = forward_tape(x)
+            else:
+                x, tape = block.forward(x), None
+            tapes.append(tape)
         hn = None
         logits = None
         afn = self._afn() if (norm and head) else None
@@ -445,7 +452,7 @@ class SambaStack(object):
             if head:
                 logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
                                           self._head_weight(), self.numeric_mode)
-        return {"ids": ids, "key": key, "xs": xs, "h": x, "hn": hn,
+        return {"ids": ids, "key": key, "xs": xs, "tapes": tapes, "h": x, "hn": hn,
                 "logits": logits}
 
     def forward(self, inputs, state=None, *, lengths=None):
@@ -575,62 +582,92 @@ class SambaStack(object):
         # loss and both backwards in one call, then the tied embedding
         # gradient in one call. The per-op arms below are the reference.
         afn = self._afn()
-        fused = afn is None and callable(T._optional_samba_head(T._load(self.numeric_mode)))
+        head_binding = T._load(self.numeric_mode)
+        fused = afn is None and callable(T._optional_samba_head(head_binding))
+        try:
+            chunked_capability = getattr(head_binding, "training_chunked_lm_head_enabled", None)
+        except (ImportError, AttributeError):
+            chunked_capability = None
+        chunked = afn is None and callable(chunked_capability) and chunked_capability()
         acts = self._forward(inputs, dropout_stream, token_offset,
-                             head=not fused and afn is None, norm=afn is None)
-        ids = acts["ids"]
-        b, l = ids.shape
-        y = self._ids(targets, "targets")
-        if y.shape != ids.shape:
-            raise ValueError("mojolearn.SambaStack: targets must match inputs' shape")
-        y = y.reshape(-1)
-        count = _count_targets(y)
-        items = count if num_items is None else int(num_items)
-        grads = {}
-        if afn is not None:
-            loss, dh, grads["norm_f.weight"], dw_head = self._afn_tail_train(
-                afn, acts["h"].reshape((b * l, c.d_model)), y, items)
-            dh = dh.reshape((b, l, c.d_model))
-        else:
-            hn2 = acts["hn"].reshape((b * l, c.d_model))
-            out = T.samba_head_loss(hn2, self._head_weight(), y, items,
-                                    self.numeric_mode) if fused else None
-            if out is not None:
-                loss, dhn, dw_head = out
+                             head=not fused and not chunked and afn is None, norm=afn is None,
+                             retain_tapes=True)
+        try:
+            ids = acts["ids"]
+            b, l = ids.shape
+            y = self._ids(targets, "targets")
+            if y.shape != ids.shape:
+                raise ValueError("mojolearn.SambaStack: targets must match inputs' shape")
+            y = y.reshape(-1)
+            count = _count_targets(y)
+            items = count if num_items is None else int(num_items)
+            grads = {}
+            if afn is not None:
+                loss, dh, grads["norm_f.weight"], dw_head = self._afn_tail_train(
+                    afn, acts["h"].reshape((b * l, c.d_model)), y, items)
+                dh = dh.reshape((b, l, c.d_model))
             else:
-                logits = acts["logits"]
-                if logits is None:
-                    logits = T.linear_forward(hn2, self._head_weight(), self.numeric_mode)
-                loss, dlogits = T.cross_entropy(logits, y, reduction="sum",
-                                                num_items=items, return_grad=True,
+                hn2 = acts["hn"].reshape((b * l, c.d_model))
+                # NI34's existing chunked profile defines an ordinary mean
+                # with no ignored targets. Other objective shapes retain the
+                # original sum/custom-divisor path; no rescaling in Python.
+                if chunked and count == b * l and items == count:
+                    out = T.chunked_lm_head_loss(hn2, self._head_weight(), y,
+                                                return_grad=True,
                                                 numeric_mode=self.numeric_mode)
-                dhn, dw_head = T.linear_backward(dlogits, hn2, self._head_weight(),
-                                                 self.numeric_mode)
-            dh, grads["norm_f.weight"] = T.rms_norm_backward(
-                dhn.reshape((b, l, c.d_model)), acts["h"], self.arrays["norm_f.weight"],
-                c.norm_eps, self.numeric_mode)
-        for i in reversed(range(len(c.layers))):  # glue: dispatches each layer backward
-            g = self._block(i).backward(acts["xs"][i], dh)
-            dh = g.pop("x")
-            for n, v in g.items():  # glue: renames gradient dict keys
-                grads["layers.%d.%s" % (i, n)] = v
-        if acts["key"] is not None:
-            dh = self.generator.dropout_backward(dh, acts["key"])
-        if c.tie_embeddings and afn is not None:
-            d_emb = self._afn_embedding_backward_tied(
-                afn, dh.reshape((b * l, c.d_model)), ids.reshape(-1), dw_head)
-        else:
-            d_emb = T.embedding_backward(dh.reshape((b * l, c.d_model)), ids.reshape(-1),
-                                         c.vocab, self.numeric_mode)
-            if c.tie_embeddings:
-                # The tied gradient is ONE pair add, embedding first, no
-                # alignment claim (tokens=None).
-                d_emb = T.accumulate_grads([d_emb, dw_head], tokens=None,
-                                           numeric_mode=self.numeric_mode)
-        if not c.tie_embeddings:
-            grads["lm_head.weight"] = dw_head
-        grads["embed.weight"] = d_emb
-        return float(loss), [grads[n] for n in self.names]  # glue: orders gradients by name
+                else:
+                    out = T.samba_head_loss(hn2, self._head_weight(), y, items,
+                                            self.numeric_mode) if fused else None
+                if out is not None:
+                    loss, dhn, dw_head = out
+                else:
+                    logits = acts["logits"]
+                    if logits is None:
+                        logits = T.linear_forward(hn2, self._head_weight(), self.numeric_mode)
+                    loss, dlogits = T.cross_entropy(logits, y, reduction="sum",
+                                                    num_items=items, return_grad=True,
+                                                    numeric_mode=self.numeric_mode)
+                    dhn, dw_head = T.linear_backward(dlogits, hn2, self._head_weight(),
+                                                     self.numeric_mode)
+                dh, grads["norm_f.weight"] = T.rms_norm_backward(
+                    dhn.reshape((b, l, c.d_model)), acts["h"], self.arrays["norm_f.weight"],
+                    c.norm_eps, self.numeric_mode)
+            for i in reversed(range(len(c.layers))):  # glue: dispatches each layer backward
+                block = self._block(i)
+                tape = acts["tapes"][i]
+                if tape is None:
+                    g = block.backward(acts["xs"][i], dh)
+                else:
+                    try:
+                        g = block._backward_from_tape(tape, dh)
+                    finally:
+                        block._close_forward_tape(tape)
+                        acts["tapes"][i] = None
+                dh = g.pop("x")
+                for n, v in g.items():  # glue: renames gradient dict keys
+                    grads["layers.%d.%s" % (i, n)] = v
+            if acts["key"] is not None:
+                dh = self.generator.dropout_backward(dh, acts["key"])
+            if c.tie_embeddings and afn is not None:
+                d_emb = self._afn_embedding_backward_tied(
+                    afn, dh.reshape((b * l, c.d_model)), ids.reshape(-1), dw_head)
+            else:
+                d_emb = T.embedding_backward(dh.reshape((b * l, c.d_model)), ids.reshape(-1),
+                                             c.vocab, self.numeric_mode)
+                if c.tie_embeddings:
+                    # The tied gradient is ONE pair add, embedding first, no
+                    # alignment claim (tokens=None).
+                    d_emb = T.accumulate_grads([d_emb, dw_head], tokens=None,
+                                               numeric_mode=self.numeric_mode)
+            if not c.tie_embeddings:
+                grads["lm_head.weight"] = dw_head
+            grads["embed.weight"] = d_emb
+            return float(loss), [grads[n] for n in self.names]  # glue: orders gradients by name
+        finally:
+            for i, tape in enumerate(acts["tapes"]):  # glue: native tape owners
+                if tape is not None:
+                    self._block(i)._close_forward_tape(tape)
+                    acts["tapes"][i] = None
 
     def train_step(self, inputs, targets):
         """One optimizer step over `(B, L)` inputs and targets: the batch
@@ -680,11 +717,20 @@ class SambaStack(object):
         return dict(self.last_)
 
     # -- state ----------------------------------------------------------------
+    def _experiment_profile(self):
+        """Native numerical-contract metadata; no tensor work in this shell."""
+        try:
+            profile = getattr(T._load(self.numeric_mode), "training_experiment_profile", None)
+        except (ImportError, AttributeError):
+            profile = None
+        return str(profile()) if callable(profile) else "baseline"
+
     def state_dict(self, *, _copy_arrays=True):
         o = self.optimizer
         sched = None if o.lr_schedule is None else o.lr_schedule.config()
         return {
             "schema": _STATE_SCHEMA, "profile": PROFILE,
+            "experiment_profile": self._experiment_profile(),
             "numeric_mode": _backend._CODE_MODE.get(
                 T._load(self.numeric_mode).training_numeric_mode(), "unknown"),
             "config": self.config.to_dict(),
@@ -709,6 +755,8 @@ class SambaStack(object):
     def load_state_dict(self, state):
         if state.get("schema") != _STATE_SCHEMA or state.get("profile") != PROFILE:
             raise ValueError("mojolearn.SambaStack: state schema/profile mismatch")
+        if state.get("experiment_profile", "baseline") != self._experiment_profile():
+            raise ValueError("mojolearn.SambaStack: experiment numerical profile mismatch")
         if state["config"] != self.config.to_dict():
             raise ValueError("mojolearn.SambaStack: state config differs from this stack's")
         # A state written under another numeric profile is refused by name; a

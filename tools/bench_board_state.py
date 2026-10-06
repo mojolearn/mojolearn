@@ -8,6 +8,258 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+from contextlib import contextmanager
+
+
+@contextmanager
+def _export_directory(retain_directory, prefix):
+    """Keep requested evidence; temporary exports remain explicitly hash-only."""
+    if retain_directory is None:
+        with tempfile.TemporaryDirectory(prefix=prefix) as directory:
+            yield Path(directory)
+    else:
+        directory = Path(retain_directory)
+        directory.mkdir(parents=True, exist_ok=False)
+        yield directory
+
+
+def _retained_export(path):
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(block)
+    return dict(path=str(path), bytes=path.stat().st_size,
+                sha256=digest.hexdigest(), encoding='original public save file bytes')
+
+
+# Reviewed against the public save/load and fit methods at numerical freeze
+# 4fc63c9d5486261f27fdd55eb31d1900e2cc0e8f. These are fitted-state contracts,
+# not a declaration that arbitrary public save() exports are complete models.
+PUBLIC_FITTED_STATE_CONTRACTS = {
+    'PCA': {
+        'id': 'mojolearn.public-fitted-state/pca-1',
+        'format': 'mojolearn-pca-1',
+        'fields': ('components', 'estimator', 'explained_variance', 'explained_variance_ratio',
+                   'format', 'mean', 'meta', 'noise_variance', 'numeric_mode', 'singular_values', 'svd_solver'),
+        'source': 'python/mojolearn/decomposition.py:PCA.fit/_fit_randomized/save/load',
+        'excluded': {'input_copied_': 'input-copy diagnostic, not fitted numerical state',
+                     'constructor_settings': 'separately pinned estimator settings; save is not a refit checkpoint'},
+    },
+    'KMeans': {
+        'id': 'mojolearn.public-fitted-state/kmeans-1',
+        'format': 'mojolearn-kmeans-1',
+        'fields': ('centers', 'estimator', 'format', 'init', 'labels', 'meta', 'metric', 'numeric_mode', 'reals'),
+        'source': 'python/mojolearn/cluster.py:KMeans.fit/save/load',
+        'excluded': {'init_centroids': 'original refit input, not learned centers; pinned by workload/settings',
+                     'input_copied_': 'input-copy diagnostic, not fitted numerical state'},
+    },
+}
+_PUBLIC_FITTED_TYPES = {
+    ('mojolearn.decomposition', 'PCA'): 'PCA',
+    ('mojolearn.cluster', 'KMeans'): 'KMeans',
+    ('mojolearn._classical_host', 'HostPCA'): 'PCA',
+    ('mojolearn._classical_host', 'HostKMeans'): 'KMeans',
+}
+
+
+# These exact classes expose their entire supported fitted state as public
+# attributes. Reviewed at cf442daed63f8d2c9d99947c3a7a4e50fb442319; see the
+# retained source audit. This is evidence glue after clocks stop, never a new
+# estimator save/load API, runtime route, or training-resumption checkpoint.
+PUBLIC_ATTRIBUTE_FITTED_STATE_CONTRACTS = {
+    'SGDRegressor': {
+        'id': 'mojolearn.public-fitted-attributes/sgd-regressor-1',
+        'attributes': ('coef_', 'intercept_', 'n_features_in_', 'n_iter_', 't_'),
+        'source': 'python/mojolearn/_expansion_linear.py:SGDRegressor.fit/_sgd_fit/_LinearRegressorMixin.predict',
+        'excluded': {'constructor_settings': 'separately pinned recipe; warm_start, average and early_stopping are refused',
+                     'optimizer_workspace': 'temporary native fit workspace, not retained; no supported partial_fit or resume API'},
+    },
+    'PassiveAggressiveRegressor': {
+        'id': 'mojolearn.public-fitted-attributes/passive-aggressive-regressor-1',
+        'attributes': ('coef_', 'intercept_', 'n_features_in_', 'n_iter_', 't_'),
+        'source': 'python/mojolearn/_expansion_linear.py:PassiveAggressiveRegressor.fit/_sgd_fit/_LinearRegressorMixin.predict',
+        'excluded': {'constructor_settings': 'separately pinned recipe; warm_start, average and early_stopping are refused',
+                     'optimizer_workspace': 'temporary native fit workspace, not retained; no supported partial_fit or resume API'},
+    },
+    'BayesianRidge': {
+        'id': 'mojolearn.public-fitted-attributes/bayesian-ridge-1',
+        'attributes': ('coef_', 'intercept_', 'n_features_in_', 'n_iter_', 'alpha_', 'lambda_'),
+        'source': 'python/mojolearn/_expansion_linear.py:BayesianRidge.fit/predict/_bayes_refuse; x_linear/bayes.mojo:bayes_finish',
+        'excluded': {'constructor_settings': 'separately pinned recipe; compute_score and return_std are refused',
+                     'posterior_covariance_and_training_statistics': 'temporary native workspace, not retained or exposed by any supported fitted operation'},
+    },
+}
+_PUBLIC_ATTRIBUTE_SOURCE = {
+    'module': 'mojolearn._expansion_linear',
+    'path': 'python/mojolearn/_expansion_linear.py',
+    'sha256': '06d0f8d75d727afcaa3fa7d820741c9c23ab6fd3a2ccc59290303d5f14f30957',
+    'audit': 'experiments/six_lane_integration/public_linear_fitted_state_audit.json',
+}
+
+
+def _public_attribute_fitted_state(model, estimator):
+    """Copy only allowlisted public attributes via the public Array protocol.
+
+    The loaded API source must match the reviewed implementation. New source,
+    subclasses, missing fields and schema changes remain explicitly unavailable.
+    No private attributes, device handles, predictions, or fitting are read/run.
+    """
+    import sys
+    import numpy as np
+    contract = PUBLIC_ATTRIBUTE_FITTED_STATE_CONTRACTS[estimator]
+    metadata = dict(contract=contract['id'], contract_source=contract['source'],
+                    contract_paths=public_fitted_state_paths(estimator),
+                    capture_source='reviewed public fitted attributes',
+                    model_class=type(model).__module__ + '.' + type(model).__name__,
+                    reviewed_api_source=dict(_PUBLIC_ATTRIBUTE_SOURCE),
+                    excluded_non_fitted_state=dict(contract['excluded']))
+    try:
+        module = sys.modules.get(_PUBLIC_ATTRIBUTE_SOURCE['module'])
+        source = getattr(module, '__file__', None)
+        if not source or hashlib.sha256(Path(source).read_bytes()).hexdigest() != _PUBLIC_ATTRIBUTE_SOURCE['sha256']:
+            raise ValueError('Loaded estimator API differs from the reviewed public-attribute source')
+        state = {name: getattr(model, name) for name in contract['attributes']}
+        for name in ('n_features_in_', 'n_iter_'):
+            if type(state[name]) is not int:
+                raise ValueError(name + ': expected public Python int')
+        nf = state['n_features_in_']
+        if nf < 1 or state['n_iter_'] < 0:
+            raise ValueError('Invalid fitted feature/iteration count')
+        coef = np.asarray(state['coef_'])
+        if coef.dtype.str != '<f4' or coef.shape != (nf,):
+            raise ValueError('coef_: expected exact float32 public coefficient vector')
+        state['coef_'] = coef.copy(order='C')
+        if estimator == 'BayesianRidge':
+            for name in ('intercept_', 'alpha_', 'lambda_'):
+                if type(state[name]) is not float:
+                    raise ValueError(name + ': expected public Python float')
+        else:
+            intercept = np.asarray(state['intercept_'])
+            if intercept.dtype.str != '<f4' or intercept.shape != (1,):
+                raise ValueError('intercept_: expected exact one-element float32 public array')
+            state['intercept_'] = intercept.copy(order='C')
+            if type(state['t_']) is not float:
+                raise ValueError('t_: expected public Python float')
+        state.update(estimator=estimator, format=contract['id'], prediction_link='identity')
+        return state, metadata
+    except Exception as exc:
+        return None, dict(metadata, status='UNAVAILABLE', missing_state=['validated complete public fitted attributes'],
+                          reason=type(exc).__name__ + ': ' + str(exc))
+
+
+def public_fitted_state_paths(estimator):
+    """The reviewed complete path set for a future frozen worker recipe."""
+    if estimator in PUBLIC_ATTRIBUTE_FITTED_STATE_CONTRACTS:
+        fields = (*PUBLIC_ATTRIBUTE_FITTED_STATE_CONTRACTS[estimator]['attributes'], 'estimator', 'format', 'prediction_link')
+    else:
+        fields = PUBLIC_FITTED_STATE_CONTRACTS[estimator]['fields']
+    return ['$.%s' % name for name in fields]
+
+
+def _saved_text(arrays, name):
+    value = arrays[name]
+    if value.dtype.kind != 'U' or value.shape != (1,):
+        raise ValueError(name + ': expected one Unicode export value')
+    return str(value[0])
+
+
+def normalize_public_fitted_state(arrays, estimator, saved_estimator):
+    """Validate a known saved schema, without loading or running a model.
+
+    Preserve numerical bytes and dtypes. Only the export's Python class name is
+    normalized: the explicit public host subclasses inherit these save formats.
+    The original full export hash remains in the capture's provenance.
+    """
+    import numpy as np
+    contract = PUBLIC_FITTED_STATE_CONTRACTS[estimator]
+    if set(arrays) != set(contract['fields']):
+        missing = sorted(set(contract['fields']) - set(arrays))
+        extra = sorted(set(arrays) - set(contract['fields']))
+        raise ValueError('export field set changed; missing=%r unexpected=%r' % (missing, extra))
+    if any(not isinstance(v, np.ndarray) or v.dtype.hasobject for v in arrays.values()):
+        raise ValueError('export requires typed non-object arrays')
+    if _saved_text(arrays, 'format') != contract['format']:
+        raise ValueError('unreviewed saved format version')
+    if saved_estimator not in (estimator, 'Host' + estimator) or _saved_text(arrays, 'estimator') != saved_estimator:
+        raise ValueError('saved estimator class differs from reviewed owner')
+    if _saved_text(arrays, 'numeric_mode') not in ('fast', 'deterministic', 'identical'):
+        raise ValueError('invalid saved numeric mode')
+
+    def exact(name, dtype, shape):
+        value = arrays[name]
+        if value.dtype.str != dtype or value.shape != shape:
+            raise ValueError('%s: expected dtype=%s shape=%r, observed dtype=%s shape=%r' %
+                             (name, dtype, shape, value.dtype.str, value.shape))
+
+    if estimator == 'PCA':
+        exact('meta', '<i8', (4,))
+        nc, nf, ns, whiten = map(int, arrays['meta'])
+        if nc < 1 or nf < 1 or ns < 2 or whiten not in (0, 1):
+            raise ValueError('invalid PCA fitted counts/whitening metadata')
+        exact('components', '<f4', (nc, nf))
+        exact('mean', '<f4', (nf,))
+        for name in ('singular_values', 'explained_variance', 'explained_variance_ratio'):
+            exact(name, '<f4', (nc,))
+        exact('noise_variance', '<f8', (1,))
+        if not _saved_text(arrays, 'svd_solver'):
+            raise ValueError('missing PCA solver')
+    elif estimator == 'KMeans':
+        exact('meta', '<i8', (9,))
+        exact('reals', '<f8', (5,))
+        k, d, nfit, niter, metric, init, _, _, _ = map(int, arrays['meta'])
+        if k < 1 or d < 1 or nfit < 1 or niter < 0:
+            raise ValueError('invalid KMeans fitted counts')
+        exact('centers', '<f4', (k, d))
+        exact('labels', '<i4', (nfit,))
+        metrics = {'euclidean': 0, 'l2_expanded': 0, 'l2_sqrt_expanded': 1}
+        inits = {'k-means++': 0, 'random': 1, 'array': 2}
+        if metrics.get(_saved_text(arrays, 'metric')) != metric or inits.get(_saved_text(arrays, 'init')) != init:
+            raise ValueError('KMeans saved names and codes differ')
+    state = dict(arrays)
+    state['estimator'] = estimator
+    return state
+
+
+def public_fitted_state(model, *, retain_directory=None):
+    """Read a reviewed public export/attributes after clocks stop; never inspect handles.
+
+    Returns (typed state, provenance), or (None, explicit unavailable evidence).
+    No existing receipt is upgraded, and incomplete exports remain partial.
+    """
+    key = (type(model).__module__, type(model).__name__)
+    if key[0] == _PUBLIC_ATTRIBUTE_SOURCE['module'] and key[1] in PUBLIC_ATTRIBUTE_FITTED_STATE_CONTRACTS:
+        return _public_attribute_fitted_state(model, key[1])
+    estimator = _PUBLIC_FITTED_TYPES.get(key)
+    if estimator is None:
+        missing = ['reviewed complete typed fitted-state export']
+        if key in (('mojolearn.linear_model', 'LinearRegression'),
+                   ('mojolearn._classical_host', 'HostLinearRegression')):
+            missing = ['retained training mean _x_mean', 'retained training mean _y_mean']
+        return None, dict(status='UNAVAILABLE', missing_state=missing,
+                          reason='Public export is not a reviewed complete fitted-state contract',
+                          partial_export=model_receipt(model, retain_directory=retain_directory))
+    contract = PUBLIC_FITTED_STATE_CONTRACTS[estimator]
+    metadata = dict(contract=contract['id'], contract_source=contract['source'],
+                    contract_paths=public_fitted_state_paths(estimator),
+                    capture_source='public save npz', model_class='.'.join(key),
+                    excluded_non_fitted_state=dict(contract['excluded']),
+                    normalized_metadata={'estimator': dict(saved=key[1], logical=estimator,
+                        reason='public host route subclass uses the same versioned fitted-state format')})
+    try:
+        import numpy as np
+        with _export_directory(retain_directory, 'mojolearn-typed-fitted-state-') as directory:
+            path = Path(directory) / 'model.npz'
+            model.save(path)
+            with np.load(path, allow_pickle=False) as saved:
+                arrays = {name: saved[name] for name in saved.files}
+            if retain_directory is not None:
+                metadata['retained_export'] = _retained_export(path)
+        metadata['complete_export_sha256'] = canonical_hash(arrays)
+        state = normalize_public_fitted_state(arrays, estimator, key[1])
+        return state, metadata
+    except Exception as exc:
+        return None, dict(metadata, status='UNAVAILABLE', missing_state=['validated complete fitted-state export'],
+                          reason=type(exc).__name__ + ': ' + str(exc))
 
 
 def canonical_hash(value):
@@ -44,7 +296,7 @@ def canonical_hash(value):
     return h.hexdigest()
 
 
-def _model_receipt(model):
+def _model_receipt(model, *, retain_directory=None):
     """Hash a public snapshot; never fit, predict, or inspect opaque handles."""
     if model is None:
         return {"status": "unavailable", "reason": "runner does not retain an exportable model"}
@@ -56,7 +308,7 @@ def _model_receipt(model):
         return dict(info, status="ok", source="public state_dict", sha256=canonical_hash(state))
     if callable(getattr(model, "save", None)):
         import numpy as np
-        with tempfile.TemporaryDirectory(prefix="mojolearn-scored-state-") as directory:
+        with _export_directory(retain_directory, "mojolearn-scored-state-") as directory:
             path = Path(directory) / "model.npz"
             model.save(path)
             with np.load(path, allow_pickle=False) as saved:
@@ -67,14 +319,17 @@ def _model_receipt(model):
                 omitted = [key for key in ("device",) if key in state]
                 for key in omitted:
                     del state[key]
-                return dict(info, status="ok", source="public save npz", sha256=canonical_hash(state),
-                            complete_export_sha256=full, excluded_metadata=omitted)
+                result = dict(info, status="ok", source="public save npz", sha256=canonical_hash(state),
+                              complete_export_sha256=full, excluded_metadata=omitted)
+                if retain_directory is not None:
+                    result['retained_export'] = _retained_export(path)
+                return result
     return dict(info, status="unavailable", reason="no public state_dict or save export")
 
 
-def model_receipt(model):
+def model_receipt(model, *, retain_directory=None):
     try:
-        return _model_receipt(model)
+        return _model_receipt(model, retain_directory=retain_directory)
     except Exception as exc:
         # Keep the scored measurement and its original diagnostic. Failed
         # exports are never an identity claim and can be repaired separately.

@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "id": "C42",
+  "title": "Compact active agglomerative distance work",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "x_cluster/device_ops.mojo",
+    "x_cluster/agglo.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_C42_ACTIVE_TRIANGLE"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Children, distances, cut labels and full dendrogram on equal-distance and disconnected cases.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C42",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C42",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C42",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C42",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C42",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/graph_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/graph_controls.mojo"
+  ],
+  "default_configuration": "active_triangle",
+  "configurations": {
+    "active_triangle": {
+      "name": "active_triangle",
+      "candidate_defines": [
+        "MOJOLEARN_C42_ACTIVE_TRIANGLE"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C42"
+      ],
+      "source_gaps": [
+        "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending."
+      ],
+      "scope": [
+        "AgglomerativeClustering",
+        "linkage"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "more:agglomerative@active_linkage"
+      ]
+    }
+  },
+  "source_gaps": [
+    "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending."
+  ],
+  "catalog_estimators": [
+    "AgglomerativeClustering",
+    "linkage methods"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "more:agglomerative@active_linkage"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

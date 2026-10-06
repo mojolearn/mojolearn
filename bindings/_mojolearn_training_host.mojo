@@ -69,6 +69,12 @@ walked descending; the same define walks every `gemm_oracle` leaf descending
 (`GEMM_ORACLE_HOST_SABOTAGE`), which moves the clip, the loss, the linear
 operations and the RMSNorm weight gradient.
 """
+
+from training.neural_arithmetic_profile import neural_training_profile
+from bindings.residual_dropout_boundary_host import residual_dropout_binding, residual_dropout_backward_binding
+from bindings.neural_gemm_boundary_host import neural_gemm_binding
+from training.neural_session_mlp_host import nn_mlp_sessions_host
+
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -676,6 +682,27 @@ def rms_norm_backward_binding(
     return PythonObject(count)
 
 
+def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
+                         row_counts: PythonObject, dims: PythonObject) raises -> PythonObject:
+    """Native whole-model A/B: shared weights, independent session row batches."""
+    var a = _addrs(addresses, 5, "mlp_sessions")
+    _params(dims, 3, "mlp_sessions")
+    if len(input_addresses) != len(row_counts):
+        raise Error("neural MLP sessions: metadata length mismatch")
+    var inputs = List[Int]()
+    var rows = List[Int]()
+    for i in range(len(row_counts)):
+        inputs.append(Int(py=input_addresses[i]))
+        rows.append(Int(py=row_counts[i]))
+    var in_width = Int(py=dims[0])
+    var hidden = Int(py=dims[1])
+    var out_width = Int(py=dims[2])
+    var count = 0
+    with GILReleased(Python()):
+        count = nn_mlp_sessions_host(inputs, rows, f32_ptr(a[1]), f32_ptr(a[2]), f32_ptr(a[3]), f32_ptr(a[4]), f32_ptr(a[0]), in_width, hidden, out_width)
+    return PythonObject(count)
+
+
 def linear_forward_binding(
     addresses: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -794,6 +821,29 @@ def neural_rng_binding(
 # ===========================================================================
 
 
+from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2, IDN_LOSS_TOKEN_TREE_V2, IDN_ATTENTION_V2
+from gemm.contract import CONTRACT_K_LEAF_MIN
+
+
+def training_experiment_profile_binding() raises -> PythonObject:
+    """Checkpoint identity for optional NI34/35/08 numerical contracts."""
+    var profile = String("baseline")
+    if IDN_ATTENTION_V2:
+        profile += "+attention-online-tile32-v2"
+    if IDN_CHUNKED_LM_HEAD_V2:
+        profile += "+head-serial-logit-chunked-v2"
+    if IDN_LOSS_TOKEN_TREE_V2:
+        profile += "+ce-token-tree256-v2"
+    if CONTRACT_K_LEAF_MIN != 128:
+        profile += "+gemm-leaf" + String(CONTRACT_K_LEAF_MIN)
+    return PythonObject(profile)
+
+
+def training_chunked_lm_head_enabled_binding() raises -> PythonObject:
+    """NI34 profile selector shared by native-host and GPU Samba wrappers."""
+    return PythonObject(IDN_CHUNKED_LM_HEAD_V2)
+
+
 def chunked_lm_head_v2_loss_binding(
     addresses: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -847,10 +897,15 @@ def chunked_lm_head_v2_train_binding(
         count = rows
     return PythonObject(count)
 
+def neural_arithmetic_profile_binding() raises -> PythonObject:
+    return PythonObject(neural_training_profile())
+
+
 @export
 def PyInit__mojolearn_training_host() abi("C") -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_training_host")
+        module.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")
         module.def_function[training_host_numeric_mode_binding]("training_host_numeric_mode")
         module.def_function[training_host_vendor_binding]("training_host_vendor")
         module.def_function[training_host_column_binding]("training_host_column")
@@ -870,10 +925,16 @@ def PyInit__mojolearn_training_host() abi("C") -> PythonObject:
         module.def_function[rms_norm_forward_binding]("rms_norm_forward")
         module.def_function[rms_norm_backward_binding]("rms_norm_backward")
         module.def_function[linear_forward_binding]("linear_forward")
+        module.def_function[neural_gemm_binding]("neural_gemm")
+        module.def_function[mlp_sessions_binding]("mlp_sessions")
+        module.def_function[residual_dropout_binding]("residual_dropout")
+        module.def_function[residual_dropout_backward_binding]("residual_dropout_backward")
         module.def_function[linear_backward_binding]("linear_backward")
         module.def_function[neural_rng_binding]("neural_rng")
         module.def_function[chunked_lm_head_v2_loss_binding]("chunked_lm_head_v2_loss")
         module.def_function[chunked_lm_head_v2_train_binding]("chunked_lm_head_v2_train")
+        module.def_function[training_chunked_lm_head_enabled_binding]("training_chunked_lm_head_enabled")
+        module.def_function[training_experiment_profile_binding]("training_experiment_profile")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_training_host: ", error))

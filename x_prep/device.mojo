@@ -1,8 +1,10 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The prep lane's device runner: the arena goes up once, every stage of the
 program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
+from experiments.classical_identical_ideas.shared_controls import C07_KEYS1024, C07_KEYS4096, C08_GROUPED_OUTPUT
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from std.memory import bitcast
@@ -24,7 +26,7 @@ from x_prep.fastred import (
     ii_gram_fast_kernel,
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
-from x_prep.fastnb import NB_CAT_ATOMIC, cat_hist_atomic_kernel, cat_hist_convert_kernel
+from x_prep.fastnb import NB_CAT_ATOMIC, AFCL_P03, cat_hist_atomic_kernel, cat_hist_convert_kernel
 from x_prep.label_fast import LABEL_SCATTER, label_scatter_kernel
 from x_prep.select_fast import (
     SELECT_FREG, SELECT_FCLS, OP_F_CLASSIF, OP_F_REGRESSION, program_has_op, select_scratch_words,
@@ -356,7 +358,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # 0.070 s, every digest equal); MOJOLEARN_XPREP_SORT_RADIX=0 is the bitonic sort.
     # MOJOLEARN_XPREP_SORT_CHUNK = positions per chunk (512 to 4096 measured within 0.006 s).
     var radix = False
-    var radix_rows = 2048
+    # C07 task sizes bound per-task key traffic independently of digit width.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var radix_rows = 4096 if C07_KEYS4096 else (1024 if C07_KEYS1024 else 2048)
     comptime if IDN_XPREP_RADIX:
         # K1: IDENTICAL takes the radix sort by define, not by env (the same words either way)
         radix = True
@@ -713,9 +717,10 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 var words = Int(hq[2]) * Int(hq[4]) * Int(hq[6])
                 if cells > 0 and cells <= 2147483647 and words > 0:
                     ctx.enqueue_memset(df.create_sub_buffer[DType.float32](Int(hq[8]), words), Float32(0))
+                    var cat_block = BLOCK // 2 if AFCL_P03 else BLOCK
                     ctx.enqueue_function[cat_hist_atomic_kernel](
                         df.unsafe_ptr(), qp, Int32(cells),
-                        grid_dim=(cells + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                        grid_dim=(cells + cat_block - 1) // cat_block, block_dim=cat_block,
                     )
                     continue
             if op == OP_CAT_HFOLD and host_q.unsafe_load(s * STAGE_INTS + 2 + 6) < 0:
@@ -724,6 +729,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )
                 continue
+        comptime if C08_GROUPED_OUTPUT:
+            if op == 9:
+                total = (total+3)//4
         comptime for k in range(N_OPS):
             if op == k:
                 ctx.enqueue_function[prep_kernel[k]](

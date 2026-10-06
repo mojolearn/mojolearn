@@ -148,6 +148,8 @@ GENERATOR AND ITS TRANSFORM:
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.atomic import Atomic
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.philox import PhiloxState
@@ -164,6 +166,8 @@ from kernel_methods.impl.random.rng_device import (
     km_unit_float_from,
 )
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     ftz,
     identical_cos,
     identical_div,
@@ -722,6 +726,37 @@ def random_offsets_kernel(
     b_out.unsafe_store(j, km_random_offset(key_join(lo_bits, hi_bits), j))
 
 
+# AFCL-L12: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# One thread handles one feature in four consecutive rows, reusing its
+# random offset. Adjacent threads still load/store adjacent components;
+# no random draw, projection, scale or cosine approximation is changed.
+# Applies to callers of km_feature_map_epilogue, including the resident
+# RBFSampler pipeline. Existing fused-projection paths bypass this candidate.
+comptime AFCL_L12 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L12"]())
+
+
+def feature_map_epilogue_rows4_kernel(
+    proj_io: MutPointer[Float32, MutAnyOrigin],
+    b_in: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32, n_components_in: Int32, scale: Float32,
+):
+    var rows = Int(n_rows_in)
+    var d = Int(n_components_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var row = (t // d) * 4
+    if row >= rows:
+        return
+    var j = t % d
+    var offset = ftz(b_in.unsafe_load(j))
+    comptime for lane in range(4):
+        if row + lane < rows:
+            var i = (row + lane) * d + j
+            var p = ftz(proj_io.unsafe_load(i))
+            var shifted = ftz(p + offset)
+            proj_io.unsafe_store(i, ftz(identical_mul(identical_cos(shifted), scale)))
+
+
 def feature_map_epilogue_kernel(
     proj_io: MutPointer[Float32, MutAnyOrigin],
     b_in: MutPointer[Float32, MutAnyOrigin],
@@ -854,6 +889,14 @@ def km_feature_map_epilogue(
             scale,
             Int32(sabotage),
             grid_dim=((total + tpb - 1) // tpb, 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
+        return
+    comptime if AFCL_L12:
+        var row_groups = (n_rows + 3) // 4
+        ctx.enqueue_function[feature_map_epilogue_rows4_kernel](
+            proj.unsafe_ptr(), b.unsafe_ptr(), Int32(n_rows), Int32(n_components), scale,
+            grid_dim=((row_groups * n_components + tpb - 1) // tpb, 1, 1),
             block_dim=(tpb, 1, 1),
         )
         return

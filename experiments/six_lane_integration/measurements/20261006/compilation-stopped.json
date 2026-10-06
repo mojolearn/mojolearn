@@ -1,0 +1,71 @@
+{
+  "status": "STOPPED_BY_OWNER",
+  "phase": "Compilation explicitly stopped; retained accepted binaries only for ongoing AMD GPU measurements",
+  "pid": 73067,
+  "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+  "total": 64,
+  "completed": 42,
+  "failed": 0,
+  "provider": "DigitalOcean",
+  "gpu_rental_started": false,
+  "heartbeat_at": 1791316579.779865,
+  "local_guardian_pid": 51527,
+  "deadline": 1791323182.365143,
+  "provider_id": 606712726,
+  "name": "mojolearn-sixlane-amd-builder-c5-20261006-03",
+  "vcpus": 8,
+  "memory_mib": 16384,
+  "hourly_usd": 0.16667,
+  "ssh_host": "107.170.96.40",
+  "capture_returncode": 0,
+  "first_full_workload_pair_ready": true,
+  "paired_bindings": [
+    "bindings/_mojolearn.mojo",
+    "bindings/_mojolearn_arima.mojo",
+    "bindings/_mojolearn_byte_lm.mojo",
+    "bindings/_mojolearn_embedding.mojo",
+    "bindings/_mojolearn_estimators.mojo",
+    "bindings/_mojolearn_gp.mojo",
+    "bindings/_mojolearn_hdbscan.mojo",
+    "bindings/_mojolearn_ivf.mojo",
+    "bindings/_mojolearn_kernel_methods.mojo",
+    "bindings/_mojolearn_preprocessing.mojo",
+    "bindings/_mojolearn_rf.mojo",
+    "bindings/_mojolearn_solver.mojo",
+    "bindings/_mojolearn_svm.mojo",
+    "bindings/_mojolearn_trees.mojo",
+    "bindings/_mojolearn_x_cluster.mojo",
+    "bindings/_mojolearn_x_decomp.mojo",
+    "bindings/_mojolearn_x_linear.mojo",
+    "bindings/_mojolearn_x_metrics.mojo",
+    "bindings/_mojolearn_x_neighbors.mojo",
+    "bindings/_mojolearn_x_prep.mojo",
+    "bindings/_mojolearn_x_trees.mojo"
+  ],
+  "capture_hash_errors": [],
+  "failures": [
+    {
+      "key": "fbec258f1738d760f434",
+      "binding": "bindings/_mojolearn.mojo",
+      "returncode": 1,
+      "log": "/root/leg_out/amd-build/fbec258f1738d760f434/build.log"
+    }
+  ],
+  "repair_started_at": 1791313148.685409,
+  "original_build_deadline": 1791322302.0,
+  "historical_failure_count": 1,
+  "historical_failures": [
+    {
+      "key": "fbec258f1738d760f434",
+      "binding": "bindings/_mojolearn.mojo",
+      "returncode": 1,
+      "log": "/root/leg_out/amd-build/fbec258f1738d760f434/build.log",
+      "local_receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/do-attempt-03/remote/leg_out/amd-build/fbec258f1738d760f434/receipt.json"
+    }
+  ],
+  "remaining_unbuilt": 22,
+  "compilation_allowed": false,
+  "build_continuation_enabled": false,
+  "finished_at": 1791316579.779865,
+  "stop_evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd-missing-build/do-attempt-03/remote/leg_out/owner-stop-compilation/stop.json"
+}

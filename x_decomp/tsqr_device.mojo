@@ -54,6 +54,7 @@ from x_decomp.jacobi2 import dev_barrier
 from x_decomp.tsqr_core import (
     TS_LAUNCH_CELLS,
     TS_LAUNCH_MIN_BLOCKS,
+    TS_TREE_ARITY,
     TS_NB,
     TS_P,
     TS_ROWS,
@@ -416,13 +417,13 @@ def ts_rtile_kernel(a: F32Ptr, tiles: F32Ptr, m_in: Int32, n_in: Int32, nb_in: I
     tiles.unsafe_store(t, ftz(a.unsafe_load((lo + i) * n + c)) if c >= i else Float32(0.0))
 
 
-def ts_combine_kernel(tiles: F32Ptr, taus: F32Ptr, n_in: Int32, nb_in: Int32, s_in: Int32, p0_in: Int32):
+def ts_combine_kernel(tiles: F32Ptr, taus: F32Ptr, n_in: Int32, nb_in: Int32, s_in: Int32, p0_in: Int32, child_in: Int32 = Int32(1)):
     """`ts_combine_host` for pair p0 + block_idx.x of the level with stride s."""
     var n = Int(n_in)
     var nb = Int(nb_in)
     var s = Int(s_in)
-    var ia = 2 * s * (Int(p0_in) + Int(block_idx.x))
-    var ib = ia + s
+    var ia = TS_TREE_ARITY * s * (Int(p0_in) + Int(block_idx.x))
+    var ib = ia + Int(child_in) * s
     if ib >= nb:
         return
     var top = tiles + ia * n * n
@@ -474,7 +475,7 @@ def ts_combine_kernel(tiles: F32Ptr, taus: F32Ptr, n_in: Int32, nb_in: Int32, s_
 
 
 def ts_capply_kernel(
-    cbuf: F32Ptr, tiles: F32Ptr, taus: F32Ptr, n_in: Int32, k_in: Int32, nb_in: Int32, s_in: Int32, p0_in: Int32
+    cbuf: F32Ptr, tiles: F32Ptr, taus: F32Ptr, n_in: Int32, k_in: Int32, nb_in: Int32, s_in: Int32, p0_in: Int32, child_in: Int32 = Int32(1)
 ):
     """`ts_capply_host` for pair p0 + block_idx.x of the level with stride s:
     one thread per column of C (each column's chain is its own)."""
@@ -482,8 +483,8 @@ def ts_capply_kernel(
     var k = Int(k_in)
     var nb = Int(nb_in)
     var s = Int(s_in)
-    var ia = 2 * s * (Int(p0_in) + Int(block_idx.x))
-    var ib = ia + s
+    var ia = TS_TREE_ARITY * s * (Int(p0_in) + Int(block_idx.x))
+    var ib = ia + Int(child_in) * s
     if ib >= nb:
         return
     var xt = cbuf + ia * n * k
@@ -705,17 +706,18 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
     var ppl = _per_launch(n * n * n)
     var s = 1
     while s < nb:
-        var pairs = (nb + 2 * s - 1) // (2 * s)
-        var p0 = 0
-        while p0 < pairs:
-            var cnt = min(ppl, pairs - p0)
-            ctx.enqueue_function[ts_combine_kernel](
-                dtl.unsafe_ptr(), dtau.unsafe_ptr(), Int32(n), Int32(nb), Int32(s), Int32(p0),
-                grid_dim=cnt, block_dim=TS_TPB,
-            )
-            _wait_apple(ctx)
-            p0 += cnt
-        s *= 2
+        var pairs = (nb + TS_TREE_ARITY * s - 1) // (TS_TREE_ARITY * s)
+        for child in range(1, TS_TREE_ARITY):
+            var p0 = 0
+            while p0 < pairs:
+                var cnt = min(ppl, pairs - p0)
+                ctx.enqueue_function[ts_combine_kernel](
+                    dtl.unsafe_ptr(), dtau.unsafe_ptr(), Int32(n), Int32(nb), Int32(s), Int32(p0), Int32(child),
+                    grid_dim=cnt, block_dim=TS_TPB,
+                )
+                _wait_apple(ctx)
+                p0 += cnt
+        s *= TS_TREE_ARITY
     # lane/apple-fast-purity2: the NaN refusal's scan runs on the device
     # (the first NaN entry by an atomic min), not as a host loop over R.
     var dnan = ctx.enqueue_create_buffer[DType.int32](1)
@@ -791,20 +793,22 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
     var s = 1
     while s < nb:
         strides.append(s)
-        s *= 2
+        s *= TS_TREE_ARITY
     var ppl = _per_launch(n * n * k)
     for li in range(len(strides)):
         var sl = strides[len(strides) - 1 - li]
-        var pairs = (nb + 2 * sl - 1) // (2 * sl)
-        var p0 = 0
-        while p0 < pairs:
-            var cnt = min(ppl, pairs - p0)
-            ctx.enqueue_function[ts_capply_kernel](
-                dcb.unsafe_ptr(), dtl.unsafe_ptr(), dtau.unsafe_ptr(), Int32(n), Int32(k), Int32(nb), Int32(sl), Int32(p0),
-                grid_dim=cnt, block_dim=TS_TPB,
-            )
-            _wait_apple(ctx)
-            p0 += cnt
+        var pairs = (nb + TS_TREE_ARITY * sl - 1) // (TS_TREE_ARITY * sl)
+        for offset in range(1, TS_TREE_ARITY):
+            var child = TS_TREE_ARITY - offset
+            var p0 = 0
+            while p0 < pairs:
+                var cnt = min(ppl, pairs - p0)
+                ctx.enqueue_function[ts_capply_kernel](
+                    dcb.unsafe_ptr(), dtl.unsafe_ptr(), dtau.unsafe_ptr(), Int32(n), Int32(k), Int32(nb), Int32(sl), Int32(p0), Int32(child),
+                    grid_dim=cnt, block_dim=TS_TPB,
+                )
+                _wait_apple(ctx)
+                p0 += cnt
     var dq = ctx.enqueue_create_buffer[DType.float32](m * k)
     ctx.enqueue_function[ts_qinit_kernel](
         dcb.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(n), Int32(k), Int32(nb), grid_dim=_grid(m * k), block_dim=TS_TPB

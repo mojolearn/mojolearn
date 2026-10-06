@@ -22,7 +22,8 @@ from training.checks.optimizer import (
     SAB_CLIP_FLAT_NORM,
 )
 from training.checks.optimizer_contract import refuse_nonfinite_scalar
-from gemm.checks.gemm_identical import identical_gemm_into
+from training.neural_ab_profiles import NN57_NORM_PROFILE, nn_reduce_pointer_into
+from gemm.neural_dispatch import identical_gemm_into
 from gemm.contract import OP_NT
 
 
@@ -48,7 +49,10 @@ struct OwnedClipTensor(Movable):
         var ws = _zeros(ctx,identical_optimizer_workspace_floats([0,count]))
         var ga = self.gradient.create_sub_buffer[DType.float32](0,count)
         var gb = self.gradient.create_sub_buffer[DType.float32](0,count)
-        identical_gemm_into(ctx,cell,ga,gb,ws,1,1,count,OP_NT)
+        comptime if NN57_NORM_PROFILE:
+            nn_reduce_pointer_into[128, True](ctx, cell.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ga.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), count)
+        else:
+            identical_gemm_into(ctx,cell,ga,gb,ws,1,1,count,OP_NT)
         ctx.synchronize()
         var value = download_f32(ctx,cell,1)
         self.sumsq = value[0]

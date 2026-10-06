@@ -336,7 +336,9 @@ def _take(a, idx):
 
 def _gpu_gather(arrays, n, count, seed, numeric_mode, replace=True):
     """Return owned results or None for unchanged public fallback."""
-    if (numeric_mode or _backend.default_mode()) != "fast" or count <= 0 or n <= 0:
+    # C11 IDENTICAL admission is the compiled binding's explicit opt-in;
+    # metadata chooses a binding, all draws and gathered data stay in Mojo.
+    if count <= 0 or n <= 0:
         return None
     mod = _extension(numeric_mode)
     enabled = getattr(mod, "resample_gpu_gather_enabled", None)

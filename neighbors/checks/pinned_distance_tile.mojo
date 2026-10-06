@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The tiled k-NN arm's distances, computed where we can see the order.
 
 DEVIATION 505 (IDENTITY_PATHS row 24). Reached only under
@@ -47,6 +45,11 @@ THE FAST ARM'S BITS DO NOT MOVE. Nothing here is reachable unless
 `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`; `tiled_brute_force_knn` keeps
 calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 """
+from core.classical_distance import direct_squared_distance
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
@@ -100,6 +103,10 @@ def pinned_distance_tile_kernel(
     var row = idx // n_cols
     var col = idx % n_cols
 
+    comptime if C30_DIRECT_DISTANCE:
+        var distance=direct_squared_distance(q+row*d,y+col*d,d)
+        z[idx]=ftz(identical_sqrt(distance)) if is_sqrt_in!=0 else distance
+        return
     var acc = Float32(0.0)
     for f in range(d):
         var qv = ftz(q.unsafe_load(row * d + f))

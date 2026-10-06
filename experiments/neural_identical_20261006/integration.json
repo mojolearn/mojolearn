@@ -1,0 +1,985 @@
+{
+  "schema": "mojolearn.neural-identical-integration/1",
+  "scope": "neural_only",
+  "status": "SOURCE_INTEGRATION_NOT_EXECUTED",
+  "default_promotion": false,
+  "build_entrypoint": "tools/identical_wave_native_build.py",
+  "queue_entrypoint": "tools/performance_full_ab_queue.py",
+  "build_policy": "Build selected families and host twins with the same per-arm defines; exclude statistical algorithms from neural timing even where a shared binding includes them. Shared GEMM requires conservative coverage of all neural consumers.",
+  "workloads": {
+    "transformer": {
+      "recipe_sources": [
+        "tools/bench_board_neural.py",
+        "tools/bench_neural_decode.py"
+      ],
+      "operations": [
+        "full block forward",
+        "public backward",
+        "prefill and decode",
+        "training consumer"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "byte_lm": {
+      "recipe_sources": [
+        "tools/bench_board_neural.py",
+        "tools/torch_lm_step_opponent.py"
+      ],
+      "operations": [
+        "full corpus forward",
+        "training step and trajectory",
+        "held-out loss",
+        "checkpoint resume"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "samba": {
+      "recipe_sources": [
+        "tools/bench_board_neural.py"
+      ],
+      "operations": [
+        "full corpus forward",
+        "training step and trajectory",
+        "prefill and decode",
+        "checkpoint resume"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "mamba1": {
+      "recipe_sources": [
+        "tools/bench_board_neural.py",
+        "mamba/corpus/gen_corpus.py"
+      ],
+      "operations": [
+        "full block forward",
+        "public backward",
+        "state and decode"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "mamba2": {
+      "recipe_sources": [
+        "tools/bench_board_neural.py",
+        "mamba/corpus/gen_corpus.py"
+      ],
+      "operations": [
+        "full block forward",
+        "public backward",
+        "state and decode"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "mamba3": {
+      "recipe_sources": [
+        "tools/bench_board_neural.py",
+        "tools/bench_neural_decode.py"
+      ],
+      "operations": [
+        "full block forward",
+        "public backward",
+        "state and decode"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "cnn": {
+      "recipe_sources": [
+        "tools/bench_board_algos.py"
+      ],
+      "operations": [
+        "full image-set preparation",
+        "fit and held-out prediction",
+        "forward and backward"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "graph_neural": {
+      "recipe_sources": [
+        "tools/bench_board_algos.py"
+      ],
+      "operations": [
+        "full graph GCN and GraphSAGE fit",
+        "predict",
+        "mean and max aggregators as affected"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "recurrent": {
+      "recipe_sources": [
+        "tools/bench_board_algos.py"
+      ],
+      "operations": [
+        "full LSTM GRU RNN fit",
+        "classifier and regressor prediction",
+        "training trajectory"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "mlp": {
+      "recipe_sources": [
+        "tools/bench_board_neural.py",
+        "tools/bench_board_algos.py"
+      ],
+      "operations": [
+        "full dataset fit or complete training step",
+        "prediction",
+        "epoch preparation"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "moe": {
+      "recipe_sources": [
+        "tools/bench_board_algos.py"
+      ],
+      "operations": [
+        "full declared forward workload",
+        "route and token permutation outputs"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "optimizer_consumers": {
+      "recipe_sources": [
+        "tools/bench_board_neural.py",
+        "tools/bench_board_algos.py"
+      ],
+      "operations": [
+        "complete caller training step",
+        "updated weights and optimizer state",
+        "failed-step transaction"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    },
+    "embedding_consumers": {
+      "recipe_sources": [
+        "tools/bench_board_neural.py"
+      ],
+      "operations": [
+        "full LM and Samba training consumers",
+        "repeated indices and backward",
+        "optimizer state"
+      ],
+      "status": "FULL_RECIPE_DETAILS_PENDING",
+      "required_before_timing": [
+        "dataset/version/hash/split",
+        "actual full dimensions and intrinsic caps",
+        "all settings/seeds",
+        "predeclared quality metrics",
+        "complete timed boundary",
+        "accepted source/compiler/target/binary evidence"
+      ]
+    }
+  },
+  "ideas": {
+    "NI01": {
+      "binding_families": [
+        "linalg",
+        "x_cnn",
+        "x_sequence",
+        "transformer",
+        "mamba",
+        "training",
+        "byte_lm",
+        "embedding"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba",
+        "mamba1",
+        "mamba2",
+        "mamba3",
+        "cnn",
+        "graph_neural",
+        "recurrent",
+        "mlp",
+        "moe",
+        "optimizer_consumers",
+        "embedding_consumers"
+      ]
+    },
+    "NI02": {
+      "binding_families": [
+        "linalg",
+        "x_cnn",
+        "x_sequence",
+        "transformer",
+        "mamba",
+        "training",
+        "byte_lm",
+        "embedding"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba",
+        "mamba1",
+        "mamba2",
+        "mamba3",
+        "cnn",
+        "graph_neural",
+        "recurrent",
+        "mlp",
+        "moe",
+        "optimizer_consumers",
+        "embedding_consumers"
+      ]
+    },
+    "NI03": {
+      "binding_families": [
+        "linalg",
+        "x_cnn",
+        "x_sequence",
+        "transformer",
+        "mamba",
+        "training",
+        "byte_lm",
+        "embedding"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba",
+        "mamba1",
+        "mamba2",
+        "mamba3",
+        "cnn",
+        "graph_neural",
+        "recurrent",
+        "mlp",
+        "moe",
+        "optimizer_consumers",
+        "embedding_consumers"
+      ]
+    },
+    "NI04": {
+      "binding_families": [
+        "linalg",
+        "x_cnn",
+        "x_sequence",
+        "transformer",
+        "mamba",
+        "training",
+        "byte_lm",
+        "embedding"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba",
+        "mamba1",
+        "mamba2",
+        "mamba3",
+        "cnn",
+        "graph_neural",
+        "recurrent",
+        "mlp",
+        "moe",
+        "optimizer_consumers",
+        "embedding_consumers"
+      ]
+    },
+    "NI05": {
+      "binding_families": [
+        "linalg",
+        "x_cnn",
+        "x_sequence",
+        "transformer",
+        "mamba",
+        "training",
+        "byte_lm",
+        "embedding"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba",
+        "mamba1",
+        "mamba2",
+        "mamba3",
+        "cnn",
+        "graph_neural",
+        "recurrent",
+        "mlp",
+        "moe",
+        "optimizer_consumers",
+        "embedding_consumers"
+      ]
+    },
+    "NI06": {
+      "binding_families": [
+        "linalg",
+        "x_cnn",
+        "x_sequence",
+        "transformer",
+        "mamba",
+        "training",
+        "byte_lm",
+        "embedding"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba",
+        "mamba1",
+        "mamba2",
+        "mamba3",
+        "cnn",
+        "graph_neural",
+        "recurrent",
+        "mlp",
+        "moe",
+        "optimizer_consumers",
+        "embedding_consumers"
+      ]
+    },
+    "NI07": {
+      "binding_families": [
+        "linalg",
+        "x_cnn",
+        "x_sequence",
+        "transformer",
+        "mamba",
+        "training",
+        "byte_lm",
+        "embedding"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba",
+        "mamba1",
+        "mamba2",
+        "mamba3",
+        "cnn",
+        "graph_neural",
+        "recurrent",
+        "mlp",
+        "moe",
+        "optimizer_consumers",
+        "embedding_consumers"
+      ]
+    },
+    "NI08": {
+      "binding_families": [
+        "linalg",
+        "x_cnn",
+        "x_sequence",
+        "transformer",
+        "mamba",
+        "training",
+        "byte_lm",
+        "embedding",
+        "neural_host"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba",
+        "mamba1",
+        "mamba2",
+        "mamba3",
+        "cnn",
+        "graph_neural",
+        "recurrent",
+        "mlp",
+        "moe",
+        "optimizer_consumers",
+        "embedding_consumers"
+      ]
+    },
+    "NI09": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn",
+        "graph_neural"
+      ]
+    },
+    "NI10": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn"
+      ]
+    },
+    "NI11": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn"
+      ]
+    },
+    "NI12": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn"
+      ]
+    },
+    "NI13": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn"
+      ]
+    },
+    "NI14": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn"
+      ]
+    },
+    "NI15": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn",
+        "graph_neural"
+      ]
+    },
+    "NI16": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn"
+      ]
+    },
+    "NI17": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn"
+      ]
+    },
+    "NI18": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn"
+      ]
+    },
+    "NI19": {
+      "binding_families": [
+        "transformer",
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI20": {
+      "binding_families": [
+        "transformer",
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI21": {
+      "binding_families": [
+        "transformer",
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI22": {
+      "binding_families": [
+        "transformer",
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI23": {
+      "binding_families": [
+        "transformer",
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI24": {
+      "binding_families": [
+        "transformer",
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI25": {
+      "binding_families": [
+        "transformer",
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI26": {
+      "binding_families": [
+        "transformer",
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "transformer",
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI27": {
+      "binding_families": [
+        "training",
+        "byte_lm",
+        "transformer",
+        "mamba"
+      ],
+      "workloads": [
+        "byte_lm",
+        "samba",
+        "optimizer_consumers"
+      ]
+    },
+    "NI28": {
+      "binding_families": [
+        "training",
+        "byte_lm",
+        "transformer",
+        "mamba"
+      ],
+      "workloads": [
+        "byte_lm",
+        "samba",
+        "optimizer_consumers"
+      ]
+    },
+    "NI29": {
+      "binding_families": [
+        "training",
+        "byte_lm",
+        "transformer",
+        "mamba"
+      ],
+      "workloads": [
+        "byte_lm",
+        "samba",
+        "optimizer_consumers"
+      ]
+    },
+    "NI30": {
+      "binding_families": [
+        "training",
+        "byte_lm",
+        "transformer",
+        "mamba"
+      ],
+      "workloads": [
+        "byte_lm",
+        "samba",
+        "optimizer_consumers"
+      ]
+    },
+    "NI31": {
+      "binding_families": [
+        "embedding",
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "byte_lm",
+        "samba",
+        "embedding_consumers"
+      ]
+    },
+    "NI32": {
+      "binding_families": [
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI33": {
+      "binding_families": [
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI34": {
+      "binding_families": [
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI35": {
+      "binding_families": [
+        "training",
+        "byte_lm"
+      ],
+      "workloads": [
+        "byte_lm",
+        "samba"
+      ]
+    },
+    "NI36": {
+      "binding_families": [
+        "training",
+        "transformer",
+        "mamba"
+      ],
+      "workloads": [
+        "samba"
+      ]
+    },
+    "NI37": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba1",
+        "mamba2",
+        "mamba3",
+        "samba"
+      ]
+    },
+    "NI38": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba1"
+      ]
+    },
+    "NI39": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba2"
+      ]
+    },
+    "NI40": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba2"
+      ]
+    },
+    "NI41": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba2"
+      ]
+    },
+    "NI42": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba3",
+        "samba"
+      ]
+    },
+    "NI43": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba3",
+        "samba"
+      ]
+    },
+    "NI44": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba2"
+      ]
+    },
+    "NI45": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba1",
+        "mamba2",
+        "mamba3",
+        "samba"
+      ]
+    },
+    "NI46": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba1"
+      ]
+    },
+    "NI47": {
+      "binding_families": [
+        "mamba"
+      ],
+      "workloads": [
+        "mamba3",
+        "samba"
+      ]
+    },
+    "NI48": {
+      "binding_families": [
+        "training",
+        "transformer",
+        "mamba"
+      ],
+      "workloads": [
+        "samba"
+      ]
+    },
+    "NI49": {
+      "binding_families": [
+        "x_sequence"
+      ],
+      "workloads": [
+        "recurrent"
+      ]
+    },
+    "NI50": {
+      "binding_families": [
+        "x_sequence"
+      ],
+      "workloads": [
+        "recurrent",
+        "mlp",
+        "moe"
+      ]
+    },
+    "NI51": {
+      "binding_families": [
+        "x_sequence"
+      ],
+      "workloads": [
+        "recurrent",
+        "mlp",
+        "moe"
+      ]
+    },
+    "NI52": {
+      "binding_families": [
+        "x_sequence"
+      ],
+      "workloads": [
+        "mlp"
+      ]
+    },
+    "NI53": {
+      "binding_families": [
+        "x_sequence"
+      ],
+      "workloads": [
+        "moe"
+      ]
+    },
+    "NI54": {
+      "binding_families": [
+        "x_sequence"
+      ],
+      "workloads": [
+        "optimizer_consumers"
+      ]
+    },
+    "NI55": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "graph_neural"
+      ]
+    },
+    "NI56": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "graph_neural"
+      ]
+    },
+    "NI57": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "graph_neural"
+      ]
+    },
+    "NI58": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "graph_neural"
+      ]
+    },
+    "NI59": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn"
+      ]
+    },
+    "NI60": {
+      "binding_families": [
+        "x_cnn"
+      ],
+      "workloads": [
+        "cnn"
+      ]
+    }
+  }
+}

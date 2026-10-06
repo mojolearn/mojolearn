@@ -1,0 +1,811 @@
+{
+  "schema": "mojolearn.integration-interaction-source-map/1",
+  "interactions": [
+    {
+      "id": "I.N.X.r3-round-01",
+      "members": [
+        "I.N.NN01",
+        "I.N.NN02",
+        "I.N.NN03",
+        "I.N.NN04",
+        "I.N.NN05",
+        "I.N.NN06",
+        "I.N.NN07",
+        "I.N.NN08",
+        "I.N.NN09",
+        "I.N.NN10",
+        "I.N.NN11",
+        "I.N.NN12",
+        "I.N.NN13",
+        "I.N.NN14",
+        "I.N.NN15",
+        "I.N.NN16"
+      ],
+      "rationale": "Authored interaction round; competing schedules/contracts stay explicitly incompatible.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-round-02",
+      "members": [
+        "I.N.NN17",
+        "I.N.NN18",
+        "I.N.NN19",
+        "I.N.NN20",
+        "I.N.NN21",
+        "I.N.NN22",
+        "I.N.NN23"
+      ],
+      "rationale": "Authored interaction round; competing schedules/contracts stay explicitly incompatible.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-round-03",
+      "members": [
+        "I.N.NN24",
+        "I.N.NN25",
+        "I.N.NN26",
+        "I.N.NN27",
+        "I.N.NN28",
+        "I.N.NN30",
+        "I.N.NN31",
+        "I.N.NN32"
+      ],
+      "rationale": "Authored interaction round; competing schedules/contracts stay explicitly incompatible.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-round-04",
+      "members": [
+        "I.N.NN33",
+        "I.N.NN34",
+        "I.N.NN35",
+        "I.N.NN36",
+        "I.N.NN37",
+        "I.N.NN38",
+        "I.N.NN39",
+        "I.N.NN40"
+      ],
+      "rationale": "Authored interaction round; competing schedules/contracts stay explicitly incompatible.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-round-05",
+      "members": [
+        "I.N.NN13",
+        "I.N.NN41",
+        "I.N.NN42",
+        "I.N.NN43",
+        "I.N.NN44"
+      ],
+      "rationale": "Authored interaction round; competing schedules/contracts stay explicitly incompatible.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-round-06",
+      "members": [
+        "I.N.NN14",
+        "I.N.NN45",
+        "I.N.NN46",
+        "I.N.NN47",
+        "I.N.NN48"
+      ],
+      "rationale": "Authored interaction round; competing schedules/contracts stay explicitly incompatible.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-round-07",
+      "members": [
+        "I.N.NN49",
+        "I.N.NN50",
+        "I.N.NN51",
+        "I.N.NN52",
+        "I.N.NN53",
+        "I.N.NN54"
+      ],
+      "rationale": "Authored interaction round; competing schedules/contracts stay explicitly incompatible.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-round-08",
+      "members": [
+        "I.N.NN55",
+        "I.N.NN56",
+        "I.N.NN57",
+        "I.N.NN58",
+        "I.N.NN59",
+        "I.N.NN60",
+        "I.N.NN61",
+        "I.N.NN62"
+      ],
+      "rationale": "Authored interaction round; competing schedules/contracts stay explicitly incompatible.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-63-3",
+      "members": [
+        "I.N.NN63",
+        "I.N.NN03"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-63-4",
+      "members": [
+        "I.N.NN63",
+        "I.N.NN04"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-63-20",
+      "members": [
+        "I.N.NN63",
+        "I.N.NN20"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-63-24",
+      "members": [
+        "I.N.NN63",
+        "I.N.NN24"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-63-34",
+      "members": [
+        "I.N.NN63",
+        "I.N.NN34"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-63-38",
+      "members": [
+        "I.N.NN63",
+        "I.N.NN38"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-63-39",
+      "members": [
+        "I.N.NN63",
+        "I.N.NN39"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-63-43",
+      "members": [
+        "I.N.NN63",
+        "I.N.NN43"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-63-54",
+      "members": [
+        "I.N.NN63",
+        "I.N.NN54"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-63-57",
+      "members": [
+        "I.N.NN63",
+        "I.N.NN57"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-64-3",
+      "members": [
+        "I.N.NN64",
+        "I.N.NN03"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-64-4",
+      "members": [
+        "I.N.NN64",
+        "I.N.NN04"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-64-20",
+      "members": [
+        "I.N.NN64",
+        "I.N.NN20"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-64-24",
+      "members": [
+        "I.N.NN64",
+        "I.N.NN24"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-64-34",
+      "members": [
+        "I.N.NN64",
+        "I.N.NN34"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-64-38",
+      "members": [
+        "I.N.NN64",
+        "I.N.NN38"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-64-39",
+      "members": [
+        "I.N.NN64",
+        "I.N.NN39"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-64-43",
+      "members": [
+        "I.N.NN64",
+        "I.N.NN43"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-64-54",
+      "members": [
+        "I.N.NN64",
+        "I.N.NN54"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.r3-topology-64-57",
+      "members": [
+        "I.N.NN64",
+        "I.N.NN57"
+      ],
+      "rationale": "Authored topology/session \u00d7 numerical-profile interaction; same-version arithmetic must not depend on batching or device count.",
+      "source": "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-01",
+      "members": [
+        "I.N.NI01",
+        "I.N.NI02",
+        "I.N.NI03",
+        "I.N.NI04",
+        "I.N.NI05",
+        "I.N.NI06"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-02",
+      "members": [
+        "I.N.NI07",
+        "I.N.NI09",
+        "I.N.NI26",
+        "I.N.NI27",
+        "I.N.NI36"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-03",
+      "members": [
+        "I.N.NI10",
+        "I.N.NI11",
+        "I.N.NI12",
+        "I.N.NI13",
+        "I.N.NI14",
+        "I.N.NI15",
+        "I.N.NI16"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-04",
+      "members": [
+        "I.N.NI19",
+        "I.N.NI20",
+        "I.N.NI21",
+        "I.N.NI22",
+        "I.N.NI23",
+        "I.N.NI24"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-05",
+      "members": [
+        "I.N.NI25",
+        "I.N.NI28",
+        "I.N.NI29",
+        "I.N.NI30",
+        "I.N.NI33",
+        "I.N.NI35"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-06",
+      "members": [
+        "I.N.NI31",
+        "I.N.NI32",
+        "I.N.NI34"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-07",
+      "members": [
+        "I.N.NI37",
+        "I.N.NI38",
+        "I.N.NI39",
+        "I.N.NI40",
+        "I.N.NI41",
+        "I.N.NI42",
+        "I.N.NI43",
+        "I.N.NI44",
+        "I.N.NI46",
+        "I.N.NI47"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-08",
+      "members": [
+        "I.N.NI36",
+        "I.N.NI45",
+        "I.N.NI48"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-09",
+      "members": [
+        "I.N.NI49",
+        "I.N.NI50",
+        "I.N.NI51",
+        "I.N.NI52",
+        "I.N.NI53",
+        "I.N.NI54"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-10",
+      "members": [
+        "I.N.NI08",
+        "I.N.NI20",
+        "I.N.NI25",
+        "I.N.NI35",
+        "I.N.NI38",
+        "I.N.NI44",
+        "I.N.NI51",
+        "I.N.NI57"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-11",
+      "members": [
+        "I.N.NI55",
+        "I.N.NI56",
+        "I.N.NI57",
+        "I.N.NI58"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "I.N.X.v2-required-12",
+      "members": [
+        "I.N.NI59",
+        "I.N.NI60"
+      ],
+      "rationale": "Authored required interaction; broader/rejected members remain explicit gaps and alternatives are not silently enabled.",
+      "source": "docs/plans/NEURAL_IDENTICAL_EXPERIMENT_IDEAS_2026-10-06.md"
+    },
+    {
+      "id": "AF.T.X.X01",
+      "members": [
+        "AF.T.F01",
+        "AF.T.F02"
+      ],
+      "rationale": "Authored Apple FAST trees interaction 1; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": null
+    },
+    {
+      "id": "AF.T.X.X02",
+      "members": [
+        "AF.T.F06",
+        "AF.T.F07",
+        "AF.T.F08"
+      ],
+      "rationale": "Authored Apple FAST trees interaction 2; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": null
+    },
+    {
+      "id": "AF.T.X.X02.F06-F07",
+      "members": [
+        "AF.T.F06",
+        "AF.T.F07"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X02.F06-F08",
+      "members": [
+        "AF.T.F06",
+        "AF.T.F08"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X02.F07-F08",
+      "members": [
+        "AF.T.F07",
+        "AF.T.F08"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X03",
+      "members": [
+        "AF.T.F10",
+        "AF.T.F12",
+        "AF.T.F11"
+      ],
+      "rationale": "Authored Apple FAST trees interaction 3; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": null
+    },
+    {
+      "id": "AF.T.X.X04",
+      "members": [
+        "AF.T.G01",
+        "AF.T.G02",
+        "AF.T.G03"
+      ],
+      "rationale": "Authored Apple FAST trees interaction 4; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": null
+    },
+    {
+      "id": "AF.T.X.X05",
+      "members": [
+        "AF.T.G05",
+        "AF.T.G06",
+        "AF.T.G09",
+        "AF.T.G10"
+      ],
+      "rationale": "Authored Apple FAST trees interaction 5; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": null
+    },
+    {
+      "id": "AF.T.X.X06",
+      "members": [
+        "AF.T.G07",
+        "AF.T.G08",
+        "AF.T.G11",
+        "AF.T.G12"
+      ],
+      "rationale": "Authored Apple FAST trees interaction 6; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": null
+    },
+    {
+      "id": "AF.T.X.X06.G07-G08",
+      "members": [
+        "AF.T.G07",
+        "AF.T.G08"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X06.G07-G11",
+      "members": [
+        "AF.T.G07",
+        "AF.T.G11"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X06.G07-G12",
+      "members": [
+        "AF.T.G07",
+        "AF.T.G12"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X06.G08-G11",
+      "members": [
+        "AF.T.G08",
+        "AF.T.G11"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X06.G08-G12",
+      "members": [
+        "AF.T.G08",
+        "AF.T.G12"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X06.G11-G12",
+      "members": [
+        "AF.T.G11",
+        "AF.T.G12"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X07",
+      "members": [
+        "AF.T.N01",
+        "AF.T.N02",
+        "AF.T.N03",
+        "AF.T.N04",
+        "AF.T.N05",
+        "AF.T.N06",
+        "AF.T.N07",
+        "AF.T.N08",
+        "AF.T.N09",
+        "AF.T.N10",
+        "AF.T.N11",
+        "AF.T.N12"
+      ],
+      "rationale": "Authored Apple FAST trees interaction 7; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": null
+    },
+    {
+      "id": "AF.T.X.X08",
+      "members": [
+        "AF.T.P01",
+        "AF.T.P02",
+        "AF.T.P03",
+        "AF.T.P04",
+        "AF.T.P05",
+        "AF.T.P06"
+      ],
+      "rationale": "Authored Apple FAST trees interaction 8; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": null
+    },
+    {
+      "id": "AF.T.X.X09",
+      "members": [
+        "AF.T.P07",
+        "AF.T.P08",
+        "AF.T.P09",
+        "AF.T.P10"
+      ],
+      "rationale": "Authored Apple FAST trees interaction 9; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": null
+    },
+    {
+      "id": "AF.T.X.X09.P07-P08",
+      "members": [
+        "AF.T.P07",
+        "AF.T.P08"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X09.P07-P09",
+      "members": [
+        "AF.T.P07",
+        "AF.T.P09"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X09.P07-P10",
+      "members": [
+        "AF.T.P07",
+        "AF.T.P10"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X09.P08-P09",
+      "members": [
+        "AF.T.P08",
+        "AF.T.P09"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X09.P08-P10",
+      "members": [
+        "AF.T.P08",
+        "AF.T.P10"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X09.P09-P10",
+      "members": [
+        "AF.T.P09",
+        "AF.T.P10"
+      ],
+      "rationale": "Authored pairwise coverage for shared workspaces and scheduling.",
+      "source": "experiments/apple_fast_trees/IDEAS.md"
+    },
+    {
+      "id": "AF.T.X.X10",
+      "members": [
+        "AF.T.P11",
+        "AF.T.P12"
+      ],
+      "rationale": "Authored Apple FAST trees interaction 10; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": null
+    },
+    {
+      "id": "AF.T.X.X11",
+      "members": [],
+      "rationale": "Authored Apple FAST trees interaction 11; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": "Membership requires future quality-qualified decisions"
+    },
+    {
+      "id": "AF.T.X.X12",
+      "members": [],
+      "rationale": "Authored Apple FAST trees interaction 12; singles already appear in the matrix.",
+      "source": "tools/apple_fast_tree_ideas.py",
+      "pending_reason": "Membership requires future quality-qualified decisions"
+    },
+    {
+      "id": "AF.C.X.required-01",
+      "members": [
+        "AF.C.AFCL-L01",
+        "AF.C.AFCL-L02"
+      ],
+      "rationale": "Authored full caller interaction; incompatible distance/MMA alternatives remain blocked.",
+      "source": "experiments/apple_fast_classical_20261006/README.md"
+    },
+    {
+      "id": "AF.C.X.required-02",
+      "members": [
+        "AF.C.AFCL-L08",
+        "AF.C.AFCL-L09",
+        "AF.C.AFCL-L07",
+        "AF.C.AFCL-L10"
+      ],
+      "rationale": "Authored full caller interaction; incompatible distance/MMA alternatives remain blocked.",
+      "source": "experiments/apple_fast_classical_20261006/README.md"
+    },
+    {
+      "id": "AF.C.X.required-03",
+      "members": [
+        "AF.C.AFCL-G01",
+        "AF.C.AFCL-G02"
+      ],
+      "rationale": "Authored full caller interaction; incompatible distance/MMA alternatives remain blocked.",
+      "source": "experiments/apple_fast_classical_20261006/README.md"
+    },
+    {
+      "id": "AF.C.X.required-04",
+      "members": [
+        "AF.C.AFCL-G05",
+        "AF.C.AFCL-G06"
+      ],
+      "rationale": "Authored full caller interaction; incompatible distance/MMA alternatives remain blocked.",
+      "source": "experiments/apple_fast_classical_20261006/README.md"
+    },
+    {
+      "id": "AF.C.X.required-05",
+      "members": [
+        "AF.C.AFCL-T01",
+        "AF.C.AFCL-T02",
+        "AF.C.AFCL-T04",
+        "AF.C.AFCL-T06"
+      ],
+      "rationale": "Authored full caller interaction; incompatible distance/MMA alternatives remain blocked.",
+      "source": "experiments/apple_fast_classical_20261006/README.md"
+    },
+    {
+      "id": "AF.C.X.required-06",
+      "members": [
+        "AF.C.AFCL-T03",
+        "AF.C.AFCL-T12"
+      ],
+      "rationale": "Authored full caller interaction; incompatible distance/MMA alternatives remain blocked.",
+      "source": "experiments/apple_fast_classical_20261006/README.md"
+    },
+    {
+      "id": "AF.C.X.required-07",
+      "members": [
+        "AF.C.AFCL-P01",
+        "AF.C.AFCL-L01"
+      ],
+      "rationale": "Authored full caller interaction; incompatible distance/MMA alternatives remain blocked.",
+      "source": "experiments/apple_fast_classical_20261006/README.md"
+    },
+    {
+      "id": "AF.C.X.required-08",
+      "members": [
+        "AF.C.AFCL-P09",
+        "AF.C.AFCL-P10"
+      ],
+      "rationale": "Authored full caller interaction; incompatible distance/MMA alternatives remain blocked.",
+      "source": "experiments/apple_fast_classical_20261006/README.md"
+    },
+    {
+      "id": "AF.C.X.required-09",
+      "members": [
+        "AF.C.AFCL-P11",
+        "AF.C.AFCL-P12"
+      ],
+      "rationale": "Authored full caller interaction; incompatible distance/MMA alternatives remain blocked.",
+      "source": "experiments/apple_fast_classical_20261006/README.md"
+    }
+  ]
+}

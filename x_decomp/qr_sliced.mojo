@@ -41,6 +41,7 @@ updates (`geqrf_update_elem`, `orgqr_update_elem`), every cell its own
 thread on the device. Reflectors go to A in order k ascending, to Q's
 columns in order k descending.
 """
+from experiments.classical_identical_ideas.linear_controls import C24_TREE4
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import F32Ptr, div0, sqrt0, sub
 
@@ -77,9 +78,14 @@ def qs_tree(p: F32Ptr, ns: Int) -> Float32:
     while h < ns:
         var a = 0
         while a + h < ns:
-            p.unsafe_store(a, ftz(p.unsafe_load(a) + p.unsafe_load(a + h)))
-            a += 2 * h
-        h *= 2
+            var acc = p.unsafe_load(a)
+            var arity = 4 if C24_TREE4 else 2
+            for child in range(1, arity):
+                if a + child * h < ns:
+                    acc = ftz(acc + p.unsafe_load(a + child * h))
+            p.unsafe_store(a, acc)
+            a += arity * h
+        h *= 4 if C24_TREE4 else 2
     return p.unsafe_load(0)
 
 
@@ -112,11 +118,15 @@ def qs_pair_tree(s: F32Ptr, q: F32Ptr, ns: Int) -> SIMD[DType.float32, 2]:
     while h < ns:
         var a = 0
         while a + h < ns:
-            var r = qs_pair(s.unsafe_load(a), q.unsafe_load(a), s.unsafe_load(a + h), q.unsafe_load(a + h))
+            var r = SIMD[DType.float32, 2](s.unsafe_load(a), q.unsafe_load(a))
+            var arity = 4 if C24_TREE4 else 2
+            for child in range(1, arity):
+                if a + child * h < ns:
+                    r = qs_pair(r[0], r[1], s.unsafe_load(a + child * h), q.unsafe_load(a + child * h))
             s.unsafe_store(a, r[0])
             q.unsafe_store(a, r[1])
-            a += 2 * h
-        h *= 2
+            a += arity * h
+        h *= 4 if C24_TREE4 else 2
     return SIMD[DType.float32, 2](s.unsafe_load(0), q.unsafe_load(0))
 
 

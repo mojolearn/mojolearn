@@ -58,6 +58,8 @@ The sabotage arm (`rf_host_sabotage`) is
 is drawn from the next Philox subsequence, so every forest this binary fits
 differs.
 """
+from ensemble.host.importance import rf_host_importance
+from ensemble.host.oob import rf_host_oob
 from std.ffi import _Global
 from std.os import abort
 from std.python import Python, PythonObject
@@ -306,6 +308,9 @@ def _rf_fit[
     criterion: PythonObject,
     weights_addr: Int = 0,
     tree_start: Int = 0,
+    oob_addr: Int = 0,
+    oob_score_addr: Int = 0,
+    importance_addr: Int = 0,
 ) raises -> PythonObject:
     """`_rf_classifier_fit` / `_rf_regressor_fit` of the GPU binding: the same
     slot checks in the same words, then the host fit. `weights_addr` is the
@@ -331,6 +336,8 @@ def _rf_fit[
     var crit = _index(criterion)
     _check_criterion(entry, crit, CLASSIFIER)
     var p = _params_from(params, crit)
+    if oob_addr != 0 and (oob_score_addr == 0 or not p.bootstrap or tree_start != 0):
+        raise Error("RF OOB requires bootstrap, score storage, and an unsharded forest")
     # `bindings/_mojolearn_rf.mojo:363-380`: the weights' checks in their
     # words; all-unit weights fit unweighted.
     var weights = _read_weights(weights_addr, n_rows)
@@ -340,8 +347,12 @@ def _rf_fit[
     with GILReleased(Python()):
         var x = _read_x_col_major(x_address, n_rows, n_cols, ROWMAJOR)
         forest = _rf_fit_colmajor[CLASSIFIER](
-            x^, y_address, n_rows, n_cols, n_classes, p, weights, tree_start
+            x^, y_address, n_rows, n_cols, n_classes, p, weights, tree_start, importance_addr != 0
         )
+        if oob_addr != 0:
+            rf_host_oob[CLASSIFIER](forest,p,f32_ptr(x_address),y_address,weights,n_rows,n_cols,oob_addr,oob_score_addr)
+    if importance_addr != 0:
+        rf_host_importance(forest,n_cols,importance_addr)
     comptime if EXPORT:
         return _retain_rf_export(forest^)
     else:
@@ -357,6 +368,7 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
     p: RfHostParams,
     weights: List[Float32],
     tree_start: Int,
+    retain_importance: Bool = False,
 ) raises -> RfHostForest:
     """The host fit on a COLUMN-major X already read: the one body `_rf_fit`
     and the data session entries below share, so a session member's forest
@@ -366,7 +378,7 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
         var y = read_i32(y_address, n_rows)
         forest = rf_host_fit(
             x^, y, List[Float32](), n_rows, n_cols, n_classes, True, p,
-            Float32(1.0), tree_start, weights,
+            Float32(1.0), tree_start, weights, retain_importance,
         )
     else:
         var y = read_f32(y_address, n_rows)
@@ -377,9 +389,62 @@ def _rf_fit_colmajor[CLASSIFIER: Bool](
         var scale = Float32(choose_scale(mag, n_rows))
         forest = rf_host_fit(
             x^, List[Int32](), y, n_rows, n_cols, 1, False, p, scale,
-            tree_start,
+            tree_start, retain_importance=retain_importance,
         )
     return forest^
+
+
+def rf_classifier_fit_aux_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    criterion: PythonObject, weights_addr: PythonObject,
+    oob_addr: PythonObject, score_addr: PythonObject, importance_addr: PythonObject,
+) raises -> PythonObject:
+    """T15 host twin: optional native OOB+score and Float32 feature importance.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    if (_index(oob_addr) == 0) != (_index(score_addr) == 0):
+        raise Error("RF OOB output and score must be requested together")
+    return _rf_fit[True,True,False](x_addr,y_addr,params,criterion,
+        weights_addr=_index(weights_addr),oob_addr=_index(oob_addr),
+        oob_score_addr=_index(score_addr),importance_addr=_index(importance_addr))
+
+
+def rf_regressor_fit_aux_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    criterion: PythonObject, oob_addr: PythonObject, score_addr: PythonObject,
+    importance_addr: PythonObject,
+) raises -> PythonObject:
+    """T15 host requested auxiliary outputs; same unqualified status."""
+    if (_index(oob_addr) == 0) != (_index(score_addr) == 0):
+        raise Error("RF OOB output and score must be requested together")
+    return _rf_fit[False,True,False](x_addr,y_addr,params,criterion,
+        oob_addr=_index(oob_addr),oob_score_addr=_index(score_addr),
+        importance_addr=_index(importance_addr))
+
+
+def rf_classifier_fit_oob_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    criterion: PythonObject, weights_addr: PythonObject,
+    oob_addr: PythonObject, score_addr: PythonObject,
+) raises -> PythonObject:
+    """T15 host public output ABI, identical buffer shapes to GPU counterpart.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    if _index(oob_addr) == 0 or _index(score_addr) == 0:
+        raise Error("RF OOB requires nonzero output and score addresses")
+    return _rf_fit[True,True,False](x_addr,y_addr,params,criterion,
+        weights_addr=_index(weights_addr),oob_addr=_index(oob_addr),oob_score_addr=_index(score_addr))
+
+
+def rf_regressor_fit_oob_export_binding(
+    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
+    criterion: PythonObject, oob_addr: PythonObject, score_addr: PythonObject,
+) raises -> PythonObject:
+    """T15 host OOB, same unqualified source status as classifier twin."""
+    if _index(oob_addr) == 0 or _index(score_addr) == 0:
+        raise Error("RF OOB requires nonzero output and score addresses")
+    return _rf_fit[False,True,False](x_addr,y_addr,params,criterion,
+        oob_addr=_index(oob_addr),oob_score_addr=_index(score_addr))
 
 
 def rf_classifier_fit_binding(
@@ -958,6 +1023,10 @@ def PyInit__mojolearn_rf_host() abi("C") -> PythonObject:
         module.def_function[rf_host_sabotage_binding]("rf_host_sabotage")
         module.def_function[rf_vendor_binding]("rf_vendor")
         module.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
+        module.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
+        module.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
+        module.def_function[rf_classifier_fit_oob_export_binding]("rf_classifier_fit_oob_export")
+        module.def_function[rf_regressor_fit_oob_export_binding]("rf_regressor_fit_oob_export")
         module.def_function[rf_classifier_fit_binding]("rf_classifier_fit")
         module.def_function[rf_classifier_fit_export_binding]("rf_classifier_fit_export")
         module.def_function[rf_classifier_fit_rowmajor_binding]("rf_classifier_fit_rowmajor")

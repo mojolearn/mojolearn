@@ -1,0 +1,372 @@
+{
+  "schema": 1,
+  "lane": "stats",
+  "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "controls_path": "experiments/classical_identical_ideas/stats_controls.mojo",
+  "entries": [
+    {
+      "id": "C52",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_integration": "production_source_draft",
+      "runtime_reach": "not_demonstrated",
+      "default_enabled": false,
+      "mode": "identical",
+      "arms": [
+        {
+          "name": "pair128",
+          "candidate_defines": [
+            "MOJOLEARN_C52_PAIR_128"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "name": "pair512",
+          "candidate_defines": [
+            "MOJOLEARN_C52_PAIR_512"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "production_paths": [
+        "kde/pair_lse.mojo",
+        "kde/impl/neighbors/kernel_density.mojo",
+        "kde/host/kde_oracle.mojo"
+      ],
+      "production_callers": [
+        "KernelDensity.score_samples",
+        "logsumexp_kernel",
+        "kde_chunk_lse_reduce_kernel",
+        "kde_chunk_lse_reduce_rowmax_kernel",
+        "oracle_logsumexp_row",
+        "_kde_lse_row_chunked"
+      ],
+      "recipe_refs": [
+        "classical:kde"
+      ],
+      "remaining_gaps": [
+        "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+        "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B."
+      ],
+      "arithmetic_contract": "Portable max/scaled-sum adjacent binary tree; ascending online leaf folds, common leaf128/512 with grid-y growth by total rows only; empty/-Inf leaves and odd tails explicit. Host and device share pair helpers."
+    },
+    {
+      "id": "C53",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_integration": "production_source_draft",
+      "runtime_reach": "not_demonstrated",
+      "default_enabled": false,
+      "mode": "identical",
+      "arms": [
+        {
+          "name": "center4",
+          "candidate_defines": [
+            "MOJOLEARN_C53_CENTER4"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "name": "bgmm_center4",
+          "candidate_defines": [
+            "MOJOLEARN_C53_BGMM_STATS"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "production_paths": [
+        "mixture/checks/mstep.mojo",
+        "x_cluster/device_ops.mojo"
+      ],
+      "production_callers": [
+        "GaussianMixture.fit -> M-step center_pair_kernel[4]",
+        "BayesianGaussianMixture.fit -> DeviceOps._moments_gemm"
+      ],
+      "recipe_refs": [
+        "more:gmm",
+        "expanded:bayesian-gmm"
+      ],
+      "remaining_gaps": [
+        "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+        "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion."
+      ],
+      "arithmetic_contract": "Four immutable component-centered/scaled planes, same component order and covariance GEMMs; host incumbent arithmetic retained."
+    },
+    {
+      "id": "C54",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_integration": "production_source_draft",
+      "runtime_reach": "not_demonstrated",
+      "default_enabled": false,
+      "mode": "identical",
+      "arms": [
+        {
+          "name": "kernel_tiles4",
+          "candidate_defines": [
+            "MOJOLEARN_C54_PREDICT_TILES"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "production_paths": [
+        "gaussian_process/checks/kernels.mojo",
+        "x_neighbors/iter_device.mojo"
+      ],
+      "production_callers": [
+        "GaussianProcessRegressor fit/predict",
+        "GaussianProcessClassifier fit/predict",
+        "GP likelihood optimizer -> gp_kernel_matrix -> gp_rbf_kernel/gp_matern_kernel",
+        "SVGP.predict -> op_svgp_predict -> _launch_scaled_rbf(prediction=True) -> _c54_svgp_predict_kernel"
+      ],
+      "recipe_refs": [
+        "more:gpr",
+        "more:gpc",
+        "expanded:svgp"
+      ],
+      "remaining_gaps": [
+        "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+        "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated."
+      ],
+      "arithmetic_contract": "Each scaled distance retains the incumbent ascending feature operations; constants, white diagonal, jitter, mean/variance solve unchanged; tails guarded."
+    },
+    {
+      "id": "C56",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_integration": "production_source_draft",
+      "runtime_reach": "not_demonstrated",
+      "default_enabled": false,
+      "mode": "identical",
+      "arms": [
+        {
+          "name": "qda_project4",
+          "candidate_defines": [
+            "MOJOLEARN_C56_QDA_PROJECT4"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "production_paths": [
+        "naive_bayes/da.mojo"
+      ],
+      "production_callers": [
+        "QuadraticDiscriminantAnalysis.decision_function/predict_proba -> x_prep qda_dec_unit"
+      ],
+      "recipe_refs": [
+        "expanded:qda",
+        "expanded:lda-clf"
+      ],
+      "remaining_gaps": [
+        "Class factorization/solve batching is not implemented; existing per-class rank thresholds remain intact.",
+        "LDA input-reuse subarm is owned by shared_implementation.json and consolidated into this ID by the source index."
+      ],
+      "arithmetic_contract": "Four projection outputs share centered feature reads while preserving each projection and outer norm order; host/device use the same unit."
+    },
+    {
+      "id": "C57",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_integration": "production_source_draft",
+      "runtime_reach": "not_demonstrated",
+      "default_enabled": false,
+      "mode": "identical",
+      "arms": [
+        {
+          "name": "candidate_mean",
+          "candidate_defines": [
+            "MOJOLEARN_C57_CANDIDATE_STATE"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "production_paths": [
+        "x_decomp/mcd.mojo",
+        "x_decomp/kit_device.mojo"
+      ],
+      "production_callers": [
+        "MinCovDet.fit",
+        "EllipticEnvelope.fit",
+        "Mcd.c_step/DMcd.c_step -> emp_cov_at"
+      ],
+      "recipe_refs": [
+        "expanded:min-cov-det",
+        "expanded:elliptic-envelope"
+      ],
+      "remaining_gaps": [
+        "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+        "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending."
+      ],
+      "arithmetic_contract": "Incumbent subset row membership and order, seeded selection, C-step order and mean expression retained. Each candidate owns its mean/covariance state."
+    },
+    {
+      "id": "C58",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_integration": "production_source_draft",
+      "runtime_reach": "not_demonstrated",
+      "default_enabled": false,
+      "mode": "identical",
+      "arms": [
+        {
+          "name": "hw_scale_once",
+          "candidate_defines": [
+            "MOJOLEARN_C58_SHARED_PREP"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "name": "hw_series4",
+          "candidate_defines": [
+            "MOJOLEARN_C58_SERIES4"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "name": "forecast_series4",
+          "candidate_defines": [
+            "MOJOLEARN_C58_FORECAST4"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "name": "team64",
+          "candidate_defines": [
+            "MOJOLEARN_C58_TEAM64"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "production_paths": [
+        "holtwinters/impl/internal/hw_estimate.mojo",
+        "holtwinters/impl/internal/hw_estimate_launch.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/fit_team_py.mojo",
+        "sequence/ets_team_py.mojo"
+      ],
+      "production_callers": [
+        "ExponentialSmoothing.fit estimated -> holtwinters_estimate_gpu",
+        "Theta family -> theta_py -> DeviceExec.launch[OP_THETA] -> seq_kernel",
+        "ETS/GARCH scalar fallback -> seq_kernel",
+        "GARCH, ETS(A,A|Ad,N), Prophet fit -> _group -> owned team launch loop"
+      ],
+      "recipe_refs": [
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet"
+      ],
+      "remaining_gaps": [
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced."
+      ],
+      "arithmetic_contract": "Immutable observations shared; four independent series keep scalar recurrence and trial order. No neural OP selects grouping; host scalar recurrence unchanged."
+    },
+    {
+      "id": "C59",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_integration": "production_source_draft",
+      "runtime_reach": "not_demonstrated",
+      "default_enabled": false,
+      "mode": "identical",
+      "arms": [
+        {
+          "name": "immutable_observations",
+          "candidate_defines": [
+            "MOJOLEARN_C59_TRIAL_STATE"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "production_paths": [
+        "arima/impl/fast_eval_ws.mojo",
+        "arima/impl/batched_kalman.mojo"
+      ],
+      "production_callers": [
+        "ARIMA/SARIMA likelihood-gradient fit -> FastEvalWS -> loglike_prepared -> fast_kalman_into -> batched_kalman_loop_kernel",
+        "AutoARIMA candidate ARIMA fits"
+      ],
+      "recipe_refs": [
+        "more:arima",
+        "expanded:autoarima"
+      ],
+      "remaining_gaps": [
+        "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+        "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+        "Parent arena/CSS constructors retain their original allocation and input indexing."
+      ],
+      "arithmetic_contract": "Only observations broadcast with bid modulo original batch. Parameters, Kalman states, exogenous rows, losses and acceptance slots remain private per trial; same recurrence arithmetic."
+    },
+    {
+      "id": "C60",
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "source_integration": "production_source_draft",
+      "runtime_reach": "not_demonstrated",
+      "default_enabled": false,
+      "mode": "identical",
+      "arms": [
+        {
+          "name": "lag4",
+          "candidate_defines": [
+            "MOJOLEARN_C60_LAG4"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        },
+        {
+          "name": "diff_reuse",
+          "candidate_defines": [
+            "MOJOLEARN_C60_DIFF_REUSE"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED"
+        }
+      ],
+      "production_paths": [
+        "tsa/impl/timeSeries/stationarity.mojo",
+        "tsa/impl/select_d_fast.mojo"
+      ],
+      "production_callers": [
+        "kpss_test -> kpss_one_wait -> s2B_accumulation_kernel",
+        "AutoARIMA/select_d -> select_d_fast",
+        "classical_second_diff_reuse"
+      ],
+      "recipe_refs": [
+        "expanded:autoarima"
+      ],
+      "remaining_gaps": [
+        "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+        "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+        "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+        "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+      ],
+      "arithmetic_contract": "Sliding four-cell lag window keeps ascending lag sums per time; no cross-series read. d=2 uses retained rounded raw[i+2]-raw[i+1], then -raw[i+1]+raw[i], preserving the incumbent left association. Host arithmetic unchanged."
+    }
+  ]
+}

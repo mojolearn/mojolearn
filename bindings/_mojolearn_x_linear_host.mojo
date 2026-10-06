@@ -4,6 +4,8 @@
 HOST ONLY: the GPU binding's export names and address contract, running the
 same x_linear/ source (`fit_dispatch`, `decision_one`) directly on the CPU."""
 from std.os import abort
+from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS, C13_LOGCV_WEIGHTS
+from x_linear.classical_fold_stats import fold_stat_words
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -108,6 +110,12 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     var fpl = List[Float32](capacity=max(n_fp, 1))
     for i in range(n_fp):
         fpl.append(Float32(Float64(py=fp[i])))
+    comptime if C13_FOLD_STATS:
+        if Int(py=algo) == 9:
+            n_fw += Int(ipl[3]) * fold_stat_words(d)
+    comptime if C13_LOGCV_WEIGHTS:
+        if Int(py=algo) == ALGO_LOGCV:
+            n_fw += Int(ipl[4]) + 1
     var fw = List[Float32](length=max(n_fw, 1), fill=Float32(0))
     var iw = List[Int32](length=max(n_iw, 1), fill=Int32(0))
     var bufs = team_rows(Int(py=algo), IP(unsafe_from_address=Int(ipl.unsafe_ptr())))

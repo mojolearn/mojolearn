@@ -1,0 +1,83 @@
+{
+  "id": "T43",
+  "title": "Deterministic isolation contamination selection",
+  "source_status": "source_integrated_unverified",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "default": "OFF (new experiment; inherited defaults preserved)",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T43",
+      "A": [
+        "MOJOLEARN_TREES_T43_RADIX_SELECT=1"
+      ],
+      "B": [],
+      "scope": [
+        "IF"
+      ],
+      "production_callers": [
+        "isolation_forest/impl/isolation_forest.mojo:IsolationForest.fit",
+        "isolation_forest/estimator.mojo",
+        "python/mojolearn/_iforest_impl.py",
+        "isolation_forest/impl/isolation_forest.mojo:contamination_offset"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "iforest-contamination:anomaly",
+        "isolation_decision:anomaly",
+        "isolation_predict:anomaly"
+      ]
+    }
+  ],
+  "production_callers": [
+    "isolation_forest/impl/isolation_forest.mojo:IsolationForest.fit",
+    "isolation_forest/estimator.mojo",
+    "python/mojolearn/_iforest_impl.py",
+    "isolation_forest/impl/isolation_forest.mojo:contamination_offset"
+  ],
+  "supported_estimators": [
+    "IF"
+  ],
+  "recipe_keys": [
+    "iforest-contamination:anomaly",
+    "isolation_decision:anomaly",
+    "isolation_predict:anomaly"
+  ],
+  "overlap_ids": [],
+  "implementation": "Two block-cooperative 32-bit integer radix selections return exact ranks; sortable Float32 keys retain signed-zero order; original Float64 interpolation unchanged.",
+  "remaining_gaps": [
+    "Explicit contamination required to reach offset selection; no-contamination auto path is inapplicable."
+  ],
+  "demonstrated_runtime_reach": false,
+  "validation": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false,
+    "reason": "Execution prohibited by owner"
+  },
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_facts": {
+    "dataset_version": "pending retained artifact selection",
+    "dataset_hash": "pending",
+    "actual_dimensions": "pending full recipe resolution; do not substitute reduced workloads",
+    "numeric_mode": "IDENTICAL",
+    "timing_boundary": "Preparation + training/model construction + required synchronization + consumed outputs; cold/repeated inference/explanation separate."
+  },
+  "evidence": [],
+  "full_dataset_recipes": [
+    "iforest-contamination:anomaly",
+    "isolation_decision:anomaly",
+    "isolation_predict:anomaly"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

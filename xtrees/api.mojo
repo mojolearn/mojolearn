@@ -5,6 +5,7 @@
 (`bindings/_mojolearn_x_trees_host.mojo`): one spelling, two registrations.
 Every buffer is a caller-owned address; `params` is a Python list of ints and
 floats. Nothing is retained."""
+from gbdt.trees_identical_switches import T30_ADABOOST
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
@@ -27,6 +28,10 @@ from xtrees.oob import (
 )
 from xtrees import agnostic_device as agn_dev
 from xtrees import agnostic_host as agn_host
+from xtrees import shap_device as shap_dev
+from xtrees import shap_host as shap_cpu
+from core.forest_auxiliary_device import forest_auxiliary_device
+from core.forest_auxiliary_units import forest_auxiliary_host
 from xtrees.ops_device import (
     apply_trees_device, bag_rows_device, gather_f32_device, transpose_f32_device, transpose_f64_device,
     unseen_rows_device, weighted_sample_device,
@@ -70,6 +75,100 @@ def _count(v: Int, who: String) raises -> Int:
     if v < 0:
         raise Error(who + ": negative count")
     return v
+
+
+# T44/C51 retained snapshot ABI, shared by GPU and host registrations.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime _TREE_SHAP_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T44_METADATA_CACHE"]()
+
+
+def tree_shap_cache_enabled_binding() raises -> PythonObject:
+    return PythonObject(_TREE_SHAP_CACHE)
+
+
+def tree_shap_cache_create_binding(forest: PythonObject, tscale: PythonObject,
+                                   cover: PythonObject, params: PythonObject) raises -> PythonObject:
+    comptime if not _TREE_SHAP_CACHE:
+        raise Error("TreeSHAP cache requires the opt-in T44 binding")
+    else:
+        _need(params, 4, "x_trees_tree_shap_cache_create")
+        if len(forest) != 5:
+            raise Error("TreeSHAP cache requires five forest addresses")
+        var addresses = List[Int]()
+        for i in range(5):
+            addresses.append(Int(py=forest[i]))
+        var d = _i(params, 0)
+        var trees = _i(params, 1)
+        var k = _i(params, 2)
+        var nodes = _i(params, 3)
+        if d < 1 or trees < 1 or k < 1 or nodes < trees:
+            raise Error("TreeSHAP cache requires positive model dimensions")
+        comptime if XTREES_DEVICE_OPS:
+            return PythonObject(shap_dev.shap_cache_create(addresses, Int(py=tscale), Int(py=cover), d, trees, k, nodes))
+        else:
+            return PythonObject(shap_cpu.shap_cache_create(addresses, Int(py=tscale), Int(py=cover), d, trees, k, nodes))
+
+
+def tree_shap_cache_values_binding(handle: PythonObject, x: PythonObject,
+                                   phi: PythonObject, params: PythonObject) raises -> PythonObject:
+    _need(params, 3, "x_trees_tree_shap_cache_values")
+    var n = _count(_i(params, 0), "x_trees_tree_shap_cache_values")
+    var slots = _count(_i(params, 1), "x_trees_tree_shap_cache_values")
+    var width = _i(params, 2)
+    if width < 8 or width > 256 or (width & (width - 1)) != 0:
+        raise Error("TreeSHAP cache path width must be 8, 16, ..., 256")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            shap_dev.shap_cache_values(Int(py=handle), Int(py=x), Int(py=phi), n, slots, width)
+        else:
+            shap_cpu.shap_cache_values(Int(py=handle), Int(py=x), Int(py=phi), n, slots, width)
+    return PythonObject(n)
+
+
+def tree_shap_cache_release_binding(handle: PythonObject) raises -> PythonObject:
+    comptime if XTREES_DEVICE_OPS:
+        shap_dev.shap_cache_release(Int(py=handle))
+    else:
+        shap_cpu.shap_cache_release(Int(py=handle))
+    return PythonObject(0)
+
+
+def forest_auxiliary_binding(forest: PythonObject, x: PythonObject, leaf: PythonObject,
+                              prefix: PythonObject, prediction: PythonObject,
+                              params: PythonObject) raises -> PythonObject:
+    """T39: leaf IDs and/or mean prefixes and/or ordered final raw scores.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    Both arms expose the same API; only A shares the traversals. Address zero
+    means unrequested output, avoiding mandatory staged-output allocation.
+    """
+    _need(params, 5, "x_trees_forest_auxiliary")
+    if len(forest) != 5:
+        raise Error("forest auxiliary requires five model addresses")
+    var addresses = List[Int]()
+    for i in range(5):
+        addresses.append(Int(py=forest[i]))
+    var n = _count(_i(params, 0), "x_trees_forest_auxiliary")
+    var d = _i(params, 1)
+    var trees = _i(params, 2)
+    var outputs = _i(params, 3)
+    if d < 1 or trees < 1 or outputs < 1:
+        raise Error("forest auxiliary requires positive dimensions")
+    # Kernel shape scalars are Int32; pointer offsets/element byte counts are
+    # signed Int64. These are representation limits, not workload thresholds.
+    if n > 2147483647 or d > 2147483647 or trees > 2147483647 or outputs > 2147483647:
+        raise Error("forest auxiliary dimensions exceed Int32")
+    if n > 0 and (d > 2305843009213693951 // n or
+                  trees > 2305843009213693951 // n // outputs):
+        raise Error("forest auxiliary requested buffers exceed addressable bytes")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            forest_auxiliary_device(addresses, Int(py=x), Int(py=leaf), Int(py=prefix),
+                                    Int(py=prediction), n, d, trees, outputs, _i(params, 4) != 0)
+        else:
+            forest_auxiliary_host(addresses, Int(py=x), Int(py=leaf), Int(py=prefix),
+                                  Int(py=prediction), n, d, trees, outputs, _i(params, 4) != 0)
+    return PythonObject(n)
 
 
 def sample_indices_binding(out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -293,16 +392,30 @@ def samme_step_binding(
     w: PythonObject, pred: PythonObject, y: PythonObject, stats: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     """params = [n, n_classes, learning_rate, last]; stats = 4 float64."""
-    _need(params, 4, "x_trees_samme_step")
+    if len(params) != 4 and len(params) != 5:
+        raise Error("x_trees_samme_step: expected 4 values plus optional tree-base metadata")
     var n = _i(params, 0)
     if n <= 0:
         raise Error("x_trees_samme_step: n must be positive")
-    comptime if XTREES_DEVICE_OPS:
-        boost_dev.samme_step_device(f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
-                                    _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    # T30 tree-base metadata only; custom non-tree estimators retain B.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var cache_tree = False
+    if len(params) > 4:
+        cache_tree = _i(params, 4) != 0
+    if T30_ADABOOST and cache_tree:
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.samme_step_device[True](f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
+                                        _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+        else:
+            samme_step[True](f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
+                       _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
     else:
-        samme_step(f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
-                   _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.samme_step_device[False](f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
+                                        _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+        else:
+            samme_step[False](f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
+                       _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
     return PythonObject(n)
 
 
@@ -310,16 +423,30 @@ def r2_step_binding(
     w: PythonObject, pred: PythonObject, y: PythonObject, stats: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     """params = [n, loss (0 linear, 1 square, 2 exponential), learning_rate, last]."""
-    _need(params, 4, "x_trees_r2_step")
+    if len(params) != 4 and len(params) != 5:
+        raise Error("x_trees_r2_step: expected 4 values plus optional tree-base metadata")
     var n = _i(params, 0)
     if n <= 0:
         raise Error("x_trees_r2_step: n must be positive")
-    comptime if XTREES_DEVICE_OPS:
-        boost_dev.r2_step_device(f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
-                                 _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    # T30 tree-base metadata only; custom non-tree estimators retain B.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var cache_tree = False
+    if len(params) > 4:
+        cache_tree = _i(params, 4) != 0
+    if T30_ADABOOST and cache_tree:
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.r2_step_device[True](f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
+                                     _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+        else:
+            r2_step[True](f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
+                    _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
     else:
-        r2_step(f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
-                _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+        comptime if XTREES_DEVICE_OPS:
+            boost_dev.r2_step_device[False](f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
+                                     _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+        else:
+            r2_step[False](f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
+                    _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
     return PythonObject(n)
 
 
@@ -1736,6 +1863,11 @@ def dart_rescale_binding(weights: PythonObject, coefs: PythonObject, flags: Pyth
 
 def register(mut m: PythonModuleBuilder) raises:
     """The shared export list; both bindings call this."""
+    m.def_function[tree_shap_cache_enabled_binding]("x_trees_tree_shap_cache_enabled")
+    m.def_function[tree_shap_cache_create_binding]("x_trees_tree_shap_cache_create")
+    m.def_function[tree_shap_cache_values_binding]("x_trees_tree_shap_cache_values")
+    m.def_function[tree_shap_cache_release_binding]("x_trees_tree_shap_cache_release")
+    m.def_function[forest_auxiliary_binding]("x_trees_forest_auxiliary")
     m.def_function[sample_indices_binding]("x_trees_sample_indices")
     m.def_function[weighted_sample_binding]("x_trees_weighted_sample")
     m.def_function[transpose_f64_binding]("x_trees_transpose_f64")

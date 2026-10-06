@@ -1,0 +1,143 @@
+{
+  "schema": "mojolearn.dispatch-policy-audit/1",
+  "audit_type": "bounded read-only source audit; no numerical edits/builds/model executions",
+  "source_sha": "d752e334358e7898cce5098f800e4acd8618be3b",
+  "created_at": 1791314059.4365718,
+  "full_repository_clean_claim": false,
+  "scope": "Prioritized current FAST classical/preprocessing/ANN dispatch, KNN shared workspace, and selected known legacy shape controls. Searched product Mojo/Python; manually inspected listed source windows. Not an exhaustive call-graph or all-target audit.",
+  "source_files": {
+    "neighbors/impl/detail/knn_brute_force.mojo": "65eeb2bb1985cccdc7aea7fde754039049170d572dd7b0edb5d9fad7ea6e63ef",
+    "neighbors/estimator.mojo": "32e95b7dec154bef469605559241b5300e5f1e382124b84908f1fd65b574b2d0",
+    "x_prep/fastmaxabs.mojo": "110ed6089d51f25af612026875e0ea2780ccf6f588785b076624907cf0e1e6e5",
+    "x_ann/cagra_fast_knn.mojo": "400c3ce37bddc0aad11e815053cb2401ed9be7fdabd73bf5667c52c535a2903b",
+    "x_ann/cagra_device.mojo": "7b52bcae46daed4a26a20fbfa7f16a4c0120a928639a04caa38fdce86c0f8a71",
+    "x_ann/fast_env.mojo": "baebf89bef196d77f55759f3200d1c112ea1851295d3408fda9c017485425852",
+    "transformer/impl/llama/afn_apple_fast.mojo": "6c5cf783bf1719a8287d6ea2b8cbf675eb9580d4490b1b2e1304b9abfe7609d6"
+  },
+  "findings": [
+    {
+      "id": "legacy-exact-knn-shape",
+      "classification": "LEGACY_COMPARISON_ONLY_OFF_CURRENT_RETAINED_NATIVE_ARMS",
+      "path": "neighbors/impl/detail/knn_brute_force.mojo",
+      "lines": [
+        198,
+        202
+      ],
+      "condition": "n_index==400000 and n_queries==4000 and n_features==32 and k in {10,15}",
+      "gate": "MOJOLEARN_LEGACY_SHAPE_KNN_BOARD compile define",
+      "affected_scope": "Legacy IDENTICAL KNN transport eligibility; kept as old-rule comparison arm. Active replacement below has broad pair-count cost rule.",
+      "board_dimension_match": "Exact historic KNN board400k index/4k queries/32features/k10or15, explicitly acknowledged in source.",
+      "rationale": "Historical benchmark shape tuning already removed from ordinary branch. The define is absent from inspected native A/B accepted receipts; this is not a newly proven active default violation.",
+      "repair": "Preserve legacy B for removal A/B. Do not delete comparison provenance. Complete neighboring-shape and non-board full-estimator qualification of active replacement before making generalization claims."
+    },
+    {
+      "id": "active-knn-workspace-budget",
+      "classification": "ACTIVE_BENCHMARK_MOTIVATED_POLICY_REQUIRES_REPAIR",
+      "path": "neighbors/estimator.mojo",
+      "lines": [
+        293,
+        300,
+        333,
+        355
+      ],
+      "condition": "WORKSPACE_BUDGET_BYTES=768*1024*1024; halve query tile while tile*n_index*4 exceeds budget, with floor and query clamp; NVIDIA-identical bounded branch can override budget.",
+      "affected_scope": "Shared KNN query tiling in FAST and IDENTICAL across vendors; active on AppleFAST and outside NVIDIA-specific bounded override.",
+      "board_dimension_match": "Source explicitly chooses budget so historic400000-point index at querytile256 remains untouched; no dataset-name test or exact400000 equality in this current branch.",
+      "rationale": "Comment explicitly anchors policy to preserving a benchmark. A general memory cap is valid, but its budget requires an independent supported memory/cost derivation. This is an active policy issue, not proof that every numeric cutoff is overfit.",
+      "repair": "Derive a supported device-memory/scratch policy including real temporary allocations; retain old768MiB as explicit comparison control. No cosmetic comment-only change. Then full-estimator A/B on affected vendors plus neighboring index sizes and a non-board dataset. Parent assigned supported-API/cost-model repair investigation."
+    },
+    {
+      "id": "maxabs-width64",
+      "classification": "ACTIVE_RATIONALE_AND_GENERALIZATION_EVIDENCE_GAP_NOT_PROVEN_DATASET_TARGETING",
+      "path": "x_prep/fastmaxabs.mojo",
+      "lines": [
+        36,
+        44,
+        91,
+        97
+      ],
+      "condition": "d>=64 selects1024 rows per chunk, otherwise128; AFCL-P02 halves both;256threads perblock.",
+      "affected_scope": "PREP3_MAXABS AppleFAST; AFCL-P02 candidate retains same width policy.",
+      "board_dimension_match": "64 separates common Taxi11 and Istella220 widths, but is neither exact width nor established benchmark-derived choice in inspected source.",
+      "rationale": "Comment says narrow inputs need more chunks/threads, a plausible occupancy reason. It does not explain the64 boundary or connect quarter-of256threads to measured/derived cost across neighboring widths. Do not call the constant alone cheating.",
+      "repair": "Document/derive active-lane occupancy and chunk/storage tradeoff independently of board cases, then test neighboring widths and a non-board full dataset under original semantics. Do not change active freeze or silently select a new threshold."
+    }
+  ],
+  "positive_controls": [
+    {
+      "path": "neighbors/impl/detail/knn_brute_force.mojo",
+      "lines": [
+        511,
+        536
+      ],
+      "rule": "queries>=1024 and index*queries>=2^28",
+      "rationale": "Two O((queries+index)*features) metadata passes amortized over queries*index*features; source expressly says edge values unmeasured and neighboring-shape evidence needed.",
+      "status": "BROAD_COST_RULE_WITH_EXPLICIT_GENERALIZATION_PENDING"
+    },
+    {
+      "path": "neighbors/estimator.mojo",
+      "lines": [
+        301,
+        319
+      ],
+      "rule": "default_tile*(4*identical_index_tile(index)+index)<=3GiB",
+      "rationale": "Worst-case per-query distance and radix scratch bytes; general memory policy under1/5of16GiB, distinct from old768budget.",
+      "status": "EXPLICIT_SCRATCH_COST_RATIONALE_NOT_EXACT_SHAPE"
+    },
+    {
+      "path": "x_ann/cagra_fast_knn.mojo",
+      "lines": [
+        424,
+        438
+      ],
+      "rule": "n>=2*PROBES*IVFG_ROWS",
+      "rationale": "Approximate probe graph evaluates at most half the exact graph pairs. Legacy65536 gate is compile-off by default. Source says replacement unmeasured.",
+      "status": "BROAD_WORK_RATIO_WITH_OLD_RULE_RETAINED"
+    },
+    {
+      "path": "transformer/impl/llama/afn_apple_fast.mojo",
+      "lines": [
+        467,
+        480,
+        1176,
+        1186
+      ],
+      "rule": "Padded head classes fit32KiB page and vector4 loads; prehead even and withinBN tile.",
+      "rationale": "Shared-memory capacity/vectorization bound covers neighboring head widths; oldhd64 only is explicit rollback.",
+      "status": "CAPACITY_CONSTRAINT_NOT_BOARD_DIMENSION_KEY"
+    }
+  ],
+  "non_product_categories": [
+    "Benchmark recipe dataset splits/caps are coverage contracts, not product dispatch; full variant IDs preserve original capped recipes.",
+    "Consumed-output sampling/hashing is capture scope and must be reported separately from runtime routing.",
+    "ABI argument counts, enum opcodes, FP32 exact-index limit2^24 and hardware lane widths are not benchmark evidence by themselves."
+  ],
+  "receipt_flag_evidence": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/classification-full-v1/accepted-receipts.json",
+    "sha256": "f0a7caec42eace47c88be0ed60e16df99db18a325b415b0d100727cd32b30a07",
+    "inspected_binding_receipts": {
+      "A": 32,
+      "B": 33
+    },
+    "matching_legacy_narrow_generic_flags": {
+      "A": [],
+      "B": []
+    },
+    "limitation": "This flag scan covers retained native bindings only; do not extend to uninspected Apple/AMD artifact histories."
+  },
+  "retained_search_logs": [
+    "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/dispatch-audit-product-hits.log",
+    "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/dispatch-audit-equality-hits.log",
+    "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/dispatch-audit-legacy-rules.log",
+    "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/dispatch-audit-fast-thresholds.log",
+    "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/dispatch-audit-fast-numeric-routes.log"
+  ],
+  "validation": {
+    "method": "source/receipt metadata inspection only",
+    "numerical_changes": 0,
+    "builds": 0,
+    "models_executed": 0,
+    "coverage": "bounded; no exhaustive clean claim",
+    "initial_search_correction": "Initial src/mojolearn roots were absent; searches were rerun against actual root-level Mojo modules and python/mojolearn. Initial discovery errors do not imply coverage."
+  }
+}

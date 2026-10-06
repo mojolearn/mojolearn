@@ -1,0 +1,68 @@
+{
+  "attempts": [
+    {
+      "attempt": "lars-stable-01",
+      "source_sha": "b1b1862a41789bec945423f9ea95ea3da2aa3290",
+      "status": "FAILED",
+      "returncode": 3,
+      "elapsed_seconds": 8.036923885345459,
+      "fit_ms": 1111.309832893312,
+      "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000",
+      "quality": {
+        "finite": true,
+        "r2": -2.0354618272041775e+27,
+        "rmse": 37646681816235.69
+      },
+      "state_receipts": [
+        {
+          "model": {
+            "class": "Lars",
+            "reason": "opponent model export is not normalized",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "output_sha256": "21c790548fa4eecbef5df38fab357698e651dfed65beb6f1fb2429eb689c7441",
+          "output_status": "ok",
+          "schema": "mojolearn-scored-receipt/1"
+        }
+      ],
+      "original_evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/lars-stable-01/captured/attempt",
+      "retained_result": "experiments/six_lane_integration/measurements/20261006/opponent-repair-receipts/lars-stable-01/result.json",
+      "result_sha256": "ab84ae8cfb2f6be1ed3bdcc61fec49a8e3b3853e75b8dccd7947f8c4b2812f58",
+      "promotion": "Rejected: original existing R2>=0 quality gate failed. Sklearn-only supported-route repair; no native A/B or default claim."
+    },
+    {
+      "attempt": "lars-direct-01",
+      "source_sha": "e645de0181cf935fd2ece229c3ec64845ab8ed45",
+      "status": "FAILED",
+      "returncode": 3,
+      "elapsed_seconds": 38.20127487182617,
+      "fit_ms": 16981.42949992325,
+      "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000",
+      "quality": {
+        "finite": true,
+        "r2": -7.54963761258623e+32,
+        "rmse": 2.2927583050435132e+16
+      },
+      "state_receipts": [
+        {
+          "model": {
+            "class": "Lars",
+            "reason": "opponent model export is not normalized",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "output_sha256": "aa8255ad47d1b6b79dcef8b9258f49a93000f8524c3eca5f31ffeed6e12ac301",
+          "output_status": "ok",
+          "schema": "mojolearn-scored-receipt/1"
+        }
+      ],
+      "original_evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/lars-direct-01/captured/attempt",
+      "retained_result": "experiments/six_lane_integration/measurements/20261006/opponent-repair-receipts/lars-direct-01/result.json",
+      "result_sha256": "3f73a1cb22f500462a3a90031898b8ac194f19de139c09ad045b2e1c03c62f56",
+      "promotion": "Rejected: original existing R2>=0 quality gate failed. Sklearn-only supported-route repair; no native A/B or default claim."
+    }
+  ],
+  "compilation": false,
+  "verification_rerun": false
+}

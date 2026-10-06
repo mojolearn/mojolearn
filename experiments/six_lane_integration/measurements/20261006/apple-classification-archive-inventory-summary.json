@@ -1,0 +1,301 @@
+{
+  "status": "NO_READY_UNCAPPED_CLASSIFICATION_BLOCK_FOUND_IN_AUDITED_ROOTS",
+  "scope": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/cache",
+    "/Users/ec2-user/datasets/gbm-bench",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/datasets"
+  ],
+  "metadata_read_count": 129,
+  "archive_stat_count": 132,
+  "errors": [],
+  "blocks": [
+    {
+      "path": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/more-data/rows-full/cls-istella.json",
+      "metadata_sha256": "cd03a92b9e1768d1b763e7561c2129154c6a1a21dccecba1e715a7e6830d3eb7",
+      "arrays": {
+        "X": [
+          1000000,
+          220
+        ],
+        "Xq": [
+          100000,
+          220
+        ],
+        "y": [
+          1000000
+        ],
+        "yq": [
+          100000
+        ]
+      },
+      "fit_rows": "stride sample of 1000000 of 2043304 train rows",
+      "eval_rows": "stride sample of 100000 of 500000 test rows",
+      "loader": "speed_gbdt_arm.load_istella('shipped', regression=True), label relevance > 0",
+      "columns": null,
+      "status": "CAPPED_NOT_FULL"
+    },
+    {
+      "path": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/more-data/rows-full/cls-taxi.json",
+      "metadata_sha256": "99ba0a075b06bbf54f7ab6b1bcfc0de8294dd0eee3297d0d168db35dcddd01af",
+      "arrays": {
+        "X": [
+          1000000,
+          11
+        ],
+        "Xq": [
+          100000,
+          11
+        ],
+        "y": [
+          1000000
+        ],
+        "yq": [
+          100000
+        ]
+      },
+      "fit_rows": "stride sample of 1000000 of 4110786 train rows",
+      "eval_rows": "stride sample of 100000 of 500000 test rows",
+      "loader": "speed_gbdt_arm.load_taxi('shipped', regression=False), TAXI_NUMERIC columns",
+      "columns": null,
+      "status": "CAPPED_NOT_FULL"
+    },
+    {
+      "path": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full/cls-istella.json",
+      "metadata_sha256": "6b15433f25e21ba5a5d85a02a3fb3b4b6b6e5fc33028e661d13f0ce51d1cfed2",
+      "arrays": {
+        "X": [
+          1000000,
+          220
+        ],
+        "Xq": [
+          100000,
+          220
+        ],
+        "y": [
+          1000000
+        ],
+        "yq": [
+          100000
+        ]
+      },
+      "fit_rows": "stride sample of 1000000 of 2043304 train rows",
+      "eval_rows": "stride sample of 100000 of 500000 test rows",
+      "loader": "speed_gbdt_arm.load_istella('shipped', regression=True), label relevance > 0",
+      "columns": null,
+      "status": "CAPPED_NOT_FULL"
+    },
+    {
+      "path": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full/raw-istella.json",
+      "metadata_sha256": "f5e2363257e937efb49480c68abe0448c971547a9cd188b38a7bdf82ef7b47ce",
+      "arrays": {
+        "X": [
+          1000000,
+          220
+        ],
+        "Xq": [
+          100000,
+          220
+        ],
+        "y": [
+          1000000
+        ],
+        "yq": [
+          100000
+        ]
+      },
+      "fit_rows": null,
+      "eval_rows": null,
+      "loader": null,
+      "columns": null,
+      "status": "CAPPED_NOT_FULL"
+    },
+    {
+      "path": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full/mc-istella.json",
+      "metadata_sha256": "d29e0ce06351cbd75b01a857633d3af3a90b4db54ff24921bbb9f6b0ccd2727e",
+      "arrays": {
+        "X": [
+          1000000,
+          220
+        ],
+        "Xq": [
+          100000,
+          220
+        ],
+        "y": [
+          1000000
+        ],
+        "yq": [
+          100000
+        ]
+      },
+      "fit_rows": null,
+      "eval_rows": null,
+      "loader": null,
+      "columns": null,
+      "status": "CAPPED_NOT_FULL"
+    },
+    {
+      "path": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full/cat-istella.json",
+      "metadata_sha256": "6e65a19649aeddc4d2b519542bb5fcb58b4c182a4f9a7ff9cce4d0f511062cb8",
+      "arrays": {
+        "X": [
+          1000000,
+          8
+        ],
+        "Xq": [
+          100000,
+          8
+        ],
+        "y": [
+          1000000
+        ],
+        "yq": [
+          100000
+        ]
+      },
+      "fit_rows": null,
+      "eval_rows": null,
+      "loader": null,
+      "columns": "Istella's 8 highest-variance columns quantile-binned to 16 codes",
+      "status": "CAPPED_NOT_FULL"
+    },
+    {
+      "path": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full/mc-taxi.json",
+      "metadata_sha256": "a97118688de490752a29fdbfa18e679a4663fa2b393f58b18d940fa2596ca469",
+      "arrays": {
+        "X": [
+          1000000,
+          11
+        ],
+        "Xq": [
+          100000,
+          11
+        ],
+        "y": [
+          1000000
+        ],
+        "yq": [
+          100000
+        ]
+      },
+      "fit_rows": null,
+      "eval_rows": null,
+      "loader": null,
+      "columns": null,
+      "status": "CAPPED_NOT_FULL"
+    },
+    {
+      "path": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full/cls-taxi.json",
+      "metadata_sha256": "b6daebeba293b8244a14e5bad04c9b51477d34a784783afe6a368a7de52bfe50",
+      "arrays": {
+        "X": [
+          1000000,
+          11
+        ],
+        "Xq": [
+          100000,
+          11
+        ],
+        "y": [
+          1000000
+        ],
+        "yq": [
+          100000
+        ]
+      },
+      "fit_rows": "stride sample of 1000000 of 4110786 train rows",
+      "eval_rows": "stride sample of 100000 of 500000 test rows",
+      "loader": "speed_gbdt_arm.load_taxi('shipped', regression=False), TAXI_NUMERIC columns",
+      "columns": null,
+      "status": "CAPPED_NOT_FULL"
+    },
+    {
+      "path": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full/cat-taxi.json",
+      "metadata_sha256": "a5d3993dabf0601ba344dfd302704abe84e053f1e8bea40a1d64ac390c6f42b3",
+      "arrays": {
+        "X": [
+          1000000,
+          5
+        ],
+        "Xq": [
+          100000,
+          5
+        ],
+        "y": [
+          1000000
+        ],
+        "yq": [
+          100000
+        ]
+      },
+      "fit_rows": null,
+      "eval_rows": null,
+      "loader": null,
+      "columns": "taxi id columns (0, 3, 4, 5, 6)",
+      "status": "CAPPED_NOT_FULL"
+    },
+    {
+      "path": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/algos-data/rows-full/raw-taxi.json",
+      "metadata_sha256": "730c54f0eb49c36db8361e903b86d4d23c03e21b608a040dcc3cdde02a988b96",
+      "arrays": {
+        "X": [
+          1000000,
+          11
+        ],
+        "Xq": [
+          100000,
+          11
+        ],
+        "y": [
+          1000000
+        ],
+        "yq": [
+          100000
+        ]
+      },
+      "fit_rows": null,
+      "eval_rows": null,
+      "loader": null,
+      "columns": null,
+      "status": "CAPPED_NOT_FULL"
+    }
+  ],
+  "full_population": {
+    "taxi_classification": {
+      "train_rows": 4110786,
+      "query_rows": 500000,
+      "population": "Credit-card-paid plausible Jan/Feb2024 yellow taxi trips; label tip>=20percentfare; last500k of filtered population held out",
+      "numeric_features": 11,
+      "categorical_columns": [
+        0,
+        3,
+        4,
+        5,
+        6
+      ],
+      "evidence": "Retained cls-taxi sidecars plus frozen speed_gbdt_arm.py load_taxi"
+    },
+    "istella_classification": {
+      "train_rows": 2043304,
+      "query_rows": 500000,
+      "numeric_features": 220,
+      "population": "Full2,043,304-row IstellaS train.txt; first500,000 rows of separate test.txt per shipped loader; binary label relevance>0",
+      "categorical_rule": "Choose8 highestvariance fulltrain columns, quantile-bin to16codes; capped selection cannot be reused as fulltraining fit"
+    }
+  },
+  "source_archives": [
+    {
+      "path": "/Users/ec2-user/datasets/gbm-bench/taxi/taxi_speed.npz",
+      "resolved_path": "/Users/ec2-user/datasets/gbm-bench/taxi/taxi_speed.npz",
+      "bytes": 419757252
+    },
+    {
+      "path": "/Users/ec2-user/datasets/gbm-bench/istella/istella_speed.npz",
+      "resolved_path": "/Users/ec2-user/datasets/gbm-bench/istella/istella_speed.npz",
+      "bytes": 2248281826
+    }
+  ],
+  "pending": "Uncapped cls/raw/categorical preparation using exact saved population and preprocessing is required after timing/CPU14; no data preparation, archive read, estimator import or new job performed.",
+  "source_rule": "tools/speed_gbdt_arm.py:1071 load_taxi; tools/bench_board_more.py:prep; tools/bench_board_algos.py:_tab_loader and prep",
+  "substitution_prohibited": "All-trip Taxi regression/big archives have5,250,086trainingrows; cannot replace4,110,786card-only classificationpopulation or its filtered last500k split"
+}

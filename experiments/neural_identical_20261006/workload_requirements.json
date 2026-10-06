@@ -1,0 +1,103 @@
+{
+  "schema": "mojolearn.neural-identical-workload-requirements/1",
+  "status": "AFFECTED_WORKLOADS_MAPPED_FULL_RECIPE_DETAILS_PENDING",
+  "scope": "neural_only",
+  "base_branch": "main",
+  "base_commit": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
+  "numeric_mode": "identical",
+  "identity_columns": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "performance_voters": [
+    "nvidia",
+    "amd"
+  ],
+  "cross_version_bit_equality_required": false,
+  "same_version_cross_column_bit_equality_required": true,
+  "new_defaults_enabled": false,
+  "commands_executed": {
+    "compile": false,
+    "test": false,
+    "lint": false,
+    "verification": false,
+    "measurement": false
+  },
+  "initial_sampling": {
+    "excluded_warmups": 1,
+    "scored_samples_per_arm": 1
+  },
+  "recipe_sources": {
+    "LM_TR_MM": [
+      "tools/bench_board_neural.py",
+      "tools/torch_lm_step_opponent.py",
+      "tools/speed_torch_seq.py",
+      "mamba/corpus/gen_corpus.py"
+    ],
+    "CNN_SEQ_OP": [
+      "tools/bench_board_algos.py",
+      "tools/classical_two_datasets.py",
+      "tools/bench_board_more.py"
+    ],
+    "policy": [
+      "AGENTS.md",
+      "experiments/performance_ideas/README.md"
+    ]
+  },
+  "required_per_card_recipe_fields": [
+    "affected public estimator and operation",
+    "saved recipe source version",
+    "dataset or corpus name and version",
+    "content hash and split",
+    "actual rows or batches, tokens, sequence/context, features, classes and vocabulary",
+    "model architecture and every estimator/optimizer setting",
+    "seed and shuffled order or counter mapping",
+    "intrinsic cap audit and expected full coverage",
+    "input/output and state dtypes",
+    "arithmetic contract version",
+    "A/B compiler defines and runtime environment",
+    "source, compiler, binary and harness provenance",
+    "complete timed boundary",
+    "predeclared task quality metric and tolerance",
+    "consumed outputs and state"
+  ],
+  "required_timing_parts": [
+    "preparation and required input staging",
+    "full forward or fit/training operation",
+    "backward and optimizer when requested",
+    "required synchronization and refusal collection",
+    "output consumption",
+    "cold and repeated use separately"
+  ],
+  "known_pending_coverage": [
+    "Per-card exact full-data recipes, content hashes and dimensions have not been collected in this source-only task.",
+    "The neural driver documents a sequence cap for CPU lanes; full selectors alone are insufficient.",
+    "Standalone GEMM, norm, attention, optimizer or convolution timing does not qualify dependent full neural estimators.",
+    "Full backward, decode, checkpoint/recovery and MoE training recipes require explicit mapping where absent.",
+    "The existing recurrent persistent-scan source records failed quality and remains unqualified.",
+    "Every version-changing candidate needs all-column contract implementation and quality evidence before promotion."
+  ],
+  "saved_recipe_notes_not_run_provenance": {
+    "cnn_clf": "tools/bench_board_algos.py declares seeded synthetic images, 20000 fit and 5000 held out, 2 epochs; no image set is in that driver's R2 store. Use the full declared workload, not a smaller caller fixture.",
+    "recurrent": "The same driver defines LSTM/GRU/RNN clf/reg on taxi-hourly and synthetic windows, T=24, hidden=64, batch=256, 2 epochs. Actual input counts, hashes and intrinsic caps must still be recorded.",
+    "moe": "The saved MoE lane is explicitly forward-only; no public MoE backward exists in its recorded recipe. Do not claim full MoE training coverage from it.",
+    "graph_neural": "GCN and GraphSAGE use saved graph/node features in tools/bench_board_algos.py. Default GraphSAGE is mean aggregation; NI58 max aggregation needs its own complete recipe.",
+    "dropout": "The saved dropout2d component uses independent library RNG and does not compare their outputs. Candidate same-version identity needs exact own-arm mask/state evidence and full CNN consumer coverage."
+  },
+  "acceptance": {
+    "performance": "NVIDIA and AMD combined faster, neither materially slower, all affected full workloads and relevant combinations measured.",
+    "identity": "Same-version output, gradient and observable state bits match across host/NVIDIA/AMD/Apple; A and B may differ for V arms.",
+    "quality": "No degradation under predeclared full-task gates, including held-out results, multi-step training, gradients/state and resume where applicable.",
+    "boards": "Only actual immutable evidence may be admitted through board tools; no opponent ratios invented from own-only A/B."
+  },
+  "integration_map": "experiments/neural_identical_20261006/integration.json",
+  "selection_entrypoints": [
+    "tools/neural_identical_ideas.py",
+    "tools/performance_ideas.py neural",
+    "tools/neural_experiments.py ideas"
+  ],
+  "build_entrypoint": "tools/identical_wave_native_build.py",
+  "full_operation_queue": "tools/performance_full_ab_queue.py"
+}

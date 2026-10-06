@@ -28,9 +28,18 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from mamba.impl.modules.afn_defines import (
+    AFN26_MAMBA_REFUSAL_VEC4,
+    AFN26_MAMBA_REFUSAL_THREADS128,
+    AFN26_MAMBA_REFUSAL_GRID4,
+)
 
-comptime AFN_REFUSAL_THREADS = 256
+# M06/M10: not tested. All AFN26 flags include FAST Apple GPU guards because
+# this helper is also used by IDENTICAL and other vendors. Integer reductions
+# and scratch extents follow this block size; no input is truncated.
+comptime AFN_REFUSAL_THREADS = 128 if AFN26_MAMBA_REFUSAL_THREADS128 else 256
 comptime AFN_REFUSAL_BLOCKS = 32
+comptime AFN_REFUSAL_GRID_WORK = 4 if AFN26_MAMBA_REFUSAL_GRID4 else 1
 comptime AFN_REFUSAL_NONE: Int32 = 0x7FFFFFFF
 
 
@@ -48,14 +57,46 @@ def afn_nonfinite_partial_kernel(
     var i = Int(block_idx.x) * AFN_REFUSAL_THREADS + tid
     var stride = Int(grid_dim.x) * AFN_REFUSAL_THREADS
     var best = AFN_REFUSAL_NONE
-    while i < n:
-        var bits = bitcast[DType.uint32](values.unsafe_load(i)) & UInt32(0x7FFFFFFF)
-        if bits >= UInt32(0x7F800000):
-            best = Int32(i) * 2
-            if bits == UInt32(0x7F800000):
-                best += 1
-            break
-        i += stride
+    comptime if AFN26_MAMBA_REFUSAL_VEC4:
+        # M06: not tested. Thread i owns contiguous groups of four cells.
+        # Ascending grid-stride groups and the local integer minimum preserve
+        # the first offending index even if a vector contains several errors.
+        # No alignment beyond the existing pointer's guarantee is assumed.
+        i *= 4
+        stride *= 4
+        while i < n:
+            if i + 3 < n:
+                var vals = values.unsafe_load[width=4](i)
+                comptime for j in range(4):
+                    var bits = bitcast[DType.uint32](vals[j]) & UInt32(0x7FFFFFFF)
+                    if bits >= UInt32(0x7F800000):
+                        var code = Int32(i + j) * 2
+                        if bits == UInt32(0x7F800000):
+                            code += 1
+                        if code < best:
+                            best = code
+            else:
+                # not tested: scalar tail reads exactly the remaining extent.
+                for j in range(n - i):
+                    var bits = bitcast[DType.uint32](values.unsafe_load(i + j)) & UInt32(0x7FFFFFFF)
+                    if bits >= UInt32(0x7F800000):
+                        var code = Int32(i + j) * 2
+                        if bits == UInt32(0x7F800000):
+                            code += 1
+                        if code < best:
+                            best = code
+            if best != AFN_REFUSAL_NONE:
+                break
+            i += stride
+    else:
+        while i < n:
+            var bits = bitcast[DType.uint32](values.unsafe_load(i)) & UInt32(0x7FFFFFFF)
+            if bits >= UInt32(0x7F800000):
+                best = Int32(i) * 2
+                if bits == UInt32(0x7F800000):
+                    best += 1
+                break
+            i += stride
     red.unsafe_store(tid, best)
     barrier()
     var active = AFN_REFUSAL_THREADS // 2
@@ -105,8 +146,10 @@ struct AfnRefusalBatch(Movable):
         self.part = ctx.enqueue_create_buffer[DType.int32](c * AFN_REFUSAL_BLOCKS)
         self.codes = ctx.enqueue_create_buffer[DType.int32](c)
         self.names = List[String]()
-        # Every partial row is written by its launch; the fill covers the
-        # rows of names never added (one launch, no wait).
+        # Every launched partial is written; the fill covers names never
+        # added and unlaunched columns of every row (one launch, no wait).
+        # M10: not tested; keep this sentinel fill with the smaller grid so
+        # the fixed 32-column fold cannot consume stale scratch.
         self.part.enqueue_fill(AFN_REFUSAL_NONE)
 
     def add(
@@ -129,7 +172,13 @@ struct AfnRefusalBatch(Movable):
         self.names.append(name)
         if n == 0:
             return
-        var blocks = (n + AFN_REFUSAL_THREADS - 1) // AFN_REFUSAL_THREADS
+        # M10: not tested. Existing work-sized grid targets one element per
+        # thread before the 32-block cap; GRID4 targets four to amortize block
+        # reduction overhead. Grid stride covers all remaining elements.
+        # The vector4 arm keeps this extent policy; its loads group cells,
+        # while the independent GRID4 arm sets the target cells per thread.
+        var block_work = AFN_REFUSAL_THREADS * AFN_REFUSAL_GRID_WORK
+        var blocks = (n + block_work - 1) // block_work
         if blocks > AFN_REFUSAL_BLOCKS:
             blocks = AFN_REFUSAL_BLOCKS
         ctx.enqueue_function[afn_nonfinite_partial_kernel](

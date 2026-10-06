@@ -48,10 +48,18 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 comptime XL_RIDGE_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                                and not is_defined["MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF"]())
 
+# AFCL-L01/L02: NEVER RUN — PENDING MEASUREMENT. Source-only, uncompiled,
+# unverified; defaults OFF. Half-sized row chunks increase independent
+# threadgroups at the cost of partial-buffer traffic. Four fold accumulators
+# reduce dependency depth without dropping any statistic or changing FP32.
+comptime AFCL_L01 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L01"]())
+comptime AFCL_L02 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L02"]())
 comptime FG_TPB = 256
-comptime FG_CH = 8192
+comptime FG_CH = 4096 if AFCL_L01 else 8192
 """Rows per chunk when the Gram has 8 or more tile pairs."""
-comptime FG_CH_SMALL = 2048
+comptime FG_CH_SMALL = 1024 if AFCL_L01 else 2048
 """Rows per chunk below that (taxi's 16 features: one tile pair), so the
 grid still holds hundreds of blocks."""
 comptime FG_TS = 32
@@ -100,6 +108,24 @@ def _aug(x: FP, y: FP, d: Int, t_n: Int, i: Int, c: Int) -> Float32:
     if c < d:
         return ld(x, i * d + c)
     return ld(y, i * t_n + (c - d))
+
+
+@always_inline
+def _fg_fold(src: FP, base: Int, stride: Int, count: Int) -> Float32:
+    comptime if AFCL_L02:
+        var partial = SIMD[DType.float32, 4](0)
+        var ch = 0
+        while ch < count:
+            comptime for lane in range(4):
+                if ch + lane < count:
+                    partial[lane] += ld(src, base + (ch + lane) * stride)
+            ch += 4
+        return (partial[0] + partial[1]) + (partial[2] + partial[3])
+    else:
+        var total = Float32(0)
+        for ch in range(count):
+            total += ld(src, base + ch * stride)
+        return total
 
 
 @always_inline
@@ -160,8 +186,7 @@ def fg_means_kernel(part_s: FP, nch_in: Int32, d_in: Int32, t_in: Int32, cnt_in:
     if c < m:
         var s = Float32(0)
         if fi != 0:
-            for ch in range(Int(nch_in)):
-                s += ld(part_s, ch * m + c)
+            s = _fg_fold(part_s, c, m, Int(nch_in))
             s = s / Float32(Int(cnt_in))
         st(mu, c, s)
         if c < d:
@@ -249,9 +274,7 @@ def fg_red_kernel(part_g: FP, nch_in: Int32, d_in: Int32, t_in: Int32, npairs_in
         var j = tjk[0] * FG_TS + cell // FG_TS
         var k = tjk[1] * FG_TS + cell % FG_TS
         if j < m and k < m:
-            var s = Float32(0)
-            for ch in range(Int(nch_in)):
-                s += ld(part_g, (ch * npairs + p) * FG_TT + cell)
+            var s = _fg_fold(part_g, p * FG_TT + cell, npairs * FG_TT, Int(nch_in))
             if j < d and k < d:
                 st(g, j * d + k, s)
                 st(g, k * d + j, s)
@@ -275,9 +298,7 @@ def fg_red_sym_kernel(part_g: FP, nch_in: Int32, m_in: Int32, npairs_in: Int32, 
         var j = tjk[0] * FG_TS + cell // FG_TS
         var k = tjk[1] * FG_TS + cell % FG_TS
         if j < m and k < m:
-            var s = Float32(0)
-            for ch in range(Int(nch_in)):
-                s += ld(part_g, (ch * npairs + p) * FG_TT + cell)
+            var s = _fg_fold(part_g, p * FG_TT + cell, npairs * FG_TT, Int(nch_in))
             if use_div != 0:
                 s = s / ld(div, 0)
             st(dst, j * m + k, s)

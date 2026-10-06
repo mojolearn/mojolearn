@@ -1,0 +1,782 @@
+{
+  "schema": 1,
+  "lane": "training",
+  "qualification": "uncompiled_unverified_unmeasured",
+  "experiments": [
+    {
+      "id": "NN49",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "embedding/checks/embedding_identical.mojo"
+      ],
+      "caller_paths": [
+        "embedding/checks/embedding_identical.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN49_EMB_VECTOR4=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Route only runs when existing touched-row dispatch is active (n_positions < vocab); other shapes retain incumbent.",
+        "Full LM/embedding callers and all-vendor qualification remain unrun; include zeroing/sort/readback in timing."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN50",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "embedding/owned_runs.mojo",
+        "embedding/checks/embedding_identical.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "caller_paths": [
+        "embedding/owned_runs.mojo",
+        "embedding/checks/embedding_identical.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN50_OWNED_RUNS=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Cold construction and repeated same/different-batch qualification intentionally unrun.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN51",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/byte_lm.mojo",
+        "training/checks/loss.mojo"
+      ],
+      "caller_paths": [
+        "training/byte_lm.mojo",
+        "training/checks/loss.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Other model upload owners are optional extensions; selected byte-LM caller is wired.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN52",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/checks/loss.mojo"
+      ],
+      "caller_paths": [
+        "training/checks/loss.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN52_CE_WEIGHT_GRAD=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Selected complete arm is backward weights/dLogits fusion; forward shift-exp/target fusion is an additional research variant.",
+        "Aliased/unaliased buffers, full loss semantics and complete training quality unverified."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN53",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/chunked_lm_head_v2.mojo",
+        "training/byte_lm_config.mojo",
+        "training/chunked_lm_head_profile.mojo",
+        "training/chunked_lm_head_gemm_host.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/byte_lm_host_backward.mojo",
+        "bindings/_mojolearn_byte_lm.mojo",
+        "bindings/_mojolearn_byte_lm_host.mojo",
+        "python/mojolearn/_byte_lm_config.py",
+        "python/mojolearn/_byte_lm_host.py",
+        "tools/bench_board_neural.py"
+      ],
+      "caller_paths": [
+        "training/chunked_lm_head_v2.mojo",
+        "training/byte_lm_config.mojo",
+        "training/chunked_lm_head_profile.mojo",
+        "training/chunked_lm_head_gemm_host.mojo",
+        "training/byte_lm.mojo",
+        "training/byte_lm_host.mojo",
+        "training/byte_lm_host_backward.mojo",
+        "bindings/_mojolearn_byte_lm.mojo",
+        "bindings/_mojolearn_byte_lm_host.mojo",
+        "python/mojolearn/_byte_lm_config.py",
+        "python/mojolearn/_byte_lm_host.py",
+        "tools/bench_board_neural.py"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {
+          "operation": "lm_chunked_head_v2",
+          "chunked_lm_head_v2": true
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN53_HEAD_CHUNK512=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "operation": "lm_chunked_head_v2",
+          "chunked_lm_head_v2": true
+        }
+      },
+      "limitations": [
+        "Both arms set chunked_lm_head_v2=True through the actual lm-train-step workload selector. Panel width is storage only, so its profile remains the existing -lmhead-chunk256-v2 identifier.",
+        "The existing full LM board control shape has intrinsic limits; its name full does not establish every intended target workload or corpus coverage.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ],
+      "variants": {
+        "panel512": {
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_NN53_HEAD_CHUNK512=1"
+            ]
+          }
+        },
+        "panel2048": {
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_NN53_HEAD_CHUNK2048=1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "NN54",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/neural_ab_profiles.mojo",
+        "training/neural_ab_profile_contract.mojo",
+        "training/checks/loss.mojo",
+        "training/checks/loss_oracle.mojo",
+        "training/loss_host_rows.mojo",
+        "training/byte_lm_host_kernels.mojo"
+      ],
+      "caller_paths": [
+        "training/neural_ab_profiles.mojo",
+        "training/neural_ab_profile_contract.mojo",
+        "training/checks/loss.mojo",
+        "training/checks/loss_oracle.mojo",
+        "training/loss_host_rows.mojo",
+        "training/byte_lm_host_kernels.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN54_LOSS_PROFILE=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Selected arm changes row-total order only; denominator and vocabulary folds remain their existing selected GEMM contract.",
+        "Alternate leaf sizes are additional research arms, not implemented switches.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN55",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/neural_ab_optimizer.mojo",
+        "training/checks/optimizer.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "caller_paths": [
+        "training/neural_ab_optimizer.mojo",
+        "training/checks/optimizer.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "legacy_experiments": [
+        "I10"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NN56_GROUPED_ADAM=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN56_GROUPED_ADAM=1",
+          "MOJOLEARN_NN55_BLOCK_STATUS=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "No status or rollback execution was run; faults retain incumbent route.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN56",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/neural_ab_optimizer.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "caller_paths": [
+        "training/neural_ab_optimizer.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN56_GROUPED_ADAM=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "The selected complete model is byte-LM AdamW; general SGD/group-API expansion remains an optional separate idea.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN57",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/neural_ab_profiles.mojo",
+        "training/neural_ab_profile_contract.mojo",
+        "training/checks/optimizer.mojo",
+        "training/checks/optimizer_oracle.mojo",
+        "training/clip_multi_gpu.mojo"
+      ],
+      "caller_paths": [
+        "training/neural_ab_profiles.mojo",
+        "training/neural_ab_profile_contract.mojo",
+        "training/checks/optimizer.mojo",
+        "training/checks/optimizer_oracle.mojo",
+        "training/clip_multi_gpu.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {
+          "operation": "samba_training_config",
+          "samba_max_norm": 1.0
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN57_NORM_PROFILE=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "operation": "samba_training_config",
+          "samba_max_norm": 1.0
+        }
+      },
+      "limitations": [
+        "This selected v2 arm preserves the two-level tensor norm structure; a flattened norm is an additional arithmetic experiment.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "samba-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN58",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/neural_ab_pointwise.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo"
+      ],
+      "caller_paths": [
+        "training/neural_ab_pointwise.mojo",
+        "training/samba_ops.mojo",
+        "training/host/samba_ops_oracle.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {
+          "operation": "samba_training_config",
+          "samba_accumulation_steps": 2
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN58_ACCUMULATE_STATUS=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "operation": "samba_training_config",
+          "samba_accumulation_steps": 2
+        }
+      },
+      "limitations": [
+        "The new opt-in profile explicitly refuses computed nonfinite gradients; baseline input admission is retained. NN58+NN63 avoids pretending the independent fused status win composes for free.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "samba-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN59",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/neural_ab_pointwise.mojo",
+        "training/residual_dropout.mojo",
+        "training/residual_dropout_contract.mojo",
+        "training/residual_dropout_host.mojo",
+        "bindings/residual_dropout_boundary.mojo",
+        "bindings/residual_dropout_boundary_host.mojo",
+        "python/mojolearn/_residual_dropout_impl.py",
+        "python/mojolearn/training.py"
+      ],
+      "caller_paths": [
+        "training/neural_ab_pointwise.mojo",
+        "training/residual_dropout.mojo",
+        "training/residual_dropout_contract.mojo",
+        "training/residual_dropout_host.mojo",
+        "bindings/residual_dropout_boundary.mojo",
+        "bindings/residual_dropout_boundary_host.mojo",
+        "python/mojolearn/_residual_dropout_impl.py",
+        "python/mojolearn/training.py"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1",
+          "MOJOLEARN_NN59_CONTROL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "operation": "residual_dropout_forward_vjp",
+          "dropout_probability": 0.1,
+          "seed": 7,
+          "stream": 0,
+          "offset": 0
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "operation": "residual_dropout_forward_vjp",
+          "dropout_probability": 0.1,
+          "seed": 7,
+          "stream": 0,
+          "offset": 0
+        }
+      },
+      "limitations": [
+        "Existing transformer dropout refusal is preserved. This is an explicit callable layer; arbitrary CNN/transformer residual-model adoption is an additional experiment.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request.",
+        "The selected operation is a complete explicit layer and its VJP; it is not a transformer model train step or model-quality evidence."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "transformer-forward",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN60",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/byte_lm.mojo"
+      ],
+      "caller_paths": [
+        "training/byte_lm.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN60_BLOCK_VIEWS=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Other model/offload owners are separate extensions; no new default enabled.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        },
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-forward",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ],
+      "variants": {
+        "blocks": {
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_NN60_BLOCK_VIEWS=1"
+            ]
+          }
+        },
+        "emb_head": {
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_NN60_EMB_HEAD_VIEWS=1"
+            ]
+          }
+        },
+        "combined": {
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_NN60_BLOCK_VIEWS=1",
+              "MOJOLEARN_NN60_EMB_HEAD_VIEWS=1"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "NN61",
+      "implementation_status": "reused_existing",
+      "implementation_paths": [
+        "training/byte_lm.mojo",
+        "core/step_glue.mojo",
+        "experiments/performance_ideas/I10/native_arms.json"
+      ],
+      "caller_paths": [
+        "training/byte_lm.mojo",
+        "core/step_glue.mojo",
+        "experiments/performance_ideas/I10/native_arms.json"
+      ],
+      "legacy_experiments": [
+        "I10"
+      ],
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_STEP_GLUE_TRIAL=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_TRAIN_LIVE_STATUS=1",
+          "MOJOLEARN_STEP_GLUE_TRIAL=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Broader all-model drain consolidation is an optional extension.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN62",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/neural_ab_lifetime.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "caller_paths": [
+        "training/neural_ab_lifetime.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {}
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN62_LIFETIME_ARENA=1"
+        ],
+        "environment": {},
+        "runtime": {}
+      },
+      "limitations": [
+        "Other activation/stage intervals are additional arena applications, not needed to select this concrete complete-model arm.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "lm-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN63",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/neural_ab_shards.mojo",
+        "training/samba_ops.mojo",
+        "training/accumulate_multi_gpu.mojo"
+      ],
+      "caller_paths": [
+        "training/neural_ab_shards.mojo",
+        "training/samba_ops.mojo",
+        "training/accumulate_multi_gpu.mojo"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {
+          "operation": "samba_training_config",
+          "samba_accumulation_steps": 2
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN63_CANONICAL_SHARD_MERGE=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "operation": "samba_training_config",
+          "samba_accumulation_steps": 2
+        }
+      },
+      "limitations": [
+        "No new collective/transport backend. Different partition/topology recipes must preserve logical leaves; no count-invariance evidence claimed.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request.",
+        "This recipe reaches canonical accumulation on one device. Existing training/accumulate_multi_gpu.mojo owns multi-device transport; topology coverage remains a separate future workload."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "samba-train-step",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    },
+    {
+      "id": "NN64",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "training/neural_ab_lifetime.mojo",
+        "training/neural_session_mlp.mojo",
+        "training/neural_session_mlp_host.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo",
+        "python/mojolearn/_training_impl.py",
+        "python/mojolearn/_mlp_impl.py"
+      ],
+      "caller_paths": [
+        "training/neural_ab_lifetime.mojo",
+        "training/neural_session_mlp.mojo",
+        "training/neural_session_mlp_host.mojo",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo",
+        "python/mojolearn/_training_impl.py",
+        "python/mojolearn/_mlp_impl.py"
+      ],
+      "legacy_experiments": [],
+      "baseline": {
+        "compile_defines": [],
+        "environment": {},
+        "runtime": {
+          "operation": "mlp_inference_sessions",
+          "session_count": 4
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NN64_SESSION_PACK=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "operation": "mlp_inference_sessions",
+          "session_count": 4
+        }
+      },
+      "limitations": [
+        "Selected arm is stateless feedforward inference: no cache or RNG exists to merge. Stateful decode/cache batching remains a separate unimplemented research direction in the broad idea list.",
+        "Compilation, same-version cross-vendor identity, quality evaluation and end-to-end timing were not run by request.",
+        "The saved MLP input fixture is reused in full through the GPU mlp-forward lane. The explicit operation uses the selected training binding. The CPU-only MLPInference lane remains separate; host arithmetic qualification needs its own matching binding recipe."
+      ],
+      "workloads": [
+        {
+          "harness": "tools/bench_board_neural.py",
+          "lane": "mlp-forward",
+          "shape": "full",
+          "dataset_recipe": "make_inputs / shape_record; resolve actual input hash and intrinsic caps before future execution",
+          "coverage": "selected caller only; all transitive affected models and combinations remain unmeasured"
+        }
+      ]
+    }
+  ]
+}

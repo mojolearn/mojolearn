@@ -15,6 +15,8 @@ Reference: scikit-learn `sklearn/linear_model/_ridge.py`:
 Theirs takes an SVD/eigendecomposition of X; here each alpha is one
 Cholesky (x_linear/ops.mojo). float32, rows ascending.
 """
+from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS
+from x_linear.ops import chol_solve_group
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, copy, cholesky, chol_solve, centered_gram,
     axpy_acc, add_acc, axpy_centered, par_rows, seq_rows,
@@ -190,6 +192,16 @@ def _ridge_solve_best(fp: FP, res: FP, fw: FP, d: Int, t_n: Int, fi: Bool, best:
         st(res, t_n * d + t_n + 2 + a_n, Float32(1))
         return False
     st(res, t_n * d + t_n + 2 + a_n, Float32(0))
+    comptime if C14_GROUP_RHS:
+        copy(res, 0, fw, xty, t_n * d)
+        for first in range(0, t_n, 4):
+            chol_solve_group(fw, mm, d, res, first, min(4, t_n - first))
+        for tt in range(t_n):
+            var acc = Float32(0)
+            for j in range(d):
+                acc = fmad(ld(fw, xm + j), ld(res, tt * d + j), acc)
+            st(res, t_n * d + tt, fs(ld(fw, ym + tt), acc) if fi else Float32(0))
+        return True
     for tt in range(t_n):
         copy(fw, rhs, fw, xty + tt * d, d)
         chol_solve(fw, mm, d, fw, rhs)
@@ -279,6 +291,20 @@ def t_ridge_solve_best(t: Team, fp: FP, res: FP, fw: FP, d: Int, t_n: Int, fi: B
         st(res, t_n * d + t_n + 2 + a_n, Float32(0) if trusted == 1 else Float32(1))
     if t.bcast_int(trusted, 1) == 0:
         return False
+    comptime if C14_GROUP_RHS:
+        for tt in range(t.tid, t_n, t.nt):
+            copy(res, tt * d, fw, xty + tt * d, d)
+        t.sync()
+        for group in range(t.tid, (t_n + 3) // 4, t.nt):
+            var first = group * 4
+            chol_solve_group(fw, mm, d, res, first, min(4, t_n - first))
+            for tt in range(first, min(first + 4, t_n)):
+                var acc = Float32(0)
+                for j in range(d):
+                    acc = fmad(ld(fw, j), ld(res, tt * d + j), acc)
+                st(res, t_n * d + tt, fs(ld(fw, ym + tt), acc) if fi else Float32(0))
+        t.sync()
+        return True
     for tt in range(t.tid, t_n, t.nt):
         var z = scr + tt * d
         copy(z, 0, fw, xty + tt * d, d)

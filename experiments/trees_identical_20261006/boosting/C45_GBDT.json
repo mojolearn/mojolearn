@@ -1,0 +1,156 @@
+{
+  "id": "C45_GBDT",
+  "title": "Bounded histogram prefix, sibling derivation and split score fusion",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "source_integrated_uncompiled_scoped",
+  "default": "OFF",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "C45_GBDT",
+      "A": [
+        "MOJOLEARN_TREES_C45_GBDT=1"
+      ],
+      "B": [],
+      "scope": "Non-symmetric root in one 256-lane scorer, plus ordinary and synchronized symmetric root/descendant levels with incumbent one-block score grid (128 lanes, 1 KiB shared score/tie scratch) and at most 16 KiB live histogram cells. Symmetric prefix scan and optional sibling subtraction execute before the actual incumbent symmetric score/noise/tie kernel in the same block. Partition-stat fold and parent-cache prefixes are retained. Traced or wider levels retain B.",
+      "production_callers": [
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:run_tree_layout_traced",
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:TSynchronizedSymmetricLevelState.enqueue_pre_score",
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:TSynchronizedSymmetricLevelState.enqueue_score",
+        "gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo:fused_symmetric_scan_score_kernel",
+        "gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo:fused_root_scan_score_kernel"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-symmetric:taxi",
+        "gbdt-symmetric:istella",
+        "gbdt-symmetric:taxireg",
+        "gbdt-symmetric:istellareg",
+        "gbdt-symmetric:year",
+        "gbdt-symmetric-1000:taxi",
+        "gbdt-symmetric-1000:istella",
+        "gbdt-symmetric-1000:taxireg",
+        "gbdt-symmetric-1000:istellareg",
+        "gbdt-symmetric-1000:year",
+        "gbdt-depthwise:taxi",
+        "gbdt-depthwise:istella",
+        "gbdt-depthwise:taxireg",
+        "gbdt-depthwise:istellareg",
+        "gbdt-depthwise:year",
+        "gbdt-lossguide:taxi",
+        "gbdt-lossguide:istella",
+        "gbdt-lossguide:taxireg",
+        "gbdt-lossguide:istellareg",
+        "gbdt-lossguide:year",
+        "gbdt-multiclass:taximc",
+        "gbdt-multiclass:istellamc",
+        "gbdt-categorical:taxicat",
+        "gbdt-categorical:criteo",
+        "gbdt-ordered:taxi",
+        "gbdt-ordered:istella",
+        "gbdt-ordered:taxireg",
+        "gbdt-ordered:istellareg"
+      ]
+    }
+  ],
+  "supported_estimators": [
+    "gbdt-symmetric",
+    "gbdt-symmetric-1000",
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-multiclass",
+    "gbdt-categorical",
+    "gbdt-ordered"
+  ],
+  "production_callers": [
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:run_tree_layout_traced",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:TSynchronizedSymmetricLevelState.enqueue_pre_score",
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:TSynchronizedSymmetricLevelState.enqueue_score",
+    "gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo:fused_symmetric_scan_score_kernel",
+    "gbdt/methods/greedy_subsets_searcher/kernel/compute_scores.mojo:fused_root_scan_score_kernel"
+  ],
+  "overlap_ids": [
+    "C45",
+    "T05",
+    "T07"
+  ],
+  "remaining_gaps": [
+    "Non-symmetric descendant frontier fusion and wider root histograms are outside the bounded arm; symmetric levels beyond the existing one-block score grid or 16 KiB live working set retain the incumbent.",
+    "Parent-cache prefixes remain required by sibling subtraction. The default symmetric incumbent already combines scan with partition-stat phase one, so a net launch-count or performance benefit is not asserted.",
+    "Traced paths retain B to preserve intermediate stage capture; stage-time labels differ on the fused arm, so only the programmed whole-operation boundary can be used for candidate measurements.",
+    "All source routes and resource eligibility remain unexecuted. Saved full-dataset mapping does not establish that any recipe reaches an eligible level; full recipe facts and coverage remain pending.",
+    "No host GPU-training emulation or unsupported vendor compiler workaround is introduced; source is shared across supported GPU backends and the S arithmetic contract retains the host incumbent."
+  ],
+  "demonstrated_runtime_reach": false,
+  "harness": {
+    "entry": "bench/speed/forest_speed_arm.py",
+    "selection": "tools/trees_identical_ideas.py",
+    "recipe_facts": "PENDING full saved definitions/hash/dimensions/settings",
+    "whole_operation": "tools/trees_identical_workload.py"
+  },
+  "qualification": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false
+  },
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_keys": [
+    "gbdt-symmetric",
+    "gbdt-symmetric-1000",
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-multiclass",
+    "gbdt-categorical",
+    "gbdt-ordered"
+  ],
+  "full_dataset_recipes": [
+    "gbdt-symmetric:taxi",
+    "gbdt-symmetric:istella",
+    "gbdt-symmetric:taxireg",
+    "gbdt-symmetric:istellareg",
+    "gbdt-symmetric:year",
+    "gbdt-symmetric-1000:taxi",
+    "gbdt-symmetric-1000:istella",
+    "gbdt-symmetric-1000:taxireg",
+    "gbdt-symmetric-1000:istellareg",
+    "gbdt-symmetric-1000:year",
+    "gbdt-depthwise:taxi",
+    "gbdt-depthwise:istella",
+    "gbdt-depthwise:taxireg",
+    "gbdt-depthwise:istellareg",
+    "gbdt-depthwise:year",
+    "gbdt-lossguide:taxi",
+    "gbdt-lossguide:istella",
+    "gbdt-lossguide:taxireg",
+    "gbdt-lossguide:istellareg",
+    "gbdt-lossguide:year",
+    "gbdt-multiclass:taximc",
+    "gbdt-multiclass:istellamc",
+    "gbdt-categorical:taxicat",
+    "gbdt-categorical:criteo",
+    "gbdt-ordered:taxi",
+    "gbdt-ordered:istella",
+    "gbdt-ordered:taxireg",
+    "gbdt-ordered:istellareg"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "symmetric_contract": {
+    "prefix": "Ascending feature-bin ftz prefix identical to scan_histograms_kernel; one-hot and <=1-fold features skip prefix.",
+    "subtraction": "ftz(parent-computed_child), stat-zero clamp only; same saved leaf IDs and parent cache.",
+    "partition_stats": "Existing compute_partition_stats/gather partial-grid and finish fold before scoring; row-count hint is ignored by those launchers.",
+    "score": "Calls compute_optimal_splits_kernel with unchanged score function, normalization default, feature weights, seeds, dither, leaf order and first-bin tie rules.",
+    "scope": "Only the incumbent single score block; complete live histogram working set bounded to 16 KiB and shared score/tie arrays 1 KiB."
+  },
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

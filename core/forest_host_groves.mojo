@@ -60,6 +60,7 @@ orders reads IDENTICAL under it, and that is a fact about the fixture
 (tools/forest_groves_identity.py reports it per cell).
 """
 from core.host_parallel import host_parallelize
+from core.forest_experiments import T34_CHUNK_FOLD, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish, chunk_add
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -199,6 +200,23 @@ struct HostGroveForest(Movable):
     ):
         """One row of the grove kernels: `sums` is this thread's
         `GROVE_LANES * outputs` scratch. The body is the pre-2960 loop."""
+        # T34 uses the same pure Mojo chunk graph as every GPU column.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        comptime if T34_CHUNK_FOLD:
+            var chunk = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
+            for c in range(outputs):
+                var total = Float32(0)
+                var first = 0
+                while first < self.trees:
+                    for i in range(FOREST_CHUNK):
+                        chunk[i] = 0
+                        if first+i < self.trees:
+                            var node = self.reached_leaf[RF_INPUT](x, first+i, row)
+                            chunk[i] = self.leaves[node*outputs+c]
+                    total = chunk_add(total, forest_chunk_sum(chunk))
+                    first += FOREST_CHUNK
+                output[row*outputs+c] = forest_chunk_finish(total, self.trees)
+            return
         for lane in range(GROVE_LANES):
             for c in range(outputs):
                 sums[lane * outputs + c] = Float32(0.0)

@@ -50,6 +50,7 @@ from checks.kernel_matrix import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
+from gbdt.apple_fast_tree_experiments import AFT_N02
 
 #: THE ONE TRUTH the driver keys its dispatch on. Comptime, so the
 #: IDENTICAL build folds every consumer away and executes the pre-round
@@ -152,6 +153,14 @@ def qh_replicas(
         work_cap = floor_rep
     if rep > work_cap:
         rep = work_cap
+    # N02 also reaches the Apple-default quantized histogram family, not
+    # only the generic fallback. Halve the occupancy/work-derived replicas
+    # to trade independent row walkers for fewer partial histograms and
+    # less fixed-point atomic contention. Every row remains in the stride;
+    # this changes no feature/bin precision or active-leaf membership.
+    # Source only, default OFF; no performance or quality evidence.
+    comptime if AFT_N02:
+        rep = max(1, (rep + 1) // 2)
     return rep
 
 

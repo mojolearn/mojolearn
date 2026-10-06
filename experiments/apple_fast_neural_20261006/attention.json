@@ -1,0 +1,460 @@
+{
+  "schema": 1,
+  "family": "attention",
+  "cards": [
+    {
+      "id": "A01",
+      "title": "Cooperative RMSNorm",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "enable_norm_sg",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_NORM_SG"
+          ]
+        }
+      ],
+      "notes": [
+        "Keep epsilon, vector-four input contract and f32 accumulation; reduction reassociation requires existing quality gates.",
+        "Cover norm1, residual+norm2 and chained next-norm callers, including tail token rows."
+      ]
+    },
+    {
+      "id": "A02",
+      "title": "Fused RoPE and cache append",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "enable_rope_cache",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_ROPE_CACHE"
+          ]
+        }
+      ],
+      "notes": [
+        "Fresh full-causal prefill only; carried cache and sliding-window cases retain orchestration fallback.",
+        "Compare absolute positions, rotary passthrough columns, packed cache layout and continuation."
+      ]
+    },
+    {
+      "id": "A03",
+      "title": "Online-softmax FLASH attention",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "enable_flash",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH"
+          ]
+        }
+      ],
+      "notes": [
+        "Historical component timings remain documented in source; they are not full-workload qualification for this campaign.",
+        "Cover masks/window, empty visible rows, head padding, amax/denom outputs and consumed context."
+      ]
+    },
+    {
+      "id": "A04",
+      "title": "Grouped-query FLASH tile reuse",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "grouped_vs_flash",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN_ATTN_GQA_TILE"
+          ]
+        }
+      ],
+      "notes": [
+        "FLASH is enabled on both sides; GQA_TILE implicitly implies FLASH, but the recipe keeps the common parent explicit.",
+        "Cover n_rep 1, 2, 4 and unsupported-group fallback, with unchanged head mapping. Historical mixed component outcomes are preserved."
+      ]
+    },
+    {
+      "id": "A05",
+      "title": "Normalized fused projection staging",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "enable_fuse_pre",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE"
+          ]
+        }
+      ],
+      "notes": [
+        "Complete mechanism includes the cooperative sums-of-squares path; fresh-pre QKV RoPE/cache and foldable norm2 gate/up are separately affected.",
+        "Backward/materialized stages remain on existing fallback."
+      ]
+    },
+    {
+      "id": "A06",
+      "title": "SwiGLU and residual projection epilogues",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "enable_fuse_mlp",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+          ]
+        }
+      ],
+      "notes": [
+        "Exercise gate/up, output residual and down residual through complete forward-only callers.",
+        "Keep activation formula, f32 precision and residual semantics; no approximation is introduced."
+      ]
+    },
+    {
+      "id": "A07",
+      "title": "Transformer binding arena",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "bindings/_mojolearn_transformer.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock full public operation, including SambaStack transformer binding callers"
+      ],
+      "variants": [
+        {
+          "name": "enable_arena",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_ARENA"
+          ]
+        }
+      ],
+      "notes": [
+        "Allocation and submission experiment in the standalone transformer binding; include cold and repeated calls plus resize/cache lifetimes.",
+        "ByteLM uses its own orchestration: do not claim this arena affects its internal block allocations."
+      ]
+    },
+    {
+      "id": "A08",
+      "title": "RMSNorm-only 128/512-thread launches",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "norm_128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_NORM_SG"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_NORM_SG",
+            "MOJOLEARN_AFN26_ATTN_NORM_TPB128"
+          ]
+        },
+        {
+          "name": "norm_512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_NORM_SG"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_NORM_SG",
+            "MOJOLEARN_AFN26_ATTN_NORM_TPB512"
+          ]
+        },
+        {
+          "name": "pre_norm_128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN26_ATTN_NORM_TPB128"
+          ]
+        },
+        {
+          "name": "pre_norm_512",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN26_ATTN_NORM_TPB512"
+          ]
+        }
+      ],
+      "notes": [
+        "Four or sixteen simdgroups replace eight only in RMSNorm; FLASH, RoPE/cache and projection launches retain their independent sizes.",
+        "Selecting both widths is a compile-time configuration error; neither flag enables a parent mechanism. All targets and quality remain untested."
+      ]
+    },
+    {
+      "id": "A09",
+      "title": "FLASH key tile 16",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "flash_bk16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN26_ATTN_FLASH_BK16"
+          ]
+        },
+        {
+          "name": "gqa_bk16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN_ATTN_GQA_TILE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN_ATTN_GQA_TILE",
+            "MOJOLEARN_AFN26_ATTN_FLASH_BK16"
+          ]
+        }
+      ],
+      "notes": [
+        "Two keys per each of eight softmax lanes replace four; score fragments, shared strides/pages and key loops derive from BK.",
+        "Existing compiled padded head classes remain 16..80; do not claim expanded head coverage or quality from a smaller page."
+      ]
+    },
+    {
+      "id": "A10",
+      "title": "FLASH query tile 16",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "flash_tq16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN26_ATTN_FLASH_TQ16"
+          ]
+        },
+        {
+          "name": "gqa_tq16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN_ATTN_GQA_TILE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FLASH",
+            "MOJOLEARN_AFN_ATTN_GQA_TILE",
+            "MOJOLEARN_AFN26_ATTN_FLASH_TQ16"
+          ]
+        }
+      ],
+      "notes": [
+        "The candidate uses four simdgroups/128 threads to preserve eight softmax lanes per query row and integral context fragments for every existing head class.",
+        "GROUP4 then has four tokens per query head; each eight-row matrix fragment may span two heads that share K/V. This new combination is explicitly untested.",
+        "Pair with BK16 only in a separate interaction arm; no geometry or quality result is claimed."
+      ]
+    },
+    {
+      "id": "A11",
+      "title": "Fused neural projection K tile 16",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "pre_kb16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN26_ATTN_PROJ_KB16"
+          ]
+        },
+        {
+          "name": "mlp_kb16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+            "MOJOLEARN_AFN26_ATTN_PROJ_KB16"
+          ]
+        },
+        {
+          "name": "pre_mlp_kb16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+            "MOJOLEARN_AFN26_ATTN_PROJ_KB16"
+          ]
+        }
+      ],
+      "notes": [
+        "Shared allocation is the maximum of operand staging and the later RoPE C tile, with the existing barrier separating lifetimes.",
+        "Whole-K-window routing follows KB; k divisible by 16 but not 32 can enter the candidate while baseline falls back. Treat newly covered shapes separately from same-route geometry.",
+        "Only neural afn projection kernels change; generic GEMM remains untouched."
+      ]
+    },
+    {
+      "id": "A12",
+      "title": "Fused neural projection output-row tile 32",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "transformer/impl/llama/afn_apple_fast.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "workloads": [
+        "TransformerBlock forward-only full operation",
+        "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+        "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+      ],
+      "variants": [
+        {
+          "name": "pre_bm32",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN26_ATTN_PROJ_BM32"
+          ]
+        },
+        {
+          "name": "mlp_bm32",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+            "MOJOLEARN_AFN26_ATTN_PROJ_BM32"
+          ]
+        },
+        {
+          "name": "pre_mlp_bm32",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+            "MOJOLEARN_AFN26_ATTN_PROJ_BM32"
+          ]
+        }
+      ],
+      "notes": [
+        "The 256-thread block keeps eight simdgroups; each row subgroup owns half as many row fragments. Grid, row statistics, shared strides and epilogues derive from BM.",
+        "A-staging uses rounded-up predicated slots so BM32+KB16 still loads the complete tile when float4 slots are fewer than threads.",
+        "Column tile remains 64 so RoPE partner ownership is unchanged; full row tails and prefill/cache semantics remain pending."
+      ]
+    }
+  ]
+}
+

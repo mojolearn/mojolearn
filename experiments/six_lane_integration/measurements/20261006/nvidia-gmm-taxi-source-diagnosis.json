@@ -1,0 +1,172 @@
+{
+  "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-gmm-taxi-diagnosis/DIAGNOSIS.json",
+  "source_sha256": "3f27fa8be6046ac9cba08a07eb3b11dd897cfa07242c5e961f1fe98c55432512",
+  "report": {
+    "schema": 1,
+    "recorded_utc": "2026-10-06T20:27:49.914669+00:00",
+    "scope": "Exact-source and retained-failure inspection only. No builds, models, tests, verification runs, new measurements, quality computation, parameter changes, data changes or source repairs.",
+    "classification": "BOTH_ARMS_REFUSED_FROZEN_FULL_WORKLOAD_NO_ESTABLISHED_SOURCE_OR_HARNESS_BUG",
+    "admission": "INCOMPLETE_A_B_PAIR; ZERO_SCORED_SAMPLES; NO_CANDIDATE_WIN_LOSS_OR_QUALITY_DECISION",
+    "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+    "workload_id": "more:gmm@dataset=taxi",
+    "vendor": "nvidia",
+    "mode": "identical",
+    "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+    "dimensions": {
+      "X": [
+        5250086,
+        11
+      ],
+      "Xq": [
+        500000,
+        11
+      ]
+    },
+    "split": {
+      "evaluation_rows": 500000,
+      "fit": [
+        0,
+        5250086
+      ]
+    },
+    "settings": {
+      "covariance_type": "full",
+      "init_params": "kmeans",
+      "max_iter": 100,
+      "means_init": null,
+      "n_components": 8,
+      "n_init": 1,
+      "precisions_init": null,
+      "random_state": 7,
+      "reg_covar": 1e-06,
+      "tol": 0.001,
+      "weights_init": null
+    },
+    "retained_failures": {
+      "A": {
+        "status": "MEASUREMENT_FAILED",
+        "phase": "warmup",
+        "worker_returncode": 1,
+        "scored_samples": 0,
+        "log": "A-warmup-A.log",
+        "receipt": "A-receipt.json"
+      },
+      "B": {
+        "status": "BASELINE_REFUSED",
+        "pair_status": "INCOMPLETE_CANDIDATE_FAILED",
+        "phase": "warmup",
+        "worker_returncode": 1,
+        "collector_returncode": 2,
+        "scored_samples": 0,
+        "log": "B-warmup-B.log",
+        "receipt": "B-receipt.json"
+      },
+      "shared_error": {
+        "em_iteration": 1,
+        "component_index_zero_based": 4,
+        "lapack_info": 11,
+        "regularization_hex": "0x358637bd",
+        "stored_error_strings_equal": true,
+        "meaning": "Pivot 11 in the computed 11x11 covariance fails the strictly-positive finite-precision factorization test. The error alone does not distinguish zero, negative, NaN, or the mathematical condition of the unrounded covariance."
+      }
+    },
+    "findings": [
+      "The B follow-up invokes the same saved worker recipe and selects its original B arm. It preserves the candidate failure and stops on the failed B warmup, before a scored execution. Stored queue/collector SHA256 values match the retained queue and script.",
+      "Frozen recipe uses the entire saved 5,250,086 x 11 fit matrix, full covariance, 8 components, n_init=1, kmeans initialization, seed=7, reg_covar=1e-6, tol=1e-3, max_iter=100. No source setting substitution was established.",
+      "bench_board_more.py passes Taxi reg_covar=1e-6 into GaussianMixture. mixture.py argument index 5 agrees with bindings/_mojolearn_mixture.mojo, which converts it to Float32 and places it in GmmParams.reg_covar.",
+      "The fit driver forwards reg_covar to initial and iterative M-steps. cov_finish_kernel divides by component mass first, then adds reg_covar only to the diagonal. No omitted or mis-scaled regularization defect was found in this source path.",
+      "Both arms retain the incumbent IDENTICAL fused-Cholesky default; B is not an all-switches-off build. The kernel tests pv>0, writes j+1 on failure, and returns before inversion. The host consumes the first failed component in ascending order and raises; the source intentionally does not reset or continue a failed component.",
+      "Because the error says EM iteration 1, the source path passed initialization factorization and failed the first iterative M-step factorization. The message alone is not proof of singleton component size or a particular roundoff cause.",
+      "At finite Float32 precision, a nominal positive diagonal ridge is not a guarantee that the computed factorization succeeds. This is a plausible conditioning/rounding explanation, not a reconstructed covariance diagnosis.",
+      "The same retained refusal on B prevents treating this as an isolated new-candidate regression. No concrete pointer, settings, covariance formula or refusal-status bug was established."
+    ],
+    "source_refs": [
+      {
+        "path": "tools/bench_board_more.py",
+        "line": 688,
+        "meaning": "unchanged per-dataset regularization"
+      },
+      {
+        "path": "tools/bench_board_more.py",
+        "line": 994,
+        "meaning": "public full GMM construction/fit"
+      },
+      {
+        "path": "python/mojolearn/mixture.py",
+        "line": 193,
+        "meaning": "binding argument order"
+      },
+      {
+        "path": "bindings/_mojolearn_mixture.mojo",
+        "line": 168,
+        "meaning": "reg_covar conversion"
+      },
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 1289,
+        "meaning": "iterative M-step then precision Cholesky refusal"
+      },
+      {
+        "path": "mixture/estimator.mojo",
+        "line": 1402,
+        "meaning": "refusal message"
+      },
+      {
+        "path": "mixture/checks/mstep.mojo",
+        "line": 1341,
+        "meaning": "regularization after mass division, diagonal only"
+      },
+      {
+        "path": "mixture/checks/mstep.mojo",
+        "line": 1191,
+        "meaning": "IDENTICAL fused-Cholesky positive-pivot guard"
+      },
+      {
+        "path": "mixture/checks/mstep.mojo",
+        "line": 1585,
+        "meaning": "incumbent fused route and returned failure status"
+      },
+      {
+        "path": "mixture/chol_order.mojo",
+        "line": 82,
+        "meaning": "incumbent default remains on"
+      },
+      {
+        "path": "mixture/checks/mstep.mojo",
+        "line": 2089,
+        "meaning": "C53 grouped centering reach guard"
+      }
+    ],
+    "coverage_gap": {
+      "id": "I.C.C53",
+      "define": "MOJOLEARN_C53_CENTER4",
+      "source_reach": "NOT_REACHED_AT_THIS_FROZEN_FULL_SHAPE",
+      "fit_cells": 57750946,
+      "candidate_max_cells": 524288,
+      "reason": "The source requires n <= GMM_CENTER_CELLS // d before allocating grouped-centering scratch; the full Taxi matrix exceeds the existing 16MiB bound. Keep missing coverage explicit; do not shrink the race or expand the cap in this task."
+    },
+    "artifact_provenance": {
+      "file": "selected-mixture-artifact-provenance.json",
+      "numerical_source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+      "A_declared_sha256": "b210beb5ffdcc3233251f4571a5badaf7fcea4ccd5d519d2d4ca0ef8ec3a438d",
+      "B_declared_sha256": "8ca464640472a0c64ac421be5e7fc7acd53ede3a8452a24eb0504b5182dbddaa",
+      "limitation": "Declared package provenance retained in the worker recipe; these failed result JSONs do not contain successful loaded-artifact/model-state evidence. Seven reviewed Mojo paths have no Git diff to the examined harness-source commit. No fresh full closure/build equivalence attestation."
+    },
+    "limits": [
+      "Failing covariance, pivot value, responsibilities, component mass and complete model state are not retained here; a common upstream defect cannot be ruled out conclusively by source inspection.",
+      "Matching diagnostic strings are not bitwise identity verification. The program message claiming identical refusal on every vendor is a source contract, not evidence that these full-workload arms were verified across vendors.",
+      "No timing/quality output was produced by a scored sample. Neither arm supplies an admitted measurement, performance ratio, promotion evidence or an individual-arm rejection decision."
+    ],
+    "disposition": [
+      "Keep original A failure and B-only diagnostic unchanged and linked; record both-arm refusal/incomplete pair.",
+      "No repair branch: no demonstrated source defect. Do not change component count, regularization, initialization, preprocessing, data, race or Cholesky failure guard to obtain a pass.",
+      "Keep I.C.C53 full-workload source reach pending. Any future native implementation extension requires a separate source freeze and explicitly authorized compilation and evaluation.",
+      "If a deeper numerical diagnosis is later authorized, retain the failing covariance/mass/pivot from the unchanged workload. No such run is scheduled here."
+    ],
+    "new_builds": 0,
+    "new_model_runs": 0,
+    "new_verification_runs": 0,
+    "new_quality_evaluations": 0,
+    "source_changes": []
+  }
+}

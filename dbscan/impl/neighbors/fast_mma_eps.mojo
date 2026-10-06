@@ -60,7 +60,15 @@ comptime FAST_MMA_EPS_ENABLED = (
     and not is_defined["MOJOLEARN_DBSCAN_FAST_MMA_OFF"]()
 )
 
-comptime ME_SG = 8
+# AFCL-G03: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Four complete SIMD groups per block expose twice as many query blocks,
+# trading cross-query operand reuse for occupancy without pruning an edge
+# or changing the exact epsilon-boundary fallback. No size-specific rule.
+comptime AFCL_G03 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G03"]()
+)
+comptime ME_SG = 4 if AFCL_G03 else 8
 comptime ME_TPB = ME_SG * 32
 comptime ME_T = 128
 comptime ME_MAX_D = 32

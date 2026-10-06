@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
+from ensemble.tree_identical_ideas import T01, T02, T03, T04, T05, T07, T11, T11_LEVELS, T13, T13_BYTES, histogram_task_rows
 from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined, get_defined_int
 from std.math import ceildiv
@@ -49,6 +50,8 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     SMALL_NODE_ROWS,
     small_node_split_kernel,
     merge_split_candidates_kernel,
+    merge_split_candidates_parallel_kernel,
+    clear_live_histogram_bins_kernel,
     launch_gather_sampled_order_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
@@ -97,7 +100,7 @@ from ensemble.decisiontree.batched_levelalgo.retained_count_histograms import Re
 # One same-process warmup/score, identity evidence reused. Full-workload
 # NVIDIA+AMD qualification remains pending; default OFF. Evidence:
 # overnight-ab-20261006/amd/normalized-measurements.json, I18.
-comptime RETAINED_COUNT_HIST = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST"]()
+comptime RETAINED_COUNT_HIST = T03 or (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREE_EXACT_SIBLING_HIST"]())
 comptime RETAINED_COUNT_HIST_BYTES = get_defined_int["MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES", 8*1024*1024]()
 
 # `builder.cuh:161` -- "default threads per block for most kernels in here"
@@ -152,7 +155,15 @@ comptime IDN_RF_COLS40 = (
     )
 )
 
-comptime N_BLKS_FOR_COLS = 40 if (
+# AFT F01: a power-of-two 32-column pass bounds workspace and reduces the
+# per-pass live histogram bytes versus 40 while retaining every column.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_F01 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F01"]()
+)
+comptime N_BLKS_FOR_COLS = 32 if AFT_F01 else (40 if (
     (
         (
             GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -167,7 +178,7 @@ comptime N_BLKS_FOR_COLS = 40 if (
     20 if is_defined["MOJOLEARN_RF_TRIAL_COLS20"]() else (
         40 if is_defined["MOJOLEARN_RF_TRIAL_COLS40"]() else 10
     )
-)
+))
 
 @always_inline
 def blk_cols_for(n_sampled_cols: Int) -> Int:
@@ -216,7 +227,15 @@ comptime ALIGN_VALUE = 512
 # One warmup/score, <1.1% difference; default512 retained.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
 comptime IDN_RF_TASK_ROWS256 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_RF_TASK_ROWS256"]()
-comptime HIST_ITEMS_PER_THREAD = 2 if IDN_RF_TASK_ROWS256 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4)
+# AFT F02: eight rows/lane amortizes each histogram work descriptor over
+# 1024 rows at the fixed 128-lane block, without changing bins or samples.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_F02 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F02"]()
+)
+comptime HIST_ITEMS_PER_THREAD = 8 if AFT_F02 else (2 if IDN_RF_TASK_ROWS256 else (1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4))
 comptime HIST_WORKLOAD_GRANULARITY = TPB_DEFAULT * HIST_ITEMS_PER_THREAD
 
 
@@ -996,11 +1015,11 @@ comptime IDN_RF_FUSED_PARTITION = (
 # Differences are small, single-sample observations: no variance/significance claim.
 # Original AMD Taxi evidence failures retained; four scoped receipt repairs used.
 # Evidence: experiments/identical_speed/results/20261005/forest-final-decisions/board.json.
-comptime LOOP_K = 1 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K1"]() else (
+comptime LOOP_K = max(1, T11_LEVELS) if T11 else (1 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K1"]() else (
     2 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K2"]() else (
         8 if is_defined["MOJOLEARN_IDN_RF_DEVICE_LOOP_K8"]() else 4
     )
-)
+))
 
 
 @fieldwise_init
@@ -1340,6 +1359,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     var split_cand: DeviceBuffer[DType.uint8]
     """HIST_SPLIT_CANDIDATES_DEFAULT: one `Split` slot per (node, column
     block) of a round; one byte otherwise."""
+    var hist_task_rows: Int
     var retained_counts: Optional[RetainedCountHistograms]
     var retained_counts_reset: Bool
     var retained_counts_phase: Bool
@@ -1456,6 +1476,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.n_cols = n_cols
         self.num_outputs = num_outputs
         self.scales = scales
+        self.hist_task_rows = histogram_task_rows(Int(params.max_n_bins) * Int(num_outputs) * size_of[Self.O.BinT](), 4 + size_of[Scalar[Self.O.LabelT]](), HIST_WORKLOAD_GRANULARITY)
         self.retained_counts = None
         self.retained_counts_reset = True
         self.retained_counts_phase = False
@@ -1663,6 +1684,11 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # common case this never regrows; past their `min(100000, ...)`
         # cap the batching loop reuses the same buffers anyway.
         self.leaf_capacity = min(100000, max_nodes(params.max_depth))
+        comptime if T13:
+            # Fit-owned cache, released with Builder; no input/state reuse across
+            # fits. Reserve a resource-bounded leaf page once for all its trees.
+            var bytes_per_leaf = 2 * (size_of[SparseTreeNode[Self.O.DataT]]() + size_of[InstanceRange]() + 4 * max(1, Int(num_outputs)))
+            self.leaf_capacity = max(self.leaf_capacity, min(max(1, 2*n_sampled_rows-1), T13_BYTES // bytes_per_leaf))
         self.leaf_host_capacity = self.leaf_capacity
         var n_out = Int(num_outputs)
         self.leaf_d_tree = ctx.enqueue_create_buffer[DType.uint8](
@@ -2191,7 +2217,14 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # 14.4 s HIGGS 1M FAST fit on the M4, `core/device_zero.mojo`);
         # the launch costs 10 us and writes the same zeros.
         var t_h = instr.times.start()
-        comptime if HIST_ZERO_AFTER_READ_DEFAULT:
+        comptime if T04:
+            ctx.enqueue_function[clear_live_histogram_bins_kernel[Self.O]](
+                hist_argsp.unsafe_origin_cast[MutAnyOrigin](),
+                self._hist_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                self.column_samples.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                Int32(col), Int32(n_bins), grid_dim=(n_work_items,n_blocks_dimy), block_dim=128,
+            )
+        elif HIST_ZERO_AFTER_READ_DEFAULT:
             # Every cell this round's (node, column) blocks can touch lies
             # in its first `len_histograms` bins; the part below the
             # high-water mark is zero already, so only the new tail is
@@ -2273,7 +2306,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         t_h = instr.times.start()
         launch_find_best_splits_kernel[
             Self.O,
-            zero_after=HIST_ZERO_AFTER_READ_DEFAULT,
+            zero_after=HIST_ZERO_AFTER_READ_DEFAULT and not T04,
             candidates=HIST_SPLIT_CANDIDATES_DEFAULT,
         ](
             ctx,
@@ -2294,20 +2327,25 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             n_classes,
         )
         comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
-            log_launch_ctx(ctx, "merge_split_candidates")
-            ctx.enqueue_function[
-                merge_split_candidates_kernel[Self.O.DataT]
-            ](
-                self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                self.split_cand.unsafe_ptr()
-                .unsafe_origin_cast[MutAnyOrigin]()
-                .unsafe_bitcast[Split[Self.O.DataT]](),
-                Int32(n_work_items),
-                Int32(n_blocks_dimy),
-                grid_dim=ceildiv(n_work_items, 128),
-                block_dim=128,
-            )
+            self._merge_candidates(ctx, n_work_items, n_blocks_dimy)
         instr.times.stop_host("host_best_launch", t_h)
+
+    def _merge_candidates(mut self, ctx: DeviceContext, n: Int, columns: Int) raises:
+        # T07: per-column candidates are distinct feature IDs. Their existing
+        # comparator is a total order across columns; no same-feature plateau
+        # is split between lanes. The canonical within-feature scan is retained.
+        comptime if T07:
+            ctx.enqueue_function[merge_split_candidates_parallel_kernel[Self.O.DataT]](
+                self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
+                Int32(n), Int32(columns), grid_dim=n, block_dim=128,
+            )
+        else:
+            ctx.enqueue_function[merge_split_candidates_kernel[Self.O.DataT]](
+                self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
+                Int32(n), Int32(columns), grid_dim=ceildiv(n,128), block_dim=128,
+            )
 
     def enqueue_best_splits(
         mut self,
@@ -2355,7 +2393,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             # reader on this phase is the histogram launch (see the
             # deviation block by the flag).
             n_blocks_dimx = update_workload_info_host(
-                work_items, self._h_workload_ptr(), HIST_WORKLOAD_GRANULARITY
+                work_items, self._h_workload_ptr(), self.hist_task_rows
             )
             instr.times.stop_host("host_stage_items", t_h)
             t_h = instr.times.start()
@@ -2476,12 +2514,15 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         instr.times.stop_host("host_launch_setup", t_h)
         var small_batch = False
         comptime if SMALL_NODE_FUSED_DEFAULT:
-            if dev_n < 0 and not self.retained_counts_phase and dataset.has_bins and not instr.trace.enabled and Int(
+            if (dev_n < 0 or T05) and not self.retained_counts_phase and dataset.has_bins and not instr.trace.enabled and Int(
                 self.params.max_n_bins
             ) * Int(
                 self.num_outputs
             ) <= SMALL_NODE_SLOTS:
-                small_batch = _small_batch_host(work_items)
+                # T05 needs no host frontier read. A single block's histogram
+                # storage is bounded by SLOTS; its row loop is complete for any
+                # node size. Deep frontiers benefit; large roots may regress.
+                small_batch = T05 or _small_batch_host(work_items)
         var c = 0
         while c < n_sampled_cols:
             if small_batch:
@@ -2490,7 +2531,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 ctx.enqueue_function[
                     small_node_split_kernel[
                         Self.O, TPB_DEFAULT, SMALL_NODE_SLOTS,
-                        Self.sampled_labels,
+                        Self.sampled_labels, HIST_SPLIT_CANDIDATES_DEFAULT,
                     ]
                 ](
                     find_argsp.unsafe_origin_cast[MutAnyOrigin](),
@@ -2501,9 +2542,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                     self.mutex.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
                     self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
                     Int32(self.params.max_n_bins),
+                    self.split_cand.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().unsafe_bitcast[Split[Self.O.DataT]](),
                     grid_dim=(n, dimy),
                     block_dim=TPB_DEFAULT,
                 )
+                comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
+                    self._merge_candidates(ctx, n, dimy)
             else:
                 self._compute_split(
                     ctx, dataset, c, n_blocks_dimx, n,
@@ -3092,7 +3136,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[Split[Self.O.DataT]]()
         )
-        comptime hist_scale = HIST_WORKLOAD_GRANULARITY // TPB_DEFAULT
+        var hist_scale = self.hist_task_rows // TPB_DEFAULT
         for _ in range(LOOP_K):
             var b = self.loop_batch
             var n_bound = max_batch
@@ -3113,7 +3157,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                 max_batch,
                 n_bound,
                 blocks_bound,
-                HIST_WORKLOAD_GRANULARITY,
+                self.hist_task_rows,
                 hist_scale,
             )
             # 2. every sampling round
@@ -3133,7 +3177,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
                         max_batch,
                         n_bound,
                         blocks_bound,
-                        HIST_WORKLOAD_GRANULARITY,
+                        self.hist_task_rows,
                         hist_scale,
                         r == 1,
                     )

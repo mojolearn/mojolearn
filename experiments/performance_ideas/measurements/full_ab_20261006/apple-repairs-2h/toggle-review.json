@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-06",
+  "owner_policy": "FAST may differ in bits; preserve accepted quality and full-workload performance requirements. IDENTICAL requires cross-vendor matching.",
+  "decisions": [
+    {
+      "candidates": [
+        "F04",
+        "F19"
+      ],
+      "decision": "Already ON",
+      "source": "resample/estimator.mojo",
+      "evidence": "../resample-promotion.json",
+      "combined_candidate_over_baseline": {
+        "istella": 0.9002336422580199,
+        "taxi": 0.9301027786501519
+      },
+      "quality": "Exact full output and index hashes matched; no further default change needed."
+    },
+    {
+      "candidates": [
+        "F11/compensated-pca"
+      ],
+      "decision": "Keep OFF",
+      "evidence": "../pca-full-summary.json",
+      "candidate_over_baseline": {
+        "istella": 2.729857820348406,
+        "taxi": 16.47637914498615
+      },
+      "reason": "Quality passed but full-workload timing regressed."
+    },
+    {
+      "candidates": [
+        "F01",
+        "F02/pca"
+      ],
+      "decision": "Keep pending",
+      "evidence": "../pca-full-summary.json",
+      "reason": "PCA quality passed and full PCA was faster; shared adapters still lack affected-workload and interaction coverage. Bit differences alone are not a blocker."
+    },
+    {
+      "candidates": [
+        "NVIDIA/AMD IDENTICAL"
+      ],
+      "decision": "No promotion",
+      "reason": "Required full-workload vendor pair artifacts remain unavailable."
+    },
+    {
+      "candidates": [
+        "QN",
+        "GMM",
+        "DART",
+        "LARS"
+      ],
+      "decision": "No runtime toggle inferred",
+      "reason": "Latest repair batch measured opponent implementations, not baseline/candidate runtime switch pairs."
+    }
+  ]
+}

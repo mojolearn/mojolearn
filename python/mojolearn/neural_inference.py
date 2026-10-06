@@ -107,12 +107,15 @@ class MLPInference:
             envelope = json.loads(encoded, object_pairs_hook=_unique_object)
         except (ValueError, UnicodeDecodeError, RecursionError) as exc:
             raise ValueError("MLPInference checkpoint is not valid bounded JSON") from exc
-        if not isinstance(envelope, dict) or set(envelope) != {"schema", "payload", "payload_sha256"}:
+        if not isinstance(envelope, dict) or set(envelope) not in ({"schema", "payload", "payload_sha256"}, {"schema", "payload", "payload_sha256", "arithmetic_profile"}):
             raise ValueError("MLPInference checkpoint envelope mismatch")
         if envelope["schema"] != _FILE_SCHEMA:
             raise ValueError("MLPInference checkpoint schema mismatch")
         if hashlib.sha256(_canonical(envelope["payload"])).hexdigest() != envelope["payload_sha256"]:
             raise ValueError("MLPInference checkpoint integrity mismatch")
+        expected_profile = str(_binding().neural_arithmetic_profile())
+        if envelope.get("arithmetic_profile", "mojolearn.neural-training.fp32.v1") != expected_profile:
+            raise ValueError("MLPInference checkpoint arithmetic profile mismatch")
         weights, _, _, _ = _validate_state(_decode_state(envelope["payload"]))
         return cls(*weights)
 

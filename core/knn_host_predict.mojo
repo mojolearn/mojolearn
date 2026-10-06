@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Brute-force k-NN inference on the host, for a box with no GPU (the knn
 host inference lane, 2026-09-14).
 
@@ -147,6 +145,11 @@ The restatement is a prediction until measured. tools/classical_host_gate.py
 (lanes knn, knn-clf, knn-reg) is the measurement, and the brief records
 what it has shown.
 """
+from core.classical_distance import direct_squared_distance, direct_distance_step
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -430,6 +433,9 @@ def host_l2_expanded_cell_ptr(
         if dist <= 0.0: dist = 0.0
         if is_sqrt: dist = ftz(identical_sqrt(dist))
     """
+    comptime if C30_DIRECT_DISTANCE:
+        var direct = direct_squared_distance((q+row*d).unsafe_origin_cast[MutAnyOrigin](),(y+col*d).unsafe_origin_cast[MutAnyOrigin](),d)
+        return ftz(identical_sqrt(direct)) if is_sqrt else direct
     var acc = Float32(0.0)
     comptime if KNN_HOST_SABOTAGE:
         # THE SABOTAGE ARM: the same chain, walked DESCENDING. Wrong on
@@ -592,6 +598,8 @@ def _host_block_step[K: Int](acc: KnnVF, qv: Float32, y: KnnVF, metric_arg: Floa
         var diff = abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y))
         return diff.gt(acc).select(diff, acc)
     elif K == KNN_STEP_DIFF2:
+        comptime if C30_DIRECT_DISTANCE:
+            return direct_distance_step[KNN_HOST_W](acc,KnnVF(qv),y)
         var diff = ftz_v[KNN_HOST_W](KnnVF(qv) - y)
         return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](diff, diff, acc))
     else:
@@ -833,6 +841,15 @@ def _host_knn_block_rows(
                         _host_block_select(dist, b0, wv, bp + (r0 + r) * k, k)
                     r0 += KNN_HOST_QB
                     continue
+                if C30_DIRECT_DISTANCE and l2_pair:
+                    for r in range(nq):
+                        var dist = KnnVF(0)
+                        for l in range(wv):
+                            var dd = direct_squared_distance((qf+(r0+r)*d).unsafe_origin_cast[MutAnyOrigin](),(ixp+(b0+l)*d).unsafe_origin_cast[MutAnyOrigin](),d)
+                            dist[l] = ftz(identical_sqrt(dd)) if is_sqrt else dd
+                        _host_block_select(dist,b0,wv,bp+(r0+r)*k,k)
+                    r0 += KNN_HOST_QB
+                    continue
                 _host_block_tile_kind(qf, r0, nq, pp, d, _host_step_kind(mtr, ipf), metric_arg, tp)
                 for r in range(nq):
                     var acc = tp.unsafe_load[width=KNN_HOST_W](r * KNN_HOST_W)
@@ -1021,10 +1038,10 @@ def host_class_probs(
 
 def host_class_vote(
     proba: List[Float32], uniq: List[Int32], n_uniq: Int, n_queries: Int,
-    mut out: List[Int32], n_outputs: Int, output_offset: Int,
+    mut output: List[Int32], n_outputs: Int, output_offset: Int,
 ):
     """`class_vote_kernel` (`knn.mojo:151-180`): `cur_max = -1.0`, strict
-    `>`, the first maximal class wins, `out[row * n_outputs +
+    `>`, the first maximal class wins, `output[row * n_outputs +
     output_offset] = uniq[cur_label]`. The sabotage arm compares with
     `>=`, so a tied vote goes to the LAST maximal class: the vote's tie
     rule, wrong on purpose."""
@@ -1042,12 +1059,12 @@ def host_class_vote(
                 if cur_proba > cur_max:
                     cur_max = cur_proba
                     cur_label = j
-        out[row * n_outputs + output_offset] = uniq[cur_label]
+        output[row * n_outputs + output_offset] = uniq[cur_label]
 
 
 def host_regress_avg(
     idx: List[UInt32], y: List[Float32], n_queries: Int, k: Int,
-    mut out: List[Float32], n_outputs: Int, output_offset: Int,
+    mut output: List[Float32], n_outputs: Int, output_offset: Int,
 ):
     """`regress_avg_kernel` (`knn.mojo:183-211`): `pred = ftz(pred +
     ftz(y[idx]))` over the k slots in slot order, then
@@ -1066,7 +1083,7 @@ def host_regress_avg(
         else:
             for j in range(k):
                 pred = ftz(pred + ftz(y[Int(idx[i + j])]))
-        out[row * n_outputs + output_offset] = ftz(pred / Float32(k))
+        output[row * n_outputs + output_offset] = ftz(pred / Float32(k))
 
 
 def host_distance_weights(
@@ -1160,7 +1177,7 @@ def host_weighted_class_probs(
 def host_weighted_regress_avg(
     idx: List[UInt32], y: List[Float32], w: List[Float32],
     n_queries: Int, k: Int,
-    mut out: List[Float32], n_outputs: Int, output_offset: Int,
+    mut output: List[Float32], n_outputs: Int, output_offset: Int,
 ):
     """`weighted_regress_avg_kernel` (`distance_weights.mojo:309-348`):
     `num = ftz(num + ftz(yv * wv))`, `den = ftz(den + wv)` in slot order
@@ -1175,7 +1192,7 @@ def host_weighted_regress_avg(
             var yv = ftz(y[Int(idx[i + j])])
             num = ftz(num + ftz(yv * wv))
             den = ftz(den + wv)
-        out[row * n_outputs + output_offset] = ftz(identical_div(num, den))
+        output[row * n_outputs + output_offset] = ftz(identical_div(num, den))
 
 
 # ===========================================================================
@@ -1209,7 +1226,7 @@ def host_rbc_cmp_dist(
             i = n_dims - 1 - g
         if metric == KNN_HOST_DIST_L2_SQRT_UNEXPANDED:
             var diff = ftz(ftz(a[a_off + i]) - ftz(b[b_off + i]))
-            acc = ftz(identical_mul_add(diff, diff, acc))
+            acc = direct_distance_step[1](acc,diff,Float32(0)) if C30_DIRECT_DISTANCE else ftz(identical_mul_add(diff,diff,acc))
         elif metric == DIST_L1:
             acc = l1_core(acc, ftz(a[a_off + i]), ftz(b[b_off + i]))
         else:

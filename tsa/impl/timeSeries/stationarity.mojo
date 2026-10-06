@@ -87,6 +87,7 @@ column and a column constant after one difference; both report
 `stat = 0x00000000`, `stationary = True`, in both modes.
 """
 
+from experiments.classical_identical_ideas.stats_controls import C60_LAG4
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -94,12 +95,19 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceil, isfinite
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from core.column_stats import STATS_TPB
 from core.device_scan import device_first_nonfinite
 from core.pinned_reduce import pinned_block_sum
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from tsa.impl.timeSeries.arima_helpers import prepare_data
+
+# AFCL-P11: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Two independent per-lane chains reduce recurrence dependency in the series
+# sums without changing the shared STATS_TPB launch or any KPSS lag/decision.
+# The existing block reduction combines the two chain totals; bits may change.
+comptime AFCL_P11 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P11"]()
 
 
 #: Table 1, Kwiatkowski 1992 (`stationarity.cuh:131-132`), as `float`.
@@ -160,14 +168,29 @@ def series_sum_kernel[
     var tid = Int(thread_idx.x)
     var base = b * n
     var acc = Float32(0.0)
+    var acc_odd = Float32(0.0)
     var t = tid
     while t < n:
         var x = ftz(data.unsafe_load(base + t))
-        comptime if square:
-            acc = ftz(identical_mul_add(x, x, acc))
+        comptime if AFCL_P11:
+            if (t // STATS_TPB) % 2 == 0:
+                comptime if square:
+                    acc = ftz(identical_mul_add(x, x, acc))
+                else:
+                    acc = ftz(acc + x)
+            else:
+                comptime if square:
+                    acc_odd = ftz(identical_mul_add(x, x, acc_odd))
+                else:
+                    acc_odd = ftz(acc_odd + x)
         else:
-            acc = ftz(acc + x)
+            comptime if square:
+                acc = ftz(identical_mul_add(x, x, acc))
+            else:
+                acc = ftz(acc + x)
         t += STATS_TPB
+    comptime if AFCL_P11:
+        acc = ftz(acc + acc_odd)
     var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
     if tid == 0:
         out_v.unsafe_store(b, ftz(s0 * scale))
@@ -204,6 +227,39 @@ def s2B_accumulation_kernel(
     (y[t]*y[t+k])`, serial in `k` ascending per cell. `coeff_a * k + coeff_b`
     and `acc += coeff * dp` are both row-9 contractions (nvcc fuses them):
     `identical_mul_add`."""
+    # C60: four adjacent time cells share a sliding lag window. Each cell's
+    # k chain is unchanged, and no window crosses a series boundary.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    comptime if C60_LAG4:
+        var task = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+        var n = Int(n_obs_in)
+        var groups = (n+3)//4
+        var series = task//groups
+        if series >= Int(n_total_in)//n:
+            return
+        var sample = (task%groups)*4
+        var base = series*n+sample
+        var xv = InlineArray[Float32, 4](fill=Float32(0))
+        var lagv = InlineArray[Float32, 4](fill=Float32(0))
+        var acc = InlineArray[Float32, 4](fill=Float32(0))
+        comptime for lane in range(4):
+            if sample+lane < n:
+                xv[lane] = ftz(data[base+lane])
+            if sample+lane+1 < n:
+                lagv[lane] = ftz(data[base+lane+1])
+        for k in range(1, Int(lags_in)+1):
+            var coeff = ftz(identical_mul_add(coeff_a, Float32(k), coeff_b))
+            comptime for lane in range(4):
+                if sample+lane < n-k:
+                    var dp = ftz(xv[lane]*lagv[lane])
+                    acc[lane] = ftz(identical_mul_add(coeff, dp, acc[lane]))
+            comptime for lane in range(3):
+                lagv[lane] = lagv[lane+1]
+            lagv[3] = ftz(data[base+k+4]) if sample+k+4 < n else Float32(0)
+        comptime for lane in range(4):
+            if sample+lane < n:
+                accumulator[base+lane] = acc[lane]
+        return
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if idx >= Int(n_total_in):
         return
@@ -469,10 +525,13 @@ def _kpss_test(
     sc.lags = lags
     var coeffs = kpss_s2B_coefficients(n_obs, lags)
     # Second sum in eq. 10 (second part of s^2)
+    # Four consecutive times share lag loads; round within each series so a
+    # partial final group never consumes the next series.
+    var lag_tasks = batch_size * ((n_obs + 3) // 4) if C60_LAG4 else total
     ctx.enqueue_function[s2B_accumulation_kernel](
         sc.accumulator.unsafe_ptr(), sc.y_cent.unsafe_ptr(), Int32(lags),
         Int32(n_obs), Int32(total), coeffs[0], coeffs[1],
-        grid_dim=(elem_grid, 1, 1), block_dim=(elem_tpb, 1, 1),
+        grid_dim=((lag_tasks + elem_tpb - 1) // elem_tpb, 1, 1), block_dim=(elem_tpb, 1, 1),
     )
     ctx.enqueue_function[sum_kernel](
         sc.s2B.unsafe_ptr(), sc.accumulator.unsafe_ptr(), Int32(n_obs),

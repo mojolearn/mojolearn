@@ -11,7 +11,16 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from umap.optimizer_identical_device import umap_dense_graph_to_device
 
 
-comptime FAST_OPT_TPB = 128
+# AFCL-G10: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Two SIMD groups per block make heavy CSR head rows less likely to delay
+# unrelated rows in the same block. Each head still owns its complete edge
+# sequence and counter-derived negatives against the same epoch snapshot.
+# Epoch count, sample count, seed and convergence settings are untouched.
+comptime AFCL_G10 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G10"]()
+)
+comptime FAST_OPT_TPB = 64 if AFCL_G10 else 128
 
 
 def _mix(value: UInt64) -> UInt64:

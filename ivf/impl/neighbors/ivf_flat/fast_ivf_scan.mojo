@@ -22,18 +22,29 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-comptime FIVF_QPB = 4
+# AFCL-G09: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Two query SIMD groups share a block instead of four, halving query shared
+# storage and exposing more independently scheduled groups for skewed lists.
+# The accepted feature cap stays fixed: this changes scheduling only, with
+# the same probed lists, filters, candidates and total-order top-k merge.
+comptime AFCL_G09 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G09"]()
+)
+comptime FIVF_QPB = 2 if AFCL_G09 else 4
 """Queries (SIMD groups) per block."""
 comptime FIVF_DIM_TILE = 256
-"""The query tile of the default instantiation: FIVF_QPB * 256 floats = 4 KB
-of threadgroup memory, so small dims keep their occupancy."""
+"""The narrow query tile: 4 KiB in A, 2 KiB under AFCL-G09."""
 comptime FIVF_MAX_DIM = FIVF_DIM_TILE if is_defined[
     "MOJOLEARN_LEGACY_NARROW_FIVF_DIM"
-]() else (32 * 1024) // (FIVF_QPB * 4)
-"""Widest query the batched FAST scan takes: the query tiles of FIVF_QPB
-SIMD groups filling 32 KB of threadgroup memory (Apple's limit, under
-NVIDIA's and AMD's), 2048 floats. Was 256 (admitted istella's 220);
+]() else (32 * 1024) // (4 * 4)
+"""Widest query the batched FAST scan takes: four baseline SIMD groups
+filling 32 KB of threadgroup memory (Apple's limit, under NVIDIA's and
+AMD's), 2048 floats. AFCL-G09 keeps this cap and uses 16 KiB instead.
+Was 256 (admitted istella's 220);
 removed as benchmark-tuned on 2026-10-04, replacement UNMEASURED. A dim
 above FIVF_DIM_TILE launches the 32 KB instantiation. `-D
 MOJOLEARN_LEGACY_NARROW_FIVF_DIM` restores the 256 cap."""

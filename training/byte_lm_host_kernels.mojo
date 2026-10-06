@@ -72,7 +72,7 @@ from core.host_lanes import (
     silu_lanes,
     host_f32_uninit,
 )
-from gemm.host.gemm_host_rows import (
+from gemm.host.neural_gemm import (
     GHR_G,
     GhrPtr,
     ghr_pack_a,
@@ -81,6 +81,10 @@ from gemm.host.gemm_host_rows import (
     ghr_tile,
 )
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, contract_leaf_size, leaf_count
+from gemm.contract import OP_NN
+from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED
+from gemm.host.neural_gemm import neural_gemm_host_into
+from training.neural_ab_profile_contract import NN54_LOSS_PROFILE,nn_reduce_host_admitted
 from training.checks.loss_contract import (
     REDUCTION_MEAN,
     CeConfig,
@@ -97,6 +101,8 @@ from transformer.checks.transformer_fixture import (
     unmasked_fill,
 )
 from transformer.checks.transformer_oracle import RopeTable, refuse_nonfinite
+from training.neural_identical_experiments import IDN_ATTENTION_V2
+from transformer.impl.llama.attention_v2_model_host import attention_v2_host_forward
 
 
 comptime HOST_FW = simd_width_of[DType.float32]()
@@ -132,7 +138,8 @@ comptime GEMM_CHAINS = 8
 #: DEVIATION 2612's control); `-D MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM=1`
 #: restores it in any build.
 comptime BYTE_HOST_GHR = (
-    not is_defined["MOJOLEARN_BYTE_LM_HOST_SABOTAGE"]()
+    not NEURAL_PROFILE_CHANGED
+    and not is_defined["MOJOLEARN_BYTE_LM_HOST_SABOTAGE"]()
     and not GEMM_ORACLE_HOST_SABOTAGE
     and not is_defined["MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM"]()
 )
@@ -335,6 +342,17 @@ def gemm_nt_rows(
     admitted only at one leaf, where it changes the fold and nothing else."""
     if hi < lo or len(c) < (hi - lo) * n:
         raise Error("byte LM host kernels: GEMM output span too short")
+    comptime if NEURAL_PROFILE_CHANGED:
+        if lo<0 or len(a)<hi*k or len(bt)<n*k:
+            raise Error("byte LM host kernels: neural GEMM operand span too short")
+        if reverse:
+            raise Error("byte LM host kernels: legacy reverse-order probe is not a selected neural profile")
+        # pack_nt/pack_w now give the logical right operand as [k,n].
+        # Model row slicing changes only addresses, never logical k/leaves.
+        neural_gemm_host_into(rebind[GhrPtr](c.unsafe_ptr()),
+            rebind[GhrPtr](a.unsafe_ptr()).unsafe_offset(lo*k),rebind[GhrPtr](bt.unsafe_ptr()),
+            hi-lo,n,k,OP_NN)
+        return
     var zero = Float32(0.0)
     var cp = c.unsafe_ptr()
     if k <= 0:
@@ -910,30 +928,45 @@ def block_fast(
     var masks = List[Float32]()
     var scale = attention_scale(hd)
     var ctx = List[Float32](length=m * qw, fill=Float32(0.0))
-    var qmat = List[Float32](length=l * hd, fill=Float32(0.0))
-    var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
-    var vpack = List[Float32](length=s * hd, fill=Float32(0.0))
-    var cell = List[Float32](length=l * s, fill=Float32(0.0))
-    var aweights = List[Float32](length=l * s, fill=Float32(0.0))
-    var qrp = qr.unsafe_ptr()
-    var krp = kr.unsafe_ptr()
-    var vvp = v.unsafe_ptr()
-    var qmp = qmat.unsafe_ptr()
-    var kpp = kpack.unsafe_ptr()
-    var vpp = vpack.unsafe_ptr()
-    for h in range(nh):
-        var kvh = h // n_rep
-        for qi in range(l):
-            for d in range(hd):
-                qmp.unsafe_store(qi * hd + d, qrp.unsafe_load(qi * qw + h * hd + d))
-        for j in range(s):
-            for d in range(hd):
-                kpp.unsafe_store(d * s + j, ftz(krp.unsafe_load(j * kw + kvh * hd + d)))
-                vpp.unsafe_store(j * hd + d, ftz(vvp.unsafe_load(j * kw + kvh * hd + d)))
-        # S11, one gemm per head, k = head_dim; then S12-S18 and S19.
-        gemm_nt_rows(qmat, kpack, s, hd, 0, l, cell)
-        _softmax_head(cell, masks, l, s, scale, aweights, 0)
-        _value_sum_head(aweights, vpack, l, s, hd, qw, h, ctx, 0)
+    if IDN_ATTENTION_V2:
+        # This native fast host caller handles one independent batch row.
+        # Pack K/V by head, then use exactly the shared V2 model arithmetic.
+        var kp = List[Float32](length=dims.n_kv_heads * s * hd, fill=Float32(0.0))
+        var vp = List[Float32](length=dims.n_kv_heads * s * hd, fill=Float32(0.0))
+        for kh in range(dims.n_kv_heads):
+            for j in range(s):
+                for d in range(hd):
+                    kp[(kh * s + j) * hd + d] = kr[j * kw + kh * hd + d]
+                    vp[(kh * s + j) * hd + d] = v[j * kw + kh * hd + d]
+        var av2 = attention_v2_host_forward(qr, kp, vp, 1, l, nh,
+                                            dims.n_kv_heads, s, hd, 0, 0,
+                                            scale, diagnostic=False)
+        ctx = av2.output.copy()
+    else:
+        var qmat = List[Float32](length=l * hd, fill=Float32(0.0))
+        var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
+        var vpack = List[Float32](length=s * hd, fill=Float32(0.0))
+        var cell = List[Float32](length=l * s, fill=Float32(0.0))
+        var aweights = List[Float32](length=l * s, fill=Float32(0.0))
+        var qrp = qr.unsafe_ptr()
+        var krp = kr.unsafe_ptr()
+        var vvp = v.unsafe_ptr()
+        var qmp = qmat.unsafe_ptr()
+        var kpp = kpack.unsafe_ptr()
+        var vpp = vpack.unsafe_ptr()
+        for h in range(nh):
+            var kvh = h // n_rep
+            for qi in range(l):
+                for d in range(hd):
+                    qmp.unsafe_store(qi * hd + d, qrp.unsafe_load(qi * qw + h * hd + d))
+            for j in range(s):
+                for d in range(hd):
+                    kpp.unsafe_store(d * s + j, ftz(krp.unsafe_load(j * kw + kvh * hd + d)))
+                    vpp.unsafe_store(j * hd + d, ftz(vvp.unsafe_load(j * kw + kvh * hd + d)))
+            # S11, one gemm per head, k = head_dim; then S12-S18 and S19.
+            gemm_nt_rows(qmat, kpack, s, hd, 0, l, cell)
+            _softmax_head(cell, masks, l, s, scale, aweights, 0)
+            _value_sum_head(aweights, vpack, l, s, hd, qw, h, ctx, 0)
 
     # S5 o_proj, S22; S1-S4 again; the MLP (S5, S20, S21, S5); S23.
     var o = List[Float32](length=m * dm, fill=Float32(0.0))
@@ -972,6 +1005,10 @@ def hidden_fast(
     for layer in range(layers):
         x = block_fast(tensors, 1 + 9 * layer, x, l, dims, rope)
     return x^
+
+
+from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2
+from training.loss_reduction_v2 import loss_token_tree_v2_host
 
 
 def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab: Int) raises -> Float32:
@@ -1040,6 +1077,12 @@ def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab:
         rows[i] = row_loss
     var ones_n = List[Float32](length=n, fill=Float32(1.0))
     var total = List[Float32](length=1, fill=Float32(0.0))
-    gemm_nt_rows(rows, ones_n, 1, n, 0, 1, total)
+    comptime if NN54_LOSS_PROFILE:
+        total[0] = nn_reduce_host_admitted[128,False](
+            rebind[MutPointer[Float32,MutAnyOrigin]](rows.unsafe_ptr()),n)
+    elif IDN_LOSS_TOKEN_TREE_V2:
+        total[0] = loss_token_tree_v2_host(rows, 0, n)
+    else:
+        gemm_nt_rows(rows, ones_n, 1, n, 0, 1, total)
     var divisor = ce_divisor(cfg.reduction, ce_count(targets, cfg.ignore_index), cfg.num_items)
     return ftz(identical_div(ftz(total[0]), divisor))

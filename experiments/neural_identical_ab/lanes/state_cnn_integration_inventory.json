@@ -1,0 +1,1653 @@
+{
+  "lane": "state_cnn",
+  "branch": "ideas/neural-identical-ab-20261006-r3",
+  "source_base_commit": "d39587b1d",
+  "status": "source_authoring_only_no_execution",
+  "arm_convention": "Candidate=A/baseline=B. Defines are NAME=value, including common IDENTICAL; target build defines are the build owner responsibility. Presence enables is_defined flags: omit for OFF, never NAME=0. New flags default OFF; inherited routes keep defaults.",
+  "common_limitations": [
+    "No compilation, static/syntax checking, tests, model execution, identity, quality or timing run. Source reading is authoring context, not validated reachability or acceptance.",
+    "Within-version host/NVIDIA/AMD/Apple arithmetic must match; previous-version bits need not. No default promoted.",
+    "Full end-to-end NVIDIA+AMD acceptance and all-column identity/quality remain pending. Prior component/FAST/reduced/other-version evidence cannot qualify new arms.",
+    "Current Mamba full board CPU recipe has intrinsic sequence cap; full equal-column coverage is not established."
+  ],
+  "new_experiment_files": [
+    "experiments/neural_identical_ab/catalog.json",
+    "experiments/neural_identical_ab/catalog_source.py",
+    "experiments/neural_identical_ab/implementation.json",
+    "experiments/neural_identical_ab/write_status.py",
+    "experiments/neural_identical_ab/README.md",
+    "experiments/neural_identical_ab/IMPLEMENTATION_STATUS.md",
+    "experiments/neural_identical_ab/MODEL_INTEGRATION.md",
+    "experiments/neural_identical_ab/NN34_AFFINE_PREFIX_CONTRACT.md",
+    "experiments/neural_identical_ab/lanes/state_cnn.json",
+    "experiments/neural_identical_ab/lanes/state_cnn.md",
+    "experiments/neural_identical_ab/lanes/state_cnn_integration_inventory.json",
+    "tools/neural_identical_ab.py",
+    "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+    "tools/bench_board_algos.py"
+  ],
+  "legacy_experiment_registry": {
+    "I08": {
+      "paths": [
+        "experiments/performance_ideas/I08/manifest.json",
+        "experiments/performance_ideas/I08/native_arms.json",
+        "experiments/performance_ideas/I08/compile_matrix.json",
+        "experiments/performance_ideas/I08/coverage.md",
+        "experiments/performance_ideas/I08/check.mojo",
+        "experiments/performance_ideas/I08/backward_check.mojo",
+        "experiments/performance_ideas/I08/time.mojo"
+      ],
+      "controls": [
+        "MOJOLEARN_IDN_M2_SSD_TILES_OFF=1",
+        "MOJOLEARN_IDN_M2_CB_LOWER_OFF=1",
+        "MOJOLEARN_IDN_M2_RETAIN_GL=1"
+      ],
+      "relationship": "Inherited shared SSD tiles/lower triangle/retained G*L; old evidence does not qualify new arms."
+    },
+    "I09": {
+      "paths": [
+        "experiments/performance_ideas/I09/manifest.json",
+        "experiments/performance_ideas/I09/native_arms.json",
+        "experiments/performance_ideas/I09/compile_matrix.json",
+        "experiments/performance_ideas/I09/coverage.md",
+        "experiments/performance_ideas/I09/check.mojo",
+        "experiments/performance_ideas/I09/time.mojo"
+      ],
+      "controls": [
+        "MOJOLEARN_IDN_MAMBA_CONV_CELL_OFF=1"
+      ],
+      "relationship": "Inherited token-parallel convolution and scan backlog. Component/planted-weight evidence is not full new-profile acceptance."
+    },
+    "existing_sequence_tiles": {
+      "paths": [
+        "sequence/gemm_tiled.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/README.md"
+      ],
+      "controls": [
+        "MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF=1"
+      ],
+      "relationship": "Default-on NVIDIA/AMD sequence tiles; exact NN13 reuse."
+    },
+    "existing_m3_angle_suffix": {
+      "paths": [
+        "mamba/impl/modules/mamba3_backward.mojo",
+        "mamba/host/gen/mamba3_backward.mojo"
+      ],
+      "controls": [
+        "MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF=1"
+      ],
+      "relationship": "Inherited fixed64 default-on suffix; NN38 reuses seeds."
+    },
+    "existing_m2_gradient_leaves": {
+      "paths": [
+        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "mamba/host/gen/mamba2_ssd_backward.mojo"
+      ],
+      "relationship": "Existing fixed256 row leaves/serial final merge; NN39 changes final merge only."
+    },
+    "existing_mamba_workspace_sessions": {
+      "paths": [
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "bindings/_mojolearn_mamba.mojo",
+        "python/mojolearn/_mamba_impl.py"
+      ],
+      "controls": [
+        "MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF=1"
+      ],
+      "environment": {
+        "MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"
+      },
+      "relationship": "Retained workspace, byte-validated borrowed prefill and copied decode weights preexist."
+    },
+    "existing_recurrent_scan_gradients": {
+      "paths": [
+        "sequence/recurrent.mojo",
+        "sequence/recurrent_scan.mojo",
+        "sequence/ops.mojo",
+        "sequence/checks/oracle.mojo",
+        "tools/sequence_apple_ab.sh"
+      ],
+      "controls": [
+        "MOJOLEARN_IDN_SEQ_LSTM_SCAN=1",
+        "MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF=1"
+      ],
+      "relationship": "Existing scan/per-step cells/blocked gradients. FAST constant-predictor failure unresolved."
+    },
+    "existing_moe_device_group": {
+      "paths": [
+        "sequence/moe_group.mojo",
+        "sequence/moe_tiled.mojo",
+        "sequence/pyapi.mojo",
+        "sequence/moe_reg.mojo"
+      ],
+      "environment": {
+        "MOJOLEARN_SEQ_MOE_TILED": "0"
+      },
+      "relationship": "Existing any-expert a.i6=2 device grouping/tiled products; B atomic scatter and linear expert lookup. FAST MMA/register alternatives are not IDENTICAL equivalents."
+    },
+    "existing_cnn_routes": {
+      "paths": [
+        "x_cnn/device.mojo",
+        "x_cnn/ops.mojo",
+        "tools/apple_speed_cnn/ab.sh",
+        "tools/identical_wave_cnn_sgd_compare.py",
+        "tools/identical_wave_cnn_sgd_gate.py"
+      ],
+      "controls": [
+        "MOJOLEARN_XCNN_NO_DIRECT_CONV=1",
+        "MOJOLEARN_XCNN_NO_TILED_LAYOUT=1",
+        "MOJOLEARN_XCNN_TILED_ROWS=1"
+      ],
+      "relationship": "Existing direct conv/layout/pool fusion. Historical Apple FAST or scoped CNN results are not new IDENTICAL NVIDIA+AMD acceptance."
+    },
+    "existing_batchnorm_apply_stats": {
+      "paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo"
+      ],
+      "relationship": "B applies and updates running state separately, both share inherited centered moment statistics."
+    },
+    "existing_neural_csr": {
+      "paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "relationship": "B per-cell SpMM; graph preparation/degree semantics/edge order inherited."
+    }
+  },
+  "source_generation": {
+    "author": "tools/mamba_host_gen.py --source-write-only",
+    "output": "mamba/host/gen",
+    "contract": "Writes source only; validation explicitly separate and not run.",
+    "prior_authoring_log": "experiments/neural_identical_ab/source_authoring/mamba_host_20261006.log",
+    "this_followup": "No generator execution needed for host-binding metadata exports."
+  },
+  "followup_source_repairs": [
+    {
+      "path": "bindings/_mojolearn_mamba_host.mojo",
+      "change": "Add reports_optional=False and session_info exports for owned host snapshots, with generation/reuse/recompute counters and zero retained device stages."
+    },
+    {
+      "path": "tools/bench_board_algos.py",
+      "change": "Real schema1 neural A/B runtime consumer; NN45 pool_size1 applied to ours and Torch; explicit BN training/GraphSAGE mean options, environment propagation, frozen config and requested-flag receipts."
+    }
+  ],
+  "experiments": [
+    {
+      "id": "NN13",
+      "implementation_status": "reused_existing",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Existing sequence tiled same-chain GEMM callers reused; independent sequence numerical profile retained.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_IDN_SEQ_GEMM_TILED_OFF=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "sequence/gemm_tiled.mojo",
+        "sequence/exec_device.mojo"
+      ],
+      "caller_paths": [
+        "sequence/recurrent.mojo",
+        "sequence/pyapi.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/exec.mojo",
+        "bindings/_mojolearn_x_sequence.mojo",
+        "bindings/_mojolearn_x_sequence_host.mojo",
+        "python/mojolearn/_x_sequence_rnn.py",
+        "sequence/mlp.mojo",
+        "sequence/mlp_fit.mojo"
+      ],
+      "arithmetic_and_host_contract": "Existing NVIDIA/AMD tiled GEMM preserves the sequence per-cell chain. Host/Apple retain same-graph existing routes; sequence profile is independent of gemm.neural_dispatch.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_algos.py"
+        ],
+        "board_lanes": [
+          "lstm-clf",
+          "lstm-reg",
+          "gru-clf",
+          "gru-reg",
+          "rnn-clf",
+          "rnn-reg"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_sequence_tiles"
+      ],
+      "limitations": [
+        "Inherited NVIDIA/AMD route uses size-derived M/N guard; Apple timing does not vote. No classical forecast source or workload is newly changed or claimed."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN14",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Bounded-im2col full Conv2d/CNNClassifier forward/recompute, virtual-im2col dWeight and dInput backward, and reduced saved-column allocation.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "Conv2d.forward/backward; CNNClassifier.fit/predict",
+          "allocation_query": "x_cnn_bounded_im2col()",
+          "saved_cols": "CNNClassifier query allocates one-word unused sentinel under NN14."
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN14_BOUNDED_IM2COL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "Conv2d.forward/backward; CNNClassifier.fit/predict",
+          "allocation_query": "x_cnn_bounded_im2col()",
+          "saved_cols": "CNNClassifier query allocates one-word unused sentinel under NN14."
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "x_cnn/host/gemm_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "caller_paths": [
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "arithmetic_and_host_contract": "Bounded row chunks retain full-K forward GEMM; virtual-operand dW/dInput use selected neural partition/chains/fold on host/device. Saved preactivation, db and resident CNN training consumers are connected.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_algos.py"
+        ],
+        "board_lanes": [
+          "conv2d",
+          "cnn-clf"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance.",
+          "Standalone Conv2d backward requires its own full saved recipe; CNNClassifier resident fit is wired."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_cnn_routes"
+      ],
+      "limitations": [
+        "8 MiB bounds forward cols+y2 except an indivisible row; outputs/gradients/other retained caches are separate, not a total VRAM guarantee.",
+        "NN14 suppresses NN45 epilogue fusion when combined."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN33",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Mamba-2 inherited tiled Ydiag rows8 and Cstate value-width16 geometries.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN33_YDIAG_ROWS8=1",
+          "MOJOLEARN_NN33_CSTATE_P16=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_IDN_M2_SSD_TILES_OFF"
+      ],
+      "implementation_paths": [
+        "mamba/impl/modules/ssd_minimal.mojo",
+        "mamba/host/gen/ssd_minimal.mojo"
+      ],
+      "caller_paths": [
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py",
+        "mamba/impl/modules/mamba2.mojo",
+        "mamba/impl/modules/afn_defines.mojo"
+      ],
+      "arithmetic_and_host_contract": "Ydiag rows8 and Cstate value-width16 are independent geometry arms; old leaves, padding and order retained. Generated host keeps original scalar same-graph kernels.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_neural.py"
+        ],
+        "board_lanes": [
+          "mamba2-forward",
+          "mamba2-infer"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance."
+        ]
+      },
+      "legacy_experiments": [
+        "I08"
+      ],
+      "limitations": [
+        "Requires inherited SSD tiles and 20 KiB resource guard. Rows8 uses 512 lanes; no compilation/resource/runtime evidence claimed."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN34",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Mamba-1 full prefill/decode and zero-state prefill backward affine-prefix numerical profile; public checkpoint and host inference integration.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "Mamba1Block.forward/step/backward; Mamba1DecodeSession; allocate_state/export_state/load_state",
+          "state_metadata": [
+            "profile_id",
+            "absolute_position"
+          ],
+          "candidate_profile_id": 2,
+          "baseline_profile_id": 1,
+          "state_arrays": [
+            "conv_window",
+            "h",
+            "affine_boundary",
+            "affine_a",
+            "affine_b"
+          ],
+          "contract": "experiments/neural_identical_ab/NN34_AFFINE_PREFIX_CONTRACT.md"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN34_AFFINE_PREFIX=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "Mamba1Block.forward/step/backward; Mamba1DecodeSession; allocate_state/export_state/load_state",
+          "state_metadata": [
+            "profile_id",
+            "absolute_position"
+          ],
+          "candidate_profile_id": 2,
+          "baseline_profile_id": 1,
+          "state_arrays": [
+            "conv_window",
+            "h",
+            "affine_boundary",
+            "affine_a",
+            "affine_b"
+          ],
+          "contract": "experiments/neural_identical_ab/NN34_AFFINE_PREFIX_CONTRACT.md"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "mamba/impl/ops/neural_scan_profile.mojo",
+        "mamba/impl/ops/neural_mamba_scan.mojo",
+        "mamba/impl/ops/selective_scan_backward.mojo",
+        "mamba/impl/modeling/modeling_mamba.mojo",
+        "mamba/checks/mamba_oracle.mojo",
+        "mamba/checks/mamba_backward.mojo",
+        "mamba/host/gen/neural_scan_profile.mojo",
+        "mamba/host/gen/neural_mamba_scan.mojo",
+        "mamba/host/gen/selective_scan_backward.mojo",
+        "mamba/host/gen/modeling_mamba.mojo",
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "bindings/_mojolearn_neural_host.mojo",
+        "python/mojolearn/_mamba_impl.py",
+        "experiments/neural_identical_ab/NN34_AFFINE_PREFIX_CONTRACT.md"
+      ],
+      "caller_paths": [
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py",
+        "bindings/_mojolearn_neural_host.mojo",
+        "mamba/impl/modeling/modeling_mamba.mojo",
+        "mamba/checks/mamba_backward.mojo"
+      ],
+      "arithmetic_and_host_contract": "New fp32 profile: absolute32 adjacent prefix-affine trees, six slots per state chain, prefill/decode carry and canonical-tree VJP. Device, direct/generated host and alternate host inference share profile2 state ABI.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_neural.py"
+        ],
+        "board_lanes": [
+          "mamba1-forward",
+          "mamba1-infer"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance.",
+          "Full zero-state backward, checkpoint and resident-decode continuation need declared complete-operation recipes; forward board rows alone do not cover them."
+        ]
+      },
+      "legacy_experiments": [
+        "I09"
+      ],
+      "limitations": [
+        "Backward remains the existing zero-state prefill API; no state cotangent or independent-position carried-ragged API added.",
+        "Each arm creates its own profile1/profile2 state; cross-profile state loading is rejected.",
+        "VJP repeats up to32 prefix trees/chunk. Speed/gradient/quality is unproven."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      },
+      "additional_workloads": [
+        {
+          "operation": "mamba_forward_vjp",
+          "board_lanes": [
+            "mamba1-forward"
+          ],
+          "scope": "Same full saved zero-state Mamba1 input and all parameter/input gradients; no state-cotangent API."
+        }
+      ]
+    },
+    {
+      "id": "NN35",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Mamba-1/2 paired causal-convolution time outputs with shared window loads.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN35_CONV_PAIR=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "mamba/impl/modeling/modeling_mamba.mojo",
+        "mamba/impl/modules/mamba2.mojo",
+        "mamba/host/gen/modeling_mamba.mojo",
+        "mamba/host/gen/mamba2.mojo"
+      ],
+      "caller_paths": [
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py"
+      ],
+      "arithmetic_and_host_contract": "Two independent time outputs reuse window/weight loads while retaining ordered bias-seeded taps, saved preactivation, portable SiLU and original window-state update. Generated host mirrors paired source.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_neural.py"
+        ],
+        "board_lanes": [
+          "mamba1-forward",
+          "mamba1-infer",
+          "mamba2-forward",
+          "mamba2-infer"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance.",
+          "Include affected backward recomputation and odd sequence tails."
+        ]
+      },
+      "legacy_experiments": [
+        "I09"
+      ],
+      "limitations": [],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN36",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Mamba-2 off-diagonal SSD output shares the rounded token/head exp across value channels.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN36_SHARED_DECAY=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "mamba/impl/modules/ssd_minimal.mojo",
+        "tools/mamba_host_gen.py",
+        "mamba/host/gen/ssd_minimal.mojo"
+      ],
+      "caller_paths": [
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py",
+        "mamba/impl/modules/mamba2.mojo"
+      ],
+      "arithmetic_and_host_contract": "Device shares one rounded exp/token/head; generator forces host NN36 false, evaluating identical scalar exp/dot expression per cell. No fold change.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_neural.py"
+        ],
+        "board_lanes": [
+          "mamba2-forward",
+          "mamba2-infer"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance."
+        ]
+      },
+      "legacy_experiments": [
+        "I08"
+      ],
+      "limitations": [],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN37",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Mamba-2 lower-triangle CB task enumeration with explicit upper/padded stage zeroing.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN37_TRIANGLE_TASKS=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_IDN_M2_CB_LOWER_OFF"
+      ],
+      "implementation_paths": [
+        "mamba/impl/modules/ssd_minimal.mojo",
+        "mamba/host/gen/ssd_minimal.mojo"
+      ],
+      "caller_paths": [
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py",
+        "mamba/impl/modules/mamba2.mojo"
+      ],
+      "arithmetic_and_host_contract": "Integer triangular task mapping retains old arithmetic, explicit cb_g clearing preserves upper/padded trace and backward words; generated host shares task/clear contract.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_neural.py"
+        ],
+        "board_lanes": [
+          "mamba2-forward",
+          "mamba2-infer"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance."
+        ]
+      },
+      "legacy_experiments": [
+        "I08"
+      ],
+      "limitations": [
+        "Requires inherited CB lower route. Include full zero-fill launch and traffic in timed boundary."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN38",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Mamba-3 existing angle/dt suffix profile reuses descending chunk-summary seeds before replay.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "operation": "mamba_forward_vjp"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "operation": "mamba_forward_vjp"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF"
+      ],
+      "implementation_paths": [
+        "mamba/impl/modules/mamba3_backward.mojo",
+        "mamba/host/gen/mamba3_backward.mojo"
+      ],
+      "caller_paths": [
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py",
+        "mamba/checks/mamba3_backward.mojo",
+        "python/mojolearn/_samba_impl.py"
+      ],
+      "arithmetic_and_host_contract": "Inherited fixed64 suffix graph already exists. Candidate computes each descending exclusive suffix seed once for identical replay; generated host mirrors in-place seed transformation.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_neural.py"
+        ],
+        "board_lanes": [
+          "mamba3-forward"
+        ],
+        "required_boundary": "Full saved zero-state block forward plus VJP: block.forward(x), block.backward(x,x), synchronized outputs including every gradient. No loss or optimizer in this selected operation.",
+        "coverage_pending": [
+          "Full dataset provenance/dimensions, intrinsic caps and all-column identity/quality/timing not run.",
+          "Separate full-model training quality remains pending; a block forward+VJP operation is not optimizer/training acceptance."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_m3_angle_suffix"
+      ],
+      "limitations": [
+        "Requires inherited angle suffix. This is schedule reuse, not a newly implemented suffix numerical profile."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN39",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Mamba-2 existing fixed256-row conv/A/dt gradient partials merge with one shared adjacent-pair tree.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "operation": "mamba_forward_vjp"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN39_M2_GRAD_TREE=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "operation": "mamba_forward_vjp"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "mamba/impl/ops/neural_gradient_profile.mojo",
+        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "mamba/host/gen/mamba2_ssd_backward.mojo"
+      ],
+      "caller_paths": [
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py",
+        "mamba/checks/mamba2_backward.mojo"
+      ],
+      "arithmetic_and_host_contract": "Existing fixed256-row partials now merge adjacent pairs with odd-tail carry. Device/generated host import shared pure helper for convW/b,A/A_log,dt_bias terminal gradients.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_neural.py"
+        ],
+        "board_lanes": [
+          "mamba2-forward"
+        ],
+        "required_boundary": "Full saved zero-state block forward plus VJP: block.forward(x), block.backward(x,x), synchronized outputs including every gradient. No loss or optimizer in this selected operation.",
+        "coverage_pending": [
+          "Full dataset provenance/dimensions, intrinsic caps and all-column identity/quality/timing not run.",
+          "Separate full-model training quality remains pending; a block forward+VJP operation is not optimizer/training acceptance."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_m2_gradient_leaves"
+      ],
+      "limitations": [
+        "Version-to-version bits intentionally change; other gradient families keep incumbent graph."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN40",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Retained projection workspace headroom plus explicit Mamba-3 immutable snapshot install/update/export and generation-owned fresh forward/backward on GPU and host.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_MAMBA3_LEGACY_SETUP": "0"
+        },
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "Mamba3Block fresh forward/backward",
+          "owned_weights": false,
+          "install": null,
+          "after_parameter_update": null,
+          "release": "block.release_owned_weights()",
+          "export": "block.export_owned_weights()",
+          "metadata": "block.session_info()",
+          "operation": "mamba3_owned_forward",
+          "install_owned_weights": false
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN40_WS_HEADROOM=1",
+          "MOJOLEARN_NN40_OWNED_WEIGHTS=1"
+        ],
+        "environment": {
+          "MOJOLEARN_MAMBA3_LEGACY_SETUP": "0"
+        },
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "Mamba3Block fresh forward/backward",
+          "owned_weights": true,
+          "install": "block.install_owned_weights()",
+          "after_parameter_update": "block.install_owned_weights()",
+          "release": "block.release_owned_weights()",
+          "export": "block.export_owned_weights()",
+          "metadata": "block.session_info()",
+          "operation": "mamba3_owned_forward",
+          "install_owned_weights": true
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF"
+      ],
+      "implementation_paths": [
+        "mamba/impl/modules/idn_gemm_ws.mojo",
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py"
+      ],
+      "caller_paths": [
+        "bindings/_mojolearn_mamba.mojo",
+        "bindings/_mojolearn_mamba_host.mojo",
+        "python/mojolearn/_mamba_impl.py",
+        "python/mojolearn/_samba_impl.py"
+      ],
+      "arithmetic_and_host_contract": "Workspace changes capacity only. Native-owned Mamba3 snapshots use copied weights and explicit generation. Host mirrors ownership and recomputes stages. Ordinary borrowed route retains safe byte comparison.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_neural.py"
+        ],
+        "board_lanes": [
+          "mamba3-forward"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin full input provenance/dimensions and actual intrinsic caps.",
+          "Selected mamba3_owned_forward consumes full saved input; install counted in cold preparation.",
+          "Explicit owned backward/Samba post-update reinstall remains a public API workload requiring a separate saved full training recipe."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_mamba_workspace_sessions"
+      ],
+      "limitations": [
+        "Requires inherited Mamba workspace; generic NN12 controls do not change this custom owner.",
+        "Define alone does not transfer weight ownership; explicit install/reinstall required after each intended update.",
+        "Explicit carried-state/decode retains ordinary weights. Alternate Mamba3BlockInference host binding is outside owned-snapshot scope.",
+        "MOJOLEARN_MAMBA3_LEGACY_SETUP=1 is incompatible. Host reports/info probes now exported; host stage reuse remains zero."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      },
+      "subarms": [
+        {
+          "name": "workspace_headroom",
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_NUMERIC_IDENTICAL=1"
+            ],
+            "environment": {},
+            "runtime": {
+              "numeric_mode": "identical"
+            }
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_NUMERIC_IDENTICAL=1",
+              "MOJOLEARN_NN40_WS_HEADROOM=1"
+            ],
+            "environment": {},
+            "runtime": {
+              "numeric_mode": "identical"
+            }
+          },
+          "scope": "No install API required; Mamba1/2/3 projection workspace.",
+          "board_lanes": [
+            "mamba1-forward",
+            "mamba2-forward",
+            "mamba3-forward"
+          ]
+        },
+        {
+          "name": "owned_weights",
+          "baseline": {
+            "compile_defines": [
+              "MOJOLEARN_NUMERIC_IDENTICAL=1"
+            ],
+            "environment": {
+              "MOJOLEARN_MAMBA3_LEGACY_SETUP": "0"
+            },
+            "runtime": {
+              "numeric_mode": "identical",
+              "owned_weights": false,
+              "operation": "mamba3_owned_forward",
+              "install_owned_weights": false
+            }
+          },
+          "candidate": {
+            "compile_defines": [
+              "MOJOLEARN_NUMERIC_IDENTICAL=1",
+              "MOJOLEARN_NN40_OWNED_WEIGHTS=1"
+            ],
+            "environment": {
+              "MOJOLEARN_MAMBA3_LEGACY_SETUP": "0"
+            },
+            "runtime": {
+              "numeric_mode": "identical",
+              "owned_weights": true,
+              "install": "block.install_owned_weights()",
+              "after_parameter_update": "block.install_owned_weights()",
+              "operation": "mamba3_owned_forward",
+              "install_owned_weights": true
+            }
+          },
+          "scope": "Mamba3Block fresh forward/backward; include snapshot update costs.",
+          "board_lanes": [
+            "mamba3-forward"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "NN41",
+      "implementation_status": "reused_existing",
+      "source_programming_status": "reused_existing_with_identical_scope_fix",
+      "selected_scope": "Existing IDENTICAL whole-sequence LSTM scan and source correction preventing FAST-wide backward from entering IDENTICAL.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_IDN_SEQ_LSTM_SCAN=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE",
+        "MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"
+      ],
+      "implementation_paths": [
+        "sequence/recurrent_scan.mojo",
+        "sequence/recurrent.mojo",
+        "sequence/exec_device.mojo"
+      ],
+      "caller_paths": [
+        "sequence/recurrent.mojo",
+        "sequence/pyapi.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/exec.mojo",
+        "bindings/_mojolearn_x_sequence.mojo",
+        "bindings/_mojolearn_x_sequence_host.mojo",
+        "python/mojolearn/_x_sequence_rnn.py"
+      ],
+      "arithmetic_and_host_contract": "Existing whole-sequence device scan reuses per-step chain; host executor uses original cells. Source fix prevents FAST-wide backward graph entering IDENTICAL.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_algos.py"
+        ],
+        "board_lanes": [
+          "lstm-clf",
+          "lstm-reg",
+          "gru-clf",
+          "gru-reg",
+          "rnn-clf",
+          "rnn-reg"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_recurrent_scan_gradients"
+      ],
+      "limitations": [
+        "Applies for1<=H<=1024 and G*H<=4096; other shapes fall back.",
+        "Inherited FAST quality failure remains: LSTM accuracy0.9608 to0.5002 and R2 0.9804 to-0.1043. No run establishes IDENTICAL cause/quality.",
+        "If team_barrier cannot order device-memory loop stores/loads, wait for documented Modular support. No spin barrier/toolchain workaround."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN42",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Sequence per-step recurrent input-bias materialization fused into gate/hidden operation.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN42_INPUT_BIAS_FUSED=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_IDN_SEQ_LSTM_SCAN"
+      ],
+      "implementation_paths": [
+        "sequence/ops.mojo",
+        "sequence/recurrent.mojo"
+      ],
+      "caller_paths": [
+        "sequence/recurrent.mojo",
+        "sequence/pyapi.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/exec.mojo",
+        "bindings/_mojolearn_x_sequence.mojo",
+        "bindings/_mojolearn_x_sequence_host.mojo",
+        "python/mojolearn/_x_sequence_rnn.py"
+      ],
+      "arithmetic_and_host_contract": "Shared host/device per-step gate body stores same rounded GX+bias before gate consumption; saved derivative intermediates preserved.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_algos.py"
+        ],
+        "board_lanes": [
+          "lstm-clf",
+          "lstm-reg",
+          "gru-clf",
+          "gru-reg",
+          "rnn-clf",
+          "rnn-reg"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_recurrent_scan_gradients"
+      ],
+      "limitations": [
+        "Inactive whenever SEQ_LSTM_SCAN compiled, even runtime shape fallback; NN41+NN42 is not two effective changes."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN43",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Recurrent weight and bias gradients use fixed128-row leaves, with size-derived portable scratch-cap growth.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN43_WGRAD_FIXED128=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"
+      ],
+      "implementation_paths": [
+        "sequence/recurrent.mojo",
+        "sequence/checks/oracle.mojo",
+        "sequence/ops.mojo"
+      ],
+      "caller_paths": [
+        "sequence/recurrent.mojo",
+        "sequence/pyapi.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/exec.mojo",
+        "bindings/_mojolearn_x_sequence.mojo",
+        "bindings/_mojolearn_x_sequence_host.mojo",
+        "python/mojolearn/_x_sequence_rnn.py"
+      ],
+      "arithmetic_and_host_contract": "Fixed128 leaves, incumbent ascending FMA and ascending partial merge; identical portable leaf doubling only when partial count exceeds scratch cap. Shared Exec and oracle source state same graph.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_algos.py"
+        ],
+        "board_lanes": [
+          "lstm-clf",
+          "lstm-reg",
+          "gru-clf",
+          "gru-reg",
+          "rnn-clf",
+          "rnn-reg"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_recurrent_scan_gradients"
+      ],
+      "limitations": [
+        "Requires inherited blocked recurrent gradients; forward-only timing cannot exercise changed weight/bias folds."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN44",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Neural MoE stable expert-local ascending pair grouping and upper-bound expert tile lookup.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {
+          "MOJOLEARN_SEQ_MOE_TILED": "1"
+        },
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN44_STABLE_GROUP=1",
+          "MOJOLEARN_NN44_EXPERT_BISECT=1"
+        ],
+        "environment": {
+          "MOJOLEARN_SEQ_MOE_TILED": "1"
+        },
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "sequence/moe_group.mojo",
+        "sequence/moe_tiled.mojo",
+        "sequence/exec_device.mojo"
+      ],
+      "caller_paths": [
+        "sequence/pyapi.mojo",
+        "sequence/exec_device.mojo",
+        "sequence/exec.mojo",
+        "bindings/_mojolearn_x_sequence.mojo",
+        "bindings/_mojolearn_x_sequence_host.mojo",
+        "python/mojolearn/_x_sequence_moe.py"
+      ],
+      "arithmetic_and_host_contract": "Stable ascending pair grouping and expert binary lookup only change integer scheduling. Original per-pair slots, routing/top-k and weighted combine retained. Host uses original cells and ignores grouped metadata.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_algos.py"
+        ],
+        "board_lanes": [
+          "moe"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance.",
+          "Full MoEBlock.forward includes routing/grouping/hidden/output/combine. Record skew/expert distributions and non-board full workload. Existing public MoE has no backward."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_moe_device_group"
+      ],
+      "limitations": [
+        "Stable grouping O(experts*pairs) may lose.",
+        "Expert bisection needs tiled products; both arms explicitly MOJOLEARN_SEQ_MOE_TILED=1.",
+        "No MoE gradient/training API is claimed."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN45",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "CNN unpooled conv-layout/bias/preactivation/ReLU fusion, with inherited direct convolution continuing its established path.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_XCNN_NO_DIRECT_CONV=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "CNNClassifier.fit/predict",
+          "estimator_settings": {
+            "pool_size": 1
+          }
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_XCNN_NO_DIRECT_CONV=1",
+          "MOJOLEARN_NN45_CONV_RELU=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "CNNClassifier.fit/predict",
+          "estimator_settings": {
+            "pool_size": 1
+          }
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF",
+        "MOJOLEARN_NN14_BOUNDED_IM2COL"
+      ],
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo"
+      ],
+      "caller_paths": [
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "arithmetic_and_host_contract": "Unpooled conv-layout/bias/preactivation/ReLU share host/device element helper. Common NO_DIRECT_CONV keeps both arms on intended epilogue at all shapes.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_algos.py"
+        ],
+        "board_lanes": [
+          "cnn-clf"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance.",
+          "Same explicit pool_size=1 model recipe in both arms; default pooled model may never hit new epilogue. Include fit and held-out predict."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_cnn_routes"
+      ],
+      "limitations": [
+        "Pooled blocks already fuse ReLU/maxpool and do not execute NN45.",
+        "Without common direct-conv control, inherited one-leaf path bypasses NN45; native-default interactions need a separate future A/B.",
+        "NN14 takes precedence and suppresses NN45."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN46",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "CNN col2im and maxpool backward gathers prune impossible taps using exact stride/dilation bounds.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN46_GATHER_BOUNDS=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "x_cnn/ops.mojo"
+      ],
+      "caller_paths": [
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "arithmetic_and_host_contract": "Exact integer gather bounds preserve divisibility, ascending taps and floating operations in col2im/maxpool backward, including NN14 virtual dInput. Host optimized plane routines may keep full old ranges with same arithmetic.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_algos.py"
+        ],
+        "board_lanes": [
+          "cnn-clf",
+          "conv2d",
+          "maxpool2d"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance.",
+          "Layer forward-only rows insufficient: choose full backward or CNN training."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_cnn_routes"
+      ],
+      "limitations": [
+        "Reverse sabotage retains full bounds; no host scheduling speedup claimed.",
+        "No new dWeight tree or shared gather tile selected."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN47",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "CNN training batchnorm apply also owns running-stat updates once/channel; statistics unchanged.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "BatchNorm1d/BatchNorm2d and affected ResNet blocks",
+          "training": true
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN47_APPLY_RUNNING=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "BatchNorm1d/BatchNorm2d and affected ResNet blocks",
+          "training": true
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "x_cnn/ops.mojo",
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo"
+      ],
+      "caller_paths": [
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "arithmetic_and_host_contract": "Training BN apply/running update share one launch; first image/pixel per channel owns state update after existing statistics. Host/device share centered variance/momentum/epsilon seams.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_algos.py"
+        ],
+        "board_lanes": [
+          "batchnorm1d",
+          "batchnorm2d",
+          "resnet-block"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Pin saved dataset/version/hash, actual full dimensions, settings, intrinsic caps, and full timed boundary. Forward-only/component cells do not establish backward/training acceptance.",
+          "Enable training and consume running state/backward saved statistics; eval-only cannot execute this arm."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_batchnorm_apply_stats"
+      ],
+      "limitations": [
+        "Evaluation and existing moment reductions unchanged; no raw-moment variance."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    },
+    {
+      "id": "NN48",
+      "implementation_status": "wired_draft",
+      "source_programming_status": "selected_arm_wired_source_uncompiled",
+      "selected_scope": "Neural weighted/mean/inverse/normalized CSR SpMM shares index/value tiles across feature lanes.",
+      "baseline": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "GCNConv.forward/backward; GraphSAGE mean forward/backward"
+        }
+      },
+      "candidate": {
+        "compile_defines": [
+          "MOJOLEARN_NUMERIC_IDENTICAL=1",
+          "MOJOLEARN_NN48_CSR_TILES=1"
+        ],
+        "environment": {},
+        "runtime": {
+          "numeric_mode": "identical",
+          "api": "GCNConv.forward/backward; GraphSAGE mean forward/backward"
+        }
+      },
+      "required_absent_defines": [
+        "MOJOLEARN_IDN_ALL_OFF"
+      ],
+      "implementation_paths": [
+        "x_cnn/device.mojo",
+        "x_cnn/ops.mojo"
+      ],
+      "caller_paths": [
+        "x_cnn/device.mojo",
+        "x_cnn/host/ops_host.mojo",
+        "bindings/_mojolearn_x_cnn.mojo",
+        "bindings/_mojolearn_x_cnn_host.mojo",
+        "python/mojolearn/_expansion_cnn.py"
+      ],
+      "arithmetic_and_host_contract": "GPU stages32 CSR columns/weights over128-feature tiles; weighted/mean/inverse/normalized-backward modes retain ordered edges and pinned operations. Host same-graph per-cell implementation retained.",
+      "full_workload_selection": {
+        "recipe_paths": [
+          "experiments/performance_ideas/README.md",
+          "tools/bench_board_algos.py"
+        ],
+        "board_lanes": [
+          "gcn",
+          "graphsage"
+        ],
+        "required_boundary": "Complete preparation, fit/training or forward as affected, required synchronization and consumed outputs; cold/repeated/inference separately.",
+        "coverage_pending": [
+          "Full saved graph provenance, actual graph/dataset caps and neighboring/non-board full workloads must be recorded.",
+          "Existing layer fit calls forward and backward; transpose/degree consumers remain inside declared fit boundary.",
+          "GraphSAGE recipe already uses aggr=mean; max is excluded."
+        ]
+      },
+      "legacy_experiments": [
+        "existing_neural_csr"
+      ],
+      "limitations": [
+        "GraphSAGE max excluded. Include zero-degree nodes and tails.",
+        "No classical graph/PageRank source changed."
+      ],
+      "acceptance": {
+        "compilation": "not_run_by_request",
+        "verification": "not_run_by_request",
+        "identity": "not_run_by_request",
+        "quality": "not_run_by_request",
+        "timing": "not_run_by_request"
+      }
+    }
+  ],
+  "compilation": "not_run_by_request",
+  "verification": "not_run_by_request",
+  "identity": "not_run_by_request",
+  "quality": "not_run_by_request",
+  "timing": "not_run_by_request",
+  "harness_integration": {
+    "path": "tools/bench_board_algos.py",
+    "argument": "race/worker --neural-ab-config PATH",
+    "schema": 1,
+    "accepted_execution_runtime": {
+      "numeric_mode": "identical",
+      "operation": "model_default only in algos",
+      "estimator_settings.pool_size": "positive integer, cnn-clf only; NN45 requires 1 in both arms",
+      "training": "boolean, batchnorm1d/batchnorm2d/resnet-block only",
+      "graphsage_aggregator": "mean, graphsage only"
+    },
+    "behavior": [
+      "Copies selected neural descriptor, updates both ours/opponents, preserves dataset sources/shapes/caps.",
+      "Frozen config and requested flags in result/worker metadata, no binary acceptance implied.",
+      "Environment/unset propagated; explicit IDENTICAL; refuses classical lanes, ours-fast and smoke-row caps.",
+      "Uses existing whole-operation timing; compilation/identity/quality evidence remains separate."
+    ],
+    "execution": "not_run_by_request"
+  }
+}

@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "id": "C12",
+  "title": "Sparse exact classification counts before dense output",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "x_metrics/plan.mojo",
+    "x_metrics/par.mojo",
+    "x_metrics/group.mojo",
+    "x_metrics/units.mojo",
+    "experiments/classical_identical_ideas/metric_workloads.py"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "All confusion and averaging outputs, absent classes, high class counts, integer overflow/refusal and warning cells.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C12",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C12",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C12",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C12",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C12",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/shared_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/shared_controls.mojo"
+  ],
+  "default_configuration": "sparse_counts",
+  "configurations": {
+    "sparse_counts": {
+      "name": "sparse_counts",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C12"
+      ],
+      "source_gaps": [
+        "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+        "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending."
+      ],
+      "scope": [
+        "confusion_matrix",
+        "classification_report",
+        "precision_recall_fscore_support",
+        "other integer grouped-count metric preparation"
+      ],
+      "adapter": "classical_classification_report",
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "expanded:sgd-clf@classification_report",
+        "expanded:gaussian-nb",
+        "expanded:categorical-nb"
+      ]
+    }
+  },
+  "source_gaps": [
+    "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+    "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending."
+  ],
+  "catalog_estimators": [
+    "Confusion matrix",
+    "precision/recall/F-score",
+    "class-count preparation"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "expanded:sgd-clf@classification_report",
+    "expanded:gaussian-nb",
+    "expanded:categorical-nb"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

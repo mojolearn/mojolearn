@@ -61,14 +61,25 @@ def build(inventory, index):
                 raise ValueError('Both artifact hashes are required')
             cell['candidate_over_baseline'] = cell['candidate_ms'] / cell['baseline_ms']
         else:
-            # Interrupted/failed attempts retain diagnostics, never a speed ratio.
+            # A completed pair rejected by quality may retain observed times,
+            # clearly separated from admitted performance or default decisions.
+            cell.pop('unqualified_timing', None)
+            if (cell.get('execution_status') == 'MEASURED_FULL'
+                    and cell.get('warmups') == 1 and cell.get('scored_samples') == 1
+                    and positive(cell.get('baseline_ms')) and positive(cell.get('candidate_ms'))):
+                cell['unqualified_timing'] = {
+                    'baseline_ms': cell['baseline_ms'], 'candidate_ms': cell['candidate_ms'],
+                    'observed_candidate_over_baseline': cell['candidate_ms'] / cell['baseline_ms'],
+                    'qualification': 'Observed only; not admitted and not a default decision'}
+            # Interrupted attempts never receive an inferred timing or ratio.
             cell.pop('baseline_ms', None)
             cell.pop('candidate_ms', None)
         cards[cell['id']]['cells'].append(cell)
     for card in cards.values():
         card['status'] = status(card['cells'])
     return {'schema': 'mojolearn.performance-measurement-board/1', 'campaign': inventory['campaign'],
-            'identity_policy': 'Previously validated; no separate retest by owner instruction',
+            'identity_policy': inventory.get('identity_policy', 'Previously validated; no separate retest by owner instruction'),
+            'evidence_policy': inventory.get('evidence_policy', 'One excluded warmup and one scored sample. Identity and compilation are reused; no separate retests.'),
             'promotion': False, 'machines': index.get('machines', []),
             'cards': list(cards.values()), 'notes': index.get('notes', []),
             'decisions': index.get('decisions', [])}
@@ -92,26 +103,55 @@ def write(board, out):
         temp.write_text(json.dumps(data, indent=2, allow_nan=False) + '\n')
         temp.replace(target)
         lines = ['# Candidate A/B measurements', '',
-                 'One excluded warmup and one scored sample. Identity and compilation are reused; no separate retests.',
+                 data.get('evidence_policy', 'One excluded warmup and one scored sample. Identity and compilation are reused; no separate retests.'),
                  'Component and public-caller fixtures retain their stated scope. Full-workload results and opponent comparisons require their own measurements. Default decisions are recorded beside source toggles; this board does not change them.', '',
                  '| Candidate | Mode | Measurement status | Captured pairs |', '|---|---|---|---:|']
         for card in data['cards']:
-            measured = sum(c['status'] == 'MEASURED' for c in card['cells'])
+            # Completed execution and admission are separate. A retained full
+            # pair can still fail quality or await identity; the status column
+            # keeps that limitation visible without claiming no data exists.
+            measured = sum(c['status'] == 'MEASURED' or
+                           (c.get('execution_status') == 'MEASURED_FULL' and
+                            c.get('warmups') == 1 and c.get('scored_samples') == 1)
+                           for c in card['cells'])
             lines.append(f"| {card['id']} | {card['mode']} | {escape(card['status'])} | {measured} |")
         lines += ['', '## Captured evidence', '',
-                  '| Candidate | Vendor / route | Case | Scope | Status | B/A time | Evidence |',
-                  '|---|---|---|---|---|---:|---|']
+                  'Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.', '',
+                  '| Candidate | Vendor / route | Case | Scope | Status | Admitted A/B | Observed A/B | Evidence |',
+                  '|---|---|---|---|---|---:|---:|---|']
         for card in data['cards']:
             for cell in card['cells']:
                 ratio = cell.get('candidate_over_baseline')
+                observed = cell.get('unqualified_timing', {}).get('observed_candidate_over_baseline', ratio)
                 values = [card['id'], cell['vendor'] + '/' + cell.get('route', 'default'), cell.get('case', ''),
-                          cell.get('scope', ''), cell['status'], f'{ratio:.4f}' if ratio is not None else '—', cell.get('evidence', '')]
+                          cell.get('scope', ''), cell['status'], f'{ratio:.4f}' if ratio is not None else '—',
+                          f'{observed:.4f}' if observed is not None else '—', cell.get('evidence', '')]
                 lines.append('| ' + ' | '.join(map(escape, values)) + ' |')
         lines += ['', '## Campaign notes', ''] + ['- ' + escape(n) for n in data['notes']]
         if data['decisions']:
             lines += ['', '## Recorded source decisions', '', '| Candidate / arm | Decision | Source commit | Evidence |', '|---|---|---|---|']
             for decision in data['decisions']:
                 lines.append('| ' + ' | '.join(escape(decision.get(k, '')) for k in ['candidate', 'decision', 'commit', 'evidence']) + ' |')
+        failures = [(card, cell) for card in data['cards'] for cell in card['cells']
+                    if cell['status'] in ('QUALITY_FAILED', 'FAILED_OR_INCOMPLETE', 'FAILED', 'REJECTED')]
+        lines += ['', '## Failed or quality-rejected attempts', '',
+                  'Original attempts remain visible after repairs. A quality failure may have complete timings; those are observations, not admitted gains. Interrupted or failed executions have no valid pair timing.', '']
+        if failures:
+            lines += ['| Candidate | Vendor / case | Outcome / reason | Worker exits | Samples A; B (warmup/scored) | Observed A/B time | Evidence |',
+                      '|---|---|---|---|---|---:|---|']
+            for card, cell in failures:
+                timing = cell.get('unqualified_timing', {})
+                ratio = timing.get('observed_candidate_over_baseline')
+                samples = cell.get('actual_sample_counts', {})
+                sample_text = '; '.join(f"{a}: {samples.get(a, {}).get('warmup', 0)}/{samples.get(a, {}).get('scored', 0)}" for a in ('A', 'B')) if samples else 'not recorded'
+                reasons = cell.get('quality_reason') or '; '.join(cell.get('failure_reasons', [])) or cell['status']
+                observed = f"{ratio:.4f} ({timing['candidate_ms']/1000:.4f}s / {timing['baseline_ms']/1000:.4f}s)" if ratio is not None else '—'
+                values = [card['id'], cell['vendor'] + ' / ' + cell.get('case', ''),
+                          cell['status'] + ': ' + reasons, cell.get('worker_returncodes', []),
+                          sample_text, observed, cell.get('evidence', '')]
+                lines.append('| ' + ' | '.join(map(escape, values)) + ' |')
+        else:
+            lines.append('No failed or quality-rejected attempts recorded for this scope.')
         target = out / (name + '.md')
         temp = target.with_suffix('.tmp')
         temp.write_text('\n'.join(lines) + '\n')

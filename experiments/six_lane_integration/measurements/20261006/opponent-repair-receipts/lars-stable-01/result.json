@@ -1,0 +1,195 @@
+{
+  "race": "algos/lars-stable/istella/rows=full",
+  "arm": "sklearn-cpu",
+  "allocation_seconds": 300.0,
+  "retry_of": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-repair-2h/attempt-01/cells/cell-04/result.json",
+  "retry_of_status": "FAILED_INCOMPLETE_COVERAGE",
+  "retry_of_sha256": "8e16833d857983da83a5d6a5689a22c3f8584ddf33df43e8243dbe5bff3af145",
+  "inherited_deadline_at": 1791302944.6742442,
+  "source_sha": "b1b1862a41789bec945423f9ea95ea3da2aa3290",
+  "returncode": 3,
+  "recipe_change": {
+    "original_race": "algos/lars/istella/rows=full",
+    "eps_before": 2.220446049250313e-16,
+    "eps_after": 1.4901161193847656e-08,
+    "scope": "Separate opt-in recipe; historical LARS unchanged"
+  },
+  "command": [
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "-u",
+    "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/source-b1b1862a/experiments/performance_ideas/apple_repair_20261006/lars_stable_board.py",
+    "--vendor",
+    "apple",
+    "--modes",
+    "identical",
+    "--families",
+    "algos",
+    "--rows",
+    "full",
+    "--rounds",
+    "1",
+    "--python-env",
+    "/Users/ec2-user/mojolearn-full-f867b50e8/venv/bin/python",
+    "--skip-install",
+    "--no-smoke-gate",
+    "--opponents-only",
+    "--skip-failed",
+    "--round-seconds",
+    "299",
+    "--cache",
+    "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/lars-stable-01/attempt/cache",
+    "--algos-data",
+    "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/apple-opponent-tail/data",
+    "--data-root",
+    "/Users/ec2-user/datasets/gbm-bench",
+    "--opponent-store",
+    "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/lars-stable-01/attempt/opponent-store.jsonl",
+    "--out",
+    "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/lars-stable-01/attempt/board"
+  ],
+  "effective_allowance_seconds": 299.8166630268097,
+  "cell_started_at": 1791302644.8575811,
+  "cell_deadline_at": 1791302944.6742442,
+  "elapsed_seconds": 8.036923885345459,
+  "killed_owned_pids": [],
+  "status": "FAILED",
+  "race_status": "done",
+  "cells": [
+    {
+      "arm": "sklearn-cpu",
+      "comparability": {
+        "span": {
+          "input_home": "host",
+          "inside_clock": "fit(X, y)",
+          "pre_clock_fit": false,
+          "upload_ms_untimed": null
+        },
+        "span_asymmetry": []
+      },
+      "dataset": "istella",
+      "device": "cpu",
+      "device_name": "arm",
+      "family": "algos",
+      "hash": "e00ab64bda607f30",
+      "hash_stable": null,
+      "lane": "lars-stable",
+      "library": "scikit-learn",
+      "library_version": "1.7.2",
+      "max_ms": 1111.309832893312,
+      "median_ms": 1111.309832893312,
+      "memory": {
+        "children_mb": 1.7,
+        "gpu_method": "cpu arm: no device memory",
+        "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+        "peak_gpu_mb": null,
+        "peak_host_mb": 9213.3,
+        "rounds_sampled": 1,
+        "warmup_gpu_mb": null,
+        "warmup_host_mb": 9195.4
+      },
+      "min_ms": 1111.309832893312,
+      "mode": "opponent",
+      "neural_shape": null,
+      "operations": [
+        {
+          "dataset_load_included": false,
+          "fresh_process": false,
+          "ms": 1203.2029579859227,
+          "preparation_ms": 0.0017499551177024841,
+          "round": 0,
+          "scope": "call-consume",
+          "startup_probe_preparation_excluded": true,
+          "warmup": true
+        },
+        {
+          "dataset_load_included": false,
+          "fresh_process": false,
+          "ms": 1190.2730000438169,
+          "preparation_ms": 0.00400003045797348,
+          "round": 1,
+          "scope": "call-consume",
+          "startup_probe_preparation_excluded": true,
+          "warmup": false
+        }
+      ],
+      "params": {
+        "library": "sklearn",
+        "params": {
+          "eps": 1.4901161193847656e-08,
+          "fit_intercept": true,
+          "precompute": "auto",
+          "seed": 7
+        },
+        "source": "get_params"
+      },
+      "peak_gpu_mb": null,
+      "peak_host_mb": 9213.3,
+      "quality": {
+        "finite": true,
+        "r2": -2.0354618272041775e+27,
+        "rmse": 37646681816235.69
+      },
+      "ratio_ours_fast_over": null,
+      "ratio_ours_identical_over": null,
+      "rounds": 1,
+      "rows": null,
+      "rows_tag": "full",
+      "settings": {
+        "config": "the board's own settings (no NVIDIA harness entry)",
+        "driver": "tools/bench_board_algos.py",
+        "interleaved": true,
+        "lane_config": {
+          "block": "reg",
+          "cuml": "cuml.experimental.linear_model:Lars",
+          "datasets": [
+            "taxi",
+            "istella"
+          ],
+          "expansion_lane": "linear",
+          "kind": "est",
+          "mismatches": [],
+          "notes": [
+            "Opt-in stabilization experiment: eps=sqrt(binary64 machine epsilon) on every arm; original lars recipe and failure evidence remain unchanged. Require finite held-out quality and R2 >= 0 (constant-mean baseline) before accepting this experiment's quality; no default promotion."
+          ],
+          "ours_class": "mojolearn.Lars",
+          "params": {
+            "eps": 1.4901161193847656e-08,
+            "fit_intercept": true,
+            "n_nonzero_coefs": 500,
+            "random_state": 7
+          },
+          "quality": "held-out R2 and RMSE",
+          "sklearn": "sklearn.linear_model:Lars",
+          "task": "reg",
+          "timed_fit": "fit(X, y)",
+          "timed_infer": "predict(Xq)"
+        },
+        "rounds": 1,
+        "rows_cap": null,
+        "seed": 7,
+        "warmup_rounds": 1
+      },
+      "shape": "X 2043304x220; Xq 500000x220; y 2043304; yq 500000",
+      "source": "measured this run",
+      "state_receipts": [
+        {
+          "model": {
+            "class": "Lars",
+            "reason": "opponent model export is not normalized",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "output_sha256": "21c790548fa4eecbef5df38fab357698e651dfed65beb6f1fb2429eb689c7441",
+          "output_status": "ok",
+          "schema": "mojolearn-scored-receipt/1"
+        }
+      ],
+      "status": "ok",
+      "times_ms": [
+        1111.309832893312
+      ],
+      "verdict": "LIKE-FOR-LIKE-SPAN",
+      "warmup_ms": 1111.0799589660019
+    }
+  ]
+}

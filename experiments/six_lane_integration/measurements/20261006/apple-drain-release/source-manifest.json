@@ -1,0 +1,28 @@
+{
+  "recorded_at": "2026-10-06T19:12:53.269211+00:00",
+  "files": [
+    {
+      "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/drain-release.py",
+      "retained": "experiments/six_lane_integration/measurements/20261006/apple-drain-release/drain-release.py",
+      "sha256": "d121cdb6d6ce083832897e2128b242e43c2e6e4228a322bee869cf06ce16f510",
+      "bytes": 13053
+    },
+    {
+      "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/drain-reservation.py",
+      "retained": "experiments/six_lane_integration/measurements/20261006/apple-drain-release/drain-reservation.py",
+      "sha256": "8405cc39b525698bd3b27a44b8da534d13adbeabf076a3758e03eeef0d6a0c5d",
+      "bytes": 2260
+    }
+  ],
+  "status_at_capture": {
+    "status": "WAITING_FOR_DRAIN",
+    "pid": 67584,
+    "instance": "i-072d21866d8b37fbd",
+    "host": "h-04545dd0c2d7a2870",
+    "config_sha256": "9db2847d9a06cccc580aa5a12f5309cd5450856b91f248c39ef9d1cabe028226",
+    "resource_actions": []
+  },
+  "live_status": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/drain-release/status.json",
+  "policy": "Drain prepared frozen queues, capture immutable metadata snapshot with verified hashes, retain both EBS volumes, then terminate owned instance and release exact dedicated host. New registered ready successor queues extend drain. No numerical work.",
+  "storage": "Retained EBS volumes continue separate storage charges."
+}

@@ -1,0 +1,260 @@
+{
+  "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-nb-lda-quality-diagnosis/DIAGNOSIS.json",
+  "source_sha256": "e1b0ce1e5aa88ef1234fe7095c5237fc5ca3b6049f8cf90e5fe809c6241cb315",
+  "report": {
+    "schema": 1,
+    "recorded_utc": "2026-10-06T20:12:24.791900+00:00",
+    "scope": "Retained-receipt and exact-source inspection only. No builds, imports, models, runtime tests, quality recomputation, identity verification, measurements, gate edits or freeze mutations.",
+    "decision": "KEEP_BOTH_RETAINED_COMBINED_CONFIG_QUALITY_FAILURES; NO_ESTABLISHED_IMPLEMENTATION_OR_HARNESS_BUG; NO_SOURCE_REPAIR",
+    "source_sha_executed_harness": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+    "source_sha_retained_x_prep_binaries": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+    "binary_provenance": "Recorded loaded x_prep hashes match retained build-ledger entries. Six reviewed Mojo source/control files have no Git diff between these commits. This is source inspection, not a new full closure/build/identity attestation.",
+    "cases": [
+      {
+        "lane": "gaussian-nb",
+        "workload": "expanded:gaussian-nb@dataset=taxi@input=classification-full-v1",
+        "dataset": "taxi",
+        "mode": "identical",
+        "vendor": "nvidia",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/3643733e60c05588ed87/attempts/attempt-0001/receipt.json",
+        "receipt_sha256": "6123620f0c5280ce4e77e0b5d28a1b9b02eb361ca927365433d860e78a10b5c7",
+        "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+        "dimensions": {
+          "X": [
+            4110786,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            4110786
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+        "returncodes": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "sample_counts": {
+          "A": {
+            "excluded_warmups": 1,
+            "scored": 1
+          },
+          "B": {
+            "excluded_warmups": 1,
+            "scored": 1
+          }
+        },
+        "metrics": {
+          "A": {
+            "accuracy": 0.71871,
+            "logloss": 1.176889445295522
+          },
+          "B": {
+            "accuracy": 0.720538,
+            "logloss": 1.1408800529981222
+          }
+        },
+        "candidate_vs_baseline": {
+          "verdict": "WORSE",
+          "metrics": {
+            "accuracy": [
+              "WORSE",
+              0.71871,
+              0.720538,
+              -0.0025369931911988705
+            ],
+            "logloss": [
+              "WORSE",
+              1.176889445295522,
+              1.1408800529981222,
+              -0.030597090016690344
+            ]
+          },
+          "unknown": [],
+          "worst": -0.030597090016690344
+        },
+        "quality_assessment": "QUALITY_FAILED",
+        "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+        "output_sha256": {
+          "A": "4fabad32816b7ed67d631eb8cd84e3c36b65bc22320d736b6a767f23ed1a155b",
+          "B": "3429c107d12e4f9acf268904653158c4c146846c8aa84af670b391e6dae16b6f"
+        }
+      },
+      {
+        "lane": "lda-clf",
+        "workload": "expanded:lda-clf@dataset=istella@input=classification-full-v1",
+        "dataset": "istella",
+        "mode": "identical",
+        "vendor": "nvidia",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1/da04cf28502e3d16dc99/attempts/attempt-0001/receipt.json",
+        "receipt_sha256": "46a7e514084b1230b2dfe157c9c0e5ea06ed8d96f3110d645c22144885fdaee9",
+        "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+        "returncodes": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "sample_counts": {
+          "A": {
+            "excluded_warmups": 1,
+            "scored": 1
+          },
+          "B": {
+            "excluded_warmups": 1,
+            "scored": 1
+          }
+        },
+        "metrics": {
+          "A": {
+            "accuracy": 0.912628,
+            "logloss": 0.23408621803587862
+          },
+          "B": {
+            "accuracy": 0.913584,
+            "logloss": 0.23366145305870906
+          }
+        },
+        "candidate_vs_baseline": {
+          "verdict": "WORSE",
+          "metrics": {
+            "accuracy": [
+              "WORSE",
+              0.912628,
+              0.913584,
+              -0.0010464281335924852
+            ],
+            "logloss": [
+              "WORSE",
+              0.23408621803587862,
+              0.23366145305870906,
+              -0.0018145663624863958
+            ]
+          },
+          "unknown": [],
+          "worst": -0.0018145663624863958
+        },
+        "quality_assessment": "QUALITY_FAILED",
+        "reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+        "output_sha256": {
+          "A": "912e64be7735c13bf011ec218269ba074c0df675c551f0f7d83df50938e51b21",
+          "B": "814362ea3d0d63dda2b74211d4031a49931caa478f2e14f16a55f71bfa70e7f0"
+        }
+      }
+    ],
+    "retained_pair_metadata": [
+      {
+        "lane": "gaussian-nb",
+        "matches": {
+          "source_sha": true,
+          "dataset_sha256": true,
+          "dataset_version": true,
+          "dataset_split": true,
+          "dimensions": true,
+          "estimator_settings": true,
+          "harness_sha256": true,
+          "seed": true,
+          "sample_counts": true
+        }
+      },
+      {
+        "lane": "lda-clf",
+        "matches": {
+          "source_sha": true,
+          "dataset_sha256": true,
+          "dataset_version": true,
+          "dataset_split": true,
+          "dimensions": true,
+          "estimator_settings": true,
+          "harness_sha256": true,
+          "seed": true,
+          "sample_counts": true
+        }
+      }
+    ],
+    "retained_x_prep_builds": [
+      {
+        "key": "a15415b902bdd9450e0d",
+        "source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+        "artifact": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/runpod-nvidia/attempt-2/complete-freeze-7/evidence-freeze-7b/part-0/a15415b902bdd9450e0d/_mojolearn_x_prep.so",
+        "artifact_sha256": "e594a055b3b2e4c800505181effad731baf714cd437c7079f80a21e1eeca7314",
+        "receipt": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/runpod-nvidia/attempt-2/complete-freeze-7/evidence-freeze-7b/part-0/a15415b902bdd9450e0d/receipt.json",
+        "mode": "identical",
+        "status": "COMPILED"
+      },
+      {
+        "key": "c9b8aa15de2c725a744c",
+        "source_sha": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+        "artifact": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/runpod-nvidia/attempt-2/complete-freeze-7/evidence-freeze-7b/part-2/c9b8aa15de2c725a744c/_mojolearn_x_prep.so",
+        "artifact_sha256": "fb2910fdf68c27851ff32a2f29e0c21b1366d0f3fe0b9dd8b4f7d37161d1cb41",
+        "receipt": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/runpod-nvidia/attempt-2/complete-freeze-7/evidence-freeze-7b/part-2/c9b8aa15de2c725a744c/receipt.json",
+        "mode": "identical",
+        "status": "COMPILED"
+      }
+    ],
+    "primary_source_explanation": {
+      "candidate": "I.C.C55 (original C55), class_group arm, MOJOLEARN_CLASSICAL_C55_CLASS_GROUP",
+      "control": "shared_controls.mojo:27 -> bindings/_mojolearn_x_prep.mojo:319 bit 2 -> _classical_shared -> _class_stats:2608",
+      "A": "C55 bypasses blocked scheduling and dispatches class_stats/group. One feature task per eight-class tile accumulates each class in ascending row order with Float32 sums, then a second centered variance pass where requested.",
+      "B": "Incumbent MOJOLEARN_XPREP_BLOCKED and IDENTICAL IDN_STATS_BLOCKED / IDN_CLASS_ONEPASS remain enabled. Uses 2048-row partials and then a partial fold; B is not an artificial all-switches-off implementation.",
+      "GaussianNB": "fit -> _class_stats -> class_stats_group_unit affects theta_ and var_. Global variance for epsilon remains _col_stats/colb_* on both arms.",
+      "LDA_svd": "fit -> _cls -> _class_stats affects class means, then centering, standard deviations, Gram matrix, eigendecompositions and coefficients. Its binary 2-class block table fits the existing limit.",
+      "numerical_inference": "Long Float32 class chains have different rounding from the incumbent blocked chains and can change fitted parameters and downstream predictions. This mechanism is consistent with the retained losses; no isolated run or retained complete state proves it is the unique cause.",
+      "contract": "shared_implementation.json explicitly calls this a versioned shared serial class profile that changes arithmetic from the incumbent blocked profile on all vendors and host. A != B is allowed for IDENTICAL; across-vendor identity within each arm is a separate unmet requirement.",
+      "static_correctness_review": "For these unweighted binary tasks, grouped tasks have disjoint output ownership, Int counts, and two-pass centered population variance; no demonstrated indexing, count, weighting or variance-formula defect found."
+    },
+    "other_controls_and_coverage": [
+      "C56 changes LDA decision_function only; this frozen classifier runner calls predict and predict_proba. C56 source reach is missing in this recipe and it cannot be qualified by this result.",
+      "C04 changes LDA transform; this recipe does not call transform. Do not attribute this classifier failure to C04 or claim its coverage.",
+      "C01 leaf64 is wired into metrics/decomposition/core reductions, not these x_prep class/column-statistics stages; its manifest explicitly leaves non-decomposition column-statistic consumers unmigrated.",
+      "C58_SHARED_PREP controls Holt-Winters source, not GaussianNB or LDA despite the word prep.",
+      "All other combined-configuration arms require their own applicable evidence. These two failures do not individually reject every define in the combined bundle."
+    ],
+    "harness_review": [
+      "Retained A/B receipts agree on source SHA, dataset hash/version/split, dimensions, estimator settings, harness hash, seed and sample counts. Each pair has one excluded warmup and one scored execution per arm; all four return codes are zero.",
+      "Frozen bench_board_algos classifier path fits once, calls predict and predict_proba, consumes binary class-one probabilities and saved held-out accuracy/logloss. No source mismatch or changed opponent/estimator setting established.",
+      "Existing af_quality.py:115 uses relative tolerance 1e-3 / absolute 1e-6. Preserve the retained WORSE/QUALITY_FAILED judgments; no gates or saved measurements were recomputed or edited."
+    ],
+    "limitations": [
+      "The measured arm is the entire combined configuration, not an isolated C55 arm.",
+      "Complete model state is unavailable in both receipts; output hashes do not establish model-state identity or root cause.",
+      "No runtime branch trace proves individual-control reach. Reach statements here are source-based.",
+      "No cross-vendor A identity, cross-vendor B identity, new qualification or promotion claim."
+    ],
+    "next_steps_for_coordinator": [
+      "Retain both original failures and leave the combined candidate unaccepted for these cases; keep unproven switches off.",
+      "No source patch is warranted merely to force a quality pass. A blocked class-group variant could be a separate deliberately specified candidate, with new source/compilation/qualification evidence only when authorized.",
+      "If later authorized, isolate C55 on these unchanged full-workload recipes and capture class counts/means/variances, smoothing and LDA coefficients/state. No such run is scheduled here.",
+      "Keep C56 decision_function and C04 transform coverage pending rather than altering this classifier race."
+    ],
+    "source_changes": [],
+    "new_builds": 0,
+    "new_model_runs": 0,
+    "new_quality_evaluations": 0
+  }
+}

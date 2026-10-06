@@ -9,6 +9,7 @@ Float64 in the same order. So the IDENTICAL words are the Python driver's on
 every column. The GPU binding runs x_decomp/ica_dev.mojo, the same
 statements on resident matrices."""
 from std.math import sqrt
+from experiments.classical_identical_ideas.linear_controls import C27_COMPONENTS
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from x_decomp.api import _f, _n
@@ -47,6 +48,11 @@ def sym_decorrelation[E: Exec](k: Kit[E], W: Mat) raises -> Mat:
 def ica_g[E: Exec](k: Kit[E], Y: Mat, fun: Int, alpha: Float64, mut gp: Mat) raises -> Mat:
     """`FastICA._g`: gx returned, gp = the row means of g'(Y).
     fun 0 logcosh (alpha), 1 exp, 2 cube."""
+    comptime if C27_COMPONENTS:
+        var g1 = Mat(0, 0)
+        var gx = k.classical_contrast(Y, fun, alpha, g1)
+        gp = k.ew1(OP_SCALE, k.rowsum(g1), 1.0 / Float64(Y.c))
+        return gx^
     var gx: Mat
     var g1: Mat
     if fun == 0:

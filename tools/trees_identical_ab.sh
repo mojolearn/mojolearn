@@ -16,6 +16,15 @@
 #   sh tools/trees_identical_ab.sh rfgate <set> [extra -D defines]
 #       ensemble/checks/rf_perf_candidates_check.mojo under the identical define
 set -u
+# Source-only discovery is usable from a local checkout; it must precede the
+# pod paths, vendor probes and all historical build/run commands below.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+case "${1:-}" in
+    ideas-list|ideas-show|ideas-plan|ideas-matrix|ideas-run)
+        _ideas_cmd=${1#ideas-}; shift
+        exec "${MOJOLEARN_SPEED_PY:-python3}" "$(dirname "$0")/trees_identical_ideas.py" "$_ideas_cmd" "$@"
+        ;;
+esac
 ROOT=/root/mojolearn
 OUT=/root/trees_out
 BINS=/root/bins
@@ -47,6 +56,7 @@ cmd_build() {
         gbdt) _script=bindings/build_gbdt.sh; _so=_mojolearn_gbdt.so ;;
         rf) _script=bindings/build_rf.sh; _so=_mojolearn_rf.so ;;
         trees) _script=bindings/build_trees.sh; _so=_mojolearn_trees.so ;;
+        xtrees) _script=bindings/build_x_trees.sh; _so=_mojolearn_x_trees.so ;;
         # The isolation forest lives in the svm extension (bindings/build_svm.sh,
         # lane forest-speed 2026-09-11); that script reads MOJOLEARN_BUILD_EXTRA_DEFINES.
         svm) _script=bindings/build_svm.sh; _so=_mojolearn_svm.so ;;

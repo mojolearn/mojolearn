@@ -43,6 +43,15 @@ from checks.soft_f64 import (
 )
 from x_metrics.common import FP, IP, p, ld, ldi, sti
 from x_metrics.tail import st64, ld64, is0, abs64
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+
+# AFCL-P08: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Two software-binary64 chains can overlap long integer-emulation dependencies
+# in multioutput score averaging. This is an epilogue experiment, not a new
+# per-row metric fold. Preserve every weight and NANRULE before final division.
+comptime AFCL_P08 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P08"]()
 
 comptime OP_REG_EPI = 60
 
@@ -127,20 +136,41 @@ def _avg(f: FP, q: IP):
             if not is0(ld64(f, w + 2 * i)):
                 weighted = True
     var s = SF64_ZERO
+    var s_odd = SF64_ZERO
     if not weighted:
         for i in range(D):
-            s = sf64_add(s, ld64(f, src + 2 * i))
+            comptime if AFCL_P08:
+                if i % 2 == 0:
+                    s = sf64_add(s, ld64(f, src + 2 * i))
+                else:
+                    s_odd = sf64_add(s_odd, ld64(f, src + 2 * i))
+            else:
+                s = sf64_add(s, ld64(f, src + 2 * i))
+        comptime if AFCL_P08:
+            s = sf64_add(s, s_odd)
         st64(f, dst, sf64_div(s, sf64_from_int(D)))
         return
     var sw = SF64_ZERO
+    var sw_odd = SF64_ZERO
     for i in range(D):
         var v = ld64(f, src + 2 * i)
         var wi = ld64(f, w + 2 * i)
         if nan_rule and (sf64_is_nan(v) or (is0(wi) and _is_inf(v))):
             st64(f, dst, SF64_NAN)
             return
-        s = sf64_add(s, sf64_mul(v, wi))
-        sw = sf64_add(sw, wi)
+        comptime if AFCL_P08:
+            if i % 2 == 0:
+                s = sf64_add(s, sf64_mul(v, wi))
+                sw = sf64_add(sw, wi)
+            else:
+                s_odd = sf64_add(s_odd, sf64_mul(v, wi))
+                sw_odd = sf64_add(sw_odd, wi)
+        else:
+            s = sf64_add(s, sf64_mul(v, wi))
+            sw = sf64_add(sw, wi)
+    comptime if AFCL_P08:
+        s = sf64_add(s, s_odd)
+        sw = sf64_add(sw, sw_odd)
     st64(f, dst, sf64_div(s, sw))
 
 

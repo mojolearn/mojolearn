@@ -1,0 +1,141 @@
+{
+  "observed_at": "2026-10-06T17:42:14.311541+00:00",
+  "references": [
+    {
+      "lane": "kmeans",
+      "dataset": "taxi",
+      "arm": "torch-gpu",
+      "qualification": "unqualified",
+      "reasons": [
+        "Constructor settings differ or are missing: {\"init_centroids\": [null, null], \"oversampling_factor\": [0.0, null], \"random_state\": [7, null]}"
+      ],
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-04/board/raw/classical/rows-full/kmeans-taxi.json",
+      "receipt_sha256": "43216fc65acd803cda3036337b5053d2885e491da7f3d600ec3947b93b99d81a",
+      "vendors": [
+        "apple",
+        "nvidia"
+      ]
+    },
+    {
+      "lane": "ridge",
+      "dataset": "taxi",
+      "arm": "sklearn-cpu",
+      "qualification": "unqualified",
+      "reasons": [
+        "Constructor settings differ or are missing: {\"normalize\": [false, null], \"solver\": [\"eig\", \"cholesky\"]}"
+      ],
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-05/board/raw/classical2/rows-full/ridge-taxi.json",
+      "receipt_sha256": "a2ae38c0d1472c2d2b9245073bc97a97f77656eeefdf2baff2afb5440e475ed7",
+      "vendors": [
+        "nvidia",
+        "apple"
+      ]
+    },
+    {
+      "lane": "ridge",
+      "dataset": "istella",
+      "arm": "sklearn-cpu",
+      "qualification": "unqualified",
+      "reasons": [
+        "Constructor settings differ or are missing: {\"normalize\": [false, null], \"solver\": [\"eig\", \"cholesky\"]}"
+      ],
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-06/board/raw/classical2/rows-full/ridge-istella.json",
+      "receipt_sha256": "506857f987f0c54233374a77ab3ef2149a8220e12cd1f9ec3962cf8d254906d6",
+      "vendors": [
+        "nvidia",
+        "apple"
+      ]
+    },
+    {
+      "lane": "lasso",
+      "dataset": "taxi",
+      "arm": "sklearn-cpu",
+      "qualification": "unqualified",
+      "reasons": [
+        "Constructor settings differ or are missing: {\"random_state\": [null, 7], \"solver\": [\"cd\", null]}"
+      ],
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-07/board/raw/classical2/rows-full/lasso-taxi.json",
+      "receipt_sha256": "38c034c88da3dd0e3fccd490659bebbb1fb321173b237d7e9390b21dbbebf4dd",
+      "vendors": [
+        "nvidia"
+      ]
+    },
+    {
+      "lane": "elasticnet",
+      "dataset": "taxi",
+      "arm": "sklearn-cpu",
+      "qualification": "unqualified",
+      "reasons": [
+        "Constructor settings differ or are missing: {\"random_state\": [null, 7], \"solver\": [\"cd\", null]}"
+      ],
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-09/board/raw/classical2/rows-full/elasticnet-taxi.json",
+      "receipt_sha256": "8770eafa363ec52f7440f880c5324b4d7a598401975d735929efaa16d93e4105",
+      "vendors": [
+        "nvidia"
+      ]
+    },
+    {
+      "lane": "lasso",
+      "dataset": "istella",
+      "arm": "sklearn-cpu",
+      "qualification": "unqualified",
+      "reasons": [
+        "Constructor settings differ or are missing: {\"random_state\": [null, 7], \"solver\": [\"cd\", null]}"
+      ],
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-08/board/raw/classical2/rows-full/lasso-istella.json",
+      "receipt_sha256": "17fa07849ef8bba4d2f39118defe3725002e45b540d13071f51e3ab235f90384",
+      "vendors": [
+        "nvidia"
+      ]
+    },
+    {
+      "lane": "elasticnet",
+      "dataset": "istella",
+      "arm": "sklearn-cpu",
+      "qualification": "unqualified",
+      "reasons": [
+        "Constructor settings differ or are missing: {\"random_state\": [null, 7], \"solver\": [\"cd\", null]}"
+      ],
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-10/board/raw/classical2/rows-full/elasticnet-istella.json",
+      "receipt_sha256": "6c8fc964664141448eee97e3fb3f95e0228f0f24092fdd92ae5ae7bcefbe8d01",
+      "vendors": [
+        "nvidia"
+      ]
+    },
+    {
+      "lane": "resample",
+      "dataset": "taxi",
+      "arm": "sklearn-cpu",
+      "qualification": "unqualified",
+      "reasons": [
+        "Missing comparable constructor settings",
+        "Constructor settings differ or are missing: {\"n_samples\": [null, null], \"random_state\": [7, null], \"replace\": [true, null]}"
+      ],
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-11/board/raw/algos/rows-full/resample-taxi.json",
+      "receipt_sha256": "0e341c5d52134a4fe3082e83d67bc55fe0fc6b882f884f47b963616ee2a83e7d",
+      "vendors": [
+        "apple"
+      ]
+    },
+    {
+      "lane": "resample",
+      "dataset": "istella",
+      "arm": "sklearn-cpu",
+      "qualification": "unqualified",
+      "reasons": [
+        "Missing comparable constructor settings",
+        "Constructor settings differ or are missing: {\"n_samples\": [null, null], \"random_state\": [7, null], \"replace\": [true, null]}"
+      ],
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/opponent-quality/captured/run-01/cells/cell-12/board/raw/algos/rows-full/resample-istella.json",
+      "receipt_sha256": "4d41392e14bd5cdf54a1ee1f41763b4a20fe8ce3d1f841db14b40fce1281b070",
+      "vendors": [
+        "apple"
+      ]
+    }
+  ],
+  "count": 9,
+  "source_metadata_bug_fixed": "Native lasso/elasticnet exact full workload facts were missing from matcher lookup; now loaded from retained native-next-reg-inputs.json",
+  "failure_preservation_fix": "Unqualified new references no longer replace an established failure with PENDING; earlier same-receipt failures also carried across base-review rebuilds until explicit accepted evidence supersedes",
+  "constructor_matching_unchanged": true,
+  "no_numerical_work": true
+}

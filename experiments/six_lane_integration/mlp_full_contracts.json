@@ -1,0 +1,998 @@
+{
+  "registration_reason": "Master matrix omitted saved full MLP estimators; explicitly add four distinct recipes, preserving all original cells and linking existing complete-proposed MLP candidate scope.",
+  "rows": [
+    {
+      "actual_shapes": {
+        "X": [
+          4110786,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          4110786
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "arrays": {
+        "X": {
+          "dtype": "float32",
+          "sha256": "f2e4d8c429534cb88707eeac990401439bb2ac3c4bcc6c0172aa7ca4daf859f1",
+          "shape": [
+            4110786,
+            11
+          ]
+        },
+        "Xq": {
+          "dtype": "float32",
+          "sha256": "7e2791c077407d9d31b7ae73fc936aa38d83d93fb7efe1cd5e7941e969719398",
+          "shape": [
+            500000,
+            11
+          ]
+        },
+        "y": {
+          "dtype": "float32",
+          "sha256": "d6bfb62169604791d693bd9d1bd05cbbea42eb6ebbae1f114fb45a8de4a4b5af",
+          "shape": [
+            4110786
+          ]
+        },
+        "yq": {
+          "dtype": "float32",
+          "sha256": "ef5fd5eb6f9a40ed95d81191c25428ad33a5d53a456f33b7df50d4723ded553a",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "block": "cls",
+      "configuration": "I.X.complete-proposed",
+      "dataset": "taxi",
+      "dataset_version": "retained uncapped cls archive; exact file and array hashes",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "activation": "relu",
+          "alpha": 0.0001,
+          "batch_size": 4096,
+          "beta_1": 0.9,
+          "beta_2": 0.999,
+          "early_stopping": false,
+          "epsilon": 1e-08,
+          "hidden_layer_sizes": [
+            256,
+            256
+          ],
+          "learning_rate": "constant",
+          "learning_rate_init": 0.001,
+          "max_fun": 15000,
+          "max_iter": 5,
+          "momentum": 0.9,
+          "n_iter_no_change": 1000,
+          "nesterovs_momentum": true,
+          "power_t": 0.5,
+          "random_state": 7,
+          "shuffle": true,
+          "solver": "adam",
+          "tol": 0.0,
+          "validation_fraction": 0.1
+        },
+        "source": "attributes"
+      },
+      "harness": "tools/bench_board_algos.py",
+      "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+      "input_files": [
+        {
+          "name": "cls-taxi.npz",
+          "sha256": "791535a7d08912f618ec66cfed5211e7d81d3aeabbd25428309135774972c03b"
+        },
+        {
+          "name": "cls-taxi.json",
+          "sha256": "7c0eded61ca3eaf4326a840fb2b0cdff9015bdfbc43381e2b5c797e84e92ec6d"
+        }
+      ],
+      "lane": "mlp-clf",
+      "limitations": [
+        "New saved full-estimator recipe registration; original neural fixture is only a candidate-scope link, not an equivalent recipe or completed full workload.",
+        "Whole fitted state/optimizer/RNG coverage remains explicit pending; consumed outputs do not prove complete model identity.",
+        "One excluded warmup and one scored execution per arm, repeated_operations=1; no independent repetitions.",
+        "Historical Python product wrapper remains noncompliant with current no-product-Python rule; timing evidence is not runtime-compliance evidence."
+      ],
+      "mode": "identical",
+      "original_workload_id": "expanded:mlp-clf@dataset=taxi",
+      "output_paths": [
+        "$.pred",
+        "$.proba1"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        },
+        "$.proba1": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "quality_gate_source": "tools/bench_board_algos.py: quality; independent vendor/quality qualification required",
+      "required_bindings": [
+        "bindings/_mojolearn.mojo",
+        "bindings/_mojolearn_x_sequence.mojo"
+      ],
+      "runtime_vendor": "cuda",
+      "scope_cell_key": "19744574fa8682fda571",
+      "scope_workload_id": "neural:mlp-train-step",
+      "sidecar_metadata": {
+        "admission": "INPUTS_ONLY; distinct recipe/settings/output/artifact/quality admission remains pending",
+        "arrays": {
+          "X": {
+            "dtype": "float32",
+            "sha256": "f2e4d8c429534cb88707eeac990401439bb2ac3c4bcc6c0172aa7ca4daf859f1",
+            "shape": [
+              4110786,
+              11
+            ]
+          },
+          "Xq": {
+            "dtype": "float32",
+            "sha256": "7e2791c077407d9d31b7ae73fc936aa38d83d93fb7efe1cd5e7941e969719398",
+            "shape": [
+              500000,
+              11
+            ]
+          },
+          "y": {
+            "dtype": "float32",
+            "sha256": "d6bfb62169604791d693bd9d1bd05cbbea42eb6ebbae1f114fb45a8de4a4b5af",
+            "shape": [
+              4110786
+            ]
+          },
+          "yq": {
+            "dtype": "float32",
+            "sha256": "ef5fd5eb6f9a40ed95d81191c25428ad33a5d53a456f33b7df50d4723ded553a",
+            "shape": [
+              500000
+            ]
+          }
+        },
+        "block": "cls",
+        "changes_frozen_race": true,
+        "dataset": "taxi",
+        "eval_rows": "all original loader query rows",
+        "fit_rows": "all original loader training rows",
+        "full_dataset_coverage": true,
+        "original_preparation_caps": {
+          "query": 100000,
+          "train": 1000000
+        },
+        "population": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out",
+        "preparation_caps": {
+          "query": null,
+          "train": null
+        },
+        "rule": "tools/six_lane_prepare_full_classification.py prepare",
+        "scaling": "original float64 mean/std fitted on all train rows",
+        "seed": 7,
+        "sentinel_cells_replaced": {
+          "X": 0,
+          "Xq": 0
+        },
+        "source_archive": {
+          "bytes": 419757252,
+          "path": "/Users/ec2-user/datasets/gbm-bench/taxi/taxi_speed.npz",
+          "sha256": "10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15"
+        },
+        "source_dimensions": {
+          "X": [
+            4110786,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            4110786
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "source_sha": "1bda35ed707d76ea9d6452fb1c98f39165fca3d6",
+        "variant": "classification-full-v1",
+        "written": "2026-10-06T18:32:08Z"
+      },
+      "split": {
+        "eval_rows": "all original loader query rows",
+        "fit_rows": "all original loader training rows",
+        "population": "card-paid plausible Jan/Feb2024 trips; tip >= 0.2*fare; last500000 FILTERED trips held out"
+      },
+      "timed_boundary": "full saved input load and preparation + estimator construction + five training epochs + separate all-query inference + all declared outputs consumed",
+      "variant_workload_id": "expanded:mlp-clf@dataset=taxi@input=mlp-full-v1",
+      "vendor": "nvidia"
+    },
+    {
+      "actual_shapes": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "arrays": {
+        "X": {
+          "dtype": "float32",
+          "sha256": "76cc5a160ba41d2445ff360023046bc06d1a60ec260a06782b7d09b52f95efab",
+          "shape": [
+            2043304,
+            220
+          ]
+        },
+        "Xq": {
+          "dtype": "float32",
+          "sha256": "5df1c07ce146440c0637c45063d99d2ebd303cd383a8b84329d5a1420f443545",
+          "shape": [
+            500000,
+            220
+          ]
+        },
+        "y": {
+          "dtype": "float32",
+          "sha256": "49f91e9760a41fec971b6627e4f58ca9900f4a9b490b08564a141fd7b1ef0e72",
+          "shape": [
+            2043304
+          ]
+        },
+        "yq": {
+          "dtype": "float32",
+          "sha256": "e947e04961ad0ad0f851b22466e077bf10ae27fe513ff94375ed19b5c01afec9",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "block": "cls",
+      "configuration": "I.X.complete-proposed",
+      "dataset": "istella",
+      "dataset_version": "retained uncapped cls archive; exact file and array hashes",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "activation": "relu",
+          "alpha": 0.0001,
+          "batch_size": 4096,
+          "beta_1": 0.9,
+          "beta_2": 0.999,
+          "early_stopping": false,
+          "epsilon": 1e-08,
+          "hidden_layer_sizes": [
+            256,
+            256
+          ],
+          "learning_rate": "constant",
+          "learning_rate_init": 0.001,
+          "max_fun": 15000,
+          "max_iter": 5,
+          "momentum": 0.9,
+          "n_iter_no_change": 1000,
+          "nesterovs_momentum": true,
+          "power_t": 0.5,
+          "random_state": 7,
+          "shuffle": true,
+          "solver": "adam",
+          "tol": 0.0,
+          "validation_fraction": 0.1
+        },
+        "source": "attributes"
+      },
+      "harness": "tools/bench_board_algos.py",
+      "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+      "input_files": [
+        {
+          "name": "cls-istella.npz",
+          "sha256": "a9e093b1d2efca541e120fbca1d5880ea4de8d9617bb4e3e5be90c912f76e7bd"
+        },
+        {
+          "name": "cls-istella.json",
+          "sha256": "e276b7f2f026aad1a5cc946cb9aa6dbfc0e6df847a62b6bbc1944702fde8dbf2"
+        }
+      ],
+      "lane": "mlp-clf",
+      "limitations": [
+        "New saved full-estimator recipe registration; original neural fixture is only a candidate-scope link, not an equivalent recipe or completed full workload.",
+        "Whole fitted state/optimizer/RNG coverage remains explicit pending; consumed outputs do not prove complete model identity.",
+        "One excluded warmup and one scored execution per arm, repeated_operations=1; no independent repetitions.",
+        "Historical Python product wrapper remains noncompliant with current no-product-Python rule; timing evidence is not runtime-compliance evidence."
+      ],
+      "mode": "identical",
+      "original_workload_id": "expanded:mlp-clf@dataset=istella",
+      "output_paths": [
+        "$.pred",
+        "$.proba1"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        },
+        "$.proba1": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "quality_gate_source": "tools/bench_board_algos.py: quality; independent vendor/quality qualification required",
+      "required_bindings": [
+        "bindings/_mojolearn.mojo",
+        "bindings/_mojolearn_x_sequence.mojo"
+      ],
+      "runtime_vendor": "cuda",
+      "scope_cell_key": "19744574fa8682fda571",
+      "scope_workload_id": "neural:mlp-train-step",
+      "sidecar_metadata": {
+        "admission": "INPUTS_ONLY; distinct recipe/settings/output/artifact/quality admission remains pending",
+        "arrays": {
+          "X": {
+            "dtype": "float32",
+            "sha256": "76cc5a160ba41d2445ff360023046bc06d1a60ec260a06782b7d09b52f95efab",
+            "shape": [
+              2043304,
+              220
+            ]
+          },
+          "Xq": {
+            "dtype": "float32",
+            "sha256": "5df1c07ce146440c0637c45063d99d2ebd303cd383a8b84329d5a1420f443545",
+            "shape": [
+              500000,
+              220
+            ]
+          },
+          "y": {
+            "dtype": "float32",
+            "sha256": "49f91e9760a41fec971b6627e4f58ca9900f4a9b490b08564a141fd7b1ef0e72",
+            "shape": [
+              2043304
+            ]
+          },
+          "yq": {
+            "dtype": "float32",
+            "sha256": "e947e04961ad0ad0f851b22466e077bf10ae27fe513ff94375ed19b5c01afec9",
+            "shape": [
+              500000
+            ]
+          }
+        },
+        "block": "cls",
+        "changes_frozen_race": true,
+        "dataset": "istella",
+        "eval_rows": "all original loader query rows",
+        "fit_rows": "all original loader training rows",
+        "full_dataset_coverage": true,
+        "original_preparation_caps": {
+          "query": 100000,
+          "train": 1000000
+        },
+        "population": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+        "preparation_caps": {
+          "query": null,
+          "train": null
+        },
+        "rule": "tools/six_lane_prepare_full_classification.py prepare",
+        "scaling": "original float64 mean/std fitted on all train rows",
+        "seed": 7,
+        "sentinel_cells_replaced": {
+          "X": 1326565,
+          "Xq": 330995
+        },
+        "source_archive": {
+          "bytes": 2248281826,
+          "path": "/Users/ec2-user/datasets/gbm-bench/istella/istella_speed.npz",
+          "sha256": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef"
+        },
+        "source_dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "source_sha": "1bda35ed707d76ea9d6452fb1c98f39165fca3d6",
+        "variant": "classification-full-v1",
+        "written": "2026-10-06T18:32:19Z"
+      },
+      "split": {
+        "eval_rows": "all original loader query rows",
+        "fit_rows": "all original loader training rows",
+        "population": "all train.txt rows, first500000 of separate test.txt; relevance > 0"
+      },
+      "timed_boundary": "full saved input load and preparation + estimator construction + five training epochs + separate all-query inference + all declared outputs consumed",
+      "variant_workload_id": "expanded:mlp-clf@dataset=istella@input=mlp-full-v1",
+      "vendor": "nvidia"
+    },
+    {
+      "actual_shapes": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "arrays": {
+        "X": {
+          "dtype": "float32",
+          "sha256": "471453cefc7c5decc5066bd12b0c9e5358d96169ae418627a423ea12f8ed93e3",
+          "shape": [
+            5250086,
+            11
+          ]
+        },
+        "Xq": {
+          "dtype": "float32",
+          "sha256": "12ab9bcebded5e90bc0dd02f96944b93733f65aa842784ff0ac96822e03596ec",
+          "shape": [
+            500000,
+            11
+          ]
+        },
+        "y": {
+          "dtype": "float32",
+          "sha256": "6e706804d8e499ea946beb248690978efe66178c957c2ee682fc1576b0d41e7e",
+          "shape": [
+            5250086
+          ]
+        },
+        "yq": {
+          "dtype": "float32",
+          "sha256": "6eb4843ea272abd323877deebdd43ed8ae327f5f42e34a6680db4c4c39e457bf",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "block": "reg",
+      "configuration": "I.X.complete-proposed",
+      "dataset": "taxi",
+      "dataset_version": "retained uncapped reg archive; exact file and array hashes",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "activation": "relu",
+          "alpha": 0.0001,
+          "batch_size": 4096,
+          "beta_1": 0.9,
+          "beta_2": 0.999,
+          "early_stopping": false,
+          "epsilon": 1e-08,
+          "hidden_layer_sizes": [
+            256,
+            256
+          ],
+          "learning_rate": "constant",
+          "learning_rate_init": 0.001,
+          "max_fun": 15000,
+          "max_iter": 5,
+          "momentum": 0.9,
+          "n_iter_no_change": 1000,
+          "nesterovs_momentum": true,
+          "power_t": 0.5,
+          "random_state": 7,
+          "shuffle": true,
+          "solver": "adam",
+          "tol": 0.0,
+          "validation_fraction": 0.1
+        },
+        "source": "attributes"
+      },
+      "harness": "tools/bench_board_algos.py",
+      "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+      "input_files": [
+        {
+          "name": "reg-taxi.npz",
+          "sha256": "ec1b39f38b116f78dff51d67f41c7bbdfcd56508562445274d4c4dfb7bb2387f"
+        },
+        {
+          "name": "reg-taxi.json",
+          "sha256": "d0434339bed6f38495de319097654bbafff56579343eb69db183c96b4c949037"
+        }
+      ],
+      "lane": "mlp-reg",
+      "limitations": [
+        "New saved full-estimator recipe registration; original neural fixture is only a candidate-scope link, not an equivalent recipe or completed full workload.",
+        "Whole fitted state/optimizer/RNG coverage remains explicit pending; consumed outputs do not prove complete model identity.",
+        "One excluded warmup and one scored execution per arm, repeated_operations=1; no independent repetitions.",
+        "Historical Python product wrapper remains noncompliant with current no-product-Python rule; timing evidence is not runtime-compliance evidence."
+      ],
+      "mode": "identical",
+      "original_workload_id": "expanded:mlp-reg@dataset=taxi",
+      "output_paths": [
+        "$.pred"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "quality_gate_source": "tools/bench_board_algos.py: quality; independent vendor/quality qualification required",
+      "required_bindings": [
+        "bindings/_mojolearn.mojo",
+        "bindings/_mojolearn_x_sequence.mojo"
+      ],
+      "runtime_vendor": "cuda",
+      "scope_cell_key": "19744574fa8682fda571",
+      "scope_workload_id": "neural:mlp-train-step",
+      "sidecar_metadata": {
+        "arrays": {
+          "X": {
+            "dtype": "float32",
+            "sha256": "471453cefc7c5decc5066bd12b0c9e5358d96169ae418627a423ea12f8ed93e3",
+            "shape": [
+              5250086,
+              11
+            ]
+          },
+          "Xq": {
+            "dtype": "float32",
+            "sha256": "12ab9bcebded5e90bc0dd02f96944b93733f65aa842784ff0ac96822e03596ec",
+            "shape": [
+              500000,
+              11
+            ]
+          },
+          "y": {
+            "dtype": "float32",
+            "sha256": "6e706804d8e499ea946beb248690978efe66178c957c2ee682fc1576b0d41e7e",
+            "shape": [
+              5250086
+            ]
+          },
+          "yq": {
+            "dtype": "float32",
+            "sha256": "6eb4843ea272abd323877deebdd43ed8ae327f5f42e34a6680db4c4c39e457bf",
+            "shape": [
+              500000
+            ]
+          }
+        },
+        "block": "reg",
+        "data_root": "/Users/ec2-user/datasets/gbm-bench",
+        "dataset": "taxi",
+        "eval_rows": [
+          0,
+          500000
+        ],
+        "eval_rows_available": 500000,
+        "fit_rows": [
+          0,
+          5250086
+        ],
+        "fit_rows_available": 5250086,
+        "full_dataset_coverage": true,
+        "intrinsic_caps": [],
+        "rule": "bench_board_more.prep reg recipe with stride caps removed",
+        "scaling": "standardized by all fit rows (float64 mean and std)",
+        "seed": 7,
+        "smoke_max_rows": null,
+        "source_block": "/Volumes/MojoPerfBuild20261005/full-ab-main-20261006/datasets/full-uncapped/big-taxi.npz",
+        "source_recipe": {
+          "arrays": {
+            "X": {
+              "dtype": "float32",
+              "sha256": "fca12124971da135229cfa8310ec1ff18e272b29497c76ba1848375f6683b33b",
+              "shape": [
+                5250086,
+                11
+              ]
+            },
+            "Xq": {
+              "dtype": "float32",
+              "sha256": "7d1081b9a675b9277b145981389c6b07ecdbf8aa8190617fcf61abe5e9cf2d29",
+              "shape": [
+                500000,
+                11
+              ]
+            },
+            "init": {
+              "dtype": "float32",
+              "sha256": "062763fb581c16713a561655036712246600df3b513bca426e443356a29868bc",
+              "shape": [
+                8,
+                11
+              ]
+            },
+            "y": {
+              "dtype": "float32",
+              "sha256": "6e706804d8e499ea946beb248690978efe66178c957c2ee682fc1576b0d41e7e",
+              "shape": [
+                5250086
+              ]
+            },
+            "yq": {
+              "dtype": "float32",
+              "sha256": "6eb4843ea272abd323877deebdd43ed8ae327f5f42e34a6680db4c4c39e457bf",
+              "shape": [
+                500000
+              ]
+            }
+          },
+          "block": "big",
+          "data_root": "/Users/ec2-user/datasets/gbm-bench",
+          "dataset": "taxi",
+          "eval_rows": "complete loader test split",
+          "fit_rows": [
+            0,
+            5250086
+          ],
+          "fit_rows_available": 5250086,
+          "intrinsic_caps": [],
+          "lanes": [
+            "pca"
+          ],
+          "loader": "speed_gbdt_arm.load_taxi(shipped,regression=True),all TAXI_NUMERIC rows",
+          "pca": {
+            "n_components": 10
+          },
+          "scaling": "none",
+          "sentinel_cells_replaced": {
+            "X": 0,
+            "Xq": 0
+          },
+          "smoke_max_rows": null,
+          "source_sha": "ec3c8c8504e5315aca358b9ae5b2cb3a170a2513",
+          "written": "2026-10-06T11:06:06Z"
+        },
+        "target": "real",
+        "target_mapping": "unchanged raw y; bench_board_algos.arrays applies gamma/tweedie target rules",
+        "written": "2026-10-06T11:55:29Z"
+      },
+      "split": {
+        "eval_rows": [
+          0,
+          500000
+        ],
+        "fit_rows": [
+          0,
+          5250086
+        ],
+        "population": "real"
+      },
+      "timed_boundary": "full saved input load and preparation + estimator construction + five training epochs + separate all-query inference + all declared outputs consumed",
+      "variant_workload_id": "expanded:mlp-reg@dataset=taxi@input=mlp-full-v1",
+      "vendor": "nvidia"
+    },
+    {
+      "actual_shapes": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "arrays": {
+        "X": {
+          "dtype": "float32",
+          "sha256": "76cc5a160ba41d2445ff360023046bc06d1a60ec260a06782b7d09b52f95efab",
+          "shape": [
+            2043304,
+            220
+          ]
+        },
+        "Xq": {
+          "dtype": "float32",
+          "sha256": "5df1c07ce146440c0637c45063d99d2ebd303cd383a8b84329d5a1420f443545",
+          "shape": [
+            500000,
+            220
+          ]
+        },
+        "y": {
+          "dtype": "float32",
+          "sha256": "25e6e0e797c2d45c74ad1e254e81f27fc953425c1fb6da38ea3329efa4254381",
+          "shape": [
+            2043304
+          ]
+        },
+        "yq": {
+          "dtype": "float32",
+          "sha256": "a52392bd2069a76aafba8188e8aaf90666b446741363b333d0f2e4f01d46f596",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "block": "reg",
+      "configuration": "I.X.complete-proposed",
+      "dataset": "istella",
+      "dataset_version": "retained uncapped reg archive; exact file and array hashes",
+      "estimator_settings_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "activation": "relu",
+          "alpha": 0.0001,
+          "batch_size": 4096,
+          "beta_1": 0.9,
+          "beta_2": 0.999,
+          "early_stopping": false,
+          "epsilon": 1e-08,
+          "hidden_layer_sizes": [
+            256,
+            256
+          ],
+          "learning_rate": "constant",
+          "learning_rate_init": 0.001,
+          "max_fun": 15000,
+          "max_iter": 5,
+          "momentum": 0.9,
+          "n_iter_no_change": 1000,
+          "nesterovs_momentum": true,
+          "power_t": 0.5,
+          "random_state": 7,
+          "shuffle": true,
+          "solver": "adam",
+          "tol": 0.0,
+          "validation_fraction": 0.1
+        },
+        "source": "attributes"
+      },
+      "harness": "tools/bench_board_algos.py",
+      "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+      "input_files": [
+        {
+          "name": "reg-istella.npz",
+          "sha256": "f1708d9b22fa874af0ee9b2dfb00de1f5d2dea848c910332ee496775dfc2f724"
+        },
+        {
+          "name": "reg-istella.json",
+          "sha256": "090cbfba29a11e0fa362b66ebb421022caa47d87aa365b5a349f121dbbfa5060"
+        }
+      ],
+      "lane": "mlp-reg",
+      "limitations": [
+        "New saved full-estimator recipe registration; original neural fixture is only a candidate-scope link, not an equivalent recipe or completed full workload.",
+        "Whole fitted state/optimizer/RNG coverage remains explicit pending; consumed outputs do not prove complete model identity.",
+        "One excluded warmup and one scored execution per arm, repeated_operations=1; no independent repetitions.",
+        "Historical Python product wrapper remains noncompliant with current no-product-Python rule; timing evidence is not runtime-compliance evidence."
+      ],
+      "mode": "identical",
+      "original_workload_id": "expanded:mlp-reg@dataset=istella",
+      "output_paths": [
+        "$.pred"
+      ],
+      "output_schema": {
+        "$.pred": {
+          "dtype": "float64",
+          "shape": [
+            500000
+          ]
+        }
+      },
+      "quality_gate_source": "tools/bench_board_algos.py: quality; independent vendor/quality qualification required",
+      "required_bindings": [
+        "bindings/_mojolearn.mojo",
+        "bindings/_mojolearn_x_sequence.mojo"
+      ],
+      "runtime_vendor": "cuda",
+      "scope_cell_key": "19744574fa8682fda571",
+      "scope_workload_id": "neural:mlp-train-step",
+      "sidecar_metadata": {
+        "arrays": {
+          "X": {
+            "dtype": "float32",
+            "sha256": "76cc5a160ba41d2445ff360023046bc06d1a60ec260a06782b7d09b52f95efab",
+            "shape": [
+              2043304,
+              220
+            ]
+          },
+          "Xq": {
+            "dtype": "float32",
+            "sha256": "5df1c07ce146440c0637c45063d99d2ebd303cd383a8b84329d5a1420f443545",
+            "shape": [
+              500000,
+              220
+            ]
+          },
+          "y": {
+            "dtype": "float32",
+            "sha256": "25e6e0e797c2d45c74ad1e254e81f27fc953425c1fb6da38ea3329efa4254381",
+            "shape": [
+              2043304
+            ]
+          },
+          "yq": {
+            "dtype": "float32",
+            "sha256": "a52392bd2069a76aafba8188e8aaf90666b446741363b333d0f2e4f01d46f596",
+            "shape": [
+              500000
+            ]
+          }
+        },
+        "block": "reg",
+        "data_root": "/Users/ec2-user/datasets/gbm-bench",
+        "dataset": "istella",
+        "eval_rows": [
+          0,
+          500000
+        ],
+        "eval_rows_available": 500000,
+        "fit_rows": [
+          0,
+          2043304
+        ],
+        "fit_rows_available": 2043304,
+        "full_dataset_coverage": true,
+        "intrinsic_caps": [],
+        "rule": "bench_board_more.prep reg recipe with stride caps removed",
+        "scaling": "standardized by all fit rows (float64 mean and std)",
+        "seed": 7,
+        "smoke_max_rows": null,
+        "source_block": "/Users/ec2-user/mojolearn-full-f867b50e8/cache/ctd-data/rows-full/big-istella.npz",
+        "source_recipe": {
+          "arrays": {
+            "X": {
+              "dtype": "float32",
+              "sha256": "4c25bd496cda0e88aefdd56e964a3cb050068bd5cbfe2ad26adb0d64c4484ea8",
+              "shape": [
+                2043304,
+                220
+              ]
+            },
+            "Xq": {
+              "dtype": "float32",
+              "sha256": "3e691df6be4f97e311a21b1a155a4aba0b3d0cc50948d452442904615832d2dc",
+              "shape": [
+                500000,
+                220
+              ]
+            },
+            "init": {
+              "dtype": "float32",
+              "sha256": "25f1f3356ecdd0f603573741ce2e6d11dcf02ee96ff168cce2d04b8be7b94d28",
+              "shape": [
+                8,
+                220
+              ]
+            },
+            "y": {
+              "dtype": "float32",
+              "sha256": "25e6e0e797c2d45c74ad1e254e81f27fc953425c1fb6da38ea3329efa4254381",
+              "shape": [
+                2043304
+              ]
+            },
+            "yq": {
+              "dtype": "float32",
+              "sha256": "a52392bd2069a76aafba8188e8aaf90666b446741363b333d0f2e4f01d46f596",
+              "shape": [
+                500000
+              ]
+            }
+          },
+          "block": "big",
+          "capped_below_4M": true,
+          "data_root": "/Users/ec2-user/datasets/gbm-bench",
+          "dataset": "istella",
+          "eval_rows": "the loader's test split, all 500000 rows",
+          "fit_rows": [
+            0,
+            2043304
+          ],
+          "fit_rows_available": 2043304,
+          "kmeans": {
+            "init_rows": [
+              0,
+              255413,
+              510826,
+              766239,
+              1021652,
+              1277065,
+              1532478,
+              1787891
+            ],
+            "k": 8,
+            "max_iter": 300
+          },
+          "lanes": [
+            "kmeans",
+            "pca",
+            "ols"
+          ],
+          "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+          "pca": {
+            "n_components": 10
+          },
+          "rule": "CONTRIBUTING.md (Performance claims); DEVIATION 2570",
+          "scaling": "none",
+          "sentinel_cells_replaced": {
+            "X": 1326565,
+            "Xq": 330995
+          },
+          "smoke_max_rows": null,
+          "target": "relevance grade 0..4",
+          "written": "2026-10-02T12:31:49Z"
+        },
+        "target": "real",
+        "target_mapping": "unchanged raw y; bench_board_algos.arrays applies gamma/tweedie target rules",
+        "written": "2026-10-06T11:55:29Z"
+      },
+      "split": {
+        "eval_rows": [
+          0,
+          500000
+        ],
+        "fit_rows": [
+          0,
+          2043304
+        ],
+        "population": "real"
+      },
+      "timed_boundary": "full saved input load and preparation + estimator construction + five training epochs + separate all-query inference + all declared outputs consumed",
+      "variant_workload_id": "expanded:mlp-reg@dataset=istella@input=mlp-full-v1",
+      "vendor": "nvidia"
+    }
+  ],
+  "schema": "mojolearn.mlp-full-contracts/1",
+  "source_hashes": {
+    "python/mojolearn/_x_sequence_mlp.py": "1f6cb5461720422e450212422eb8768fb694dcf7b97d2af238575aa7212863e2",
+    "tools/bench_board_algos.py": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+    "tools/bench_board_more.py": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+    "tools/bench_board_params.py": "b5aa1c7a9d7ab41382e8875513b1d7515b9da0883c1dda593976d58ed30a6d2e"
+  },
+  "variant": "mlp-full-v1"
+}

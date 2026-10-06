@@ -1,0 +1,113 @@
+{
+  "scope": "Static source citations only; no numerical execution",
+  "citations": [
+    {
+      "id": "ridge-same-objective",
+      "source": "python/mojolearn/linear_model.py",
+      "source_sha256": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-python__mojolearn__linear_model.py",
+      "start_line": 796,
+      "end_line": 831,
+      "excerpt": "class Ridge(NumericModeMixin):\n    \"\"\"l2-regularized least squares on the GPU, cuML's `solver='eig'` arm.\n\n    Reference: `cuml/python/cuml/linear_model/ridge.pyx` and\n    `cuml/cpp/src/glm/ridge.cuh::ridgeFit` (DEVIATION 545; the Mojo implementation is\n    `glm/impl/ridge.mojo` and the design note there is worth reading:\n    their `eig` solver is an SVD through the eigendecomposition of `X.T @ X`\n    followed by `ridgeSolve`, NOT \"OLS with alpha added\", and so is ours).\n    Solves `min ||y - Xw||^2 + alpha ||w||^2`; the same objective as\n    scikit-learn's `Ridge`, and the same minimizer. Forms `X.T @ X`, so the\n    condition number is squared (see `LinearRegression`).\n\n    WHAT IS HONORED, WHAT IS REFUSED, AND WHY (measured row by row by\n    `tools/e2u_matrix_fit.py`):\n\n        alpha           honored   a non-negative float (ridge.pyx:296);\n                                  0.0 is allowed and is least squares\n                                  through the ridge program\n        fit_intercept   honored   True centers X and y ON THE HOST exactly\n                                  as `LinearRegression` does (that class's\n                                  docstring: THE INTERCEPT IS A HOST\n                                  REIMPLEMENTATION, DEVIATION 517); the\n                                  implemented `ridge_fit` sees a centered\n                                  design with fit_intercept=False, which\n                                  is `ridge.cuh:247`'s `intercept = 0` arm\n        solver          'eig' only  cuML's 'auto' maps to 'eig'\n                                  (ridge.pyx:304); 'svd' (ridgeSVD ->\n                                  cuSOLVER gesvd, glm/NOT_IMPLEMENTED.tsv) and\n                                  'cd' (cuml/solvers/cd.pyx, a different\n                                  solver) are REFUSED by name\n        normalize       refused   only reachable with fit_intercept on\n                                  their side and is preProcessData's\n                                  meanvar arm (preprocess.cuh:76-108),\n                                  not implemented\n        sample_weight   refused   ridge.cuh:197-208 / 220-231, a sqrt-\n                                  scaling of both operands and its exact"
+    },
+    {
+      "id": "ridge-documented-solver-pair",
+      "source": "tools/bench_board_more.py",
+      "source_sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-tools__bench_board_more.py",
+      "start_line": 356,
+      "end_line": 380,
+      "excerpt": "    \"ridge\": {\n        \"rows\": \"%d fit and %d held-out stride rows (%s)\" % (LIN_ROWS, EVAL_ROWS, _STD),\n        \"params\": \"alpha=1.0, fit_intercept=True; scikit-learn positive=False, random_state=7\",\n        \"timed\": \"fit\", \"quality\": \"held-out R2 and RMSE\",\n        \"mismatches\": [\"solver, named on every arm: ours and cuML 'eig' (eigendecomposition of \"\n                       \"the normal equations), scikit-learn 'cholesky' (it has no 'eig')\",\n                       \"seed: ours and cuML Ridge have no seed argument\"],\n    },\n    \"lasso\": {\n        \"rows\": \"%d fit and %d held-out stride rows (%s)\" % (LIN_ROWS, EVAL_ROWS, _STD),\n        \"params\": \"alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4, selection='cyclic', \"\n                  \"precompute=False, positive=False; ours and cuML solver='cd'\",\n        \"timed\": \"fit\", \"quality\": \"held-out R2 and RMSE\",\n        \"mismatches\": [\"seed: ours refuses random_state (it selects nothing with \"\n                       \"selection='cyclic'), cuML has none; scikit-learn random_state=7\",\n                       \"tol: each library's own stopping rule reads it\"],\n    },\n    \"elasticnet\": {\n        \"rows\": \"%d fit and %d held-out stride rows (%s)\" % (LIN_ROWS, EVAL_ROWS, _STD),\n        \"params\": \"alpha=0.1, l1_ratio=0.5 (the cuML benchmark's ElasticNet), fit_intercept=True, \"\n                  \"max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; \"\n                  \"ours and cuML solver='cd'\",\n        \"timed\": \"fit\", \"quality\": \"held-out R2 and RMSE\",\n        \"mismatches\": [\"seed: ours refuses random_state (it selects nothing with \"\n                       \"selection='cyclic'), cuML has none; scikit-learn random_state=7\","
+    },
+    {
+      "id": "ridge-cholesky-equation",
+      "source": "sklearn/linear_model/_ridge.py",
+      "source_sha256": "a0a8c5e26611c1bc91a97ae85d6add59b98a2fa5c92ff7c25467ea88bd6e4ce3",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/installed-sklearn-linear_model___ridge.py",
+      "start_line": 201,
+      "end_line": 217,
+      "excerpt": "def _solve_cholesky(X, y, alpha):\n    # w = inv(X^t X + alpha*Id) * X.T y\n    n_features = X.shape[1]\n    n_targets = y.shape[1]\n\n    A = safe_sparse_dot(X.T, X, dense_output=True)\n    Xy = safe_sparse_dot(X.T, y, dense_output=True)\n\n    one_alpha = np.array_equal(alpha, len(alpha) * [alpha[0]])\n\n    if one_alpha:\n        A.flat[:: n_features + 1] += alpha[0]\n        return linalg.solve(A, Xy, assume_a=\"pos\", overwrite_a=True).T\n    else:\n        coefs = np.empty([n_targets, n_features], dtype=X.dtype)\n        for coef, target, current_alpha in zip(coefs, Xy.T, alpha):\n            A.flat[:: n_features + 1] += current_alpha"
+    },
+    {
+      "id": "sklearn-no-feature-normalization",
+      "source": "sklearn/linear_model/_base.py",
+      "source_sha256": "1d2ffdba0cb4509d11983fa87ba4187d4469c9c1ae9fd9193461281b20b35133",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/installed-sklearn-linear_model___base.py",
+      "start_line": 181,
+      "end_line": 202,
+      "excerpt": "    if fit_intercept:\n        if X_is_sparse:\n            X_offset, X_var = mean_variance_axis(X, axis=0, weights=sample_weight)\n        else:\n            X_offset = _average(X, axis=0, weights=sample_weight, xp=xp)\n\n            X_offset = xp.astype(X_offset, X.dtype, copy=False)\n            X -= X_offset\n\n        y_offset = _average(y, axis=0, weights=sample_weight, xp=xp)\n        y -= y_offset\n    else:\n        X_offset = xp.zeros(n_features, dtype=X.dtype, device=device_)\n        if y.ndim == 1:\n            y_offset = xp.asarray(0.0, dtype=dtype_, device=device_)\n        else:\n            y_offset = xp.zeros(y.shape[1], dtype=dtype_, device=device_)\n\n    # XXX: X_scale is no longer needed. It is an historic artifact from the\n    # time where linear model exposed the normalize parameter.\n    X_scale = xp.ones(n_features, dtype=X.dtype, device=device_)\n    return X, y, X_offset, y_offset, X_scale"
+    },
+    {
+      "id": "cd-objective-and-stopping",
+      "source": "python/mojolearn/_solver_impl.py",
+      "source_sha256": "653d620ac11759ebce595925657b68fef741031b2b5a5bf9eed60114caf498e1",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-python__mojolearn___solver_impl.py",
+      "start_line": 66,
+      "end_line": 104,
+      "excerpt": "    THE OBJECTIVE, AND WHOSE `alpha` THIS IS\n    ----------------------------------------\n    `cd.cuh:84-86` DOCUMENTS an unscaled objective, and the CODE\n    (`cd.cuh:201-202`, read in the `v26.08.00` checkout) scales both\n    penalties by the row count::\n\n        l2_alpha = (1 - l1_ratio) * alpha * n_rows\n        l1_alpha =      l1_ratio  * alpha * n_rows\n\n    so what is minimized is `n_rows` times ::\n\n        (1 / (2 n)) ||y - X w||^2\n        + alpha * l1_ratio * ||w||_1\n        + 0.5 * alpha * (1 - l1_ratio) * ||w||^2\n\n    which is exactly scikit-learn's documented ElasticNet objective\n    (`sklearn/linear_model/_coordinate_descent.py:499-501`), and\n    scikit-learn's own solver applies the same `n_samples` factor to both\n    penalties before its coordinate loop (`:781-782`). Scaling an objective\n    by a positive constant does not move its minimizer, so **`alpha` and\n    `l1_ratio` mean the same thing in `sklearn.linear_model.ElasticNet`, in\n    `cuml.linear_model.ElasticNet` and here.** Their docstring is off by the\n    factor `n`; the code is what was implemented.\n\n    WHERE THE THREE STILL DIFFER, all of it matching cuML on purpose:\n\n        stopping rule   after each epoch, `coefMax < tol` OR\n                        `diffMax / coefMax < tol` (`cd.cuh:271`) -- a\n                        coefficient-CHANGE test only. scikit-learn runs the\n                        same change test and THEN requires a duality gap\n                        below `tol * ||y||^2`; the gap is what it certifies\n                        and there is none here. `dual_gap_` is therefore\n                        ABSENT, not zero.\n        tol default     1e-3 (cuML's). scikit-learn's is 1e-4, and cuML's\n                        own CPU-to-GPU converter multiplies a scikit-learn\n                        `tol` by 10 (`elastic_net.py:154`) to line the two\n                        up. A like-for-like comparison must set them.\n        zero-column     `squared > 1e-5 ? r / squared : 0` (`cd.cuh:68`), an\n        guard           ABSOLUTE threshold on a sum of squares that scales"
+    },
+    {
+      "id": "cyclic-seed-inactive",
+      "source": "sklearn/linear_model/_coordinate_descent.py",
+      "source_sha256": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/installed-sklearn-linear_model___coordinate_descent.py",
+      "start_line": 799,
+      "end_line": 810,
+      "excerpt": "        When set to ``True``, forces the coefficients to be positive.\n\n    random_state : int, RandomState instance, default=None\n        The seed of the pseudo random number generator that selects a random\n        feature to update. Used when ``selection`` == 'random'.\n        Pass an int for reproducible output across multiple function calls.\n        See :term:`Glossary <random_state>`.\n\n    selection : {'cyclic', 'random'}, default='cyclic'\n        If set to 'random', a random coefficient is updated every iteration\n        rather than looping over features sequentially by default. This\n        (setting to 'random') often leads to significantly faster convergence"
+    },
+    {
+      "id": "cd-coordinate-selection",
+      "source": "sklearn/linear_model/_coordinate_descent.py",
+      "source_sha256": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/installed-sklearn-linear_model___coordinate_descent.py",
+      "start_line": 636,
+      "end_line": 639,
+      "excerpt": "    rng = check_random_state(random_state)\n    if selection not in [\"random\", \"cyclic\"]:\n        raise ValueError(\"selection should be either random or cyclic.\")\n    random = selection == \"random\""
+    },
+    {
+      "id": "kmeans-existing-cross-library-contract",
+      "source": "tools/classical_two_datasets.py",
+      "source_sha256": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-tools__classical_two_datasets.py",
+      "start_line": 258,
+      "end_line": 276,
+      "excerpt": "CONFIG = {\n    \"kmeans\": {\n        \"rows\": \"big block: 4,000,000 taxi rows or the Istella-S train split, raw\",\n        \"params\": \"n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's \"\n                  \"KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic \"\n                  \"sequential seeding), tol=1e-7, metric='euclidean', Lloyd; seed 7 (ours, \"\n                  \"scikit-learn and cuML random_state=7, torch a generator seeded 7)\",\n        \"timed\": \"fit (the k-means++ seeding included on every arm)\",\n        \"mismatches\": [\n            \"k-means++: each library draws its own start from its own generator seeded 7, so \"\n            \"the starts differ; scikit-learn greedy k-means++ (2 + log k candidates per center), \"\n            \"ours and cuML the sequential k-means++ of cuML (oversampling_factor=0), torch-gpu \"\n            \"scikit-learn's greedy rule written out\",\n            \"tol=1e-7 on ours, scikit-learn and cuML (ours and cuML refuse 0); each library \"\n            \"applies it through its own convergence test; torch-gpu stops by scikit-learn's \"\n            \"(center shift <= tol x mean feature variance). n_iter is in every quality cell\",\n            \"algorithm: scikit-learn algorithm='lloyd'; ours and cuML have no such parameter \"\n            \"(Lloyd); torch-gpu is written as Lloyd\",\n        ],"
+    },
+    {
+      "id": "torch-seed-and-lloyd",
+      "source": "tools/classical_two_datasets.py",
+      "source_sha256": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-tools__classical_two_datasets.py",
+      "start_line": 1311,
+      "end_line": 1327,
+      "excerpt": "    def call(self):\n        torch = self.torch\n        x = self.x\n        n, d = x.shape\n        gen = torch.Generator(device=self.dev)\n        gen.manual_seed(SEED)\n        xx = (x * x).sum(dim=1)\n        k = KMEANS_K\n        c = self._kmeans_pp(x, xx, k, gen)\n        # scikit-learn's absolute tolerance: tol x the mean feature variance\n        tol = KMEANS_TOL * float(x.var(dim=0, unbiased=False).mean().item())\n        labels = torch.empty(n, dtype=torch.long, device=self.dev)\n        it = 0\n        for it in range(1, KMEANS_ITER + 1):\n            c2 = (c * c).sum(dim=1)\n            for s in range(0, n, TORCH_CHUNK_ROWS):\n                e = min(s + TORCH_CHUNK_ROWS, n)"
+    },
+    {
+      "id": "explicit-centroids-inactive",
+      "source": "python/mojolearn/cluster.py",
+      "source_sha256": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-python__mojolearn__cluster.py",
+      "start_line": 256,
+      "end_line": 273,
+      "excerpt": "            )\n\n        if init_code == INIT_ARRAY:\n            if init_centroids is None:\n                raise ValueError(\n                    \"mojolearn: init='array' needs init_centroids\"\n                )\n            c0, _ = as_f32_c(init_centroids, ndim=2,\n                             name=\"init_centroids\")\n            if c0.shape != (self.n_clusters, d):\n                raise ValueError(\n                    f\"mojolearn: init_centroids must be \"\n                    f\"({self.n_clusters}, {d}), got {c0.shape}\"\n                )\n            # A COPY, on purpose: the kernel writes the centroids in place\n            # and `c0` may be a zero-copy borrow of the caller's array.\n            _refuse_non_finite(c0, \"init_centroids\", \"fit\")\n            centers = c0.copy()"
+    },
+    {
+      "id": "resample-shared-kwargs",
+      "source": "tools/bench_board_algos.py",
+      "source_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-tools__bench_board_algos.py",
+      "start_line": 727,
+      "end_line": 734,
+      "excerpt": "_add(\"resample\", xlane=\"resample\", ours=(\"resample.resample\",), kind=\"fn\", task=\"resample\",\n     block=\"reg\", params=dict(replace=True, n_samples=None, random_state=SEED),\n     other={\"sklearn-cpu\": \"sklearn\"},\n     notes=[\"resample(X, y) of the reg block's 1,000,000 fit rows with replacement \"\n            \"(sklearn.utils.resample); the gather of both arrays is timed\"],\n     mism=[\"the drawn rows are each library's own (ours the Philox position map, scikit-learn \"\n           \"numpy RandomState(7)); quality is the resampled column means against the \"\n           \"population's\"])"
+    },
+    {
+      "id": "resample-opponent-call-and-declared-record",
+      "source": "tools/bench_board_algos.py",
+      "source_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+      "saved_source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-tools__bench_board_algos.py",
+      "start_line": 4152,
+      "end_line": 4163,
+      "excerpt": "    else:\n        if t == \"resample\":\n            from sklearn.utils import resample as skresample\n            info[\"config\"] = \"sklearn.utils.resample(X, y, %s)\" % p\n\n            def fit():\n                Xr, yr = skresample(X, y, **p)\n                S[\"o\"] = {\"xmean\": np.asarray(Xr, dtype=np.float64).mean(0),\n                          \"ymean\": np.array([np.asarray(yr, dtype=np.float64).mean()])}\n            rec = dict(p)\n        else:\n            from sklearn.model_selection import cross_val_score as skcv"
+    }
+  ]
+}

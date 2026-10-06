@@ -1,0 +1,754 @@
+{
+  "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-cv-quality-diagnosis/DIAGNOSIS.json",
+  "source_sha256": "1eda7681e8ca9c33c978fb11c4e6f72d44de98990f68e7c6be9ee79a00f74097",
+  "report": {
+    "schema": "mojolearn.source-diagnosis/1",
+    "observed_at": "2026-10-06T20:55:28.604681+00:00",
+    "task": "Saved NVIDIA/AMD LassoCV and ElasticNetCV Taxi quality failure source diagnosis",
+    "disposition": "RETAIN_COMBINED_CONFIGURATION_QUALITY_FAILED_NO_ESTABLISHED_SOURCE_OR_HARNESS_DEFECT",
+    "review_type": "SOURCE_AND_RETAINED_METADATA_ONLY",
+    "no_new_compilation_runtime_tests_model_execution_quality_recomputation_identity_verification_or_measurements": true,
+    "repository_source_edits": false,
+    "branch_created": false,
+    "source_freeze_changed": false,
+    "gate_or_settings_changes": false,
+    "source_main_at_review_start": "fa6009933a8fbaae18d98c3cbc79609ddc1bb508",
+    "executed_harness_sources": {
+      "nvidia": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+      "amd": "cf442daed63f8d2c9d99947c3a7a4e50fb442319"
+    },
+    "declared_numerical_sources": {
+      "nvidia": "8f496172e43c791e9c4d2798af375e9c62cb1708",
+      "amd": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9"
+    },
+    "quality_report_snapshot": {
+      "source_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/next-reg-resample-quality-review.json",
+      "source_sha256": "c36cbed3fe59662589964edb724145fc6948c5daa5c39a9072d6e2f6f4885c9d",
+      "observed_at": "2026-10-06T20:51:13.641498+00:00",
+      "completed_pairs_reviewed": 242,
+      "read_error_count": 0
+    },
+    "case_count": 4,
+    "cases": [
+      {
+        "vendor": "nvidia",
+        "workload": "expanded:lasso-cv@dataset=taxi",
+        "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/96ac4d3d170baa9b8709/attempts/attempt-0001/receipt.json",
+        "receipt_sha256": "82bd778ed89a56ac2b0dc0686a0508fd45c0e0d578c42b96a6dceddb5de799ff",
+        "execution_status": "MEASURED_FULL",
+        "returncodes": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "metrics": {
+          "A": {
+            "finite": true,
+            "r2": 0.9088028117512673,
+            "rmse": 4.697345852642057
+          },
+          "B": {
+            "finite": true,
+            "r2": 0.9091215889136197,
+            "rmse": 4.689128946848568
+          }
+        },
+        "candidate_vs_baseline": {
+          "verdict": "WORSE",
+          "metrics": {
+            "finite": [
+              "SAME",
+              1.0,
+              1.0,
+              0.0
+            ],
+            "r2": [
+              "SAME",
+              0.9088028117512673,
+              0.9091215889136197,
+              -0.0003506430451545357
+            ],
+            "rmse": [
+              "WORSE",
+              4.697345852642057,
+              4.689128946848568,
+              -0.0017492656600678967
+            ]
+          },
+          "unknown": [],
+          "worst": -0.0017492656600678967
+        },
+        "sample_counts": {
+          "A": {
+            "excluded_warmups": 1,
+            "scored": 1
+          },
+          "B": {
+            "excluded_warmups": 1,
+            "scored": 1
+          }
+        },
+        "quality_assessment": "QUALITY_FAILED"
+      },
+      {
+        "vendor": "nvidia",
+        "workload": "expanded:enet-cv@dataset=taxi",
+        "source_sha": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg/3392ecb27af9675963d9/attempts/attempt-0001/receipt.json",
+        "receipt_sha256": "9fc87489464b142ab9cd356046f588738393c45dca8793fe30236f3b4899c770",
+        "execution_status": "MEASURED_FULL",
+        "returncodes": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "metrics": {
+          "A": {
+            "finite": true,
+            "r2": 0.9087603210162847,
+            "rmse": 4.698440022529554
+          },
+          "B": {
+            "finite": true,
+            "r2": 0.9090718560676742,
+            "rmse": 4.690411824863933
+          }
+        },
+        "candidate_vs_baseline": {
+          "verdict": "WORSE",
+          "metrics": {
+            "finite": [
+              "SAME",
+              1.0,
+              1.0,
+              0.0
+            ],
+            "r2": [
+              "SAME",
+              0.9087603210162847,
+              0.9090718560676742,
+              -0.0003426957388572879
+            ],
+            "rmse": [
+              "WORSE",
+              4.698440022529554,
+              4.690411824863933,
+              -0.0017086942957928607
+            ]
+          },
+          "unknown": [],
+          "worst": -0.0017086942957928607
+        },
+        "sample_counts": {
+          "A": {
+            "excluded_warmups": 1,
+            "scored": 1
+          },
+          "B": {
+            "excluded_warmups": 1,
+            "scored": 1
+          }
+        },
+        "quality_assessment": "QUALITY_FAILED"
+      },
+      {
+        "vendor": "amd",
+        "workload": "expanded:enet-cv@dataset=taxi",
+        "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/capture-attempt-01/artifacts/measurements-expanded-reg/f3260b9ad432706adba9/attempts/attempt-0001/receipt.json",
+        "receipt_sha256": "0e392fcf2a93f517b976cd927c6c0dfb11bb6cbbfb5e32abe9150beb1bbfc324",
+        "execution_status": "MEASURED_FULL",
+        "returncodes": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "metrics": {
+          "A": {
+            "finite": true,
+            "r2": 0.9087603210162847,
+            "rmse": 4.698440022529554
+          },
+          "B": {
+            "finite": true,
+            "r2": 0.9090718560676742,
+            "rmse": 4.690411824863933
+          }
+        },
+        "candidate_vs_baseline": {
+          "verdict": "WORSE",
+          "metrics": {
+            "finite": [
+              "SAME",
+              1.0,
+              1.0,
+              0.0
+            ],
+            "r2": [
+              "SAME",
+              0.9087603210162847,
+              0.9090718560676742,
+              -0.0003426957388572879
+            ],
+            "rmse": [
+              "WORSE",
+              4.698440022529554,
+              4.690411824863933,
+              -0.0017086942957928607
+            ]
+          },
+          "unknown": [],
+          "worst": -0.0017086942957928607
+        },
+        "sample_counts": {
+          "A": {
+            "excluded_warmups": 1,
+            "scored": 1
+          },
+          "B": {
+            "excluded_warmups": 1,
+            "scored": 1
+          }
+        },
+        "quality_assessment": "QUALITY_FAILED"
+      },
+      {
+        "vendor": "amd",
+        "workload": "expanded:lasso-cv@dataset=taxi",
+        "source_sha": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/amd/capture-attempt-01/artifacts/measurements-expanded-reg/6e33969bb9b101021356/attempts/attempt-0001/receipt.json",
+        "receipt_sha256": "e7dfb10d2af67d1a1480b05eb7ae2e95d17e62bc26abab8734482536a0d7c50e",
+        "execution_status": "MEASURED_FULL",
+        "returncodes": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "dimensions": {
+          "X": [
+            5250086,
+            11
+          ],
+          "Xq": [
+            500000,
+            11
+          ],
+          "y": [
+            5250086
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+        "metrics": {
+          "A": {
+            "finite": true,
+            "r2": 0.9088028117512673,
+            "rmse": 4.697345852642057
+          },
+          "B": {
+            "finite": true,
+            "r2": 0.9091215889136197,
+            "rmse": 4.689128946848568
+          }
+        },
+        "candidate_vs_baseline": {
+          "verdict": "WORSE",
+          "metrics": {
+            "finite": [
+              "SAME",
+              1.0,
+              1.0,
+              0.0
+            ],
+            "r2": [
+              "SAME",
+              0.9088028117512673,
+              0.9091215889136197,
+              -0.0003506430451545357
+            ],
+            "rmse": [
+              "WORSE",
+              4.697345852642057,
+              4.689128946848568,
+              -0.0017492656600678967
+            ]
+          },
+          "unknown": [],
+          "worst": -0.0017492656600678967
+        },
+        "sample_counts": {
+          "A": {
+            "excluded_warmups": 1,
+            "scored": 1
+          },
+          "B": {
+            "excluded_warmups": 1,
+            "scored": 1
+          }
+        },
+        "quality_assessment": "QUALITY_FAILED"
+      }
+    ],
+    "metadata_review": [
+      {
+        "tag": "nvidia-lasso-cv",
+        "source": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+        "status": "MEASURED_FULL",
+        "A_B_equal_metadata": {
+          "dataset_sha256": true,
+          "dataset_split": true,
+          "dataset_version": true,
+          "dimensions": true,
+          "estimator_settings": true,
+          "seed": true,
+          "harness_sha256": true,
+          "sample_counts": true,
+          "resource_policy": true
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "model_state": {
+          "A": {
+            "missing_state": [
+              "reviewed complete typed fitted-state export"
+            ],
+            "partial_export": {
+              "class": "LassoCV",
+              "reason": "no public state_dict or save export",
+              "schema": "mojolearn-benchmark-state-v1",
+              "status": "unavailable"
+            },
+            "reason": "Public export is not a reviewed complete fitted-state contract",
+            "status": "UNAVAILABLE"
+          },
+          "B": {
+            "missing_state": [
+              "reviewed complete typed fitted-state export"
+            ],
+            "partial_export": {
+              "class": "LassoCV",
+              "reason": "no public state_dict or save export",
+              "schema": "mojolearn-benchmark-state-v1",
+              "status": "unavailable"
+            },
+            "reason": "Public export is not a reviewed complete fitted-state contract",
+            "status": "UNAVAILABLE"
+          }
+        }
+      },
+      {
+        "tag": "nvidia-enet-cv",
+        "source": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
+        "status": "MEASURED_FULL",
+        "A_B_equal_metadata": {
+          "dataset_sha256": true,
+          "dataset_split": true,
+          "dataset_version": true,
+          "dimensions": true,
+          "estimator_settings": true,
+          "seed": true,
+          "harness_sha256": true,
+          "sample_counts": true,
+          "resource_policy": true
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "model_state": {
+          "A": {
+            "missing_state": [
+              "reviewed complete typed fitted-state export"
+            ],
+            "partial_export": {
+              "class": "ElasticNetCV",
+              "reason": "no public state_dict or save export",
+              "schema": "mojolearn-benchmark-state-v1",
+              "status": "unavailable"
+            },
+            "reason": "Public export is not a reviewed complete fitted-state contract",
+            "status": "UNAVAILABLE"
+          },
+          "B": {
+            "missing_state": [
+              "reviewed complete typed fitted-state export"
+            ],
+            "partial_export": {
+              "class": "ElasticNetCV",
+              "reason": "no public state_dict or save export",
+              "schema": "mojolearn-benchmark-state-v1",
+              "status": "unavailable"
+            },
+            "reason": "Public export is not a reviewed complete fitted-state contract",
+            "status": "UNAVAILABLE"
+          }
+        }
+      },
+      {
+        "tag": "amd-enet-cv",
+        "source": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+        "status": "MEASURED_FULL",
+        "A_B_equal_metadata": {
+          "dataset_sha256": true,
+          "dataset_split": true,
+          "dataset_version": true,
+          "dimensions": true,
+          "estimator_settings": true,
+          "seed": true,
+          "harness_sha256": true,
+          "sample_counts": true,
+          "resource_policy": true
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "l1_ratio": 0.5,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "model_state": {
+          "A": {
+            "missing_state": [
+              "reviewed complete typed fitted-state export"
+            ],
+            "partial_export": {
+              "class": "ElasticNetCV",
+              "reason": "no public state_dict or save export",
+              "schema": "mojolearn-benchmark-state-v1",
+              "status": "unavailable"
+            },
+            "reason": "Public export is not a reviewed complete fitted-state contract",
+            "status": "UNAVAILABLE"
+          },
+          "B": {
+            "missing_state": [
+              "reviewed complete typed fitted-state export"
+            ],
+            "partial_export": {
+              "class": "ElasticNetCV",
+              "reason": "no public state_dict or save export",
+              "schema": "mojolearn-benchmark-state-v1",
+              "status": "unavailable"
+            },
+            "reason": "Public export is not a reviewed complete fitted-state contract",
+            "status": "UNAVAILABLE"
+          }
+        }
+      },
+      {
+        "tag": "amd-lasso-cv",
+        "source": "cf442daed63f8d2c9d99947c3a7a4e50fb442319",
+        "status": "MEASURED_FULL",
+        "A_B_equal_metadata": {
+          "dataset_sha256": true,
+          "dataset_split": true,
+          "dataset_version": true,
+          "dimensions": true,
+          "estimator_settings": true,
+          "seed": true,
+          "harness_sha256": true,
+          "sample_counts": true,
+          "resource_policy": true
+        },
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "alphas": [
+              0.001,
+              0.01,
+              0.1,
+              1.0
+            ],
+            "cv": 5,
+            "eps": 0.001,
+            "fit_intercept": true,
+            "max_iter": 1000,
+            "n_alphas": "deprecated",
+            "positive": false,
+            "precompute": "auto",
+            "random_state": 7,
+            "selection": "cyclic",
+            "tol": 0.0001
+          },
+          "source": "get_params"
+        },
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            5250086
+          ]
+        },
+        "model_state": {
+          "A": {
+            "missing_state": [
+              "reviewed complete typed fitted-state export"
+            ],
+            "partial_export": {
+              "class": "LassoCV",
+              "reason": "no public state_dict or save export",
+              "schema": "mojolearn-benchmark-state-v1",
+              "status": "unavailable"
+            },
+            "reason": "Public export is not a reviewed complete fitted-state contract",
+            "status": "UNAVAILABLE"
+          },
+          "B": {
+            "missing_state": [
+              "reviewed complete typed fitted-state export"
+            ],
+            "partial_export": {
+              "class": "LassoCV",
+              "reason": "no public state_dict or save export",
+              "schema": "mojolearn-benchmark-state-v1",
+              "status": "unavailable"
+            },
+            "reason": "Public export is not a reviewed complete fitted-state contract",
+            "status": "UNAVAILABLE"
+          }
+        }
+      }
+    ],
+    "artifact_metadata_matches": [
+      {
+        "tag": "nvidia-lasso-cv",
+        "arm": "A",
+        "matches_declared_retained_sha": true
+      },
+      {
+        "tag": "nvidia-enet-cv",
+        "arm": "A",
+        "matches_declared_retained_sha": true
+      },
+      {
+        "tag": "nvidia-lasso-cv",
+        "arm": "B",
+        "matches_declared_retained_sha": true
+      },
+      {
+        "tag": "nvidia-enet-cv",
+        "arm": "B",
+        "matches_declared_retained_sha": true
+      },
+      {
+        "tag": "amd-enet-cv",
+        "arm": "A",
+        "matches_declared_retained_sha": true
+      },
+      {
+        "tag": "amd-lasso-cv",
+        "arm": "A",
+        "matches_declared_retained_sha": true
+      },
+      {
+        "tag": "amd-enet-cv",
+        "arm": "B",
+        "matches_declared_retained_sha": true
+      },
+      {
+        "tag": "amd-lasso-cv",
+        "arm": "B",
+        "matches_declared_retained_sha": true
+      }
+    ],
+    "static_findings": [
+      {
+        "id": "controls",
+        "status": "SOURCE_REACH_ESTABLISHED_RUNTIME_REACH_NOT_NEWLY_VERIFIED",
+        "implementation_ids": [
+          "I.C.C13",
+          "I.C.C18"
+        ],
+        "details": "Both A configurations contain MOJOLEARN_CLASSICAL_C13_FOLD_STATS=1 and MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT=1. B omits candidate defines and retains incumbent behavior, including existing staged statistics/scoring where supported. Public LassoCV/ElasticNetCV call ALGO_ENETCV, the x_linear binding and enetcv_fit_grid on both GPUs; not the ordinary solver/impl/cd.mojo or Apple FAST route."
+      },
+      {
+        "id": "C13_numerical_profile",
+        "status": "STRONGEST_SOURCE_EXPLANATION_NOT_ISOLATED_CAUSE_PROOF",
+        "details": "C13 computes each disjoint fold mean and centered augmented Gram in Float32, then combines retained folds in ascending fold order with weighted means and the centered moment shift n_f*(mu_f_i-mu_i)*(mu_f_j-mu_j). The full refit also uses all cached folds. B scans retained rows directly, including one full-data prep. This changes rounding, centering, Gram/Xy/y-norm values, the CV loss path and final fit. The catalog explicitly identifies C13 as a numerical profile; A-versus-B bit changes are permitted but task-quality regression is not accepted."
+      },
+      {
+        "id": "fold_contract",
+        "status": "NO_CONCRETE_INDEX_COUNT_LEAKAGE_OR_SCALING_DEFECT_FOUND",
+        "details": "Fold cache IDs come from contiguous unshuffled KFold at y+n. Retained training statistics exclude the held fold; final refit uses held=-1 and all folds. Augmented cache layout, symmetric Gram writes and destination offsets align. Counts are below 2^24 in this workload. Held-out denominator is n-training_count. No omitted normalization or L1/L2 scaling discrepancy found in reviewed paths."
+      },
+      {
+        "id": "C18_forwarding",
+        "status": "NO_CONCRETE_DEFECT_FOUND_NOT_IDENTITY_PROOF",
+        "details": "Scalar/team routines forward the same fmad result written to Qw[j+1]; unchanged weights and zero Gram diagonal paths reload the next residual, and each team thread owns its Qw entries. Coordinate order, loss/gap formula and stopping conditions remain those of B. This source inspection is not an isolated C18 execution or identity check."
+      },
+      {
+        "id": "explicit_grid",
+        "status": "AUTO_GRID_NOT_REACHED",
+        "details": "The frozen alphas are [0.001,0.01,0.1,1.0], sorted descending before native entry. ecv_alpha_cell copies explicit values; changes in automatically generated alpha_max cannot explain these cases. Selected alpha may still differ; it was not retained."
+      },
+      {
+        "id": "quality_gate",
+        "status": "RETAIN_EXISTING_FAILURE",
+        "details": "All 16 saved warmup/scored worker executions returned 0; eight scored outputs have finite task metrics. The saved existing af_quality gate marks RMSE WORSE for both estimators and vendors. R2 remains within its tolerance. No task metrics were recomputed or gates changed."
+      },
+      {
+        "id": "runtime_policy_debt",
+        "status": "SEPARATE_EXISTING_DEBT",
+        "details": "The reviewed public path still uses Python API orchestration, parameter conversion and fitted-state unpacking. This is debt under the latest no-product-Python rule, not an established explanation of the A/B quality regression. No migration or source freeze mutation was attempted during this scoped review."
+      }
+    ],
+    "limits": [
+      "The measured A is a combined configuration (189 defines), not an isolated C13 or C18 arm. Do not label every enabled implementation individually rejected.",
+      "Complete fitted-state export is UNAVAILABLE. No selected alpha_, coefficients, intercept, mse_path_, n_iter_ or l1_ratio_ values are retained in the reviewed scored JSON. No assertion that a specific selected alpha or stopping iteration changed.",
+      "No retained fold means, Gram matrices or duality-gap diagnostics to establish the exact numerical mechanism.",
+      "Equal saved NVIDIA/AMD task metrics are not complete output/model identity evidence. Earlier campaign comparisons remain their separate retained evidence.",
+      "Reviewed-source diffs are static narrow path comparisons, not a new full source closure or compile applicability attestation. Retained binary/source provenance remains unchanged.",
+      "C18 tile64/gram_prefetch arms live in the separate ordinary coordinate-descent solver and are not established by these CV runs; C13 logcv_weights and compensated RidgeCV helper paths are also outside these cases."
+    ],
+    "next_action": "Coordinator keeps the current combined A QUALITY_FAILED and defaults unpromoted. No rerun or repair is launched by this review. Any separately authorized future investigation should distinguish C13, C18 and their combination and retain typed learned state within the original full workload/settings/gates.",
+    "evidence_paths": {
+      "quality_rows": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-cv-quality-diagnosis/retained-quality-rows.json",
+      "metadata": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-cv-quality-diagnosis/scored-pair-metadata-review.json",
+      "scored_provenance": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-cv-quality-diagnosis/scored-source-provenance.json",
+      "artifact_provenance": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-cv-quality-diagnosis/selected-linear-artifact-provenance.json",
+      "source_snapshots": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-cv-quality-diagnosis/source-snapshot-index.json",
+      "source_diff": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-cv-quality-diagnosis/reviewed-source-diffs.json",
+      "logs": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-cv-quality-diagnosis/retained-log-review.json",
+      "receipt_index": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-cv-quality-diagnosis/receipt-index.json",
+      "files": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-cv-quality-diagnosis/retained-file-index.json"
+    }
+  }
+}

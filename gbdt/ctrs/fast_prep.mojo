@@ -7,9 +7,11 @@ Every entry point here is reached from `gbdt/train.mojo` only under a
 `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()` and its
 own `-D MOJOLEARN_...` define (or SYM_CTR_ALL, the FAST + Apple default since
 2026-10-04; rollback `-D MOJOLEARN_SYM_CTR_ALL_OFF`). IDENTICAL and
-every non-Apple build compile main's CTR prep unchanged
-(`ctrs/ctr_calcers.mojo`, `ctrs/ctr_bins_builder.mojo`); nothing in this file
-runs for them.
+every non-Apple build compile main's CTR prep unchanged by those historical
+FAST switches. NEW T28/T28_SORT/T28_PREFIX independently opt IDENTICAL into the
+shared preparation, stable-segment frequency and exclusive-prefix reuse paths below. They do
+not enable the other Apple FAST switches and remain default OFF.
+NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 
 What each flag changes, against the read-profile in
 `docs/apple-fast/notes/sym-ctr.md`:
@@ -46,13 +48,16 @@ What each flag changes, against the read-profile in
 
 Bits: FeatureFreq counts and table counts are integers; Borders values are
 the same kernels over the same sorted order; borders are the same host
-arithmetic over the same min/max. FAST only, so no vendor column moves.
+arithmetic over the same min/max. The historical FAST outcomes below are
+not evidence for the new IDENTICAL T28/T28_SORT arms; all-column identity and
+quality remain unverified.
 """
 
 from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import memcpy
 from std.sys.compile import is_defined
+from gbdt.trees_identical_switches import T28, T28_SORT, T28_PREFIX
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -127,16 +132,16 @@ comptime SYM_CTR_ALL = not is_defined["MOJOLEARN_SYM_CTR_ALL_OFF"]()
 #: EXPERIMENTS.md (Oct 4): sym-ctr-prep-shared-taxicat-x on the old batch
 #: base 3150d75c1, 27,548 -> 26,357 ms (-4.3%), AUC .631249 -> .630964,
 #: HOLD (old base; quality noise not established). Owed: current-main A/B.
-comptime CTR_PREP_SHARED = _SYM_CTR_FAST_APPLE and (
+comptime CTR_PREP_SHARED = T28 or T28_PREFIX or (_SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_PREP_SHARED"]() or SYM_CTR_ALL
-)
+))
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
 #: never timed.
-comptime CTR_SORT_ONCE = _SYM_CTR_FAST_APPLE and (
+comptime CTR_SORT_ONCE = T28_SORT or (_SYM_CTR_FAST_APPLE and (
     is_defined["MOJOLEARN_CTR_SORT_ONCE"]() or SYM_CTR_ALL
-)
+))
 #: recovery 2026-10-04 (lane/apple-fast-rec-sym): source
 #: lane/apple-fast-sym-ctr@39c3c9daf; SYM_CTR_ALL rc=1 at 13547eaf1 (two
 #: fast_prep read_column errors, fixed at 4e08a1922), no passing build yet,
@@ -618,6 +623,11 @@ struct CtrPrepFast(Movable):
     var orders: List[DeviceBuffer[DType.uint32]]
     var order_ready: List[Bool]
     var scratch_ready: Bool
+    # T28_PREFIX retains the exact exclusive prefix denominator and gathered
+    # target in existing scratch, only while bins/target are unchanged. No
+    # persistent row-sized cache allocation or hash-only identity is involved.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var prefix_ready: Bool
     # the bin builder's buffers (`ctr_bins_builder.h:253-259`)
     var indices: DeviceBuffer[DType.uint32]
     var bins: DeviceBuffer[DType.uint32]
@@ -653,6 +663,7 @@ struct CtrPrepFast(Movable):
         self.perm_count = perm_count
         self.has_target = False
         self.scratch_ready = False
+        self.prefix_ready = False
         self.target = ctx.enqueue_create_buffer[DType.uint8](1)
         self.orders = List[DeviceBuffer[DType.uint32]]()
         self.order_ready = List[Bool]()
@@ -731,6 +742,7 @@ struct CtrPrepFast(Movable):
             dest=h.unsafe_ptr(), src=binarized_target.unsafe_ptr(),
             count=self.n,
         )
+        self.prefix_ready = False
         self.target = ctx.enqueue_create_buffer[DType.uint8](self.n)
         ctx.enqueue_copy(dst_buf=self.target, src_ptr=h.unsafe_ptr())
         ctx.synchronize()
@@ -756,6 +768,7 @@ struct CtrPrepFast(Movable):
             )
         var h = ctx.enqueue_create_host_buffer[DType.uint32](self.n)
         memcpy(dest=h.unsafe_ptr(), src=order.unsafe_ptr(), count=self.n)
+        self.prefix_ready = False
         self.orders[p] = ctx.enqueue_create_buffer[DType.uint32](self.n)
         ctx.enqueue_copy(dst_buf=self.orders[p], src_ptr=h.unsafe_ptr())
         ctx.synchronize()
@@ -784,6 +797,9 @@ struct CtrPrepFast(Movable):
         if unique_values <= 1:
             raise Error("Error: useless catFeature found")
         self.ensure_scratch(ctx)
+        # New feature/permutation invalidates the previous stable-segment
+        # generation even if pointer allocation happens to be reused.
+        self.prefix_ready = False
         var n = self.n
         ctx.enqueue_copy(dst_buf=self.indices, src_buf=self.orders[p])
         enqueue_fill(ctx, self.current_bins, UInt32(0))
@@ -828,21 +844,34 @@ struct CtrPrepFast(Movable):
         ):
             raise Error("borders_ctrs takes Borders or Buckets configs only")
         var n = self.n
-        # `Reset`: trivial weights, negated at a segment start, then the
-        # exclusive segmented scan -> the denominators per ORIGINAL row
-        launch_gather_trivial_weights(
-            ctx, self.indices, n, UInt32(n), True, self.gathered_weights
-        )
-        launch_segmented_scan_and_scatter_non_negative(
-            ctx, n, False, self.gathered_weights, self.indices,
-            self.scanned_weights, self.seg_scanned, self.seg_has_flag,
-            self.seg_block_sums, self.seg_block_flags,
-        )
-        # `GetGatheredBinSample`, `FillBinarizedTargetsStats`, the scan
-        launch_gather_with_mask_u8(
-            ctx, self.gathered_sample, self.target, self.indices, n,
-            CTR_INDEX_MASK,
-        )
+        # T28_PREFIX: compatible CTR configs share category segments, target
+        # and permutation, so their exclusive denominator and gathered target
+        # are unchanged. Reuse only this builder generation; every build_bins,
+        # target/order replacement or frequency pass invalidates it. Each
+        # numerator still uses its requested target border/bucket and priors.
+        # Final columns are owned by this fit's permutation data and remain
+        # resident across trees; no target from a later row enters a prefix.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        var reuse_prefix = False
+        comptime if T28_PREFIX:
+            reuse_prefix = self.prefix_ready
+        if not reuse_prefix:
+            # `Reset`: trivial weights, negated at a segment start, then the
+            # exclusive segmented scan -> denominator per ORIGINAL row.
+            launch_gather_trivial_weights(
+                ctx, self.indices, n, UInt32(n), True, self.gathered_weights
+            )
+            launch_segmented_scan_and_scatter_non_negative(
+                ctx, n, False, self.gathered_weights, self.indices,
+                self.scanned_weights, self.seg_scanned, self.seg_has_flag,
+                self.seg_block_sums, self.seg_block_flags,
+            )
+            launch_gather_with_mask_u8(
+                ctx, self.gathered_sample, self.target, self.indices, n,
+                CTR_INDEX_MASK,
+            )
+            comptime if T28_PREFIX:
+                self.prefix_ready = True
         launch_fill_binarized_targets_stats(
             ctx, self.gathered_sample, self.gathered_weights, n, self.stats,
             UInt32(reference.param_id), reference.ctr_type == CTR_BORDERS,
@@ -892,6 +921,8 @@ struct CtrPrepFast(Movable):
         adds the device copy for the fused compressed index."""
         if len(group) == 0:
             raise Error("freq_ctrs called with no configs")
+        # This path replaces gathered_weights with unflagged frequency ones.
+        self.prefix_ready = False
         var n = self.n
         launch_extract_border_masks(ctx, self.indices, self.tmp_u32, n, False)
         launch_scan_vector_u32(

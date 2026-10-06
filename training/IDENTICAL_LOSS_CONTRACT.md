@@ -915,3 +915,49 @@ lane; numbers cited from elsewhere (204, 258, 504, 522, 528, 720, 740-746,
    (3.2), the divisions (5.5) and the smoothing combine (section 5).
 9. **`bench/` has no loss shape and `SUPPORT_MATRIX.md` has no loss row.** No
    performance number exists and section 10 forbids quoting one.
+
+## NI35 opt-in token-total numerical version (source only)
+
+`-D MOJOLEARN_IDN_LOSS_TOKEN_TREE_V2=1` selects
+`mojolearn.identical.loss.ce.token-tree256.fp32.v2` in IDENTICAL mode, unless
+`MOJOLEARN_IDN_ALL_OFF` is defined. The default remains the existing loss
+profile. No compilation, identity, quality or timing verification has been
+performed for this source revision.
+
+This version replaces **only L12**, the fold across the already-computed token
+row losses. Consecutive groups of 256 rows form logical leaves. Each leaf
+starts at positive zero and visits its present rows in ascending order,
+applying `ftz(ftz(acc) + ftz(row))` once per row. Adjacent left/right leaves
+merge through the same operation in a balanced binary tree; an odd final
+child carries unchanged to the next level. A partial leaf contains only its
+present rows. Logical leaf width, merge order, FTZ and tail behavior are
+identical on native Mojo host, NVIDIA, AMD and Apple; device launch geometry
+only distributes independent leaves or parents. The 256-row leaf bounds the
+serial dependency chain and input span to 1 KiB; it is a fixed numerical
+contract, not a benchmark-shape dispatch rule.
+
+L1–L11, vocabulary denominator/log-probability folds, row weights, smoothing,
+ignored-row positive-zero stores and L13's existing `ce_divisor` are unchanged.
+L14–L16 gradients keep their existing formulas and divisor. `REDUCTION_NONE`
+does not execute L12 and is unaffected. All-ignored rows retain the original
+count/divisor behavior. This changes floating-point evaluation of the same
+objective, not token inclusion or the objective denominator.
+
+The device path uses caller-owned scratch sized for two logical leaf arrays.
+Levels alternate between disjoint slices on the same ordered context and the
+last parent writes `total` directly. Native host `ce_forward_oracle`, the
+parallel-row CE runtime and the byte-LM fast host loss all call the native
+Mojo tree counterpart. `CE_NUMERICAL_PROFILE` / `ce_numerical_profile()` expose
+the selected loss version. Byte-LM configuration profiles append
+`-ce-token-tree256-v2`, preserving profile-based checkpoint/resume separation.
+Other model/artifact metadata consumers still need to propagate this loss
+profile explicitly before a promotion. The independently versioned chunked
+LM head does not call this L12 path and is outside this sub-arm.
+
+A/B means this graph versus the original routed L12 graph, with every other
+numerical switch held fixed. Cross-version output bits may differ; each
+version must match across vendors and host. Required later evidence includes
+odd leaf counts, non-power-of-two row tails, ignored rows, SUM/MEAN and custom
+`num_items`, separated and aliased CE storage, unchanged gradients, and full
+neural training quality. Parameter-gradient and residual-fan-in reduction
+versions from the broader NI35 idea remain unimplemented.

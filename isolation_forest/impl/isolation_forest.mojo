@@ -57,7 +57,9 @@ Spelling only; gated by `check_if_refusals` over n = 1..4097.
 """
 
 from std.math import fma, log2
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, memcpy, stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.sys import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -78,10 +80,11 @@ from isolation_forest.impl.isolation_tree_builder import (
     IF_BUILD_TPB_MAX,
     IF_DECISION_WORDS,
     IF_PATH_TPB,
+    AFT_IF_PATH_ROWS,
     IF_RNG_STATE_WORDS,
     IF_SCRATCH_WORDS_PER_NODE,
     IF_STACK_WORDS,
-    IF_FAST_ROWMAJOR,
+    IF_FAST_ROWMAJOR, IF_T41_TREE_BATCH, IF_T42_CORRECTION_CACHE, IF_WORK_PLANES, if_correction_table_kernel,
     build_isolation_trees_global_kernel,
     if_finite_scan_kernel,
     if_finite_scan_ftz_kernel,
@@ -103,9 +106,42 @@ from checks.numerics import (
 )
 from std.os import getenv
 from core.host_parallel import host_parallelize
-from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
+from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32, float_to_sortable, sortable_to_float
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from metrics.checks.device_io import upload_i32
+
+
+# C50 / T31: exact IF vector nodes, independent of the RF/ET packed control.
+# Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime IF_C50_PACKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C50_IF_PACKED"]()
+
+
+def if_pack_nodes_kernel(feature: MutPointer[Int32, MutAnyOrigin], threshold: MutPointer[Float32, MutAnyOrigin],
+    left: MutPointer[Int32, MutAnyOrigin], right: MutPointer[Int32, MutAnyOrigin], packed: MutPointer[Int32, MutAnyOrigin], nodes: Int32):
+    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if i < Int(nodes):
+        packed.unsafe_store(4*i, feature.unsafe_load(i))
+        packed.unsafe_store(4*i+1, bitcast[DType.int32](threshold.unsafe_load(i)))
+        packed.unsafe_store(4*i+2, left.unsafe_load(i))
+        packed.unsafe_store(4*i+3, right.unsafe_load(i))
+
+
+def if_packed_paths_kernel(x: MutPointer[Float32, MutAnyOrigin], packed: MutPointer[Int32, MutAnyOrigin],
+    offsets: MutPointer[Int32, MutAnyOrigin], result: MutPointer[Float32, MutAnyOrigin], rows: Int32, features: Int32, trees: Int32):
+    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if row >= Int(rows):
+        return
+    var total = Float32(0)
+    for t in range(Int(trees)):
+        var base = Int(offsets.unsafe_load(t))
+        var node = 0
+        var words = packed.unsafe_load[width=4](4*base)
+        while words[0] >= 0:
+            var value = x.unsafe_load(row*Int(features)+Int(words[0]))
+            node = Int(words[2] if value < bitcast[DType.float32](words[1]) else words[3])
+            words = packed.unsafe_load[width=4](4*(base+node))
+        total = ftz(total+bitcast[DType.float32](words[1]))
+    result.unsafe_store(row, ftz(total/Float32(trees)))
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +244,7 @@ struct IsolationForestModel(Movable):
     var global_tree_max_depth: DeviceBuffer[DType.int32]
     var tree_n_nodes_host: List[Int32]
     var tree_max_depth_host: List[Int32]
+    var packed_nodes: Optional[DeviceBuffer[DType.int32]]
     var fitted: Bool
     var shards: List[IFModelShard]
 
@@ -229,6 +266,7 @@ struct IsolationForestModel(Movable):
         self.global_tree_max_depth = ctx.enqueue_create_buffer[DType.int32](1)
         self.tree_n_nodes_host = List[Int32]()
         self.tree_max_depth_host = List[Int32]()
+        self.packed_nodes = Optional[DeviceBuffer[DType.int32]]()
         self.fitted = False
         self.shards = List[IFModelShard]()
         ctx.synchronize()
@@ -510,7 +548,7 @@ def _upload_rowmajor_fast(
     comptime tpb = 256
     var blocks = min((n + tpb * 16 - 1) // (tpb * 16), 65535)
     blocks = max(blocks, (pad + tpb - 1) // tpb)
-    ctx.enqueue_function[if_finite_scan_kernel](
+    ctx.enqueue_function[if_finite_scan_ftz_kernel](
         buf.unsafe_ptr(),
         Int64(n),
         Int64(pad),
@@ -937,6 +975,8 @@ struct IsolationForest(Movable):
                     raise Error("parallel IsolationForest requires 1..64 devices")
                 if trace.enabled:
                     raise Error("parallel IsolationForest does not export diagnostic traces")
+                comptime if IF_C50_PACKED:
+                    raise Error("C50 IF packed model requires one device; pooled packed models remain pending")
                 _fit_tree_shards(ctx, input_colmajor, src_addr, n_rows, n_cols,
                                  self.params, model, knobs, count)
                 return
@@ -983,13 +1023,25 @@ struct IsolationForest(Movable):
                 data = _upload_rowmajor_query_device(
                     ctx, "X", cm_addr, n_rows, n_cols, pad, poison
                 )
+        # T41/C49: live scratch, not forest width, determines batch capacity.
+        # Keep diagnostics' full-tree archive when explicitly requested.
+        var scratch_stride = model.max_nodes_per_tree*IF_SCRATCH_WORDS_PER_NODE+IF_RNG_STATE_WORDS
+        var batch_trees = n_trees
+        comptime if IF_T41_TREE_BATCH:
+            if not trace.enabled:
+                var live_bytes = 4*n_sampled_rows*n_sampled_features + 8*n_sampled_rows + 4*IF_WORK_PLANES*n_sampled_rows + 4*scratch_stride
+                batch_trees = max(1, min(n_trees, (128*1024*1024)//max(1, live_bytes)))
+        var corrections = ctx.enqueue_create_buffer[DType.float32](n_sampled_rows+1 if IF_T42_CORRECTION_CACHE else 1)
+        comptime if IF_T42_CORRECTION_CACHE:
+            ctx.enqueue_function[if_correction_table_kernel](corrections.unsafe_ptr(), Int32(n_sampled_rows+1),
+                grid_dim=(n_sampled_rows+256)//256, block_dim=256)
         var subsample_buffer = _poisoned_f32(
-            ctx, n_trees * n_sampled_rows * n_sampled_features, pad, poison
+            ctx, batch_trees * n_sampled_rows * n_sampled_features, pad, poison
         )
-        var sample_indices = _poisoned_i64(ctx, n_trees * n_sampled_rows, pad, poison)
+        var sample_indices = _poisoned_i64(ctx, batch_trees * n_sampled_rows, pad, poison)
         # two halves per tree: the partition order and its scratch (the
         # block-parallel stable partition, `isolation_tree_builder.mojo`)
-        var work_indices = _poisoned_i32(ctx, 2 * n_trees * n_sampled_rows, pad, poison)
+        var work_indices = _poisoned_i32(ctx, IF_WORK_PLANES * batch_trees * n_sampled_rows, pad, poison)
         if knobs.build_tpb < 1 or knobs.build_tpb > IF_BUILD_TPB_MAX:
             raise Error(
                 "isolation forest: build_tpb must be in [1, "
@@ -998,11 +1050,7 @@ struct IsolationForest(Movable):
         # One scratch buffer per tree carved into three disjoint slices
         # (stack, per-node decisions, final RNG state). ONE kernel argument:
         # Metal caps a kernel at 31 and this one stands at 25.
-        var scratch_stride = (
-            model.max_nodes_per_tree * IF_SCRATCH_WORDS_PER_NODE
-            + IF_RNG_STATE_WORDS
-        )
-        var stack = _poisoned_i32(ctx, n_trees * scratch_stride, pad, poison)
+        var stack = _poisoned_i32(ctx, batch_trees * scratch_stride, pad, poison)
         var tables = XorwowDeviceTables(ctx)
 
         # The card's RNG probe: the first 16 draws of tree 0's state, on the
@@ -1024,42 +1072,52 @@ struct IsolationForest(Movable):
 
         comptime if DIAG_TRACE:
             print("if_diag: build kernel enqueue begin", flush=True)
-        ctx.enqueue_function[build_isolation_trees_global_kernel](
-            data.unsafe_ptr(),
-            Int64(n_rows),
-            Int32(n_cols),
-            Int32(n_trees),
-            Int32(n_sampled_rows),
-            Int32(n_sampled_features),
-            Int32(max_depth),
-            Int32(model.max_nodes_per_tree),
-            Int32(1) if self.params.bootstrap else Int32(0),
-            self.params.seed,
-            Int32(1) if model.has_feature_indices else Int32(0),
-            model.global_feature_indices.unsafe_ptr(),
-            model.node_feature.unsafe_ptr(),
-            model.node_threshold.unsafe_ptr(),
-            model.node_left.unsafe_ptr(),
-            model.node_right.unsafe_ptr(),
-            model.global_tree_offsets.unsafe_ptr(),
-            model.global_tree_n_nodes.unsafe_ptr(),
-            model.global_tree_max_depth.unsafe_ptr(),
-            subsample_buffer.unsafe_ptr(),
-            sample_indices.unsafe_ptr(),
-            work_indices.unsafe_ptr(),
-            stack.unsafe_ptr(),
-            tables.sequence.unsafe_ptr(),
-            tables.offset.unsafe_ptr(),
-            Int32(global_tree_start),
-            grid_dim=(n_trees, 1, 1),
-            block_dim=(knobs.build_tpb, 1, 1),
-        )
+        var batch_start = 0
+        while batch_start < n_trees:
+            ctx.enqueue_function[build_isolation_trees_global_kernel](
+                data.unsafe_ptr(),
+                Int64(n_rows),
+                Int32(n_cols),
+                Int32(n_trees),
+                Int32(n_sampled_rows),
+                Int32(n_sampled_features),
+                Int32(max_depth),
+                Int32(model.max_nodes_per_tree),
+                Int32(1) if self.params.bootstrap else Int32(0),
+                self.params.seed,
+                Int32(1) if model.has_feature_indices else Int32(0),
+                model.global_feature_indices.unsafe_ptr(),
+                model.node_feature.unsafe_ptr(),
+                model.node_threshold.unsafe_ptr(),
+                model.node_left.unsafe_ptr(),
+                model.node_right.unsafe_ptr(),
+                model.global_tree_offsets.unsafe_ptr(),
+                model.global_tree_n_nodes.unsafe_ptr(),
+                model.global_tree_max_depth.unsafe_ptr(),
+                subsample_buffer.unsafe_ptr(),
+                sample_indices.unsafe_ptr(),
+                work_indices.unsafe_ptr(),
+                stack.unsafe_ptr(),
+                tables.sequence.unsafe_ptr(),
+                tables.offset.unsafe_ptr(),
+                Int32(global_tree_start),
+                Int32(batch_start),
+                corrections.unsafe_ptr(),
+                grid_dim=(min(batch_trees, n_trees-batch_start), 1, 1),
+                block_dim=(knobs.build_tpb, 1, 1),
+            )
+            batch_start += batch_trees
         comptime if DIAG_TRACE:
             print("if_diag: build kernel enqueue returned, synchronize begin", flush=True)
         ctx.synchronize()
         comptime if DIAG_TRACE:
             print("if_diag: build kernel synchronize returned", flush=True)
 
+        comptime if IF_C50_PACKED:
+            model.packed_nodes = ctx.enqueue_create_buffer[DType.int32](4*total_nodes)
+            ctx.enqueue_function[if_pack_nodes_kernel](model.node_feature.unsafe_ptr(), model.node_threshold.unsafe_ptr(),
+                model.node_left.unsafe_ptr(), model.node_right.unsafe_ptr(), model.packed_nodes.value().unsafe_ptr(), Int32(total_nodes),
+                grid_dim=(total_nodes+255)//256, block_dim=256)
         model.tree_n_nodes_host = read_i32(ctx, model.global_tree_n_nodes, n_trees)
         model.tree_max_depth_host = read_i32(ctx, model.global_tree_max_depth, n_trees)
         model.shards = List[IFModelShard]()
@@ -1138,6 +1196,7 @@ struct IsolationForest(Movable):
         _ = work_indices^
         _ = stack^
         _ = tables^
+        _ = corrections^
 
     def compute_path_lengths(
         self,
@@ -1160,7 +1219,14 @@ struct IsolationForest(Movable):
             _ = pooled^
             return
         var threads = path_tpb
-        var blocks = (n_rows + threads - 1) // threads
+        var path_rows_per_block = threads * AFT_IF_PATH_ROWS
+        var blocks = (n_rows + path_rows_per_block - 1) // path_rows_per_block
+        comptime if IF_C50_PACKED:
+            ctx.enqueue_function[if_packed_paths_kernel](_mp_f32(input_rowmajor), _mp_i32(model.packed_nodes.value()),
+                _mp_i32(model.global_tree_offsets), avg_path_lengths.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
+                Int32(self.params.n_estimators), grid_dim=(blocks,1,1), block_dim=(threads,1,1))
+            ctx.synchronize()
+            return
         comptime if DIAG_TRACE:
             print("if_diag: path kernel enqueue begin", flush=True)
         ctx.enqueue_function[compute_path_lengths_global_kernel](
@@ -1425,6 +1491,46 @@ def score_samples_into(
     _ = scores^
 
 
+# T43: exact 32-bit radix selection, two independent order statistics.
+# Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime IF_T43_RADIX_SELECT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T43_RADIX_SELECT"]()
+
+def if_select_two_kernel(scores: MutPointer[Float32, MutAnyOrigin], selected: MutPointer[Float32, MutAnyOrigin],
+                         n: Int32, lo: Int32, hi: Int32):
+    var tid = Int(thread_idx.x)
+    var rank = Int(lo if Int(block_idx.x) == 0 else hi)
+    var counts = stack_allocation[256, Int32, address_space=AddressSpace.SHARED]()
+    var prefix = UInt32(0)
+    var mask = UInt32(0)
+    var bit = 31
+    while bit >= 0:
+        var flag = UInt32(1) << UInt32(bit)
+        var count = 0
+        var r = tid
+        while r < Int(n):
+            var key = float_to_sortable(bitcast[DType.uint32](scores.unsafe_load(r)))
+            if (key & mask) == prefix and (key & flag) == 0:
+                count += 1
+            r += 256
+        counts.unsafe_store(tid, Int32(count))
+        barrier()
+        var stride = 128
+        while stride > 0:
+            if tid < stride:
+                counts.unsafe_store(tid, counts.unsafe_load(tid)+counts.unsafe_load(tid+stride))
+            barrier()
+            stride //= 2
+        var zeros = Int(counts.unsafe_load(0))
+        if rank >= zeros:
+            prefix |= flag
+            rank -= zeros
+        mask |= flag
+        barrier()
+        bit -= 1
+    if tid == 0:
+        selected.unsafe_store(Int(block_idx.x), bitcast[DType.float32](sortable_to_float(prefix)))
+
+
 def contamination_offset(
     ctx: DeviceContext,
     forest: IsolationForestModel,
@@ -1460,6 +1566,23 @@ def contamination_offset(
         grid_dim=(blocks, 1, 1),
         block_dim=(knobs.path_tpb, 1, 1),
     )
+    comptime if IF_T43_RADIX_SELECT:
+        var index = q/100.0*Float64(n_rows-1)
+        var lo = max(0, min(n_rows-1, Int(index)))
+        var hi = min(lo+1, n_rows-1)
+        var selected = ctx.enqueue_create_buffer[DType.float32](2)
+        var h = ctx.enqueue_create_host_buffer[DType.float32](2)
+        ctx.enqueue_function[if_select_two_kernel](scores.unsafe_ptr(), selected.unsafe_ptr(), Int32(n_rows), Int32(lo), Int32(hi),
+            grid_dim=2, block_dim=256)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=selected)
+        ctx.synchronize()
+        var a = Float64(h.unsafe_ptr().unsafe_load(0))
+        var b = Float64(h.unsafe_ptr().unsafe_load(1))
+        var result = fma(b-a, index-Float64(lo), a)
+        _ = h^
+        _ = selected^
+        _ = scores^
+        return result
     var src = scores.create_sub_buffer[DType.float32](0, n_rows)
     var dst = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var work_a = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -1671,7 +1794,7 @@ def _pooled_path_lengths(ctx: DeviceContext, model: IsolationForestModel,
             _mp_i32(shard.global_tree_offsets), Int32(shard.count),
             Int32(model.params.n_estimators),
             Int32(1) if rank + 1 == len(model.shards) else Int32(0),
-            total.unsafe_ptr(), grid_dim=((rows + threads - 1) // threads, 1, 1),
+            total.unsafe_ptr(), grid_dim=((rows + threads * AFT_IF_PATH_ROWS - 1) // (threads * AFT_IF_PATH_ROWS), 1, 1),
             block_dim=(threads, 1, 1))
         shard.ctx.synchronize()
         carry = read_f32(shard.ctx, total, rows)

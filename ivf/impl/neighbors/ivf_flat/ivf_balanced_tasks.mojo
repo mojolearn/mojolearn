@@ -1,4 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
 """I16 compact exact query/list chunks. Eight logical warp-width batches
 per task bounds serial candidate visits while amortizing task descriptors.
 The 256-row work unit is independent of vendor wave width and board rows.
@@ -8,19 +7,33 @@ cancellation for nearby vectors. Task top-k and
 query merge compare the same total (distance,index) keys. Partial lists are
 exact: any globally selected point must occur in its task's KM best.
 One integer task-total readback sizes scratch; no input arithmetic on host."""
+from core.classical_distance import direct_squared_distance
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from experiments.classical_identical_ideas.graph_controls import C35_PACKED_LISTS, C35_TASK_ROWS
+# SPDX-License-Identifier: Apache-2.0
+
 from std.gpu import block_idx,thread_idx,lane_id
 from std.gpu.primitives.warp import shuffle_xor
 from max.gpu.host import DeviceBuffer,DeviceContext
 from checks.numerics import ftz,identical_mul_add,GLOBAL_NUMERIC_MODE,NUMERIC_FAST
 from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import WARP_SIZE,_key,_kless
 from ivf.impl.neighbors.ivf_flat.ivf_group_device import device_exclusive_scan_total_from
-comptime TASK_ROWS=256
+comptime TASK_ROWS=C35_TASK_ROWS if C35_PACKED_LISTS else 256
 
 def _task_counts(probes: MutPointer[UInt32,MutAnyOrigin],off: MutPointer[Int32,MutAnyOrigin],counts: MutPointer[Int32,MutAnyOrigin],pairs: Int32):
     var i=Int(block_idx.x)*256+Int(thread_idx.x)
     if i<Int(pairs):
         var l=Int(probes[i])
         counts[i]=Int32((Int(off[l+1]-off[l])+TASK_ROWS-1)//TASK_ROWS)
+
+def _query_task_counts(probes: MutPointer[UInt32,MutAnyOrigin],off: MutPointer[Int32,MutAnyOrigin],counts: MutPointer[Int32,MutAnyOrigin],nq: Int32,np: Int32):
+    var q=Int(block_idx.x)*256+Int(thread_idx.x)
+    if q<Int(nq):
+        var total=0
+        for p in range(Int(np)):
+            var l=Int(probes[q*Int(np)+p])
+            total+=Int(off[l+1]-off[l])
+        counts[q]=Int32((total+TASK_ROWS-1)//TASK_ROWS)
 
 def _scan_task[KM:Int](queries: MutPointer[Float32,MutAnyOrigin],qn: MutPointer[Float32,MutAnyOrigin],data: MutPointer[Float32,MutAnyOrigin],norm: MutPointer[Float32,MutAnyOrigin],off: MutPointer[Int32,MutAnyOrigin],ids: MutPointer[UInt32,MutAnyOrigin],probes: MutPointer[UInt32,MutAnyOrigin],task_offsets: MutPointer[Int32,MutAnyOrigin],pd: MutPointer[Float32,MutAnyOrigin],pi: MutPointer[UInt32,MutAnyOrigin],keep: MutPointer[Int32,MutAnyOrigin],keep_len: Int32,dim_in: Int32,nprobes: Int32,pairs: Int32):
     var task=Int(block_idx.x)
@@ -38,6 +51,16 @@ def _scan_task[KM:Int](queries: MutPointer[Float32,MutAnyOrigin],qn: MutPointer[
     var list_id=Int(probes[pair])
     var start=Int(off[list_id])+(task-Int(task_offsets[pair]))*TASK_ROWS
     var end=min(start+TASK_ROWS,Int(off[list_id+1]))
+    comptime if C35_PACKED_LISTS:
+        # A query's ordered probe rows form one logical stream. Small lists
+        # share a task and long lists cross task boundaries; no recall change.
+        q=pair
+        start=(task-Int(task_offsets[pair]))*TASK_ROWS
+        var total=0
+        for p in range(Int(nprobes)):
+            var l=Int(probes[q*Int(nprobes)+p])
+            total+=Int(off[l+1]-off[l])
+        end=min(start+TASK_ROWS,total)
     var lane=Int(lane_id())
     var dim=Int(dim_in)
     var tk=InlineArray[UInt32,KM](fill=UInt32.MAX)
@@ -45,7 +68,17 @@ def _scan_task[KM:Int](queries: MutPointer[Float32,MutAnyOrigin],qn: MutPointer[
     var ti=InlineArray[UInt32,KM](fill=UInt32.MAX)
     var pos=start+lane
     while pos<end:
-        var id=ids[pos]
+        var address=pos
+        comptime if C35_PACKED_LISTS:
+            var ordinal=pos
+            for p in range(Int(nprobes)):
+                var l=Int(probes[q*Int(nprobes)+p])
+                var size=Int(off[l+1]-off[l])
+                if ordinal<size:
+                    address=Int(off[l])+ordinal
+                    break
+                ordinal-=size
+        var id=ids[address]
         if keep_len==0 or keep[Int(id)]!=0:
             var d=Float32(0)
             comptime if GLOBAL_NUMERIC_MODE==NUMERIC_FAST:
@@ -53,15 +86,17 @@ def _scan_task[KM:Int](queries: MutPointer[Float32,MutAnyOrigin],qn: MutPointer[
                 # ascending feature order. Splitting a list into tasks must
                 # not replace well-conditioned differences with qn+xn-2dot.
                 for f in range(dim):
-                    var delta=data[pos*dim+f]-queries[q*dim+f]
+                    var delta=data[address*dim+f]-queries[q*dim+f]
                     d+=delta*delta
             else:
                 var acc=Float32(0)
                 for f in range(dim):
-                    acc=ftz(identical_mul_add(ftz(queries[q*dim+f]),ftz(data[pos*dim+f]),acc))
-                d=ftz(identical_mul_add(Float32(-2),acc,ftz(ftz(qn[q])+ftz(norm[pos]))))
+                    acc=ftz(identical_mul_add(ftz(queries[q*dim+f]),ftz(data[address*dim+f]),acc))
+                d=ftz(identical_mul_add(Float32(-2),acc,ftz(ftz(qn[q])+ftz(norm[address]))))
                 if d<=Float32(0):
                     d=Float32(0)
+            comptime if C30_DIRECT_DISTANCE:
+                d=direct_squared_distance(queries+q*dim,data+address*dim,dim)
             var key=_key(d)
             var ck=key
             var cd=d
@@ -122,10 +157,15 @@ def ivf_balanced_scan[KM:Int](ctx: DeviceContext,mut query: DeviceBuffer[DType.f
     var counts=ctx.enqueue_create_buffer[DType.int32](pairs+1)
     var offsets=ctx.enqueue_create_buffer[DType.int32](pairs+1)
     counts.enqueue_fill(Int32(0))
-    ctx.enqueue_function[_task_counts](probes.unsafe_ptr(),off.unsafe_ptr(),counts.unsafe_ptr(),Int32(pairs),grid_dim=((pairs+255)//256,1,1),block_dim=(256,1,1))
-    device_exclusive_scan_total_from(ctx,counts,offsets,pairs)
+    var descriptors=pairs
+    comptime if C35_PACKED_LISTS:
+        descriptors=nq
+        ctx.enqueue_function[_query_task_counts](probes.unsafe_ptr(),off.unsafe_ptr(),counts.unsafe_ptr(),Int32(nq),Int32(np),grid_dim=((nq+255)//256,1,1),block_dim=(256,1,1))
+    else:
+        ctx.enqueue_function[_task_counts](probes.unsafe_ptr(),off.unsafe_ptr(),counts.unsafe_ptr(),Int32(pairs),grid_dim=((pairs+255)//256,1,1),block_dim=(256,1,1))
+    device_exclusive_scan_total_from(ctx,counts,offsets,descriptors)
     var h=ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(),src_buf=offsets.create_sub_buffer[DType.int32](pairs,1))
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(),src_buf=offsets.create_sub_buffer[DType.int32](descriptors,1))
     ctx.synchronize()
     var tasks=Int(h[0])
     if tasks<0 or tasks>2147483647//KM:
@@ -133,7 +173,7 @@ def ivf_balanced_scan[KM:Int](ctx: DeviceContext,mut query: DeviceBuffer[DType.f
     var pd=ctx.enqueue_create_buffer[DType.float32](max(tasks*KM,1))
     var pi=ctx.enqueue_create_buffer[DType.uint32](max(tasks*KM,1))
     if tasks>0:
-        ctx.enqueue_function[_scan_task[KM]](query.unsafe_ptr(),qn.unsafe_ptr(),data.unsafe_ptr(),norm.unsafe_ptr(),off.unsafe_ptr(),ids.unsafe_ptr(),probes.unsafe_ptr(),offsets.unsafe_ptr(),pd.unsafe_ptr(),pi.unsafe_ptr(),keep.unsafe_ptr(),Int32(keep_len),Int32(dim),Int32(np),Int32(pairs),grid_dim=(tasks,1,1),block_dim=(WARP_SIZE,1,1))
-    ctx.enqueue_function[_merge_tasks[KM]](pd.unsafe_ptr(),pi.unsafe_ptr(),offsets.unsafe_ptr(),outd.unsafe_ptr(),outi.unsafe_ptr(),Int32(nq),Int32(np),Int32(k),grid_dim=((nq+255)//256,1,1),block_dim=(256,1,1))
+        ctx.enqueue_function[_scan_task[KM]](query.unsafe_ptr(),qn.unsafe_ptr(),data.unsafe_ptr(),norm.unsafe_ptr(),off.unsafe_ptr(),ids.unsafe_ptr(),probes.unsafe_ptr(),offsets.unsafe_ptr(),pd.unsafe_ptr(),pi.unsafe_ptr(),keep.unsafe_ptr(),Int32(keep_len),Int32(dim),Int32(np),Int32(descriptors),grid_dim=(tasks,1,1),block_dim=(WARP_SIZE,1,1))
+    ctx.enqueue_function[_merge_tasks[KM]](pd.unsafe_ptr(),pi.unsafe_ptr(),offsets.unsafe_ptr(),outd.unsafe_ptr(),outi.unsafe_ptr(),Int32(nq),Int32(1 if C35_PACKED_LISTS else np),Int32(k),grid_dim=((nq+255)//256,1,1),block_dim=(256,1,1))
     ctx.synchronize()
     _ = counts^;_ = offsets^;_ = pd^;_ = pi^

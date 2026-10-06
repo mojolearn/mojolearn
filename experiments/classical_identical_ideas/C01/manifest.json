@@ -1,0 +1,1420 @@
+{
+  "schema": 1,
+  "id": "C01",
+  "title": "Versioned fixed-leaf reduction profiles",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "x_metrics/common.mojo",
+    "core/classical_stats.mojo",
+    "core/xtdz_coalesced.mojo",
+    "decomposition/host/pca_oracle.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_CLASSICAL_C01_LEAF64"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Objective, residual and downstream task metrics must not degrade; inspect cancellation, overflow, subnormals, constant and ragged columns.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C01",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C01",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C01",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C01",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C01",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/shared_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/shared_controls.mojo"
+  ],
+  "default_configuration": "leaf64",
+  "configurations": {
+    "leaf64": {
+      "name": "leaf64",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C01"
+      ],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01."
+      ],
+      "scope": [
+        "PCA covariance/full",
+        "TruncatedSVD variance preparation",
+        "expanded regression/classification metric folds"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report"
+      ]
+    },
+    "leaf128": {
+      "name": "leaf128",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF128"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C01"
+      ],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01."
+      ],
+      "scope": [
+        "PCA covariance/full",
+        "TruncatedSVD variance preparation",
+        "expanded regression/classification metric folds"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report"
+      ]
+    },
+    "interaction_fold_fusion": {
+      "name": "interaction_fold_fusion",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C02",
+        "C09",
+        "C13",
+        "C23",
+        "C37",
+        "C52"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_CLASSICAL_C02_STATS_PAIR",
+        "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR",
+        "MOJOLEARN_CLASSICAL_C09_REG_BUNDLE",
+        "MOJOLEARN_CLASSICAL_C13_FOLD_STATS",
+        "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS",
+        "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS",
+        "MOJOLEARN_C37_ROW_PANELS",
+        "MOJOLEARN_C37_PANEL_128",
+        "MOJOLEARN_C52_PAIR_128"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+        "Weighted linear means keep incumbent scaling and sums. GPU schedules both exact streams together; host uses its incumbent exact sums under the same new binding.",
+        "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists.",
+        "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+        "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+        "C13 is a numerical profile and its quality/selected model results remain unverified.",
+        "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+        "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+        "IncrementalPCA centered incremental covariance caller remains unfinished source work.",
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+        "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+        "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "expanded:standard-scaler",
+        "classical:ols",
+        "more:ridge",
+        "expanded:gaussian-nb",
+        "expanded:ridge-cv",
+        "expanded:lasso-cv",
+        "expanded:enet-cv",
+        "expanded:logreg-cv",
+        "expanded:logreg-cv@weighted_cv",
+        "expanded:incremental-pca",
+        "expanded:min-cov-det",
+        "expanded:elliptic-envelope",
+        "expanded:lda-clf",
+        "expanded:qda",
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf",
+        "classical:kde"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C02",
+          "configuration": "combined"
+        },
+        {
+          "id": "C09",
+          "configuration": "regression_bundle"
+        },
+        {
+          "id": "C13",
+          "configuration": "combined"
+        },
+        {
+          "id": "C23",
+          "configuration": "centered_panels"
+        },
+        {
+          "id": "C37",
+          "configuration": "combined"
+        },
+        {
+          "id": "C52",
+          "configuration": "pair128"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c01_c02": {
+      "name": "interaction_c01_c02",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C02"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_CLASSICAL_C02_STATS_PAIR"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "expanded:standard-scaler",
+        "classical:ols",
+        "more:ridge",
+        "expanded:gaussian-nb"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C02",
+          "configuration": "paired_stats"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c01_c09": {
+      "name": "interaction_c01_c09",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C09"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_CLASSICAL_C09_REG_BUNDLE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C09",
+          "configuration": "regression_bundle"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c01_c13": {
+      "name": "interaction_c01_c13",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C13"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_CLASSICAL_C13_FOLD_STATS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+        "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+        "C13 is a numerical profile and its quality/selected model results remain unverified."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "expanded:ridge-cv",
+        "expanded:lasso-cv",
+        "expanded:enet-cv",
+        "expanded:logreg-cv",
+        "expanded:logreg-cv@weighted_cv"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C13",
+          "configuration": "fold_stats"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c01_c23": {
+      "name": "interaction_c01_c23",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C23"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+        "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+        "IncrementalPCA centered incremental covariance caller remains unfinished source work."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "expanded:incremental-pca",
+        "expanded:min-cov-det",
+        "expanded:elliptic-envelope",
+        "expanded:lda-clf",
+        "expanded:qda"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C23",
+          "configuration": "centered_panels"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c01_c37": {
+      "name": "interaction_c01_c37",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C37"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_C37_ROW_PANELS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C37",
+          "configuration": "row_panels"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "interaction_c01_c52": {
+      "name": "interaction_c01_c52",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C52"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_C52_PAIR_128"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+        "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "classical:kde"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C52",
+          "configuration": "pair128"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c01_leaf64_c52_pair128": {
+      "name": "profile_c01_leaf64_c52_pair128",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C52"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_C52_PAIR_128"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+        "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "classical:kde"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C52",
+          "configuration": "pair128"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c01_leaf64_c52_pair512": {
+      "name": "profile_c01_leaf64_c52_pair512",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C52"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_C52_PAIR_512"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+        "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "classical:kde"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C52",
+          "configuration": "pair512"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c01_leaf128_c52_pair128": {
+      "name": "profile_c01_leaf128_c52_pair128",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C52"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF128",
+        "MOJOLEARN_C52_PAIR_128"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+        "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "classical:kde"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf128"
+        },
+        {
+          "id": "C52",
+          "configuration": "pair128"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c01_leaf128_c52_pair512": {
+      "name": "profile_c01_leaf128_c52_pair512",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C52"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF128",
+        "MOJOLEARN_C52_PAIR_512"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+        "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "classical:kde"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf128"
+        },
+        {
+          "id": "C52",
+          "configuration": "pair512"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c01_leaf64_c37_row_panels": {
+      "name": "profile_c01_leaf64_c37_row_panels",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C37"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_C37_ROW_PANELS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C37",
+          "configuration": "row_panels"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c01_leaf64_c37_row_panels_panel_128": {
+      "name": "profile_c01_leaf64_c37_row_panels_panel_128",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C37"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_C37_ROW_PANELS",
+        "MOJOLEARN_C37_PANEL_128"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C37",
+          "configuration": "row_panels_panel_128"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c01_leaf128_c37_row_panels": {
+      "name": "profile_c01_leaf128_c37_row_panels",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C37"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF128",
+        "MOJOLEARN_C37_ROW_PANELS"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf128"
+        },
+        {
+          "id": "C37",
+          "configuration": "row_panels"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "profile_c01_leaf128_c37_row_panels_panel_128": {
+      "name": "profile_c01_leaf128_c37_row_panels_panel_128",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C37"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF128",
+        "MOJOLEARN_C37_ROW_PANELS",
+        "MOJOLEARN_C37_PANEL_128"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "classical:kmeans",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "more:ivf"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf128"
+        },
+        {
+          "id": "C37",
+          "configuration": "row_panels_panel_128"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    },
+    "complete_classical": {
+      "name": "complete_classical",
+      "selectable": true,
+      "candidate_ids": [
+        "C01",
+        "C02",
+        "C03",
+        "C04",
+        "C05",
+        "C06",
+        "C07",
+        "C08",
+        "C09",
+        "C10",
+        "C11",
+        "C12",
+        "C13",
+        "C14",
+        "C15",
+        "C16",
+        "C17",
+        "C18",
+        "C19",
+        "C20",
+        "C21",
+        "C22",
+        "C23",
+        "C24",
+        "C25",
+        "C26",
+        "C27",
+        "C28",
+        "C29",
+        "C30",
+        "C31",
+        "C32",
+        "C33",
+        "C34",
+        "C35",
+        "C36",
+        "C37",
+        "C38",
+        "C39",
+        "C40",
+        "C41",
+        "C42",
+        "C43",
+        "C44",
+        "C52",
+        "C53",
+        "C54",
+        "C55",
+        "C56",
+        "C57",
+        "C58",
+        "C59",
+        "C60"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C01_LEAF64",
+        "MOJOLEARN_CLASSICAL_C02_STATS_PAIR",
+        "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR",
+        "MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA",
+        "MOJOLEARN_CLASSICAL_C04_LOAD_CENTER",
+        "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH",
+        "MOJOLEARN_CLASSICAL_C05_OLS_PHASE",
+        "MOJOLEARN_CLASSICAL_C06_ROWS2",
+        "MOJOLEARN_CLASSICAL_C07_DIGIT4",
+        "MOJOLEARN_CLASSICAL_C07_KEYS1024",
+        "MOJOLEARN_CLASSICAL_C08_DICTIONARY",
+        "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT",
+        "MOJOLEARN_CLASSICAL_C09_REG_BUNDLE",
+        "MOJOLEARN_CLASSICAL_C10_RANK_REUSE",
+        "MOJOLEARN_CLASSICAL_C11_DRAW_GATHER",
+        "MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS",
+        "MOJOLEARN_CLASSICAL_C13_FOLD_STATS",
+        "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS",
+        "MOJOLEARN_CLASSICAL_C14_GROUP_RHS",
+        "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE",
+        "MOJOLEARN_CLASSICAL_C16_GLM_FUSED",
+        "MOJOLEARN_CLASSICAL_C17_OVR",
+        "MOJOLEARN_CLASSICAL_C17_LS_TRIALS",
+        "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT",
+        "MOJOLEARN_CLASSICAL_C18_TILE64",
+        "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH",
+        "MOJOLEARN_CLASSICAL_C19_ORDERED_128",
+        "MOJOLEARN_CLASSICAL_C20_ROW_CACHE",
+        "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD",
+        "MOJOLEARN_CLASSICAL_C21_EXTREMA",
+        "MOJOLEARN_CLASSICAL_C22_TRIANGLE",
+        "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS",
+        "MOJOLEARN_CLASSICAL_C24_PANEL8",
+        "MOJOLEARN_CLASSICAL_C24_ROWS2048",
+        "MOJOLEARN_CLASSICAL_C24_TREE4",
+        "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE",
+        "MOJOLEARN_CLASSICAL_C26_PRODUCTS",
+        "MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED",
+        "MOJOLEARN_CLASSICAL_C27_COMPONENTS",
+        "MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS",
+        "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR",
+        "MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES",
+        "MOJOLEARN_C29_STREAM_TOPK",
+        "MOJOLEARN_C29_TILE_128",
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C30_ROWS_4",
+        "MOJOLEARN_C31_DEVICE_BUCKETS",
+        "MOJOLEARN_C32_COUNT_FUSION",
+        "MOJOLEARN_C32_EMIT_FUSION",
+        "MOJOLEARN_C33_FROZEN_CHUNKS",
+        "MOJOLEARN_C33_CHUNK_4",
+        "MOJOLEARN_C34_PARALLEL_EDGES",
+        "MOJOLEARN_C35_PACKED_LISTS",
+        "MOJOLEARN_C35_ROWS_128",
+        "MOJOLEARN_C36_CENTROID_TILES",
+        "MOJOLEARN_C36_ROWS_4",
+        "MOJOLEARN_C37_ROW_PANELS",
+        "MOJOLEARN_C37_PANEL_128",
+        "MOJOLEARN_C38_REUSE_NEAREST",
+        "MOJOLEARN_C38_DEVICE_POTENTIAL",
+        "MOJOLEARN_C39_RETAIN_STATE",
+        "MOJOLEARN_C40_SEED_TILES",
+        "MOJOLEARN_C40_ACTIVE_SEEDS",
+        "MOJOLEARN_C41_FUSED_MINIMA",
+        "MOJOLEARN_C42_ACTIVE_TRIANGLE",
+        "MOJOLEARN_C43_RESIDENT_NORMALIZATION",
+        "MOJOLEARN_C44_SAMPLING_DESCRIPTORS",
+        "MOJOLEARN_C52_PAIR_128",
+        "MOJOLEARN_C53_CENTER4",
+        "MOJOLEARN_C53_BGMM_STATS",
+        "MOJOLEARN_C54_PREDICT_TILES",
+        "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP",
+        "MOJOLEARN_CLASSICAL_C56_LDA_INPUT",
+        "MOJOLEARN_C56_QDA_PROJECT4",
+        "MOJOLEARN_C57_CANDIDATE_STATE",
+        "MOJOLEARN_C58_SHARED_PREP",
+        "MOJOLEARN_C58_SERIES4",
+        "MOJOLEARN_C58_FORECAST4",
+        "MOJOLEARN_C58_TEAM64",
+        "MOJOLEARN_C59_TRIAL_STATE",
+        "MOJOLEARN_C60_LAG4",
+        "MOJOLEARN_C60_DIFF_REUSE"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+        "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+        "Weighted linear means keep incumbent scaling and sums. GPU schedules both exact streams together; host uses its incumbent exact sums under the same new binding.",
+        "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+        "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+        "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+        "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed.",
+        "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+        "Default TSQR does not allocate these Gram/inverse buffers; do not claim its reach. No cross-call cache.",
+        "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+        "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route.",
+        "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+        "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+        "Dictionary reuse is independent of grouped emission; only one-hot emission integrated.",
+        "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists.",
+        "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending.",
+        "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization.",
+        "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+        "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending.",
+        "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+        "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+        "C13 is a numerical profile and its quality/selected model results remain unverified.",
+        "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+        "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+        "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed.",
+        "No new BayesianRidge inverse-elision arm where production already solves factors.",
+        "Gaussian-process inverse-materialization callers need independent integration by owning family.",
+        "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+        "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+        "OVR arm changes scheduling waves, not full model-state allocation.",
+        "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+        "Do not claim unchanged old I12 OVR/exact-trial experiments as new.",
+        "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+        "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated.",
+        "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+        "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter.",
+        "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+        "Unsupported precomputed kernel routes preserve incumbent handling.",
+        "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+        "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+        "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+        "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+        "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+        "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+        "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+        "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op.",
+        "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+        "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+        "IncrementalPCA centered incremental covariance caller remains unfinished source work.",
+        "Global TSQR uses must remain classical callers; no neural application is introduced.",
+        "Panel-size numeric version quality/rank/sign behavior remains wholly unverified.",
+        "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+        "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+        "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite.",
+        "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+        "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+        "Nonnegative dictionary-learning callers not changed.",
+        "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+        "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted.",
+        "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+        "Descriptor scans and radix scratch belong to whole-operation cost.",
+        "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling.",
+        "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated.",
+        "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate.",
+        "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+        "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there.",
+        "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction.",
+        "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent.",
+        "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+        "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+        "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach.",
+        "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired.",
+        "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced.",
+        "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded.",
+        "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending.",
+        "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers.",
+        "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced.",
+        "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+        "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B.",
+        "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+        "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion.",
+        "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+        "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated.",
+        "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+        "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it.",
+        "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter.",
+        "Class factorization/solve batching is not implemented; existing per-class rank thresholds remain intact.",
+        "LDA input-reuse subarm is owned by shared_implementation.json and consolidated into this ID by the source index.",
+        "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+        "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending.",
+        "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+        "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+        "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+        "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+        "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+        "Parent arena/CSS constructors retain their original allocation and input indexing.",
+        "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+        "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+        "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+        "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+      ],
+      "required_workload_keys": [
+        "classical:pca",
+        "more:tsvd",
+        "expanded:sgd-reg@regression_report",
+        "expanded:standard-scaler",
+        "classical:ols",
+        "more:ridge",
+        "expanded:gaussian-nb",
+        "expanded:minmax-scaler",
+        "expanded:maxabs-scaler",
+        "expanded:lda-clf@lda_outputs",
+        "expanded:sgd-clf@ranking_report",
+        "classical:kmeans",
+        "classical:knn",
+        "classical:kde",
+        "classical:hdbscan",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:ivf",
+        "expanded:normalizer",
+        "expanded:quantile-transformer",
+        "expanded:kbins",
+        "expanded:onehot",
+        "expanded:ordinal",
+        "expanded:target-encoder",
+        "expanded:label-encoder",
+        "expanded:isotonic",
+        "expanded:onehot@onehot_fit_transform",
+        "expanded:ordinal@ordinal_fit_transform",
+        "expanded:categorical-nb",
+        "expanded:resample",
+        "expanded:bootstrap",
+        "expanded:permutation-test",
+        "expanded:cross-val-score",
+        "expanded:sgd-clf@classification_report",
+        "expanded:ridge-cv",
+        "expanded:lasso-cv",
+        "expanded:enet-cv",
+        "expanded:logreg-cv",
+        "expanded:logreg-cv@weighted_cv",
+        "more:gpr",
+        "expanded:pls",
+        "expanded:lstsq",
+        "expanded:lu-solve",
+        "expanded:ridge-clf",
+        "expanded:bayesian-ridge",
+        "expanded:ard",
+        "expanded:min-cov-det",
+        "expanded:elliptic-envelope",
+        "more:logreg",
+        "more:linearsvc",
+        "more:linearsvr",
+        "expanded:poisson",
+        "expanded:gamma",
+        "expanded:tweedie",
+        "more:lasso",
+        "more:elasticnet",
+        "expanded:sparse-coder",
+        "expanded:sgd-clf",
+        "expanded:sgd-reg",
+        "expanded:perceptron",
+        "expanded:pa-clf",
+        "expanded:pa-reg",
+        "expanded:sgd-ocsvm",
+        "classical:svc",
+        "more:svr",
+        "expanded:ocsvm",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:incremental-pca",
+        "expanded:lda-clf",
+        "expanded:qda",
+        "expanded:qr",
+        "expanded:svd",
+        "expanded:randomized-svd",
+        "expanded:gaussian-rp",
+        "expanded:sparse-rp",
+        "more:nystroem",
+        "more:rbf-sampler",
+        "expanded:nmf",
+        "expanded:dict-learning",
+        "expanded:mb-dict-learning",
+        "expanded:fastica",
+        "expanded:factor-analysis",
+        "expanded:cca",
+        "expanded:pls-canonical",
+        "expanded:als",
+        "expanded:lof",
+        "expanded:label-propagation",
+        "expanded:label-spreading",
+        "expanded:isomap",
+        "expanded:lle",
+        "classical:dbscan",
+        "more:agglomerative",
+        "expanded:radius-neighbors",
+        "expanded:connected-components",
+        "expanded:minibatch-kmeans",
+        "expanded:bisecting-kmeans",
+        "expanded:meanshift",
+        "expanded:optics",
+        "more:agglomerative@active_linkage",
+        "more:spectral-embedding",
+        "more:spectral",
+        "expanded:pagerank",
+        "more:umap",
+        "more:gmm",
+        "expanded:bayesian-gmm",
+        "more:gpc",
+        "expanded:svgp",
+        "expanded:multinomial-nb",
+        "expanded:bernoulli-nb",
+        "expanded:complement-nb",
+        "more:ets",
+        "expanded:theta",
+        "expanded:optimized-theta",
+        "expanded:dynamic-theta",
+        "expanded:dynamic-optimized-theta",
+        "expanded:auto-theta",
+        "expanded:damped-ets",
+        "expanded:garch",
+        "expanded:prophet",
+        "more:arima",
+        "expanded:autoarima"
+      ],
+      "component_arms": [
+        {
+          "id": "C01",
+          "configuration": "leaf64"
+        },
+        {
+          "id": "C02",
+          "configuration": "combined"
+        },
+        {
+          "id": "C03",
+          "configuration": "finite_extrema"
+        },
+        {
+          "id": "C04",
+          "configuration": "load_center"
+        },
+        {
+          "id": "C05",
+          "configuration": "combined"
+        },
+        {
+          "id": "C06",
+          "configuration": "rows2"
+        },
+        {
+          "id": "C07",
+          "configuration": "combined"
+        },
+        {
+          "id": "C08",
+          "configuration": "combined"
+        },
+        {
+          "id": "C09",
+          "configuration": "regression_bundle"
+        },
+        {
+          "id": "C10",
+          "configuration": "ranking_bundle"
+        },
+        {
+          "id": "C11",
+          "configuration": "draw_gather"
+        },
+        {
+          "id": "C12",
+          "configuration": "sparse_counts"
+        },
+        {
+          "id": "C13",
+          "configuration": "combined"
+        },
+        {
+          "id": "C14",
+          "configuration": "group_rhs"
+        },
+        {
+          "id": "C15",
+          "configuration": "factor_solve"
+        },
+        {
+          "id": "C16",
+          "configuration": "glm_fused"
+        },
+        {
+          "id": "C17",
+          "configuration": "combined"
+        },
+        {
+          "id": "C18",
+          "configuration": "combined"
+        },
+        {
+          "id": "C19",
+          "configuration": "ordered_128"
+        },
+        {
+          "id": "C20",
+          "configuration": "combined"
+        },
+        {
+          "id": "C21",
+          "configuration": "extrema_tree4"
+        },
+        {
+          "id": "C22",
+          "configuration": "symmetric_triangle"
+        },
+        {
+          "id": "C23",
+          "configuration": "centered_panels"
+        },
+        {
+          "id": "C24",
+          "configuration": "combined"
+        },
+        {
+          "id": "C25",
+          "configuration": "projection_reuse"
+        },
+        {
+          "id": "C26",
+          "configuration": "combined"
+        },
+        {
+          "id": "C27",
+          "configuration": "combined"
+        },
+        {
+          "id": "C28",
+          "configuration": "bucket_solves"
+        },
+        {
+          "id": "C29",
+          "configuration": "combined"
+        },
+        {
+          "id": "C30",
+          "configuration": "combined"
+        },
+        {
+          "id": "C31",
+          "configuration": "device_buckets"
+        },
+        {
+          "id": "C32",
+          "configuration": "combined"
+        },
+        {
+          "id": "C33",
+          "configuration": "combined"
+        },
+        {
+          "id": "C34",
+          "configuration": "parallel_edges"
+        },
+        {
+          "id": "C35",
+          "configuration": "combined"
+        },
+        {
+          "id": "C36",
+          "configuration": "combined"
+        },
+        {
+          "id": "C37",
+          "configuration": "combined"
+        },
+        {
+          "id": "C38",
+          "configuration": "combined"
+        },
+        {
+          "id": "C39",
+          "configuration": "retain_state"
+        },
+        {
+          "id": "C40",
+          "configuration": "combined"
+        },
+        {
+          "id": "C41",
+          "configuration": "fused_minima"
+        },
+        {
+          "id": "C42",
+          "configuration": "active_triangle"
+        },
+        {
+          "id": "C43",
+          "configuration": "resident_normalization"
+        },
+        {
+          "id": "C44",
+          "configuration": "sampling_descriptors"
+        },
+        {
+          "id": "C52",
+          "configuration": "pair128"
+        },
+        {
+          "id": "C53",
+          "configuration": "combined"
+        },
+        {
+          "id": "C54",
+          "configuration": "kernel_tiles4"
+        },
+        {
+          "id": "C55",
+          "configuration": "class_group"
+        },
+        {
+          "id": "C56",
+          "configuration": "combined"
+        },
+        {
+          "id": "C57",
+          "configuration": "candidate_mean"
+        },
+        {
+          "id": "C58",
+          "configuration": "combined"
+        },
+        {
+          "id": "C59",
+          "configuration": "immutable_observations"
+        },
+        {
+          "id": "C60",
+          "configuration": "combined"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01."
+  ],
+  "catalog_estimators": [
+    "Classical column statistics",
+    "GLM objectives",
+    "covariance",
+    "regression metrics"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "classical:pca",
+    "more:tsvd",
+    "expanded:sgd-reg@regression_report"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

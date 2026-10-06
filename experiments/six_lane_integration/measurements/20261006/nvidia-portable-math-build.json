@@ -1,0 +1,19 @@
+{
+  "source_sha256": "bf14372e3583a2d94ae97f37bf5dcc9c927c47ab7a3b17ee3052342a1eae1324",
+  "constants_sha256": "d2a0d4a86a78c87df53a21da122b2a53a67ef3634d021d000ec5d979de32317a",
+  "output_sha256": "35c849364120b31d1e760b662f5915b4863a6979e0e39b62d1e2198b449febf5",
+  "command": [
+    "cc",
+    "-O2",
+    "-ffp-contract=off",
+    "-fno-fast-math",
+    "-shared",
+    "-fPIC",
+    "-march=x86-64-v3",
+    "-nostdlib",
+    "-Wl,-soname,libMojolearnMath.so"
+  ],
+  "source_commit": "acbac52213651b3f1e2598309e3436d16d59272d",
+  "build_api": "packaging/portable_math/stage.py:build",
+  "runtime_patching": false
+}

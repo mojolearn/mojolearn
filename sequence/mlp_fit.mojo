@@ -10,6 +10,7 @@ from sequence.mlp import (
     EPI_L2GRAD,
     MLP_BLOCKED_FOLDS,
     MLP_EPOCH_DEV,
+    MLP_DEVICE_EPOCH_ORDER,
     MLP_L2_BLOCK,
     MLP_ROW_BLOCK,
     SplitMix,
@@ -247,8 +248,9 @@ def mlp_fit[E: Exec](
     var dcurve = ex.alloc(max_iter if MLP_EPOCH_DEV else 1)
     var loss_word = List[Float32](length=1, fill=Float32(0.0))
     var perm = List[Float32]()
-    for i in range(N):
-        perm.append(Float32(i))
+    comptime if not MLP_DEVICE_EPOCH_ORDER:
+        for i in range(N):
+            perm.append(Float32(i))
     var rng = SplitMix(seed)
     var host_loss = List[Float32](length=n_batches, fill=Float32(0.0))
     var best = Float64(1.0e308)
@@ -264,7 +266,12 @@ def mlp_fit[E: Exec](
             if shuffle:
                 ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, it), didx), N)
             elif it == 0:
-                ex.upload(didx, FP(unsafe_from_address=Int(perm.unsafe_ptr())), N)
+                comptime if MLP_DEVICE_EPOCH_ORDER:
+                    var identity_order = mlp_perm_args(N, UInt64(0), didx)
+                    identity_order.i6 = 1
+                    ex.launch[OP_MLP_PERM](identity_order, N)
+                else:
+                    ex.upload(didx, FP(unsafe_from_address=Int(perm.unsafe_ptr())), N)
         else:
             if shuffle:
                 fisher_yates(rng, perm)

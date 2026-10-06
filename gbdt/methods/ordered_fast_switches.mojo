@@ -41,6 +41,7 @@ The bundle's four pieces, all on together when `ord_all_on`:
 """
 
 from std.sys.compile import is_defined
+from gbdt.trees_identical_switches import T22
 from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -82,7 +83,7 @@ def ord_all_on(n_features: Int) -> Bool:
 # F12 pending device quality/performance. Restore stable document-key dither
 # while retaining coalesced fold-position compressed storage. Existing ORD_ALL
 # promotion is unchanged; IDENTICAL/non-Apple builds cannot admit this candidate.
-comptime ORD_DOC_ID_STORAGE = (
+comptime ORD_DOC_ID_STORAGE = T22 or (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     # MEASURED M3 FAST; broader workload evidence remains separate.
 # F12/ordered-docids M3 2026-10-06: 4 scored caller times; B/A

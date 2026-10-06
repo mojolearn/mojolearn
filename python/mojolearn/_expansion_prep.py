@@ -62,7 +62,7 @@ _BINDING = "_mojolearn_x_prep"
 
 #: op name -> id; x_prep/units.mojo `run_unit` holds the same table.
 _OPS = dict(
-    sort_cols=0, col_stats=1, quantile=2, affine=3, scale_params=4, unique_cols=5, mode_cols=6,
+    centered_matmul=178, unique_inverse=177, sort_cols=0, col_stats=1, quantile=2, affine=3, scale_params=4, unique_cols=5, mode_cols=6,
     lookup=7, count_neg=8, onehot=9, i2f=10, f2i=11, binarize=12, matmul=13, row_softmax=14,
     row_argmax=15, class_stats=16, center_rows=17, eigh=18, where_neg=19,
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
@@ -1098,7 +1098,7 @@ def _infrequent_threshold(n, min_frequency):
     return int(math.ceil(n * float(min_frequency)))
 
 
-def _fit_infrequent(est, mode, arr, ignore_missing):
+def _fit_infrequent(est, mode, arr, ignore_missing, inverse=None):
     """Sets est._infrequent (per column: sorted infrequent indices or None)
     and est._grouping (per column: category index -> grouped code, or None),
     as the reference's `_identify_infrequent` and
@@ -1113,7 +1113,10 @@ def _fit_infrequent(est, mode, arr, ignore_missing):
     ks = [c.size - 1 if (ignore_missing and c.size and _is_nan_value(c.tolist()[-1])) else c.size
           for c in cats_all]  # glue: one size per column
     pr = _Prog()
-    codes, _neg = _codes(pr, arr, cats_all)
+    if inverse is None:
+        codes, _neg = _codes(pr, arr, cats_all)
+    else:
+        codes = pr.put(inverse)
     kmax = max(c.size for c in cats_all)  # glue: the widest column's category count (a shape)
     cnt, kc = pr.alloc(d * kmax), pr.put_list(ks)
     m0, m1, mp = pr.work(d * kmax), pr.alloc(d * kmax), pr.alloc(d * kmax)
@@ -1245,13 +1248,16 @@ class OrdinalEncoder(_PrepBase):
             raise TypeError("mojolearn: encoded_missing_value must be a number (or NaN)")
         arr = _finite_2d(X, "OrdinalEncoder")
         mode = _mode()
-        self.categories_ = (_fit_categories(mode, arr) if _is_auto(self.categories) else
-                            _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
-                                              "OrdinalEncoder"))
+        if getattr(self, "_classical_capture_codes", False) and _is_auto(self.categories):
+            self.categories_, self._classical_fit_codes = _fit_categories_with_codes(mode, arr)
+        else:
+            self.categories_ = (_fit_categories(mode, arr) if _is_auto(self.categories) else
+                                _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
+                                                  "OrdinalEncoder"))
         self._missing = [c.size - 1 if c.size and _is_nan_value(c.tolist()[-1]) else -1 for c in self.categories_]  # glue: per-column NaN category slot (categories_-sized: fitted per-column category arrays)
         self._infrequent = self._grouping = None
         if grouping:
-            _fit_infrequent(self, mode, arr, True)
+            _fit_infrequent(self, mode, arr, True, getattr(self, "_classical_fit_codes", None))
         cards = [c.size - (1 if m >= 0 else 0) for c, m in zip(self.categories_, self._missing)]  # glue: per-column category cardinalities (categories_-sized: fitted per-column category arrays)
         if grouping:
             cards = [k if g is None else max(g) + 1 for k, g in zip(cards, self._grouping)]  # glue: grouped per-column cardinalities (cards-sized: per-column category cardinalities)
@@ -1273,8 +1279,16 @@ class OrdinalEncoder(_PrepBase):
         arr = _finite_2d(X, "OrdinalEncoder")
         self._check_width(arr)
         n, d = arr.shape
+        return self._transform_encoded(arr)
+
+    def _transform_encoded(self, arr, inverse=None):
+        n, d = arr.shape
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_)
+        if inverse is None:
+            codes, neg = _codes(pr, arr, self.categories_)
+        else:
+            codes, neg = pr.put(inverse), pr.alloc(d)
+            pr.stage("count_neg", d, codes, n, d, neg)
         out = codes
         if self._grouping is not None:
             out = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping), _NONE)
@@ -1290,6 +1304,20 @@ class OrdinalEncoder(_PrepBase):
         if self.handle_unknown == "error":
             _raise_unknown(pr, neg, d, "OrdinalEncoder")
         return pr.get(out, (n, d))
+
+    def fit_transform(self, X, y=None, **fit_params):
+        # C08 explicitly owned fit-local inverse; never reused for a later
+        # transform, mutated input, another fit or a TargetEncoder fold.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        if not (_classical_shared(_mode()) & 1) or not _is_auto(self.categories):
+            return super().fit_transform(X, y, **fit_params)
+        self._classical_capture_codes = True
+        try:
+            self.fit(X, y, **fit_params)
+            return self._transform_encoded(_finite_2d(X, "OrdinalEncoder"), self._classical_fit_codes)
+        finally:
+            self.__dict__.pop("_classical_capture_codes", None)
+            self.__dict__.pop("_classical_fit_codes", None)
 
     def inverse_transform(self, X):
         self._check_fitted()
@@ -1350,12 +1378,15 @@ class OneHotEncoder(_PrepBase):
                              "per feature")
         arr = _finite_2d(X, "OneHotEncoder")
         mode = _mode()
-        self.categories_ = (_fit_categories(mode, arr) if _is_auto(self.categories) else
-                            _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
-                                              "OneHotEncoder"))
+        if getattr(self, "_classical_capture_codes", False) and _is_auto(self.categories):
+            self.categories_, self._classical_fit_codes = _fit_categories_with_codes(mode, arr)
+        else:
+            self.categories_ = (_fit_categories(mode, arr) if _is_auto(self.categories) else
+                                _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
+                                                  "OneHotEncoder"))
         self._infrequent = self._grouping = None
         if grouping:
-            _fit_infrequent(self, mode, arr, False)
+            _fit_infrequent(self, mode, arr, False, getattr(self, "_classical_fit_codes", None))
         self._set_drop_idx()
         self.numeric_mode_, self.n_features_in_ = mode, arr.shape[1]
         return self
@@ -1423,12 +1454,19 @@ class OneHotEncoder(_PrepBase):
         self._check_fitted()
         arr = _finite_2d(X, "OneHotEncoder")
         self._check_width(arr)
+        return self._transform_encoded(arr)
+
+    def _transform_encoded(self, arr, inverse=None):
         n, d = arr.shape
         widths, drops = self._widths()
         starts = [sum(widths[:j]) for j in range(d)]  # glue: prefix offsets of the per-column block widths (d-sized: feature count)
         W = sum(widths)  # glue: total one-hot output width (widths-sized: per-column block widths)
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_)
+        if inverse is None:
+            codes, neg = _codes(pr, arr, self.categories_)
+        else:
+            codes, neg = pr.put(inverse), pr.alloc(d)
+            pr.stage("count_neg", d, codes, n, d, neg)
         if self._grouping is not None:
             unk = self._unknown_to()
             codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping),
@@ -1450,6 +1488,20 @@ class OneHotEncoder(_PrepBase):
                 warnings.warn(f"Found unknown categories in columns {bad} during transform. These unknown "
                               f"categories will be {where}.", UserWarning)
         return pr.get(out, (n, W))
+
+    def fit_transform(self, X, y=None, **fit_params):
+        # C08 keeps only invocation-owned inverse data, shared by category
+        # counts and output emission. Future transforms always recode X.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        if not (_classical_shared(_mode()) & 1) or not _is_auto(self.categories):
+            return super().fit_transform(X, y, **fit_params)
+        self._classical_capture_codes = True
+        try:
+            self.fit(X, y, **fit_params)
+            return self._transform_encoded(_finite_2d(X, "OneHotEncoder"), self._classical_fit_codes)
+        finally:
+            self.__dict__.pop("_classical_capture_codes", None)
+            self.__dict__.pop("_classical_fit_codes", None)
 
     def inverse_transform(self, X):
         self._check_fitted()
@@ -1717,13 +1769,23 @@ class TargetEncoder(_PrepBase):
         rows = tgt.size * T
         if rows != n * T:
             raise ValueError("mojolearn: X and y have different numbers of rows")
-        cats = (_fit_categories(mode, arr) if _is_auto(self.categories) else
-                _given_categories(self.categories, arr, mode, False, "TargetEncoder"))
+        inverse = None
+        if (_classical_shared(mode) & 1) and _is_auto(self.categories):
+            # C08 reuses only unsupervised category IDs. Fold membership,
+            # target statistics, and held-out target isolation are unchanged.
+            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+            cats, inverse = _fit_categories_with_codes(mode, arr)
+        else:
+            cats = (_fit_categories(mode, arr) if _is_auto(self.categories) else
+                    _given_categories(self.categories, arr, mode, False, "TargetEncoder"))
         cmax = max(c.size for c in cats)  # glue: largest category count for the program layout (cats-sized: per-column category arrays)
         F = n_folds
         pr = _Prog()
         scratch = _target_scratch(mode)
-        codes, _neg = _codes(pr, arr, cats, device_only=scratch)
+        if inverse is None:
+            codes, _neg = _codes(pr, arr, cats, device_only=scratch)
+        else:
+            codes = pr.put(inverse)
         # the target's words as arrays (lane apple-fast-py2mojo-prep /
         # cgr4-py-compute): continuous float32, codes through i2f, the
         # one-hot rows built on the device
@@ -2539,6 +2601,16 @@ def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None
     _NONE are not written). mode given and IDN_CLASS_ONEPASS (IDENTICAL):
     one unit per (block, column) walks X once for every class (csb1_part /
     csb1_ss; the same words as csb_part / csb_ss)."""
+    # C55 explicit build control outranks incumbent blocked scheduling.
+    # A's class-group serial profile is shared by host and all devices;
+    # switching from a blocked incumbent is a versioned arithmetic change.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    if _classical_shared(mode if mode is not None else _mode()) & 2:
+        if wo is None:
+            pr.stage("class_stats", total, xo, n, d, yo, K, cnt, mean, var, sums)
+        else:
+            pr.stage("class_stats_w", total, xo, n, d, yo, K, cnt, mean, var, sums, wo)
+        return
     if _blocked():
         nb = (n + _XB - 1) // _XB
         w = _NONE if wo is None else wo
@@ -3402,6 +3474,23 @@ class LinearDiscriminantAnalysis(_Classifier):
         pr.stage("matmul", n * K, xo, d, 1, c, 1, d, out, K, d, b, _NONE)
 
     def decision_function(self, X):
+        # C56: the incumbent binary answer is _pair's coefficient difference.
+        # Build it once from the validated input, avoiding discarded K scores.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        self._check_fitted()
+        if len(self.classes_) == 2 and (_classical_shared(self.numeric_mode_) & 8):
+            arr = _x2d(X)
+            self._check_width(arr)
+            n, d = arr.shape
+            pr = _Prog()
+            xo = pr.put(arr)
+            chk = self._score_checks(pr, xo, n, d)
+            coef, inter = pr.put(self.coef_), pr.put(self.intercept_)
+            out = pr.alloc(n)
+            pr.stage("matmul", n, xo, d, 1, coef, 1, 0, out, 1, d, inter, _NONE)
+            pr.run(self.numeric_mode_)
+            self._score_refusals(pr, d, chk)
+            return pr.get(out, n)
         pr, n, K, o = self._scores(X, ())
         if K == 2:
             return self._pair(X, o, pr, n)
@@ -3428,12 +3517,17 @@ class LinearDiscriminantAnalysis(_Classifier):
         pr = _Prog()
         xo = pr.put(arr)
         xb, sc = pr.put(self.xbar_), pr.put(self._scal_full)
-        cen, out = pr.alloc(n * d), pr.alloc(n * max(mc, 1))
-        if self.solver == "eigen":
-            cen = xo
+        out = pr.alloc(n * max(mc, 1))
+        if self.solver != "eigen" and (_classical_shared(self.numeric_mode_) & 4):
+            # C04: the same center_rows -> matmul arithmetic in the consumer.
+            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+            pr.stage("centered_matmul", n * mc, xo, n, d, xb, _NONE, _NONE,
+                     sc, d, 1, out, mc, _NONE, _NONE)
         else:
-            pr.stage("center_rows", n * d, xo, n, d, xb, _NONE, _NONE, cen)
-        pr.stage("matmul", n * mc, cen, d, 1, sc, d, 1, out, mc, d, _NONE, _NONE)
+            cen = xo if self.solver == "eigen" else pr.alloc(n * d)
+            if self.solver != "eigen":
+                pr.stage("center_rows", n * d, xo, n, d, xb, _NONE, _NONE, cen)
+            pr.stage("matmul", n * mc, cen, d, 1, sc, d, 1, out, mc, d, _NONE, _NONE)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, mc))
 
@@ -6034,3 +6128,27 @@ class CategoricalNB(_DiscreteNB):
         K = len(self.classes_)
         fo, co = pr.put(self._flp), pr.put(self.class_log_prior_)
         pr.stage("cat_jll", n * K, xo, n, d, fo, K, self._cmax, co, out)
+
+
+
+def _classical_shared(mode):
+    """Compile-time admission only; no data processing or Python candidate arithmetic."""
+    if mode != "identical":
+        return 0
+    entry = _optional_prep_entry(_prep_binding(mode), "x_prep_classical_shared")
+    return int(entry()) if entry is not None else 0
+
+
+
+def _fit_categories_with_codes(mode, arr):
+    """C08 canonical categories and inverse from one owned native program."""
+    n, d = arr.shape
+    pr = _Prog()
+    X, sorted_rows = pr.put(arr), pr.work(n*d)
+    dictionary, counts, inverse = pr.alloc(n*d), pr.alloc(d), pr.alloc(n*d)
+    pr.stage("sort_cols", d, X, n, d, sorted_rows, 1)
+    pr.stage("unique_inverse", d, sorted_rows, n, d, dictionary, counts, X, inverse)
+    pr.run(mode)
+    sizes = [int(v) for v in pr.values(counts, d)]  # glue: per-feature output extents
+    categories = [pr.get(dictionary+c*n, sizes[c]) for c in range(d)]  # glue: wraps dictionaries
+    return categories, pr.get(inverse, (n, d))

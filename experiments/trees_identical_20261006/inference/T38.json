@@ -1,0 +1,148 @@
+{
+  "id": "T38",
+  "title": "Fuse forest score normalization and classification",
+  "source_status": "source_integrated_unverified",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "default": "OFF (new experiment; inherited defaults preserved)",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T38",
+      "A": [
+        "MOJOLEARN_TREES_T38_FUSED_LABELS=1"
+      ],
+      "B": [],
+      "scope": [
+        "RF",
+        "ET"
+      ],
+      "production_callers": [
+        "core/forest_inference.mojo:launch_forest_inference",
+        "core/forest_inference_model.mojo:ResidentForest.predict_into",
+        "python/mojolearn/_forest_protocol.py",
+        "bindings/forest_inference_binding.mojo:forest_identical_fused_labels_binding"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "labels:rf:taxi",
+        "labels:rf:taxireg",
+        "labels:rf:istella",
+        "labels:rf:istellareg",
+        "labels:rf:year",
+        "labels:rf:taximc",
+        "labels:rf:istellamc",
+        "labels:et:taxi",
+        "labels:et:taxireg",
+        "labels:et:istella",
+        "labels:et:istellareg",
+        "labels:et:year",
+        "labels:et:taximc",
+        "labels:et:istellamc",
+        "groves-labels:rf:taxi",
+        "groves-labels:rf:istella",
+        "groves-labels:rf:taximc",
+        "groves-labels:rf:istellamc",
+        "groves-labels:et:taxi",
+        "groves-labels:et:istella",
+        "groves-labels:et:taximc",
+        "groves-labels:et:istellamc",
+        "labels:decisiontree:taxi",
+        "labels:decisiontree:istella"
+      ]
+    }
+  ],
+  "production_callers": [
+    "core/forest_inference.mojo:launch_forest_inference",
+    "core/forest_inference_model.mojo:ResidentForest.predict_into",
+    "python/mojolearn/_forest_protocol.py",
+    "bindings/forest_inference_binding.mojo:forest_identical_fused_labels_binding"
+  ],
+  "supported_estimators": [
+    "RF",
+    "ET"
+  ],
+  "recipe_keys": [
+    "labels:rf:taxi",
+    "labels:rf:taxireg",
+    "labels:rf:istella",
+    "labels:rf:istellareg",
+    "labels:rf:year",
+    "labels:rf:taximc",
+    "labels:rf:istellamc",
+    "labels:et:taxi",
+    "labels:et:taxireg",
+    "labels:et:istella",
+    "labels:et:istellareg",
+    "labels:et:year",
+    "labels:et:taximc",
+    "labels:et:istellamc",
+    "groves-labels:rf:taxi",
+    "groves-labels:rf:istella",
+    "groves-labels:rf:taximc",
+    "groves-labels:rf:istellamc",
+    "groves-labels:et:taxi",
+    "groves-labels:et:istella",
+    "groves-labels:et:taximc",
+    "groves-labels:et:istellamc",
+    "labels:decisiontree:taxi",
+    "labels:decisiontree:istella"
+  ],
+  "overlap_ids": [],
+  "implementation": "Labels-only kernel computes normalized scores and first-max directly; T35/T36 combined path consumes prepared leaves without materialized score output.",
+  "remaining_gaps": [
+    "Selected candidate requires one device; host retains existing same-statement labels route."
+  ],
+  "demonstrated_runtime_reach": false,
+  "validation": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false,
+    "reason": "Execution prohibited by owner"
+  },
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_facts": {
+    "dataset_version": "pending retained artifact selection",
+    "dataset_hash": "pending",
+    "actual_dimensions": "pending full recipe resolution; do not substitute reduced workloads",
+    "numeric_mode": "IDENTICAL",
+    "timing_boundary": "Preparation + training/model construction + required synchronization + consumed outputs; cold/repeated inference/explanation separate."
+  },
+  "evidence": [],
+  "full_dataset_recipes": [
+    "labels:rf:taxi",
+    "labels:rf:taxireg",
+    "labels:rf:istella",
+    "labels:rf:istellareg",
+    "labels:rf:year",
+    "labels:rf:taximc",
+    "labels:rf:istellamc",
+    "labels:et:taxi",
+    "labels:et:taxireg",
+    "labels:et:istella",
+    "labels:et:istellareg",
+    "labels:et:year",
+    "labels:et:taximc",
+    "labels:et:istellamc",
+    "groves-labels:rf:taxi",
+    "groves-labels:rf:istella",
+    "groves-labels:rf:taximc",
+    "groves-labels:rf:istellamc",
+    "groves-labels:et:taxi",
+    "groves-labels:et:istella",
+    "groves-labels:et:taximc",
+    "groves-labels:et:istellamc",
+    "labels:decisiontree:taxi",
+    "labels:decisiontree:istella"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

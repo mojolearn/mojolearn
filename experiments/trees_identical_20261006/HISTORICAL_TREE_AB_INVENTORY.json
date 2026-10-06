@@ -1,0 +1,965 @@
+{
+  "schema": "mojolearn.historical-tree-ab-inventory/1",
+  "label": "OLD / HISTORICAL \u2014 REFERENCE ONLY \u2014 NOT NEW TASKS",
+  "branch": "ideas/trees-identical-20261006",
+  "scope": "Inspected retained tree-only selectors, records and source references; not an exhaustive reconstruction of repository/Git/external history. No execution or requalification. New tree cards, non-tree classical, neural and Apple FAST excluded.",
+  "inspected_scope": [
+    "tools/trees_identical_ab.sh (historical commands only; newly added ideas commands excluded)",
+    "tools/select_identical_ab.py",
+    "tools/forest_experiment_board.py",
+    "tools/identical_candidate_recipes.json (tree recipe groups only)",
+    "docs/identical/toggle-inventory.json (tree flag prefixes only)",
+    "docs/identical/optimization-ledger.json (RF/DART record only)",
+    "experiments/identical_speed/selected-batch.json (RF/ET families only)",
+    "experiments/identical_speed/results/20261005/forest-final-decisions/board.json (RF/ET decisions and limitations)",
+    "experiments/identical_speed/results/20261005/forest-et-decision/BOARD.md",
+    "experiments/performance_ideas/{I17,I18,N07,A07}/{manifest,compile_matrix}.json (A07 histogram portion only)",
+    "experiments/performance_ideas/README.md (campaign qualification scope)",
+    "Relevant retained Mojo selector comments and definitions linked below"
+  ],
+  "records": [
+    {
+      "kind": "historical_recipe",
+      "id": "rf_sorted_bootstrap/1",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_RF_ROWS_SORTED=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready_as_recorded": false,
+      "required_fixture_as_recorded": "Wide RF bootstrap with >=64cols and narrow control; exact forest/predictions, trace row order intentionally different.",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "sources": [
+        "tools/identical_candidate_recipes.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_recipe",
+      "id": "rf_device_level_loop/1",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP=1",
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K1=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready_as_recorded": false,
+      "required_fixture_as_recorded": "max_leaves=-1 and single sampling round required, unlike DART255-leaf fixture. Exact forest node queue/IDs and tail batches; bound unlimited-depth allocation.",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "sources": [
+        "tools/identical_candidate_recipes.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_recipe",
+      "id": "rf_device_level_loop/2",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP=1",
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K2=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready_as_recorded": false,
+      "required_fixture_as_recorded": "max_leaves=-1 and single sampling round required, unlike DART255-leaf fixture. Exact forest node queue/IDs and tail batches; bound unlimited-depth allocation.",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "sources": [
+        "tools/identical_candidate_recipes.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_recipe",
+      "id": "rf_device_level_loop/4",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready_as_recorded": false,
+      "required_fixture_as_recorded": "max_leaves=-1 and single sampling round required, unlike DART255-leaf fixture. Exact forest node queue/IDs and tail batches; bound unlimited-depth allocation.",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "sources": [
+        "tools/identical_candidate_recipes.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_recipe",
+      "id": "rf_device_level_loop/8",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP=1",
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K8=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready_as_recorded": false,
+      "required_fixture_as_recorded": "max_leaves=-1 and single sampling round required, unlike DART255-leaf fixture. Exact forest node queue/IDs and tail batches; bound unlimited-depth allocation.",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "sources": [
+        "tools/identical_candidate_recipes.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_recipe",
+      "id": "extra_trees_u16_bins/1",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_ET_BINNED_U16=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready_as_recorded": false,
+      "required_fixture_as_recorded": ">=64cols with2*k>=cols; Istella-reg/year quality within declared margin and raw all-column model/prediction identity. Taxi16cols cannot activate.",
+      "source_ref": "lane/fam2-forests",
+      "source_sha": "1ecd3dfdc8e0b68e909a0044b3abca626a69b61d",
+      "sources": [
+        "tools/identical_candidate_recipes.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_recipe",
+      "id": "gbdt_apply_wide/1",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_GBDT_APPLY_WIDE=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready_as_recorded": false,
+      "required_fixture_as_recorded": "Wide symmetric predict resident/nonresident fixtures, zero/mixed depth and exact labels/probabilities.",
+      "source_ref": "lane/fam2-gbdt",
+      "source_sha": "54c99a3b7b4f1a90a19a4a486af5ecbdb2b81690",
+      "sources": [
+        "tools/identical_candidate_recipes.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_recipe",
+      "id": "gbdt_ctr_borders_device/1",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_GBDT_CTR_BORDERS_DEVICE=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "NOT_QUALIFIED_LEAVE_DISABLED",
+      "qualification_ready_as_recorded": false,
+      "required_fixture_as_recorded": "Categorical GBDT borders/model/prediction raw identity with flag applied device AND host builds.",
+      "source_ref": "lane/fam2-gbdt",
+      "source_sha": "54c99a3b7b4f1a90a19a4a486af5ecbdb2b81690",
+      "sources": [
+        "tools/identical_candidate_recipes.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_full_fit_profile",
+      "id": "rf-k1",
+      "baseline_profile": "rf-k4",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K1=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "REJECTED_KEEP_DEFAULT",
+      "reason_as_recorded": "No measured combined improvement; retain K4.",
+      "limitations_as_recorded": "One warmup/sample; Apple/host identity and ET quality decision must be linked before promotion; no automatic material-regression threshold.",
+      "promoted_as_recorded": false,
+      "sources": [
+        "experiments/identical_speed/selected-batch.json",
+        "tools/select_identical_ab.py",
+        "tools/forest_experiment_board.py",
+        "experiments/identical_speed/results/20261005/forest-final-decisions/board.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_full_fit_profile",
+      "id": "rf-k2",
+      "baseline_profile": "rf-k4",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K2=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "REJECTED_KEEP_DEFAULT",
+      "reason_as_recorded": "No measured combined improvement; retain K4.",
+      "limitations_as_recorded": "One warmup/sample; Apple/host identity and ET quality decision must be linked before promotion; no automatic material-regression threshold.",
+      "promoted_as_recorded": false,
+      "sources": [
+        "experiments/identical_speed/selected-batch.json",
+        "tools/select_identical_ab.py",
+        "tools/forest_experiment_board.py",
+        "experiments/identical_speed/results/20261005/forest-final-decisions/board.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_full_fit_profile",
+      "id": "rf-k8",
+      "baseline_profile": "rf-k4",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_RF_DEVICE_LOOP_K8=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "REJECTED_KEEP_DEFAULT",
+      "reason_as_recorded": "No measured combined improvement; retain K4.",
+      "limitations_as_recorded": "One warmup/sample; Apple/host identity and ET quality decision must be linked before promotion; no automatic material-regression threshold.",
+      "promoted_as_recorded": false,
+      "sources": [
+        "experiments/identical_speed/selected-batch.json",
+        "tools/select_identical_ab.py",
+        "tools/forest_experiment_board.py",
+        "experiments/identical_speed/results/20261005/forest-final-decisions/board.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_full_fit_profile",
+      "id": "et-u16",
+      "baseline_profile": "et-float",
+      "candidate_controls": [
+        "MOJOLEARN_IDN_ET_BINNED_U16=1"
+      ],
+      "baseline_controls": [],
+      "recorded_status": "REJECTED_KEEP_DEFAULT",
+      "reason_as_recorded": "Slower combined and on both vendors overall; slightly worse RMSE; retain float.",
+      "limitations_as_recorded": "One warmup/sample; Apple/host identity and ET quality decision must be linked before promotion; no automatic material-regression threshold.",
+      "promoted_as_recorded": false,
+      "sources": [
+        "experiments/identical_speed/selected-batch.json",
+        "tools/select_identical_ab.py",
+        "tools/forest_experiment_board.py",
+        "experiments/identical_speed/results/20261005/forest-final-decisions/board.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_card_tree_scope",
+      "id": "I17",
+      "title": "qualify loss-guide frontier retention at varying live leaf capacities",
+      "recorded_status": "source_ready",
+      "qualification_as_recorded": "pending_device_validation",
+      "arms": [
+        {
+          "name": "incumbent",
+          "source": "experiments/performance_ideas/I17/check.mojo",
+          "defines": []
+        },
+        {
+          "name": "candidate",
+          "source": "experiments/performance_ideas/I17/check.mojo",
+          "defines": [
+            "MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT=1"
+          ]
+        },
+        {
+          "name": "lg_exact_off",
+          "source": "experiments/performance_ideas/I17/check.mojo",
+          "defines": [
+            "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1"
+          ]
+        },
+        {
+          "name": "inherit_off",
+          "source": "experiments/performance_ideas/I17/check.mojo",
+          "defines": [
+            "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
+          ]
+        },
+        {
+          "name": "legacy_both_off",
+          "source": "experiments/performance_ideas/I17/check.mojo",
+          "defines": [
+            "MOJOLEARN_GBDT_LG_EXACT_ID_OFF=1",
+            "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF=1"
+          ]
+        }
+      ],
+      "sources": [
+        "experiments/performance_ideas/I17/manifest.json",
+        "experiments/performance_ideas/I17/compile_matrix.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_card_tree_scope",
+      "id": "I18",
+      "title": "Retain bounded exact forest histograms and subtract compatible siblings",
+      "recorded_status": "source_ready",
+      "qualification_as_recorded": "pending",
+      "arms": [
+        {
+          "name": "baseline",
+          "source": "experiments/performance_ideas/I18/forest_check.mojo",
+          "defines": [
+            "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT=1"
+          ]
+        },
+        {
+          "name": "candidate",
+          "source": "experiments/performance_ideas/I18/forest_check.mojo",
+          "defines": [
+            "MOJOLEARN_TREE_EXACT_SIBLING_HIST=1",
+            "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT=1"
+          ]
+        },
+        {
+          "name": "cell-oracle",
+          "source": "experiments/performance_ideas/I18/check.mojo",
+          "defines": [
+            "MOJOLEARN_TREE_EXACT_SIBLING_HIST=1",
+            "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT=1"
+          ]
+        }
+      ],
+      "sources": [
+        "experiments/performance_ideas/I18/manifest.json",
+        "experiments/performance_ideas/I18/compile_matrix.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_card_tree_scope",
+      "id": "N07",
+      "title": "Stream bounded feature chunks with exact private integer histograms",
+      "recorded_status": "source_ready",
+      "qualification_as_recorded": "pending_device_validation",
+      "arms": [
+        {
+          "name": "baseline",
+          "source": "experiments/performance_ideas/N07/check.mojo",
+          "defines": []
+        },
+        {
+          "name": "candidate",
+          "source": "experiments/performance_ideas/N07/check.mojo",
+          "defines": [
+            "MOJOLEARN_IDN_RF_STREAM_REPLICAS=1"
+          ]
+        },
+        {
+          "name": "production_baseline",
+          "source": "experiments/performance_ideas/N07/production_check.mojo",
+          "defines": []
+        },
+        {
+          "name": "production_stream_replicas",
+          "source": "experiments/performance_ideas/N07/production_check.mojo",
+          "defines": [
+            "MOJOLEARN_IDN_RF_STREAM_REPLICAS=1"
+          ]
+        }
+      ],
+      "sources": [
+        "experiments/performance_ideas/N07/manifest.json",
+        "experiments/performance_ideas/N07/compile_matrix.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_card_tree_scope",
+      "id": "A07/tree-histograms-only",
+      "title": "Exact integer node histogram task-size arms only",
+      "recorded_status": "source_ready",
+      "qualification_as_recorded": "pending_device_validation",
+      "arms": [
+        {
+          "name": "production_default512",
+          "source": "experiments/performance_ideas/A07/production_check.mojo",
+          "defines": []
+        },
+        {
+          "name": "production_tasks256",
+          "source": "experiments/performance_ideas/A07/production_check.mojo",
+          "defines": [
+            "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
+          ]
+        },
+        {
+          "name": "histogram_tasks256",
+          "source": "experiments/performance_ideas/A07/check.mojo",
+          "defines": [
+            "MOJOLEARN_IDN_RF_TASK_ROWS256=1"
+          ]
+        }
+      ],
+      "sources": [
+        "experiments/performance_ideas/A07/manifest.json",
+        "experiments/performance_ideas/A07/compile_matrix.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_ET_BINNED_U16",
+      "recorded_status": "Default OFF; later retained full-fit board rejects candidate, keep float incumbent.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_ET_PART_ROWS_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_ET_RESCUE_DEVICE_OFF",
+      "recorded_status": "Retired host rescue comparison; source says removed.",
+      "retired_as_source_noted": true,
+      "sources": [
+        "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_ET_STAGE_LIVE_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_ET_TILED_SEARCH_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_APPLY_WIDE",
+      "recorded_status": "Default OFF source arm; historical recipe NOT_QUALIFIED_LEAVE_DISABLED.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "gbdt/models/kernel/add_bin_values.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_BOOT_SEEDS_DEVICE_OFF",
+      "recorded_status": "Retired host bootstrap seed loop; source says removed.",
+      "retired_as_source_noted": true,
+      "sources": [
+        "gbdt/gpu_util/kernel/bootstrap.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_CTR_BORDERS_DEVICE",
+      "recorded_status": "Retired opt-in: CTR border construction is the only production device route, with corresponding host arithmetic.",
+      "retired_as_source_noted": true,
+      "sources": [
+        "gbdt/ctrs/ctr_binarization.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_CTR_FREQ_DEVICE_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "gbdt/train.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_CTR_PERM_BATCH_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "gbdt/methods/doc_parallel_boosting.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_EST_ONE_STEP_DEVICE_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "gbdt/methods/leaves_estimation/leaves_estimation.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "gbdt/methods/leaves_estimation/pointwise_oracle.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_NS_PREDICT_PACKED_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "gbdt/models/add_non_symmetric_tree_doc_parallel.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_NS_SCALE_DEVICE_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_ORDERED_RMSE_DEVICE_GRID_OFF",
+      "recorded_status": "Retired OFF selector: source constant is always true and says this flag no longer changes it.",
+      "retired_as_source_noted": true,
+      "sources": [
+        "gbdt/grid_creator/binarization.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_PAIRLOGIT_GROUP_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "gbdt/data/pairs.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_PREDICT_FOUR_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "gbdt/models/kernel/add_bin_values.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_GBDT_YETI_BLOCK_AMD_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "gbdt/targets/kernel/yeti_rank.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_IF_EPILOGUE_DEVICE_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "isolation_forest/impl/isolation_forest.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_IF_QUERY_DEVICE_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "isolation_forest/impl/isolation_forest.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_IF_RESIDENT_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "isolation_forest/impl/isolation_forest.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_COLS40_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_DEVICE_LOOP",
+      "recorded_status": "Retired enable selector: builder now uses device control for every production GPU fit; K1/K2/K8 remain separate schedule selectors.",
+      "retired_as_source_noted": true,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo",
+        "ensemble/decisiontree/batched_levelalgo/kernels/level_loop_kernels.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_DEVICE_LOOP_K1",
+      "recorded_status": "Selectable old K1 schedule; later retained board REJECTED_KEEP_DEFAULT (K4).",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_DEVICE_LOOP_K2",
+      "recorded_status": "Selectable old K2 schedule; later retained board REJECTED_KEEP_DEFAULT (K4).",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_DEVICE_LOOP_K8",
+      "recorded_status": "Selectable old K8 schedule; later retained board REJECTED_KEEP_DEFAULT (K4).",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_FUSED_PARTITION_OFF",
+      "recorded_status": "Existing default-on selector with OFF comparison; optimization ledger records PENDING_QUALITY_AND_SPEED and main_promoted=false at that ledger snapshot.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_HIST_COLUMNS4_AMD_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_HIST_SIMD_AGG_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_HIST_ZERO_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_OOB_DEVICE_OFF",
+      "recorded_status": "Retired GPU host-walk comparison; source says complete OOB pass is device-only.",
+      "retired_as_source_noted": true,
+      "sources": [
+        "ensemble/oob_device.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_QBIN_DEVICE_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/quantiles.mojo",
+        "ensemble/host/rf_oracle.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_ROWS_SORTED",
+      "recorded_status": "Opt-in; historical recipe NOT_QUALIFIED_LEAVE_DISABLED. No current qualification inferred.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/randomforest.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_SAMPLE_PER_NODE_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_WEIGHTED_BOOTSTRAP_DEVICE_OFF",
+      "recorded_status": "Historical tree-toggle reference; this inventory does not establish current runtime reach, qualification or a latest keep/drop decision.",
+      "retired_as_source_noted": false,
+      "sources": [
+        "ensemble/host/rf_oracle.mojo",
+        "ensemble/weighted_bootstrap_device.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_toggle",
+      "id": "MOJOLEARN_IDN_RF_WEIGHT_ROWS_DEVICE_OFF",
+      "recorded_status": "Retired host row-weight arm, replaced by the always-device route.",
+      "retired_as_source_noted": true,
+      "sources": [
+        "ensemble/randomforest.mojo"
+      ],
+      "catalog_source": "docs/identical/toggle-inventory.json",
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_IDN_RF_STREAM_REPLICAS",
+      "recorded_status": "N07 opt-in, default OFF. Source records scoped representative RF losses on AMD/NVIDIA; generated fits do not qualify full datasets.",
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_IDN_RF_TASK_ROWS256",
+      "recorded_status": "A07 tree arm only, default OFF. Source records near-neutral generated fits; incumbent 512-row mapping retained, named full-dataset coverage remains pending.",
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_TREE_EXACT_SIBLING_HIST",
+      "recorded_status": "I18 opt-in, default OFF. Source records component/public-caller observations; full-workload NVIDIA+AMD qualification pending.",
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_TREE_EXACT_SIBLING_HIST_AUDIT",
+      "recorded_status": "I18 diagnostic attribution control, present in both native comparison arms; not a scored-fit performance candidate.",
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/retained_count_histograms.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_TREE_EXACT_SIBLING_HIST_BYTES",
+      "recorded_status": "I18 cache capacity parameter, source default 8 MiB; no new size sweep claimed.",
+      "sources": [
+        "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT",
+      "recorded_status": "I17 opt-in, default OFF. Source records scoped Lossguide losses on AMD/NVIDIA; Depthwise recorded zero snapshots and was not candidate reach.",
+      "sources": [
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_GBDT_LG_EXACT_ID_OFF",
+      "recorded_status": "Existing exact-batch OFF control; I17 matrix has incumbent, lg_exact_off, inherit_off and legacy_both_off. Source retains incumbent; one-switch NVIDIA scope differs from combined control.",
+      "sources": [
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_GBDT_NS_INHERIT_ID_OFF",
+      "recorded_status": "Existing inherited-partition OFF control, separately selectable from exact batching; combined legacy_both_off is explicitly not evidence for one switch alone.",
+      "sources": [
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_IDN_ORD_ONE_STEP_DEVICE_OFF",
+      "recorded_status": "Existing ordered one-step device estimation OFF comparison; no new qualification established here.",
+      "sources": [
+        "gbdt/methods/ordered_boosting.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_IDN_ORD_STD_SCALE_DEVICE_OFF",
+      "recorded_status": "Existing ordered noise statistics/scale OFF comparison; no new qualification established here.",
+      "sources": [
+        "gbdt/methods/ordered_boosting.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_IDN_GBDT_MC_ONE_STEP_DEVICE_OFF",
+      "recorded_status": "Existing multiclass one-step device estimation OFF comparison; no new qualification established here.",
+      "sources": [
+        "gbdt/methods/leaves_estimation/leaves_estimation.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_IDN_GBDT_SYM_EST_DEFER_DRAIN_OFF",
+      "recorded_status": "Existing symmetric estimation drain deferral OFF comparison; no new qualification established here.",
+      "sources": [
+        "gbdt/methods/leaves_estimation/leaves_estimation.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_FOREST_PACKED_NODES / MOJOLEARN_FOREST_SEPARATE_NODES",
+      "recorded_status": "Historical cross-mode layout A/B: packed is existing default; SEPARATE_NODES selects comparison. Old PACKED_NODES opt-in changes nothing. Apple FAST measurements excluded from this inventory.",
+      "sources": [
+        "core/forest_inference.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_FOREST_SHARED_ROWS",
+      "recorded_status": "Historical general shared-input staging opt-in; retain current source eligibility. No IDENTICAL keep/drop qualification inferred from Apple FAST comments.",
+      "sources": [
+        "core/forest_inference.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_FOREST_ROW_THREADS / MOJOLEARN_FOREST_ROW_THREADS_OFF",
+      "recorded_status": "Historical force-on/force-off row schedule; default follows existing target-column dispatch. Recorded legacy threshold is reference only, not a newly adopted tuning rule.",
+      "sources": [
+        "core/forest_inference.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_FOREST_SCALAR_GROVES / MOJOLEARN_FOREST_VECTOR_GROVES",
+      "recorded_status": "Historical vector/scalar traversal control: vector default for supported output counts; scalar force is diagnostic; old VECTOR_GROVES opt-in no longer required.",
+      "sources": [
+        "core/forest_inference.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_FOREST_ROW_THREADS_SABOTAGE",
+      "recorded_status": "Historical negative control changes fold order; never a shipping/performance candidate.",
+      "sources": [
+        "core/forest_inference.mojo"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    },
+    {
+      "kind": "historical_source_control",
+      "id": "MOJOLEARN_IDN_ALL_OFF",
+      "recorded_status": "Historical aggregate rollback control, tree effects only in this inventory. Retired device-only routes need not respond. Not an independent per-candidate comparison.",
+      "sources": [
+        "docs/identical/optimization-ledger.json"
+      ],
+      "inventory_status": "REFERENCE ONLY \u2014 NO EXECUTION OR REQUALIFICATION IN THIS TASK"
+    }
+  ],
+  "execution_in_this_task": {
+    "compiled": false,
+    "tested": false,
+    "verified": false,
+    "measured": false,
+    "candidate_imported": false
+  }
+}

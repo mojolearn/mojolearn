@@ -1,5 +1,14 @@
 # Apple FAST NEURAL: the plan (lane afn-tier, 2026-10-03)
 
+2026-10-06 source-only follow-up:
+[44 neural ideas, eight interaction groups, and integration status](../../experiments/apple_fast_neural_20261006/README.md).
+The `AFN26-*` cards share A/B metadata through `tools/performance_ideas.py`,
+`tools/neural_experiments.py --apple-fast-plan`, and
+`tools/afn_ab.sh --experiment-plan`. Those new entry points only emit plans.
+They are **not tested**, not compiled or measured, and do not inherit the
+historical qualification below. Complete executable full-workload harnesses,
+including actual multistep and CNN/embedding consumer recipes, remain pending.
+
 ## The tier
 
 FAST is the Apple GPU tier: no bit promise, speed and quality only. Until 2026-10-03 it covered

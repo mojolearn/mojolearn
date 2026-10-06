@@ -196,6 +196,9 @@ class _HostTrainerBinding:
     def byte_lm_profile(self):
         return str(self._host.byte_lm_host_profile(list(ByteLanguageModelConfig().native_shape)))
 
+    def byte_lm_arithmetic_suffix(self):
+        return str(self._host.byte_lm_host_arithmetic_suffix())
+
     def byte_lm_config_profile(self, shape):
         return str(self._host.byte_lm_host_profile(list(_config(shape).native_shape)))
 

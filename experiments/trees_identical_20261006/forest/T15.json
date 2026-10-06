@@ -1,0 +1,159 @@
+{
+  "id": "T15",
+  "title": "Device OOB aggregation and feature importance",
+  "source_status": "PARTIAL_SOURCE_INTEGRATION",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "controls": [
+    {
+      "name": "register",
+      "A": [
+        "MOJOLEARN_TREES_T15=1"
+      ],
+      "B": [],
+      "scope": [
+        "RFClassifier",
+        "RFRegressor"
+      ],
+      "production_callers": [
+        "ensemble/randomforest.mojo",
+        "ensemble/oob_device.mojo",
+        "ensemble/importance_device.mojo",
+        "ensemble/host/oob.mojo",
+        "ensemble/host/importance.mojo",
+        "ensemble/host/rf_oracle.mojo",
+        "bindings/_mojolearn_rf.mojo",
+        "bindings/_mojolearn_rf_host.mojo",
+        "python/mojolearn/randomforest.py",
+        "xtrees/exact_oob_sum.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "importance:rf:taxi",
+        "oob:rf:taxi",
+        "importance:rf:taxireg",
+        "oob:rf:taxireg",
+        "importance:rf:istella",
+        "oob:rf:istella",
+        "importance:rf:istellareg",
+        "oob:rf:istellareg",
+        "importance:rf:year",
+        "oob:rf:year",
+        "importance:rf:taximc",
+        "oob:rf:taximc",
+        "importance:rf:istellamc",
+        "oob:rf:istellamc",
+        "oob_importance:rf:taxi",
+        "oob_importance:rf:taxireg",
+        "oob_importance:rf:istella",
+        "oob_importance:rf:istellareg",
+        "oob_importance:rf:year",
+        "oob_importance:rf:taximc",
+        "oob_importance:rf:istellamc"
+      ]
+    }
+  ],
+  "production_callers": [
+    "ensemble/randomforest.mojo",
+    "ensemble/oob_device.mojo",
+    "ensemble/importance_device.mojo",
+    "ensemble/host/oob.mojo",
+    "ensemble/host/importance.mojo",
+    "ensemble/host/rf_oracle.mojo",
+    "bindings/_mojolearn_rf.mojo",
+    "bindings/_mojolearn_rf_host.mojo",
+    "python/mojolearn/randomforest.py",
+    "xtrees/exact_oob_sum.mojo"
+  ],
+  "supported_estimators": [
+    "RFClassifier",
+    "RFRegressor"
+  ],
+  "recipe_keys": [
+    "importance:rf:taxi",
+    "oob:rf:taxi",
+    "importance:rf:taxireg",
+    "oob:rf:taxireg",
+    "importance:rf:istella",
+    "oob:rf:istella",
+    "importance:rf:istellareg",
+    "oob:rf:istellareg",
+    "importance:rf:year",
+    "oob:rf:year",
+    "importance:rf:taximc",
+    "oob:rf:taximc",
+    "importance:rf:istellamc",
+    "oob:rf:istellamc",
+    "oob_importance:rf:taxi",
+    "oob_importance:rf:taxireg",
+    "oob_importance:rf:istella",
+    "oob_importance:rf:istellareg",
+    "oob_importance:rf:year",
+    "oob_importance:rf:taximc",
+    "oob_importance:rf:istellamc"
+  ],
+  "overlap_ids": [],
+  "remaining_gaps": [
+    "RF requested OOB and impurity importance are native fit outputs. A importance consumes each live finished device tree before its builder is reused; normalized per-tree vectors fold in tree order. B calls the incumbent Mojo host importance fold. Host oracle retains gain/count metadata only on a requested importance fit.",
+    "RF OOB A is per-row/output register accumulation; B already retains bootstrap masks and device OOB model. The card does not falsely claim those incumbent dependencies as new.",
+    "ET OOB needs retained bootstrap membership, canonical output fold and public auxiliary export. ET impurity importance needs fitted split-gain/count retention plus a defined estimator normalization contract. No ET auxiliary recipe is claimed.",
+    "RF native regression is one output; wrapper multioutput OOB/importance and weighted regression are not silently covered. Zero-voter policy and force-finite score logic match existing native source but are unexecuted."
+  ],
+  "demonstrated_runtime_reach": false,
+  "default": "OFF",
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "timing_boundary": "cold/repeated complete preparation+fit+mandatory synchronization+consumed outputs; inference is a separate result",
+  "evidence": {
+    "compilation": "NOT COMPILED",
+    "tests": "NOT TESTED",
+    "identity": "NOT VERIFIED",
+    "quality": "NOT VERIFIED",
+    "measurement": "NOT MEASURED"
+  },
+  "no_difference_notes": [
+    "Host uses the same defined output contract for both arms; no device launch scheduling occurs. Outputs are computed only when requested and full fit boundaries include creation and consumption."
+  ],
+  "branch": "ideas/trees-identical-20261006",
+  "base_commit": "35b2d4976550a6a9a47c4563ca1c08b6de21670b",
+  "implementation_commit": "Containing Git commit; no frozen binary exists.",
+  "recipe_coverage": "Affected classifier/regressor and supported objective routes listed; absent dataset hash/version/full rows/features/classes/settings/weights/multioutput facts remain PENDING. Single-tree and auxiliary recipes must be saved independently; base recipe aliases are not evidence.",
+  "host_vendor_contract": "S branches retain incumbent host statement order; V branches share numerical source graph with host. NVIDIA/AMD/Apple/host identity, compilation and quality are UNVERIFIED.",
+  "public_auxiliary_abi": {
+    "classifier": "rf_classifier_fit_aux_export(x_addr,y_addr,params,criterion,weights_addr,oob_addr,score_addr,importance_addr)",
+    "regressor": "rf_regressor_fit_aux_export(x_addr,y_addr,params,criterion,oob_addr,score_addr,importance_addr)",
+    "input_layout": "column-major Float32",
+    "outputs": "OOB Float64[row,output]; score Float64[1]; importance Float32[n_features]; zero pointer disables output; OOB+score requested together",
+    "public_request": "fit(feature_importances=True); oob_score estimator setting",
+    "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+  },
+  "full_dataset_recipes": [
+    "importance:rf:taxi",
+    "oob:rf:taxi",
+    "importance:rf:taxireg",
+    "oob:rf:taxireg",
+    "importance:rf:istella",
+    "oob:rf:istella",
+    "importance:rf:istellareg",
+    "oob:rf:istellareg",
+    "importance:rf:year",
+    "oob:rf:year",
+    "importance:rf:taximc",
+    "oob:rf:taximc",
+    "importance:rf:istellamc",
+    "oob:rf:istellamc",
+    "oob_importance:rf:taxi",
+    "oob_importance:rf:taxireg",
+    "oob_importance:rf:istella",
+    "oob_importance:rf:istellareg",
+    "oob_importance:rf:year",
+    "oob_importance:rf:taximc",
+    "oob_importance:rf:istellamc"
+  ],
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT"
+}

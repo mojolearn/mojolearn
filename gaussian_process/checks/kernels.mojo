@@ -94,6 +94,7 @@ number of roundings and the order they happen in. sklearn's `Sum` and
 `Product` are the same two lines and the same non-rewriting.
 """
 
+from experiments.classical_identical_ideas.stats_controls import C54_PREDICT_TILES
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -114,6 +115,7 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from core.identity_trace import IdentityTrace
+from gaussian_process.afcl_prediction import AFCL_L11, AFCL_GP_VAR_TPB
 from gaussian_process.checks.gp_sabotage import (
     GP_SAB_NONE,
     gp_sabotage_touches_kernel_matrix,
@@ -880,6 +882,27 @@ def gp_white_kernel(
         out_k.unsafe_store(t, Float32(0.0))
 
 
+
+# C54: four independent kernel columns share one scaled query feature load.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+def gp_scaled_sqdist4(x: MutPointer[Float32, MutAnyOrigin], y: MutPointer[Float32, MutAnyOrigin],
+                     ls: MutPointer[Float32, MutAnyOrigin], i: Int, j0: Int, n: Int,
+                     d: Int, ls_len: Int) -> SIMD[DType.float32, 4]:
+    var acc = SIMD[DType.float32, 4](0)
+    for f in range(d):
+        var xv = ftz(x[i*d+f])
+        var lv = Float32(1)
+        if ls_len != 0:
+            lv = ftz(ls[0 if ls_len == 1 else f])
+            xv = ftz(identical_div(xv, lv))
+        comptime for lane in range(4):
+            if j0+lane < n:
+                var yv = ftz(y[(j0+lane)*d+f])
+                if ls_len != 0:
+                    yv = ftz(identical_div(yv, lv))
+                acc[lane] = l2_unexp_core(acc[lane], xv, yv)
+    return acc
+
 def gp_rbf_kernel(
     out_k: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
@@ -908,6 +931,18 @@ def gp_rbf_kernel(
     var n = Int(n_in)
     var d = Int(d_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    comptime if C54_PREDICT_TILES:
+        var groups = (n+3)//4
+        var row = t//groups
+        if row >= m:
+            return
+        var j0 = (t%groups)*4
+        var ds = gp_scaled_sqdist4(x, y, ls, row, j0, n, d, Int(ls_len_in))
+        comptime for lane in range(4):
+            if j0+lane < n:
+                var e4 = ftz(identical_mul(Float32(-0.5), ds[lane]))
+                out_k[row*n+j0+lane] = ftz(identical_exp(e4))
+        return
     if t >= m * n:
         return
     var i = t // n
@@ -956,6 +991,28 @@ def gp_matern_kernel(
     var d = Int(d_in)
     var nu_sel = Int(nu_sel_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    comptime if C54_PREDICT_TILES:
+        var groups = (n+3)//4
+        var row = t//groups
+        if row >= m:
+            return
+        var j0 = (t%groups)*4
+        var ds = gp_scaled_sqdist4(x, y, ls, row, j0, n, d, Int(ls_len_in))
+        comptime for lane in range(4):
+            if j0+lane < n:
+                var dd = ftz(identical_sqrt(ds[lane]))
+                var value = ftz(identical_exp(-dd))
+                if nu_sel == 1:
+                    var z = ftz(identical_mul(dd, sqrt3))
+                    value = ftz(identical_mul(ftz(Float32(1)+z), ftz(identical_exp(-z))))
+                elif nu_sel == 2:
+                    var z = ftz(identical_mul(dd, sqrt5))
+                    var zz = ftz(identical_mul(z,z))
+                    var third4 = ftz(identical_div(zz, Float32(3)))
+                    var pre4 = ftz(ftz(Float32(1)+z)+third4)
+                    value = ftz(identical_mul(pre4, ftz(identical_exp(-z))))
+                out_k[row*n+j0+lane] = value
+        return
     if t >= m * n:
         return
     var i = t // n
@@ -1173,7 +1230,7 @@ def gp_kernel_stack_floats(m: Int, n: Int) -> Int:
 
 def gp_kernel_matrix(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     x_input: DeviceBuffer[DType.float32],
     y_input: DeviceBuffer[DType.float32],
     mut dls: DeviceBuffer[DType.float32],
@@ -1190,7 +1247,7 @@ def gp_kernel_matrix(
     distribute: Bool = True,
     global_row_start: Int = 0,
 ) raises:
-    """`out[m x n] = k(x[m x d], y[n x d])`, row-major, on the device.
+    """`output[m x n] = k(x[m x d], y[n x d])`, row-major, on the device.
 
     `is_self` is sklearn's `Y is None` and reaches exactly one kernel
     (`gp_white_kernel`); it is a caller's structural statement about whether
@@ -1231,10 +1288,10 @@ def gp_kernel_matrix(
     if elem_tpb <= 0:
         raise Error("gp_kernel_matrix: elem_tpb must be positive")
     gp_validate_kernel(spec, d)
-    if len(out) < m * n:
+    if len(output) < m * n:
         raise Error(
             "gp_kernel_matrix: the output buffer holds "
-            + String(len(out))
+            + String(len(output))
             + " floats, an "
             + String(m)
             + " x "
@@ -1249,7 +1306,7 @@ def gp_kernel_matrix(
             + " floats and this shape needs "
             + String(gp_kernel_stack_floats(m, n))
             + ". Sizing it for one expression and evaluating another is an"
-            " out-of-bounds write a small shape will not show you; use"
+            " output-of-bounds write a small shape will not show you; use"
             " gp_kernel_stack_floats"
         )
 
@@ -1261,8 +1318,8 @@ def gp_kernel_matrix(
                 raise Error("parallel GP requires IDENTICAL and 1..64 devices")
             if sabotage != GP_SAB_NONE:
                 raise Error("parallel GP does not execute sabotage probes")
-            _gp_rows(ctx, out, x, y, dls, m, n, d, spec, is_self, elem_tpb, count)
-            trace.record_device(ctx, tag, out, m * n)
+            _gp_rows(ctx, output, x, y, dls, m, n, d, spec, is_self, elem_tpb, count)
+            trace.record_device(ctx, tag, output, m * n)
             return
 
     var cells = m * n
@@ -1357,7 +1414,7 @@ def gp_kernel_matrix(
                     ctx.enqueue_function[gp_rbf_kernel](
                         slot.unsafe_ptr(), xs.unsafe_ptr(), ys.unsafe_ptr(), lsview.unsafe_ptr(),
                         Int32(m), Int32(n), Int32(d), Int32(0),
-                        grid_dim=(grid, 1, 1),
+                        grid_dim=(((m*((n+3)//4)+elem_tpb-1)//elem_tpb if C54_PREDICT_TILES else grid), 1, 1),
                         block_dim=(elem_tpb, 1, 1),
                     )
                 else:
@@ -1365,7 +1422,7 @@ def gp_kernel_matrix(
                     ctx.enqueue_function[gp_matern_kernel](
                         slot.unsafe_ptr(), xs.unsafe_ptr(), ys.unsafe_ptr(), lsview.unsafe_ptr(),
                         Int32(m), Int32(n), Int32(d), Int32(0), Int32(nu_pre), sqrt3, sqrt5,
-                        grid_dim=(grid, 1, 1),
+                        grid_dim=(((m*((n+3)//4)+elem_tpb-1)//elem_tpb if C54_PREDICT_TILES else grid), 1, 1),
                         block_dim=(elem_tpb, 1, 1),
                     )
             elif kind == GP_K_RBF:
@@ -1393,7 +1450,7 @@ def gp_kernel_matrix(
                         Int32(n),
                         Int32(d),
                         spec.ls_len[t],
-                        grid_dim=(grid, 1, 1),
+                        grid_dim=(((m*((n+3)//4)+elem_tpb-1)//elem_tpb if C54_PREDICT_TILES else grid), 1, 1),
                         block_dim=(elem_tpb, 1, 1),
                     )
             else:
@@ -1428,7 +1485,7 @@ def gp_kernel_matrix(
                         Int32(nu_sel),
                         sqrt3,
                         sqrt5,
-                        grid_dim=(grid, 1, 1),
+                        grid_dim=(((m*((n+3)//4)+elem_tpb-1)//elem_tpb if C54_PREDICT_TILES else grid), 1, 1),
                         block_dim=(elem_tpb, 1, 1),
                     )
             _ = lsview^
@@ -1437,7 +1494,7 @@ def gp_kernel_matrix(
 
     var root = stack.create_sub_buffer[DType.float32](0, cells)
     ctx.enqueue_function[gp_copy_kernel](
-        out.unsafe_ptr(),
+        output.unsafe_ptr(),
         root.unsafe_ptr(),
         Int32(cells),
         grid_dim=(grid, 1, 1),
@@ -1449,7 +1506,7 @@ def gp_kernel_matrix(
         ctx.synchronize()
     _ = xs^
     _ = ys^
-    trace.record_device(ctx, tag, out, cells)
+    trace.record_device(ctx, tag, output, cells)
 
 
 def gp_predictive_variance(
@@ -1522,6 +1579,7 @@ def gp_predictive_variance(
                 block_dim=(GP_VAR_PTS, GP_VAR_SEGS, 1),
             )
         else:
+            var var_tpb = AFCL_GP_VAR_TPB if AFCL_L11 else elem_tpb
             ctx.enqueue_function[gp_variance_kernel](
                 var_out.unsafe_ptr(),
                 std_out.unsafe_ptr(),
@@ -1530,8 +1588,8 @@ def gp_predictive_variance(
                 Int32(n_train),
                 Int32(n_star),
                 kss,
-                grid_dim=(grid, 1, 1),
-                block_dim=(elem_tpb, 1, 1),
+                grid_dim=((n_star + var_tpb - 1) // var_tpb, 1, 1),
+                block_dim=(var_tpb, 1, 1),
             )
     trace.record_device(ctx, "gp.var", var_out, n_star)
     trace.record_device(ctx, "gp.clamped", clamped, n_star)

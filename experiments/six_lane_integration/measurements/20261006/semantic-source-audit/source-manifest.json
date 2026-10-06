@@ -1,0 +1,62 @@
+{
+  "tools/bench_board_more.py": {
+    "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+    "sha256": "ceaa630cfd8a7f0c09cc6ec366667686493454cc59fc9627ddec1abda9b117bf",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-tools__bench_board_more.py"
+  },
+  "tools/bench_board_algos.py": {
+    "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+    "sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-tools__bench_board_algos.py"
+  },
+  "tools/classical_two_datasets.py": {
+    "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+    "sha256": "9c7b8f09f11ed471f047233cde951b11402dc1d7d88a7c5d72a8f354289b5209",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-tools__classical_two_datasets.py"
+  },
+  "python/mojolearn/linear_model.py": {
+    "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+    "sha256": "e494ef22cffe6398fdc563b4b000d1096b214cb162343ba043ec9af962cc555c",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-python__mojolearn__linear_model.py"
+  },
+  "python/mojolearn/_solver_impl.py": {
+    "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+    "sha256": "653d620ac11759ebce595925657b68fef741031b2b5a5bf9eed60114caf498e1",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-python__mojolearn___solver_impl.py"
+  },
+  "python/mojolearn/cluster.py": {
+    "source_sha": "47301d12b14859e81cadc9ab6a0cd4f728d0e206",
+    "sha256": "81c1ea6ea4bc86596e3fc4dcf79b28c26f816580988852ed50be11b28d52f04f",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/frozen-python__mojolearn__cluster.py"
+  },
+  "sklearn/linear_model/_coordinate_descent.py": {
+    "path": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_coordinate_descent.py",
+    "sha256": "dc83a60d7ad30cabcd3dae7bd57ca860cae07846caf9987f8a30859fe5ad1a0e",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/installed-sklearn-linear_model___coordinate_descent.py",
+    "observed_version": "1.7.2 from scored opponent info"
+  },
+  "sklearn/linear_model/_ridge.py": {
+    "path": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_ridge.py",
+    "sha256": "a0a8c5e26611c1bc91a97ae85d6add59b98a2fa5c92ff7c25467ea88bd6e4ce3",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/installed-sklearn-linear_model___ridge.py",
+    "observed_version": "1.7.2 from scored opponent info"
+  },
+  "sklearn/linear_model/_base.py": {
+    "path": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_base.py",
+    "sha256": "1d2ffdba0cb4509d11983fa87ba4187d4469c9c1ae9fd9193461281b20b35133",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/installed-sklearn-linear_model___base.py",
+    "observed_version": "1.7.2 from scored opponent info"
+  },
+  "sklearn/utils/_indexing.py": {
+    "path": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/sklearn/utils/_indexing.py",
+    "sha256": "5a9364661cd07f449090d1838594f46ee9ba060c695859987224d64106982dc5",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/installed-sklearn-utils___indexing.py",
+    "observed_version": "1.7.2 from scored opponent info"
+  },
+  "sklearn/cluster/_kmeans.py": {
+    "path": "/Users/ec2-user/board-0834/cache/venv/lib/python3.13/site-packages/sklearn/cluster/_kmeans.py",
+    "sha256": "2e0da803f41cc870df45c59a24cd2da93c46d064785fef3e8d5c2e4912d9c803",
+    "saved": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/quality-review/semantic-source-audit/installed-sklearn-cluster___kmeans.py",
+    "observed_version": "1.7.2 from scored opponent info"
+  }
+}

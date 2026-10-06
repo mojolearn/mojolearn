@@ -1,0 +1,494 @@
+{
+  "schema": "mojolearn.performance-measurement-inventory/1",
+  "campaign": "apple-fast-classical-20261006",
+  "identity_policy": "FAST permits changed bits; task quality, correctness and actual route reach remain pending. No identity, compilation or quality validation is claimed.",
+  "evidence_policy": "Source-only registration. No compilation, verification or measurement has run. Future cells require full workloads and one excluded warmup plus one scored sample per arm.",
+  "candidates": [
+    {
+      "id": "AFCL-L01",
+      "title": "Linear Gram row partition",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L01/manifest.json"
+    },
+    {
+      "id": "AFCL-L02",
+      "title": "Linear sufficient-statistic reduction",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L02/manifest.json"
+    },
+    {
+      "id": "AFCL-L03",
+      "title": "ElasticNetCV device work granularity",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L03/manifest.json"
+    },
+    {
+      "id": "AFCL-L04",
+      "title": "Huber gradient/loss work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L04/manifest.json"
+    },
+    {
+      "id": "AFCL-L05",
+      "title": "Multiclass logistic gradient schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L05/manifest.json"
+    },
+    {
+      "id": "AFCL-L06",
+      "title": "SMO gradient row reuse",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L06/manifest.json"
+    },
+    {
+      "id": "AFCL-L07",
+      "title": "PCA covariance work granularity",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L07/manifest.json"
+    },
+    {
+      "id": "AFCL-L08",
+      "title": "Decomposition tiled product geometry",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L08/manifest.json"
+    },
+    {
+      "id": "AFCL-L09",
+      "title": "TSQR panel reduction schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L09/manifest.json"
+    },
+    {
+      "id": "AFCL-L10",
+      "title": "NMF update memory traffic",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L10/manifest.json"
+    },
+    {
+      "id": "AFCL-L11",
+      "title": "Gaussian-process prediction batching",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L11/manifest.json"
+    },
+    {
+      "id": "AFCL-L12",
+      "title": "Random-feature and kernel output work",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L12/manifest.json"
+    },
+    {
+      "id": "AFCL-G01",
+      "title": "Exact nearest-neighbor distance geometry",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G01/manifest.json"
+    },
+    {
+      "id": "AFCL-G02",
+      "title": "Streaming top-k merge granularity",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G02/manifest.json"
+    },
+    {
+      "id": "AFCL-G03",
+      "title": "DBSCAN epsilon-neighborhood schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G03/manifest.json"
+    },
+    {
+      "id": "AFCL-G04",
+      "title": "HDBSCAN core-distance schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G04/manifest.json"
+    },
+    {
+      "id": "AFCL-G05",
+      "title": "KMeans assignment work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G05/manifest.json"
+    },
+    {
+      "id": "AFCL-G06",
+      "title": "KMeans center partial chunks",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G06/manifest.json"
+    },
+    {
+      "id": "AFCL-G07",
+      "title": "MiniBatchKMeans resident schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G07/manifest.json"
+    },
+    {
+      "id": "AFCL-G08",
+      "title": "GMM expectation row scheduling",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G08/manifest.json"
+    },
+    {
+      "id": "AFCL-G09",
+      "title": "IVF query work partition",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G09/manifest.json"
+    },
+    {
+      "id": "AFCL-G10",
+      "title": "UMAP optimizer edge grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G10/manifest.json"
+    },
+    {
+      "id": "AFCL-G11",
+      "title": "Spectral and LLE local product schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G11/manifest.json"
+    },
+    {
+      "id": "AFCL-G12",
+      "title": "MeanShift neighborhood row grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G12/manifest.json"
+    },
+    {
+      "id": "AFCL-T01",
+      "title": "Boosting histogram row chunks",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T01/manifest.json"
+    },
+    {
+      "id": "AFCL-T02",
+      "title": "Boosting histogram feature grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T02/manifest.json"
+    },
+    {
+      "id": "AFCL-T03",
+      "title": "Binarization launch geometry",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T03/manifest.json"
+    },
+    {
+      "id": "AFCL-T04",
+      "title": "Tree row-partition schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T04/manifest.json"
+    },
+    {
+      "id": "AFCL-T05",
+      "title": "Split-score reduction schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T05/manifest.json"
+    },
+    {
+      "id": "AFCL-T06",
+      "title": "Leaf estimation partial chunks",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T06/manifest.json"
+    },
+    {
+      "id": "AFCL-T07",
+      "title": "Boosted-tree prediction grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T07/manifest.json"
+    },
+    {
+      "id": "AFCL-T08",
+      "title": "RandomForest traversal geometry",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T08/manifest.json"
+    },
+    {
+      "id": "AFCL-T09",
+      "title": "ExtraTrees training work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T09/manifest.json"
+    },
+    {
+      "id": "AFCL-T10",
+      "title": "IsolationForest score grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T10/manifest.json"
+    },
+    {
+      "id": "AFCL-T11",
+      "title": "TreeSHAP query scheduling",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T11/manifest.json"
+    },
+    {
+      "id": "AFCL-T12",
+      "title": "Categorical CTR preprocessing schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-T12/manifest.json"
+    },
+    {
+      "id": "AFCL-P01",
+      "title": "Scaler reduction independent accumulators",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P01/manifest.json"
+    },
+    {
+      "id": "AFCL-P02",
+      "title": "MaxAbs row tiling",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P02/manifest.json"
+    },
+    {
+      "id": "AFCL-P03",
+      "title": "Categorical Naive Bayes count grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P03/manifest.json"
+    },
+    {
+      "id": "AFCL-P04",
+      "title": "Sparse Naive Bayes row grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P04/manifest.json"
+    },
+    {
+      "id": "AFCL-P05",
+      "title": "Target-encoding work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P05/manifest.json"
+    },
+    {
+      "id": "AFCL-P06",
+      "title": "Iterative-imputer convergence fold",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P06/manifest.json"
+    },
+    {
+      "id": "AFCL-P07",
+      "title": "Feature-selection row tile",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P07/manifest.json"
+    },
+    {
+      "id": "AFCL-P08",
+      "title": "Regression metric independent accumulators",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P08/manifest.json"
+    },
+    {
+      "id": "AFCL-P09",
+      "title": "Ranking metric prefix work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P09/manifest.json"
+    },
+    {
+      "id": "AFCL-P10",
+      "title": "Resampling gather tile geometry",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P10/manifest.json"
+    },
+    {
+      "id": "AFCL-P11",
+      "title": "Stationarity series reduction schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P11/manifest.json"
+    },
+    {
+      "id": "AFCL-P12",
+      "title": "Batched ARIMA likelihood work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P12/manifest.json"
+    },
+    {
+      "id": "AFCL-G13",
+      "title": "KDE stable score work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G13/manifest.json"
+    },
+    {
+      "id": "AFCL-G14",
+      "title": "Agglomerative graph/MST work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-G14/manifest.json"
+    },
+    {
+      "id": "AFCL-L13",
+      "title": "Robust covariance C-step scheduling",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L13/manifest.json"
+    },
+    {
+      "id": "AFCL-L14",
+      "title": "SGD linear update work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-L14/manifest.json"
+    },
+    {
+      "id": "AFCL-P13",
+      "title": "Gaussian Naive Bayes class-statistic chains",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P13/manifest.json"
+    },
+    {
+      "id": "AFCL-P14",
+      "title": "Holt-Winters series launch geometry",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "registration": "experiments/performance_ideas/AFCL-P14/manifest.json"
+    }
+  ]
+}

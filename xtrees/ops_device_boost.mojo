@@ -89,9 +89,10 @@ def _head_u64(ctx: DeviceContext, d: DeviceBuffer[DType.uint64], k: Int) raises 
 # ------------------------------------------------------------- SAMME --
 
 
-def samme_sums_kernel(
+def samme_sums_kernel[CACHE: Bool = False](
     w: MutPointer[UInt64, MutAnyOrigin], pred: MutPointer[Int32, MutAnyOrigin], y: MutPointer[Int32, MutAnyOrigin],
     n: Int64, m: Int64, p: MutPointer[UInt64, MutAnyOrigin],
+    wrong: MutPointer[UInt8, MutAnyOrigin],
 ):
     """One thread per chunk: p[2c] = the misclassified weight, p[2c + 1] =
     the weight, each from +0.0 in row order (ops.samme_step's chunk loop)."""
@@ -103,16 +104,28 @@ def samme_sums_kernel(
         for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, Int(n))):
             var wi = w.unsafe_load(i)
             t = sf64_add(t, wi)
-            if pred.unsafe_load(i) != y.unsafe_load(i):
+            var miss = pred.unsafe_load(i) != y.unsafe_load(i)
+            comptime if CACHE:
+                wrong.unsafe_store(i, UInt8(1) if miss else UInt8(0))
+            if miss:
                 e = sf64_add(e, wi)
         p.unsafe_store(2 * c, e)
         p.unsafe_store(2 * c + 1, t)
         c += stride
 
 
-def samme_update_kernel(
+def samme_sums_kernel_reference(
+    w: MutPointer[UInt64, MutAnyOrigin], pred: MutPointer[Int32, MutAnyOrigin], y: MutPointer[Int32, MutAnyOrigin],
+    n: Int64, m: Int64, p: MutPointer[UInt64, MutAnyOrigin],
+):
+    """Incumbent launch, no candidate cache allocation or launch argument."""
+    samme_sums_kernel(w, pred, y, n, m, p, p.bitcast[UInt8]())
+
+
+def samme_update_kernel[CACHE: Bool = False](
     w: MutPointer[UInt64, MutAnyOrigin], pred: MutPointer[Int32, MutAnyOrigin], y: MutPointer[Int32, MutAnyOrigin],
     n: Int64, m: Int64, boost: UInt64, q: MutPointer[UInt64, MutAnyOrigin],
+    wrong: MutPointer[UInt8, MutAnyOrigin],
 ):
     """One thread per chunk: a misclassified positive weight times `boost`,
     then the chunk's new sum from +0.0 in row order."""
@@ -122,7 +135,12 @@ def samme_update_kernel(
         var run = SF64_ZERO
         for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, Int(n))):
             var wi = w.unsafe_load(i)
-            if pred.unsafe_load(i) != y.unsafe_load(i) and _gt64(wi, SF64_ZERO):
+            var miss: Bool
+            comptime if CACHE:
+                miss = wrong.unsafe_load(i) != UInt8(0)
+            else:
+                miss = pred.unsafe_load(i) != y.unsafe_load(i)
+            if miss and _gt64(wi, SF64_ZERO):
                 wi = sf64_mul(wi, boost)
                 w.unsafe_store(i, wi)
             run = sf64_add(run, wi)
@@ -130,7 +148,15 @@ def samme_update_kernel(
         c += stride
 
 
-def samme_step_device(
+def samme_update_kernel_reference(
+    w: MutPointer[UInt64, MutAnyOrigin], pred: MutPointer[Int32, MutAnyOrigin], y: MutPointer[Int32, MutAnyOrigin],
+    n: Int64, m: Int64, boost: UInt64, q: MutPointer[UInt64, MutAnyOrigin],
+):
+    """Incumbent launch, no candidate cache allocation or launch argument."""
+    samme_update_kernel(w, pred, y, n, m, boost, q, q.bitcast[UInt8]())
+
+
+def samme_step_device[CACHE: Bool = False](
     w: MutPointer[Float64, MutUntrackedOrigin], pred: MutPointer[Int32, MutUntrackedOrigin],
     y: MutPointer[Int32, MutUntrackedOrigin], n: Int, n_classes: Int,
     learning_rate: Float64, last: Bool, stats: MutPointer[Float64, MutUntrackedOrigin],
@@ -144,10 +170,21 @@ def samme_step_device(
     var d_p = _up_i32(ctx, pred, n)
     var d_y = _up_i32(ctx, y, n)
     var d_s = ctx.enqueue_create_buffer[DType.uint64](2 * m)
-    ctx.enqueue_function[samme_sums_kernel](
-        d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), d_s.unsafe_ptr(),
-        grid_dim=_blocks(m), block_dim=OPS_TPB,
-    )
+    var wrong: DeviceBuffer[DType.uint8]
+    comptime if CACHE:
+        wrong = ctx.enqueue_create_buffer[DType.uint8](n)
+    else:
+        wrong = d_p.create_sub_buffer[DType.uint8](0, 1)  # unread B view
+    comptime if CACHE:
+        ctx.enqueue_function[samme_sums_kernel[CACHE]](
+            d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), d_s.unsafe_ptr(), wrong.unsafe_ptr(),
+            grid_dim=_blocks(m), block_dim=OPS_TPB,
+        )
+    else:
+        ctx.enqueue_function[samme_sums_kernel_reference](
+            d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), d_s.unsafe_ptr(),
+            grid_dim=_blocks(m), block_dim=OPS_TPB,
+        )
     fold_tree_device(ctx, d_s, m, 2)
     var et = _head_u64(ctx, d_s, 2)
     var tot = _f(et[1])
@@ -169,10 +206,16 @@ def samme_step_device(
                 # DEVIATION 5603: the pinned exp (a host scalar).
                 var boost = identical_exp64(alpha)
                 var d_q = ctx.enqueue_create_buffer[DType.uint64](m)
-                ctx.enqueue_function[samme_update_kernel](
-                    d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), _w(boost),
-                    d_q.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
-                )
+                comptime if CACHE:
+                    ctx.enqueue_function[samme_update_kernel[CACHE]](
+                        d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), _w(boost),
+                        d_q.unsafe_ptr(), wrong.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
+                    )
+                else:
+                    ctx.enqueue_function[samme_update_kernel_reference](
+                        d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), _w(boost),
+                        d_q.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
+                    )
                 fold_tree_device(ctx, d_q, m, 1)
                 s = _f(_head_u64(ctx, d_q, 1)[0])
                 ctx.enqueue_copy(dst_ptr=w.bitcast[UInt64](), src_buf=d_w)
@@ -186,6 +229,7 @@ def samme_step_device(
     _ = d_p^
     _ = d_y^
     _ = d_s^
+    _ = wrong^
 
 
 # ---------------------------------------------------------- AdaBoost.R2 --
@@ -238,9 +282,10 @@ def max_tree_pass_kernel(p: MutPointer[UInt64, MutAnyOrigin], m: Int64, s: Int64
         t += stride
 
 
-def r2_err_kernel(
+def r2_err_kernel[CACHE: Bool = False](
     w: MutPointer[UInt64, MutAnyOrigin], pred: MutPointer[Float32, MutAnyOrigin], y: MutPointer[Float32, MutAnyOrigin],
     n: Int64, m: Int64, emax: UInt64, loss: Int64, p: MutPointer[UInt64, MutAnyOrigin],
+    errors: MutPointer[UInt64, MutAnyOrigin],
 ):
     """One thread per chunk: sum of w * e over positive weights, from +0.0
     in row order (ops.r2_step's first chunk loop)."""
@@ -251,15 +296,27 @@ def r2_err_kernel(
         for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, Int(n))):
             var wi = w.unsafe_load(i)
             if _gt64(wi, SF64_ZERO):
-                run = sf64_add(run, sf64_mul(wi, _r2_error(pred.unsafe_load(i), y.unsafe_load(i), emax, Int(loss))))
+                var e = _r2_error(pred.unsafe_load(i), y.unsafe_load(i), emax, Int(loss))
+                comptime if CACHE:
+                    errors.unsafe_store(i, e)
+                run = sf64_add(run, sf64_mul(wi, e))
         p.unsafe_store(c, run)
         c += stride
 
 
-def r2_update_kernel(
+def r2_err_kernel_reference(
+    w: MutPointer[UInt64, MutAnyOrigin], pred: MutPointer[Float32, MutAnyOrigin], y: MutPointer[Float32, MutAnyOrigin],
+    n: Int64, m: Int64, emax: UInt64, loss: Int64, p: MutPointer[UInt64, MutAnyOrigin],
+):
+    """Incumbent launch, no candidate cache allocation or launch argument."""
+    r2_err_kernel(w, pred, y, n, m, emax, loss, p, p)
+
+
+def r2_update_kernel[CACHE: Bool = False](
     w: MutPointer[UInt64, MutAnyOrigin], pred: MutPointer[Float32, MutAnyOrigin], y: MutPointer[Float32, MutAnyOrigin],
     n: Int64, m: Int64, emax: UInt64, loss: Int64, lr: UInt64, lb: UInt64, update: Int64,
     q: MutPointer[UInt64, MutAnyOrigin],
+    errors: MutPointer[UInt64, MutAnyOrigin],
 ):
     """One thread per chunk: w *= exp(((1 - e) lr) log(beta)) for positive
     weights (unless the last step), then the chunk's sum from +0.0."""
@@ -270,7 +327,11 @@ def r2_update_kernel(
         for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, Int(n))):
             var wi = w.unsafe_load(i)
             if update != 0 and _gt64(wi, SF64_ZERO):
-                var e = _r2_error(pred.unsafe_load(i), y.unsafe_load(i), emax, Int(loss))
+                var e: UInt64
+                comptime if CACHE:
+                    e = errors.unsafe_load(i)
+                else:
+                    e = _r2_error(pred.unsafe_load(i), y.unsafe_load(i), emax, Int(loss))
                 var t = sf64_mul(sf64_sub(SF64_ONE, e), lr)
                 wi = sf64_mul(wi, sf64_exp(sf64_mul(t, lb)))
                 w.unsafe_store(i, wi)
@@ -279,7 +340,16 @@ def r2_update_kernel(
         c += stride
 
 
-def r2_step_device(
+def r2_update_kernel_reference(
+    w: MutPointer[UInt64, MutAnyOrigin], pred: MutPointer[Float32, MutAnyOrigin], y: MutPointer[Float32, MutAnyOrigin],
+    n: Int64, m: Int64, emax: UInt64, loss: Int64, lr: UInt64, lb: UInt64, update: Int64,
+    q: MutPointer[UInt64, MutAnyOrigin],
+):
+    """Incumbent launch, no candidate cache allocation or launch argument."""
+    r2_update_kernel(w, pred, y, n, m, emax, loss, lr, lb, update, q, q)
+
+
+def r2_step_device[CACHE: Bool = False](
     w: MutPointer[Float64, MutUntrackedOrigin], pred: MutPointer[Float32, MutUntrackedOrigin],
     y: MutPointer[Float32, MutUntrackedOrigin], n: Int, loss: Int,
     learning_rate: Float64, last: Bool, stats: MutPointer[Float64, MutUntrackedOrigin],
@@ -293,6 +363,11 @@ def r2_step_device(
     var d_p = _up_f32(ctx, pred, n)
     var d_y = _up_f32(ctx, y, n)
     var d_s = ctx.enqueue_create_buffer[DType.uint64](m)
+    var errors: DeviceBuffer[DType.uint64]
+    comptime if CACHE:
+        errors = ctx.enqueue_create_buffer[DType.uint64](n)
+    else:
+        errors = d_s.copy()  # unread B view; no cache allocation
     ctx.enqueue_function[r2_emax_kernel](
         d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), d_s.unsafe_ptr(),
         grid_dim=_blocks(m), block_dim=OPS_TPB,
@@ -304,10 +379,16 @@ def r2_step_device(
         )
         s *= 2
     var emax = _head_u64(ctx, d_s, 1)[0]
-    ctx.enqueue_function[r2_err_kernel](
-        d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), emax, Int64(loss),
-        d_s.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
-    )
+    comptime if CACHE:
+        ctx.enqueue_function[r2_err_kernel[CACHE]](
+            d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), emax, Int64(loss),
+            d_s.unsafe_ptr(), errors.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
+        )
+    else:
+        ctx.enqueue_function[r2_err_kernel_reference](
+            d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), emax, Int64(loss),
+            d_s.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
+        )
     fold_tree_device(ctx, d_s, m, 1)
     var err = _f(_head_u64(ctx, d_s, 1)[0])
     if err <= 0.0:
@@ -322,11 +403,18 @@ def r2_step_device(
         var beta = err / (1.0 - err)
         var alpha = identical_mul64(learning_rate, identical_log64(1.0 / beta))
         var lb = identical_log64(beta)
-        ctx.enqueue_function[r2_update_kernel](
-            d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), emax, Int64(loss),
-            _w(learning_rate), _w(lb), Int64(0 if last else 1), d_s.unsafe_ptr(),
-            grid_dim=_blocks(m), block_dim=OPS_TPB,
-        )
+        comptime if CACHE:
+            ctx.enqueue_function[r2_update_kernel[CACHE]](
+                d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), emax, Int64(loss),
+                _w(learning_rate), _w(lb), Int64(0 if last else 1), d_s.unsafe_ptr(), errors.unsafe_ptr(),
+                grid_dim=_blocks(m), block_dim=OPS_TPB,
+            )
+        else:
+            ctx.enqueue_function[r2_update_kernel_reference](
+                d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), emax, Int64(loss),
+                _w(learning_rate), _w(lb), Int64(0 if last else 1), d_s.unsafe_ptr(),
+                grid_dim=_blocks(m), block_dim=OPS_TPB,
+            )
         fold_tree_device(ctx, d_s, m, 1)
         var tot = _f(_head_u64(ctx, d_s, 1)[0])
         if not last:
@@ -340,6 +428,7 @@ def r2_step_device(
     _ = d_p^
     _ = d_y^
     _ = d_s^
+    _ = errors^
 
 
 # ------------------------------------------------------ weighted median --
@@ -732,7 +821,7 @@ struct PlattDevice(PlattSums):
         fold_tree_device(self.ctx, self.d_p, self.m, 1)
         return _f(_head_u64(self.ctx, self.d_p, 1)[0])
 
-    def grad(mut self, a: Float64, b: Float64, mut out: List[Float64]) raises:
+    def grad(mut self, a: Float64, b: Float64, mut output: List[Float64]) raises:
         self.ctx.enqueue_function[platt_grad_kernel](
             self.d_f.unsafe_ptr(), self.d_y.unsafe_ptr(), Int64(self.n), Int64(self.m), self.hi, self.lo, _w(a), _w(b),
             self.d_p.unsafe_ptr(), grid_dim=_blocks(self.m), block_dim=OPS_TPB,
@@ -740,7 +829,7 @@ struct PlattDevice(PlattSums):
         fold_tree_device(self.ctx, self.d_p, self.m, 5)
         var r = _head_u64(self.ctx, self.d_p, 5)
         for q in range(5):
-            out[q] = _f(r[q])
+            output[q] = _f(r[q])
 
 
 def platt_fit_device(

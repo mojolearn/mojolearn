@@ -25,6 +25,12 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from x_prep.common import FP, IP, p, ld, st
 
+# AFCL-P03: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# More smaller blocks may reduce scheduling pressure from contended category
+# atomics. No count, category or weight semantics change. Both A/B arms must
+# enable MOJOLEARN_NB_CAT_ATOMIC; this switch only changes its launch geometry.
+comptime AFCL_P03 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P03"]()
+
 #: lane idn-int-prep (2026-10-04): IDENTICAL on every vendor, ON by default.
 #: The table is an integer count: the atomic adds give the units' words at any
 #: row count (`cat_hfold_unit` also sums integers and converts once), and the

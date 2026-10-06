@@ -1,0 +1,28 @@
+{
+  "id": "C50",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "SHARED_SCOPED_IMPLEMENTATIONS_UNVERIFIED",
+  "default": "OFF",
+  "shared_implementations": [
+    "T31",
+    "T33",
+    "T35",
+    "C50_IF",
+    "C50_GB"
+  ],
+  "implementation_records": [
+    "experiments/trees_identical_20261006/inference/T31.json",
+    "experiments/trees_identical_20261006/inference/T33.json",
+    "experiments/trees_identical_20261006/inference/T35.json",
+    "experiments/trees_identical_20261006/inference/C50_IF.json",
+    "experiments/trees_identical_20261006/inference/C50_GB.json"
+  ],
+  "overlap_explanation": "Exact forest T31/T33/T35 and IF C50_IF layouts, plus C50_GB packed resident oblivious/non-symmetric GB plans. T34 remains a separately selected numerical version.",
+  "selector": "tools/trees_identical_ideas.py:OVERLAPS",
+  "harness": "bench/speed/forest_speed_arm.py --trees-experiment C50",
+  "recipe_mapping": "experiments/trees_identical_20261006/recipes.json",
+  "full_dataset_facts": "PENDING; every shared record retains its affected scopes and gaps",
+  "demonstrated_runtime_reach": false,
+  "evidence": [],
+  "classical_source": "../mojolearn-classical-identical-ideas/docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md (read only)"
+}
