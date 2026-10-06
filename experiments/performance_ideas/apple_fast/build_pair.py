@@ -31,7 +31,7 @@ def main():
     card=json.loads((ROOT/'experiments/performance_ideas'/a.idea/'manifest.json').read_text())
     if card['status'].startswith('blocked_'):raise RuntimeError(card['blocker'])
     a.output.mkdir(parents=True,exist_ok=False)
-    binding=card['binding'];candidate=card.get('variants',{}).get(a.variant,card['candidate_defines'])
+    binding=card.get('variant_bindings',{}).get(a.variant,card['binding']);candidate=card.get('variants',{}).get(a.variant,card['candidate_defines'])
     env=dict(os.environ,MOJOLEARN_NUMERIC_MODE='fast',MOJOLEARN_COMPILE_JOBS='1',MOJOLEARN_SKIP_BUILD_GATE='1')
     slot=Path.home()/'mojolearn-evidence/compile_slot.sh'
     if not slot.is_file():raise RuntimeError('existing M2 compile-slot script missing: '+str(slot))

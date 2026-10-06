@@ -46,6 +46,7 @@ def main():
     hashes = {arm: sha(args.arms / (arm + '.so')) for arm in ('A', 'B')}
     assert hashes == manifest['hashes']
     binding = manifest['binding']
+    assert binding == card.get('variant_bindings', {}).get(args.variant, card['binding'])
     args.output.mkdir(parents=True, exist_ok=False)
     records = {}
     for arm in ('A', 'B'):
