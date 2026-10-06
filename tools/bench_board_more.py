@@ -789,6 +789,12 @@ def _np():
 
 
 def _host(a):
+    if type(a).__module__.split(".")[0] == "cudf":
+        # cuML 26.08 HoltWinters.forecast returns a cuDF frame even when the
+        # fit input is CuPy. cuDF rejects implicit NumPy conversion; explicitly
+        # copy its values to the host, preserving dtype and shape for the
+        # existing series-major quality normalization below.
+        return a.to_numpy(copy=True)
     ctd = _load("classical_two_datasets")
     return ctd._to_host(a)
 

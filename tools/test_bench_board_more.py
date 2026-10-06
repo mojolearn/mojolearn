@@ -27,6 +27,46 @@ bbm = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(bbm)
 
 
+@pytest.mark.parametrize("shape", [(3, 2), (2, 3), (6,)])
+def test_host_cudf_forecast_uses_explicit_copy_and_preserves_layout(shape):
+    values = np.arange(6, dtype=np.float32).reshape(shape)
+
+    class Forecast:
+        __module__ = "cudf.core.dataframe"
+
+        def __array__(self, *args, **kwargs):
+            raise TypeError("cuDF forbids implicit NumPy conversion")
+
+        def to_numpy(self, *, copy):
+            assert copy is True
+            return values.copy()
+
+    host = bbm._host(Forecast())
+    assert host.shape == values.shape
+    assert host.dtype == values.dtype
+    assert not np.shares_memory(host, values)
+    np.testing.assert_array_equal(host, values)
+    expected = values.T if shape == (3, 2) else values.reshape(2, 3)
+    np.testing.assert_array_equal(bbm._series_major(host, 2), expected)
+
+
+def test_host_cupy_forecast_keeps_explicit_device_copy():
+    values = np.arange(6, dtype=np.float32).reshape(3, 2)
+
+    class Forecast:
+        __module__ = "cupy._core.core"
+
+        def __array__(self, *args, **kwargs):
+            raise TypeError("CuPy forbids implicit NumPy conversion")
+
+        def get(self):
+            return values.copy()
+
+    host = bbm._host(Forecast())
+    assert host.dtype == values.dtype
+    np.testing.assert_array_equal(bbm._series_major(host, 2), values.T)
+
+
 def _xe():
     rng = np.random.default_rng(0)
     X = rng.standard_normal((300, 6))
