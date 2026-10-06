@@ -16,7 +16,9 @@
     "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo",
     "experiments/performance_ideas/N07/production_check.mojo"
   ],
-  "candidate_defines": [],
+  "candidate_defines": [
+    "MOJOLEARN_IDN_RF_STREAM_REPLICAS=1"
+  ],
   "baseline_defines": [],
   "build_argv": [
     "{python}",
@@ -31,14 +33,17 @@
     "--output",
     "{output}",
     "--source-sha",
-    "{source_sha}"
+    "{source_sha}",
+    "--define",
+    "MOJOLEARN_IDN_RF_STREAM_REPLICAS=1"
   ],
   "run_argv": [
     "{output}"
   ],
   "validation_paths": [
     "gemm/checks/gemm_step_arms_check.mojo",
-    "core/gemm_identity_check.mojo"
+    "core/gemm_identity_check.mojo",
+    "experiments/performance_ideas/N07/production_check.mojo"
   ],
   "depends_on": [
     "I18"

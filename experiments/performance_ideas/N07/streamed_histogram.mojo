@@ -73,7 +73,7 @@ def merge_kernel(partials: MutPointer[Int64,MutAnyOrigin],output: MutPointer[Int
 
 
 # N07 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
-# Explicit bounded exact-integer adapter; weighted floating forest admission is absent.
+# Explicit bounded integer adapter; production fixed-point weighted route is separately guarded.
 def streamed_histogram[CHUNK: Int,BINS: Int,REPLICAS: Int](ctx: DeviceContext,
     mut bins: DeviceBuffer[DType.int32],mut weights: DeviceBuffer[DType.int32],
     mut partials: DeviceBuffer[DType.int64],mut output: DeviceBuffer[DType.int64],
