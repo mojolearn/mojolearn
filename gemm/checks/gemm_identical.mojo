@@ -7221,6 +7221,7 @@ def identical_gemm_shipped_into(
     Row above 0 (NVIDIA): `identical_gemm_shipped_at_row_into[False]` at the
     row. Row 0 (AMD until the MI300X leg decides, Apple, every other column):
     the old line, and the ksplit path is not compiled at all."""
+    # A05 experiment: NEVER RUN — PENDING VALIDATION; incumbent defaults retained.
     # A05 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
     # Compact tile requires MOJOLEARN_IDN_GEMM_COMPACT_LIVE_TILE; shipped tile retained.
     # A05: halve per-thread row accumulators to shorten register live ranges.
