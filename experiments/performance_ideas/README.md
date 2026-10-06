@@ -59,6 +59,10 @@ its explicit recipe. Arguments are arrays executed without a shell. Supported
 argument substitutions are `{repo}`, `{python}`, `{mojo}`, `{compile_slot}`,
 `{vendor}`, `{output}`, `{source_sha}`, `{mode}`, and `{arm}`.
 
+`paired_build: true` declares a builder that prepares both attested arms in
+one invocation. Use the default build arm once; a separate baseline build is
+refused. Its own artifact manifest must retain both hashes and exact defines.
+
 `output_kind: "directory"` is available for paired campaigns; the default is a
 file. Builds use the existing compile-slot semaphore unless the recipe sets
 `build_uses_compile_slot: true` and manages it itself. Recipes must actually

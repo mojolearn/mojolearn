@@ -141,6 +141,22 @@ def test_queue_requirement_does_not_run_a_gpu(tmp_path, monkeypatch):
     p.require_queue_host("build", record, "amd")
 
 
+@pytest.mark.parametrize("platform,vendor", [("darwin", "amd"), ("darwin", "nvidia"), ("linux", "apple")])
+def test_wrong_device_queue_is_rejected_before_launch(tmp_path, monkeypatch, platform, vendor):
+    _, record = recipe(tmp_path)
+    monkeypatch.setenv("MOJOLEARN_PERFORMANCE_QUEUE_JOB", "1")
+    monkeypatch.setattr(p.sys, "platform", platform)
+    with pytest.raises(p.ExperimentError, match="matching"):
+        p.require_queue_host("validate", record, vendor)
+
+
+def test_paired_build_runs_once_and_refuses_duplicate_baseline(tmp_path):
+    _, record = recipe(tmp_path, paired_build=True, baseline_build_argv=['duplicate'])
+    assert p.command_for(record, 'build', 'amd', tmp_path/'arms', 'a'*40, tmp_path)
+    with pytest.raises(p.ExperimentError, match='both arms once'):
+        p.command_for(record, 'build', 'amd', tmp_path/'arms', 'a'*40, tmp_path, 'baseline')
+
+
 def committed(root):
     subprocess.run(["git", "init", "--quiet", str(root)], check=True)
     subprocess.run(["git", "add", "."], cwd=root, check=True)

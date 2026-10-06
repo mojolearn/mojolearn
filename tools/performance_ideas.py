@@ -119,6 +119,8 @@ def read_manifest(path: Path, root: Path = ROOT) -> dict[str, Any]:
             require_string_list(record[key], f"{idea}.{key}")
     if not isinstance(record.get("build_uses_compile_slot", False), bool):
         raise ExperimentError(f"{idea}: build_uses_compile_slot must be boolean")
+    if not isinstance(record.get("paired_build", False), bool):
+        raise ExperimentError(f"{idea}: paired_build must be boolean")
     if record.get("output_kind", "file") not in {"file", "directory"}:
         raise ExperimentError(f"{idea}: invalid output_kind")
     if not isinstance(record.get("timing_contract"), str) or not record["timing_contract"].strip():
@@ -190,6 +192,8 @@ def command_for(record: dict[str, Any], stage: str, vendor: str, output: Path, s
         raise ExperimentError(f"{record['id']}: vendor {vendor} is outside this recipe")
     if record["status"].startswith("blocked_"):
         raise ExperimentError(f"{record['id']}: {record['blocker']}")
+    if stage == "build" and arm == "baseline" and record.get("paired_build", False):
+        raise ExperimentError(f"{record['id']}: this recipe builds both arms once; use the default build arm")
     key = "baseline_build_argv" if stage == "build" and arm == "baseline" else STAGES[stage]
     command = record.get(key, [])
     if not command:
@@ -237,6 +241,10 @@ def require_queue_host(stage: str, record: dict[str, Any], vendor: str) -> None:
         raise ExperimentError("Device validation and execution must run as a queued job")
     if vendor == "host" and stage in {"time", "run"}:
         raise ExperimentError("The host column supplies verification, not performance timing")
+    if sys.platform == "darwin" and vendor not in {"apple", "host"}:
+        raise ExperimentError("AMD and NVIDIA device execution requires its matching Linux queue")
+    if vendor == "apple" and sys.platform != "darwin":
+        raise ExperimentError("Apple device execution requires its matching macOS queue")
     if sys.platform == "darwin":
         brand = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"],
                                text=True, capture_output=True, check=True).stdout.strip()
@@ -297,6 +305,7 @@ def execute(record: dict[str, Any], path: Path, stage: str, vendor: str, output:
     receipt: dict[str, Any] = {
         "schema": 1, "id": record["id"], "mode": record["mode"], "vendor": vendor,
         "stage": stage, "arm": arm, "source_sha": source, "manifest_sha256": manifest_digest,
+        "paired_build": stage == "build" and record.get("paired_build", False),
         "argv": command, "log": str(log_path), "status": "RUNNING",
         "quality_receipt": str(quality) if quality else None,
     }
