@@ -1,40 +1,41 @@
 {
   "schema": 1,
   "id": "I04",
-  "title": "Probe alternative leaves before a coherent fold version",
+  "title": "Qualify a coherently shared opt-in 64-element IDENTICAL leaf version",
   "mode": "identical",
   "vendors": [
     "nvidia",
     "amd",
-    "apple",
-    "host"
+    "apple"
   ],
   "status": "build_passed",
   "implementation_paths": [
     "gemm/contract.mojo",
     "gemm/experiments/fold_profile_probe.mojo",
     "gemm/experiments/profile_check.mojo",
-    "gemm/experiments/profile_identity_check.mojo"
+    "gemm/experiments/profile_identity_check.mojo",
+    "gemm/experiments/native_build.py"
   ],
   "candidate_defines": [
     "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64=1"
   ],
   "baseline_defines": [],
   "build_argv": [
-    "pixi",
-    "run",
-    "mojo",
-    "build",
-    "-j1",
-    "-D",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "-D",
-    "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64=1",
-    "-I",
-    "{repo}",
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
     "{repo}/gemm/experiments/profile_identity_check.mojo",
-    "-o",
-    "{output}"
+    "--mojo",
+    "{mojo}",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}",
+    "--define",
+    "MOJOLEARN_IDN_GEMM_FOLD_LEAF_64=1"
   ],
   "run_argv": [
     "{output}"
@@ -54,22 +55,24 @@
     "public caller quality and NVIDIA+AMD speed acceptance; neither materially slower",
     "Research candidate only: I01-I03 must prove fold/leaf bottleneck before timing admission",
     "Adversarial conditioning and all caller quality required before profile promotion",
-    "Native harness instantiates explicit control and candidate; all compared cells and poison/failure gates required"
+    "Build target/column must match actual device; CPU identity uses independent host references and separately owed host caller qualification, not a GPU DeviceContext host run",
+    "Separate baseline128 and candidate64 builds each match their coherently shared host/device profile; answers may differ across versions but must agree across all columns within one version"
   ],
   "timing_contract": "Frozen source, one arm run; device completion includes launch and wait, excludes fixture upload/reference/readback. Full caller timing and compiled resource counters remain required; Apple identity only.",
   "blocker": null,
   "baseline_build_argv": [
-    "pixi",
-    "run",
-    "mojo",
-    "build",
-    "-j1",
-    "-D",
-    "MOJOLEARN_NUMERIC_IDENTICAL=1",
-    "-I",
-    "{repo}",
+    "{python}",
+    "{repo}/gemm/experiments/native_build.py",
     "{repo}/gemm/experiments/profile_identity_check.mojo",
-    "-o",
-    "{output}"
+    "--mojo",
+    "{mojo}",
+    "--vendor",
+    "{vendor}",
+    "--mode",
+    "{mode}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}"
   ]
 }
