@@ -22,7 +22,7 @@ struct TrialResult(Movable):
         self.words=words^; self.status=status; self.logical=logical
         self.physical=physical; self.considered=considered; self.fresh=fresh
 
-def run_trial(ctx: DeviceContext,case: Int,control: Bool) raises -> TrialResult:
+def run_trial(ctx: DeviceContext,fixture: Int,control: Bool) raises -> TrialResult:
     var rows=257
     var d=7
     var n=d+1
@@ -40,25 +40,25 @@ def run_trial(ctx: DeviceContext,case: Int,control: Bool) raises -> TrialResult:
     var f=GLMWithData(ctx,dx^,dy^,rows,GLMDims.make(1,d,True),QN_LOSS_LOGISTIC,Float32(0.125))
     var fx=f.evaluate(ctx,x,grad)
     copy_vec(ctx,gradp,grad)
-    ax(ctx,direction,Float32(1) if case==2 else Float32(-1),grad,n)
+    ax(ctx,direction,Float32(1) if fixture==2 else Float32(-1),grad,n)
     var param=LBFGSParam.defaults()
     var step=Float32(1)
     var expected=LS_SUCCESS
-    if case==1:
+    if fixture==1:
         step=Float32(64)  # reject full steps before finding the first acceptance
-    elif case==2:
+    elif fixture==2:
         expected=LS_INVALID_DIR
-    elif case==3:
+    elif fixture==3:
         step=Float32(0); expected=LS_INVALID_STEP
-    elif case==4:
+    elif fixture==4:
         param.ftol=Float32(1e6); param.min_step=Float32(2)
         expected=LS_INVALID_STEP_MIN
-    elif case==5:
+    elif fixture==5:
         param.ftol=Float32(1e6); param.max_step=Float32(0.5)
         expected=LS_INVALID_STEP_MAX
-    elif case==6 or case==7:
+    elif fixture==6 or fixture==7:
         param.ftol=Float32(1e6)
-        param.max_linesearch=2 if case==6 else 7
+        param.max_linesearch=2 if fixture==6 else 7
         expected=LS_MAX_ITERS_REACHED
     var iterations=0
     var fresh=False
@@ -90,9 +90,9 @@ def run_trial(ctx: DeviceContext,case: Int,control: Bool) raises -> TrialResult:
     return result^
 
 def check_exact_trial_schedule(ctx: DeviceContext) raises:
-    for case in range(8):
-        var expected=run_trial(ctx,case,True)
-        var actual=run_trial(ctx,case,False)
+    for fixture in range(8):
+        var expected=run_trial(ctx,fixture,True)
+        var actual=run_trial(ctx,fixture,False)
         if actual.status!=expected.status or actual.logical!=expected.logical or actual.considered!=expected.considered or actual.fresh!=expected.fresh:
             raise Error("I12 speculative line-search status/count/first acceptance differs")
         if len(actual.words)!=len(expected.words):
@@ -102,9 +102,9 @@ def check_exact_trial_schedule(ctx: DeviceContext) raises:
                 raise Error("I12 selected trial/objective/gradient/cache word differs at "+String(i))
         var should_reach=False
         comptime if is_defined["MOJOLEARN_IDN_QN_EXACT_TRIALS"]():
-            should_reach=case!=3
+            should_reach=fixture!=3
         if (actual.physical>0)!=should_reach or expected.physical!=0:
             raise Error("I12 full speculative evaluator did not reach the requested arm")
-        if case==1 and actual.considered<=1:
+        if fixture==1 and actual.considered<=1:
             raise Error("I12 rejection fixture accepted its initial full step")
-        print("I12_TRIAL case",case,"status",actual.status,"considered",actual.considered,"logical",actual.logical,"physical",actual.physical)
+        print("I12_TRIAL fixture",fixture,"status",actual.status,"considered",actual.considered,"logical",actual.logical,"physical",actual.physical)
