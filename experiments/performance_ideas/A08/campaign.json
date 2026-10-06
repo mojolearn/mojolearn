@@ -1,0 +1,38 @@
+{
+  "id": "A08",
+  "source": "experiments/performance_ideas/A08/check.mojo",
+  "arms": [
+    {
+      "name": "current256",
+      "defines": []
+    },
+    {
+      "name": "old1024",
+      "defines": [
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1"
+      ]
+    },
+    {
+      "name": "wide4096",
+      "defines": [
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_4096=1"
+      ]
+    },
+    {
+      "name": "256_conv_poll1",
+      "defines": [
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1=1"
+      ]
+    },
+    {
+      "name": "1024_conv_poll1",
+      "defines": [
+        "MOJOLEARN_IDN_KMEANS_ACC_ROWS_256_OFF=1",
+        "MOJOLEARN_IDN_KMEANS_CONV_CHUNK_1=1"
+      ]
+    }
+  ],
+  "fixtures": [
+    {}
+  ]
+}
