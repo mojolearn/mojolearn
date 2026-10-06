@@ -131,7 +131,7 @@ def product_finish_kernel(parts: MutPointer[Float32,MutAnyOrigin],words: MutPoin
         var log2pi=DF(Float32(1.8378770664093453),Float32(3.1268354230284965e-8))
         var value=df_mul(DF(Float32(-0.5)),df_add(df_add(DF(qh[0],ql[0]),df_mul(n,log2pi)),DF(lh[0],ll[0])))
         # Keep the first actual production refusal; never clear its stage code.
-        if info_init.unsafe_load(bid)!=0 or info_loop.unsafe_load(bid)!=0 or not isfinite(df_round(value)):
+        if info_init.unsafe_load(bid)!=0 or info_loop.unsafe_load(bid)!=0 or not isfinite(original) or not isfinite(df_round(value)):
             value=DF(original)
         ll_out.unsafe_store(bid,df_round(value))
         words.unsafe_store(bid,value.hi);words.unsafe_store(members+bid,value.lo)
