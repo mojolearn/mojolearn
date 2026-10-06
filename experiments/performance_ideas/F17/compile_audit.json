@@ -4,7 +4,7 @@
   "mode": "fast",
   "vendor": "apple",
   "source_guard_paths": [
-    "arima/impl/fast_eval_ws.mojo"
+    "arima/impl/batched_arima.mojo"
   ],
   "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
   "existing_default_exception": "Rollback arms for previously promoted schedules retain existing production defaults.",
