@@ -119,6 +119,17 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
   resource claims explicit; do not label every previous CPU result as one-core without worker evidence.
 - These resource rules do not expand the selected race arms or alter another session's active frozen run.
 
+## Measurement artifact retention before teardown
+
+Before terminating a measurement machine, prove where every required output,
+model-state artifact, accepted binary and unique input is stored. An attached EBS
+volume with DeleteOnTermination=false does not prove that a workspace is on it.
+Map the actual filesystem through its physical device to the provider volume ID;
+directory names and mount labels are not evidence. For instance-local storage,
+verify the retained bytes off the machine before termination. Metadata and hashes
+alone are not retained array/model/binary bytes. Keep any incomplete retention
+explicit and stop teardown until the required evidence is durably preserved.
+
 ## No Python in the runtime
 
 Owner clarification (2026-10-06, supersedes earlier Python API/glue exceptions):
@@ -130,6 +141,11 @@ bindings; no Python loops, callbacks, worker threads or NumPy/SciPy/scikit-learn
 computation, conversions or fallbacks may execute on a product path, in any mode
 or on any vendor. Preserve supported interfaces and semantics through native
 implementation; do not remove features to claim compliance.
+Product orchestration is runtime work: batch/epoch loops, kernel launch sequences,
+buffer/workspace management, synchronization and stopping decisions must also run
+in Mojo. Moving arithmetic to Mojo while Python still drives these operations is
+only a partial repair, not compliance. Measure performance gains; do not assume
+that removing Python makes every full workload faster.
 
 Python test/benchmark controllers, test-data preparation and independent test
 oracles remain allowed as testing tools. Keep their work explicitly distinguished

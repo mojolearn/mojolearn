@@ -36,6 +36,8 @@ SOURCES=[('apple',ROOT/'apple/captured/runs'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1'),
          ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements'),
          ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements-classical-dependency-repair'),
+         ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements-tsvd-full-v1'),
+         ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements-expanded-reg'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements')]
 
 
@@ -87,7 +89,7 @@ def main():
                      route={'nvidia':'native-sm90','amd':'amd-native-gfx942','apple':'apple-fast'}[vendor],
                      receipt_sha256=digest,source_coverage_pending=job.get('source_coverage_pending',[]))
             if vendor=='apple' and source in [ROOT/'apple/captured/runs',ROOT/'apple/captured/kmeans-repair2/runs']:
-                row['resource_limitations']=['Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established.']
+                row['resource_limitations']=['Shared workspace storage I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established.']
             detail=dict(configuration=config,workload=job['workload_id'],vendor=vendor,
                         source_sha=receipt['source_sha'],execution_status=execution_status,
                         evidence=row['evidence'],returncodes=[r.get('returncode') for r in receipt['runs']])
@@ -112,18 +114,27 @@ def main():
                 detail['quality_reason']=row['quality_reason']
             if row.get('resource_limitations'):detail['resource_limitations']=row['resource_limitations']
             cells.append(row);summary.append(detail)
-    inventory=dict(campaign='six-lane-full-ab-20261006',identity_policy='NVIDIA/AMD same-arm IDENTICAL comparison pending AMD/PTX artifacts and complete typed fitted-state evidence. Apple FAST is evaluated by task quality; bits may differ.',evidence_policy='Complete full-workload executions are retained separately from quality and identity admission. Failed attempts preserved at controller-qualified paths; no default promotion.',candidates=[
+    inventory=dict(campaign='six-lane-full-ab-20261006',identity_policy='NVIDIA/AMD same-arm IDENTICAL admission requires matching source/runtime provenance and complete typed fitted-state evidence. AMD measurements are arriving; NVIDIA PTX artifacts remain pending. Apple FAST is evaluated by task quality; bits may differ.',evidence_policy='Complete full-workload executions are retained separately from quality and identity admission. Failed attempts preserved at controller-qualified paths; no default promotion. Hash receipts alone do not establish retained array/model bytes; see artifact-retention.json.',candidates=[
         dict(id='AF.X.complete-proposed',title='Apple FAST complete proposed configuration',mode='fast',vendors=['apple']),
         dict(id='I.X.complete-proposed',title='IDENTICAL complete proposed configuration',mode='identical',vendors=['nvidia','amd','apple','host'])])
     notes=['A=candidate; B=incumbent. Timed evidence is pending admission, not a default promotion.',
            'These are combined-configuration full workloads, not completed individual constituent experiments.',
            'Initial 12-pair quality review: all12 preserve baseline metrics; 4 task-metric gates pass, 6 taxi opponent comparisons pending (historical4m vs current5.25m rows), Apple Istella KMeans fails best-opponent gate, NVIDIA inherits opponent-quality deficit. Additional saved assessments are retained in next-quality-review.json.',
            'One excluded warmup and one scored sample per arm. Original failed attempts are retained.',
-           'NVIDIA PTX and AMD have no compatible retained artifacts; missing-only build question remains pending.',
+           'AMD GPU measurements use accepted artifacts as they become available; missing artifacts are built separately on the owned CPU builder. NVIDIA PTX still awaits compatible artifacts.',
            'IDENTICAL compares each same arm across vendors; unavailable typed complete model state remains incomplete.',
            'Scored output and partial/public-save model hashes are retained separately; partial hashes do not prove complete state identity.',
-           'Apple first four PCA/OLS pairs overlapped shared external-storage data transfer; KMeans overlap unestablished. No quiet-storage or promotion claim.',
-           'No compilation or separate numerical verification rerun. Full provider and worker logs remain under '+str(ROOT)]
+           'Apple first four PCA/OLS pairs overlapped shared workspace storage data transfer; KMeans overlap unestablished. No quiet-storage or promotion claim.',
+           'Apple teardown preservation failed: the workspace was on the internal SSD, not retained EBS. Logs, timings, metrics and hash receipts survive; some raw array bytes remain unrecovered. See artifact-retention.json for exact recovery coverage and provenance. Original receipts are unchanged.',
+           'Races reuse accepted binaries without separate numerical verification reruns; the separately authorized AMD missing-artifact build is not a measurement. Full provider and worker logs remain under '+str(ROOT)]
+    retention={}
+    for label,relative in [('apple_incident','apple/emergency-preservation-correction.json'),
+                           ('apple_recovery','apple/incident-offbox-audit/recovery-summary.json')]:
+        source=ROOT/relative
+        if source.exists():
+            raw=source.read_bytes()
+            retention[label]=dict(source=str(source),sha256=hashlib.sha256(raw).hexdigest(),record=json.loads(raw))
+    write(OUT/'artifact-retention.json',retention)
     for assessment in review['rows']+next_review['rows']:
         assessment['original_review_receipt_path']=assessment['receipt']
         assessment['receipt']=receipt_paths.get(assessment['receipt_sha256'],assessment['receipt'])

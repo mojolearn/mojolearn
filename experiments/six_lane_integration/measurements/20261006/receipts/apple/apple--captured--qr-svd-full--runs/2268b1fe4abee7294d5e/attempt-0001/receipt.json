@@ -2994,10 +2994,397 @@
         "preparation_seconds": 0.7381051250267774
       },
       "model_identity_available": false
+    },
+    {
+      "phase": "scored",
+      "arm": "B",
+      "excluded": false,
+      "returncode": 0,
+      "process_wall_seconds": 9.984514951705933,
+      "log": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/qr-svd-full/runs/2268b1fe4abee7294d5e/attempts/attempt-0001/scored-B.log",
+      "output": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/qr-svd-full/runs/2268b1fe4abee7294d5e/attempts/attempt-0001/scored-B.json",
+      "result_sha256": "9131ca160b840640ccdf7bb56091a00b9a1622a827e3e2fcfdd63fd86f885eb8",
+      "result": {
+        "arm": "B",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+        "dataset_split": {
+          "evaluation_rows": 500000,
+          "fit": [
+            0,
+            2043304
+          ]
+        },
+        "dataset_version": "saved shipped full standardized regression block; source array and file hashes retained",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "Apple full-machine CPU pools unrestricted; dedicated serial GPU lock; no competing workloads or bulk input transfer",
+          "thread_caps": "cleared"
+        },
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "mode": "reduced"
+          },
+          "source": "declared"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": null,
+          "cgroup": {},
+          "cpu_count": 28,
+          "machine": "arm64",
+          "native_readback": {
+            "config": "mojolearn.linalg.qr(mode='reduced')",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/__init__.py",
+            "numeric_mode_env": "fast",
+            "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+            "numeric_mode_used": "fast",
+            "pre_clock_fit": false,
+            "vendor_used": "metal",
+            "version": "0.8.37"
+          },
+          "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+          "sysctl": {
+            "hw.memsize": "274877906944",
+            "hw.ncpu": "28",
+            "machdep.cpu.brand_string": "Apple M3 Ultra"
+          },
+          "system": "Darwin"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "AF.C.AFCL-G01",
+          "AF.C.AFCL-G03",
+          "AF.C.AFCL-G04",
+          "AF.C.AFCL-G05",
+          "AF.C.AFCL-G06",
+          "AF.C.AFCL-G07",
+          "AF.C.AFCL-G08",
+          "AF.C.AFCL-G09",
+          "AF.C.AFCL-G10",
+          "AF.C.AFCL-G11",
+          "AF.C.AFCL-G12",
+          "AF.C.AFCL-G13",
+          "AF.C.AFCL-G14",
+          "AF.C.AFCL-L01",
+          "AF.C.AFCL-L02",
+          "AF.C.AFCL-L03",
+          "AF.C.AFCL-L04",
+          "AF.C.AFCL-L05",
+          "AF.C.AFCL-L06",
+          "AF.C.AFCL-L07",
+          "AF.C.AFCL-L08",
+          "AF.C.AFCL-L09",
+          "AF.C.AFCL-L10",
+          "AF.C.AFCL-L11",
+          "AF.C.AFCL-L12",
+          "AF.C.AFCL-L13",
+          "AF.C.AFCL-L14",
+          "AF.C.AFCL-P01",
+          "AF.C.AFCL-P02",
+          "AF.C.AFCL-P03",
+          "AF.C.AFCL-P04",
+          "AF.C.AFCL-P05",
+          "AF.C.AFCL-P06",
+          "AF.C.AFCL-P07",
+          "AF.C.AFCL-P08",
+          "AF.C.AFCL-P09",
+          "AF.C.AFCL-P10",
+          "AF.C.AFCL-P11",
+          "AF.C.AFCL-P12",
+          "AF.C.AFCL-P13",
+          "AF.C.AFCL-P14",
+          "AF.C.AFCL-T01",
+          "AF.C.AFCL-T02",
+          "AF.C.AFCL-T03",
+          "AF.C.AFCL-T04",
+          "AF.C.AFCL-T05",
+          "AF.C.AFCL-T06",
+          "AF.C.AFCL-T07",
+          "AF.C.AFCL-T08",
+          "AF.C.AFCL-T09",
+          "AF.C.AFCL-T10",
+          "AF.C.AFCL-T11",
+          "AF.C.AFCL-T12",
+          "AF.T.F01",
+          "AF.T.F02",
+          "AF.T.F03",
+          "AF.T.F04",
+          "AF.T.F05",
+          "AF.T.F06",
+          "AF.T.F07",
+          "AF.T.F08",
+          "AF.T.F09",
+          "AF.T.F10",
+          "AF.T.F11",
+          "AF.T.F12",
+          "AF.T.G01",
+          "AF.T.G02",
+          "AF.T.G04",
+          "AF.T.G05",
+          "AF.T.G07",
+          "AF.T.G08",
+          "AF.T.G09",
+          "AF.T.G10",
+          "AF.T.G11",
+          "AF.T.G12",
+          "AF.T.N01",
+          "AF.T.N02",
+          "AF.T.N03",
+          "AF.T.N04",
+          "AF.T.N05",
+          "AF.T.N06",
+          "AF.T.N07",
+          "AF.T.N08",
+          "AF.T.N09",
+          "AF.T.N10",
+          "AF.T.N11",
+          "AF.T.N12",
+          "AF.T.P01",
+          "AF.T.P03",
+          "AF.T.P04",
+          "AF.T.P05",
+          "AF.T.P06",
+          "AF.T.P07",
+          "AF.T.P08",
+          "AF.T.P09",
+          "AF.T.P10",
+          "AF.T.P11",
+          "AF.T.P12",
+          "AF.N.A01",
+          "AF.N.A02",
+          "AF.N.A03",
+          "AF.N.A04",
+          "AF.N.A05",
+          "AF.N.A06",
+          "AF.N.A07",
+          "AF.N.A08",
+          "AF.N.A09",
+          "AF.N.A10",
+          "AF.N.A11",
+          "AF.N.A12",
+          "AF.N.T01",
+          "AF.N.T02",
+          "AF.N.T03",
+          "AF.N.T04",
+          "AF.N.T05",
+          "AF.N.T06",
+          "AF.N.T07",
+          "AF.N.T08",
+          "AF.N.T09",
+          "AF.N.T10",
+          "AF.N.T11",
+          "AF.N.T12",
+          "AF.N.M01",
+          "AF.N.M02",
+          "AF.N.M03",
+          "AF.N.M04",
+          "AF.N.M05",
+          "AF.N.M06",
+          "AF.N.M07",
+          "AF.N.M08",
+          "AF.N.M09",
+          "AF.N.M10",
+          "AF.N.E01",
+          "AF.N.E02",
+          "AF.N.E03",
+          "AF.N.E04",
+          "AF.N.E05",
+          "AF.N.E06",
+          "AF.N.E07",
+          "AF.N.E08",
+          "AF.N.E09",
+          "AF.N.E10"
+        ],
+        "loaded_artifacts": {
+          "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/_mojolearn.so": "4c6fcc6c36feda05054e19672696fa0aa21aad41faa9dab99fac0a53fbcc6ebf",
+          "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/_mojolearn_x_decomp.so": "7c55b0805e4285997a3b67f91aad0196edc230a01f962c4a73d712310d129353"
+        },
+        "missing_timing_scopes": [],
+        "mode": "fast",
+        "model_state": {
+          "missing_state": [
+            "model owner"
+          ],
+          "reason": "Runner exposes no public model owner",
+          "status": "UNAVAILABLE"
+        },
+        "output_sha256": "5bdc3890e6e6144c137fee061fc1c99350cd2d70ea5bc209f7c88f63354e0864",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 387200,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.R",
+              "shape": [
+                220,
+                220
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "5bdc3890e6e6144c137fee061fc1c99350cd2d70ea5bc209f7c88f63354e0864",
+          "status": "CAPTURED"
+        },
+        "phase": "scored",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "missing_state": [
+                "model owner"
+              ],
+              "reason": "Runner exposes no public model owner",
+              "status": "UNAVAILABLE"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 387200,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.R",
+                  "shape": [
+                    220,
+                    220
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "5bdc3890e6e6144c137fee061fc1c99350cd2d70ea5bc209f7c88f63354e0864",
+              "status": "CAPTURED"
+            },
+            "timings": {
+              "consumed_output_seconds": 7.3583098128438e-05,
+              "fit_or_training_seconds": 3.430009667063132,
+              "repeated_seconds": 3.43008591607213
+            }
+          }
+        ],
+        "resource_policy": {
+          "policy": "dedicated Apple; CPU libraries unrestricted"
+        },
+        "retained_output_values": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/qr-svd-full/runs/2268b1fe4abee7294d5e/attempts/attempt-0001/scored-B.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.linalg.qr(mode='reduced')",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/__init__.py",
+          "numeric_mode_env": "fast",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+          "numeric_mode_used": "fast",
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality; QR R.T@R vs full X.T@X; SVD singular-value reference from full float64 Gram and original stride-row reconstruction. Original gates/opponents unchanged.",
+          "metrics": {
+            "ours-fast": {
+              "relative_gram_difference": 1.601826657737046e-07
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": null,
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "Load the exact saved full standardized reg NPZ/JSON and unchanged lane preparation; form contiguous float32 X; call mojolearn.linalg.qr on every fit row with the original declared kwargs; form all function return factors and required synchronization; consume the unchanged harness output scope. No separate inference/query operation. Quality computation, output hashes, reporting and model-state capture remain outside timing.",
+        "timings": {
+          "cold_seconds": 4.2042725830106065,
+          "consumed_output_seconds": 0.011962749995291233,
+          "fit_or_training_seconds": 3.451066792011261,
+          "full_operation_seconds": 4.2042725830106065,
+          "preparation_seconds": 0.7412382500478998
+        },
+        "vendor": "apple",
+        "workload_id": "algos/qr@dataset=istella",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": false
+        }
+      },
+      "output_sha256": "5bdc3890e6e6144c137fee061fc1c99350cd2d70ea5bc209f7c88f63354e0864",
+      "model_state": {
+        "missing_state": [
+          "model owner"
+        ],
+        "reason": "Runner exposes no public model owner",
+        "status": "UNAVAILABLE"
+      },
+      "timings": {
+        "cold_seconds": 4.2042725830106065,
+        "consumed_output_seconds": 0.011962749995291233,
+        "fit_or_training_seconds": 3.451066792011261,
+        "full_operation_seconds": 4.2042725830106065,
+        "preparation_seconds": 0.7412382500478998
+      },
+      "model_identity_available": false
     }
   ],
   "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/qr-svd-full/runs/2268b1fe4abee7294d5e/attempts/attempt-0001/receipt.json",
   "previous_receipt": null,
   "warmup_scope": "separate_process",
-  "steady_state_claim": false
+  "steady_state_claim": false,
+  "finished": 1791314679.130572,
+  "status": "MEASURED_FULL",
+  "model_identity_available": false
 }

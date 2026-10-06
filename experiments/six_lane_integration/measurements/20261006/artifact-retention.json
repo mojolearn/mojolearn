@@ -1,0 +1,170 @@
+{
+  "apple_incident": {
+    "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/emergency-preservation-correction.json",
+    "sha256": "52dc8e86f0996cfa26a27b5c49521c7933780ab6069401c0d0e1eb7c136224b4",
+    "record": {
+      "schema": "mojolearn.preservation-incident/1",
+      "status": "UNRECOVERED_INTERNAL_WORKSPACE",
+      "recorded_at": "2026-10-06T19:35:30.678434+00:00",
+      "guard_stopped": true,
+      "instance_id": "i-072d21866d8b37fbd",
+      "host_id": "h-04545dd0c2d7a2870",
+      "terminate_already_issued_at": "2026-10-06T19:28:22.591225Z",
+      "host_release_issued": false,
+      "correction": {
+        "invalid_original_claim_file": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/drain-release/capture-proof.json",
+        "invalid_field": "typed_array_bytes",
+        "reason": "The workspace mount was on internal Apple Fabric storage, not either retained EBS volume. Verifying DeleteOnTermination=false on attached EBS did not establish protection for this filesystem.",
+        "original_preserved": true
+      },
+      "proven_offbox_capture": {
+        "files": 1649,
+        "bytes": 93885424,
+        "contents": "metadata, logs, control files, typed manifests and hashes; raw typed array leaf bytes not covered",
+        "directory": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/drain-release/capture"
+      },
+      "mount_evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/drain-release/reservation-audit-1791314895290087000/external-volume-info.plist",
+      "mount_selected": {
+        "DeviceIdentifier": "disk3s7",
+        "ParentWholeDisk": "disk3",
+        "Internal": true,
+        "BusProtocol": "Apple Fabric",
+        "APFSPhysicalStores": [
+          {
+            "APFSPhysicalStore": "disk0s2"
+          }
+        ],
+        "APFSContainerReference": "disk3",
+        "MountPoint": "/Volumes/MojoPerfBuild20261005",
+        "TotalSize": 994662584320
+      },
+      "retained_ebs": {
+        "vol-0ef50c4f586f92fd8": "/dev/sda1; DeleteOnTermination=false",
+        "vol-0ae371d3208853a26": "/dev/sdf; DeleteOnTermination=false"
+      },
+      "recovery": {
+        "ssh_attempts": 2,
+        "latest_exit_code": 255,
+        "latest_failure": "Operation timed out",
+        "current_source_ipv4": "24.103.92.69",
+        "matching_ssh_rule_present": true,
+        "aws_state": "shutting-down",
+        "copies_started": 0,
+        "raw_typed_array_recovery": "not established; at risk of scrub after termination"
+      },
+      "no_claims": [
+        "No raw typed array durability claim",
+        "No recovery success claim",
+        "No host release success claim"
+      ],
+      "billing_correction": {
+        "prior_claim": "Host billing continues until release",
+        "corrected": "AWS pauses host billing while the host is pending during scrub; retained EBS is separately billed",
+        "source": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/mac-instance-stop.html"
+      }
+    }
+  },
+  "apple_recovery": {
+    "source": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/incident-offbox-audit/recovery-summary.json",
+    "sha256": "eecdb8dc24c92a4107e049dcc1a0c264c1ff68870c8ba4652da8e38fa8ea5bd9",
+    "record": {
+      "hash_algorithm": "SHA256 of complete .npy file bytes, including header: tools/six_lane_evidence.py retain_values at db59bb9557035da8fd11b0a020a84e33b0581c30:48. No model run or tensor computation. NPY headers statically parsed and dtype/shape checked.",
+      "original_receipts_unchanged": true,
+      "original_apple_array_references": 552,
+      "candidate_references": 154,
+      "recovered_references": 154,
+      "remaining_without_recovery": 398,
+      "unique_recovered_files": 46,
+      "unique_recovered_file_bytes": 1631951536,
+      "failures": [],
+      "provenance_limitation": "Recovered bytes copied from existing offbox NVIDIA/AMD capture. Exact original Apple manifest file hash proves byte equivalence; does not claim original Apple file was transferred or supply missing model-state scope.",
+      "batch_recovery": {
+        "runs": {
+          "original_refs": 56,
+          "recovered_refs": 0,
+          "unrecovered_refs": 56,
+          "original_payload_bytes": 176048432,
+          "unrecovered_payload_bytes": 176048432
+        },
+        "qr-svd-full": {
+          "original_refs": 32,
+          "recovered_refs": 0,
+          "unrecovered_refs": 32,
+          "original_payload_bytes": 742312736,
+          "unrecovered_payload_bytes": 742312736
+        },
+        "selectors-full": {
+          "original_refs": 16,
+          "recovered_refs": 0,
+          "unrecovered_refs": 16,
+          "original_payload_bytes": 14784,
+          "unrecovered_payload_bytes": 14784
+        },
+        "resample-full": {
+          "original_refs": 16,
+          "recovered_refs": 0,
+          "unrecovered_refs": 16,
+          "original_payload_bytes": 7456,
+          "unrecovered_payload_bytes": 7456
+        },
+        "kmeans-repair2": {
+          "original_refs": 32,
+          "recovered_refs": 32,
+          "unrecovered_refs": 0,
+          "original_payload_bytes": 132723872,
+          "unrecovered_payload_bytes": 0
+        },
+        "expanded-reg": {
+          "original_refs": 72,
+          "recovered_refs": 8,
+          "unrecovered_refs": 64,
+          "original_payload_bytes": 288000000,
+          "unrecovered_payload_bytes": 256000000
+        },
+        "tsvd-full-v1": {
+          "original_refs": 8,
+          "recovered_refs": 0,
+          "unrecovered_refs": 8,
+          "original_payload_bytes": 59136,
+          "unrecovered_payload_bytes": 59136
+        },
+        "classification-full-v1": {
+          "original_refs": 216,
+          "recovered_refs": 90,
+          "unrecovered_refs": 126,
+          "original_payload_bytes": 14012510976,
+          "unrecovered_payload_bytes": 8973205344
+        },
+        "reg-full": {
+          "original_refs": 32,
+          "recovered_refs": 0,
+          "unrecovered_refs": 32,
+          "original_payload_bytes": 64034080,
+          "unrecovered_payload_bytes": 64034080
+        },
+        "gmm-istella-full": {
+          "original_refs": 16,
+          "recovered_refs": 4,
+          "unrecovered_refs": 12,
+          "original_payload_bytes": 10394400,
+          "unrecovered_payload_bytes": 10394368
+        },
+        "classification-full-v1-remaining": {
+          "original_refs": 40,
+          "recovered_refs": 16,
+          "unrecovered_refs": 24,
+          "original_payload_bytes": 8304007392,
+          "unrecovered_payload_bytes": 8064007392
+        },
+        "pls-qn-full": {
+          "original_refs": 16,
+          "recovered_refs": 4,
+          "unrecovered_refs": 12,
+          "original_payload_bytes": 48000000,
+          "unrecovered_payload_bytes": 32000000
+        }
+      },
+      "unrecovered_reference_payload_bytes": 18318083728
+    }
+  }
+}
