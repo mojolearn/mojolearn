@@ -53,6 +53,7 @@ def normalize(route):
   if not bns or not cns:return
   row=common(c,case)
   if c['candidate_id']=='I06' and c['source_sha'].startswith('cbcc8dcd3'):row.update(comparison_kind='confounded_schedule_bundle',limitation='Head-reuse flag also changed the requested backward kvgrid schedule in the original timing driver. Bundled measurement only; isolated toggle rerun uses corrected freeze.',promotion=False)
+  if c['candidate_id']=='I14':row.update(scope='component',comparison_kind='gated_shortcut_chunk_bundle',promotion=False,limitation='Disconnected17-vertex-clique weak_cc_batched graph component; gated+shortcut chunk16 versus ungated baseline, not an isolated chunk-width or full DBSCAN/HDBSCAN comparison.')
   row.update(artifact_hashes=dict(baseline=b['binary_sha256'],candidate=c['binary_sha256']),baseline_ms=bns/1e6,candidate_ms=cns/1e6);rows.append(row)
  for key,r in results.items():
   if r['candidate_id']=='I23':
