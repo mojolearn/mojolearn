@@ -19,3 +19,5 @@
 
 - D014: Freeze 22b983d first build failed: the borrowed main .pixi compiler configuration pointed to a removed worktree and could not find std. Preserve all diagnostics. Install the repository's frozen Pixi lock into the integration worktree using supported `pixi install --frozen`; do not edit compiler configuration or toolchain internals. Opponent installations remain untouched.
 - D015: The first compiler diagnostics also exposed source-added imports before module docstrings. Move affected module docstrings before imports as a syntax repair, without changing computation. This starts a new freeze.
+
+- D016: Local compiler repairs preserve the frozen algorithms: typed unsigned shift operands, supported compile-time guard helpers, struct pointer indexing, explicit generic baseline arguments, throwing PythonObject bindings, and disjoint buffer ownership. T26 publishes a same-value atomic failure flag through the supported Atomic.store API. No toolchain internals or unsupported build modes are modified. Each repair freeze keeps earlier failures and hashes separate.

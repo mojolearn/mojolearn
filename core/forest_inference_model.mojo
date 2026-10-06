@@ -559,14 +559,25 @@ struct ResidentForest(Movable):
                 raise e
         else:
             self.prepare_workspace(rows)
+            if not self.label_workspace:
+                self.label_workspace = self.ctx.value().enqueue_create_buffer[DType.int32](rows)
+            # Move the three workspaces out while the model borrows its other
+            # buffers. Restore ownership after the synchronous operation on both
+            # paths; no second mutable borrow through self reaches _labels_on.
+            var dx = self.input_workspace.take()
+            var dout = self.output_workspace.take()
+            var dlab = self.label_workspace.take()
             try:
-                if not self.label_workspace:
-                    self.label_workspace = self.ctx.value().enqueue_create_buffer[DType.int32](rows)
-                self._labels_on[RF_INPUT](self.input_workspace.value(), self.output_workspace.value(),
-                    self.label_workspace.value(), x, output, rows, features, outputs)
+                self._labels_on[RF_INPUT](dx, dout, dlab, x, output, rows, features, outputs)
             except e:
                 self.ctx.value().synchronize()
+                self.input_workspace = dx^
+                self.output_workspace = dout^
+                self.label_workspace = dlab^
                 raise e
+            self.input_workspace = dx^
+            self.output_workspace = dout^
+            self.label_workspace = dlab^
 
 
 def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,

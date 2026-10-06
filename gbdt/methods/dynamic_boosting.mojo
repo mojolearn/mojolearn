@@ -252,7 +252,7 @@ def ordered_estimate_and_apply(
     for leaf in range(n_leaves):
         hl.unsafe_ptr().unsafe_store(leaf, leaves[leaf])
     ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
-    ctx.enqueue_function[_ordered_apply_kernel](
+    ctx.enqueue_function[_ordered_apply_kernel[False]](
         permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
         cursor.unsafe_ptr(), Int32(apply_size), rate,
         grid_dim=((apply_size + 255) // 256, 1, 1), block_dim=(256, 1, 1),

@@ -3863,7 +3863,7 @@ def merge_split_candidates_parallel_kernel[dtype: DType](
     var mine = Split[dtype]()
     var y = lane
     while y < Int(n_cand):
-        var c = cand.unsafe_load(nid*Int(n_cand)+y)
+        var c = cand[unsafe_offset=nid*Int(n_cand)+y]
         if c.IsValid() and mine.update(c.quesval,c.colid,c.best_metric_val,c.global_nLeft,c.split_start,c.split_end):
             mine.pure = c.pure
         y += 128
@@ -3880,11 +3880,11 @@ def merge_split_candidates_parallel_kernel[dtype: DType](
         barrier()
         step //= 2
     if lane == 0:
-        var best = splits.unsafe_load(nid)
+        var best = splits[unsafe_offset=nid]
         var c = page[unsafe_offset=0]
         if c.IsValid() and best.update(c.quesval,c.colid,c.best_metric_val,c.global_nLeft,c.split_start,c.split_end):
             best.pure = c.pure
-            splits.unsafe_store(nid,best)
+            splits[unsafe_offset=nid] = best
 
 
 def clear_live_histogram_bins_kernel[O: ObjectiveLike](
@@ -3907,7 +3907,7 @@ def clear_live_histogram_bins_kernel[O: ObjectiveLike](
     var base = (node*Int(grid_dim.y)+Int(block_idx.y))*Int(max_bins)*outputs
     var i = Int(thread_idx.x)
     while i < count:
-        hist.unsafe_store(base+i,O.BinT())
+        hist[unsafe_offset=base+i] = O.BinT()
         i += Int(block_dim.x)
 
 
@@ -3923,9 +3923,9 @@ def publish_histogram_child_counts_kernel[dtype: DType](
     """
     var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
     if i < Int(n):
-        var sp = splits.unsafe_load(i)
+        var sp = splits[unsafe_offset=i]
         sp.local_nLeft = sp.global_nLeft if sp.IsValid() else Int64(0)
-        splits.unsafe_store(i,sp)
+        splits[unsafe_offset=i] = sp
 
 
 # ===========================================================================

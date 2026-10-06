@@ -825,7 +825,7 @@ from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2, IDN_LO
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
 
-def training_experiment_profile_binding() -> PythonObject:
+def training_experiment_profile_binding() raises -> PythonObject:
     """Checkpoint identity for optional NI34/35/08 numerical contracts."""
     var profile = String("baseline")
     if IDN_ATTENTION_V2:
@@ -839,7 +839,7 @@ def training_experiment_profile_binding() -> PythonObject:
     return PythonObject(profile)
 
 
-def training_chunked_lm_head_enabled_binding() -> PythonObject:
+def training_chunked_lm_head_enabled_binding() raises -> PythonObject:
     """NI34 profile selector shared by native-host and GPU Samba wrappers."""
     return PythonObject(IDN_CHUNKED_LM_HEAD_V2)
 

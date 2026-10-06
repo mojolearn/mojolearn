@@ -217,8 +217,11 @@ def neural_streaming_ab[
             Int32(part[0]),Int32(first),Int32(count),Int32(st[0]),Int32(st[1]),Int32(st[2]),Int32(st[3]),
             grid_dim=((count*cells+127)//128,1,1),block_dim=(128,1,1))
         comptime if CANDIDATE and NN02:
-            ctx.enqueue_function[_neural_stream_fold_kernel](c.unsafe_ptr(),scratch.unsafe_ptr(),
-                scratch.unsafe_ptr()+batch*cells,Int32(cells),Int32(first),Int32(count),
+            # The allocation has disjoint leaf [0,batch*cells) and fold-state
+            # tails. One raw view describes both ranges for this queued launch.
+            var scratch_ptr = scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            ctx.enqueue_function[_neural_stream_fold_kernel](c.unsafe_ptr(),scratch_ptr,
+                scratch_ptr+batch*cells,Int32(cells),Int32(first),Int32(count),
                 Int32(part[1]),Int32(levels),grid_dim=((cells+127)//128,1,1),block_dim=(128,1,1))
         else:
             ctx.enqueue_function[_neural_full_fold_kernel](c,scratch,Int32(cells),Int32(part[1]),

@@ -43,7 +43,9 @@ def _leaf_kernel(part: T26F, chunks: Int32, first: Int32, count: Int32,
         var at = 2 * i * Int(chunks)
         var value = t26_leaf(part[at], part[at + 1], lam)
         if not isfinite(part[at]) or not isfinite(part[at + 1]) or not isfinite(value):
-            _ = Atomic.fetch_or(bad, UInt32(1))
+            # Every publisher writes the same failure flag after the queued
+            # zero fill. This needs an atomic store, not read-modify-write.
+            Atomic.store(bad, UInt32(1))
         values[Int(first) + i] = value
 
 

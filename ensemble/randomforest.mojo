@@ -6,6 +6,7 @@ from ensemble.bootstrap_sort import sort_passes_for, sort_selected_rows
 from ensemble.tree_identical_ideas import T08, T08_LAYOUT, T08_BITS, T09, T10, T12, T12_BYTES, T15
 from std.math import fma
 from std.gpu import block_dim, block_idx, global_idx, thread_idx
+from std.sys import size_of
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
 from std.math import ceildiv as _ceildiv
