@@ -10,13 +10,18 @@
   ],
   "status": "source_ready",
   "implementation_paths": [
-    "experiments/performance_ideas/I15/check.mojo"
+    "experiments/performance_ideas/I15/check.mojo",
+    "neighbors/impl/detail/knn_brute_force.mojo",
+    "experiments/performance_ideas/I15/certified_caller.mojo"
   ],
   "candidate_defines": [
-    "MOJOLEARN_KNN_SELECT_TRIAL=1"
+    "MOJOLEARN_KNN_SELECT_TRIAL=1",
+    "MOJOLEARN_IDN_KNN_CERTIFIED_REACH=1"
   ],
   "baseline_defines": [
-    "MOJOLEARN_KNN_SELECT_TRIAL=1"
+    "MOJOLEARN_KNN_SELECT_TRIAL=1",
+    "MOJOLEARN_IDN_KNN_CERTIFIED_REACH=1",
+    "MOJOLEARN_KNN_CERTIFIED_MMA_OFF=1"
   ],
   "build_argv": [
     "{python}",
@@ -33,7 +38,9 @@
     "--output",
     "{output}",
     "--define",
-    "MOJOLEARN_KNN_SELECT_TRIAL=1"
+    "MOJOLEARN_KNN_SELECT_TRIAL=1",
+    "--define",
+    "MOJOLEARN_IDN_KNN_CERTIFIED_REACH=1"
   ],
   "run_argv": [
     "{output}"
@@ -64,6 +71,13 @@
     "--output",
     "{output}",
     "--define",
-    "MOJOLEARN_KNN_SELECT_TRIAL=1"
+    "MOJOLEARN_KNN_SELECT_TRIAL=1",
+    "--define",
+    "MOJOLEARN_IDN_KNN_CERTIFIED_REACH=1",
+    "--define",
+    "MOJOLEARN_KNN_CERTIFIED_MMA_OFF=1"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }

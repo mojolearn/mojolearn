@@ -68,6 +68,7 @@ merge (`knn_merge_parts`). See `neighbors/NOT_IMPLEMENTED.tsv`.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
+from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.os import getenv
 
@@ -233,6 +234,30 @@ comptime KNN_CERTIFIED_MMA = (
     and TARGET_COLUMN == COLUMN_APPLE
     and not is_defined["MOJOLEARN_KNN_CERTIFIED_MMA_OFF"]()
 )
+# Experimental metadata only: no new query route or device work. This
+# serial campaign counter uses the exact fallback total already read by
+# the existing driver and is absent from ordinary builds.
+struct _CertifiedReach(Defaultable,Movable):
+    var calls: Int
+    var queries: Int
+    var fallback: Int
+    def __init__(out self):
+        self.calls=0; self.queries=0; self.fallback=0
+comptime _CERTIFIED_REACH = _Global[StorageType=_CertifiedReach,
+    name="MojolearnCertifiedKnnReachV1",init_fn=_CertifiedReach.__init__]
+
+def certified_knn_reach_clear() raises:
+    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
+        var p=_CERTIFIED_REACH.get_or_create_ptr()
+        p[].calls=0; p[].queries=0; p[].fallback=0
+
+def certified_knn_reach_read() raises -> InlineArray[Int,3]:
+    var values=InlineArray[Int,3](fill=0)
+    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
+        var p=_CERTIFIED_REACH.get_or_create_ptr()
+        values[0]=p[].calls; values[1]=p[].queries; values[2]=p[].fallback
+    return values^
+
 comptime CERT_MAX_K = 24
 comptime CERT_MAX_D = 32
 
@@ -2210,6 +2235,9 @@ def certified_mma_knn(
     # device (ascending, by an exclusive scan), not downloaded and walked
     var rows = ctx.enqueue_create_buffer[DType.int32](n_queries)
     var nf = device_compact_equal_i32(ctx, flags, n_queries, Int32(0), rows)
+    comptime if is_defined["MOJOLEARN_IDN_KNN_CERTIFIED_REACH"]():
+        var reached=_CERTIFIED_REACH.get_or_create_ptr()
+        reached[].calls+=1; reached[].queries+=n_queries; reached[].fallback+=nf
     if getenv("MOJOLEARN_STAGE_TIMES") == "1":
         print("CERT_KNN queries=" + String(n_queries) + " kc=" + String(kc)
               + " tiled_fallback=" + String(nf))
