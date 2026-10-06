@@ -513,5 +513,22 @@
     }
   ],
   "data_policy": "Only private symlinks to accepted existing NPZ+JSON. Never generate, shrink, restandardize or alter dataset. Each expected fullshape and same source-array hashes attested before race.",
-  "promotions": false
+  "promotions": false,
+  "retained_inputs": {
+    "reg-taxi": {
+      "npz_sha256": "ec1b39f38b116f78dff51d67f41c7bbdfcd56508562445274d4c4dfb7bb2387f",
+      "recipe_sha256": "d0434339bed6f38495de319097654bbafff56579343eb69db183c96b4c949037",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu-six-admission/next-reg/native-next-reg-inputs.json"
+    },
+    "reg-istella": {
+      "npz_sha256": "f1708d9b22fa874af0ee9b2dfb00de1f5d2dea848c910332ee496775dfc2f724",
+      "recipe_sha256": "090cbfba29a11e0fa362b66ebb421022caa47d87aa365b5a349f121dbbfa5060",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu-six-admission/next-reg/native-next-reg-inputs.json"
+    },
+    "big-taxi": {
+      "npz_sha256": "0db47891038cb000a320470f8f6f7172285118e9c0697bc3e118dab2bc4921e0",
+      "recipe_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/repair1-workers/449522fb6bd97f700c04.json"
+    }
+  }
 }

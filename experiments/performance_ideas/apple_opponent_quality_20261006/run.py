@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -27,6 +28,35 @@ from retry import coverage
 CAPS = tuple(set(prior.CAPS) | {'OMP_THREAD_LIMIT', 'NUMBA_NUM_THREADS',
              'NUMEXPR_MAX_THREADS', 'GOTO_NUM_THREADS', 'LOKY_MAX_CPU_COUNT'})
 atomic, stop_tree = prior.atomic, prior.stop_tree
+
+
+def actual_coverage(board_path, cell):
+    """Reject a capped worker result, even when its route says rows=full."""
+    parsed = coverage(board_path, cell['race'], cell['arm'])
+    if parsed['status'] != 'MEASURED':
+        return parsed
+    board = json.loads(board_path.read_text())
+    record = board['races'][cell['race']]
+    measured = next(c for c in record['cells'] if c.get('arm') == cell['arm'])
+    shape = measured.get('shape') or ''
+    if cell['family'] == 'classical':
+        match = re.match(r'^(?:X\s+)?(\d+)x(\d+)(?:\s|$)', shape)
+        fit = [int(x) for x in match.groups()] if match else None
+        inference = [c for c in record.get('infer_cells', [])
+                     if c.get('arm') == cell['arm'] and c.get('status') == 'ok']
+        # A successful prediction has the fitted feature count; the inference
+        # receipt supplies the actual batch row count, not the recipe's cap.
+        query = ([inference[0].get('batch_rows'), fit[1]]
+                 if len(inference) == 1 and fit else None)
+    else:
+        match = re.search(r'(?:^|;\s*)X\s+(\d+)x(\d+)', shape)
+        fit = [int(x) for x in match.groups()] if match else None
+        match = re.search(r'(?:^|;\s*)Xq\s+(\d+)x(\d+)', shape)
+        query = [int(x) for x in match.groups()] if match else None
+    parsed['actual_shape_attestation'] = dict(fit=fit, evaluation=query, worker_shape=shape)
+    if fit != cell['fit_shape'] or query != cell['eval_shape']:
+        parsed['status'] = 'FAILED_ACTUAL_FULL_COVERAGE'
+    return parsed
 
 
 def main():
@@ -92,12 +122,22 @@ def main():
                 original = root / (stem+'.json')
                 raw = original.read_bytes()
                 rec = json.loads(raw)
+                expected = plan['retained_inputs'][stem]
+                if hashlib.sha256(raw).hexdigest() != expected['recipe_sha256']:
+                    raise ValueError('Retained recipe bytes changed: '+stem)
                 shape = [5250086, 11] if dataset == 'taxi' else [2043304, 220]
                 if (rec['arrays']['X']['shape'] != shape
                         or rec['arrays']['Xq']['shape'] != [500000, shape[1]]
                         or rec.get('fit_rows_available') != shape[0]
                         or rec.get('fit_rows') != [0, shape[0]] or rec.get('smoke_max_rows')):
                     raise ValueError('Existing recipe does not attest expected full workload: '+stem)
+                npz = (root / (stem+'.npz')).resolve(strict=True)
+                digest = hashlib.sha256()
+                with npz.open('rb') as stream:
+                    for chunk in iter(lambda: stream.read(8*1024*1024), b''):
+                        digest.update(chunk)
+                if digest.hexdigest() != expected['npz_sha256']:
+                    raise ValueError('Retained full NPZ bytes changed: '+stem)
                 for suffix in ('.npz', '.json'):
                     source = (root / (stem+suffix)).resolve(strict=True)
                     target = destination / (stem+suffix)
@@ -106,6 +146,7 @@ def main():
                     target.symlink_to(source)
                 inputs[stem] = dict(source_npz=str((root / (stem+'.npz')).resolve()),
                      source_recipe=str(original), recipe_sha256=hashlib.sha256(raw).hexdigest(),
+                     npz_sha256=digest.hexdigest(), retained_facts=expected['evidence'],
                      arrays=rec['arrays'], data_unchanged=True)
             atomic(base / 'input-receipts.json', inputs)
         except Exception as exc:
@@ -138,6 +179,7 @@ def main():
                 killed = []
                 state.update(status='RUNNING', active_race=race, active_arm=arm, phase=label)
                 save()
+                process = None
                 try:
                     with (out / 'run.log').open('x') as log:
                         process = subprocess.Popen(command, cwd=SOURCE, env=cell_env, stdout=log,
@@ -152,12 +194,18 @@ def main():
                     result.update(command=command, returncode=process.returncode,
                                   elapsed_seconds=time.time()-cell_start, killed_owned_pids=killed,
                                   status='BUDGET_LIMIT' if killed else 'FAILED')
-                    parsed = coverage(out/'board/board.json', race, arm)
+                    parsed = actual_coverage(out/'board/board.json', cell)
                     result.update({k:v for k,v in parsed.items() if k != 'status'})
                     if not killed and process.returncode == 0:
                         result['status'] = parsed['status']
                 except Exception as exc:
+                    # A bookkeeping failure must never leave this arm running
+                    # concurrently with the next cell or another machine user.
+                    if process is not None and process.poll() is None:
+                        killed = stop_tree(process)
                     result.update(status='FAILED_CONTROLLER', error=repr(exc),
+                                  returncode=process.returncode if process is not None else None,
+                                  killed_owned_pids=killed,
                                   elapsed_seconds=time.time()-cell_start)
             atomic(out/'result.json', result)
             state['cells'].append({k:result.get(k) for k in ('race','arm','status','returncode','elapsed_seconds')})
