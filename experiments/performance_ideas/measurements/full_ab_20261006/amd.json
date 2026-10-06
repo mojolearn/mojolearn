@@ -1,0 +1,875 @@
+{
+  "schema": "mojolearn.performance-measurement-board/1",
+  "campaign": "full-ab-main-20261006",
+  "identity_policy": "Previously validated; no separate retest by owner instruction",
+  "promotion": false,
+  "machines": [],
+  "cards": [
+    {
+      "id": "A01",
+      "title": "Isolate AMD smaller MFMA and band routing",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "A01",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "A02",
+      "title": "Compare production one/two-page staging and bounded one/two/four-plane resource controls",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "A02",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "A03",
+      "title": "Vary vector-aligned LDS operand strides",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "A03",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "A04",
+      "title": "Pair independent logical groups with supported XOR membership",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "A04",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "A05",
+      "title": "Halve the packed body row accumulator live range",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "A05",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "A06",
+      "title": "Qualify AMD exact fused low-dimensional neighbor selection",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "A06",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "A07",
+      "title": "Qualify bounded degree graph and exact integer node histogram tasks",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "A07",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "A08",
+      "title": "Requalify promoted 256-row accumulation with fit interactions",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "A08",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I01",
+      "title": "Attribute existing GEMM schedules",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I01",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I02",
+      "title": "Bound session GEMM scratch retention",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I02",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I03",
+      "title": "Batch independent products on separate grid jobs",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I03",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I04",
+      "title": "Qualify a coherently shared opt-in 64-element IDENTICAL leaf version",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I04",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I05",
+      "title": "Fuse bias after the explicit rounded product seam",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I05",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I06",
+      "title": "qualify attention KV grid reuse across GQA tails",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I06",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I07",
+      "title": "exercise retained and recomputed attention backward lifetimes",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I07",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I08",
+      "title": "attribute SSD tile reuse on multiple state cases and chunk tails",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I08",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I09",
+      "title": "gate token-parallel recurrence on prefix and decode boundaries",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I09",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I10",
+      "title": "reduce ordered training status from per-tile contributions",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I10",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I11",
+      "title": "qualify canonical radix embedding updates under skew and vocabulary reuse",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I11",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I12",
+      "title": "gate solver pass fusion on accepted iterates and refusal semantics",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I12",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I13",
+      "title": "implement compact degree buckets for bounded RBC stable merges",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I13",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I14",
+      "title": "qualify gated convergence at first fixed point on graph topologies",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I14",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I15",
+      "title": "qualify streaming exact neighbor merge at ties and batch tails",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I15",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I16",
+      "title": "attribute IVF grouped and staged scans under skewed list occupancy",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I16",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I17",
+      "title": "qualify loss-guide frontier retention at varying live leaf capacities",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I17",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I18",
+      "title": "Retain bounded exact forest histograms and subtract compatible siblings",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I18",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I19",
+      "title": "qualify reusable stable radix scratch and bounded key widths",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I19",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I20",
+      "title": "Retain bounded source-owned KDE partial storage under the existing chunked fold",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I20",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I21",
+      "title": "gate fused GMM components on complete EM state and likelihood",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I21",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I22",
+      "title": "qualify blocked TSQR factors and retained reflector applies across tails",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I22",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I23",
+      "title": "qualify independent time-series fits and batch-gradient selection state",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I23",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "I24",
+      "title": "fuse resident confusion and PRF input counts in one device pass",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "I24",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "N01",
+      "title": "Isolate packed64 body tiles and their interaction",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "N01",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "N02",
+      "title": "Prove and dispatch a two-level logical fold stack",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "N02",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "N04",
+      "title": "Separate contiguous and gather staging with counted caller passes",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "N04",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "N05",
+      "title": "Batch compatible launches with fixed-address changing inputs",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "N05",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "N06",
+      "title": "Keep compact feature gradients in registers without query barriers",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "N06",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "N07",
+      "title": "Stream bounded feature chunks with exact private integer histograms",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "N07",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    },
+    {
+      "id": "N08",
+      "title": "Fuse canonical radius distance decisions into device CSR scan/fill",
+      "mode": "identical",
+      "vendors": [
+        "nvidia",
+        "amd",
+        "apple"
+      ],
+      "cells": [
+        {
+          "id": "N08",
+          "mode": "identical",
+          "vendor": "amd",
+          "scope": "full_workload",
+          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "case": "candidate-to-full-workload mapping pending",
+          "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/gpu/artifact-inventory.json"
+        }
+      ],
+      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+    }
+  ],
+  "notes": [
+    "No full-dataset candidate measurements launched. Prior component/public-caller results are not full-workload evidence.",
+    "All 87 retained Apple FAST build jobs recovered and staged on M3; current IDENTICAL full-workload paired artifacts and full recipe mappings have not been located.",
+    "NVIDIA/AMD prior campaign resources retired; no new rental started without a runnable full-workload pair.",
+    "Model/output SHA256 capture added to actual workload drivers; unavailable model exports remain explicit. No compilation or separate identity validation run.",
+    "Final frozen main SHA is retained in /Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/freeze.json after push."
+  ],
+  "decisions": []
+}
