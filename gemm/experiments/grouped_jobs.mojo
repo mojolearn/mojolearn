@@ -22,6 +22,8 @@ def grouped_flat_kernel(c: MutPointer[Float32, MutAnyOrigin],
                               Int32(Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)))
 
 
+# I03 PENDING: compile evidence alone does not qualify device correctness, quality or speed.
+# Explicit grouped adapter only; the shared FLAT arithmetic body is unchanged.
 def grouped_gemm(mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
     ctx: DeviceContext,m: Int,n: Int,k: Int,op: Int,jobs: Int) raises:
