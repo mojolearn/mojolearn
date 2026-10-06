@@ -816,8 +816,13 @@ def gmm_initial_resp_host(
 # both-OFF/incumbent time ratios AMD 2.051/1.913/1.471 and NVIDIA L40S
 # 2.140/2.221/1.705. This arm restores BOTH the component Cholesky chain
 # and the late meanll copy below; its timing cannot isolate this drain
-# control. The isolated one_drain_off arm remains pending. All six executions
-# converged=True, rc=0; one excluded same-context fit and one scored fit.
+# control. Isolated one_drain_off, same freeze/cases, OFF/ON ratios AMD
+# 0.987/1.000/1.010 (mixed near-neutral) and NVIDIA 1.010/1.020/1.532
+# (losses). This arm retains fused Cholesky and only moves the meanll copy
+# from after E-step to after M-step/Cholesky, before the final synchronize.
+# All six isolated and six combined rollback executions converged=True,
+# rc=0; one excluded same-context fit and one scored fit per binary.
+# Retain ON: the small AMD first-case gain does not offset the NVIDIA losses.
 # Retain the existing ON default. Prior identity evidence reused without
 # revalidation; synthetic caller results do not qualify full-board changes.
 # Evidence: experiments/performance_ideas/measurements/20261006/index.json.
