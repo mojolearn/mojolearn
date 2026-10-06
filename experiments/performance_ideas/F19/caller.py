@@ -13,7 +13,7 @@ from caller import exercise as paired_gather
 def exercise(args):
     result=paired_gather(args)
     import numpy as np
-    from mojolearn import resample
+    from mojolearn.resample import resample
     # Unsupported weighted draws must retain the public refusal; we never
     # rescue them with host/NumPy sampling inside the candidate route.
     try:resample(np.zeros((17,3),'float32'),sample_weight=np.ones(17,'float32'),numeric_mode='fast')
@@ -22,7 +22,7 @@ def exercise(args):
     else:raise AssertionError('unsupported weighted sampling silently admitted')
     result['weighted_mode']='blocked API prerequisite: sample_weight refused by name'
     if args.variant=='permutation':
-        from mojolearn import resample_indices
+        from mojolearn.resample import resample_indices
         from mojolearn import _mojolearn_resample as binding
         original=binding.resample_permutation_gather_gpu
         calls=[]
