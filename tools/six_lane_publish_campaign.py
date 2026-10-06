@@ -24,6 +24,8 @@ SOURCES=[('apple',ROOT/'apple/captured/runs'),
          ('apple',ROOT/'apple/captured/tsvd-full-v1/runs'),
          ('apple',ROOT/'apple/captured/selectors-full/runs'),
          ('apple',ROOT/'apple/captured/classification-full-v1/runs'),
+         ('apple',ROOT/'apple/captured/classification-full-v1-remaining/runs'),
+         ('apple',ROOT/'apple/captured/qr-svd-full/runs'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-next-reg'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-expanded-reg'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-gmm-istella'),
@@ -33,6 +35,7 @@ SOURCES=[('apple',ROOT/'apple/captured/runs'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-isotonic-cv'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements-classification-full-v1'),
          ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements'),
+         ('amd',ROOT/'amd/capture-attempt-01/artifacts/measurements-classical-dependency-repair'),
          ('nvidia',ROOT/'nvidia-native/capture-attempt-02/artifacts/measurements')]
 
 

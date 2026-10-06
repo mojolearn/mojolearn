@@ -129,3 +129,15 @@ All runtime work is Mojo: on the device for GPU routes, in the host binding for 
 that cannot be Mojo is an explicit CPU-only input step before the runtime, marked `# cpu-route: <reason>`.
 Every existing violation is debt to remove (the checker baseline `tools/hooks/host_routes_baseline.tsv`, class py-compute),
 and no change may add one.
+
+Owner reaffirmation (2026-10-06): NEVER USE PYTHON IN THE RUNTIME. NumPy, SciPy,
+scikit-learn and other Python packages must not supply MojoLearn runtime computation,
+including sparse/dense conversion, preprocessing, label handling, model orchestration
+over data or output reductions hidden in helper calls. Installing a missing Python
+package is not a repair for such a violation. Use Mojo device kernels for GPU routes
+and Mojo host bindings for CPU-only routes. Preserve optional Python API interoperability.
+Audit transitive callees and the actual timed boundary, including preparation and
+consumed outputs; a helper's old "outside the clock" comment is not evidence.
+Keep necessary offline dataset preparation explicitly separate and recorded; do not
+move estimator runtime work outside the timer to make a benchmark pass. Retained
+baseline entries are unresolved debt, never exemptions or proof of compliance.

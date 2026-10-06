@@ -3675,6 +3675,176 @@
         {
           "id": "AF.X.complete-proposed",
           "vendor": "apple",
+          "case": "algos/power-transformer@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/0f6d07d5f7a9fa8e86ec/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "543d9e0d7dc9b13635c973ca4d8ac3029bdf987a9f3a05e65b7735a3abccd428",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "e04a72cc4de1bf76879ff113456f1de81532f70ecfbcae4bdd9d1f062171eb77",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x11"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x11"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 1315.2390000177547,
+            "candidate_ms": 1322.0051670214161,
+            "observed_candidate_over_baseline": 1.0051444391502762,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/simple-imputer@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/10caf828bd0b75b5e3ca/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "X_true": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "Xq_true": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "e42e52926faefe9ff9d9fb6c0d72526ef54c26b0867d3b70e6fe8ab0cafae758",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "a423a1f44ead8b70693a4efc6c50cbf64a808ef196a66b63ed67f5030e7c89fb",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch impute; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "masked_rmse": 348517.29107358545
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch impute; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "masked_rmse": 348517.29107358545
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 4521.4825419243425,
+            "candidate_ms": 4506.303416914307,
+            "observed_candidate_over_baseline": 0.9966428876216393,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
           "case": "algos/ridge-clf@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -3837,6 +4007,87 @@
         {
           "id": "AF.X.complete-proposed",
           "vendor": "apple",
+          "case": "algos/sgd-clf@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/21217534b9ec24fdec13/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "fdac3c04d8e9d0da06d91963f280518f981e639aa6c3c97e8403c53f95fa1333",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.75694
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.75694
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 10721.622625016607,
+            "candidate_ms": 10737.975417054258,
+            "observed_candidate_over_baseline": 1.0015252161552017,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
           "case": "algos/ridge-clf@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -3987,6 +4238,8 @@
               "status": "PENDING"
             }
           },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
           "unqualified_timing": {
             "baseline_ms": 9445.072249975055,
             "candidate_ms": 9464.645790983923,
@@ -4066,10 +4319,417 @@
               "status": "PENDING"
             }
           },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
           "unqualified_timing": {
             "baseline_ms": 1028.9566669380292,
             "candidate_ms": 1293.2769579347223,
             "observed_candidate_over_baseline": 1.2568818488569182,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/cca@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/43f0120c502ae1170075/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "a399885b5619429905c6d2ae7a679d6309a328c52b07c3fe69fece9c96420c51",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "mean_canonical_corr": 0.5748276455462062
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "mean_canonical_corr": 0.5748276588628063
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 1177.7119589969516,
+            "candidate_ms": 1418.8017920823768,
+            "observed_candidate_over_baseline": 1.204710354890817,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/power-transformer@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/50e1b5764b66cafe829d/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "e42e52926faefe9ff9d9fb6c0d72526ef54c26b0867d3b70e6fe8ab0cafae758",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "ef627f0e713881333d010bbc5c7968217ff8bccf315e0af11146a96d69360035",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x220"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x220"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 4236.502042040229,
+            "candidate_ms": 4231.699166004546,
+            "observed_candidate_over_baseline": 0.9988663109357621,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/sgd-ocsvm@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/5b496fffda8d73e5cc95/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "96c61eca8ab7ef9fe3d70adb54d7315a961826530d56fd2327fd4b1157adbc5f",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch outlier; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "fraction_flagged": 0.066736
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch outlier; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "fraction_flagged": 0.066736
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 704.5067499857396,
+            "candidate_ms": 705.4802079219371,
+            "observed_candidate_over_baseline": 1.0013817581396023,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/maxabs-scaler@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/7012c5ed73f2ea3883ad/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "543d9e0d7dc9b13635c973ca4d8ac3029bdf987a9f3a05e65b7735a3abccd428",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "95492416ee7c3b1ba80827b7696494b5930f945df07137c231e8e64d07d1ab9c",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x11"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x11"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 539.5590830594301,
+            "candidate_ms": 555.0444170366973,
+            "observed_candidate_over_baseline": 1.0286999783035096,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/pa-clf@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/706c6c218583c2556f05/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "7b3b732b4f3120313d57fa831399f62376a3cf1ef9ad220d7a2c162d7449ceac",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.922242
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.922242
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 10207.266291952692,
+            "candidate_ms": 10199.209874961525,
+            "observed_candidate_over_baseline": 0.9992107174672695,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -4159,6 +4819,87 @@
         {
           "id": "AF.X.complete-proposed",
           "vendor": "apple",
+          "case": "algos/pa-clf@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/871ec7c64114eeac953f/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "48bf27a42cd45009287167839a57ce831d846d85835575373170a54e53604528",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.76288
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.76288
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 6932.964749983512,
+            "candidate_ms": 6931.29941704683,
+            "observed_candidate_over_baseline": 0.9997597949799636,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
           "case": "algos/factor-analysis@dataset=taxi@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -4234,6 +4975,87 @@
             "baseline_ms": 740.8203750383109,
             "candidate_ms": 741.8258750112727,
             "observed_candidate_over_baseline": 1.0013572790474476,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/maxabs-scaler@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/95058e058d6c35a7f5aa/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "e42e52926faefe9ff9d9fb6c0d72526ef54c26b0867d3b70e6fe8ab0cafae758",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "9968c57b89cf823527f57d8c283cf1e015e8bfd3d6b0902c4f9646d953ce6109",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x220"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x220"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 1279.437833931297,
+            "candidate_ms": 1307.464167010039,
+            "observed_candidate_over_baseline": 1.0219051933087098,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -4404,6 +5226,89 @@
         {
           "id": "AF.X.complete-proposed",
           "vendor": "apple",
+          "case": "algos/categorical-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/acff99fbeb6c301c3fc0/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              5
+            ],
+            "Xq": [
+              500000,
+              5
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "dfa590dac2fb063e5c1f1853f832056f54ed5c0e5911a83827c8e0a189f04e11",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "2261fef81fc70163ea1042aaa8166fb940d93108fa6ff9ad5b99e1d3a0351d4c",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.767572,
+                  "logloss": 0.5366124582756454
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.767572,
+                  "logloss": 0.5366124582756454
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 597.6734579307958,
+            "candidate_ms": 595.2678329776973,
+            "observed_candidate_over_baseline": 0.9959750179279717,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
           "case": "algos/minibatch-kmeans@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
           "status": "PENDING_ADMISSION",
@@ -4489,7 +5394,7 @@
           "vendor": "apple",
           "case": "algos/pls-canonical@dataset=istella@input=classification-full-v1/attempt-0001",
           "scope": "full_workload",
-          "status": "IN_PROGRESS",
+          "status": "PENDING_ADMISSION",
           "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
           "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/b0667caada66668f51aa/attempt-0001/receipt.json",
           "dimensions": {
@@ -4509,28 +5414,142 @@
             ]
           },
           "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
-          "execution_status": "IN_PROGRESS",
+          "execution_status": "MEASURED_FULL",
           "worker_returncodes": [
+            0,
+            0,
+            0,
             0
           ],
           "failure_reasons": [],
           "actual_sample_counts": {
             "A": {
               "warmup": 1,
-              "scored": 0
+              "scored": 1
             },
             "B": {
-              "warmup": 0,
-              "scored": 0
+              "warmup": 1,
+              "scored": 1
             }
           },
-          "warmups": 0,
-          "scored_samples": 0,
-          "quality": "NOT_ASSESSED",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
           "identity": "NOT_REQUIRED",
           "route": "apple-fast",
-          "receipt_sha256": "9766bc282c1d22fb4d07e47525fdd733a59f0a06701e0e6fafc1bb424e59f05e",
-          "source_coverage_pending": []
+          "receipt_sha256": "cb92a3eff98eb5af58b06868839c1e56b8766f757487125698f823319459b7cf",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "mean_canonical_corr": 0.8763007936505436
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "mean_canonical_corr": 0.8763008127460923
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 4636.70854200609,
+            "candidate_ms": 5837.604667060077,
+            "observed_candidate_over_baseline": 1.2589975440928651,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/cca@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/b17b6e514c1006f88c5f/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "ce1435e47b2ea096151eb59abcf5294b790ae685ad550b340cb6d6a23c675869",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "mean_canonical_corr": 0.9890539742649506
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "mean_canonical_corr": 0.989053929353883
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 22623.44487500377,
+            "candidate_ms": 41482.47150005773,
+            "observed_candidate_over_baseline": 1.8336054358322305,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
         },
         {
           "id": "AF.X.complete-proposed",
@@ -4612,6 +5631,301 @@
             "baseline_ms": 654.5286249602214,
             "candidate_ms": 673.4981659101322,
             "observed_candidate_over_baseline": 1.0289819882989284,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/perceptron@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/bcdd603c81cc1f7814d2/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "e19f2e19979afe62b318b625e15b4415fe39e880c3dddd6f6c76135d72ddb9b1",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.874976
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.874976
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 10052.67620808445,
+            "candidate_ms": 10061.868375050835,
+            "observed_candidate_over_baseline": 1.0009143999842542,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/multinomial-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "FAILED_OR_INCOMPLETE",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/dc3d41d16eac72f9f13f/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASUREMENT_FAILED",
+          "worker_returncodes": [
+            1
+          ],
+          "failure_reasons": [
+            "Workload failed or did not write result JSON"
+          ],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 0,
+              "scored": 0
+            },
+            "B": {
+              "warmup": 0,
+              "scored": 0
+            }
+          },
+          "warmups": 0,
+          "scored_samples": 0,
+          "quality": "NOT_ASSESSED",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "beb37cff84f9e4cebf4c5227455c6add5cb90cfee136acee8fd0a471d529e8df",
+          "source_coverage_pending": []
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/categorical-nb@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/de43e5d216cb8ccb8197/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              8
+            ],
+            "Xq": [
+              500000,
+              8
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "a00264d7190c39dae4e7792af3c8676ecdf5da98e936aeb4ec76be39710a1454",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "9e6e00017dcbfd2ff33f83c1aba07278c4deaf115bfdeab4b8a84ac39a748a61",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.840176,
+                  "logloss": 0.41186649035415707
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.840176,
+                  "logloss": 0.41186649035415707
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 552.7334589278325,
+            "candidate_ms": 553.7436249433085,
+            "observed_candidate_over_baseline": 1.0018275825339675,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/perceptron@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/df871bd8e0d9c37c890f/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "e05ddeab72b3facbaca3397c9b9b85a298df042c784692927ea6c776896e8cd1",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.493462
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.493462
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 6678.49483306054,
+            "candidate_ms": 6674.702542019077,
+            "observed_candidate_over_baseline": 0.9994321638129162,
             "qualification": "Observed only; not admitted and not a default decision"
           }
         },
@@ -4780,6 +6094,1044 @@
             "observed_candidate_over_baseline": 1.0562919994099,
             "qualification": "Observed only; not admitted and not a default decision"
           }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/sgd-clf@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fad0e0840b7714d0907f/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "261f63a841ce7dc7d821e811779a766d79eab724d80735dba548fac4c4e45fdb",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.92238
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.92238
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 7266.766374930739,
+            "candidate_ms": 7227.511374978349,
+            "observed_candidate_over_baseline": 0.994598009908807,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/simple-imputer@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fbe0df53cb628d25849b/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "X_true": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "Xq_true": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "543d9e0d7dc9b13635c973ca4d8ac3029bdf987a9f3a05e65b7735a3abccd428",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "dc87a8121197d5b2c4adfb98228d8215f252b4714bfbf2a120ef58d54992a98d",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch impute; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "masked_rmse": 6.08788405636742
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch impute; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "masked_rmse": 6.08788405636742
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 836.7519580060616,
+            "candidate_ms": 843.325916910544,
+            "observed_candidate_over_baseline": 1.0078565204916254,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/sgd-ocsvm@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1--runs/fd25410fa324ee1d2da7/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "2d80f6315c8cecb9780d12424d651d245a3a1ff97fac20a171ba9b908c1c4ba0",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch outlier; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "fraction_flagged": 0.123182
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch outlier; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "fraction_flagged": 0.123182
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 1627.905625035055,
+            "candidate_ms": 1643.035624991171,
+            "observed_candidate_over_baseline": 1.0092941505474498,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/0d1e6d8e4700016071f0/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "1ea8698c9d066e10af0adbe506856fffe9b09eb3b22ee0c8ba5ba9a87bb91f38",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.720538,
+                  "logloss": 1.1408800529708094
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.720538,
+                  "logloss": 1.1408800529708094
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 580.5591250536963,
+            "candidate_ms": 576.7430829582736,
+            "observed_candidate_over_baseline": 0.9934269535509069,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/target-encoder@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/27ef5795de5e53b035e7/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              8
+            ],
+            "Xq": [
+              500000,
+              8
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "a00264d7190c39dae4e7792af3c8676ecdf5da98e936aeb4ec76be39710a1454",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "ad345ef2131d5a578b9deb2a9f6814588aabca33242a3c7bab8944ce870f4cbb",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x8"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x8"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 580.2826250437647,
+            "candidate_ms": 598.6357920337468,
+            "observed_candidate_over_baseline": 1.0316279795360028,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/select-f-classif@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/6fc9ae71c2c1506ffb73/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "6b5a8af53c463caf83b036ac48ed00d9b71a7aed30f388262d7797f2de8bfac2",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; n_selected and jaccard_vs_sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "n_selected": 110
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; n_selected and jaccard_vs_sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "n_selected": 110
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 1059.7869580378756,
+            "candidate_ms": 1054.0899590123445,
+            "observed_candidate_over_baseline": 0.994624392211734,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/random-trees-embedding@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/786c65354ed40e98b838/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "8dc9bf446219e5b3ea70bf99189297b24eccbbd809a5b05e38e191c99240f4cb",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch shape; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "nonzeros_per_row": 10.0,
+                  "output_columns": 219
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch shape; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "nonzeros_per_row": 10.0,
+                  "output_columns": 219
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 1804.4732910348102,
+            "candidate_ms": 1828.4146660007536,
+            "observed_candidate_over_baseline": 1.0132677912634627,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/gaussian-nb@dataset=istella@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/93e940c30f835c0f74ce/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "71dc683c5a5208bcc1fdb48a8177d3500d3f907289a383170e865997ebc93360",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.868346,
+                  "logloss": 3.5194426723515444
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original classifier metrics including available probability metrics; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "accuracy": 0.868346,
+                  "logloss": 3.5194426723515444
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 1231.9236249895766,
+            "candidate_ms": 1247.3996250191703,
+            "observed_candidate_over_baseline": 1.0125624671170055,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/random-trees-embedding@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/b18d2fcc10233c33faf1/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "321fd74a760bab316c543a2d68984cf53c80f5b16ca6e3758e1d702b57c0ca23",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch shape; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "nonzeros_per_row": 10.0,
+                  "output_columns": 283
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch shape; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "nonzeros_per_row": 10.0,
+                  "output_columns": 283
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 1350.9567499859259,
+            "candidate_ms": 1429.5469589997083,
+            "observed_candidate_over_baseline": 1.0581737416942483,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/target-encoder@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/be8c92995859ff28b0ea/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              5
+            ],
+            "Xq": [
+              500000,
+              5
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "dfa590dac2fb063e5c1f1853f832056f54ed5c0e5911a83827c8e0a189f04e11",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "903bed5fcff743cb4ad9e8d7d2a2d2187df9b6c77adaf22d5a1c129ef11d492c",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x5"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch vs-sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "output_shape": "500000x5"
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 643.0268329568207,
+            "candidate_ms": 689.4132080487907,
+            "observed_candidate_over_baseline": 1.0721375418793524,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/select-f-classif@dataset=taxi@input=classification-full-v1/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--classification-full-v1-remaining--runs/d1c0ff06e93ce2c5d6e4/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              4110786,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              4110786
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "ab233471532935cc76ff2fe1dd9a489169339811cb6516ae800df8b943799320",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "0fda7b3744c36342aa37b43c9ff23b614c5089c55fe892cf3138583da0efc1c9",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; n_selected and jaccard_vs_sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "n_selected": 5
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; n_selected and jaccard_vs_sklearn; existing matching full-opponent gates pending",
+              "metrics": {
+                "ours-fast": {
+                  "n_selected": 5
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Saved metrics lack an established shared comparison; no quality threshold invented.",
+          "unqualified_timing": {
+            "baseline_ms": 556.4248750451952,
+            "candidate_ms": 555.2098749903962,
+            "observed_candidate_over_baseline": 0.9978164167180694,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/qr@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "IN_PROGRESS",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/2268b1fe4abee7294d5e/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "execution_status": "IN_PROGRESS",
+          "worker_returncodes": [
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 0
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 0,
+          "quality": "NOT_ASSESSED",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "bc38f73a64dca47822b18e762eba8855a693da9b2ecc39a1a516d67c03825e76",
+          "source_coverage_pending": []
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "algos/qr@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "QUALITY_FAILED",
+          "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "FAIL",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "1895f90d08824b9be71dd73e2ad570f9488d22a88068244b3729e775aaacdfe3",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_algos.py:quality; QR R.T@R vs full X.T@X; SVD singular-value reference from full float64 Gram and original stride-row reconstruction. Original gates/opponents unchanged.",
+              "metrics": {
+                "ours-fast": {
+                  "relative_gram_difference": 2.4421552190152415e-06
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_algos.py:quality; QR R.T@R vs full X.T@X; SVD singular-value reference from full float64 Gram and original stride-row reconstruction. Original gates/opponents unchanged.",
+              "metrics": {
+                "ours-fast": {
+                  "relative_gram_difference": 7.375898458611172e-07
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "QUALITY_FAILED",
+          "quality_reason": "Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+          "unqualified_timing": {
+            "baseline_ms": 686.1715409904718,
+            "candidate_ms": 1130.0790419336408,
+            "observed_candidate_over_baseline": 1.6469337103407107,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
         }
       ],
       "status": "FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION, QUALITY_FAILED"
@@ -4835,6 +7187,14 @@
       "individual_constituents": "Not decided by this combined-configuration result"
     },
     {
+      "candidate": "AF.X.complete-proposed/algos/qr@dataset=taxi/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+      "commit": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Not decided by this combined-configuration result"
+    },
+    {
       "candidate": "I.X.complete-proposed/expanded:enet-cv@dataset=taxi/attempt-0001",
       "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
       "commit": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
@@ -4847,6 +7207,22 @@
       "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
       "commit": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Not decided by this combined-configuration result"
+    },
+    {
+      "candidate": "I.X.complete-proposed/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+      "commit": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Not decided by this combined-configuration result"
+    },
+    {
+      "candidate": "I.X.complete-proposed/expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+      "commit": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json",
       "default_changed": false,
       "individual_constituents": "Not decided by this combined-configuration result"
     }

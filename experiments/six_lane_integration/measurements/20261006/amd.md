@@ -5,7 +5,7 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 
 | Candidate | Mode | Measurement status | Captured pairs |
 |---|---|---|---:|
-| I.X.complete-proposed | identical | PENDING_MEASUREMENT | 0 |
+| I.X.complete-proposed | identical | FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION | 5 |
 
 ## Captured evidence
 
@@ -13,6 +13,13 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 
 | Candidate | Vendor / route | Case | Scope | Status | Admitted A/B | Observed A/B | Evidence |
 |---|---|---|---|---|---:|---:|---|
+| I.X.complete-proposed | amd/amd-native-gfx942 | classical:ols@dataset=istella/attempt-0001 | full_workload | FAILED_OR_INCOMPLETE | — | — | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements/6950ad15bec5c24b3768/attempt-0001/receipt.json |
+| I.X.complete-proposed | amd/amd-native-gfx942 | classical:pca@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | 2.0326 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements/b42fb20d60c797167de3/attempt-0001/receipt.json |
+| I.X.complete-proposed | amd/amd-native-gfx942 | classical:pca@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | 3.7303 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements/e0f96a2a63ac7c061d4c/attempt-0001/receipt.json |
+| I.X.complete-proposed | amd/amd-native-gfx942 | classical:kmeans@dataset=taxi/attempt-0001 | full_workload | IN_PROGRESS | — | — | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/276e62dc5e5832765814/attempt-0001/receipt.json |
+| I.X.complete-proposed | amd/amd-native-gfx942 | classical:ols@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | 1.0295 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/6950ad15bec5c24b3768/attempt-0001/receipt.json |
+| I.X.complete-proposed | amd/amd-native-gfx942 | classical:ols@dataset=taxi/attempt-0001 | full_workload | PENDING_ADMISSION | — | 0.9683 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/d7530cd1a38627b906b5/attempt-0001/receipt.json |
+| I.X.complete-proposed | amd/amd-native-gfx942 | classical:kmeans@dataset=istella/attempt-0001 | full_workload | PENDING_ADMISSION | — | 14.1138 | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/f1e53f9879870c705823/attempt-0001/receipt.json |
 
 ## Campaign notes
 
@@ -33,11 +40,16 @@ Observed ratios retain complete scored pairs even while quality or identity is p
 | AF.X.complete-proposed/classical/kmeans@dataset=istella/attempt-0001 | NOT PROMOTED: Candidate and baseline both have worse inertia than retained same-data sklearn; deficit is inherited, not introduced by candidate. | 51a3eb11bd99b921e775fa5fc6f6dbedca125382 | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--kmeans-repair2--runs/69a08c873718b0d710ad/attempt-0001/receipt.json |
 | AF.X.complete-proposed/algos/resample@dataset=istella/attempt-0001 | NOT PROMOTED: Saved candidate task metrics are worse than at least one exact-full-input/settings opponent under existing tolerance; no default admission. | 55a815e13728392be41903769c33ece8948cad4a | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json |
 | AF.X.complete-proposed/algos/huber@dataset=istella/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 47301d12b14859e81cadc9ab6a0cd4f728d0e206 | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--expanded-reg--runs/4fa48ab7783acc171486/attempt-0001/receipt.json |
+| AF.X.complete-proposed/algos/qr@dataset=taxi/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | db59bb9557035da8fd11b0a020a84e33b0581c30 | experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json |
 | I.X.complete-proposed/expanded:enet-cv@dataset=taxi/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 1c773404b24dcb05b9fd4684d5f4c8654c13f780 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/3392ecb27af9675963d9/attempt-0001/receipt.json |
 | I.X.complete-proposed/expanded:lasso-cv@dataset=taxi/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | 1c773404b24dcb05b9fd4684d5f4c8654c13f780 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json |
+| I.X.complete-proposed/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | db59bb9557035da8fd11b0a020a84e33b0581c30 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json |
+| I.X.complete-proposed/expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001 | NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules. | db59bb9557035da8fd11b0a020a84e33b0581c30 | experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json |
 
 ## Failed or quality-rejected attempts
 
 Original attempts remain visible after repairs. A quality failure may have complete timings; those are observations, not admitted gains. Interrupted or failed executions have no valid pair timing.
 
-No failed or quality-rejected attempts recorded for this scope.
+| Candidate | Vendor / case | Outcome / reason | Worker exits | Samples A; B (warmup/scored) | Observed A/B time | Evidence |
+|---|---|---|---|---|---:|---|
+| I.X.complete-proposed | amd / classical:ols@dataset=istella/attempt-0001 | FAILED_OR_INCOMPLETE: Workload failed or did not write result JSON | [1] | A: 0/0; B: 0/0 | — | experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements/6950ad15bec5c24b3768/attempt-0001/receipt.json |

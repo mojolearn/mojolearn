@@ -16,8 +16,1232 @@
         "apple",
         "host"
       ],
-      "cells": [],
-      "status": "PENDING_MEASUREMENT"
+      "cells": [
+        {
+          "id": "I.X.complete-proposed",
+          "vendor": "amd",
+          "case": "classical:ols@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "FAILED_OR_INCOMPLETE",
+          "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements/6950ad15bec5c24b3768/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "init": [
+              8,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "execution_status": "MEASUREMENT_FAILED",
+          "worker_returncodes": [
+            1
+          ],
+          "failure_reasons": [
+            "Workload failed or did not write result JSON"
+          ],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 0,
+              "scored": 0
+            },
+            "B": {
+              "warmup": 0,
+              "scored": 0
+            }
+          },
+          "warmups": 0,
+          "scored_samples": 0,
+          "quality": "NOT_ASSESSED",
+          "identity": "INCOMPLETE",
+          "route": "amd-native-gfx942",
+          "receipt_sha256": "604613c4bfc633df42159ac16c2948b40a9d1d554753fcefbfc2bd2476b2520f",
+          "source_coverage_pending": [
+            "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+            "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+            "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+            "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+            "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+            "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed.",
+            "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+            "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route.",
+            "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+            "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+            "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists.",
+            "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending.",
+            "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization.",
+            "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+            "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending.",
+            "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+            "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+            "C13 is a numerical profile and its quality/selected model results remain unverified.",
+            "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+            "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+            "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed.",
+            "No new BayesianRidge inverse-elision arm where production already solves factors.",
+            "Gaussian-process inverse-materialization callers need independent integration by owning family.",
+            "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+            "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+            "OVR arm changes scheduling waves, not full model-state allocation.",
+            "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+            "Do not claim unchanged old I12 OVR/exact-trial experiments as new.",
+            "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+            "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated.",
+            "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+            "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter.",
+            "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+            "Unsupported precomputed kernel routes preserve incumbent handling.",
+            "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+            "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+            "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+            "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+            "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+            "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+            "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+            "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op.",
+            "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+            "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+            "IncrementalPCA centered incremental covariance caller remains unfinished source work.",
+            "Global TSQR uses must remain classical callers; no neural application is introduced.",
+            "Panel-size numeric version quality/rank/sign behavior remains wholly unverified.",
+            "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+            "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+            "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite.",
+            "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+            "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+            "Nonnegative dictionary-learning callers not changed.",
+            "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+            "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted.",
+            "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+            "Descriptor scans and radix scratch belong to whole-operation cost.",
+            "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling.",
+            "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+            "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated.",
+            "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate.",
+            "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+            "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there.",
+            "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction.",
+            "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent.",
+            "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+            "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+            "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach.",
+            "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired.",
+            "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced.",
+            "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded.",
+            "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending.",
+            "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers.",
+            "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced.",
+            "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+            "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B.",
+            "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+            "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion.",
+            "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+            "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated.",
+            "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+            "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it.",
+            "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter.",
+            "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+            "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending.",
+            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+            "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+            "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+            "Parent arena/CSS constructors retain their original allocation and input indexing.",
+            "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+            "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+            "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+            "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+          ]
+        },
+        {
+          "id": "I.X.complete-proposed",
+          "vendor": "amd",
+          "case": "classical:pca@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements/b42fb20d60c797167de3/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "init": [
+              8,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "amd-native-gfx942",
+          "receipt_sha256": "320fa673c597fb5f7e3998c65425f166750a7a1b4a4f65e833047ec110f4d42e",
+          "source_coverage_pending": [
+            "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+            "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+            "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+            "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+            "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+            "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed.",
+            "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+            "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route.",
+            "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+            "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+            "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists.",
+            "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending.",
+            "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization.",
+            "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+            "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending.",
+            "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+            "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+            "C13 is a numerical profile and its quality/selected model results remain unverified.",
+            "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+            "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+            "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed.",
+            "No new BayesianRidge inverse-elision arm where production already solves factors.",
+            "Gaussian-process inverse-materialization callers need independent integration by owning family.",
+            "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+            "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+            "OVR arm changes scheduling waves, not full model-state allocation.",
+            "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+            "Do not claim unchanged old I12 OVR/exact-trial experiments as new.",
+            "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+            "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated.",
+            "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+            "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter.",
+            "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+            "Unsupported precomputed kernel routes preserve incumbent handling.",
+            "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+            "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+            "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+            "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+            "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+            "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+            "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+            "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op.",
+            "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+            "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+            "IncrementalPCA centered incremental covariance caller remains unfinished source work.",
+            "Global TSQR uses must remain classical callers; no neural application is introduced.",
+            "Panel-size numeric version quality/rank/sign behavior remains wholly unverified.",
+            "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+            "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+            "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite.",
+            "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+            "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+            "Nonnegative dictionary-learning callers not changed.",
+            "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+            "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted.",
+            "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+            "Descriptor scans and radix scratch belong to whole-operation cost.",
+            "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling.",
+            "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+            "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated.",
+            "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate.",
+            "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+            "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there.",
+            "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction.",
+            "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent.",
+            "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+            "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+            "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach.",
+            "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired.",
+            "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced.",
+            "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded.",
+            "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending.",
+            "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers.",
+            "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced.",
+            "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+            "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B.",
+            "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+            "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion.",
+            "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+            "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated.",
+            "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+            "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it.",
+            "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter.",
+            "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+            "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending.",
+            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+            "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+            "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+            "Parent arena/CSS constructors retain their original allocation and input indexing.",
+            "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+            "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+            "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+            "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+              "metrics": {
+                "ours": {
+                  "explained_variance_ratio_sum": 1.0000000586947453
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+              "metrics": {
+                "ours": {
+                  "explained_variance_ratio_sum": 1.0000000586899918
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 1478.8790410000274,
+            "candidate_ms": 3006.0314379999795,
+            "observed_candidate_over_baseline": 2.032641855528145,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "I.X.complete-proposed",
+          "vendor": "amd",
+          "case": "classical:pca@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements/e0f96a2a63ac7c061d4c/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "init": [
+              8,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "amd-native-gfx942",
+          "receipt_sha256": "6ed1253afb24f2690960eaf53d61b7868dcb5315f70bd0f4cbcb65e18cae9a29",
+          "source_coverage_pending": [
+            "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+            "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+            "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+            "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+            "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+            "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed.",
+            "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+            "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route.",
+            "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+            "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+            "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists.",
+            "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending.",
+            "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization.",
+            "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+            "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending.",
+            "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+            "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+            "C13 is a numerical profile and its quality/selected model results remain unverified.",
+            "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+            "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+            "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed.",
+            "No new BayesianRidge inverse-elision arm where production already solves factors.",
+            "Gaussian-process inverse-materialization callers need independent integration by owning family.",
+            "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+            "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+            "OVR arm changes scheduling waves, not full model-state allocation.",
+            "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+            "Do not claim unchanged old I12 OVR/exact-trial experiments as new.",
+            "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+            "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated.",
+            "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+            "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter.",
+            "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+            "Unsupported precomputed kernel routes preserve incumbent handling.",
+            "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+            "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+            "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+            "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+            "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+            "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+            "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+            "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op.",
+            "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+            "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+            "IncrementalPCA centered incremental covariance caller remains unfinished source work.",
+            "Global TSQR uses must remain classical callers; no neural application is introduced.",
+            "Panel-size numeric version quality/rank/sign behavior remains wholly unverified.",
+            "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+            "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+            "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite.",
+            "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+            "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+            "Nonnegative dictionary-learning callers not changed.",
+            "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+            "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted.",
+            "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+            "Descriptor scans and radix scratch belong to whole-operation cost.",
+            "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling.",
+            "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+            "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated.",
+            "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate.",
+            "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+            "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there.",
+            "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction.",
+            "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent.",
+            "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+            "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+            "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach.",
+            "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired.",
+            "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced.",
+            "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded.",
+            "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending.",
+            "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers.",
+            "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced.",
+            "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+            "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B.",
+            "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+            "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion.",
+            "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+            "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated.",
+            "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+            "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it.",
+            "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter.",
+            "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+            "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending.",
+            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+            "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+            "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+            "Parent arena/CSS constructors retain their original allocation and input indexing.",
+            "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+            "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+            "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+            "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+              "metrics": {
+                "ours": {
+                  "explained_variance_ratio_sum": 0.9999963714262299
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+              "metrics": {
+                "ours": {
+                  "explained_variance_ratio_sum": 0.9999963632758655
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 778.5231870000189,
+            "candidate_ms": 2904.1237120000005,
+            "observed_candidate_over_baseline": 3.730298288469512,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "I.X.complete-proposed",
+          "vendor": "amd",
+          "case": "classical:kmeans@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "IN_PROGRESS",
+          "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/276e62dc5e5832765814/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "init": [
+              8,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "execution_status": "IN_PROGRESS",
+          "worker_returncodes": [
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 0
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 0
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 0,
+          "quality": "NOT_ASSESSED",
+          "identity": "INCOMPLETE",
+          "route": "amd-native-gfx942",
+          "receipt_sha256": "ed9746566ea67d5b12488568d20f28a89e1fe1daed4ab03aeb4b7a0849878a08",
+          "source_coverage_pending": [
+            "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+            "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+            "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+            "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+            "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+            "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed.",
+            "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+            "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route.",
+            "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+            "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+            "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists.",
+            "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending.",
+            "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization.",
+            "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+            "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending.",
+            "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+            "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+            "C13 is a numerical profile and its quality/selected model results remain unverified.",
+            "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+            "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+            "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed.",
+            "No new BayesianRidge inverse-elision arm where production already solves factors.",
+            "Gaussian-process inverse-materialization callers need independent integration by owning family.",
+            "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+            "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+            "OVR arm changes scheduling waves, not full model-state allocation.",
+            "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+            "Do not claim unchanged old I12 OVR/exact-trial experiments as new.",
+            "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+            "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated.",
+            "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+            "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter.",
+            "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+            "Unsupported precomputed kernel routes preserve incumbent handling.",
+            "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+            "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+            "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+            "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+            "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+            "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+            "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+            "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op.",
+            "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+            "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+            "IncrementalPCA centered incremental covariance caller remains unfinished source work.",
+            "Global TSQR uses must remain classical callers; no neural application is introduced.",
+            "Panel-size numeric version quality/rank/sign behavior remains wholly unverified.",
+            "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+            "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+            "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite.",
+            "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+            "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+            "Nonnegative dictionary-learning callers not changed.",
+            "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+            "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted.",
+            "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+            "Descriptor scans and radix scratch belong to whole-operation cost.",
+            "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling.",
+            "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+            "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated.",
+            "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate.",
+            "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+            "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there.",
+            "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction.",
+            "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent.",
+            "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+            "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+            "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach.",
+            "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired.",
+            "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced.",
+            "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded.",
+            "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending.",
+            "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers.",
+            "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced.",
+            "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+            "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B.",
+            "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+            "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion.",
+            "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+            "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated.",
+            "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+            "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it.",
+            "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter.",
+            "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+            "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending.",
+            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+            "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+            "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+            "Parent arena/CSS constructors retain their original allocation and input indexing.",
+            "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+            "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+            "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+            "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+          ]
+        },
+        {
+          "id": "I.X.complete-proposed",
+          "vendor": "amd",
+          "case": "classical:ols@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/6950ad15bec5c24b3768/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "init": [
+              8,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "amd-native-gfx942",
+          "receipt_sha256": "f72bbf8c8ddb5b7ea590c14fdb4f2c3e0b23ef980874908c419a79e6489bb338",
+          "source_coverage_pending": [
+            "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+            "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+            "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+            "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+            "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+            "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed.",
+            "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+            "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route.",
+            "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+            "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+            "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists.",
+            "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending.",
+            "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization.",
+            "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+            "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending.",
+            "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+            "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+            "C13 is a numerical profile and its quality/selected model results remain unverified.",
+            "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+            "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+            "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed.",
+            "No new BayesianRidge inverse-elision arm where production already solves factors.",
+            "Gaussian-process inverse-materialization callers need independent integration by owning family.",
+            "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+            "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+            "OVR arm changes scheduling waves, not full model-state allocation.",
+            "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+            "Do not claim unchanged old I12 OVR/exact-trial experiments as new.",
+            "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+            "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated.",
+            "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+            "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter.",
+            "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+            "Unsupported precomputed kernel routes preserve incumbent handling.",
+            "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+            "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+            "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+            "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+            "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+            "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+            "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+            "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op.",
+            "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+            "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+            "IncrementalPCA centered incremental covariance caller remains unfinished source work.",
+            "Global TSQR uses must remain classical callers; no neural application is introduced.",
+            "Panel-size numeric version quality/rank/sign behavior remains wholly unverified.",
+            "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+            "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+            "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite.",
+            "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+            "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+            "Nonnegative dictionary-learning callers not changed.",
+            "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+            "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted.",
+            "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+            "Descriptor scans and radix scratch belong to whole-operation cost.",
+            "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling.",
+            "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+            "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated.",
+            "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate.",
+            "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+            "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there.",
+            "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction.",
+            "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent.",
+            "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+            "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+            "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach.",
+            "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired.",
+            "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced.",
+            "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded.",
+            "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending.",
+            "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers.",
+            "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced.",
+            "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+            "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B.",
+            "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+            "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion.",
+            "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+            "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated.",
+            "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+            "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it.",
+            "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter.",
+            "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+            "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending.",
+            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+            "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+            "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+            "Parent arena/CSS constructors retain their original allocation and input indexing.",
+            "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+            "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+            "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+            "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.3325061187271815,
+                  "rmse": 0.6817401422623481
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.33250592285087277,
+                  "rmse": 0.6817402422907802
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 1845.2500390000068,
+            "candidate_ms": 1899.7588149999274,
+            "observed_candidate_over_baseline": 1.0295400486914286,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "I.X.complete-proposed",
+          "vendor": "amd",
+          "case": "classical:ols@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/d7530cd1a38627b906b5/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "init": [
+              8,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "52be3cd59ea8da3744f824634ea4ad39cd5853cdb4bcf7e2bda8ca37f3d01577",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "amd-native-gfx942",
+          "receipt_sha256": "ce4f7e02f93e798b69312bd5c217bc008e088bec48ae5c641d05567084189821",
+          "source_coverage_pending": [
+            "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+            "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+            "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+            "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+            "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+            "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed.",
+            "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+            "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route.",
+            "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+            "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+            "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists.",
+            "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending.",
+            "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization.",
+            "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+            "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending.",
+            "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+            "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+            "C13 is a numerical profile and its quality/selected model results remain unverified.",
+            "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+            "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+            "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed.",
+            "No new BayesianRidge inverse-elision arm where production already solves factors.",
+            "Gaussian-process inverse-materialization callers need independent integration by owning family.",
+            "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+            "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+            "OVR arm changes scheduling waves, not full model-state allocation.",
+            "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+            "Do not claim unchanged old I12 OVR/exact-trial experiments as new.",
+            "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+            "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated.",
+            "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+            "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter.",
+            "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+            "Unsupported precomputed kernel routes preserve incumbent handling.",
+            "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+            "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+            "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+            "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+            "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+            "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+            "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+            "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op.",
+            "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+            "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+            "IncrementalPCA centered incremental covariance caller remains unfinished source work.",
+            "Global TSQR uses must remain classical callers; no neural application is introduced.",
+            "Panel-size numeric version quality/rank/sign behavior remains wholly unverified.",
+            "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+            "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+            "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite.",
+            "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+            "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+            "Nonnegative dictionary-learning callers not changed.",
+            "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+            "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted.",
+            "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+            "Descriptor scans and radix scratch belong to whole-operation cost.",
+            "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling.",
+            "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+            "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated.",
+            "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate.",
+            "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+            "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there.",
+            "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction.",
+            "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent.",
+            "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+            "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+            "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach.",
+            "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired.",
+            "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced.",
+            "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded.",
+            "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending.",
+            "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers.",
+            "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced.",
+            "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+            "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B.",
+            "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+            "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion.",
+            "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+            "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated.",
+            "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+            "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it.",
+            "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter.",
+            "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+            "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending.",
+            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+            "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+            "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+            "Parent arena/CSS constructors retain their original allocation and input indexing.",
+            "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+            "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+            "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+            "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9087723652727997,
+                  "rmse": 4.6981298993181095
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+              "metrics": {
+                "ours": {
+                  "finite": true,
+                  "r2": 0.9087723843182816,
+                  "rmse": 4.698129408906665
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 800.0336480000669,
+            "candidate_ms": 774.6892170000592,
+            "observed_candidate_over_baseline": 0.968320793677411,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        },
+        {
+          "id": "I.X.complete-proposed",
+          "vendor": "amd",
+          "case": "classical:kmeans@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "c5e3a037b69adc74ef5a193d6c1f563e68b812a9",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/amd/amd--capture-attempt-01--artifacts--measurements-classical-dependency-repair/f1e53f9879870c705823/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "init": [
+              8,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "85850c371f1836ec6011810957a6f971f9859449e0d31c99b9c06203991e1928",
+          "execution_status": "MEASURED_FULL",
+          "worker_returncodes": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "failure_reasons": [],
+          "actual_sample_counts": {
+            "A": {
+              "warmup": 1,
+              "scored": 1
+            },
+            "B": {
+              "warmup": 1,
+              "scored": 1
+            }
+          },
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "INCOMPLETE",
+          "route": "amd-native-gfx942",
+          "receipt_sha256": "a51c008b5485fa8d162494bd174822f81f0ec3af492b3322845e169edc2cd17f",
+          "source_coverage_pending": [
+            "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01.",
+            "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added.",
+            "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+            "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented.",
+            "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+            "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed.",
+            "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced.",
+            "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites.",
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route.",
+            "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+            "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent.",
+            "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists.",
+            "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending.",
+            "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization.",
+            "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+            "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending.",
+            "Weighted LogCV saved full-workload recipe variant is pending; unweighted recipe does not exercise cached weight-normalization arithmetic.",
+            "RidgeCV higher-precision fallback retains independent retained-row rescans when a factor is untrusted.",
+            "C13 is a numerical profile and its quality/selected model results remain unverified.",
+            "Primary linear_model.Ridge uses glm ridge_fit; grouped factor application in that route and OLS multioutput remain unfinished source work.",
+            "Gaussian-process caller grouped RHS extension remains unfinished source work.",
+            "Existing single-factor state is incumbent; only new bounded four-RHS applications are claimed.",
+            "No new BayesianRidge inverse-elision arm where production already solves factors.",
+            "Gaussian-process inverse-materialization callers need independent integration by owning family.",
+            "GLM trial derivative state is replaced on each objective and reused only at accepted/current point.",
+            "Other logistic/linear-margin objectives have existing fusion but no distinct new C16 arm.",
+            "OVR arm changes scheduling waves, not full model-state allocation.",
+            "C17 line-search A permits two exact trials; B retains existing legacy flags and ordinary incumbent line search.",
+            "Do not claim unchanged old I12 OVR/exact-trial experiments as new.",
+            "Residual window arm requires existing fused row route; resident-Gram arm covers incumbent Gram route.",
+            "Saved full workloads need actual route/provenance receipt; no runtime reach demonstrated.",
+            "SGDClassifier/Regressor saved recipes use minibatch 4096 and do not reach per-sample candidate; a genuine saved full per-sample recipe is pending.",
+            "Incumbent ordered chunk2048 remains B; no minibatch substitution or changed update counter.",
+            "Kernel row cache currently serves working-set square tile production, not full update_f batches.",
+            "Unsupported precomputed kernel routes preserve incumbent handling.",
+            "Cache state allocated per immutable fit; no reuse across changed fit parameters.",
+            "OneClassSVM public API uses x_neighbors, so svm SMO/kernel-cache changes do not establish its source reach.",
+            "Incumbent already fuses min/max; the new arm is only the lower-barrier canonical four-way tree schedule.",
+            "Host canonical extrema result is unchanged; cross-vendor tie/NaN outcomes remain unverified.",
+            "Other x_decomp Gram consumers are not routed through svm kernel_op.",
+            "Poly/sigmoid direct kernel_methods triangles are incumbent and not claimed new.",
+            "Affected full kernel matrix recipes have caps; full intended workload coverage stays pending.",
+            "KernelPCA uses separate x_neighbors kernel routines and is not reached by svm kernel_op.",
+            "QDA/LDA arena covariance callers need shared-cell migration; C55 class-stat profile is separate.",
+            "PCA and MCD wiring performed by shared/root owners; ledger records source coordination only.",
+            "IncrementalPCA centered incremental covariance caller remains unfinished source work.",
+            "Global TSQR uses must remain classical callers; no neural application is introduced.",
+            "Panel-size numeric version quality/rank/sign behavior remains wholly unverified.",
+            "Random projection, Nystr\u00f6m and randomized SVD production callers still need distinct panel-reuse arms.",
+            "Existing host canonical GEMM supplies intended same-version projection words; numerical identity not established.",
+            "These broader production extensions are unfinished source work, not an asserted Mojo/Modular prerequisite.",
+            "Product arm is reached for update_h=False/transform; fit with mutable H must recompute dependency products.",
+            "Saved NMF default beta2 does not reach beta0/1 pointwise arm; full saved parameter variants pending.",
+            "Nonnegative dictionary-learning callers not changed.",
+            "New component maps retain existing dependent deflation/spectral order; they do not parallelize dependent ICA/PLS components.",
+            "Additional centered projection tile reuse remains a broader design extension, with no toolchain prerequisite asserted.",
+            "ALS CG route remains incumbent; saved exact-solve recipe specifies use_cg=False.",
+            "Descriptor scans and radix scratch belong to whole-operation cost.",
+            "Sparse-code rows share immutable Gram allocation; no claim of explicit shared-memory Gram tiling.",
+            "Expanded Euclidean row-major brute force entry is supported. Other metrics and layouts keep incumbent. Caller scratch allocation is retained even though candidate selection uses output-sized merge state. Full-recipe classifier/regressor variants and exact graph routes require declared settings and runtime reach evidence.",
+            "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated.",
+            "RBC canonicalization is source-integrated. HDBSCAN sparse mutual-reachability route does not use this CSR canonicalizer; only a recipe explicitly using RBC graph preparation can reach this candidate.",
+            "Candidate retains canonical sorting; fused distances to final returned radius distances are still a separate pass. Brute-force DBSCAN already fuses threshold; new route is RBC exhaustive exact count/emission.",
+            "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there.",
+            "Sparse HDBSCAN component edge reduction uses canonical weight/lo/hi minimum with one block per component and scans candidate rows. Work may grow quadratically in components; no performance claim. Hierarchy uses 128-lane canonical row reduction.",
+            "Existing KM and scan-dimension dispatch admission preserved; reach for unsupported large k/dim stays incumbent.",
+            "Two/four independent sample chains reuse centroid feature loads in main assignment and x_cluster nearest/mini-batch assignment. Large/register-pressure performance and runtime reach remain unmeasured.",
+            "Main KMeans host still computes incumbent accumulators before replacing centroids with panel profile; source contract agrees but removed-work optimization is incomplete on host. MiniBatch online update uses ordered row panels merged into retained prior center/count; partial-fit weighted/reassignment semantics retained. Bisecting and IVF training call the migrated main KMeans source.",
+            "REUSE_NEAREST has distinct duplicate-trial distance-row reuse in x_cluster generic init (all original RNG draws and potential order retained). DEVICE_POTENTIAL selects existing device-only greedy trial-adopt schedule for main IDENTICAL KMeans, newly selectable here. Scalable/default init may already retain nearest/device potential; recipes must select an affected initializer to claim reach.",
+            "Weighted bisect subsets retain incumbent host gather; unweighted subset arenas and minibatch rollback histories wired.",
+            "Two-seed feature staging admits at most512 features by fixed shared storage; larger rows retain single-seed arithmetic. ACTIVE_SEEDS builds stable descriptors each shift; launch upper bound remains ns with inert excess blocks because no unsupported indirect launch is introduced.",
+            "New one-visit relaxation/minimum in existing resident full distance graph; approximate ordering excluded.",
+            "Packed triangle is built from initial square and square storage is then released; preparation still includes full initial square. Saved hierarchy single-linkage recipe uses another production path; independent x_cluster AgglomerativeClustering full recipe remains pending.",
+            "Spectral, PageRank, compact kNN LabelPropagation, and dense LabelPropagation/Spreading raw-affinity bindings/consumers are source-integrated. Dense raw affinity keeps its dense topology and resident degree array; consumer computes the same quotient(s) before its fixed fold. Compact kNN LabelSpreading retains its normalized value format. Isomap/LLE use separate x_decomp dense representations without DeviceCoo/CSR normalization consumers.",
+            "Per-fit per-epoch descriptor arena is edges*(negative_sample_rate+1) Int32 cells and reused across epochs. Immutable graph already resident. Cross-fit cache requires explicit graph ownership/version invalidation API; no cache across unrelated fits is introduced.",
+            "All kernel/metric/weighted public variants need resolved full-dataset recipes and future reach evidence.",
+            "Legacy explicitly disabled chunk-fold configurations are separate from the incumbent default A/B.",
+            "Four-component staging requires the existing 16 MiB scratch budget; larger panels retain B. Full-recipe route admission is pending.",
+            "General tiled full-size centering and additional fused sufficient-statistic arms are not implemented; do not treat CENTER4 as statistic fusion.",
+            "C54 shares RBF/Matern/inducing-kernel inputs across four independent columns. Persistent fitted-factor ownership across public calls remains unimplemented; the pointer API still reuploads factors. No pointer-address cache is fabricated.",
+            "GP mean, variance, predictive probabilities and optimizer paths require separate resolved full-workload settings; all runtime reach remains undemonstrated.",
+            "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+            "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it.",
+            "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter.",
+            "Retains a candidate subset mean rather than recomputing it for covariance. Independent robust candidates are not yet scheduled together.",
+            "C23 interaction uses the common centered Gram panel profile; complete determinant/support/quality evidence pending.",
+            "HW scale sharing applies parallel start trials; HW series4 applies the serial series route. Each route needs admission recorded from the saved settings.",
+            "C58_FORECAST4 applies only scalar OP_THETA/OP_ETS/OP_GARCH. Cooperative GARCH/ETS/Prophet routes have the separate TEAM64 bounded state-budget arm; neither arm changes optimizer trial scheduling inside a series.",
+            "Long grouped scalar fits have no demonstrated device completion, especially command-buffer lifetime; no vendor-specific workaround introduced.",
+            "Workspace admission remains the incumbent eval_ws_fits threshold; a recipe outside it keeps B.",
+            "The independent gradient trial observation copy is removed; AutoARIMA order-search scheduling remains incumbent.",
+            "Parent arena/CSS constructors retain their original allocation and input indexing.",
+            "Standalone KPSS/select_d full recipe is pending; no standalone saved board lane found.",
+            "DIFF_REUSE needs D=0 and a requested d=2 trial; the standard d_max=2 recipe stops before that trial, so that setting does not exercise the subarm.",
+            "ADF is not supported by this AutoARIMA API (test must be kpss); no ADF or autocorrelation runtime is invented.",
+            "Fusing multiple requested reports requires a supported multi-report public interface; current KPSS call returns one test."
+          ],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
+              "metrics": {
+                "ours": {
+                  "inertia": 6.049256723180045e+17,
+                  "inertia_over_ours": 1.0,
+                  "n_iter": 27
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
+              "metrics": {
+                "ours": {
+                  "inertia": 6.050717116872483e+17,
+                  "inertia_over_ours": 1.0,
+                  "n_iter": 33
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but no matched accepted full-workload opponent reference has been established; historical reduced or quality-failed references do not qualify.",
+          "unqualified_timing": {
+            "baseline_ms": 1977.0179270000199,
+            "candidate_ms": 27903.22753299995,
+            "observed_candidate_over_baseline": 14.113795910460487,
+            "qualification": "Observed only; not admitted and not a default decision"
+          }
+        }
+      ],
+      "status": "FAILED_OR_INCOMPLETE, IN_PROGRESS, PENDING_ADMISSION"
     }
   ],
   "notes": [
@@ -57,6 +1281,14 @@
       "individual_constituents": "Not decided by this combined-configuration result"
     },
     {
+      "candidate": "AF.X.complete-proposed/algos/qr@dataset=taxi/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+      "commit": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--qr-svd-full--runs/6df9e7692fcc24a89c0c/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Not decided by this combined-configuration result"
+    },
+    {
       "candidate": "I.X.complete-proposed/expanded:enet-cv@dataset=taxi/attempt-0001",
       "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
       "commit": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
@@ -69,6 +1301,22 @@
       "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
       "commit": "1c773404b24dcb05b9fd4684d5f4c8654c13f780",
       "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-expanded-reg/96ac4d3d170baa9b8709/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Not decided by this combined-configuration result"
+    },
+    {
+      "candidate": "I.X.complete-proposed/expanded:gaussian-nb@dataset=taxi@input=classification-full-v1/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+      "commit": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/3643733e60c05588ed87/attempt-0001/receipt.json",
+      "default_changed": false,
+      "individual_constituents": "Not decided by this combined-configuration result"
+    },
+    {
+      "candidate": "I.X.complete-proposed/expanded:lda-clf@dataset=istella@input=classification-full-v1/attempt-0001",
+      "decision": "NOT PROMOTED: Saved scored metrics are nonfinite or candidate materially worse than baseline under existing af_quality rules.",
+      "commit": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-classification-full-v1/da04cf28502e3d16dc99/attempt-0001/receipt.json",
       "default_changed": false,
       "individual_constituents": "Not decided by this combined-configuration result"
     }

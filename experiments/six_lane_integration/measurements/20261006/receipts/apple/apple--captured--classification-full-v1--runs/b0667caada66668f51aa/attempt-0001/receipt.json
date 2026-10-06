@@ -2159,10 +2159,1475 @@
         "preparation_seconds": 0.7429114580154419
       },
       "model_identity_available": false
+    },
+    {
+      "phase": "warmup",
+      "arm": "B",
+      "excluded": true,
+      "returncode": 0,
+      "process_wall_seconds": 10.601211786270142,
+      "log": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/classification-full-v1/runs/b0667caada66668f51aa/attempts/attempt-0001/warmup-B.log",
+      "output": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/classification-full-v1/runs/b0667caada66668f51aa/attempts/attempt-0001/warmup-B.json",
+      "result_sha256": "2bc86066907691a2261ca76a18c5c96d2f625f0de756e960e87aa2c28734c776",
+      "result": {
+        "arm": "B",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "dataset_version": "classification-full-v1; original loader archive 31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "serial whole-machine allocation; Apple CPU libraries unrestricted, Linux actual cgroup; shared lock; no overlapping transfer"
+        },
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "algorithm": "nipals",
+            "max_iter": 500,
+            "n_components": 2,
+            "scale": true,
+            "tol": 1e-06
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": null,
+          "cgroup": {},
+          "cpu_count": 28,
+          "machine": "arm64",
+          "native_readback": {
+            "config": "mojolearn.PLSCanonical(algorithm='nipals', max_iter=500, n_components=2, scale=True, tol=1e-06)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/__init__.py",
+            "numeric_mode_env": "fast",
+            "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+            "numeric_mode_used": "fast",
+            "pre_clock_fit": false,
+            "vendor_used": "metal",
+            "version": "0.8.37"
+          },
+          "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+          "sysctl": {
+            "hw.memsize": "274877906944",
+            "hw.ncpu": "28",
+            "machdep.cpu.brand_string": "Apple M3 Ultra"
+          },
+          "system": "Darwin"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "AF.C.AFCL-G01",
+          "AF.C.AFCL-G03",
+          "AF.C.AFCL-G04",
+          "AF.C.AFCL-G05",
+          "AF.C.AFCL-G06",
+          "AF.C.AFCL-G07",
+          "AF.C.AFCL-G08",
+          "AF.C.AFCL-G09",
+          "AF.C.AFCL-G10",
+          "AF.C.AFCL-G11",
+          "AF.C.AFCL-G12",
+          "AF.C.AFCL-G13",
+          "AF.C.AFCL-G14",
+          "AF.C.AFCL-L01",
+          "AF.C.AFCL-L02",
+          "AF.C.AFCL-L03",
+          "AF.C.AFCL-L04",
+          "AF.C.AFCL-L05",
+          "AF.C.AFCL-L06",
+          "AF.C.AFCL-L07",
+          "AF.C.AFCL-L08",
+          "AF.C.AFCL-L09",
+          "AF.C.AFCL-L10",
+          "AF.C.AFCL-L11",
+          "AF.C.AFCL-L12",
+          "AF.C.AFCL-L13",
+          "AF.C.AFCL-L14",
+          "AF.C.AFCL-P01",
+          "AF.C.AFCL-P02",
+          "AF.C.AFCL-P03",
+          "AF.C.AFCL-P04",
+          "AF.C.AFCL-P05",
+          "AF.C.AFCL-P06",
+          "AF.C.AFCL-P07",
+          "AF.C.AFCL-P08",
+          "AF.C.AFCL-P09",
+          "AF.C.AFCL-P10",
+          "AF.C.AFCL-P11",
+          "AF.C.AFCL-P12",
+          "AF.C.AFCL-P13",
+          "AF.C.AFCL-P14",
+          "AF.C.AFCL-T01",
+          "AF.C.AFCL-T02",
+          "AF.C.AFCL-T03",
+          "AF.C.AFCL-T04",
+          "AF.C.AFCL-T05",
+          "AF.C.AFCL-T06",
+          "AF.C.AFCL-T07",
+          "AF.C.AFCL-T08",
+          "AF.C.AFCL-T09",
+          "AF.C.AFCL-T10",
+          "AF.C.AFCL-T11",
+          "AF.C.AFCL-T12",
+          "AF.T.F01",
+          "AF.T.F02",
+          "AF.T.F03",
+          "AF.T.F04",
+          "AF.T.F05",
+          "AF.T.F06",
+          "AF.T.F07",
+          "AF.T.F08",
+          "AF.T.F09",
+          "AF.T.F10",
+          "AF.T.F11",
+          "AF.T.F12",
+          "AF.T.G01",
+          "AF.T.G02",
+          "AF.T.G04",
+          "AF.T.G05",
+          "AF.T.G07",
+          "AF.T.G08",
+          "AF.T.G09",
+          "AF.T.G10",
+          "AF.T.G11",
+          "AF.T.G12",
+          "AF.T.N01",
+          "AF.T.N02",
+          "AF.T.N03",
+          "AF.T.N04",
+          "AF.T.N05",
+          "AF.T.N06",
+          "AF.T.N07",
+          "AF.T.N08",
+          "AF.T.N09",
+          "AF.T.N10",
+          "AF.T.N11",
+          "AF.T.N12",
+          "AF.T.P01",
+          "AF.T.P03",
+          "AF.T.P04",
+          "AF.T.P05",
+          "AF.T.P06",
+          "AF.T.P07",
+          "AF.T.P08",
+          "AF.T.P09",
+          "AF.T.P10",
+          "AF.T.P11",
+          "AF.T.P12",
+          "AF.N.A01",
+          "AF.N.A02",
+          "AF.N.A03",
+          "AF.N.A04",
+          "AF.N.A05",
+          "AF.N.A06",
+          "AF.N.A07",
+          "AF.N.A08",
+          "AF.N.A09",
+          "AF.N.A10",
+          "AF.N.A11",
+          "AF.N.A12",
+          "AF.N.T01",
+          "AF.N.T02",
+          "AF.N.T03",
+          "AF.N.T04",
+          "AF.N.T05",
+          "AF.N.T06",
+          "AF.N.T07",
+          "AF.N.T08",
+          "AF.N.T09",
+          "AF.N.T10",
+          "AF.N.T11",
+          "AF.N.T12",
+          "AF.N.M01",
+          "AF.N.M02",
+          "AF.N.M03",
+          "AF.N.M04",
+          "AF.N.M05",
+          "AF.N.M06",
+          "AF.N.M07",
+          "AF.N.M08",
+          "AF.N.M09",
+          "AF.N.M10",
+          "AF.N.E01",
+          "AF.N.E02",
+          "AF.N.E03",
+          "AF.N.E04",
+          "AF.N.E05",
+          "AF.N.E06",
+          "AF.N.E07",
+          "AF.N.E08",
+          "AF.N.E09",
+          "AF.N.E10"
+        ],
+        "loaded_artifacts": {
+          "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/_mojolearn.so": "4c6fcc6c36feda05054e19672696fa0aa21aad41faa9dab99fac0a53fbcc6ebf",
+          "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/_mojolearn_x_decomp.so": "7c55b0805e4285997a3b67f91aad0196edc230a01f962c4a73d712310d129353"
+        },
+        "missing_timing_scopes": [],
+        "mode": "fast",
+        "model_state": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "PLSCanonical",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "output_sha256": "dbd3266c67c9e193e5a90fb56752a2b2ce1f14f2a7b4324e0ced0868aea90693",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 8000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.xs",
+              "shape": [
+                500000,
+                2
+              ]
+            },
+            {
+              "bytes": 8000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.ys",
+              "shape": [
+                500000,
+                2
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "dbd3266c67c9e193e5a90fb56752a2b2ce1f14f2a7b4324e0ced0868aea90693",
+          "status": "CAPTURED"
+        },
+        "phase": "warmup",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "missing_state": [
+                "reviewed complete typed fitted-state export"
+              ],
+              "partial_export": {
+                "class": "PLSCanonical",
+                "reason": "no public state_dict or save export",
+                "schema": "mojolearn-benchmark-state-v1",
+                "status": "unavailable"
+              },
+              "reason": "Public export is not a reviewed complete fitted-state contract",
+              "status": "UNAVAILABLE"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 8000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.xs",
+                  "shape": [
+                    500000,
+                    2
+                  ]
+                },
+                {
+                  "bytes": 8000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.ys",
+                  "shape": [
+                    500000,
+                    2
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "26be884999f988961866562f40592aff4f71acd688701ceb12db55196ae5a0a8",
+              "status": "CAPTURED"
+            },
+            "timings": {
+              "consumed_output_seconds": 0.0013361669844016433,
+              "fit_or_training_seconds": 3.485486791934818,
+              "inference_seconds": 0.286960166064091,
+              "repeated_seconds": 3.773783583077602
+            }
+          }
+        ],
+        "resource_policy": {
+          "policy": "dedicated Apple; CPU libraries unrestricted"
+        },
+        "retained_output_values": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/classification-full-v1/runs/b0667caada66668f51aa/attempts/attempt-0001/warmup-B.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.PLSCanonical(algorithm='nipals', max_iter=500, n_components=2, scale=True, tol=1e-06)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/__init__.py",
+          "numeric_mode_env": "fast",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+          "numeric_mode_used": "fast",
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 1,
+          "scored": 0
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "mean_canonical_corr": 0.8763008052464534
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": null,
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+        "timings": {
+          "cold_seconds": 4.665847666095942,
+          "consumed_output_seconds": 0.013266541063785553,
+          "fit_or_training_seconds": 3.6323137501021847,
+          "full_operation_seconds": 4.665847666095942,
+          "inference_seconds": 0.2730565839447081,
+          "preparation_seconds": 0.7472067910712212
+        },
+        "vendor": "apple",
+        "workload_id": "algos/pls-canonical@dataset=istella@input=classification-full-v1",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": false
+        }
+      },
+      "output_sha256": "dbd3266c67c9e193e5a90fb56752a2b2ce1f14f2a7b4324e0ced0868aea90693",
+      "model_state": {
+        "missing_state": [
+          "reviewed complete typed fitted-state export"
+        ],
+        "partial_export": {
+          "class": "PLSCanonical",
+          "reason": "no public state_dict or save export",
+          "schema": "mojolearn-benchmark-state-v1",
+          "status": "unavailable"
+        },
+        "reason": "Public export is not a reviewed complete fitted-state contract",
+        "status": "UNAVAILABLE"
+      },
+      "timings": {
+        "cold_seconds": 4.665847666095942,
+        "consumed_output_seconds": 0.013266541063785553,
+        "fit_or_training_seconds": 3.6323137501021847,
+        "full_operation_seconds": 4.665847666095942,
+        "inference_seconds": 0.2730565839447081,
+        "preparation_seconds": 0.7472067910712212
+      },
+      "model_identity_available": false
+    },
+    {
+      "phase": "scored",
+      "arm": "A",
+      "excluded": false,
+      "returncode": 0,
+      "process_wall_seconds": 12.97145700454712,
+      "log": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/classification-full-v1/runs/b0667caada66668f51aa/attempts/attempt-0001/scored-A.log",
+      "output": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/classification-full-v1/runs/b0667caada66668f51aa/attempts/attempt-0001/scored-A.json",
+      "result_sha256": "caab4baa566cc6b1285e723be71d95a0608baa9120381cc3f444743f911c2e39",
+      "result": {
+        "arm": "A",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [
+            "MOJOLEARN_AFCL_G01=1",
+            "MOJOLEARN_AFCL_G03=1",
+            "MOJOLEARN_AFCL_G04=1",
+            "MOJOLEARN_AFCL_G05=1",
+            "MOJOLEARN_AFCL_G06=1",
+            "MOJOLEARN_AFCL_G07=1",
+            "MOJOLEARN_AFCL_G08=1",
+            "MOJOLEARN_AFCL_G09=1",
+            "MOJOLEARN_AFCL_G10=1",
+            "MOJOLEARN_AFCL_G11=1",
+            "MOJOLEARN_AFCL_G12=1",
+            "MOJOLEARN_AFCL_G13=1",
+            "MOJOLEARN_AFCL_G14=1",
+            "MOJOLEARN_AFCL_L01=1",
+            "MOJOLEARN_AFCL_L02=1",
+            "MOJOLEARN_AFCL_L03=1",
+            "MOJOLEARN_AFCL_L04=1",
+            "MOJOLEARN_AFCL_L05=1",
+            "MOJOLEARN_AFCL_L06=1",
+            "MOJOLEARN_AFCL_L07=1",
+            "MOJOLEARN_AFCL_L08=1",
+            "MOJOLEARN_AFCL_L09=1",
+            "MOJOLEARN_AFCL_L10=1",
+            "MOJOLEARN_AFCL_L11=1",
+            "MOJOLEARN_AFCL_L12=1",
+            "MOJOLEARN_AFCL_L13=1",
+            "MOJOLEARN_AFCL_L14=1",
+            "MOJOLEARN_AFCL_P01=1",
+            "MOJOLEARN_AFCL_P02=1",
+            "MOJOLEARN_AFCL_P03=1",
+            "MOJOLEARN_AFCL_P04=1",
+            "MOJOLEARN_AFCL_P05=1",
+            "MOJOLEARN_AFCL_P06=1",
+            "MOJOLEARN_AFCL_P07=1",
+            "MOJOLEARN_AFCL_P08=1",
+            "MOJOLEARN_AFCL_P09=1",
+            "MOJOLEARN_AFCL_P10=1",
+            "MOJOLEARN_AFCL_P11=1",
+            "MOJOLEARN_AFCL_P12=1",
+            "MOJOLEARN_AFCL_P13=1",
+            "MOJOLEARN_AFCL_P14=1",
+            "MOJOLEARN_AFCL_T01=1",
+            "MOJOLEARN_AFCL_T02=1",
+            "MOJOLEARN_AFCL_T03=1",
+            "MOJOLEARN_AFCL_T04=1",
+            "MOJOLEARN_AFCL_T05=1",
+            "MOJOLEARN_AFCL_T06=1",
+            "MOJOLEARN_AFCL_T07=1",
+            "MOJOLEARN_AFCL_T08=1",
+            "MOJOLEARN_AFCL_T09=1",
+            "MOJOLEARN_AFCL_T10=1",
+            "MOJOLEARN_AFCL_T11=1",
+            "MOJOLEARN_AFCL_T12=1",
+            "MOJOLEARN_AFN26_ATTN_FLASH_BK16=1",
+            "MOJOLEARN_AFN26_ATTN_FLASH_TQ16=1",
+            "MOJOLEARN_AFN26_ATTN_NORM_TPB128=1",
+            "MOJOLEARN_AFN26_ATTN_PROJ_BM32=1",
+            "MOJOLEARN_AFN26_ATTN_PROJ_KB16=1",
+            "MOJOLEARN_AFN26_CNN_CHANNELS16=1",
+            "MOJOLEARN_AFN26_CNN_COLS_ONCE=1",
+            "MOJOLEARN_AFN26_CNN_K16=1",
+            "MOJOLEARN_AFN26_CNN_ROWS32=1",
+            "MOJOLEARN_AFN26_EMB_GATHER8=1",
+            "MOJOLEARN_AFN26_EMB_RESIDENT=1",
+            "MOJOLEARN_AFN26_EMB_SCRATCH=1",
+            "MOJOLEARN_AFN26_EMB_THREADS64=1",
+            "MOJOLEARN_AFN26_LM_BWD_FUSE=1",
+            "MOJOLEARN_AFN26_LM_CE_BLOCK128=1",
+            "MOJOLEARN_AFN26_LM_HEAD_FUSE=1",
+            "MOJOLEARN_AFN26_LM_NOSYNC=1",
+            "MOJOLEARN_AFN26_LM_PARAM_VIEWS=1",
+            "MOJOLEARN_AFN26_LM_WGRAD_MIN128=1",
+            "MOJOLEARN_AFN26_LM_WGRAD_SPLIT=1",
+            "MOJOLEARN_AFN26_MAMBA1_CHUNKS16=1",
+            "MOJOLEARN_AFN26_MAMBA2_SSD_K16=1",
+            "MOJOLEARN_AFN26_MAMBA3_THREADS64=1",
+            "MOJOLEARN_AFN26_MAMBA_REFUSAL_THREADS128=1",
+            "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4=1",
+            "MOJOLEARN_AFN26_MLP_FUSED_STEP=1",
+            "MOJOLEARN_AFN26_MLP_RESIDENT=1",
+            "MOJOLEARN_AFN26_MLP_ROWS32=1",
+            "MOJOLEARN_AFN26_OPT_BLOCK128=1",
+            "MOJOLEARN_AFN26_OPT_FUSE_SCAN=1",
+            "MOJOLEARN_AFN_ATTN_ARENA=1",
+            "MOJOLEARN_AFN_ATTN_FLASH=1",
+            "MOJOLEARN_AFN_ATTN_FUSE_MLP=1",
+            "MOJOLEARN_AFN_ATTN_FUSE_PRE=1",
+            "MOJOLEARN_AFN_ATTN_GQA_TILE=1",
+            "MOJOLEARN_AFN_ATTN_NORM_SG=1",
+            "MOJOLEARN_AFN_ATTN_ROPE_CACHE=1",
+            "MOJOLEARN_AFN_CNN_DIRECT=1",
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD=1",
+            "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN=1",
+            "MOJOLEARN_AFN_MAMBA1_FUSE_IN=1",
+            "MOJOLEARN_AFN_MAMBA2_SSD_MMA=1",
+            "MOJOLEARN_AFN_MAMBA3_SISO_FUSED=1",
+            "MOJOLEARN_AFN_MAMBA_ARENA=1",
+            "MOJOLEARN_AFT_F01=1",
+            "MOJOLEARN_AFT_F02=1",
+            "MOJOLEARN_AFT_F03=1",
+            "MOJOLEARN_AFT_F04=1",
+            "MOJOLEARN_AFT_F05=1",
+            "MOJOLEARN_AFT_F06=1",
+            "MOJOLEARN_AFT_F07=1",
+            "MOJOLEARN_AFT_F08=1",
+            "MOJOLEARN_AFT_F09=1",
+            "MOJOLEARN_AFT_F10=1",
+            "MOJOLEARN_AFT_F11=1",
+            "MOJOLEARN_AFT_F12=1",
+            "MOJOLEARN_AFT_G01=1",
+            "MOJOLEARN_AFT_G02=1",
+            "MOJOLEARN_AFT_G04=1",
+            "MOJOLEARN_AFT_G05=1",
+            "MOJOLEARN_AFT_G07=1",
+            "MOJOLEARN_AFT_G08=1",
+            "MOJOLEARN_AFT_G09=1",
+            "MOJOLEARN_AFT_G10=1",
+            "MOJOLEARN_AFT_G11=1",
+            "MOJOLEARN_AFT_G12=1",
+            "MOJOLEARN_AFT_N01=1",
+            "MOJOLEARN_AFT_N02=1",
+            "MOJOLEARN_AFT_N03=1",
+            "MOJOLEARN_AFT_N04=1",
+            "MOJOLEARN_AFT_N05=1",
+            "MOJOLEARN_AFT_N06=1",
+            "MOJOLEARN_AFT_N07=1",
+            "MOJOLEARN_AFT_N08=1",
+            "MOJOLEARN_AFT_N09=1",
+            "MOJOLEARN_AFT_N10=1",
+            "MOJOLEARN_AFT_N11=1",
+            "MOJOLEARN_AFT_N12=1",
+            "MOJOLEARN_AFT_P01=1",
+            "MOJOLEARN_AFT_P03=1",
+            "MOJOLEARN_AFT_P04=1",
+            "MOJOLEARN_AFT_P05=1",
+            "MOJOLEARN_AFT_P06=1",
+            "MOJOLEARN_AFT_P07=1",
+            "MOJOLEARN_AFT_P08=1",
+            "MOJOLEARN_AFT_P09=1",
+            "MOJOLEARN_AFT_P10=1",
+            "MOJOLEARN_AFT_P11=1",
+            "MOJOLEARN_AFT_P12=1",
+            "MOJOLEARN_DECOMP_FAST_GEMM_TILED=1",
+            "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1",
+            "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1",
+            "MOJOLEARN_GBDT_PREDICT_PACKED=1",
+            "MOJOLEARN_HDB_CORE_TILE=1",
+            "MOJOLEARN_NB_CAT_ATOMIC=1",
+            "MOJOLEARN_PCA_FAST_COMPENSATED_COV=1",
+            "MOJOLEARN_QN_FAST_COALESCED_OFF=1",
+            "MOJOLEARN_QR_FAST_DEV=1",
+            "MOJOLEARN_RESAMPLE_FAST_GATHER=1",
+            "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER=1",
+            "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR=1",
+            "MOJOLEARN_SYM_RESOLVE_BLOCK=1"
+          ],
+          "environment": {
+            "MOJOLEARN_NUMERIC_MODE": "fast",
+            "MOJOLEARN_X_LINEAR_ENETCV_FAST": "1",
+            "MOJOLEARN_X_PREP_FAST_II_CONV": "1"
+          },
+          "runtime": {}
+        },
+        "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "dataset_version": "classification-full-v1; original loader archive 31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "serial whole-machine allocation; Apple CPU libraries unrestricted, Linux actual cgroup; shared lock; no overlapping transfer"
+        },
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "algorithm": "nipals",
+            "max_iter": 500,
+            "n_components": 2,
+            "scale": true,
+            "tol": 1e-06
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": null,
+          "cgroup": {},
+          "cpu_count": 28,
+          "machine": "arm64",
+          "native_readback": {
+            "config": "mojolearn.PLSCanonical(algorithm='nipals', max_iter=500, n_components=2, scale=True, tol=1e-06)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/A/mojolearn/__init__.py",
+            "numeric_mode_env": "fast",
+            "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+            "numeric_mode_used": "fast",
+            "pre_clock_fit": false,
+            "vendor_used": "metal",
+            "version": "0.8.37"
+          },
+          "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+          "sysctl": {
+            "hw.memsize": "274877906944",
+            "hw.ncpu": "28",
+            "machdep.cpu.brand_string": "Apple M3 Ultra"
+          },
+          "system": "Darwin"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "AF.C.AFCL-G01",
+          "AF.C.AFCL-G03",
+          "AF.C.AFCL-G04",
+          "AF.C.AFCL-G05",
+          "AF.C.AFCL-G06",
+          "AF.C.AFCL-G07",
+          "AF.C.AFCL-G08",
+          "AF.C.AFCL-G09",
+          "AF.C.AFCL-G10",
+          "AF.C.AFCL-G11",
+          "AF.C.AFCL-G12",
+          "AF.C.AFCL-G13",
+          "AF.C.AFCL-G14",
+          "AF.C.AFCL-L01",
+          "AF.C.AFCL-L02",
+          "AF.C.AFCL-L03",
+          "AF.C.AFCL-L04",
+          "AF.C.AFCL-L05",
+          "AF.C.AFCL-L06",
+          "AF.C.AFCL-L07",
+          "AF.C.AFCL-L08",
+          "AF.C.AFCL-L09",
+          "AF.C.AFCL-L10",
+          "AF.C.AFCL-L11",
+          "AF.C.AFCL-L12",
+          "AF.C.AFCL-L13",
+          "AF.C.AFCL-L14",
+          "AF.C.AFCL-P01",
+          "AF.C.AFCL-P02",
+          "AF.C.AFCL-P03",
+          "AF.C.AFCL-P04",
+          "AF.C.AFCL-P05",
+          "AF.C.AFCL-P06",
+          "AF.C.AFCL-P07",
+          "AF.C.AFCL-P08",
+          "AF.C.AFCL-P09",
+          "AF.C.AFCL-P10",
+          "AF.C.AFCL-P11",
+          "AF.C.AFCL-P12",
+          "AF.C.AFCL-P13",
+          "AF.C.AFCL-P14",
+          "AF.C.AFCL-T01",
+          "AF.C.AFCL-T02",
+          "AF.C.AFCL-T03",
+          "AF.C.AFCL-T04",
+          "AF.C.AFCL-T05",
+          "AF.C.AFCL-T06",
+          "AF.C.AFCL-T07",
+          "AF.C.AFCL-T08",
+          "AF.C.AFCL-T09",
+          "AF.C.AFCL-T10",
+          "AF.C.AFCL-T11",
+          "AF.C.AFCL-T12",
+          "AF.T.F01",
+          "AF.T.F02",
+          "AF.T.F03",
+          "AF.T.F04",
+          "AF.T.F05",
+          "AF.T.F06",
+          "AF.T.F07",
+          "AF.T.F08",
+          "AF.T.F09",
+          "AF.T.F10",
+          "AF.T.F11",
+          "AF.T.F12",
+          "AF.T.G01",
+          "AF.T.G02",
+          "AF.T.G04",
+          "AF.T.G05",
+          "AF.T.G07",
+          "AF.T.G08",
+          "AF.T.G09",
+          "AF.T.G10",
+          "AF.T.G11",
+          "AF.T.G12",
+          "AF.T.N01",
+          "AF.T.N02",
+          "AF.T.N03",
+          "AF.T.N04",
+          "AF.T.N05",
+          "AF.T.N06",
+          "AF.T.N07",
+          "AF.T.N08",
+          "AF.T.N09",
+          "AF.T.N10",
+          "AF.T.N11",
+          "AF.T.N12",
+          "AF.T.P01",
+          "AF.T.P03",
+          "AF.T.P04",
+          "AF.T.P05",
+          "AF.T.P06",
+          "AF.T.P07",
+          "AF.T.P08",
+          "AF.T.P09",
+          "AF.T.P10",
+          "AF.T.P11",
+          "AF.T.P12",
+          "AF.N.A01",
+          "AF.N.A02",
+          "AF.N.A03",
+          "AF.N.A04",
+          "AF.N.A05",
+          "AF.N.A06",
+          "AF.N.A07",
+          "AF.N.A08",
+          "AF.N.A09",
+          "AF.N.A10",
+          "AF.N.A11",
+          "AF.N.A12",
+          "AF.N.T01",
+          "AF.N.T02",
+          "AF.N.T03",
+          "AF.N.T04",
+          "AF.N.T05",
+          "AF.N.T06",
+          "AF.N.T07",
+          "AF.N.T08",
+          "AF.N.T09",
+          "AF.N.T10",
+          "AF.N.T11",
+          "AF.N.T12",
+          "AF.N.M01",
+          "AF.N.M02",
+          "AF.N.M03",
+          "AF.N.M04",
+          "AF.N.M05",
+          "AF.N.M06",
+          "AF.N.M07",
+          "AF.N.M08",
+          "AF.N.M09",
+          "AF.N.M10",
+          "AF.N.E01",
+          "AF.N.E02",
+          "AF.N.E03",
+          "AF.N.E04",
+          "AF.N.E05",
+          "AF.N.E06",
+          "AF.N.E07",
+          "AF.N.E08",
+          "AF.N.E09",
+          "AF.N.E10"
+        ],
+        "loaded_artifacts": {
+          "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/A/mojolearn/_mojolearn.so": "9ca15115c4e098c0f5435251fbc2993788dc3307c480873a54911e684cfa7d61",
+          "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/A/mojolearn/_mojolearn_x_decomp.so": "4cdd453dfa63540671edcac772a1a275045c8e19c8e09560618d419a3aceceb1"
+        },
+        "missing_timing_scopes": [],
+        "mode": "fast",
+        "model_state": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "PLSCanonical",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "output_sha256": "46f1a145c85248c83516cdbd7b6982d33d4dd7f1a4afa9938c5c8d2b4eb06a40",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 8000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.xs",
+              "shape": [
+                500000,
+                2
+              ]
+            },
+            {
+              "bytes": 8000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.ys",
+              "shape": [
+                500000,
+                2
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "46f1a145c85248c83516cdbd7b6982d33d4dd7f1a4afa9938c5c8d2b4eb06a40",
+          "status": "CAPTURED"
+        },
+        "phase": "scored",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "missing_state": [
+                "reviewed complete typed fitted-state export"
+              ],
+              "partial_export": {
+                "class": "PLSCanonical",
+                "reason": "no public state_dict or save export",
+                "schema": "mojolearn-benchmark-state-v1",
+                "status": "unavailable"
+              },
+              "reason": "Public export is not a reviewed complete fitted-state contract",
+              "status": "UNAVAILABLE"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 8000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.xs",
+                  "shape": [
+                    500000,
+                    2
+                  ]
+                },
+                {
+                  "bytes": 8000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.ys",
+                  "shape": [
+                    500000,
+                    2
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "46f1a145c85248c83516cdbd7b6982d33d4dd7f1a4afa9938c5c8d2b4eb06a40",
+              "status": "CAPTURED"
+            },
+            "timings": {
+              "consumed_output_seconds": 0.0017767079407349229,
+              "fit_or_training_seconds": 4.6809093749616295,
+              "inference_seconds": 0.28943420806899667,
+              "repeated_seconds": 4.972120707971044
+            }
+          }
+        ],
+        "resource_policy": {
+          "policy": "dedicated Apple; CPU libraries unrestricted"
+        },
+        "retained_output_values": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/classification-full-v1/runs/b0667caada66668f51aa/attempts/attempt-0001/scored-A.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.PLSCanonical(algorithm='nipals', max_iter=500, n_components=2, scale=True, tol=1e-06)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/A/mojolearn/__init__.py",
+          "numeric_mode_env": "fast",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+          "numeric_mode_used": "fast",
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "mean_canonical_corr": 0.8763007936505436
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": null,
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+        "timings": {
+          "cold_seconds": 5.837604667060077,
+          "consumed_output_seconds": 0.012578292051330209,
+          "fit_or_training_seconds": 4.804059333051555,
+          "full_operation_seconds": 5.837604667060077,
+          "inference_seconds": 0.275840749964118,
+          "preparation_seconds": 0.7451257919892669
+        },
+        "vendor": "apple",
+        "workload_id": "algos/pls-canonical@dataset=istella@input=classification-full-v1",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": false
+        }
+      },
+      "output_sha256": "46f1a145c85248c83516cdbd7b6982d33d4dd7f1a4afa9938c5c8d2b4eb06a40",
+      "model_state": {
+        "missing_state": [
+          "reviewed complete typed fitted-state export"
+        ],
+        "partial_export": {
+          "class": "PLSCanonical",
+          "reason": "no public state_dict or save export",
+          "schema": "mojolearn-benchmark-state-v1",
+          "status": "unavailable"
+        },
+        "reason": "Public export is not a reviewed complete fitted-state contract",
+        "status": "UNAVAILABLE"
+      },
+      "timings": {
+        "cold_seconds": 5.837604667060077,
+        "consumed_output_seconds": 0.012578292051330209,
+        "fit_or_training_seconds": 4.804059333051555,
+        "full_operation_seconds": 5.837604667060077,
+        "inference_seconds": 0.275840749964118,
+        "preparation_seconds": 0.7451257919892669
+      },
+      "model_identity_available": false
+    },
+    {
+      "phase": "scored",
+      "arm": "B",
+      "excluded": false,
+      "returncode": 0,
+      "process_wall_seconds": 10.611838102340698,
+      "log": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/classification-full-v1/runs/b0667caada66668f51aa/attempts/attempt-0001/scored-B.log",
+      "output": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/classification-full-v1/runs/b0667caada66668f51aa/attempts/attempt-0001/scored-B.json",
+      "result_sha256": "cd023ced5dbc67838d3a176ad5214863378500fbb896c776e33fb8e9cfe99aa1",
+      "result": {
+        "arm": "B",
+        "compiler": [
+          "Mojo 1.0.0 (ed45d567)",
+          "Mojo 1.0.0 (ed45d567)"
+        ],
+        "configuration": {
+          "defines": [],
+          "environment": {},
+          "runtime": {}
+        },
+        "dataset_sha256": "131890c3e3d4f50e5bd86ddb9c5c884437fe614519f22aac040a20ee2ca8641b",
+        "dataset_split": {
+          "fit": "all original loader training rows",
+          "original_preparation_caps": {
+            "query": 100000,
+            "train": 1000000
+          },
+          "population": "all train.txt rows, first500000 of separate test.txt; relevance > 0",
+          "preparation_caps": {
+            "query": null,
+            "train": null
+          },
+          "query": "all original loader query rows"
+        },
+        "dataset_version": "classification-full-v1; original loader archive 31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+        "declared_hardware": null,
+        "declared_resource_policy": {
+          "policy": "serial whole-machine allocation; Apple CPU libraries unrestricted, Linux actual cgroup; shared lock; no overlapping transfer"
+        },
+        "dimensions": {
+          "X": [
+            2043304,
+            220
+          ],
+          "Xq": [
+            500000,
+            220
+          ],
+          "y": [
+            2043304
+          ],
+          "yq": [
+            500000
+          ]
+        },
+        "effective_pools": null,
+        "estimator_settings": {
+          "__record__": true,
+          "library": "mojolearn",
+          "params": {
+            "algorithm": "nipals",
+            "max_iter": 500,
+            "n_components": 2,
+            "scale": true,
+            "tol": 1e-06
+          },
+          "source": "get_params"
+        },
+        "full_dataset_coverage": true,
+        "hardware": {
+          "affinity": null,
+          "cgroup": {},
+          "cpu_count": 28,
+          "machine": "arm64",
+          "native_readback": {
+            "config": "mojolearn.PLSCanonical(algorithm='nipals', max_iter=500, n_components=2, scale=True, tol=1e-06)",
+            "device": "gpu",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/__init__.py",
+            "numeric_mode_env": "fast",
+            "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+            "numeric_mode_used": "fast",
+            "pre_clock_fit": false,
+            "vendor_used": "metal",
+            "version": "0.8.37"
+          },
+          "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+          "sysctl": {
+            "hw.memsize": "274877906944",
+            "hw.ncpu": "28",
+            "machdep.cpu.brand_string": "Apple M3 Ultra"
+          },
+          "system": "Darwin"
+        },
+        "harness_sha256": "6f980e29bd622556c157e16a25d41fc18496bcf67b66bc98450b34a4870445b9",
+        "hashing_outside_timing": true,
+        "implementation_ids": [
+          "AF.C.AFCL-G01",
+          "AF.C.AFCL-G03",
+          "AF.C.AFCL-G04",
+          "AF.C.AFCL-G05",
+          "AF.C.AFCL-G06",
+          "AF.C.AFCL-G07",
+          "AF.C.AFCL-G08",
+          "AF.C.AFCL-G09",
+          "AF.C.AFCL-G10",
+          "AF.C.AFCL-G11",
+          "AF.C.AFCL-G12",
+          "AF.C.AFCL-G13",
+          "AF.C.AFCL-G14",
+          "AF.C.AFCL-L01",
+          "AF.C.AFCL-L02",
+          "AF.C.AFCL-L03",
+          "AF.C.AFCL-L04",
+          "AF.C.AFCL-L05",
+          "AF.C.AFCL-L06",
+          "AF.C.AFCL-L07",
+          "AF.C.AFCL-L08",
+          "AF.C.AFCL-L09",
+          "AF.C.AFCL-L10",
+          "AF.C.AFCL-L11",
+          "AF.C.AFCL-L12",
+          "AF.C.AFCL-L13",
+          "AF.C.AFCL-L14",
+          "AF.C.AFCL-P01",
+          "AF.C.AFCL-P02",
+          "AF.C.AFCL-P03",
+          "AF.C.AFCL-P04",
+          "AF.C.AFCL-P05",
+          "AF.C.AFCL-P06",
+          "AF.C.AFCL-P07",
+          "AF.C.AFCL-P08",
+          "AF.C.AFCL-P09",
+          "AF.C.AFCL-P10",
+          "AF.C.AFCL-P11",
+          "AF.C.AFCL-P12",
+          "AF.C.AFCL-P13",
+          "AF.C.AFCL-P14",
+          "AF.C.AFCL-T01",
+          "AF.C.AFCL-T02",
+          "AF.C.AFCL-T03",
+          "AF.C.AFCL-T04",
+          "AF.C.AFCL-T05",
+          "AF.C.AFCL-T06",
+          "AF.C.AFCL-T07",
+          "AF.C.AFCL-T08",
+          "AF.C.AFCL-T09",
+          "AF.C.AFCL-T10",
+          "AF.C.AFCL-T11",
+          "AF.C.AFCL-T12",
+          "AF.T.F01",
+          "AF.T.F02",
+          "AF.T.F03",
+          "AF.T.F04",
+          "AF.T.F05",
+          "AF.T.F06",
+          "AF.T.F07",
+          "AF.T.F08",
+          "AF.T.F09",
+          "AF.T.F10",
+          "AF.T.F11",
+          "AF.T.F12",
+          "AF.T.G01",
+          "AF.T.G02",
+          "AF.T.G04",
+          "AF.T.G05",
+          "AF.T.G07",
+          "AF.T.G08",
+          "AF.T.G09",
+          "AF.T.G10",
+          "AF.T.G11",
+          "AF.T.G12",
+          "AF.T.N01",
+          "AF.T.N02",
+          "AF.T.N03",
+          "AF.T.N04",
+          "AF.T.N05",
+          "AF.T.N06",
+          "AF.T.N07",
+          "AF.T.N08",
+          "AF.T.N09",
+          "AF.T.N10",
+          "AF.T.N11",
+          "AF.T.N12",
+          "AF.T.P01",
+          "AF.T.P03",
+          "AF.T.P04",
+          "AF.T.P05",
+          "AF.T.P06",
+          "AF.T.P07",
+          "AF.T.P08",
+          "AF.T.P09",
+          "AF.T.P10",
+          "AF.T.P11",
+          "AF.T.P12",
+          "AF.N.A01",
+          "AF.N.A02",
+          "AF.N.A03",
+          "AF.N.A04",
+          "AF.N.A05",
+          "AF.N.A06",
+          "AF.N.A07",
+          "AF.N.A08",
+          "AF.N.A09",
+          "AF.N.A10",
+          "AF.N.A11",
+          "AF.N.A12",
+          "AF.N.T01",
+          "AF.N.T02",
+          "AF.N.T03",
+          "AF.N.T04",
+          "AF.N.T05",
+          "AF.N.T06",
+          "AF.N.T07",
+          "AF.N.T08",
+          "AF.N.T09",
+          "AF.N.T10",
+          "AF.N.T11",
+          "AF.N.T12",
+          "AF.N.M01",
+          "AF.N.M02",
+          "AF.N.M03",
+          "AF.N.M04",
+          "AF.N.M05",
+          "AF.N.M06",
+          "AF.N.M07",
+          "AF.N.M08",
+          "AF.N.M09",
+          "AF.N.M10",
+          "AF.N.E01",
+          "AF.N.E02",
+          "AF.N.E03",
+          "AF.N.E04",
+          "AF.N.E05",
+          "AF.N.E06",
+          "AF.N.E07",
+          "AF.N.E08",
+          "AF.N.E09",
+          "AF.N.E10"
+        ],
+        "loaded_artifacts": {
+          "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/_mojolearn.so": "4c6fcc6c36feda05054e19672696fa0aa21aad41faa9dab99fac0a53fbcc6ebf",
+          "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/_mojolearn_x_decomp.so": "7c55b0805e4285997a3b67f91aad0196edc230a01f962c4a73d712310d129353"
+        },
+        "missing_timing_scopes": [],
+        "mode": "fast",
+        "model_state": {
+          "missing_state": [
+            "reviewed complete typed fitted-state export"
+          ],
+          "partial_export": {
+            "class": "PLSCanonical",
+            "reason": "no public state_dict or save export",
+            "schema": "mojolearn-benchmark-state-v1",
+            "status": "unavailable"
+          },
+          "reason": "Public export is not a reviewed complete fitted-state contract",
+          "status": "UNAVAILABLE"
+        },
+        "output_sha256": "172111dcb0892bfd9cac60fefd9789433e879915a4212eca60c69287514e652a",
+        "outputs": {
+          "completeness": "complete_declared_scope",
+          "encoding": "mojolearn-benchmark-state-v1",
+          "manifest": [
+            {
+              "bytes": 8000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.xs",
+              "shape": [
+                500000,
+                2
+              ]
+            },
+            {
+              "bytes": 8000000,
+              "dtype": "<f8",
+              "encoding": "C-order raw bytes; dtype endian preserved",
+              "path": "$.ys",
+              "shape": [
+                500000,
+                2
+              ]
+            }
+          ],
+          "missing_state": [],
+          "scope": "all declared consumed outputs",
+          "sha256": "172111dcb0892bfd9cac60fefd9789433e879915a4212eca60c69287514e652a",
+          "status": "CAPTURED"
+        },
+        "phase": "scored",
+        "repeated_use": [
+          {
+            "index": 0,
+            "model_state": {
+              "missing_state": [
+                "reviewed complete typed fitted-state export"
+              ],
+              "partial_export": {
+                "class": "PLSCanonical",
+                "reason": "no public state_dict or save export",
+                "schema": "mojolearn-benchmark-state-v1",
+                "status": "unavailable"
+              },
+              "reason": "Public export is not a reviewed complete fitted-state contract",
+              "status": "UNAVAILABLE"
+            },
+            "outputs": {
+              "completeness": "complete_declared_scope",
+              "encoding": "mojolearn-benchmark-state-v1",
+              "manifest": [
+                {
+                  "bytes": 8000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.xs",
+                  "shape": [
+                    500000,
+                    2
+                  ]
+                },
+                {
+                  "bytes": 8000000,
+                  "dtype": "<f8",
+                  "encoding": "C-order raw bytes; dtype endian preserved",
+                  "path": "$.ys",
+                  "shape": [
+                    500000,
+                    2
+                  ]
+                }
+              ],
+              "missing_state": [],
+              "scope": "repeated consumed outputs",
+              "sha256": "e9a189017cdc496fdf629464607806e73767c4932552cab24c2064291032afd6",
+              "status": "CAPTURED"
+            },
+            "timings": {
+              "consumed_output_seconds": 0.0010102089727297425,
+              "fit_or_training_seconds": 3.483055084012449,
+              "inference_seconds": 0.28561716608237475,
+              "repeated_seconds": 3.769682875019498
+            }
+          }
+        ],
+        "resource_policy": {
+          "policy": "dedicated Apple; CPU libraries unrestricted"
+        },
+        "retained_output_values": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/classification-full-v1/runs/b0667caada66668f51aa/attempts/attempt-0001/scored-B.values.json",
+        "runtime_reach": {
+          "config": "mojolearn.PLSCanonical(algorithm='nipals', max_iter=500, n_components=2, scale=True, tol=1e-06)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/packages-next6/B/mojolearn/__init__.py",
+          "numeric_mode_env": "fast",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+          "numeric_mode_used": "fast",
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.37"
+        },
+        "sample_counts": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "schema": "mojolearn.full-ab-result/1",
+        "seed": 7,
+        "source_coverage_pending": [],
+        "source_sha": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+        "status": "PASS",
+        "task_quality": {
+          "gate_source": "tools/bench_board_algos.py:quality; original bench_board_algos.quality branch cca; existing matching full-opponent gates pending",
+          "metrics": {
+            "ours-fast": {
+              "mean_canonical_corr": 0.8763008127460923
+            }
+          },
+          "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+          "status": "PENDING"
+        },
+        "thread_environment": {
+          "MKL_NUM_THREADS": null,
+          "MOJOLEARN_BENCH_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "timed_boundary": "Load/prepare exact new full inputs and unchanged lane transforms + construction + full prescribed fit + original separate inference when present + required synchronization + consume every declared output; hashes/quality outside timing",
+        "timings": {
+          "cold_seconds": 4.63670854200609,
+          "consumed_output_seconds": 0.012401333078742027,
+          "fit_or_training_seconds": 3.6092154580401257,
+          "full_operation_seconds": 4.63670854200609,
+          "inference_seconds": 0.27120120893232524,
+          "preparation_seconds": 0.7438900419510901
+        },
+        "vendor": "apple",
+        "workload_id": "algos/pls-canonical@dataset=istella@input=classification-full-v1",
+        "master_qualification": {
+          "timing": "timed",
+          "quality": "not_assessed",
+          "identity": "not_assessed",
+          "accepted": false,
+          "promoted": false,
+          "complete_state_available": false
+        }
+      },
+      "output_sha256": "172111dcb0892bfd9cac60fefd9789433e879915a4212eca60c69287514e652a",
+      "model_state": {
+        "missing_state": [
+          "reviewed complete typed fitted-state export"
+        ],
+        "partial_export": {
+          "class": "PLSCanonical",
+          "reason": "no public state_dict or save export",
+          "schema": "mojolearn-benchmark-state-v1",
+          "status": "unavailable"
+        },
+        "reason": "Public export is not a reviewed complete fitted-state contract",
+        "status": "UNAVAILABLE"
+      },
+      "timings": {
+        "cold_seconds": 4.63670854200609,
+        "consumed_output_seconds": 0.012401333078742027,
+        "fit_or_training_seconds": 3.6092154580401257,
+        "full_operation_seconds": 4.63670854200609,
+        "inference_seconds": 0.27120120893232524,
+        "preparation_seconds": 0.7438900419510901
+      },
+      "model_identity_available": false
     }
   ],
   "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/classification-full-v1/runs/b0667caada66668f51aa/attempts/attempt-0001/receipt.json",
   "previous_receipt": null,
   "warmup_scope": "separate_process",
-  "steady_state_claim": false
+  "steady_state_claim": false,
+  "finished": 1791313013.4484491,
+  "status": "MEASURED_FULL",
+  "model_identity_available": false
 }
