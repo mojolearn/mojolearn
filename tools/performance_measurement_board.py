@@ -116,13 +116,16 @@ def write(board, out):
                            for c in card['cells'])
             lines.append(f"| {card['id']} | {card['mode']} | {escape(card['status'])} | {measured} |")
         lines += ['', '## Captured evidence', '',
-                  '| Candidate | Vendor / route | Case | Scope | Status | A/B time | Evidence |',
-                  '|---|---|---|---|---|---:|---|']
+                  'Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.', '',
+                  '| Candidate | Vendor / route | Case | Scope | Status | Admitted A/B | Observed A/B | Evidence |',
+                  '|---|---|---|---|---|---:|---:|---|']
         for card in data['cards']:
             for cell in card['cells']:
                 ratio = cell.get('candidate_over_baseline')
+                observed = cell.get('unqualified_timing', {}).get('observed_candidate_over_baseline', ratio)
                 values = [card['id'], cell['vendor'] + '/' + cell.get('route', 'default'), cell.get('case', ''),
-                          cell.get('scope', ''), cell['status'], f'{ratio:.4f}' if ratio is not None else '—', cell.get('evidence', '')]
+                          cell.get('scope', ''), cell['status'], f'{ratio:.4f}' if ratio is not None else '—',
+                          f'{observed:.4f}' if observed is not None else '—', cell.get('evidence', '')]
                 lines.append('| ' + ' | '.join(map(escape, values)) + ' |')
         lines += ['', '## Campaign notes', ''] + ['- ' + escape(n) for n in data['notes']]
         if data['decisions']:

@@ -99,7 +99,7 @@
       "base_sha256": "a71a1717323f1147885328228828b34bc0d42d3391e32c44cab0fbd7e165a3b9",
       "changed": true,
       "changed_incumbent_module_assignments": {},
-      "integrated_sha256": "bbace775f06a0729700dc54a91a744a5a976510fb3dd63b6b0194e9c0d289b70",
+      "integrated_sha256": "bae31f4642a8adf38ac007e92a921a070e742e1c7672ffdf5b495b2ed1c219c9",
       "path": "tools/performance_measurement_board.py"
     },
     {
@@ -156,7 +156,7 @@
   "merge_review": {
     "numerical_validation": "Retained metadata rendering only; no compilation or numerical verification",
     "reviewed_changes": {
-      "tools/performance_measurement_board.py": "Separate footer retains failed/quality-rejected attempts, worker exits, sample coverage and explicitly unqualified complete-pair timing. Fix ratio label to A/B. No changed metrics, dataset, estimator or default acceptance."
+      "tools/performance_measurement_board.py": "Separate footer retains failed/quality-rejected attempts, worker exits, sample coverage and explicitly unqualified complete-pair timing. Fix ratio label to A/B. No changed metrics, dataset, estimator or default acceptance. Show observed complete-pair ratios separately from admitted ratios; pending quality/identity remains explicit."
     },
     "source_sha": "00ae203818d188a132dad37429423fd8c558bde2"
   },

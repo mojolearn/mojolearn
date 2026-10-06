@@ -9,8 +9,10 @@ Component and public-caller fixtures retain their stated scope. Full-workload re
 
 ## Captured evidence
 
-| Candidate | Vendor / route | Case | Scope | Status | A/B time | Evidence |
-|---|---|---|---|---|---:|---|
+Observed ratios retain complete scored pairs even while quality or identity is pending. They are not admitted gains or default decisions. A is candidate; B is baseline.
+
+| Candidate | Vendor / route | Case | Scope | Status | Admitted A/B | Observed A/B | Evidence |
+|---|---|---|---|---|---:|---:|---|
 
 ## Campaign notes
 
