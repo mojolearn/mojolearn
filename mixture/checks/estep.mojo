@@ -1076,6 +1076,7 @@ def mahal_stacked_kernel(
 # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
 comptime GMM_COMPONENT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    # NEVER RUN — PENDING VALIDATION
     and is_defined["MOJOLEARN_IDN_GMM_COMPONENT_BATCH"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
