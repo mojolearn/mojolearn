@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# F08: qualification pending. Build every independent variant; device quality,
+# complete-call speed, peak scratch and opponent admission remain separate gates.
+# New experiment mechanisms remain opt-in; existing promoted defaults are retained.
 """Backward-only A/B measured on training, including swapped views and recovery."""
 import sys
 from pathlib import Path
