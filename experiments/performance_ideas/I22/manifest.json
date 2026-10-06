@@ -12,16 +12,14 @@
   "implementation_paths": [
     "experiments/performance_ideas/I22/check.mojo",
     "x_decomp/tsqr_device.mojo",
-    "experiments/performance_ideas/I22/reuse_check.mojo"
+    "experiments/performance_ideas/I22/reuse_check.mojo",
+    "experiments/performance_ideas/I22/campaign.py"
   ],
   "candidate_defines": [
     "MOJOLEARN_IDN_TSQR_REUSE=1",
     "MOJOLEARN_IDN_TSQR_STRIP_UPDATE=1"
   ],
-  "baseline_defines": [
-    "MOJOLEARN_IDN_TSQR_GRID_OFF=1",
-    "MOJOLEARN_IDN_TSQR_NORM_OFF=1"
-  ],
+  "baseline_defines": [],
   "build_argv": [
     "{python}",
     "{repo}/gemm/experiments/native_build.py",
@@ -68,10 +66,9 @@
     "--mojo",
     "{mojo}",
     "--output",
-    "{output}",
-    "--define",
-    "MOJOLEARN_IDN_TSQR_GRID_OFF=1",
-    "--define",
-    "MOJOLEARN_IDN_TSQR_NORM_OFF=1"
+    "{output}"
+  ],
+  "validation_argv": [
+    "{output}"
   ]
 }
