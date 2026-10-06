@@ -16,6 +16,24 @@ from arima.impl.batched_kalman import fast_kalman_into
 from arima.impl.tsa.arima_common import ARIMAOrder
 
 
+def _plant_prepared_refusal(ctx: DeviceContext, mut held: FastEvalWS) raises:
+    """Raw zero variance is accepted by the production Jones floor.
+
+    Verify that contract first, then plant zero *transformed* variance in
+    series 1's members. This is the genuine trans=False filter refusal used
+    by check_arima_refuses_by_name, not a change to optimizer admission.
+    """
+    var sigma=ctx.enqueue_create_host_buffer[DType.float32](held.eb)
+    ctx.enqueue_copy(dst_ptr=sigma.unsafe_ptr(),src_buf=held.t_params.sigma2)
+    ctx.synchronize()
+    for member in range(held.N+1):
+        var index=member*held.nb+1
+        if sigma[index]<=Float32(0):raise Error("actual Jones variance floor was lost")
+        sigma[index]=Float32(0)
+    ctx.enqueue_copy(dst_buf=held.t_params.sigma2,src_buf=sigma)
+    ctx.synchronize()
+
+
 def _case(nobs: Int,refuse: Bool=False) raises:
     comptime assert PRODUCT_DF_ON,"compile the Apple FAST product DF candidate"
     var ctx=DeviceContext()
@@ -37,6 +55,8 @@ def _case(nobs: Int,refuse: Bool=False) raises:
     var rh=ctx.enqueue_create_host_buffer[DType.float32](nb*N)
     var fh=ctx.enqueue_create_host_buffer[DType.float32](nb)
     var bh=ctx.enqueue_create_host_buffer[DType.int32](nb)
+    var init_h=ctx.enqueue_create_host_buffer[DType.int32](eb)
+    var loop_h=ctx.enqueue_create_host_buffer[DType.int32](eb)
     ctx.synchronize()
     for b in range(nb):
         hx[b*N]=Float32(0.1)
@@ -50,10 +70,13 @@ def _case(nobs: Int,refuse: Bool=False) raises:
     if not held.compensated:raise Error("actual product adapter not reached")
     var h=Float32(0.0009765625);var scale=Float32(nobs)
     held.prepare(ctx,order,h,x,bad)
+    if refuse:_plant_prepared_refusal(ctx,held)
     fast_kalman_into(ctx,held.y_ext,held.t_params,order,eb,nobs,held.ws,32,0,True)
     ctx.enqueue_copy(dst_ptr=llh.unsafe_ptr(),src_buf=held.ws.loglike)
     ctx.enqueue_copy(dst_ptr=vh.unsafe_ptr(),src_buf=held.ws.vs)
     ctx.enqueue_copy(dst_ptr=Fh.unsafe_ptr(),src_buf=held.ws.Fs)
+    ctx.enqueue_copy(dst_ptr=init_h.unsafe_ptr(),src_buf=held.ws.info_init)
+    ctx.enqueue_copy(dst_ptr=loop_h.unsafe_ptr(),src_buf=held.ws.info_loop)
     ctx.enqueue_function[ew_finish_kernel](f,g,grad,xp,x,held.ws.loglike,held.ws.info_init,held.ws.info_loop,bad,Int32(nb),Int32(N),h,scale,grid_dim=(1,1,1),block_dim=(128,1,1))
     ctx.enqueue_copy(dst_ptr=gh.unsafe_ptr(),src_buf=g)
     ctx.enqueue_copy(dst_ptr=rh.unsafe_ptr(),src_buf=grad)
@@ -71,7 +94,12 @@ def _case(nobs: Int,refuse: Bool=False) raises:
         if bh[b]!=0 and not refuse:raise Error("valid actual initializer/filter refused")
         basef.append(fh[b])
         basebad.append(bh[b])
-    if refuse and basebad[1]==0:raise Error("invalid production variance did not refuse")
+    if refuse:
+        if basebad[1]==0:raise Error("zero prepared variance did not refuse")
+        for member in range(N+1):
+            var index=member*nb+1
+            if init_h[index]!=0 or loop_h[index]!=1:
+                raise Error("prepared variance refusal did not preserve first filter step")
     # cpu-route: independent captured-stage likelihood oracle for qualification.
     for member in range(eb):
         var total=Float64(0)
@@ -113,7 +141,12 @@ def _case(nobs: Int,refuse: Bool=False) raises:
     var route0=product_df_count(0);var route1=product_df_count(1)
     var routed_f=ctx.enqueue_create_host_buffer[DType.float32](nb)
     var routed_g=ctx.enqueue_create_host_buffer[DType.float32](nb*N)
-    held.loglike_at(ctx,order,h,x,bad)
+    if refuse:
+        held.prepare(ctx,order,h,x,bad)
+        _plant_prepared_refusal(ctx,held)
+        held.loglike_prepared(ctx,order)
+    else:
+        held.loglike_at(ctx,order,h,x,bad)
     held.finish(ctx,h,scale,x,grad,xp,f,g,bad)
     ctx.enqueue_copy(dst_ptr=routed_f.unsafe_ptr(),src_buf=f)
     ctx.enqueue_copy(dst_ptr=routed_g.unsafe_ptr(),src_buf=g)
@@ -123,6 +156,7 @@ def _case(nobs: Int,refuse: Bool=False) raises:
         if bitcast[DType.uint32](routed_f[b])!=bitcast[DType.uint32](fh[b]):raise Error("actual likelihood entry differs from qualified stages")
     for cell in range(nb*N):
         if bitcast[DType.uint32](routed_g[cell])!=bitcast[DType.uint32](gh[cell]):raise Error("actual gradient entry differs from qualified stages")
+    if refuse:print("PRODUCT_DF_REFUSAL_PASS Jones_floor_positive=True first_filter_step=1 objective_optimizer_raw_bits_preserved=True")
     print("PRODUCT_DF_ROUTE_PASS likelihood_launches=1 tail_launches=1")
 
 

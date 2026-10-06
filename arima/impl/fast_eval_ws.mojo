@@ -476,6 +476,16 @@ struct FastEvalWS(Movable):
         """Every member's objective at `d_x` (member 0 the unperturbed point)
         into `ws.loglike`: CSS or the Kalman filter, as `eval` takes it."""
         self.prepare(ctx, order, h, d_x, d_bad)
+        self.loglike_prepared(ctx, order)
+
+    def loglike_prepared(mut self, ctx: DeviceContext, order: ARIMAOrder) raises:
+        """Evaluate the retained transformed members without preparing again.
+
+        `loglike_at` uses this immediately after the original Jones stage.
+        Qualification can exercise the same adapter with refused transformed
+        parameters, as the production filter's `trans=False` contract allows.
+        Kernel arguments, arithmetic, refusal codes, and defaults are unchanged.
+        """
         if self.css:
             self.css_into(ctx, order)
         else:
