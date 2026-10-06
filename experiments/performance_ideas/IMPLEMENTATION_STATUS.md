@@ -11,6 +11,24 @@ and AMD decide IDENTICAL performance acceptance, while Apple and host also
 owe the same-version identity witnesses. Apple FAST measures task quality and
 completed public calls on the M3 Ultra.
 
+## Requested completion plan
+
+Finish all supported candidates, then compile each distinct source/define/target
+configuration once. Retain successful artifact receipts; repeat a build only
+when a relevant source fix invalidates it. Compilation runs on the rented
+NVIDIA builder and the retained M3 Ultra for Apple Metal. The M2 instance and
+its Dedicated Host are being retired after preserving their work.
+
+For IDENTICAL, collect exact-output GPU witnesses where hardware is available
+and record missing vendor/host checks explicitly. Every new experiment stays
+default off and pending numerical/performance qualification. Preserve existing
+promoted defaults. After the compile matrix passes, merge into main, retaining
+the per-card commit history. Do not require a timing campaign before this merge.
+
+The machine-readable [progress ledger](progress.json) records this plan and
+links the compile coverage. A manifest or successful parser check alone does
+not establish that every candidate configuration compiled.
+
 ## What the implementation establishes
 
 Each manifest names real source or an executable campaign for existing source,
@@ -113,7 +131,7 @@ on the existing device queues. I18's `paired_identity.py` checks complete forest
 witnesses on one device and deliberately emits a device-witness receipt rather
 than a global quality pass. Apple paired builds attest every prerequisite and
 both libraries at one source SHA; independent native oracles run before public
-caller measurements. Compilation is performed on the existing M2 peer and
-attested artifacts are transported to the M3 peer without rebuilding there.
+caller measurements. New compilation uses the NVIDIA RunPod builder and the
+retained M3 Ultra; older M2 artifacts retain their original source attestations.
 
 No production defaults or performance boards are changed by this work.

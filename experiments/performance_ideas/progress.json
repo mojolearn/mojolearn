@@ -1,0 +1,438 @@
+{
+  "schema": 1,
+  "user_plan": "finish candidates; compile each distinct configuration once; collect available IDENTICAL GPU witnesses; keep new experiments off and pending; merge main after compile success",
+  "compile_repetition_policy": "only repeat configurations affected by a source fix",
+  "performance_timing_required_before_merge": false,
+  "new_experiment_defaults": "off",
+  "qualification": "pending",
+  "main_merge": "pending_compile_matrix",
+  "unsupported_policy": "record missing Modular support or numerical contract explicitly; do not manufacture unsupported toolchain workarounds",
+  "hardware": {
+    "nvidia": "guarded rented NVIDIA RTX 4090 builder",
+    "apple": "retained M3 Ultra",
+    "m2_instance": "retirement_backup_in_progress",
+    "m2_dedicated_host": "retirement_pending"
+  },
+  "cards": [
+    {
+      "id": "I01",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I02",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I03",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I04",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I05",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I06",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I07",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I08",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I09",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I10",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I11",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I12",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I13",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I14",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I15",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I16",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I17",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I18",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I19",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I20",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I21",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I22",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I23",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "I24",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "A01",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "A02",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "A03",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "A04",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "A05",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "A06",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "A07",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "A08",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "N01",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "N02",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "N03",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "N04",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "N05",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "N06",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "N07",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "N08",
+      "mode": "identical",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F01",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F02",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F03",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F04",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F05",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F06",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F07",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F08",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F09",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F10",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F11",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F12",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F13",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F14",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F15",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F16",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F17",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F18",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F19",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    },
+    {
+      "id": "F20",
+      "mode": "fast",
+      "configuration_compile": "pending_matrix_receipts",
+      "gpu_witness": "pending",
+      "performance_qualification": "pending"
+    }
+  ]
+}
