@@ -840,7 +840,7 @@
         "sequence/mlp_fit.mojo"
       ],
       "candidate_defines": [
-        "MOJOLEARN_IDN_MLP_NO_HOST_ORDER"
+        "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER"
       ],
       "baseline_defines": [],
       "candidate_env": {},

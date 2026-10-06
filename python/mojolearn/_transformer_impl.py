@@ -1258,8 +1258,8 @@ class TransformerBlock(NumericModeMixin):
                   self.head_dim, self.intermediate, self.window]
         with self._runtime_lock:
             handle = ext.transformer_forward_tape(
-                [_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr(y)], params)
-        return y, (ext, handle, tuple(x.shape), tuple(a.shape for a in w))
+                [_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr(y)], params)  # glue: pass parameter buffer addresses
+        return y, (ext, handle, tuple(x.shape), tuple(a.shape for a in w))  # glue: retain parameter shape metadata
 
     def _backward_from_tape(self, tape, grad_output):
         ext, handle, shape, weight_shapes = tape
@@ -1267,9 +1267,9 @@ class TransformerBlock(NumericModeMixin):
         dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
                          what, "grad_output", shape)
         grads = [_buffers.empty(shape, "<f4")] + [
-            _buffers.empty(s, "<f4") for s in weight_shapes]  # glue: tensor metadata
+            _buffers.empty(s, "<f4") for s in weight_shapes]  # glue: allocate native output buffers by shape
         with self._runtime_lock:
-            ext.transformer_backward_tape(handle, [_addr_ro(dy)] + [_addr(g) for g in grads])
+            ext.transformer_backward_tape(handle, [_addr_ro(dy)] + [_addr(g) for g in grads])  # glue: pass gradient buffer addresses
         return dict(zip(("x",) + self._W_NAMES, grads))
 
     @staticmethod

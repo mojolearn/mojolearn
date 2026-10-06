@@ -102,7 +102,7 @@ def train_dev_free(ctx: DeviceContext, h: Int) raises:
     pool[].n[h] = 0
     comptime if IDN_TRAINING_GEMM_WORKSPACE:
         var any_live = False
-        for i in range(len(pool[].n)):  # metadata only: owned tensor handles
+        for i in range(len(pool[].n)):  # small-loop(pool: device-array handles): inspect allocation metadata, never tensor elements
             any_live = any_live or pool[].n[i] > 0
         if not any_live:
             training_gemm_cached_close(ctx)

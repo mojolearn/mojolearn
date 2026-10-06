@@ -406,7 +406,7 @@ Status: `wired_candidate_unverified`. Contract: **S**.
 
 New scheduling-only subarm removes unused host N-row permutation construction under existing device epochs and emits no-shuffle identity indices via the executor. Existing Feistel row mapping, seed/epoch keys, resident batches and curve fold remain unchanged. Host and GPU use the same item operation.
 
-A defines: `MOJOLEARN_IDN_MLP_NO_HOST_ORDER`.
+A defines: `MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER`.
 B defines: (existing defaults).
 
 No numerical state/checkpoint layout or arithmetic profile changes in this S primary arm; existing host computation is the counterpart. Compilation, cross-column identity and quality remain unverified.

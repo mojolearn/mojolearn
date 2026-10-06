@@ -1798,10 +1798,10 @@ class Mamba3Block(_MambaBase):
         # Glue only: one address/shape per parameter, no tensor data work.
         weights = self._w
         addresses = ([addr_ro(x, name="x")]
-                     + [addr_ro(w, name="weight") for w in weights]
+                     + [addr_ro(w, name="weight") for w in weights]  # glue: pass parameter buffer addresses
                      + [addr(y, name="output")])
         handle = extension.mamba3_forward_tape(addresses, [b, l, self.d_model])
-        tape = (extension, handle, x.shape, tuple(w.shape for w in weights))
+        tape = (extension, handle, x.shape, tuple(w.shape for w in weights))  # glue: retain parameter shape metadata
         return y, tape
 
     def _backward_from_tape(self, tape, grad_output):
@@ -1811,11 +1811,11 @@ class Mamba3Block(_MambaBase):
         dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
                          what, "grad_output", input_shape)
         gradients = ([_buffers.empty(input_shape, "<f4")]
-                     + [_buffers.empty(shape, "<f4") for shape in weight_shapes])
+                     + [_buffers.empty(shape, "<f4") for shape in weight_shapes])  # glue: allocate native output buffers by shape
         # Native code checks dy and tape validity before it executes the VJP.
         extension.mamba3_backward_tape(
             handle, [addr_ro(dy, name="grad_output")]
-            + [addr(g, name="gradient") for g in gradients])
+            + [addr(g, name="gradient") for g in gradients])  # glue: pass gradient buffer addresses
         return dict(zip(("x",) + self._W_NAMES, gradients))
 
     def _close_forward_tape(self, tape):

@@ -50,8 +50,8 @@ comptime MLP_EPOCH_DEV = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_EPOCH_DE
 # but construct even the no-shuffle identity order on the selected executor.
 # Avoid the otherwise unused host N-row permutation initialization. Default
 # OFF, includes host executor; no convergence/identity/performance evidence yet.
-comptime MLP_NO_HOST_ORDER = MLP_EPOCH_DEV and is_defined[
-    "MOJOLEARN_IDN_MLP_NO_HOST_ORDER"
+comptime MLP_DEVICE_EPOCH_ORDER = MLP_EPOCH_DEV and is_defined[
+    "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER"
 ]()
 comptime MLP_L2_BLOCK = AF_NORM_BLOCK
 comptime MLP_ROW_BLOCK = 256
@@ -389,7 +389,7 @@ def op_mlp_perm(t: Int, a: Args):
     on the two i1-bit halves of t, cycle-walked into [0, i0) (x_cnn/ops.mojo
     `epoch_rows_at`, the same function); i2..i5 the 64-bit key as 16-bit
     words, low first. Integers only: the same row on every column."""
-    comptime if MLP_NO_HOST_ORDER:
+    comptime if MLP_DEVICE_EPOCH_ORDER:
         if a.i6 != 0:
             st(a.p0, t, Float32(t))
             return
