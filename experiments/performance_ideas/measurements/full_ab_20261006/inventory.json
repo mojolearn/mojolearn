@@ -5,11 +5,14 @@
     "warmups": 1,
     "scored_samples": 1,
     "apple_order": [
-      "identical",
       "fast"
     ],
     "compilation_retest": false,
-    "identity_retest": false
+    "identity_retest": false,
+    "identical_vendors": [
+      "nvidia",
+      "amd"
+    ]
   },
   "candidates": [
     {

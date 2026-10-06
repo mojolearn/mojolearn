@@ -38,12 +38,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "A02",
@@ -78,12 +78,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "A03",
@@ -118,12 +118,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "A04",
@@ -158,12 +158,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "A05",
@@ -198,12 +198,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "A06",
@@ -238,12 +238,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "A07",
@@ -278,12 +278,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "A08",
@@ -318,12 +318,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "F01",
@@ -338,7 +338,7 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         },
@@ -815,12 +815,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F03",
@@ -835,12 +835,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F04",
@@ -855,12 +855,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F05",
@@ -875,12 +875,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F06",
@@ -895,12 +895,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F07",
@@ -915,12 +915,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F08",
@@ -935,12 +935,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F09",
@@ -955,12 +955,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F10",
@@ -975,12 +975,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F11",
@@ -995,7 +995,7 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         },
@@ -1365,12 +1365,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F13",
@@ -1385,12 +1385,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F14",
@@ -1405,12 +1405,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F15",
@@ -1425,12 +1425,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F16",
@@ -1445,12 +1445,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F17",
@@ -1465,12 +1465,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F18",
@@ -1485,12 +1485,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F19",
@@ -1505,12 +1505,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "F20",
@@ -1525,12 +1525,12 @@
           "mode": "fast",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES",
+          "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "WAITING_IDENTICAL_FIRST_AND_FULL_RECIPES"
+      "status": "REMAINING_FULL_WORKLOAD_COVERAGE_PENDING"
     },
     {
       "id": "I01",
@@ -1565,12 +1565,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I02",
@@ -1605,12 +1605,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I03",
@@ -1645,12 +1645,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I04",
@@ -1685,12 +1685,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I05",
@@ -1725,12 +1725,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I06",
@@ -1765,12 +1765,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I07",
@@ -1805,12 +1805,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I08",
@@ -1845,12 +1845,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I09",
@@ -1885,12 +1885,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I10",
@@ -1925,12 +1925,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I11",
@@ -1965,12 +1965,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I12",
@@ -2005,12 +2005,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I13",
@@ -2045,12 +2045,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I14",
@@ -2085,12 +2085,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I15",
@@ -2125,12 +2125,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I16",
@@ -2165,12 +2165,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I17",
@@ -2205,12 +2205,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I18",
@@ -2245,12 +2245,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I19",
@@ -2285,12 +2285,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I20",
@@ -2325,12 +2325,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I21",
@@ -2365,12 +2365,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I22",
@@ -2405,12 +2405,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I23",
@@ -2445,12 +2445,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "I24",
@@ -2485,12 +2485,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "N01",
@@ -2525,12 +2525,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "N02",
@@ -2565,12 +2565,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "N03",
@@ -2625,12 +2625,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "N05",
@@ -2665,12 +2665,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "N06",
@@ -2705,12 +2705,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "N07",
@@ -2745,12 +2745,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     },
     {
       "id": "N08",
@@ -2785,12 +2785,12 @@
           "mode": "identical",
           "vendor": "apple",
           "scope": "full_workload",
-          "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES",
+          "status": "NOT_SELECTED_CURRENT_SCOPE",
           "case": "candidate-to-full-workload mapping pending",
           "evidence": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple/artifact-inventory.json"
         }
       ],
-      "status": "PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
+      "status": "NOT_SELECTED_CURRENT_SCOPE, PENDING_FULL_WORKLOAD_ARTIFACTS_AND_RECIPES"
     }
   ],
   "notes": [
