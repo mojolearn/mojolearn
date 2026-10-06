@@ -20,6 +20,10 @@ def main() raises:
     var arm=fused_attention_arm_parse(String("stash_tiled_fgrid_r32_qres_pf"))
     comptime if is_defined["MOJOLEARN_IDN_ATTN_GQA_HEAD_REUSE"]():
         arm=fused_attention_arm_parse(String("stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"))
+    # Isolate I06's forward GQA reuse: both variants must keep the same
+    # existing backward kvgrid schedule. The original driver changed both.
+    comptime if is_defined["MOJOLEARN_MEASURE_I06_GQA"]():
+        arm=fused_attention_arm_parse(String("stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"))
     # I07 measures the existing retained-estash lifetime against its existing
     # recompute macro. The original no-estash word ran the same path twice.
     # Keep I06's selector unchanged; only affected I07 driver builds opt in.
