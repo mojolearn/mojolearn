@@ -1668,6 +1668,17 @@ comptime ORDERED_CAT_CURSORS = ORDERED_BATCH_EST
 #: chunks per (task, leaf) run in the batched reduce
 comptime ORDERED_BAT_CHUNKS = 8
 
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G11, AFT_G12
+
+# G11: four SIMD groups per prefix-task chunk reduce shared/register demand.
+# Keep every prefix, eight chunks, every weight and RNG mapping unchanged.
+# Uncompiled/unverified/unmeasured; only the FAST sum association changes.
+comptime AFT_ORDERED_REDUCE_BLOCK = 128 if AFT_G11 else ORDERED_BLOCK
+# G12: independent four-row tiles amortize task-bound lookup, retaining the
+# per-row leaf and task. Four bounds-checked coalesced stores need little
+# register state; no dataset/dimension rule. No performance/quality evidence.
+comptime AFT_ORDERED_APPLY_ROWS = 4 if AFT_G12 else 1
+
 
 def _ord_point[objective: Int](
     relev: Float32, val: Float32, weight: Float32, alpha: Float32, border: Float32
@@ -1764,9 +1775,9 @@ def _ord_bat_reduce_kernel[objective: Int](
         a1 += d[1]
         a2 += weight
         idx += Int(block_dim.x)
-    var s0 = pinned_block_sum[block_size=ORDERED_BLOCK](a0)
-    var s1 = pinned_block_sum[block_size=ORDERED_BLOCK](a1)
-    var s2 = pinned_block_sum[block_size=ORDERED_BLOCK](a2)
+    var s0 = pinned_block_sum[block_size=AFT_ORDERED_REDUCE_BLOCK](a0)
+    var s1 = pinned_block_sum[block_size=AFT_ORDERED_REDUCE_BLOCK](a1)
+    var s2 = pinned_block_sum[block_size=AFT_ORDERED_REDUCE_BLOCK](a2)
     if Int(thread_idx.x) == 0:
         var at = 3 * (
             ((Int(task_base_in) + tl) * Int(leaf_cap_in) + b) * nc + c
@@ -1829,17 +1840,47 @@ def _ord_bat_apply_kernel(
     """`_ordered_apply_kernel` for every task sharing one cursor buffer:
     position `p` belongs to the task `t` with `off[t] <= p`, at that
     task's permutation position `j = p - off[t]`."""
-    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if p < Int(total_in):
-        var t = _ord_fast_segment(off, Int(n_tasks_in), p)
-        var j = p - Int(off.unsafe_load(t))
-        var row = Int(permutation.unsafe_load(j))
-        var leaf = Int(bins.unsafe_load(row))
-        var at = (Int(task_base_in) + t) * Int(leaf_cap_in) + leaf
-        cursor.unsafe_store(
-            p,
-            identical_mul_add(leaves.unsafe_load(at), rate, cursor.unsafe_load(p)),
-        )
+    comptime if not AFT_G12:
+        var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+        if p < Int(total_in):
+            var t = _ord_fast_segment(off, Int(n_tasks_in), p)
+            var j = p - Int(off.unsafe_load(t))
+            var row = Int(permutation.unsafe_load(j))
+            var leaf = Int(bins.unsafe_load(row))
+            var at = (Int(task_base_in) + t) * Int(leaf_cap_in) + leaf
+            cursor.unsafe_store(
+                p,
+                identical_mul_add(leaves.unsafe_load(at), rate, cursor.unsafe_load(p)),
+            )
+        return
+    var first = (
+        Int(block_idx.x) * Int(block_dim.x) * AFT_ORDERED_APPLY_ROWS
+        + Int(thread_idx.x)
+    )
+    var total = Int(total_in)
+    var nt = Int(n_tasks_in)
+    var t = -1
+    var lower = 0
+    var upper = 0
+    comptime for lane in range(AFT_ORDERED_APPLY_ROWS):
+        var p = first + lane * Int(block_dim.x)
+        if p < total:
+            # Bounds are cached only while this row is in the same task;
+            # a tile crossing any number of short tasks redoes the search.
+            if t < 0 or p >= upper:
+                t = _ord_fast_segment(off, nt, p)
+                lower = Int(off.unsafe_load(t))
+                upper = total
+                if t + 1 < nt:
+                    upper = Int(off.unsafe_load(t + 1))
+            var j = p - lower
+            var row = Int(permutation.unsafe_load(j))
+            var leaf = Int(bins.unsafe_load(row))
+            var at = (Int(task_base_in) + t) * Int(leaf_cap_in) + leaf
+            cursor.unsafe_store(
+                p,
+                identical_mul_add(leaves.unsafe_load(at), rate, cursor.unsafe_load(p)),
+            )
 
 
 def _launch_ord_bat_reduce(
@@ -1872,7 +1913,7 @@ def _launch_ord_bat_reduce(
             Int32(ORDERED_BAT_CHUNKS), Int32(task_base), alpha, border,
             partials.unsafe_ptr(),
             grid_dim=(ORDERED_BAT_CHUNKS, n_tasks * n_leaves, 1),
-            block_dim=(ORDERED_BLOCK, 1, 1),
+            block_dim=(AFT_ORDERED_REDUCE_BLOCK, 1, 1),
         )
 
     if objective == OBJECTIVE_RMSE:
@@ -2083,14 +2124,14 @@ def _ord_fast_estimate_tree(
             fast_leaves[0].unsafe_ptr(), fast_cat[lp].unsafe_ptr(),
             fast_fold_off[0].unsafe_ptr(), Int32(n_folds), Int32(total),
             Int32(lp * n_folds), Int32(leaf_cap), opts.learning_rate,
-            grid_dim=(_grid(total), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+            grid_dim=((total + ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS - 1) // (ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
         )
     ctx.enqueue_function[_ord_bat_apply_kernel](
         dperms[est_p].unsafe_ptr(), bins.unsafe_ptr(),
         fast_leaves[0].unsafe_ptr(), est_cursor.unsafe_ptr(),
         fast_est_off[0].unsafe_ptr(), Int32(1), Int32(n_rows),
         Int32(est_task), Int32(leaf_cap), opts.learning_rate,
-        grid_dim=(_grid(n_rows), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+        grid_dim=((n_rows + ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS - 1) // (ORDERED_BLOCK * AFT_ORDERED_APPLY_ROWS), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
     )
     # the model's `leaf * learning_rate` rescale on the device, in place, after
     # the apply launches above read the unscaled leaves (lane cpu4-gbdt)
@@ -2388,7 +2429,13 @@ def fit_ordered(
     # per-task trace records wanted
     var fast_on = False
     comptime if ORDERED_BATCH_EST:
-        fast_on = batch and not trace.enabled
+        # The fused task kernel below implements exactly one Newton/Gradient
+        # step. estimate_can_batch also admits multi-iteration walkers, so
+        # its predicate alone must not select the one-step implementation.
+        # Preserve every requested iteration via the existing batched walker
+        # when the count exceeds one. Found while wiring G11/G12; source-only
+        # repair, uncompiled/unverified/unmeasured.
+        fast_on = batch and opts.leaf_iterations == 1 and not trace.enabled
     var n_slots = learn_count * n_folds + 1 if batch else n_folds + 1
     for _ in range(n_slots):  # small-loop(n_slots: estimation tasks, permutations times folds): empty workspace lists per task
         est_pools.append(List[TEstimationWorkspace]())

@@ -35,6 +35,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.apple_fast_tree_experiments import AFT_P05
 
 #: lane/fam2-gbdt F3 (IDENTICAL, every vendor; default ON): the non-resident
 #: `predict` (`gbdt/methods/doc_parallel_boosting.mojo`) launches the
@@ -723,31 +724,73 @@ def compute_bins_and_add_all_kernel(
             )
             j += Int(block_dim.x)
         barrier()
-        var i = Int(block_idx.x) * Int(block_dim.x) + tid
-        while i < n_rows:
-            var acc = cursor.unsafe_load(plane + i)
-            for t in range(t0, t1):
-                var depth = Int(tree_depth.unsafe_load(t))
-                var lb = Int(tree_level_start.unsafe_load(t)) - l0
-                var leaf_base = Int(tree_leaf_start.unsafe_load(t))
-                var leaf = 0
-                for level in range(depth):
-                    var k = lb + level
-                    var off = Int(meta.unsafe_load(k))
-                    var shift = meta.unsafe_load(PRED_ALL_CHUNK_LEVELS + k)
-                    var mask = meta.unsafe_load(2 * PRED_ALL_CHUNK_LEVELS + k) << shift
-                    var value = meta.unsafe_load(3 * PRED_ALL_CHUNK_LEVELS + k) << shift
-                    var feature_val = compressed_index.unsafe_load(off + i) & mask
-                    var split: Bool
-                    if meta.unsafe_load(4 * PRED_ALL_CHUNK_LEVELS + k) != UInt32(0):
-                        split = feature_val == value
-                    else:
-                        split = feature_val > value
-                    if split:
-                        leaf += 1 << level
-                acc = acc + leaf_values.unsafe_load(
-                    leaf_base + leaf * dim_count + dim
-                )
-            cursor.unsafe_store(plane + i, acc)
-            i += stride
+        comptime if AFT_P05:
+            # P05: a two-plane row tile shares every tree/split descriptor.
+            # The second plane is guarded; every worker still hits both
+            # shared-page barriers even when its rows are out of range.
+            var i = Int(block_idx.x) * Int(block_dim.x) * 2 + tid
+            while i < n_rows:
+                var i1 = i + Int(block_dim.x)
+                var has_second = i1 < n_rows
+                var acc = cursor.unsafe_load(plane + i)
+                var acc1 = Float32(0)
+                if has_second:
+                    acc1 = cursor.unsafe_load(plane + i1)
+                for t in range(t0, t1):
+                    var depth = Int(tree_depth.unsafe_load(t))
+                    var lb = Int(tree_level_start.unsafe_load(t)) - l0
+                    var leaf_base = Int(tree_leaf_start.unsafe_load(t))
+                    var leaf = 0
+                    var leaf1 = 0
+                    for level in range(depth):
+                        var k = lb + level
+                        var off = Int(meta.unsafe_load(k))
+                        var shift = meta.unsafe_load(PRED_ALL_CHUNK_LEVELS + k)
+                        var mask = meta.unsafe_load(2 * PRED_ALL_CHUNK_LEVELS + k) << shift
+                        var value = meta.unsafe_load(3 * PRED_ALL_CHUNK_LEVELS + k) << shift
+                        var equal = meta.unsafe_load(4 * PRED_ALL_CHUNK_LEVELS + k) != UInt32(0)
+                        var feature_val = compressed_index.unsafe_load(off + i) & mask
+                        var take = feature_val == value if equal else feature_val > value
+                        if take:
+                            leaf += 1 << level
+                        if has_second:
+                            var feature_val1 = compressed_index.unsafe_load(off + i1) & mask
+                            var take1 = feature_val1 == value if equal else feature_val1 > value
+                            if take1:
+                                leaf1 += 1 << level
+                    acc = acc + leaf_values.unsafe_load(leaf_base + leaf * dim_count + dim)
+                    if has_second:
+                        acc1 = acc1 + leaf_values.unsafe_load(leaf_base + leaf1 * dim_count + dim)
+                cursor.unsafe_store(plane + i, acc)
+                if has_second:
+                    cursor.unsafe_store(plane + i1, acc1)
+                i += stride * 2
+        else:
+            var i = Int(block_idx.x) * Int(block_dim.x) + tid
+            while i < n_rows:
+                var acc = cursor.unsafe_load(plane + i)
+                for t in range(t0, t1):
+                    var depth = Int(tree_depth.unsafe_load(t))
+                    var lb = Int(tree_level_start.unsafe_load(t)) - l0
+                    var leaf_base = Int(tree_leaf_start.unsafe_load(t))
+                    var leaf = 0
+                    for level in range(depth):
+                        var k = lb + level
+                        var off = Int(meta.unsafe_load(k))
+                        var shift = meta.unsafe_load(PRED_ALL_CHUNK_LEVELS + k)
+                        var mask = meta.unsafe_load(2 * PRED_ALL_CHUNK_LEVELS + k) << shift
+                        var value = meta.unsafe_load(3 * PRED_ALL_CHUNK_LEVELS + k) << shift
+                        var feature_val = compressed_index.unsafe_load(off + i) & mask
+                        var split: Bool
+                        if meta.unsafe_load(4 * PRED_ALL_CHUNK_LEVELS + k) != UInt32(0):
+                            split = feature_val == value
+                        else:
+                            split = feature_val > value
+                        if split:
+                            leaf += 1 << level
+                    acc = acc + leaf_values.unsafe_load(
+                        leaf_base + leaf * dim_count + dim
+                    )
+                cursor.unsafe_store(plane + i, acc)
+                i += stride
         barrier()

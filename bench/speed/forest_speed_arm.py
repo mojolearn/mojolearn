@@ -1330,15 +1330,25 @@ def main(argv=None):
     if args.mem:
         import forest_board_arms
         fit_context = forest_board_arms.TreeMem(lane).context
-    live = spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg, fit_context=fit_context)
+    aft_capture = os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1"
+    # Repeat caller buffer preparation inside the explicit whole-operation
+    # boundary. Existing construction/preflight still has its prepared views;
+    # normal board runs keep their historical clocks and preparation policy.
+    operation_prepare = (lambda arm, d: prepare_our_inputs(d)) if aft_capture else None
+    live = spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg, fit_context=fit_context,
+                    operation_prepare=operation_prepare, operation_capture=aft_capture,
+                    skip_warmup=aft_capture and os.environ.get("MOJOLEARN_AFT_EXTERNAL_WARMUP") == "1")
     from bench_board_state import scored_receipt
+    aft_states = {}
     for arm in live:
         if arm.name in retained_scores:
             model, triples, _ = retained_scores[arm.name]
             outputs = {str(i) + ":" + metric: pred for i, (metric, _, pred) in enumerate(triples)
                        if pred is not None}
+            state = scored_receipt(outputs, model=model)
+            aft_states[arm.name] = state
             print("FSPEED-STATE " + json.dumps(dict(arm=arm.name, lane=lane,
-                  receipt=scored_receipt(outputs, model=model)), sort_keys=True), flush=True)
+                  receipt=state), sort_keys=True), flush=True)
     if args.save_scored_models:
         save_scored_forests(args.save_scored_models, retained_scores, {a.name for a in live})
     if args.infer:
@@ -1346,6 +1356,12 @@ def main(argv=None):
         run_inference(lane, [a for a in arms if a.name in names],
                       models, data, spec.rounds(), args.infer_large_rows,
                       started + spec.process_deadline_s())
+    if os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1":
+        # Experiment-only metadata; no extra fit, predict, or numeric check.
+        # The adapter retains exact scorer values rather than rounded log text.
+        from apple_fast_tree_capture import packet
+        print("FSPEED-AFT " + json.dumps(packet(data, cfg, retained_scores, aft_states, records),
+                                        sort_keys=True, default=str), flush=True)
     return 0
 
 

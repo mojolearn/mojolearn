@@ -6,6 +6,7 @@ from gbdt.options.child_hessian import child_hessian_threshold
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
+from gbdt.apple_fast_tree_experiments import AFT_N01, AFT_N02
 
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -1241,7 +1242,11 @@ comptime _LG_EXACT_BATCH128 = (
         and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]()
     )
 ) and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF"]()
-comptime LG_EXACT_BATCH_WIDTH = (
+# N01: 256 speculative candidates amortize exact-batch control over twice
+# the default candidate slots. This trades scratch bytes for fewer rounds;
+# the existing exact replay still admits leaves in global best-first order.
+# No performance/quality evidence; source only, default OFF.
+comptime LG_EXACT_BATCH_WIDTH = 256 if AFT_N01 else (
     128 if _LG_EXACT_BATCH128 else (
         32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
     )
@@ -2717,6 +2722,7 @@ def fit_non_symmetric_tree[
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
                             width_plans=ws[0].width_plans,
+                            nonsymmetric_work=AFT_N02,
                         )
                     else:
                         launch_histograms_for_blocks[
@@ -2728,6 +2734,7 @@ def fit_non_symmetric_tree[
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
                             width_plans=ws[0].width_plans,
+                            nonsymmetric_work=AFT_N02,
                         )
                 else:
                     if use_ridx:
@@ -2739,6 +2746,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
+                            nonsymmetric_work=AFT_N02,
                         )
                     else:
                         launch_histograms_for_blocks[
@@ -2749,6 +2757,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
+                            nonsymmetric_work=AFT_N02,
                         )
             mgr.stream_kernel()
             stage_times.end(ctx, "hist.build")

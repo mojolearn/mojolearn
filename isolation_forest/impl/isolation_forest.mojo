@@ -80,6 +80,7 @@ from isolation_forest.impl.isolation_tree_builder import (
     IF_BUILD_TPB_MAX,
     IF_DECISION_WORDS,
     IF_PATH_TPB,
+    AFT_IF_PATH_ROWS,
     IF_RNG_STATE_WORDS,
     IF_SCRATCH_WORDS_PER_NODE,
     IF_STACK_WORDS,
@@ -1218,7 +1219,8 @@ struct IsolationForest(Movable):
             _ = pooled^
             return
         var threads = path_tpb
-        var blocks = (n_rows + threads - 1) // threads
+        var path_rows_per_block = threads * AFT_IF_PATH_ROWS
+        var blocks = (n_rows + path_rows_per_block - 1) // path_rows_per_block
         comptime if IF_C50_PACKED:
             ctx.enqueue_function[if_packed_paths_kernel](_mp_f32(input_rowmajor), _mp_i32(model.packed_nodes.value()),
                 _mp_i32(model.global_tree_offsets), avg_path_lengths.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
@@ -1792,7 +1794,7 @@ def _pooled_path_lengths(ctx: DeviceContext, model: IsolationForestModel,
             _mp_i32(shard.global_tree_offsets), Int32(shard.count),
             Int32(model.params.n_estimators),
             Int32(1) if rank + 1 == len(model.shards) else Int32(0),
-            total.unsafe_ptr(), grid_dim=((rows + threads - 1) // threads, 1, 1),
+            total.unsafe_ptr(), grid_dim=((rows + threads * AFT_IF_PATH_ROWS - 1) // (threads * AFT_IF_PATH_ROWS), 1, 1),
             block_dim=(threads, 1, 1))
         shard.ctx.synchronize()
         carry = read_f32(shard.ctx, total, rows)

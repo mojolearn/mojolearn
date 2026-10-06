@@ -171,6 +171,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points_ridx import (
     launch_reorder_index_only,
 )
 from checks.numerics import PIN_DETERMINISM
+from gbdt.apple_fast_tree_experiments import AFT_N02
 from checks.numerics import NUMERIC_IDENTICAL
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
@@ -3049,6 +3050,7 @@ def launch_histograms_for_blocks[
     qstats: Optional[DeviceBuffer[DType.int32]] = None,
     width_plans: List[OneByteWidthPlan] = List[OneByteWidthPlan](),
     replicas_override: Int = 0,
+    nonsymmetric_work: Bool = False,
 ) raises:
     """One histogram launch per policy present, dispatching on the block.
 
@@ -3130,6 +3132,14 @@ def launch_histograms_for_blocks[
         var replicas = replication_for(
             groups, n_live, stat_count, sm_count, gather=(depth > 0)
         )
+        # N02 caller is guarded Apple FAST, non-symmetric only. Halve the
+        # occupancy-derived replicas to reduce duplicated partial histograms
+        # and their fold traffic; every replica keeps its complete row stride.
+        # This can lose parallelism on narrow/deep work. No timing/quality
+        # evidence. Scratch needs cannot exceed the baseline allocation.
+        comptime if AFT_N02:
+            if nonsymmetric_work:
+                replicas = max(1, (replicas + 1) // 2)
         if replicas_override > 0:
             replicas = replicas_override
 

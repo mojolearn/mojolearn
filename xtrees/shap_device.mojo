@@ -26,8 +26,11 @@ from xtrees.shap import (
     shap_tree_unit, shap_fold_unit, shap_table_unit, shap_table_row_unit,
 )
 from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_tab_row_unit
+from core.apple_fast_tree_experiments import (
+    AFT_P07, AFT_P08, AFT_P09, AFT_SHAP_FOLD_ITEMS,
+)
 
-comptime TPB = 128
+comptime TPB = 64 if AFT_P08 else 128
 # AFCL-T11: two SIMD groups per query/fold block reduce private TreeSHAP
 # state per workgroup. This does not enable the rejected row-pair candidate.
 # NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
@@ -37,7 +40,7 @@ comptime AFCL_T11 = (
     and is_defined["MOJOLEARN_AFCL_T11"]()
 )
 comptime QUERY_TPB = 64 if AFCL_T11 else TPB
-comptime BUF_BYTES = 128 * 1024 * 1024
+comptime BUF_BYTES = (64 if AFT_P09 else 128) * 1024 * 1024
 comptime UNITS_MAX = 1 << 20
 
 # lane/idn-gates (2026-10-04): also the IDENTICAL default on every vendor
@@ -90,6 +93,8 @@ comptime SHAP_TREE_TAB = SHAP_TABLE and not is_defined["MOJOLEARN_SHAP_TREE_TAB_
 # plus one score. Regression. ab-20261006/repairs-shap-3e19f734e/F13/shap.
 # Original wrong-binding failure retained; affected artifacts built fe1864e2c.
 comptime SHAP_FAST_ROW_PAIR = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SHAP_FAST_ROW_PAIR"]()
+# P07 is a distinct quartet tile; the existing pair arm and audit stay separate.
+comptime SHAP_ROW_TILE = 4 if AFT_P07 else (2 if SHAP_FAST_ROW_PAIR else 1)
 struct ShapPairAudit(Defaultable, Movable):
     var calls: Int
     def __init__(out self):
@@ -180,12 +185,12 @@ def tree_kernel[W: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slots: In
     """x is the whole input; the chunk's rows start at r0 (offset here, on
     the typed pointer: a pointer rebuilt from an integer misses on Metal)."""
     var group = _uid()
-    comptime if SHAP_FAST_ROW_PAIR:
-        var pairs = (Int(rows) + 1) // 2
+    comptime if SHAP_ROW_TILE > 1:
+        var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
         var tree = group // pairs
-        var row = (group % pairs) * 2
+        var row = (group % pairs) * SHAP_ROW_TILE
         if tree < Int(units) // Int(rows):
-            for offset in range(2):
+            for offset in range(SHAP_ROW_TILE):
                 if row + offset < Int(rows):
                     var u = tree * Int(rows) + row + offset
                     shap_tree_unit[W](u, Int(rows), Int(d), Int(k), Int(slots), offsets, colid, quesval, left, leaves, parent,
@@ -211,12 +216,12 @@ def table_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, sl
                                slot: I32P, leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, x: F32P,
                                r0: Int32, buf: F32P, meta: I32P):
     var group = _uid()
-    comptime if SHAP_FAST_ROW_PAIR:
-        var pairs = (Int(rows) + 1) // 2
+    comptime if SHAP_ROW_TILE > 1:
+        var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
         var tree = group // pairs
-        var row = (group % pairs) * 2
+        var row = (group % pairs) * SHAP_ROW_TILE
         if tree < Int(units) // Int(rows):
-            for offset in range(2):
+            for offset in range(SHAP_ROW_TILE):
                 if row + offset < Int(rows):
                     var u = tree * Int(rows) + row + offset
                     shap_table_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
@@ -249,12 +254,12 @@ def tab_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slot
                              slot: I32P, leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, nint: I32P,
                              needl: U64P, needr: U64P, x: F32P, r0: Int32, buf: F32P, meta: I32P):
     var group = _uid()
-    comptime if SHAP_FAST_ROW_PAIR:
-        var pairs = (Int(rows) + 1) // 2
+    comptime if SHAP_ROW_TILE > 1:
+        var pairs = (Int(rows) + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE
         var tree = group // pairs
-        var row = (group % pairs) * 2
+        var row = (group % pairs) * SHAP_ROW_TILE
         if tree < Int(units) // Int(rows):
-            for offset in range(2):
+            for offset in range(SHAP_ROW_TILE):
                 if row + offset < Int(rows):
                     var u = tree * Int(rows) + row + offset
                     shap_tab_row_unit[ACC](u, Int(rows), Int(d), Int(k), Int(slots), Int(m), Int(nm), offsets, colid, quesval,
@@ -270,9 +275,13 @@ def tab_row_kernel[ACC: Int](units: Int32, rows: Int32, d: Int32, k: Int32, slot
 
 def fold_kernel(units: Int32, r0: Int32, rows: Int32, n_trees: Int32, d: Int32, k: Int32, slots: Int32, slot: I32P,
                 buf: F32P, phi: F32P):
-    var u = _uid()
-    if u < Int(units):
-        shap_fold_unit(u, Int(r0), Int(rows), Int(n_trees), Int(d), Int(k), Int(slots), slot, buf, phi)
+    # P10: independent output planes, no skipped contributions or changed fold.
+    var first = Int(block_idx.x) * TPB * AFT_SHAP_FOLD_ITEMS + Int(thread_idx.x)
+    @parameter
+    for tile in range(AFT_SHAP_FOLD_ITEMS):
+        var u = first + tile * TPB
+        if u < Int(units):
+            shap_fold_unit(u, Int(r0), Int(rows), Int(n_trees), Int(d), Int(k), Int(slots), slot, buf, phi)
 
 
 def _up_i32(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
@@ -460,7 +469,7 @@ def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceB
     while r0 < n:
         var rc = min(rows, n - r0)
         var tu = n_trees * rc
-        var row_units = n_trees * ((rc + 1) // 2) if SHAP_FAST_ROW_PAIR else tu
+        var row_units = n_trees * ((rc + SHAP_ROW_TILE - 1) // SHAP_ROW_TILE)
         comptime if SHAP_FAST_ROW_PAIR:
             SHAP_PAIR_STATE.get_or_create_ptr()[].calls += 1
         var ran = False
@@ -512,7 +521,7 @@ def _tree_shap_values_on(ctx: DeviceContext, mut fo: _Forest, mut cover: DeviceB
         var fu = d * k * rc
         ctx.enqueue_function[fold_kernel](
             Int32(fu), Int32(r0), Int32(rc), Int32(n_trees), Int32(d), Int32(k), Int32(sl), fo.slot.unsafe_ptr(),
-            buf.unsafe_ptr(), dphi.unsafe_ptr(), grid_dim=_query_grid(fu), block_dim=QUERY_TPB)
+            buf.unsafe_ptr(), dphi.unsafe_ptr(), grid_dim=_query_grid((fu + AFT_SHAP_FOLD_ITEMS - 1) // AFT_SHAP_FOLD_ITEMS), block_dim=QUERY_TPB)
         r0 += rc
     ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=phi), src_buf=dphi)
     _check_meta(ctx, fo.meta, 0)

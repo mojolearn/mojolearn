@@ -32,6 +32,10 @@ from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_div, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from checks.kernel_matrix import TARGET_COLUMN, forest_row_threads_for
+from core.apple_fast_tree_experiments import (
+    AFT_P02, AFT_P03, AFT_GROVE_BLOCK, AFT_GROVES_PER_BLOCK,
+    AFT_ROW_STAGE_BYTES, AFT_ORDERED_ITEMS, AFT_ARGMAX_ROWS,
+)
 from core.forest_experiments import (T31_PACKED_A, T31_PACKED_B, T32_SHARED_ROWS, T33_COST_SCHEDULE, T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T38_FUSED_LABELS, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish)
 
 # AFCL-T08: two Apple SIMD groups per RF traversal workgroup instead of
@@ -50,7 +54,7 @@ comptime AFCL_T08 = (
 def _afcl_rf_block[RF_INPUT: Bool]() -> Int:
     comptime if AFCL_T08 and RF_INPUT:
         return 64
-    return 128
+    return AFT_GROVE_BLOCK
 
 
 @always_inline
@@ -78,8 +82,8 @@ def finite_key(value: Float32) -> UInt32:
 # F13 M3 2026-10-06 MEASURED shared rows, depths4/11/9skew:
 # cold B/A0.9331/0.9938/0.9510, repeat1.1091/0.9332/0.9786; quality equal.
 # One warmup+score, mixed; FAST opt-in remains OFF. ab-20261006/repairs-54c1f35a5/F13.
-comptime FOREST_SHARED_ROWS = T32_SHARED_ROWS or is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
-comptime FOREST_SHARED_ROW_CAPACITY = 256
+comptime FOREST_SHARED_ROWS = T32_SHARED_ROWS or AFT_P03 or is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]() or (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_FOREST_FAST_SHARED_ROWS"]())
+comptime FOREST_SHARED_ROW_CAPACITY = AFT_ROW_STAGE_BYTES // (4 * AFT_GROVES_PER_BLOCK) if AFT_P03 else 256
 
 #: DEVIATION 2964 (lane/forest-groves-row-schedule, 2026-09-17): the groves
 #: engine's SCHEDULE, not its graph. The 32-lane kernels give one row 32
@@ -169,40 +173,63 @@ def forest_ordered_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     var features = Int(features_in)
     var outputs = Int(outputs_in)
     var trees = Int(trees_in)
-    var item = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if item < rows*outputs:
-        var total = Float32(0)
-        for tree in range(trees):
-            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item//outputs,features)
-            total = forest_add(total,leaves.unsafe_load(node*outputs+item%outputs))
-        output.unsafe_store(item,ftz(identical_div(ftz(total),Float32(trees))))
+    var worker = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    # P02: neighboring lanes keep contiguous items in each tile plane.
+    var item = Int(block_idx.x)*Int(block_dim.x)*AFT_ORDERED_ITEMS+Int(thread_idx.x)
+    comptime if AFT_P02:
+        var item1 = item + Int(block_dim.x)
+        var total0 = Float32(0)
+        var total1 = Float32(0)
+        if item < rows*outputs:
+            for tree in range(trees):
+                var node0 = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item//outputs,features)
+                total0 = forest_add(total0,leaves.unsafe_load(node0*outputs+item%outputs))
+                if item1 < rows*outputs:
+                    var node1 = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item1//outputs,features)
+                    total1 = forest_add(total1,leaves.unsafe_load(node1*outputs+item1%outputs))
+            output.unsafe_store(item,ftz(identical_div(ftz(total0),Float32(trees))))
+            if item1 < rows*outputs:
+                output.unsafe_store(item1,ftz(identical_div(ftz(total1),Float32(trees))))
+    else:
+        if worker < rows*outputs:
+            var total = Float32(0)
+            for tree in range(trees):
+                var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,worker//outputs,features)
+                total = forest_add(total,leaves.unsafe_load(node*outputs+worker%outputs))
+            output.unsafe_store(worker,ftz(identical_div(ftz(total),Float32(trees))))
+
+
+@always_inline
+def forest_argmax_row(
+    scores: MutPointer[Float32, MutAnyOrigin], row: Int, outputs: Int,
+) -> Int32:
+    """First-index maximum, with the original nonfinite sentinel."""
+    var base = row * outputs
+    var best = 0
+    var best_value = scores.unsafe_load(base)
+    if (bitcast[DType.uint32](best_value) & UInt32(0x7f800000)) == UInt32(0x7f800000):
+        return Int32(-1)
+    for c in range(1, outputs):
+        var value = scores.unsafe_load(base + c)
+        if (bitcast[DType.uint32](value) & UInt32(0x7f800000)) == UInt32(0x7f800000):
+            return Int32(-1)
+        if value > best_value:
+            best = c
+            best_value = value
+    return Int32(best)
 
 
 def forest_argmax_kernel(
     scores: MutPointer[Float32, MutAnyOrigin],
     codes: MutPointer[Int32, MutAnyOrigin], rows_in: Int32, outputs_in: Int32,
 ):
-    """Row-wise first-max argmax; `-1` reports a non-finite score."""
-    var rows = Int(rows_in)
-    var outputs = Int(outputs_in)
-    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if row >= rows:
-        return
-    var base = row * outputs
-    var best = 0
-    var best_value = scores.unsafe_load(base)
-    if (bitcast[DType.uint32](best_value) & UInt32(0x7f800000)) == UInt32(0x7f800000):
-        codes.unsafe_store(row, Int32(-1))
-        return
-    for c in range(1, outputs):
-        var value = scores.unsafe_load(base + c)
-        if (bitcast[DType.uint32](value) & UInt32(0x7f800000)) == UInt32(0x7f800000):
-            codes.unsafe_store(row, Int32(-1))
-            return
-        if value > best_value:
-            best = c
-            best_value = value
-    codes.unsafe_store(row, Int32(best))
+    # P04: two row planes share a worker; every row still scans all classes.
+    var first = Int(block_idx.x) * Int(block_dim.x) * AFT_ARGMAX_ROWS + Int(thread_idx.x)
+    @parameter
+    for tile in range(AFT_ARGMAX_ROWS):
+        var row = first + tile * Int(block_dim.x)
+        if row < Int(rows_in):
+            codes.unsafe_store(row, forest_argmax_row(scores, row, Int(outputs_in)))
 
 
 def launch_forest_argmax(ctx: DeviceContext,
@@ -211,7 +238,7 @@ def launch_forest_argmax(ctx: DeviceContext,
     if rows > 0:
         ctx.enqueue_function[forest_argmax_kernel](
             scores.unsafe_ptr(), codes.unsafe_ptr(), Int32(rows), Int32(outputs),
-            grid_dim=(rows + 127) // 128, block_dim=128,
+            grid_dim=(rows + 128*AFT_ARGMAX_ROWS - 1) // (128*AFT_ARGMAX_ROWS), block_dim=128,
         )
 
 
@@ -227,7 +254,7 @@ def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     var features = Int(features_in)
     var outputs = Int(outputs_in)
     var trees = Int(trees_in)
-    # Four scalar row/output tasks per128-thread block; all threads hit barriers.
+    # P01: a fixed number of logical 32-lane groves; all threads hit barriers.
     var tid = Int(thread_idx.x)
     var lane = tid%32
     var item = Int(block_idx.x)*traversal_rows+tid//32
@@ -507,7 +534,7 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
         ctx.enqueue_function[forest_ordered_kernel[RF_INPUT,PACKED]](
             doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
             dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-            grid_dim=(n_rows*n_outputs+traversal_tpb-1)//traversal_tpb,block_dim=traversal_tpb,
+            grid_dim=(n_rows*n_outputs+128*AFT_ORDERED_ITEMS-1)//(128*AFT_ORDERED_ITEMS),block_dim=128,
         )
 
 

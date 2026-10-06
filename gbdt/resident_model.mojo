@@ -105,6 +105,7 @@ from checks.numerics import (
     identical_exp64,
 )
 from core.device_zero import enqueue_fill
+from core.apple_fast_tree_experiments import AFT_P05
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS, nan_substitution
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -778,7 +779,9 @@ struct ResidentGbdtModel(Movable):
         for lvl in range(self.total_levels):
             ho.unsafe_store(lvl, self.off_base[lvl] * UInt32(n_rows))
         ctx.enqueue_copy(dst_buf=self.d_off, src_ptr=ho)
-        var wide = (n_rows + AFCL_PREDICT_BLOCK - 1) // AFCL_PREDICT_BLOCK
+        # P05: two rows per lane, same grid cap, no shape-specific route.
+        var rows_per_block = AFCL_PREDICT_BLOCK * (2 if AFT_P05 else 1)
+        var wide = (n_rows + rows_per_block - 1) // rows_per_block
         if wide > 1024:
             wide = 1024
         ctx.enqueue_function[compute_bins_and_add_all_kernel](
