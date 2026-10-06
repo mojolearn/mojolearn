@@ -21,6 +21,7 @@ def main() -> int:
     parser.add_argument("--vendor", choices=("nvidia", "amd", "apple"), required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--mojo", default="mojo")
+    parser.add_argument("--compile-slot", type=Path, default=Path.home() / "mojolearn-evidence/compile_slot.sh")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--arm", choices=(*ARMS, "all"), default="all")
     parser.add_argument("--timeout", type=int, default=3600)
@@ -30,6 +31,8 @@ def main() -> int:
     dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=no"], cwd=repo, text=True).strip()
     if head != args.source_sha or dirty:
         parser.error("campaign requires the requested clean frozen source")
+    if args.stage == "build" and not args.compile_slot.is_file():
+        parser.error("build requires the configured compile semaphore script")
     args.output.mkdir(parents=True, exist_ok=True)
     result = 0
     for arm in ARMS if args.arm == "all" else (args.arm,):
@@ -40,9 +43,10 @@ def main() -> int:
                  "--mojo", args.mojo, "--output", str(binary)]
         for define in ARMS[arm]:
             build.extend(("--define", define))
-        command = build if args.stage in ("render", "build") else [str(binary)]
+        guarded_build = ["bash", str(args.compile_slot), *build]
+        command = guarded_build if args.stage in ("render", "build") else [str(binary)]
         if args.stage == "render":
-            print(json.dumps({"arm": arm, "build_argv": build, "validation_argv": [str(binary)],
+            print(json.dumps({"arm": arm, "build_argv": guarded_build, "validation_argv": [str(binary)],
                               "source_sha": head, "defines": ARMS[arm]}))
             continue
         log = args.output / f"I22-{args.vendor}-{arm}-{args.stage}.log"
