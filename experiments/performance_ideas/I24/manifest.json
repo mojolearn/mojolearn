@@ -44,7 +44,8 @@
   "quality_gates": [
     "same-version NVIDIA/AMD/Apple/host exact output bits",
     "public semantics and canonical tie order retained",
-    "NVIDIA+AMD combined faster and neither materially slower"
+    "NVIDIA+AMD combined faster and neither materially slower",
+    "complete resident confusion and PRF consumers preserve all averages zero-division values and warning cells"
   ],
   "timing_contract": "Frozen source; compile once on cheap boxes; device runs only; full public-operation timing includes all scratch/preparation/readback. Apple IDENTICAL bit check only. Native builds explicitly bind device column and accelerator; independent host replay remains a separate identity gate, not a DeviceContext execution vendor.",
   "blocker": null,
