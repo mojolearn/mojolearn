@@ -81,7 +81,7 @@ from training.checks.optimizer import (
     ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
     identical_optimizer_workspace_floats,
     # DEVIATIONS 2646 and 2647: the pieces the glue update path launches.
-    OPT_TPB, _grid_for as _opt_grid_for, adam_update_kernel, adam_update_oop_kernel,
+    OPT_TPB, _grid_for as _opt_grid_for, adam_update_kernel, adam_update_oop_kernel, adam_update_oop_status_kernel,
     device_step_scalars, opt_refuse_device_inputs,
 )
 from training.checks.optimizer_contract import OPT_ADAMW, OPT_SGD, OptimizerConfig
@@ -888,6 +888,8 @@ struct ByteTrainer(Movable):
     var shadow_step: Int
     var released_eager_cells: Int
     var grad_step: Int
+    # Diagnostic reach witness; counts successful live-status optimizer checks.
+    var live_status_steps: Int
 
     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
                  initial_m: List[Float32], initial_v: List[Float32],
@@ -911,6 +913,7 @@ struct ByteTrainer(Movable):
         self.shadow_step = -1
         self.released_eager_cells = 0
         self.grad_step = -1
+        self.live_status_steps = 0
         # lane/neural-pass43: the session's buffers carved from arena chunks
         # (core/device_arena.mojo) between here and `arena_end` below.
         self.arena_id = arena_begin()
@@ -1751,11 +1754,12 @@ def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     # `glue_update` is the constant False and the block below is the shipped
     # path, unchanged.
     var glue_update = False
+    var live_validated = False
     comptime if STEP_GLUE_TRIAL or STEP_GLUE_SHIPPED_UPDATE:
         var glue_arm = step_glue_arm_from_env()
         if (glue_arm & STEP_GLUE_UPDATE_BITS) != 0:
             glue_update = True
-            _byte_glue_update(ctx, tr, next_step, glue_arm)
+            live_validated = _byte_glue_update(ctx, tr, next_step, glue_arm)
     if not glue_update:
         # THE SHADOW POINT (design 4.2 item 2): everything before this line
         # left param/m/v untouched; the update kernel below writes them in
@@ -1787,9 +1791,10 @@ def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     _maybe_fault(ctx, tr.buffers.v_state, "after_negative", 3, _FAULT_MINUS_ONE)
     # validate_after as device scans (design 2.3): finite param, m, v and
     # `v >= 0`, by name, with no download.
-    tr.validate_device_state(ctx, next_step)
+    if not live_validated:
+        tr.validate_device_state(ctx, next_step)
     timing_tick(ctx, ton, tk, "step.validate_after_scan")
-    timing_bytes(ton, "step.validate_after_scan_bytes", 4 * n * 4)
+    timing_bytes(ton, "step.validate_after_scan_bytes", 16 if live_validated else 4 * n * 4)
     tr.completed_steps = next_step
     tr.grad_step = next_step
 
@@ -1911,7 +1916,36 @@ def byte_glue_update_launch(
     _ = q_out
 
 
-def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, arm: Int) raises:
+
+def _byte_live_status_launch(ctx: DeviceContext,mut tr: ByteTrainer,mut status: DeviceBuffer[DType.int32],next_step: Int) raises:
+    var n=tr.config.n_total()
+    var cfg=tr.optimizer.copy()
+    var sc=device_step_scalars(cfg,next_step)
+    status.enqueue_fill(Int32(n))
+    step_count_launch()
+    ctx.enqueue_function[adam_update_oop_status_kernel](
+        status.unsafe_ptr(),tr.buffers.shadow_p.unsafe_ptr(),tr.buffers.shadow_m.unsafe_ptr(),tr.buffers.shadow_v.unsafe_ptr(),tr.buffers.param.unsafe_ptr(),tr.buffers.grad.unsafe_ptr(),tr.buffers.m_state.unsafe_ptr(),tr.buffers.v_state.unsafe_ptr(),Int32(n),Int32(1) if cfg.kind==OPT_ADAMW else Int32(0),cfg.beta1,cfg.beta2,cfg.eps,cfg.weight_decay,sc.c1,sc.c2,sc.step_size,sc.rt_bc2,sc.decay_mul,
+        grid_dim=(step_glue_blocks(n,OPT_TPB),1,1),block_dim=(OPT_TPB,1,1),
+    )
+    # Handles are swapped by _byte_glue_update before status refusal so the
+    # existing rollback always sees the new state and its pre-update shadow.
+
+
+def _byte_live_status_finish(ctx: DeviceContext,mut status: DeviceBuffer[DType.int32],n: Int,completed: Int) raises:
+    if completed<0 or completed>=1000000:
+        raise Error("byte LM: completed step must be in [0,1000000)")
+    var host=ctx.enqueue_create_host_buffer[DType.int32](4)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(),src_buf=status)
+    step_count_sync()
+    ctx.synchronize()
+    var names: List[String]=["parameters","first moments","second moments"]
+    for field in range(3):
+        if host[field]<Int32(n):
+            raise Error("byte LM: nonfinite "+names[field]+" at "+String(host[field]))
+    if host[3]<Int32(n):
+        raise Error("byte LM: negative second moment")
+
+def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, arm: Int) raises -> Bool:
     """DEVIATIONS 2646 and 2647: the shadow point and the update of
     `_byte_step_device` under a glue arm carrying `optskip` and/or
     `noshadow` (brief sections 4.2, 4.3, 5.2, 5.3). Reached from a trial
@@ -1965,10 +1999,21 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
     if out_of_place:
         tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
         tr.shadow_step = tr.completed_steps
-    byte_glue_update_launch(ctx, tr.buffers.param, tr.buffers.grad,
-        tr.buffers.m_state, tr.buffers.v_state, tr.buffers.shadow_p,
-        tr.buffers.shadow_m, tr.buffers.shadow_v, tr.buffers.denom_out,
-        tr.buffers.q_out, n, tr.optimizer, next_step, out_of_place)
+    var use_live_status = False
+    comptime if is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]():
+        # This mechanism changes scheduling only on the existing admitted
+        # OOP Adam path. Fault builds keep the required post-fault scan;
+        # the path already refuses fault injection before it changes state.
+        use_live_status = out_of_place and not BYTE_LM_FAULT_INJECT
+    var live = List[DeviceBuffer[DType.int32]]()
+    if use_live_status:
+        live.append(ctx.enqueue_create_buffer[DType.int32](4))
+        _byte_live_status_launch(ctx,tr,live[0],next_step)
+    else:
+        byte_glue_update_launch(ctx, tr.buffers.param, tr.buffers.grad,
+            tr.buffers.m_state, tr.buffers.v_state, tr.buffers.shadow_p,
+            tr.buffers.shadow_m, tr.buffers.shadow_v, tr.buffers.denom_out,
+            tr.buffers.q_out, n, tr.optimizer, next_step, out_of_place)
     if out_of_place:
         # The new state is in `shadow_*` and the pre-update state is still in
         # `param`, `m_state`, `v_state`; swap the handles so every later
@@ -1977,7 +2022,12 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
         swap(tr.buffers.m_state, tr.buffers.shadow_m)
         swap(tr.buffers.v_state, tr.buffers.shadow_v)
         tr.shadow_valid = True
+    if use_live_status:
+        _byte_live_status_finish(ctx,live[0],n,next_step)
+        tr.live_status_steps += 1
     timing_tick(ctx, ton, tk, "step.optimizer")
+    _ = live^
+    return use_live_status
 
 
 def byte_checkpoint(capture: ByteStepCapture, seed: UInt64,
