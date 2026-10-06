@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "I24",
+  "mode": "identical",
+  "supported_vendors": [
+    "nvidia",
+    "amd",
+    "apple"
+  ],
+  "unsupported_reason": "DeviceContext oracle is GPU-only",
+  "status": "pending",
+  "default_enabled": false,
+  "arms": [
+    {
+      "name": "baseline",
+      "source": "experiments/performance_ideas/I24/check.mojo",
+      "defines": []
+    },
+    {
+      "name": "candidate",
+      "source": "experiments/performance_ideas/I24/check.mojo",
+      "defines": [
+        "MOJOLEARN_METRICS_JOINT_COUNTS=1"
+      ]
+    }
+  ]
+}

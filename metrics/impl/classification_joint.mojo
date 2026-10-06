@@ -11,6 +11,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from metrics.impl.classification import count_labels_kernel, MAX_CONFUSION_CLASSES, confusion_finish_kernel, prf_finish_kernel
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
+# I24 PENDING qualification; default OFF. Only an explicit IDENTICAL define
+# admits the joint count pass; the existing finish kernels remain authoritative.
+
 def joint_classification_count_kernel(truth: MutPointer[Int32, MutAnyOrigin],prediction: MutPointer[Int32, MutAnyOrigin],n: Int32,classes: Int32,matrix: MutPointer[Int32, MutAnyOrigin],prf: MutPointer[Int32, MutAnyOrigin]):
     var i=Int(block_idx.x)*256+Int(thread_idx.x)
     if i<Int(n):
