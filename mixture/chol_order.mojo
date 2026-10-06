@@ -72,6 +72,11 @@ comptime GMM_IDN_CHOL_MAX_D = GMM_IDN_CHOL_TPB
 # Representative synthetic caller results support retaining ON; full-board
 # qualification is separate. Evidence: experiments/performance_ideas/
 # measurements/20261006/index.json (fused_cholesky_off).
+# I21 legacy_both_off additionally restores the late mean-likelihood copy:
+# same frozen source/cases, AMD both-OFF/incumbent ratios 2.051/1.913/1.471
+# (all LOSS), converged=True and rc=0, one warmup/one score. NVIDIA matching
+# combined rollback remains pending. This bundle does not isolate the drain
+# control; retain both existing ON defaults and the full-board limitation.
 comptime IDN_GMM_FUSED_CHOL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
