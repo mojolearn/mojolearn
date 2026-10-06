@@ -40,6 +40,12 @@ def enqueue_joint_classification_counts(ctx: DeviceContext,mut truth: DeviceBuff
     # (1M rows, 33 classes); LOSS 3.874 vs 3.085 ms (1048573 rows, 17 classes).
     # One warmup/score; mixed scope-limited result, default OFF. Evidence:
     # overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
+    # I24 AMD MI325X scoped WINNER (2026-10-06, source f32549d28):
+    # candidate/base 0.858, 0.873, 0.859 for 1000000/1000001/1048577 rows,
+    # 33 classes; complete report plus readback, one same-process warmup/score.
+    # Existing identity evidence reused, not rerun. NVIDIA result above is mixed;
+    # generated fixtures alone do not qualify promotion. Default stays OFF.
+    # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I24.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_METRICS_JOINT_COUNTS"]():
         ctx.enqueue_function[joint_classification_count_kernel](truth.unsafe_ptr(),prediction.unsafe_ptr(),Int32(n),Int32(classes),matrix.unsafe_ptr(),prf.unsafe_ptr(),grid_dim=((n+255)//256,1,1),block_dim=(256,1,1))
     else:
