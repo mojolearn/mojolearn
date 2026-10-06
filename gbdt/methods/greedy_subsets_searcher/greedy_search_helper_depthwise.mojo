@@ -1266,9 +1266,19 @@ comptime LG_EXACT_BATCH_WIDTH = (
 #: MOJOLEARN_GBDT_NS_INHERIT_ID_OFF` (or the master `-D
 #: MOJOLEARN_IDN_ALL_OFF`) is the A/B arm; the old opt-in `-D
 #: MOJOLEARN_GBDT_NS_INHERIT_ID` stays harmless.
+# I17 inherited-partition control, source5b467815b (2026-10-06): OFF/ON
+# at rows/features10000/17,10001/18,32769/9, complete10-tree fits:
+# AMD Depthwise0.911/1.228/0.947, Lossguide0.818/1.185/0.835 (mixed).
+# NVIDIA Depthwise1.118/1.064/1.106 (OFF loses), Lossguide0.997/0.992/0.999.
+# This switch applies both policies; do not reuse the resident-frontier
+# candidate's Depthwise exclusion for these controls. One same-process
+# warmup/score; accepted identity reused. Preserve established ON default:
+# representative mixed results do not qualify a cross-vendor default change.
+# Evidence: overnight-ab-20261006/{amd,nvidia} normalized measurements,
+# I17 inherit_off (NVIDIA raw recovery: i17-inherit-depthwise-recovery.json).
 comptime NS_INHERIT_ID = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # I17 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
+    # Scoped inheritance controls above retain the existing default.
     and not is_defined["MOJOLEARN_GBDT_NS_INHERIT_ID_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
@@ -2235,7 +2245,10 @@ def fit_non_symmetric_tree[
     # Complete 10-tree fits; logs show six resident snapshots/tree. Depthwise
     # recorded zero snapshots: those controls do not measure this candidate.
     # One same-process warmup and score; accepted identity evidence reused.
-    # NVIDIA/full-workload qualification pending. Keep resident frontier OFF.
+    # Matching NVIDIA Lossguide ratios1.114/1.111/1.116 also lose; both
+    # vendors record six snapshots/tree. Candidate snapshot diagnostics are
+    # inside the timed fit; no isolated kernel-speed claim. Full-workload
+    # qualification remains pending. Keep resident frontier OFF.
     # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I17;
     # exact snapshot counts and raw timings remain in amd/live/repairs.
     comptime if LG_EXACT_ID and is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]():

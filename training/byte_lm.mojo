@@ -2000,9 +2000,14 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
         tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
         tr.shadow_step = tr.completed_steps
     var use_live_status = False
-    # I10 new candidate remains default off. Qualification is pending: native
-    # compilation is not four-column identity or NVIDIA+AMD full-operation speed.
-    # NEVER RUN — PENDING MEASUREMENT
+    # I10 sourcecbcc8dcd3303 (2026-10-06) L40S scoped WIN: live/base0.960,
+    # 1.601/1.667ms for one resident byte-training step (34944parameters,
+    # B2,L32,d_model32,two blocks). Driver selects noshadow/OOP Adam without
+    # fault injection, admitting this distinct status path. One same-process
+    # warmup/score; accepted identity reused, no additional validation.
+    # AMD matching timing and full application qualification remain pending;
+    # this single representative fixture keeps live status default OFF.
+    # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json, I10.
     comptime if is_defined["MOJOLEARN_TRAIN_LIVE_STATUS"]():
         # This mechanism changes scheduling only on the existing admitted
         # OOP Adam path. Fault builds keep the required post-fault scan;
