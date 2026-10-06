@@ -4,6 +4,14 @@ The [60-candidate A/B measurement board](../experiments/performance_ideas/measur
 records the overnight candidate campaign, including pending and failed cases,
 component versus full-workload scope, and retained per-device evidence.
 
+The overnight GPU-only opponent measurements are published separately for
+[NVIDIA architecture-specific](../bench/results/bench_board/overnight-20261006-nvidia-specific/BOARD.md),
+[NVIDIA default](../bench/results/bench_board/overnight-20261006-nvidia-default/BOARD.md), and
+[AMD](../bench/results/bench_board/overnight-20261006-amd/BOARD.md).
+These pages retain each source machine, runtime, coverage and failures. They do
+not compare opponent timings with the candidate campaign's component A/B rows.
+`tools/performance_opponents_publish.py` refreshes their captured source files.
+
 `tools/bench_board.py` is one script, the same file on every box. It times
 mojolearn from the installed PyPI wheel against the opponent libraries on the
 same box, in the same run, with the same settings, interleaved round by round,
