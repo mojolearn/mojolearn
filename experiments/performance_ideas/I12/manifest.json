@@ -13,7 +13,10 @@
     "experiments/performance_ideas/I12/check.mojo",
     "glm/impl/qn/glm_base.mojo",
     "glm/impl/qn/qn_linesearch.mojo",
-    "experiments/performance_ideas/I12/trials_check.mojo"
+    "experiments/performance_ideas/I12/trials_check.mojo",
+    "experiments/performance_ideas/I12/sgd_check.mojo",
+    "x_linear/device.mojo",
+    "x_linear/sgd.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_IDN_QN_EXACT_TRIALS=1"
@@ -40,7 +43,8 @@
     "{output}"
   ],
   "validation_paths": [
-    "experiments/performance_ideas/I12/check.mojo"
+    "experiments/performance_ideas/I12/check.mojo",
+    "experiments/performance_ideas/I12/sgd_check.mojo"
   ],
   "depends_on": [],
   "quality_gates": [
@@ -67,5 +71,7 @@
   ],
   "validation_argv": [
     "{output}"
-  ]
+  ],
+  "compile_matrix_path": "experiments/performance_ideas/I12/compile_matrix.json",
+  "arm_policy": "Compile every independent arm in compile_matrix.json once; no device qualification inferred from compiler exit status."
 }

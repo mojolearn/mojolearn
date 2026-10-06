@@ -11,7 +11,9 @@
   "status": "source_ready",
   "implementation_paths": [
     "experiments/performance_ideas/I08/check.mojo",
-    "mamba/impl/modules/ssd_minimal.mojo"
+    "mamba/impl/modules/ssd_minimal.mojo",
+    "experiments/performance_ideas/I08/backward_check.mojo",
+    "mamba/impl/modules/mamba2_prefill_backward.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_IDN_M2_RETAIN_GL=1"
@@ -38,7 +40,8 @@
     "{output}"
   ],
   "validation_paths": [
-    "experiments/performance_ideas/I08/check.mojo"
+    "experiments/performance_ideas/I08/check.mojo",
+    "experiments/performance_ideas/I08/backward_check.mojo"
   ],
   "depends_on": [],
   "quality_gates": [
@@ -65,5 +68,7 @@
   ],
   "validation_argv": [
     "{output}"
-  ]
+  ],
+  "compile_matrix_path": "experiments/performance_ideas/I08/compile_matrix.json",
+  "arm_policy": "Compile every independent arm in compile_matrix.json once; no device qualification inferred from compiler exit status."
 }

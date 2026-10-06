@@ -12,3 +12,11 @@ Merge admission: new source candidates remain explicit default-off opt-ins.
 Qualification remains pending. `native_arms.json` lists independently compiled
 incumbent/candidate and available rollback arms; compilation never promotes a
 switch or supplies performance evidence. Existing promoted defaults remain unchanged.
+
+Actual complete public backward consumers now run two short/cross-chunk
+fixtures, comparing every input/parameter gradient word across repeated fits
+and emitting all ten complete-gradient digests for frozen control pairing.
+The existing cstate tiles already share B*decay across eight p channels and
+retain decay values; this experiment adds retained G*L without discarding
+any stage used by backward. A changed shared-state arithmetic fold remains
+outside this schedule candidate. Full oracle/device pairing remains owed.
