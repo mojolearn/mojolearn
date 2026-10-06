@@ -7,6 +7,9 @@ or probability storage and score recomputation work; it does not replace
 measured complete-step acceptance or the input/checkpoint lifetime contract.
 """
 
+# I07 experiment qualification pending: compile/fixtures do not establish
+# four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
+# defaults stay unchanged; this campaign attributes explicit experiment arms.
 def _bounded_product(a: UInt64,b: UInt64) raises -> UInt64:
     if b!=0 and a>UInt64(0xffffffffffffffff)//b:
         raise Error("attention state model: cost overflow")
