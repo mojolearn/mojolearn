@@ -22574,8 +22574,4435 @@
       "stored_arms": [],
       "stored_now": 1,
       "wall_s": 3.5
+    },
+    "algos/lstm-clf/taxi-hourly/rows=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-compile-fp32",
+        "torch-eager-tf32",
+        "torch-compile-tf32",
+        "torch-eager-bf16",
+        "torch-compile-bf16"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "72c8a2133fdcb4f1",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1246.5114276856184,
+          "median_ms": 1246.5114276856184,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 695.4,
+            "peak_host_mb": 1122.8,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 695.3,
+            "warmup_host_mb": 1121.5
+          },
+          "min_ms": 1246.5114276856184,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 695.4,
+          "peak_host_mb": 1122.8,
+          "quality": {
+            "accuracy": 0.8682183159722222
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1246.5114276856184
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2031.2845464795828
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "72c8a2133fdcb4f1",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1257.4007641524076,
+          "median_ms": 1257.4007641524076,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 695.4,
+            "peak_host_mb": 1173.7,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 695.3,
+            "warmup_host_mb": 1172.7
+          },
+          "min_ms": 1257.4007641524076,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 695.4,
+          "peak_host_mb": 1173.7,
+          "quality": {
+            "accuracy": 0.8682183159722222
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1257.4007641524076
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2715.583009645343
+        },
+        {
+          "arm": "torch-eager-tf32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "17327d73fca6abd9",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1230.3703911602497,
+          "median_ms": 1230.3703911602497,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 695.4,
+            "peak_host_mb": 1124.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 695.3,
+            "warmup_host_mb": 1122.6
+          },
+          "min_ms": 1230.3703911602497,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 695.4,
+          "peak_host_mb": 1124.0,
+          "quality": {
+            "accuracy": 0.8681640625
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1230.3703911602497
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2060.5966802686453
+        },
+        {
+          "arm": "torch-compile-tf32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "17327d73fca6abd9",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1277.3713413625956,
+          "median_ms": 1277.3713413625956,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 695.4,
+            "peak_host_mb": 1175.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 695.3,
+            "warmup_host_mb": 1174.6
+          },
+          "min_ms": 1277.3713413625956,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 695.4,
+          "peak_host_mb": 1175.5,
+          "quality": {
+            "accuracy": 0.8681640625
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1277.3713413625956
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2694.7370674461126
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "1d1a7e1de80e4c34",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1805.4912593215704,
+          "median_ms": 1805.4912593215704,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 367.2,
+            "peak_host_mb": 1490.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 367.1,
+            "warmup_host_mb": 1489.2
+          },
+          "min_ms": 1805.4912593215704,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 367.2,
+          "peak_host_mb": 1490.6,
+          "quality": {
+            "accuracy": 0.8683268229166666
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1805.4912593215704
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2411.8718300014734
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "1d1a7e1de80e4c34",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1735.315328463912,
+          "median_ms": 1735.315328463912,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 367.2,
+            "peak_host_mb": 1542.3,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 367.1,
+            "warmup_host_mb": 1541.3
+          },
+          "min_ms": 1735.315328463912,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 367.2,
+          "peak_host_mb": 1542.3,
+          "quality": {
+            "accuracy": 0.8683268229166666
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1735.315328463912
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2762.650540098548
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "lstm-clf",
+        "--dataset",
+        "taxi-hourly",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-eager-fp32,torch-compile-fp32,torch-eager-tf32,torch-compile-tf32,torch-eager-bf16,torch-compile-bf16",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi-hourly",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:45:46Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/lstm-clf/taxi-hourly/rows=full",
+      "infer_cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "72c8a2133fdcb4f1",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "max_ms": 3.2017286866903305,
+          "median_ms": 3.2017286866903305,
+          "memory": {},
+          "min_ms": 3.2017286866903305,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            3.2017286866903305
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 29.11781147122383
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "72c8a2133fdcb4f1",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "max_ms": 3.6061350256204605,
+          "median_ms": 3.6061350256204605,
+          "memory": {},
+          "min_ms": 3.6061350256204605,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            3.6061350256204605
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 23.223724216222763
+        },
+        {
+          "arm": "torch-eager-tf32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "17327d73fca6abd9",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "max_ms": 3.1819771975278854,
+          "median_ms": 3.1819771975278854,
+          "memory": {},
+          "min_ms": 3.1819771975278854,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            3.1819771975278854
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 23.79840426146984
+        },
+        {
+          "arm": "torch-compile-tf32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "17327d73fca6abd9",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "max_ms": 3.574395552277565,
+          "median_ms": 3.574395552277565,
+          "memory": {},
+          "min_ms": 3.574395552277565,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            3.574395552277565
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 23.700052872300148
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "1d1a7e1de80e4c34",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "max_ms": 5.672803148627281,
+          "median_ms": 5.672803148627281,
+          "memory": {},
+          "min_ms": 5.672803148627281,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            5.672803148627281
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 26.399001479148865
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "1d1a7e1de80e4c34",
+          "hash_stable": null,
+          "lane": "lstm-clf",
+          "library": "torch",
+          "max_ms": 5.978548899292946,
+          "median_ms": 5.978548899292946,
+          "memory": {},
+          "min_ms": 5.978548899292946,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMClassifier",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+              "task": "clf",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            5.978548899292946
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 18.12628097832203
+        }
+      ],
+      "lane": "lstm-clf",
+      "lane_config": {
+        "block": "seqwin",
+        "datasets": [
+          "taxi-hourly",
+          "synthetic"
+        ],
+        "expansion_lane": "sequence",
+        "kind": "seqmodel",
+        "mismatches": [],
+        "notes": [
+          "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+          "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+        ],
+        "ours_class": "mojolearn.LSTMClassifier",
+        "params": {
+          "batch_size": 256,
+          "hidden_size": 64,
+          "learning_rate": 0.001,
+          "max_epochs": 2,
+          "num_layers": 1,
+          "optimizer": "adam",
+          "optimizer_options": {
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "eps": 1e-08,
+            "weight_decay": 0.0
+          },
+          "random_state": 7,
+          "shuffle": true
+        },
+        "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+        "task": "clf",
+        "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+        "timed_infer": "predict(Xq)"
+      },
+      "log": "logs/algos.lstm-clf.taxi-hourly.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-bf16": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "torch-compile-tf32": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "torch-eager-bf16": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "torch-eager-tf32": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 256,
+            "param": "batch_size",
+            "same": true,
+            "theirs": 256
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 64,
+            "param": "hidden_size",
+            "same": true,
+            "theirs": 64
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 1,
+            "param": "num_layers",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": true,
+            "param": "shuffle",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 256,
+            "param": "batch_size",
+            "same": true,
+            "theirs": 256
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 64,
+            "param": "hidden_size",
+            "same": true,
+            "theirs": 64
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 1,
+            "param": "num_layers",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": true,
+            "param": "shuffle",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 256,
+            "param": "batch_size",
+            "same": true,
+            "theirs": 256
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 64,
+            "param": "hidden_size",
+            "same": true,
+            "theirs": 64
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 1,
+            "param": "num_layers",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": true,
+            "param": "shuffle",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 256,
+            "param": "batch_size",
+            "same": true,
+            "theirs": 256
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 64,
+            "param": "hidden_size",
+            "same": true,
+            "theirs": 64
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 1,
+            "param": "num_layers",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": true,
+            "param": "shuffle",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 256,
+            "param": "batch_size",
+            "same": true,
+            "theirs": 256
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 64,
+            "param": "hidden_size",
+            "same": true,
+            "theirs": 64
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 1,
+            "param": "num_layers",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": true,
+            "param": "shuffle",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          }
+        ],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/lstm-clf",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/lstm-clf-taxi-hourly.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:45:16Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 6,
+      "wall_s": 30.2
+    },
+    "algos/lstm-reg/taxi-hourly/rows=full": {
+      "arms": [
+        "torch-eager-fp32",
+        "torch-compile-fp32",
+        "torch-eager-tf32",
+        "torch-compile-tf32",
+        "torch-eager-bf16",
+        "torch-compile-bf16"
+      ],
+      "cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "8a4a54faff35aaaa",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1330.889469012618,
+          "median_ms": 1330.889469012618,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 695.1,
+            "peak_host_mb": 1131.8,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 694.9,
+            "warmup_host_mb": 1130.5
+          },
+          "min_ms": 1330.889469012618,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 695.1,
+          "peak_host_mb": 1131.8,
+          "quality": {
+            "finite": true,
+            "r2": 0.751679144356432,
+            "rmse": 0.5404295375395983
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1330.889469012618
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2171.211501583457
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "8a4a54faff35aaaa",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1243.664514273405,
+          "median_ms": 1243.664514273405,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 695.1,
+            "peak_host_mb": 1183.5,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 694.9,
+            "warmup_host_mb": 1182.5
+          },
+          "min_ms": 1243.664514273405,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 695.1,
+          "peak_host_mb": 1183.5,
+          "quality": {
+            "finite": true,
+            "r2": 0.751679144356432,
+            "rmse": 0.5404295375395983
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1243.664514273405
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2716.2677701562643
+        },
+        {
+          "arm": "torch-eager-tf32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "595bc0bf7612f85b",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1253.8139000535011,
+          "median_ms": 1253.8139000535011,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 695.1,
+            "peak_host_mb": 1133.7,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 694.9,
+            "warmup_host_mb": 1132.3
+          },
+          "min_ms": 1253.8139000535011,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 695.1,
+          "peak_host_mb": 1133.7,
+          "quality": {
+            "finite": true,
+            "r2": 0.7516797067022023,
+            "rmse": 0.5404289256126704
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1253.8139000535011
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2084.650570526719
+        },
+        {
+          "arm": "torch-compile-tf32",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "595bc0bf7612f85b",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1285.245442762971,
+          "median_ms": 1285.245442762971,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 695.1,
+            "peak_host_mb": 1185.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 694.9,
+            "warmup_host_mb": 1184.1
+          },
+          "min_ms": 1285.245442762971,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 695.1,
+          "peak_host_mb": 1185.1,
+          "quality": {
+            "finite": true,
+            "r2": 0.7516797067022023,
+            "rmse": 0.5404289256126704
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1285.245442762971
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2737.761812284589
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "8fbb8ebeb4db44b3",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1711.1837044358253,
+          "median_ms": 1711.1837044358253,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 366.9,
+            "peak_host_mb": 1536.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 366.8,
+            "warmup_host_mb": 1535.0
+          },
+          "min_ms": 1711.1837044358253,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 366.9,
+          "peak_host_mb": 1536.4,
+          "quality": {
+            "finite": true,
+            "r2": 0.7517120496863796,
+            "rmse": 0.5403937298315591
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1711.1837044358253
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2368.4389870613813
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "8fbb8ebeb4db44b3",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 1539.5042411983013,
+          "median_ms": 1539.5042411983013,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 366.9,
+            "peak_host_mb": 1587.7,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 366.8,
+            "warmup_host_mb": 1586.7
+          },
+          "min_ms": 1539.5042411983013,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 366.9,
+          "peak_host_mb": 1587.7,
+          "quality": {
+            "finite": true,
+            "r2": 0.7517120496863796,
+            "rmse": 0.5403937298315591
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            1539.5042411983013
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 2816.2480890750885
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "lstm-reg",
+        "--dataset",
+        "taxi-hourly",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-eager-fp32,torch-compile-fp32,torch-eager-tf32,torch-compile-tf32,torch-eager-bf16,torch-compile-bf16",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi-hourly",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:46:16Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/lstm-reg/taxi-hourly/rows=full",
+      "infer_cells": [
+        {
+          "arm": "torch-eager-fp32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "8a4a54faff35aaaa",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "max_ms": 3.3808723092079163,
+          "median_ms": 3.3808723092079163,
+          "memory": {},
+          "min_ms": 3.3808723092079163,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            3.3808723092079163
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 17.62259192764759
+        },
+        {
+          "arm": "torch-compile-fp32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "8a4a54faff35aaaa",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "max_ms": 3.5258345305919647,
+          "median_ms": 3.5258345305919647,
+          "memory": {},
+          "min_ms": 3.5258345305919647,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            3.5258345305919647
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 21.206308156251907
+        },
+        {
+          "arm": "torch-eager-tf32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "595bc0bf7612f85b",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "max_ms": 3.1696781516075134,
+          "median_ms": 3.1696781516075134,
+          "memory": {},
+          "min_ms": 3.1696781516075134,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            3.1696781516075134
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 17.350226640701294
+        },
+        {
+          "arm": "torch-compile-tf32",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "595bc0bf7612f85b",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "max_ms": 3.341410309076309,
+          "median_ms": 3.341410309076309,
+          "memory": {},
+          "min_ms": 3.341410309076309,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            3.341410309076309
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 16.508471220731735
+        },
+        {
+          "arm": "torch-eager-bf16",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "8fbb8ebeb4db44b3",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "max_ms": 6.3903070986270905,
+          "median_ms": 6.3903070986270905,
+          "memory": {},
+          "min_ms": 6.3903070986270905,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            6.3903070986270905
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 22.01264165341854
+        },
+        {
+          "arm": "torch-compile-bf16",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi-hourly",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "8fbb8ebeb4db44b3",
+          "hash_stable": null,
+          "lane": "lstm-reg",
+          "library": "torch",
+          "max_ms": 6.7294929176568985,
+          "median_ms": 6.7294929176568985,
+          "memory": {},
+          "min_ms": 6.7294929176568985,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "seqwin",
+              "datasets": [
+                "taxi-hourly",
+                "synthetic"
+              ],
+              "expansion_lane": "sequence",
+              "kind": "seqmodel",
+              "mismatches": [],
+              "notes": [
+                "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+                "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+              ],
+              "ours_class": "mojolearn.LSTMRegressor",
+              "params": {
+                "batch_size": 256,
+                "hidden_size": 64,
+                "learning_rate": 0.001,
+                "max_epochs": 2,
+                "num_layers": 1,
+                "optimizer": "adam",
+                "optimizer_options": {
+                  "betas": [
+                    0.9,
+                    0.999
+                  ],
+                  "eps": 1e-08,
+                  "weight_decay": 0.0
+                },
+                "random_state": 7,
+                "shuffle": true
+              },
+              "quality": "held-out R2 and RMSE",
+              "task": "reg",
+              "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            6.7294929176568985
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 13.15229944884777
+        }
+      ],
+      "lane": "lstm-reg",
+      "lane_config": {
+        "block": "seqwin",
+        "datasets": [
+          "taxi-hourly",
+          "synthetic"
+        ],
+        "expansion_lane": "sequence",
+        "kind": "seqmodel",
+        "mismatches": [],
+        "notes": [
+          "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+          "torch arm: nn.LSTM(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+        ],
+        "ours_class": "mojolearn.LSTMRegressor",
+        "params": {
+          "batch_size": 256,
+          "hidden_size": 64,
+          "learning_rate": 0.001,
+          "max_epochs": 2,
+          "num_layers": 1,
+          "optimizer": "adam",
+          "optimizer_options": {
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "eps": 1e-08,
+            "weight_decay": 0.0
+          },
+          "random_state": 7,
+          "shuffle": true
+        },
+        "quality": "held-out R2 and RMSE",
+        "task": "reg",
+        "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+        "timed_infer": "predict(Xq)"
+      },
+      "log": "logs/algos.lstm-reg.taxi-hourly.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "torch-compile-bf16": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "torch-compile-fp32": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "torch-compile-tf32": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "torch-eager-bf16": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "torch-eager-fp32": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          },
+          "torch-eager-tf32": {
+            "library": "torch",
+            "params": {
+              "batch_size": 256,
+              "betas": [
+                0.9,
+                0.999
+              ],
+              "eps": 1e-08,
+              "hidden_size": 64,
+              "learning_rate": 0.001,
+              "num_layers": 1,
+              "seed": 7,
+              "shuffle": true,
+              "weight_decay": 0.0
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 256,
+            "param": "batch_size",
+            "same": true,
+            "theirs": 256
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 64,
+            "param": "hidden_size",
+            "same": true,
+            "theirs": 64
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 1,
+            "param": "num_layers",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": true,
+            "param": "shuffle",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-compile-fp32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 256,
+            "param": "batch_size",
+            "same": true,
+            "theirs": 256
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 64,
+            "param": "hidden_size",
+            "same": true,
+            "theirs": 64
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 1,
+            "param": "num_layers",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": true,
+            "param": "shuffle",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-eager-tf32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 256,
+            "param": "batch_size",
+            "same": true,
+            "theirs": 256
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 64,
+            "param": "hidden_size",
+            "same": true,
+            "theirs": 64
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 1,
+            "param": "num_layers",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": true,
+            "param": "shuffle",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-compile-tf32",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 256,
+            "param": "batch_size",
+            "same": true,
+            "theirs": 256
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 64,
+            "param": "hidden_size",
+            "same": true,
+            "theirs": 64
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 1,
+            "param": "num_layers",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": true,
+            "param": "shuffle",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-eager-bf16",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 256,
+            "param": "batch_size",
+            "same": true,
+            "theirs": 256
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": [
+              0.9,
+              0.999
+            ],
+            "param": "betas",
+            "same": true,
+            "theirs": [
+              0.9,
+              0.999
+            ]
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 1e-08,
+            "param": "eps",
+            "same": true,
+            "theirs": 1e-08
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 64,
+            "param": "hidden_size",
+            "same": true,
+            "theirs": 64
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 0.001,
+            "param": "learning_rate",
+            "same": true,
+            "theirs": 0.001
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 1,
+            "param": "num_layers",
+            "same": true,
+            "theirs": 1
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": true,
+            "param": "shuffle",
+            "same": true,
+            "theirs": true
+          },
+          {
+            "arm": "torch-compile-bf16",
+            "ours": 0.0,
+            "param": "weight_decay",
+            "same": true,
+            "theirs": 0.0
+          }
+        ],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/lstm-reg",
+        "problems": [],
+        "reference": "torch-eager-fp32",
+        "seed": 7,
+        "seed_none_deterministic": [],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/lstm-reg-taxi-hourly.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:45:46Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 6,
+      "wall_s": 30.3
+    },
+    "algos/lstsq/taxi/rows=full": {
+      "arms": [
+        "torch-gpu",
+        "cupy-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "least squares",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "0c978b87467975c0",
+          "hash_stable": null,
+          "lane": "lstsq",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 7.066568359732628,
+          "median_ms": 7.066568359732628,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 1122.8,
+            "peak_host_mb": 913.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 1110.4,
+            "warmup_host_mb": 903.4
+          },
+          "min_ms": 7.066568359732628,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 1122.8,
+          "peak_host_mb": 913.0,
+          "quality": {
+            "relative_residual": 0.7563658809250823
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "reg",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "decomp",
+              "kind": "linalg",
+              "mismatches": [],
+              "notes": [
+                "min ||X b - y|| on the reg block's fit rows (1,000,000 x d)"
+              ],
+              "ours_class": "mojolearn.lstsq or mojolearn.linalg.lstsq",
+              "params": {},
+              "quality": "relative residual vs numpy's",
+              "task": "lstsq",
+              "timed_fit": "least squares",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            7.066568359732628
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 172.7224364876747
+        },
+        {
+          "arm": "cupy-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "least squares",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "596c9e2c9d751272",
+          "hash_stable": null,
+          "lane": "lstsq",
+          "library": "cupy",
+          "library_version": "14.2.0",
+          "max_ms": 9.898990392684937,
+          "median_ms": 9.898990392684937,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 2778.0,
+            "peak_host_mb": 727.9,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 1670.0,
+            "warmup_host_mb": 725.7
+          },
+          "min_ms": 9.898990392684937,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cupy",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 2778.0,
+          "peak_host_mb": 727.9,
+          "quality": {
+            "relative_residual": 0.7563658809251067
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "reg",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "decomp",
+              "kind": "linalg",
+              "mismatches": [],
+              "notes": [
+                "min ||X b - y|| on the reg block's fit rows (1,000,000 x d)"
+              ],
+              "ours_class": "mojolearn.lstsq or mojolearn.linalg.lstsq",
+              "params": {},
+              "quality": "relative residual vs numpy's",
+              "task": "lstsq",
+              "timed_fit": "least squares",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            9.898990392684937
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 644.850792363286
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "lstsq",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-gpu,cupy-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:46:21Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/lstsq/taxi/rows=full",
+      "infer_cells": [],
+      "lane": "lstsq",
+      "lane_config": {
+        "block": "reg",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "decomp",
+        "kind": "linalg",
+        "mismatches": [],
+        "notes": [
+          "min ||X b - y|| on the reg block's fit rows (1,000,000 x d)"
+        ],
+        "ours_class": "mojolearn.lstsq or mojolearn.linalg.lstsq",
+        "params": {},
+        "quality": "relative residual vs numpy's",
+        "task": "lstsq",
+        "timed_fit": "least squares",
+        "timed_infer": null
+      },
+      "log": "logs/algos.lstsq.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cupy-gpu": {
+            "library": "cupy",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/lstsq",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cupy-gpu",
+          "torch-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/lstsq-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:46:16Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 5.2
+    },
+    "algos/lu-solve/synthetic/rows=full": {
+      "arms": [
+        "torch-gpu",
+        "cupy-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "torch-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "LU factor + solve",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "87086fbb72b740a0",
+          "hash_stable": null,
+          "lane": "lu-solve",
+          "library": "torch",
+          "library_version": "2.13.0+cu129",
+          "max_ms": 36.10941953957081,
+          "median_ms": 36.10941953957081,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 528.3,
+            "peak_host_mb": 824.1,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 526.3,
+            "warmup_host_mb": 806.0
+          },
+          "min_ms": 36.10941953957081,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "torch",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 528.3,
+          "peak_host_mb": 824.1,
+          "quality": {
+            "relative_residual": 3.385715286505644e-07
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "dense",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "decomp",
+              "kind": "linalg",
+              "mismatches": [],
+              "notes": [
+                "A = N(0,1) 8192 x 8192 + 2 sqrt(8192) I (seed 7), B 8192 x 64; LU with partial pivoting then the two triangular solves (numpy.linalg.solve = LAPACK getrf/getrs)",
+                "dense linear algebra has no dataset kind: one seeded matrix, not taxi/Istella"
+              ],
+              "ours_class": "mojolearn.solve or mojolearn.linalg.solve",
+              "params": {},
+              "quality": "relative residual ||A x - B|| / ||B||",
+              "task": "lu",
+              "timed_fit": "LU factor + solve",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            36.10941953957081
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 157.28222392499447
+        },
+        {
+          "arm": "cupy-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "device",
+              "inside_clock": "LU factor + solve",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "synthetic",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "87086fbb72b740a0",
+          "hash_stable": null,
+          "lane": "lu-solve",
+          "library": "cupy",
+          "library_version": "14.2.0",
+          "max_ms": 35.83376482129097,
+          "median_ms": 35.83376482129097,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 984.0,
+            "peak_host_mb": 778.4,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 982.0,
+            "warmup_host_mb": 764.5
+          },
+          "min_ms": 35.83376482129097,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cupy",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "peak_gpu_mb": 984.0,
+          "peak_host_mb": 778.4,
+          "quality": {
+            "relative_residual": 3.385715286505644e-07
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "dense",
+              "datasets": [
+                "synthetic"
+              ],
+              "expansion_lane": "decomp",
+              "kind": "linalg",
+              "mismatches": [],
+              "notes": [
+                "A = N(0,1) 8192 x 8192 + 2 sqrt(8192) I (seed 7), B 8192 x 64; LU with partial pivoting then the two triangular solves (numpy.linalg.solve = LAPACK getrf/getrs)",
+                "dense linear algebra has no dataset kind: one seeded matrix, not taxi/Istella"
+              ],
+              "ours_class": "mojolearn.solve or mojolearn.linalg.solve",
+              "params": {},
+              "quality": "relative residual ||A x - B|| / ||B||",
+              "task": "lu",
+              "timed_fit": "LU factor + solve",
+              "timed_infer": null
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": null,
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            35.83376482129097
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 243.62844228744507
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "lu-solve",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "torch-gpu,cupy-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "synthetic",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:46:33Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/lu-solve/synthetic/rows=full",
+      "infer_cells": [],
+      "lane": "lu-solve",
+      "lane_config": {
+        "block": "dense",
+        "datasets": [
+          "synthetic"
+        ],
+        "expansion_lane": "decomp",
+        "kind": "linalg",
+        "mismatches": [],
+        "notes": [
+          "A = N(0,1) 8192 x 8192 + 2 sqrt(8192) I (seed 7), B 8192 x 64; LU with partial pivoting then the two triangular solves (numpy.linalg.solve = LAPACK getrf/getrs)",
+          "dense linear algebra has no dataset kind: one seeded matrix, not taxi/Istella"
+        ],
+        "ours_class": "mojolearn.solve or mojolearn.linalg.solve",
+        "params": {},
+        "quality": "relative residual ||A x - B|| / ||B||",
+        "task": "lu",
+        "timed_fit": "LU factor + solve",
+        "timed_infer": null
+      },
+      "log": "logs/algos.lu-solve.synthetic.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cupy-gpu": {
+            "library": "cupy",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          },
+          "torch-gpu": {
+            "library": "torch",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "declared"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/lu-solve",
+        "problems": [],
+        "reference": "torch-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cupy-gpu",
+          "torch-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/lu-solve-synthetic.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:46:22Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 2,
+      "wall_s": 11.9
+    },
+    "algos/maxabs-scaler/taxi/rows=full": {
+      "arms": [
+        "cuml-gpu"
+      ],
+      "cells": [
+        {
+          "arm": "cuml-gpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 56.62401393055916
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "family": "algos",
+          "hash": "a53bc3e46999f042",
+          "hash_stable": null,
+          "lane": "maxabs-scaler",
+          "library": "cuml",
+          "library_version": "26.08.00",
+          "max_ms": 3.445412963628769,
+          "median_ms": 3.445412963628769,
+          "memory": {
+            "children_mb": 0.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)",
+            "peak_gpu_mb": 488.0,
+            "peak_host_mb": 892.7,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": 488.0,
+            "warmup_host_mb": 884.3
+          },
+          "min_ms": 3.445412963628769,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "cuml",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": 488.0,
+          "peak_host_mb": 892.7,
+          "quality": {
+            "output_shape": "100000x11"
+          },
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "MaxAbsScaler",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw",
+              "cuml": "cuml.preprocessing:MaxAbsScaler",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [],
+              "ours_class": "mojolearn.MaxAbsScaler",
+              "params": {},
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:MaxAbsScaler",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "source": "measured this run",
+          "status": "ok",
+          "times_ms": [
+            3.445412963628769
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 320.98206505179405
+        }
+      ],
+      "command": [
+        "/root/opponent-venv/bin/python",
+        "-u",
+        "/root/opponent-harness/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "maxabs-scaler",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/opponent-cache/algos-data/rows-full",
+        "--arms",
+        "cuml-gpu",
+        "--rounds",
+        "1",
+        "--out",
+        "/root/campaign-results/gpu-opponents/board/raw/algos/rows-full",
+        "--work",
+        "/root/campaign-results/gpu-opponents/board/work",
+        "--ours-python",
+        "/root/opponent-venv/bin/python",
+        "--theirs-python",
+        "/root/opponent-venv/bin/python",
+        "--ready-seconds",
+        "3600",
+        "--warmup-seconds",
+        "3600",
+        "--round-seconds",
+        "3600"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-10-06T07:46:37Z",
+      "host": {
+        "hostname": "cc560ebdaf91",
+        "pod_id": null
+      },
+      "id": "algos/maxabs-scaler/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "cuml-gpu",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "transform(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": 56.62401393055916
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": 56.62401393055916
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "a53bc3e46999f042",
+          "hash_stable": null,
+          "lane": "maxabs-scaler",
+          "library": "cuml",
+          "max_ms": 0.8571557700634003,
+          "median_ms": 0.8571557700634003,
+          "memory": {},
+          "min_ms": 0.8571557700634003,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": {
+              "commit": "e0f7a4e31578c8eeef376f3ce715d846bfee8d4c",
+              "entry": "MaxAbsScaler",
+              "harness": "cuML benchmark (RAPIDS)",
+              "url": "https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py"
+            },
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "raw",
+              "cuml": "cuml.preprocessing:MaxAbsScaler",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "prep",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [],
+              "ours_class": "mojolearn.MaxAbsScaler",
+              "params": {},
+              "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+              "sklearn": "sklearn.preprocessing:MaxAbsScaler",
+              "task": "transform",
+              "timed_fit": "fit(X)",
+              "timed_infer": "transform(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            0.8571557700634003
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 1.9606370478868484
+        }
+      ],
+      "lane": "maxabs-scaler",
+      "lane_config": {
+        "block": "raw",
+        "cuml": "cuml.preprocessing:MaxAbsScaler",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "prep",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [],
+        "ours_class": "mojolearn.MaxAbsScaler",
+        "params": {},
+        "quality": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
+        "sklearn": "sklearn.preprocessing:MaxAbsScaler",
+        "task": "transform",
+        "timed_fit": "fit(X)",
+        "timed_infer": "transform(Xq)"
+      },
+      "log": "logs/algos.maxabs-scaler.taxi.rows-full.log",
+      "our_arms": {},
+      "params": {
+        "arms": {
+          "cuml-gpu": {
+            "library": "cuml",
+            "params": {
+              "seed": "none (deterministic)"
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/maxabs-scaler",
+        "problems": [],
+        "reference": "cuml-gpu",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "cuml-gpu"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/maxabs-scaler-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "skipped_opponents": [],
+      "started": "2026-10-06T07:46:33Z",
+      "status": "done",
+      "stored_arms": [],
+      "stored_now": 1,
+      "wall_s": 3.8
     }
   },
   "schema": "mojolearn-bench-board/1",
-  "updated": "2026-10-06T07:45:16Z"
+  "updated": "2026-10-06T07:46:37Z"
 }
