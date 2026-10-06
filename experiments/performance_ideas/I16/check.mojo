@@ -30,7 +30,7 @@ def check(ctx: DeviceContext, dim: Int, occupancy: Int) raises:
             raise Error("I16 could not select scan arm")
         var result = _search(ctx,index,queries,nq,17,lists)
         for q in range(nq):
-            if result.n_candidates[q]!=n:
+            if result.n_candidates[q]!=Int32(n):
                 raise Error("I16 selected lists dropped candidates")
         for i in range(nq*17):
             var word = bitcast[DType.uint32](result.distances[i])
