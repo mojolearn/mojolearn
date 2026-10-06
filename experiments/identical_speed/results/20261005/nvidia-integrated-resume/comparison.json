@@ -1,0 +1,129 @@
+{
+  "status": "PASS",
+  "source_sha": "a006da73d78634683cfc77a12dcb99666c55748c",
+  "harness_sha": "11420aa8fe6db02332e8044203f096c714f6ad7c",
+  "retained_baseline_harness": "ad1d9ec2e4c7f906b05e9a305971967272a0dcf5",
+  "retained_baseline_lanes": [
+    "gemm",
+    "transformer-forward"
+  ],
+  "comparisons": {
+    "group-slack2": [
+      {
+        "race": "neural/gemm/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 83.25420133769512,
+        "candidate_ms": 82.15293288230896,
+        "candidate_over_baseline": 0.9867722176455792
+      },
+      {
+        "race": "neural/mlp-train-step/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 10.170897468924522,
+        "candidate_ms": 10.264560580253601,
+        "candidate_over_baseline": 1.0092089328021692
+      },
+      {
+        "race": "neural/transformer-forward/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 3.985906019806862,
+        "candidate_ms": 5.78746572136879,
+        "candidate_over_baseline": 1.4519824834327686
+      }
+    ],
+    "body-tiles": [
+      {
+        "race": "neural/gemm/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 83.25420133769512,
+        "candidate_ms": 84.60873924195766,
+        "candidate_over_baseline": 1.0162699044912853
+      },
+      {
+        "race": "neural/mlp-train-step/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 10.170897468924522,
+        "candidate_ms": 10.189706459641457,
+        "candidate_over_baseline": 1.0018492950867317
+      },
+      {
+        "race": "neural/transformer-forward/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 3.985906019806862,
+        "candidate_ms": 5.591941997408867,
+        "candidate_over_baseline": 1.402928711721062
+      }
+    ],
+    "one-page": [
+      {
+        "race": "neural/gemm/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 83.25420133769512,
+        "candidate_ms": 86.05076372623444,
+        "candidate_over_baseline": 1.0335906458005155
+      },
+      {
+        "race": "neural/mlp-train-step/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 10.170897468924522,
+        "candidate_ms": 10.351931676268578,
+        "candidate_over_baseline": 1.0177992362913082
+      },
+      {
+        "race": "neural/transformer-forward/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 3.985906019806862,
+        "candidate_ms": 4.073180258274078,
+        "candidate_over_baseline": 1.0218957090391823
+      }
+    ],
+    "group-slack8": [
+      {
+        "race": "neural/gemm/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 83.25420133769512,
+        "candidate_ms": 85.25126054883003,
+        "candidate_over_baseline": 1.0239874886678024
+      },
+      {
+        "race": "neural/mlp-train-step/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 10.170897468924522,
+        "candidate_ms": 10.578412562608719,
+        "candidate_over_baseline": 1.0400667782690063
+      },
+      {
+        "race": "neural/transformer-forward/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 3.985906019806862,
+        "candidate_ms": 5.723854526877403,
+        "candidate_over_baseline": 1.4360234532460838
+      }
+    ],
+    "packed64": [
+      {
+        "race": "neural/gemm/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 83.25420133769512,
+        "candidate_ms": 100.47127865254879,
+        "candidate_over_baseline": 1.2068013029759048
+      },
+      {
+        "race": "neural/mlp-train-step/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 10.170897468924522,
+        "candidate_ms": 10.264111682772636,
+        "candidate_over_baseline": 1.0091647973183206
+      },
+      {
+        "race": "neural/transformer-forward/gaussian/shape=full",
+        "bits": "MATCH",
+        "baseline_ms": 3.985906019806862,
+        "candidate_ms": 4.21503372490406,
+        "candidate_over_baseline": 1.0574844725286074
+      }
+    ]
+  },
+  "promotion": false,
+  "one_sample": true
+}

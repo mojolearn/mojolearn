@@ -6359,6 +6359,18 @@ comptime GEMM_KSPLIT_KS = 16
 # only baseline MLP was rerun. Original missing-hash failure remains recorded.
 # Evidence: experiments/identical_speed/results/20261005/amd-integrated-resume/.
 # Final owner capture 6ed220677906c67fe99968d5394309304494c1650f43f0a42dd3d46904b36dcd.
+# NVIDIA real public-harness follow-up (same frozen a006, harness11420aa8):
+# all15 candidate/lane comparisons MATCH, including full saved MLP state.
+# One warmup/sample; B/A (GEMM, MLP, transformer):
+# slack2 0.9868/1.0092/1.4520; body-tiles 1.0163/1.0018/1.4029;
+# one-page 1.0336/1.0178/1.0219; slack8 1.0240/1.0401/1.4360;
+# packed64 1.2068/1.0092/1.0575. No end-to-end default winner identified.
+# In particular the synthetic body-tiles/slack2 wins did NOT carry through
+# these public workloads. Keep defaults unchanged on both vendors. This is
+# single-sample evidence, not a statistically established regression claim.
+# Exact shapes/old retained baseline origins are recorded alongside results:
+# experiments/identical_speed/results/20261005/nvidia-integrated-resume/.
+# Final capture bdd685793e39f274a99bbf7319fbd1263cb9169908645eeb39d40a73403af41b.
 comptime _IDN_GEMM_GROUP_ARMS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 comptime GEMM_KSPLIT_SLACK = (
     2 if (_IDN_GEMM_GROUP_ARMS and is_defined["MOJOLEARN_IDN_GEMM_GROUP_SLACK_2"]()) else (

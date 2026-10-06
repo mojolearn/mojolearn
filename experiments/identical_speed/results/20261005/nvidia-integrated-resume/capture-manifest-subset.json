@@ -1,0 +1,654 @@
+{
+  "exclude_relative": [],
+  "manifest_sha256": "bdd685793e39f274a99bbf7319fbd1263cb9169908645eeb39d40a73403af41b",
+  "owner_id": "06456052-a874-4dd1-8bac-b15073d840a0",
+  "pod_id": "85xr33l7pdo4e6",
+  "rows": [
+    {
+      "bytes": 12445,
+      "path": "integrated-neural-ab-resume/baseline/BOARD.md",
+      "sha256": "d61a6cb2884d47262bc4a3986404f116b064f07ea95d1eed639e3fb7a5dfd8cf"
+    },
+    {
+      "bytes": 57276,
+      "path": "integrated-neural-ab-resume/baseline/board.json",
+      "sha256": "8663fb0b4c1705cc46aec19fdbba9d5d195a678b8bf56df79d5babc7f511117e"
+    },
+    {
+      "bytes": 1132,
+      "path": "integrated-neural-ab-resume/baseline/logs/neural.gemm.gaussian.shape-full.log",
+      "sha256": "ebe3d06d6764258b9657fc57d67902ad875b6b14acc8d7b1ec2dcefb1dc97f00"
+    },
+    {
+      "bytes": 1446,
+      "path": "integrated-neural-ab-resume/baseline/logs/neural.mlp-train-step.gaussian.shape-full.log",
+      "sha256": "2fc6819574b82b2b661dc7b81a3a6cacfd8be55aa919abccfb859d44d1b1db3b"
+    },
+    {
+      "bytes": 1440,
+      "path": "integrated-neural-ab-resume/baseline/logs/neural.transformer-forward.gaussian.shape-full.log",
+      "sha256": "2d561359e8feee48e414d57c0805d2e7f626b4a940c1d50283aaa23701effc05"
+    },
+    {
+      "bytes": 8390,
+      "path": "integrated-neural-ab-resume/baseline-audit.json",
+      "sha256": "4acfaacf445712e659954e8575bfc0017758169600c4671859dedf2fcb0b8f2e"
+    },
+    {
+      "bytes": 892,
+      "path": "integrated-neural-ab-resume/baseline-invocation.json",
+      "sha256": "9e3ea22beb4842167f2c1d33ed59558e985a3702c6006ac0cc281069114382df"
+    },
+    {
+      "bytes": 9329,
+      "path": "integrated-neural-ab-resume/baseline-mlp/BOARD.md",
+      "sha256": "bb6fc7e96ecd0300836dfc4ac5026129a4c946dcc4fba6fd3798098967f45eb1"
+    },
+    {
+      "bytes": 26766,
+      "path": "integrated-neural-ab-resume/baseline-mlp/board.json",
+      "sha256": "db2e7f7a8af0a7cafa13c55cb389afd54b96e390c79c72b5c0110bfd6637b4f0"
+    },
+    {
+      "bytes": 1446,
+      "path": "integrated-neural-ab-resume/baseline-mlp/logs/neural.mlp-train-step.gaussian.shape-full.log",
+      "sha256": "2fc6819574b82b2b661dc7b81a3a6cacfd8be55aa919abccfb859d44d1b1db3b"
+    },
+    {
+      "bytes": 4882,
+      "path": "integrated-neural-ab-resume/baseline-mlp/provenance/race-fj0p2gv2/5510.json",
+      "sha256": "ffc3b2e5260a1d654ae8c858ff20d0b7ca86f12996ab82cc639be43431f9f014"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/baseline-mlp/raw/neural/shape-full/mlp-train-step-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 5475,
+      "path": "integrated-neural-ab-resume/baseline-mlp/raw/neural/shape-full/mlp-train-step-gaussian-ours.outputs.npz",
+      "sha256": "465280ffea56ffbe0eac45773a86934504914a9bd95b2d22bc440a816f5568b4"
+    },
+    {
+      "bytes": 4289,
+      "path": "integrated-neural-ab-resume/baseline-mlp/raw/neural/shape-full/mlp-train-step-gaussian.json",
+      "sha256": "abc2e88e4348269c94fc1c4ba05319dab3ca8e734274c9ef9ab1f6f109173e69"
+    },
+    {
+      "bytes": 939,
+      "path": "integrated-neural-ab-resume/baseline-mlp-state-audit.json",
+      "sha256": "9941964120a6424160c675e1e3e254f3d6fa32bcb9fe36a096cfcea1263ef291"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/baseline-mlp-state-readback.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 509,
+      "path": "integrated-neural-ab-resume/baseline.log",
+      "sha256": "a11d37c6d63c8f45654cc42c14127c8b0bfcd74b0d4a8186964f0ba0670a4068"
+    },
+    {
+      "bytes": 12451,
+      "path": "integrated-neural-ab-resume/body-tiles/BOARD.md",
+      "sha256": "016e05ac44263aac9e0c4c06743d5266fa3218b12d11f8723bc6f9fc22e88bf6"
+    },
+    {
+      "bytes": 55311,
+      "path": "integrated-neural-ab-resume/body-tiles/board.json",
+      "sha256": "1c86504270aa38d8fc291d3b62132eb09fb065a2ec090fa062711811945cf2b0"
+    },
+    {
+      "bytes": 1159,
+      "path": "integrated-neural-ab-resume/body-tiles/logs/neural.gemm.gaussian.shape-full.log",
+      "sha256": "c249ad7d1864e9cbe41a434b37a695cbebd3fc4f79aafcc8e1304746e9b07526"
+    },
+    {
+      "bytes": 1448,
+      "path": "integrated-neural-ab-resume/body-tiles/logs/neural.mlp-train-step.gaussian.shape-full.log",
+      "sha256": "ef17ebee29beb4bff6970f49289b0b2523c94db2f050e1fadfe3818b6934c4d9"
+    },
+    {
+      "bytes": 1467,
+      "path": "integrated-neural-ab-resume/body-tiles/logs/neural.transformer-forward.gaussian.shape-full.log",
+      "sha256": "a9039be5a0a1a6e9f52d8d2a06d34730cb3a999e4db770f2ab75882bd9d58a6b"
+    },
+    {
+      "bytes": 4862,
+      "path": "integrated-neural-ab-resume/body-tiles/provenance/race-lz6djtcc/7503.json",
+      "sha256": "b1be85c0a76e61e2fb47a8d4db7f34e81e342d64126d9682f9c4d9b70af63fe7"
+    },
+    {
+      "bytes": 4882,
+      "path": "integrated-neural-ab-resume/body-tiles/provenance/race-p6f6mduk/8169.json",
+      "sha256": "a771637ac056a6e8b02e70f9e3300e3e4f5e3f4ed37778f4ff55efe782ba7721"
+    },
+    {
+      "bytes": 5096,
+      "path": "integrated-neural-ab-resume/body-tiles/provenance/race-teunc22s/7797.json",
+      "sha256": "0f811139f08c6bd7a11fd26f6d81ce4ac5566cdd957271c988700daa881059fe"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/body-tiles/raw/neural/shape-full/gemm-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3511,
+      "path": "integrated-neural-ab-resume/body-tiles/raw/neural/shape-full/gemm-gaussian.json",
+      "sha256": "4526e8fddf291c0a7d3fc7cd0522f7fb8f7011aae8a7cdba2a642dd32c9d0e4b"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/body-tiles/raw/neural/shape-full/mlp-train-step-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 5475,
+      "path": "integrated-neural-ab-resume/body-tiles/raw/neural/shape-full/mlp-train-step-gaussian-ours.outputs.npz",
+      "sha256": "465280ffea56ffbe0eac45773a86934504914a9bd95b2d22bc440a816f5568b4"
+    },
+    {
+      "bytes": 4289,
+      "path": "integrated-neural-ab-resume/body-tiles/raw/neural/shape-full/mlp-train-step-gaussian.json",
+      "sha256": "84fa06828d84518051f8a26d21fb74aa709a6a4100df9a7dcece2c40dbd03a03"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/body-tiles/raw/neural/shape-full/transformer-forward-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3145984,
+      "path": "integrated-neural-ab-resume/body-tiles/raw/neural/shape-full/transformer-forward-gaussian-ours.outputs.npz",
+      "sha256": "641264f6c73a14540ee4934dcc0f727ff2370696f37c8d4ce21688492529c6ba"
+    },
+    {
+      "bytes": 10229370,
+      "path": "integrated-neural-ab-resume/body-tiles/raw/neural/shape-full/transformer-forward-gaussian.inputs.npz",
+      "sha256": "7e23ff472e3a21cbfb68ae06dd6c3f271cae9585962bce2da9d3ad688472ab2f"
+    },
+    {
+      "bytes": 4926,
+      "path": "integrated-neural-ab-resume/body-tiles/raw/neural/shape-full/transformer-forward-gaussian.json",
+      "sha256": "eb245992db093cff83ba267b2d7073611350908315c779cb3c6e828872fb4244"
+    },
+    {
+      "bytes": 8329,
+      "path": "integrated-neural-ab-resume/body-tiles-audit.json",
+      "sha256": "341665ba590cad296d752c6381f05550614ada895b5df117177f5279c6ceeb9f"
+    },
+    {
+      "bytes": 921,
+      "path": "integrated-neural-ab-resume/body-tiles-invocation.json",
+      "sha256": "b69f1406f11ccd2c012f09a6d9f791d7ed357669e16bd65e8b670e6c6f6a5d63"
+    },
+    {
+      "bytes": 937,
+      "path": "integrated-neural-ab-resume/body-tiles-state-audit.json",
+      "sha256": "abbce6fd14c106a08e4c37d8e02ebba55fa2af1e98e7d7dfb0194c23b68d89da"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/body-tiles-state-readback.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1336,
+      "path": "integrated-neural-ab-resume/body-tiles.log",
+      "sha256": "49fb292709a67c379430bd986d7857b13438179ce701cbc82367c01ee499ecc5"
+    },
+    {
+      "bytes": 4102,
+      "path": "integrated-neural-ab-resume/comparison.json",
+      "sha256": "138ff8530ce2015c657bd19144b99f904d66af31ab2bf324318a5705e20fbec9"
+    },
+    {
+      "bytes": 12457,
+      "path": "integrated-neural-ab-resume/group-slack2/BOARD.md",
+      "sha256": "32c585177cd6e6dced615080bda0b8fdced96d2b3363e60d4b86ea079a48022b"
+    },
+    {
+      "bytes": 55362,
+      "path": "integrated-neural-ab-resume/group-slack2/board.json",
+      "sha256": "3723ffa4065712eef1ffcbe000c5e59fe682241235a88edfbea3c08db204539e"
+    },
+    {
+      "bytes": 1169,
+      "path": "integrated-neural-ab-resume/group-slack2/logs/neural.gemm.gaussian.shape-full.log",
+      "sha256": "8bc99e0971fd77fef4516ef516a5e48ea05c180e9712616b35f7959b2e018c99"
+    },
+    {
+      "bytes": 1458,
+      "path": "integrated-neural-ab-resume/group-slack2/logs/neural.mlp-train-step.gaussian.shape-full.log",
+      "sha256": "2186c40859ee5aa0956845229fb413915093759ffde40ff1c163c953497bd2f6"
+    },
+    {
+      "bytes": 1476,
+      "path": "integrated-neural-ab-resume/group-slack2/logs/neural.transformer-forward.gaussian.shape-full.log",
+      "sha256": "2526a3e30d4c27f98dc2d3bfa0e820c3eaa00651602ecf70ebe7d6adea46ad43"
+    },
+    {
+      "bytes": 4866,
+      "path": "integrated-neural-ab-resume/group-slack2/provenance/race-hsndbumt/6210.json",
+      "sha256": "890a0ea54d2a551b3fbf4c12ccca28e3d124311e9e407f23586c2653fe99eaf3"
+    },
+    {
+      "bytes": 4886,
+      "path": "integrated-neural-ab-resume/group-slack2/provenance/race-p2lt2uxo/6840.json",
+      "sha256": "40aa2186c69322cfdbfd5bdf434722ab6e01f45de0653592731424f089e39277"
+    },
+    {
+      "bytes": 5100,
+      "path": "integrated-neural-ab-resume/group-slack2/provenance/race-p9tvq004/6482.json",
+      "sha256": "69629b84fabcf19a3e6f786b3bc7dbb45a36e3c8de5d8995daa377c9a26c12df"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/group-slack2/raw/neural/shape-full/gemm-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3517,
+      "path": "integrated-neural-ab-resume/group-slack2/raw/neural/shape-full/gemm-gaussian.json",
+      "sha256": "7e504ea97869acb2b5128afac0fa010be980c4aba6002f0d126baa135837e91c"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/group-slack2/raw/neural/shape-full/mlp-train-step-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 5475,
+      "path": "integrated-neural-ab-resume/group-slack2/raw/neural/shape-full/mlp-train-step-gaussian-ours.outputs.npz",
+      "sha256": "465280ffea56ffbe0eac45773a86934504914a9bd95b2d22bc440a816f5568b4"
+    },
+    {
+      "bytes": 4297,
+      "path": "integrated-neural-ab-resume/group-slack2/raw/neural/shape-full/mlp-train-step-gaussian.json",
+      "sha256": "340ff25e07c34fa1bac2a1e565e23e676f807a824e81770a171126bdfe99fd43"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/group-slack2/raw/neural/shape-full/transformer-forward-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3145984,
+      "path": "integrated-neural-ab-resume/group-slack2/raw/neural/shape-full/transformer-forward-gaussian-ours.outputs.npz",
+      "sha256": "641264f6c73a14540ee4934dcc0f727ff2370696f37c8d4ce21688492529c6ba"
+    },
+    {
+      "bytes": 10229370,
+      "path": "integrated-neural-ab-resume/group-slack2/raw/neural/shape-full/transformer-forward-gaussian.inputs.npz",
+      "sha256": "7e23ff472e3a21cbfb68ae06dd6c3f271cae9585962bce2da9d3ad688472ab2f"
+    },
+    {
+      "bytes": 4935,
+      "path": "integrated-neural-ab-resume/group-slack2/raw/neural/shape-full/transformer-forward-gaussian.json",
+      "sha256": "41716fd1c27709731b5cb90f09726bf899e2dfa36e2241507e7363ad5fa67c5b"
+    },
+    {
+      "bytes": 8328,
+      "path": "integrated-neural-ab-resume/group-slack2-audit.json",
+      "sha256": "02f8bf6e9814eb25f6654880e82b696fb138aada7014624cd8b10bd8087a8ba6"
+    },
+    {
+      "bytes": 929,
+      "path": "integrated-neural-ab-resume/group-slack2-invocation.json",
+      "sha256": "0be2469a405d815ff9829d77786815bd4226693692f9c74f70270099062a009e"
+    },
+    {
+      "bytes": 939,
+      "path": "integrated-neural-ab-resume/group-slack2-state-audit.json",
+      "sha256": "c5b51c79a65fe2c2d340c38b38fe3e1ee34435d0b09f0334ab051cfb767b4ce7"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/group-slack2-state-readback.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1338,
+      "path": "integrated-neural-ab-resume/group-slack2.log",
+      "sha256": "6d0cdacc23985a15ac6c80bfa89a1dcdac2553e8f7b80b987f9f5cd4b0e6a80c"
+    },
+    {
+      "bytes": 12457,
+      "path": "integrated-neural-ab-resume/group-slack8/BOARD.md",
+      "sha256": "76c681682fc77668135dff78be06704239e4c908868d0d4b2d8e60664acd3382"
+    },
+    {
+      "bytes": 55369,
+      "path": "integrated-neural-ab-resume/group-slack8/board.json",
+      "sha256": "75633d7f7cd0c7baff93eff1f96e40bfaf3605c8836fa015dd2342ea89ce9999"
+    },
+    {
+      "bytes": 1169,
+      "path": "integrated-neural-ab-resume/group-slack8/logs/neural.gemm.gaussian.shape-full.log",
+      "sha256": "bb107e59cefc8dd13988caa4734c61316643772fa79678685de7a8170e9bc3ee"
+    },
+    {
+      "bytes": 1458,
+      "path": "integrated-neural-ab-resume/group-slack8/logs/neural.mlp-train-step.gaussian.shape-full.log",
+      "sha256": "480b6cff71582ee8164e1e45c835591c0df49b9b14836e426576d5a3419f18b5"
+    },
+    {
+      "bytes": 1477,
+      "path": "integrated-neural-ab-resume/group-slack8/logs/neural.transformer-forward.gaussian.shape-full.log",
+      "sha256": "b309551259bc38e9ae737c67a9c28852deb45d632059baeeb9109bb456bd3d09"
+    },
+    {
+      "bytes": 5101,
+      "path": "integrated-neural-ab-resume/group-slack8/provenance/race-fdh2phwa/10434.json",
+      "sha256": "016764a22d341a6417a295d4872e2e35cbc636ea7ad359145f539cadc6d6c393"
+    },
+    {
+      "bytes": 4887,
+      "path": "integrated-neural-ab-resume/group-slack8/provenance/race-jhk2m5oj/10803.json",
+      "sha256": "678d108f10d735b72f10dfe391971c113a2178dc199288bfb3bd6e41b0e172e7"
+    },
+    {
+      "bytes": 4867,
+      "path": "integrated-neural-ab-resume/group-slack8/provenance/race-ywp0fbti/10137.json",
+      "sha256": "73aff337866c29af5d29c2d1006524808a898d16c3a7d622712d4b1d3f683895"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/group-slack8/raw/neural/shape-full/gemm-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3517,
+      "path": "integrated-neural-ab-resume/group-slack8/raw/neural/shape-full/gemm-gaussian.json",
+      "sha256": "bff6836400c793573e6c40c1600fabe874911500a3cd9032d1e351be284e5c28"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/group-slack8/raw/neural/shape-full/mlp-train-step-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 5475,
+      "path": "integrated-neural-ab-resume/group-slack8/raw/neural/shape-full/mlp-train-step-gaussian-ours.outputs.npz",
+      "sha256": "465280ffea56ffbe0eac45773a86934504914a9bd95b2d22bc440a816f5568b4"
+    },
+    {
+      "bytes": 4297,
+      "path": "integrated-neural-ab-resume/group-slack8/raw/neural/shape-full/mlp-train-step-gaussian.json",
+      "sha256": "54c47e2b96766d03c84240efae448e83d5b42a1c7c37609e4bbdbf29ac4dd965"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/group-slack8/raw/neural/shape-full/transformer-forward-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3145984,
+      "path": "integrated-neural-ab-resume/group-slack8/raw/neural/shape-full/transformer-forward-gaussian-ours.outputs.npz",
+      "sha256": "641264f6c73a14540ee4934dcc0f727ff2370696f37c8d4ce21688492529c6ba"
+    },
+    {
+      "bytes": 10229370,
+      "path": "integrated-neural-ab-resume/group-slack8/raw/neural/shape-full/transformer-forward-gaussian.inputs.npz",
+      "sha256": "7e23ff472e3a21cbfb68ae06dd6c3f271cae9585962bce2da9d3ad688472ab2f"
+    },
+    {
+      "bytes": 4937,
+      "path": "integrated-neural-ab-resume/group-slack8/raw/neural/shape-full/transformer-forward-gaussian.json",
+      "sha256": "bb0c04a745f2d99f2ecb7511ff10fcac439f9e668b41ac30c13c5b751959783e"
+    },
+    {
+      "bytes": 8329,
+      "path": "integrated-neural-ab-resume/group-slack8-audit.json",
+      "sha256": "8bcdcf785b0be5e6668bd0ff7d6a7d8689320de9a987098a9b77e785bc416c8b"
+    },
+    {
+      "bytes": 929,
+      "path": "integrated-neural-ab-resume/group-slack8-invocation.json",
+      "sha256": "4cfaf2e49bdee14eef4e3b4b45015ca459cb68d71b6b98332b9463645ff09bf2"
+    },
+    {
+      "bytes": 939,
+      "path": "integrated-neural-ab-resume/group-slack8-state-audit.json",
+      "sha256": "af3e220df8b1ab9677f855df0e66a894753d358bd3721e39122fd7d77c350db8"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/group-slack8-state-readback.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1338,
+      "path": "integrated-neural-ab-resume/group-slack8.log",
+      "sha256": "81b2c464c914134e4bc98f73a1ac79b45e496c5d183869c8d7be69d7069c5463"
+    },
+    {
+      "bytes": 12445,
+      "path": "integrated-neural-ab-resume/one-page/BOARD.md",
+      "sha256": "d4e541b1e8e6e8918da6243aadb30ffd57a2253dcbba6286c8a7b6afeee33821"
+    },
+    {
+      "bytes": 55256,
+      "path": "integrated-neural-ab-resume/one-page/board.json",
+      "sha256": "7ead96654bd94abe2063f5843905fe04d0813e6a1c5e5b7a85a6a471f7db9add"
+    },
+    {
+      "bytes": 1149,
+      "path": "integrated-neural-ab-resume/one-page/logs/neural.gemm.gaussian.shape-full.log",
+      "sha256": "053fcaf7d7a01aef48c714bd1b00a5855c75adb121da5efb9af6ffb5943023f7"
+    },
+    {
+      "bytes": 1438,
+      "path": "integrated-neural-ab-resume/one-page/logs/neural.mlp-train-step.gaussian.shape-full.log",
+      "sha256": "f2fa3e369ecccc09a72f5774e8fd26c769aceb2f49f75b5cbd934a446dfb8230"
+    },
+    {
+      "bytes": 1457,
+      "path": "integrated-neural-ab-resume/one-page/logs/neural.transformer-forward.gaussian.shape-full.log",
+      "sha256": "47b10732b8b464b78f3abaa1f8681d427238133578b0d9df269e87f53a350c6e"
+    },
+    {
+      "bytes": 4858,
+      "path": "integrated-neural-ab-resume/one-page/provenance/race-7o_jf8lz/8844.json",
+      "sha256": "c7e3f2d41b8e02f40bcb88a6d055a546255f81d04bd90f3f8ecfe6a32ed23bb1"
+    },
+    {
+      "bytes": 4878,
+      "path": "integrated-neural-ab-resume/one-page/provenance/race-bv76b9wf/9474.json",
+      "sha256": "053fa3cc9d34101033459a85987a98bf97665dde7a496d975b969ee89cb31952"
+    },
+    {
+      "bytes": 5092,
+      "path": "integrated-neural-ab-resume/one-page/provenance/race-w5xc6u0d/9115.json",
+      "sha256": "8e652c95020be31035329a446235762ee9555800ed02f4b8441eb06a80dbb9f6"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/one-page/raw/neural/shape-full/gemm-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3503,
+      "path": "integrated-neural-ab-resume/one-page/raw/neural/shape-full/gemm-gaussian.json",
+      "sha256": "e6a0ac7fa79787b4896def65ad4f58d8d068a832b8974e9ea749526abb41b3b7"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/one-page/raw/neural/shape-full/mlp-train-step-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 5475,
+      "path": "integrated-neural-ab-resume/one-page/raw/neural/shape-full/mlp-train-step-gaussian-ours.outputs.npz",
+      "sha256": "465280ffea56ffbe0eac45773a86934504914a9bd95b2d22bc440a816f5568b4"
+    },
+    {
+      "bytes": 4281,
+      "path": "integrated-neural-ab-resume/one-page/raw/neural/shape-full/mlp-train-step-gaussian.json",
+      "sha256": "a3e898db235e6e0a083c53742d814558ce126d38bddbd364c9dab6c89139569e"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/one-page/raw/neural/shape-full/transformer-forward-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3145984,
+      "path": "integrated-neural-ab-resume/one-page/raw/neural/shape-full/transformer-forward-gaussian-ours.outputs.npz",
+      "sha256": "641264f6c73a14540ee4934dcc0f727ff2370696f37c8d4ce21688492529c6ba"
+    },
+    {
+      "bytes": 10229370,
+      "path": "integrated-neural-ab-resume/one-page/raw/neural/shape-full/transformer-forward-gaussian.inputs.npz",
+      "sha256": "7e23ff472e3a21cbfb68ae06dd6c3f271cae9585962bce2da9d3ad688472ab2f"
+    },
+    {
+      "bytes": 4917,
+      "path": "integrated-neural-ab-resume/one-page/raw/neural/shape-full/transformer-forward-gaussian.json",
+      "sha256": "981901b61d18600aac931c6e9f5a693b6d53927e64e29b5e5db8c16519bfc14d"
+    },
+    {
+      "bytes": 8329,
+      "path": "integrated-neural-ab-resume/one-page-audit.json",
+      "sha256": "d305af911899096ec8d29ff578a4505c094c37273bba1d705d78b16e28ca7595"
+    },
+    {
+      "bytes": 913,
+      "path": "integrated-neural-ab-resume/one-page-invocation.json",
+      "sha256": "c702c87af826050fdbcd3e38669795987c1f0e663b3dc36d219ebbbc97f6e380"
+    },
+    {
+      "bytes": 935,
+      "path": "integrated-neural-ab-resume/one-page-state-audit.json",
+      "sha256": "5f63dfd530539f3ad80c2df337f2acacfdd2e7f33f09770ccb2cec599b66bdb2"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/one-page-state-readback.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1334,
+      "path": "integrated-neural-ab-resume/one-page.log",
+      "sha256": "ed8fa16a930ae03f29c6a7cb00c68fd3ffd101266db6d1b86aaddbe749b582e1"
+    },
+    {
+      "bytes": 12448,
+      "path": "integrated-neural-ab-resume/packed64/BOARD.md",
+      "sha256": "3375c85401fb7bb5b39b079c6fdebf96429436a8862beca5085237ac1d1fe9fe"
+    },
+    {
+      "bytes": 55260,
+      "path": "integrated-neural-ab-resume/packed64/board.json",
+      "sha256": "7e934dc760d4088b0fa08b9f692d282a8e2b04dadf9c632897c98e43bc01b5f1"
+    },
+    {
+      "bytes": 1151,
+      "path": "integrated-neural-ab-resume/packed64/logs/neural.gemm.gaussian.shape-full.log",
+      "sha256": "660aba7a83d390a38ff98d7b1cdca946930e469aed28e2ad829125e9a045baf1"
+    },
+    {
+      "bytes": 1438,
+      "path": "integrated-neural-ab-resume/packed64/logs/neural.mlp-train-step.gaussian.shape-full.log",
+      "sha256": "19f38d696f39f44ffcbb242c0b4b537037c4de0c418134fa3d28f0b35cb211cb"
+    },
+    {
+      "bytes": 1456,
+      "path": "integrated-neural-ab-resume/packed64/logs/neural.transformer-forward.gaussian.shape-full.log",
+      "sha256": "6322b63e7ca42d050792f4459f1c8d59b90aa79cdaf060ebbbe0a611becf29e8"
+    },
+    {
+      "bytes": 5093,
+      "path": "integrated-neural-ab-resume/packed64/provenance/race-40g_u9o1/11738.json",
+      "sha256": "3efb06cae0c409bde0f80cb3efe885df2fbd34f13e09f133f04065925f7454f2"
+    },
+    {
+      "bytes": 4859,
+      "path": "integrated-neural-ab-resume/packed64/provenance/race-gtqdncvz/11478.json",
+      "sha256": "731a446369047972c68df29ee1c5d0fc7433d2b39a2d3c85f301895079d09b03"
+    },
+    {
+      "bytes": 4879,
+      "path": "integrated-neural-ab-resume/packed64/provenance/race-it7rr9qb/12108.json",
+      "sha256": "9b96b507f6e11a00bb12a76bbaf048c7418564b37cecaf48a3e66e4efdbe6b1e"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/packed64/raw/neural/shape-full/gemm-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3507,
+      "path": "integrated-neural-ab-resume/packed64/raw/neural/shape-full/gemm-gaussian.json",
+      "sha256": "7392e1c7a90e8c4f7328db5f0093a8ca32f90f53560c1d65eb193a52d5438e65"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/packed64/raw/neural/shape-full/mlp-train-step-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 5475,
+      "path": "integrated-neural-ab-resume/packed64/raw/neural/shape-full/mlp-train-step-gaussian-ours.outputs.npz",
+      "sha256": "465280ffea56ffbe0eac45773a86934504914a9bd95b2d22bc440a816f5568b4"
+    },
+    {
+      "bytes": 4280,
+      "path": "integrated-neural-ab-resume/packed64/raw/neural/shape-full/mlp-train-step-gaussian.json",
+      "sha256": "ccc6881ffce6ebf21efb69dd526a4a135840887b029a7c3764d855153007c50a"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/packed64/raw/neural/shape-full/transformer-forward-gaussian-ours.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 3145984,
+      "path": "integrated-neural-ab-resume/packed64/raw/neural/shape-full/transformer-forward-gaussian-ours.outputs.npz",
+      "sha256": "641264f6c73a14540ee4934dcc0f727ff2370696f37c8d4ce21688492529c6ba"
+    },
+    {
+      "bytes": 10229370,
+      "path": "integrated-neural-ab-resume/packed64/raw/neural/shape-full/transformer-forward-gaussian.inputs.npz",
+      "sha256": "7e23ff472e3a21cbfb68ae06dd6c3f271cae9585962bce2da9d3ad688472ab2f"
+    },
+    {
+      "bytes": 4915,
+      "path": "integrated-neural-ab-resume/packed64/raw/neural/shape-full/transformer-forward-gaussian.json",
+      "sha256": "3ccea1e89ced892d60fdc65a6b86bac241af9730bf5922ebc3c09268691b3592"
+    },
+    {
+      "bytes": 8329,
+      "path": "integrated-neural-ab-resume/packed64-audit.json",
+      "sha256": "9098fad98934c5a0b7df59ce562a63c735444f5b9f0346abc0fef61c33a56fb1"
+    },
+    {
+      "bytes": 913,
+      "path": "integrated-neural-ab-resume/packed64-invocation.json",
+      "sha256": "b085651e5b8e8eecfb5594e3873ac6d11a7ac0ddf2ec37944e071b0c8d161b4e"
+    },
+    {
+      "bytes": 935,
+      "path": "integrated-neural-ab-resume/packed64-state-audit.json",
+      "sha256": "6c848e7c4fa08c1e930ac576cab13c94b4d62c61f4eac33b01775704909a06bc"
+    },
+    {
+      "bytes": 0,
+      "path": "integrated-neural-ab-resume/packed64-state-readback.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 1334,
+      "path": "integrated-neural-ab-resume/packed64.log",
+      "sha256": "27b6c554501d9e02e9b99dddd889baa71236eb7cf3f572a6b1b421bf2c6f28af"
+    },
+    {
+      "bytes": 671,
+      "path": "integrated-neural-ab-resume/status.json",
+      "sha256": "a316cfc68efd38f4e089c5e9c1a3f5cb6e0da35b9d46cde287ce4bdd82db442e"
+    }
+  ],
+  "verified_at": 1791250958.280103
+}
