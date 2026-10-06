@@ -1183,6 +1183,7 @@ comptime GBDT_LG_BATCH = 1 if not _LG_FAST_APPLE else (
 #: would pass the Int32 offset range, keeps one leaf per iteration.
 comptime LG_EXACT_ID = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    # I17 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     and not is_defined["MOJOLEARN_GBDT_LG_EXACT_ID_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
@@ -1255,6 +1256,7 @@ comptime LG_EXACT_BATCH_WIDTH = (
 #: MOJOLEARN_GBDT_NS_INHERIT_ID` stays harmless.
 comptime NS_INHERIT_ID = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    # I17 current experiment: NEVER RUN — PENDING VALIDATION; existing defaults preserved.
     and not is_defined["MOJOLEARN_GBDT_NS_INHERIT_ID_OFF"]()
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
