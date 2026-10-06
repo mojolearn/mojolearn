@@ -152,6 +152,7 @@ def main():
         shutil.copyfile(diagnosis,OUT/'nvidia-nb-lda-source-diagnosis.json')
         notes.append('Source-only review of NVIDIA GaussianNB Taxi and LDA Istella retains both combined-configuration quality failures: no implementation or harness bug established. Changed C55 reduction order is a source-supported explanation, not isolated causal proof. Unexercised controls and individual alternatives remain pending; see nvidia-nb-lda-source-diagnosis.json.')
     for name, explanation in (
+        ('apple-qr-resample-source-diagnosis.json', 'Apple source-only review retains QR combined-configuration quality failures; no concrete implementation defect or isolated L09 regression was established. Resampling A and B have equal saved quality and both fail the opponent quality requirement; this does not establish a new P10 regression. Original evidence and missing-array limitations remain explicit.'),
         ('nvidia-gmm-taxi-source-diagnosis.json', 'Full Taxi GMM refused both candidate and incumbent before scoring. Source-only review found no established implementation or harness defect; retain the incomplete pair and original failures, with zero scored samples and no candidate win/loss decision.'),
         ('cv-taxi-source-diagnosis.json', 'LassoCV and ElasticNetCV Taxi retain combined-configuration quality failures on NVIDIA and AMD. Source-only review does not establish an implementation defect or isolate a control; saved quality failures cannot promote these defaults.'),
     ):

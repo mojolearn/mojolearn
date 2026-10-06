@@ -1,0 +1,86 @@
+{
+  "source": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-apple-qr-resample-diagnosis/DIAGNOSIS.json",
+  "source_sha256": "94ee0613e550e3f8e268ffc3f819004e67372e730fd927d44ea899bd876f233c",
+  "report": {
+    "status": "SOURCE_REVIEW_COMPLETE_NO_CONCRETE_DEFECT_ESTABLISHED",
+    "scope": "Apple FAST QR Taxi/Istella and paired resample Istella",
+    "performed": "Source and retained metadata inspection only; no builds, models, runtime tests, quality recomputation, identity verification or measurements.",
+    "main_at_review_start": "ca779cd29609c80e2b42ab99fd7aeafd0a542c4d",
+    "source_repair_branch": null,
+    "main_source_gates_settings_freezes_changed": false,
+    "qr": {
+      "decision": "RETAIN_COMBINED_CANDIDATE_QUALITY_FAILED_ON_BOTH_DATASETS",
+      "saved_relative_gram_difference": {
+        "taxi": {
+          "A": {
+            "relative_gram_difference": 2.4421552190152415e-06
+          },
+          "B": {
+            "relative_gram_difference": 7.375898458611172e-07
+          }
+        },
+        "istella": {
+          "A": {
+            "relative_gram_difference": 2.356185009416981e-06
+          },
+          "B": {
+            "relative_gram_difference": 1.601826657737046e-07
+          }
+        }
+      },
+      "source_explanation": "A selects grid Householder QR (MOJOLEARN_QR_FAST_DEV) plus AF.C.AFCL-L09, which halves product chunks from256 to128 rows. B preserves blocked TSQR on both tall inputs. Different reduction/factorization arithmetic plausibly explains increased error; no concrete lost-tail, scratch-offset, norm or reflector-update defect found.",
+      "attribution_limit": "This is combined A against incumbent B, not isolated L09. Its isolated catalog requires QR_FAST_DEV in both arms. No claim that L09 alone caused the regression.",
+      "settings": "mode=reduced; Taxi X[5250086,11], Istella X[2043304,220]; original full inputs/settings preserved.",
+      "harness_source": "db59bb9557035da8fd11b0a020a84e33b0581c30",
+      "declared_decomp_binary_source": "76165b54ec6a31b71854f9e2a7b2952934783b3a",
+      "source_refs": [
+        "source/qr/python/mojolearn/_linalg_impl.py:1248",
+        "source/qr/x_decomp/fast_qr.mojo:42",
+        "source/qr/x_decomp/fast_qr.mojo:203",
+        "source/qr/x_decomp/cells.mojo:456",
+        "source/qr/tools/bench_board_algos.py:4998"
+      ]
+    },
+    "resample": {
+      "decision": "RETAIN_SHARED_A_AND_B_OPPONENT_QUALITY_FAILURE; NO_NEW_P10_REGRESSION_ESTABLISHED",
+      "saved_max_mean_shift_over_std": {
+        "A": 0.001946923534707672,
+        "B": 0.001946923534707672,
+        "full_sklearn_opponent": 0.0015666546468173469
+      },
+      "saved_verdicts": {
+        "A_vs_B": "SAME",
+        "A_vs_opponent": "WORSE",
+        "B_vs_opponent": "WORSE"
+      },
+      "source_explanation": "AF.C.AFCL-P10 changes copying from32x8 to16x16 tiles, retaining the same Philox draws and shared X/y row indices. Incumbent gather/paired-wait/tiled-gather defaults remain ON in both arms. No concrete pairing, indexing, tail or lifetime bug found. The frozen race explicitly uses different RNG streams for MojoLearn and sklearn, so different sample-mean shifts alone do not establish a bug.",
+      "settings": "replace=True,n_samples=None,random_state=7; X[2043304,220], paired y[2043304]. Prior semantic audit and opponent kwargs match.",
+      "harness_source": "55a815e13728392be41903769c33ece8948cad4a",
+      "declared_binary_source": "c13c6b9f7fe3730dcfead5e076973b92d4544aa1",
+      "source_refs": [
+        "source/resample/resample/gather_fast.mojo:31",
+        "source/resample/resample/estimator.mojo:2356",
+        "source/resample/resample/estimator.mojo:2394",
+        "source/resample/resample/checks/statistics.mojo:635",
+        "source/resample/tools/bench_board_algos.py:727"
+      ],
+      "opponent_evidence": "resample-istella-opponent.json; original path and SHA in source-review-detail.json"
+    },
+    "validation_limits": {
+      "saved_execution": "All12 saved worker exits0, one excluded warmup and one scored sample per arm. Input/config metadata match within each pair. Complete logs retained; no warning/error matches.",
+      "missing_arrays": "Existing reconciliation lists all16 relevant warmup/scored QR R and resample xmean/ymean references missing, with zero mappings in existing byte-equivalent recovery. No arrays loaded, recovered or recreated in this review.",
+      "capture_scope": "QR captured R only, no Q. Resample captured xmean/ymean only, no full sampled rows or draw indices. Aggregate means do not establish pairing or complete output identity.",
+      "source_scope": "Eight QR and five resample Mojo paths unchanged between recorded numerical and harness sources; narrow static comparison, not new compiler/binary/closure attestation. A has155 combined defines.",
+      "separate_debt": "Existing Python product API/orchestration remains outside current owner policy; no migration or causal attribution attempted."
+    },
+    "next_action": "Preserve all failures and frozen evidence; no repair, rerun or resource action pending from this review.",
+    "evidence": {
+      "detail": "source-review-detail.json",
+      "original_quality_rows": "retained-quality-rows.json",
+      "prior_review": "prior-artifact-index.json",
+      "source_snapshots": "source-snapshot-index.json",
+      "retention": "selected-array-retention.json; selected-prior-recovery-status.json",
+      "directory": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/peer-apple-qr-resample-diagnosis"
+    }
+  }
+}
