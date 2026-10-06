@@ -6,6 +6,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from gbdt.apple_fast_classical import AFCL_T04
 
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins, _radix_pass
@@ -26,7 +27,7 @@ from gbdt.gpu_util.partitions_reduce import (
 )
 
 
-comptime SPLIT_BLOCK_SIZE = 256
+comptime SPLIT_BLOCK_SIZE = 128 if AFCL_T04 else 256
 """`constexpr int blockSize = 256` (`gpu_data/kernel/split.cu:211`)."""
 
 comptime SPLIT_MAX_BLOCKS = 65535
@@ -468,7 +469,7 @@ def update_bins_from_compressed_index_kernel(
         else:
             goes_right = feature_val > value
         if goes_right:
-            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << depth))
+            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << UInt32(depth)))
         i += stride
 
 
@@ -499,7 +500,7 @@ def update_bins_from_desc_kernel(
         else:
             goes_right = feature_val > value
         if goes_right:
-            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << depth))
+            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << UInt32(depth)))
         i += stride
 
 

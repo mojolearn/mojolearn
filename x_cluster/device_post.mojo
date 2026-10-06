@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE CLUSTER LANE'S POST-PROCESSING KERNELS (lane cgr2-cluster,
 2026-10-03): the n-sized parts of agglomerative-with-connectivity, OPTICS,
 MeanShift, AffinityPropagation, the mixtures and k-means++ that ran on the
@@ -10,6 +8,10 @@ host between device calls (`ClusterOps` primitives, `DeviceOps` in
 sum the fixed blocked-then-tree float-float fold of `post_bodies`, so no
 launch shape moves a bit and the host column's loops give the same words.
 Only the GPU binding imports this file."""
+from experiments.classical_identical_ideas.graph_controls import C41_FUSED_MINIMA
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
@@ -365,7 +367,7 @@ def optics_step_kernel(
 #: and the set each step scans are the two kernels' own, so the picks, the
 #: reachabilities and the predecessors are the same words.
 #: `-D MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF=1` restores the two launches.
-comptime IDN_OPTICS_FUSED_STEP = (
+comptime IDN_OPTICS_FUSED_STEP = C41_FUSED_MINIMA or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (
         is_defined["MOJOLEARN_IDN_OPTICS_FUSED_STEP_OFF"]()
@@ -394,6 +396,26 @@ def optics_fused_kernel(
     var t = Int(thread_idx.x)
     var base = b * SCAN_PER
     var end = min(base + SCAN_PER, N)
+    comptime if C41_FUSED_MINIMA:
+        var r = KEY_NONE
+        if s >= 0:
+            for q in range(NB):
+                r = min(r,part[(s & 1)*NB+q])
+        var point = Int(UInt32(r & UInt64(0xFFFFFFFF))) if r != KEY_NONE else -1
+        if b == 0 and t == 0 and point >= 0:
+            ordering[s] = Int32(point)
+        var mine = KEY_NONE
+        for o in range(base+t,end,RTPB):
+            if point == o:
+                done[o] = 1
+            elif point >= 0 and core[point] != Float32.MAX*Float32(2):
+                optics_relax_cell(dist,N,point,core[point],max_eps,done,reach,pred,o)
+            if done[o] == 0:
+                mine = min(mine,order_key(reach[o],o))
+        var rr = _block_min_u64(red,mine)
+        if t == 0:
+            part[((s+1)&1)*NB+b] = rr
+        return
     if s >= 0:
         var r = KEY_NONE
         var src = (s & 1) * NB

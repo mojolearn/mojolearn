@@ -149,6 +149,7 @@ comptime IDN_M2_SSD_TILES = (
     and lib_smem_page_fits_for[TARGET_COLUMN, 20480]()
 )
 
+# M01: not tested in this campaign; keep the historical evidence below.
 comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
     # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 28/28 metrics within the existing bands; PASS.
@@ -160,6 +161,7 @@ comptime AFN_MAMBA1_CHUNKSCAN = AFN_MAMBA_ALL or (
 # No combined-switch or full-board default claim from these component cases.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"]()
 )
+# M02: not tested in this campaign; standalone A/B leaves CHUNKSCAN fixed.
 comptime AFN_MAMBA1_FUSE_IN = AFN_MAMBA_ALL or (
     # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 28/28 metrics within the existing bands; PASS.
@@ -171,6 +173,7 @@ comptime AFN_MAMBA1_FUSE_IN = AFN_MAMBA_ALL or (
 # No combined-switch or full-board default claim from these component cases.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA1_FUSE_IN"]()
 )
+# M03: not tested in this campaign; no full-workload promotion is claimed.
 comptime AFN_MAMBA2_SSD_MMA = AFN_MAMBA_ALL or (
     # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 29/29 metrics within the existing bands; PASS.
@@ -182,6 +185,7 @@ comptime AFN_MAMBA2_SSD_MMA = AFN_MAMBA_ALL or (
 # No combined-switch or full-board default claim from these component cases.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA2_SSD_MMA"]()
 )
+# M04: not tested in this campaign; current OFF default is preserved.
 comptime AFN_MAMBA3_SISO_FUSED = AFN_MAMBA_ALL or (
     # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 17/17 metrics within the existing bands; PASS.
@@ -193,6 +197,7 @@ comptime AFN_MAMBA3_SISO_FUSED = AFN_MAMBA_ALL or (
 # No combined-switch or full-board default claim from these component cases.
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA3_SISO_FUSED"]()
 )
+# M05: not tested in this campaign; FAST default and IDENTICAL are preserved.
 comptime AFN_MAMBA_ARENA = AFN_MAMBA_ALL or (
     # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 29/29 metrics within the existing bands; PASS.
@@ -212,9 +217,54 @@ comptime AFN_MAMBA_ARENA = AFN_MAMBA_ALL or (
 #: build (`MOJOLEARN_COLUMN_CPU`). The names, their order and the messages
 #: are unchanged; `MOJOLEARN_IDN_MAMBA_DEVICE_REFUSAL_OFF` and
 #: `MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL` no longer change this switch.
+# M06: not tested in this campaign. Device refusal is already mandatory;
+# AFN26_MAMBA_REFUSAL_VEC4 below compares two device implementations.
 comptime AFN_MAMBA_DEVICE_REFUSAL = not is_defined["MOJOLEARN_COLUMN_CPU"]() or AFN_MAMBA_ALL or (
     AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"]()
 ) or IDN_MAMBA_DEVICE_REFUSAL
+
+
+# 2026-10-06 source-only campaign: every AFN26 switch is OFF by default and
+# not tested. These are independent defines, never enabled by MAMBA_ALL.
+# Geometry choices require their existing parent, so a geometry-only build
+# cannot silently activate a different algorithm. No dataset/shape dispatch.
+# M06: not tested; four contiguous f32 loads amortize index/load work while
+# the integer minimum still picks the first invalid element and named input.
+comptime AFN26_MAMBA_REFUSAL_VEC4 = AFN_APPLE_FAST and is_defined[
+    "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"
+]()
+# M07: not tested; fewer chunks reduce carry/shared storage; more chunks
+# expose recurrence parallelism at the cost of additional summaries.
+comptime AFN26_MAMBA1_CHUNKS16 = AFN_APPLE_FAST and AFN_MAMBA1_CHUNKSCAN and is_defined[
+    "MOJOLEARN_AFN26_MAMBA1_CHUNKS16"
+]()
+# M07: not tested; two simdgroups give each of 64 chunks its own worker.
+comptime AFN26_MAMBA1_CHUNKS64 = AFN_APPLE_FAST and AFN_MAMBA1_CHUNKSCAN and is_defined[
+    "MOJOLEARN_AFN26_MAMBA1_CHUNKS64"
+]()
+# M08: not tested; a shorter staged K window trades shared storage for
+# more loop/barrier work, with the same full f32 dot products.
+comptime AFN26_MAMBA2_SSD_K16 = AFN_APPLE_FAST and AFN_MAMBA2_SSD_MMA and is_defined[
+    "MOJOLEARN_AFN26_MAMBA2_SSD_K16"
+]()
+# M09: not tested; two/eight simdgroups per block trade launch count against
+# occupancy for the same elementwise cells and returned states.
+comptime AFN26_MAMBA3_THREADS64 = AFN_APPLE_FAST and AFN_MAMBA3_SISO_FUSED and is_defined[
+    "MOJOLEARN_AFN26_MAMBA3_THREADS64"
+]()
+# M09: not tested; eight simdgroups per block may amortize launch overhead.
+comptime AFN26_MAMBA3_THREADS256 = AFN_APPLE_FAST and AFN_MAMBA3_SISO_FUSED and is_defined[
+    "MOJOLEARN_AFN26_MAMBA3_THREADS256"
+]()
+# M10: not tested; smaller reductions or four elements per launched thread
+# may amortize refusal overhead. The bounded grid-stride scan stays complete.
+comptime AFN26_MAMBA_REFUSAL_THREADS128 = AFN_APPLE_FAST and is_defined[
+    "MOJOLEARN_AFN26_MAMBA_REFUSAL_THREADS128"
+]()
+# M10: not tested; four cells/thread target is based on amortized scan work.
+comptime AFN26_MAMBA_REFUSAL_GRID4 = AFN_APPLE_FAST and is_defined[
+    "MOJOLEARN_AFN26_MAMBA_REFUSAL_GRID4"
+]()
 
 
 def afn_mamba_switches() -> String:
@@ -232,6 +282,23 @@ def afn_mamba_switches() -> String:
         s += "MAMBA_ARENA "
     comptime if AFN_MAMBA_DEVICE_REFUSAL:
         s += "MAMBA_DEVICE_REFUSAL "
+    # AFN26 provenance reporting is not tested in this campaign.
+    comptime if AFN26_MAMBA_REFUSAL_VEC4:
+        s += "AFN26_MAMBA_REFUSAL_VEC4 "
+    comptime if AFN26_MAMBA1_CHUNKS16:
+        s += "AFN26_MAMBA1_CHUNKS16 "
+    comptime if AFN26_MAMBA1_CHUNKS64:
+        s += "AFN26_MAMBA1_CHUNKS64 "
+    comptime if AFN26_MAMBA2_SSD_K16:
+        s += "AFN26_MAMBA2_SSD_K16 "
+    comptime if AFN26_MAMBA3_THREADS64:
+        s += "AFN26_MAMBA3_THREADS64 "
+    comptime if AFN26_MAMBA3_THREADS256:
+        s += "AFN26_MAMBA3_THREADS256 "
+    comptime if AFN26_MAMBA_REFUSAL_THREADS128:
+        s += "AFN26_MAMBA_REFUSAL_THREADS128 "
+    comptime if AFN26_MAMBA_REFUSAL_GRID4:
+        s += "AFN26_MAMBA_REFUSAL_GRID4 "
     if s == "":
         return String("none")
     return s

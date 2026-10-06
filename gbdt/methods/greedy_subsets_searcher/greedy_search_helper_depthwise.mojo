@@ -6,6 +6,7 @@ from gbdt.options.child_hessian import child_hessian_threshold
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
+from gbdt.apple_fast_tree_experiments import AFT_N01, AFT_N02
 
 from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -36,6 +37,7 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
     LEAFWISE_SCORE_BLOCK_SIZE,
     compute_optimal_split_kernel,
+    fused_root_scan_score_kernel,
     compute_optimal_splits_region_kernel,
 )
 from gbdt.methods.greedy_subsets_searcher.quantized_hist_launcher import (
@@ -61,6 +63,8 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from std.sys.compile import is_defined
+from gbdt.trees_identical_switches import T16, T17, T18, T19, T19_DEFER, T20, T21, C47_GBDT, C45_GBDT
+
 from std.sys.info import has_apple_gpu_accelerator
 from std.builtin.sort import sort
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
@@ -166,7 +170,7 @@ from gbdt.options.catboost_options import (
 # cache reduces repeated work without changing any leaf's arithmetic.
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
-comptime DEFER_HIST_COPY_1903 = not SPLIT_COST_IDENTICAL or (
+comptime DEFER_HIST_COPY_1903 = T20 or T19_DEFER or not SPLIT_COST_IDENTICAL or (
     (
         has_apple_gpu_accelerator()
         or (
@@ -231,7 +235,7 @@ comptime REPORT_PART_STATS_WORK = is_defined["MOJOLEARN_GBDT_PART_STATS_WORK"]()
 # Istella-S is where it can pay (220 features, one one-byte block of 32
 # groups); taxi's two groups are both 8-bit, so there it only changes
 # launcher.
-comptime NONSYM_GROUP_WIDTH_2661 = is_defined[
+comptime NONSYM_GROUP_WIDTH_2661 = T21 or is_defined[
     "MOJOLEARN_2661_NONSYM_GROUP_WIDTH"
 ]()
 
@@ -267,7 +271,9 @@ comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
 #: `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF` turns it off (and with it
 #: DW_NO_LEVEL_SYNC, which stacks on it); the old
 #: `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN` is harmless.
-comptime DW_FUSED_CHAIN = (
+# T19/C48: same stable integer partition, canonical IDENTICAL stats retained.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime DW_FUSED_CHAIN = T19 or (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
 # F12/depthwise M3 2026-10-06: 4 scored caller times; B/A
@@ -293,7 +299,7 @@ comptime DW_FUSED_CHAIN = (
 #: nothing to score keep the two-wait schedule.
 #: DEFAULT with DW_FUSED_CHAIN (numbers above). `-D
 #: MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC_OFF` turns it off; the old `-D MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC` is harmless.
-comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not is_defined[
+comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not T19 and not is_defined[
     "MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC_OFF"
 ]()
 
@@ -306,7 +312,7 @@ comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not is_defined[
 #: depthwise taxi 12,711 -> 11,361 ms (-10.6%), istella 17,154 -> 16,539 ms
 #: (-3.6%), auc within spread. Off: `-D MOJOLEARN_GBDT_DW2_PART_VEC4_OFF`.
 #: The old opt-in define `-D MOJOLEARN_GBDT_DW2_PART_VEC4` is harmless.
-comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not is_defined[
+comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not T19 and not is_defined[
     "MOJOLEARN_GBDT_DW2_PART_VEC4_OFF"
 ]()
 #: The histogram prefix scan over a shared-memory copy of 16 features'
@@ -479,7 +485,7 @@ def _launch_fused_split_chain[
         grid_dim=(chunk_grid, n_split, 1),
         block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
     )
-    ctx.enqueue_function[fused_scan_update_kernel[GUARD]](
+    ctx.enqueue_function[fused_scan_update_kernel[GUARD, not SPLIT_COST_IDENTICAL]](
         d_left.unsafe_ptr(),
         d_right.unsafe_ptr(),
         p_off.unsafe_ptr(),
@@ -1236,12 +1242,16 @@ comptime _LG_EXACT_BATCH128 = (
         and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]()
     )
 ) and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF"]()
-comptime LG_EXACT_BATCH_WIDTH = (
+# N01: 256 speculative candidates amortize exact-batch control over twice
+# the default candidate slots. This trades scratch bytes for fewer rounds;
+# the existing exact replay still admits leaves in global best-first order.
+# No performance/quality evidence; source only, default OFF.
+comptime LG_EXACT_BATCH_WIDTH = 256 if AFT_N01 else (
     128 if _LG_EXACT_BATCH128 else (
         32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
     )
 ) if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else (
-    64 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]() else 32
+    64 if (T17 or is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]()) else 32
 )
 
 #: FAST on Apple (trees-apple3): THE ESTIMATOR INHERITS THE SEARCHER'S
@@ -1793,9 +1803,9 @@ def fit_non_symmetric_tree[
     # Istella 1.024); -D MOJOLEARN_GBDT_RIDX_COST_RULE_OFF restores the cut.
     # FAST keeps it at every width. One decision per tree, so a tree never
     # mixes the two schedules.
-    var use_ridx = RIDX_ONLY_SPLITS and (
+    var use_ridx = T19 or (RIDX_ONLY_SPLITS and (
         not SPLIT_COST_IDENTICAL or ridx_schedule_pays(len(fold_counts))
-    )
+    ))
     if options.policy != GROW_DEPTHWISE and options.policy != GROW_LOSSGUIDE:
         raise Error(
             "fit_non_symmetric_tree is EGrowPolicy::Depthwise or Lossguide;"
@@ -2264,7 +2274,7 @@ def fit_non_symmetric_tree[
     # qualification remains pending. Keep resident frontier OFF.
     # Evidence: overnight-ab-20261006/amd/normalized-measurements.json, I17;
     # exact snapshot counts and raw timings remain in amd/live/repairs.
-    comptime if LG_EXACT_ID and is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]():
+    comptime if LG_EXACT_ID and (is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]() or T16):
         if lg_exact and max_leaves>0 and stat_count>0 and max_leaves<=(1<<22)//(3*stat_count):
             lg_resident_stats.append(ctx.enqueue_create_buffer[DType.float32]((2*max_leaves-1)*stat_count))
             lg_resident_stats.append(ctx.enqueue_create_buffer[DType.float32](max_leaves*stat_count))
@@ -2462,6 +2472,9 @@ def fit_non_symmetric_tree[
                     plan_slots.append(IDS_SLOT_COPY_DST)
         # the ZERO set (DEVIATION 1903: dirty slots only on the FAST arm)
         var zero_count = 0
+        # C45's block-local synchronization needs the entire root histogram
+        # inside one scoring block; this is kernel capacity, not board routing.
+        var c45_root = C45_GBDT and argmax_blocks == 1 and len(leaves) == 1 and not trace.enabled
         if len(plan.compute_ids) > 0:
             comptime if not DEFER_HIST_COPY_1903:
                 for i in range(len(plan.compute_ids)):
@@ -2709,6 +2722,7 @@ def fit_non_symmetric_tree[
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
                             width_plans=ws[0].width_plans,
+                            nonsymmetric_work=AFT_N02,
                         )
                     else:
                         launch_histograms_for_blocks[
@@ -2720,6 +2734,7 @@ def fit_non_symmetric_tree[
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
                             width_plans=ws[0].width_plans,
+                            nonsymmetric_work=AFT_N02,
                         )
                 else:
                     if use_ridx:
@@ -2731,6 +2746,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
+                            nonsymmetric_work=AFT_N02,
                         )
                     else:
                         launch_histograms_for_blocks[
@@ -2741,6 +2757,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz, d_ids,
                             dense_ids, hist, acc_i32, block_hist,
                             hist_cells_per_leaf,
+                            nonsymmetric_work=AFT_N02,
                         )
             mgr.stream_kernel()
             stage_times.end(ctx, "hist.build")
@@ -2749,40 +2766,41 @@ def fit_non_symmetric_tree[
             # sum is linear, so the derived sibling needs no scan and an
             # all-zero slot scans to itself.
             stage_times.begin(ctx)
-            comptime if DW2_SCAN_SMEM:
-                # lane apple-fast-dwgap2: the same serial fold over a
-                # shared-memory copy of 16 features per block
-                ctx.enqueue_function[dw2_scan_histograms_smem_kernel](
-                    d_ids.unsafe_ptr(),
-                    flat_first.unsafe_ptr(),
-                    flat_folds.unsafe_ptr(),
-                    flat_one_hot.unsafe_ptr(),
-                    Int32(len(fold_counts)),
-                    Int32(hist_cells_per_leaf),
-                    hist.unsafe_ptr(),
-                    grid_dim=(
-                        (len(fold_counts) + DW2_SCAN_FT - 1) // DW2_SCAN_FT,
-                        len(non_zero),
-                        stat_count,
-                    ),
-                    block_dim=(DW2_SCAN_BLOCK, 1, 1),
-                )
-            else:
-                ctx.enqueue_function[scan_histograms_kernel](
-                    d_ids.unsafe_ptr(),
-                    flat_first.unsafe_ptr(),
-                    flat_folds.unsafe_ptr(),
-                    flat_one_hot.unsafe_ptr(),
-                    Int32(len(fold_counts)),
-                    Int32(hist_cells_per_leaf),
-                    hist.unsafe_ptr(),
-                    grid_dim=(
-                        (len(fold_counts) + 255) // 256,
-                        len(non_zero),
-                        stat_count,
-                    ),
-                    block_dim=(256, 1, 1),
-                )
+            if not c45_root:
+                comptime if DW2_SCAN_SMEM:
+                    # lane apple-fast-dwgap2: the same serial fold over a
+                    # shared-memory copy of 16 features per block
+                    ctx.enqueue_function[dw2_scan_histograms_smem_kernel](
+                        d_ids.unsafe_ptr(),
+                        flat_first.unsafe_ptr(),
+                        flat_folds.unsafe_ptr(),
+                        flat_one_hot.unsafe_ptr(),
+                        Int32(len(fold_counts)),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (len(fold_counts) + DW2_SCAN_FT - 1) // DW2_SCAN_FT,
+                            len(non_zero),
+                            stat_count,
+                        ),
+                        block_dim=(DW2_SCAN_BLOCK, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[scan_histograms_kernel](
+                        d_ids.unsafe_ptr(),
+                        flat_first.unsafe_ptr(),
+                        flat_folds.unsafe_ptr(),
+                        flat_one_hot.unsafe_ptr(),
+                        Int32(len(fold_counts)),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (len(fold_counts) + 255) // 256,
+                            len(non_zero),
+                            stat_count,
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
             mgr.stream_kernel()
             stage_times.end(ctx, "hist.scan")
             trace.record_device(
@@ -2958,7 +2976,32 @@ def fit_non_symmetric_tree[
                     + " undefined by a poison record is the state that"
                     + " does this."
                 )
-            if lossguide and len(visit) <= 2:
+            if c45_root:
+                if options.score_function == SCORE_FUNCTION_L2 or options.score_function == SCORE_FUNCTION_NEWTON_L2:
+                    ctx.enqueue_function[fused_root_scan_score_kernel[SCORE_FUNCTION_L2]](
+                            skip.unsafe_ptr(), Int32(hist_cells_per_leaf),
+                            bff.unsafe_ptr(), ffw.unsafe_ptr(), hist.unsafe_ptr(),
+                            part_stats.unsafe_ptr(), Int32(stat_count), Int32(0), Int32(0),
+                            Int32(1) if multiclass_optimization else Int32(0),
+                            options.l2_reg, Float32(0.0), level_seed,
+                            region_score.unsafe_ptr(), region_bin.unsafe_ptr(),
+                            min_child_hessian, flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
+                            flat_one_hot.unsafe_ptr(), Int32(len(fold_counts)),
+                            grid_dim=(1, 1, 1), block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[fused_root_scan_score_kernel[SCORE_FUNCTION_COSINE]](
+                            skip.unsafe_ptr(), Int32(hist_cells_per_leaf),
+                            bff.unsafe_ptr(), ffw.unsafe_ptr(), hist.unsafe_ptr(),
+                            part_stats.unsafe_ptr(), Int32(stat_count), Int32(0), Int32(0),
+                            Int32(1) if multiclass_optimization else Int32(0),
+                            options.l2_reg, score_std_dev, level_seed,
+                            region_score.unsafe_ptr(), region_bin.unsafe_ptr(),
+                            min_child_hessian, flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
+                            flat_one_hot.unsafe_ptr(), Int32(len(fold_counts)),
+                            grid_dim=(1, 1, 1), block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
+                    )
+            elif lossguide and len(visit) <= 2:
                 # their two scalars, and `numBlocks.y = partId ==
                 # maybeSecondPartId ? 1 : 2` (`:570`) -- so a single-leaf
                 # iteration passes the SAME id twice and launches one row.
@@ -3305,6 +3348,12 @@ def fit_non_symmetric_tree[
                         # slots, and (capacity below the depth bound) the slots the
                         # certain splits still to come may need
                         var lg_limit = LG_EXACT_BATCH_WIDTH
+                        comptime if C47_GBDT:
+                            # A pending leaf retains stat_count*hist_cells floats.
+                            # Bound this queue by 8 MiB of live histograms; this is
+                            # a memory budget, independent of dataset dimensions.
+                            var bytes_per_leaf = max(stat_count * hist_cells_per_leaf * 4, 1)
+                            lg_limit = min(lg_limit, max(1, (8 * 1024 * 1024) // bytes_per_leaf))
                         if max_leaves - len(leaves) < lg_limit:
                             lg_limit = max_leaves - len(leaves)
                         var lg_plan = _lg_exact_plan(
@@ -4148,7 +4197,7 @@ def fit_non_symmetric_tree[
         print("part_stats_work", options.policy, n_rows,
               part_stats_leaves_reduced, part_stats_rows_reduced)
     # Retain measured resident-snapshot diagnostics for the opt-in I17 caller.
-    comptime if LG_EXACT_ID and is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]():
+    comptime if LG_EXACT_ID and (is_defined["MOJOLEARN_IDN_GBDT_FRONTIER_RESIDENT"]() or T16):
         print("I17 frontier_resident_snapshots",lg_resident_snapshots,"retained_nodes",len(lg_node_stats)//stat_count)
     _ = lg_resident_stats^
     return model^

@@ -1,9 +1,15 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE CLUSTER LANE'S DEVICE COLUMN (lane/algos-cluster): `ClusterOps` on a
 GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
+from experiments.classical_identical_ideas.stats_controls import C53_BGMM_STATS
+from mixture.checks.mstep import center_pair_kernel
+from experiments.classical_identical_ideas.graph_controls import C37_ROW_PANELS
+from experiments.classical_identical_ideas.graph_controls import C36_CENTROID_TILES, C36_ROWS
+from experiments.classical_identical_ideas.graph_controls import C42_ACTIVE_TRIANGLE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv
@@ -1430,6 +1436,44 @@ def _agg_block_min(red: UnsafePointer[UInt64, MutUntrackedOrigin, address_space=
     return r
 
 
+@always_inline
+def _c42_slot(i: Int,j: Int,n: Int) -> Int:
+    comptime if C42_ACTIVE_TRIANGLE:
+        var lo=min(i,j)
+        var hi=max(i,j)
+        return lo*n-lo*(lo-1)//2+(hi-lo)
+    return i*n+j
+
+
+def _c42_pack(source: FPtr,dst: FPtr,n: Int32):
+    var i=_tid()
+    if i<Int(n):
+        for j in range(i,Int(n)):
+            dst[_c42_slot(i,j,Int(n))]=source[i*Int(n)+j]
+
+
+def _c42_active(live: IPtr,active: IPtr,n: Int32):
+    # Stable logical row order is independent of task scheduling.
+    var count=0
+    for row in range(Int(n)):
+        if live[row]!=0:
+            active[count]=Int32(row)
+            count+=1
+
+
+def _c42_argmin(md: FPtr,nn: IPtr,active: IPtr,count: Int32,part: MutPointer[UInt64,MutAnyOrigin]):
+    var red=stack_allocation[AGG_TPB,UInt64,address_space=AddressSpace.SHARED]()
+    var mine=AGG_NONE
+    var start=Int(block_idx.x)*AGG_PER
+    for task in range(start+Int(thread_idx.x),min(start+AGG_PER,Int(count)),AGG_TPB):
+        var row=Int(active[task])
+        if nn[row]>=0:
+            mine=min(mine,_agg_key(md[row],row))
+    var best=_agg_block_min(red,mine)
+    if thread_idx.x==0:
+        part[Int(block_idx.x)]=best
+
+
 def _agg_init_kernel(live: IPtr, nn: IPtr, md: FPtr, sz: FPtr, node: IPtr, lst: IPtr, st: IPtr, n: Int32):
     var i = _tid()
     if i < Int(n):
@@ -1507,7 +1551,7 @@ def _agg_lw_kernel(
         return
     var a = Int(UInt32(r & UInt64(0xFFFFFFFF)))
     var b = Int(nn[a])
-    var dab = dm[a * N + b]
+    var dab = dm[_c42_slot(a,b,N)]
     var na = sz[a]
     var nbs = sz[b]
     if k == 0:
@@ -1525,9 +1569,10 @@ def _agg_lw_kernel(
         ha = adj[a * N + k] != 0
         hb = adj[b * N + k] != 0
     if Int(linkage) == LINK_WARD or ha or hb:
-        var v = lance_williams(Int(linkage), dm[a * N + k], dm[b * N + k], dab, na, nbs, sz[k], ha, hb)
-        dm[a * N + k] = v
-        dm[k * N + a] = v
+        var v = lance_williams(Int(linkage), dm[_c42_slot(a,k,N)], dm[_c42_slot(b,k,N)], dab, na, nbs, sz[k], ha, hb)
+        dm[_c42_slot(a,k,N)] = v
+        comptime if not C42_ACTIVE_TRIANGLE:
+            dm[_c42_slot(k,a,N)] = v
     if con != 0 and (ha or hb):
         adj[a * N + k] = 1
         adj[k * N + a] = 1
@@ -1566,7 +1611,7 @@ def _agg_flag_kernel(
         if q == a or q == b:
             go = True
         elif i < a and (con == 0 or adj[i * N + a] != 0):
-            var v = dm[i * N + a]
+            var v = dm[_c42_slot(i,a,N)]
             if q < 0 or v < md[i] or (v == md[i] and a < q):
                 nn[i] = Int32(a)
                 md[i] = v
@@ -1589,7 +1634,7 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
         var mine = AGG_NONE
         for j in range(i + 1 + Int(thread_idx.x), N, AGG_TPB):
             if live[j] != 0 and (con == 0 or adj[i * N + j] != 0):
-                mine = min(mine, _agg_key(dm[i * N + j], j))
+                mine = min(mine, _agg_key(dm[_c42_slot(i,j,N)], j))
         var r = _agg_block_min(red, mine)
         if thread_idx.x == 0:
             if r == AGG_NONE:
@@ -1598,7 +1643,7 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
             else:
                 var j = Int(UInt32(r & UInt64(0xFFFFFFFF)))
                 nn[i] = Int32(j)
-                md[i] = dm[i * N + j]
+                md[i] = dm[_c42_slot(i,j,N)]
         e += Int(grid_dim.x)
 
 
@@ -1817,17 +1862,17 @@ struct DeviceOps(ClusterOps):
         self._ph1("zeros_i")
         return len(self.i) - 1
 
-    def _enq_get(mut self, slot: Int, n: Int, mut out: List[Float32]) raises:
-        out = List[Float32](length=n, fill=Float32(0))
+    def _enq_get(mut self, slot: Int, n: Int, mut output: List[Float32]) raises:
+        output = List[Float32](length=n, fill=Float32(0))
         if n > 0:
             var view = self.f[slot].create_sub_buffer[DType.float32](0, n)
-            self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+            self.ctx.enqueue_copy(dst_ptr=output.unsafe_ptr(), src_buf=view)
 
-    def _enq_get_i(mut self, slot: Int, n: Int, mut out: List[Int32]) raises:
-        out = List[Int32](length=n, fill=Int32(0))
+    def _enq_get_i(mut self, slot: Int, n: Int, mut output: List[Int32]) raises:
+        output = List[Int32](length=n, fill=Int32(0))
         if n > 0:
             var view = self.i[slot].create_sub_buffer[DType.int32](0, n)
-            self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+            self.ctx.enqueue_copy(dst_ptr=output.unsafe_ptr(), src_buf=view)
 
     def get(mut self, slot: Int, n: Int) raises -> List[Float32]:
         self._ph0()
@@ -1901,6 +1946,10 @@ struct DeviceOps(ClusterOps):
 
     def nearest(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, labels: Int, dist: Int) raises:
         self._ph0()
+        comptime if C36_CENTROID_TILES:
+            self.ctx.enqueue_function[_c36_nearest_group](self._fp(a),Int32(na),self._fp(b),Int32(nb),Int32(d),self._ip(labels),self._fp(dist),grid_dim=_grid((na+C36_ROWS-1)//C36_ROWS),block_dim=TPB)
+            self._ph1("nearest")
+            return
         self.ctx.enqueue_function[_nearest_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._ip(labels), self._fp(dist),
             grid_dim=_grid(na), block_dim=TPB,
@@ -2251,7 +2300,11 @@ struct DeviceOps(ClusterOps):
         if wsn < 1:
             wsn = 1
         var rawn = kc * d if kc * d > d * d else d * d
-        var nd = n * d if n * d > 0 else 1
+        # C53 default OFF, source-only: four components share each input
+        # load when eight centered/scaled planes fit the 16 MiB scratch
+        # budget. Full-workload reach must record whether admission occurs.
+        var c53_group = C53_BGMM_STATS and n*d <= (16*1024*1024)//(8*4)
+        var nd = max(n*d,1)*(4 if c53_group else 1)
         var pooled = False
         comptime if IDN_BGMM_MOMENTS_POOL:
             pooled = True
@@ -2340,18 +2393,28 @@ struct DeviceOps(ClusterOps):
             raw.unsafe_ptr(), self._fp(nk), self._fp(means), Int32(kc), Int32(d),
             grid_dim=_grid(kc * d), block_dim=TPB,
         )
-        for k in range(kc):
-            self.ctx.enqueue_function[center_scale_kernel](
-                self._fp(x), self._fp(means), self._fp(resp), diff.unsafe_ptr(), scaled.unsafe_ptr(),
-                Int32(n), Int32(d), Int32(k), Int32(kc), grid_dim=_grid(n * d), block_dim=TPB,
-            )
-            identical_gemm_into(self.ctx, raw, scaled, diff, ws, d, d, n, OP_TN)
-            self.ctx.enqueue_function[cov_finish_kernel](
-                raw.unsafe_ptr(), self._fp(nk), self._fp(cov), Int32(d), Int32(k), reg, Int32(1),
-                grid_dim=_grid(d * d), block_dim=TPB,
-            )
-        # the scratch buffers die with this call: drain first (pooled: they
-        # are handles of the ops object's buffers, nothing dies)
+        if c53_group:
+            for first in range(0,kc,4):
+                var count=min(4,kc-first)
+                self.ctx.enqueue_function[center_pair_kernel[4]](self._fp(x),self._fp(means),self._fp(resp),diff.unsafe_ptr(),scaled.unsafe_ptr(),Int32(n),Int32(d),Int32(first),Int32(kc),Int32(count),grid_dim=_grid(n*d),block_dim=TPB)
+                for local in range(count):
+                    var ds=diff.create_sub_buffer[DType.float32](local*n*d,n*d)
+                    var ss=scaled.create_sub_buffer[DType.float32](local*n*d,n*d)
+                    identical_gemm_into(self.ctx,raw,ss,ds,ws,d,d,n,OP_TN)
+                    self.ctx.enqueue_function[cov_finish_kernel](raw.unsafe_ptr(),self._fp(nk),self._fp(cov),Int32(d),Int32(first+local),reg,Int32(1),grid_dim=_grid(d*d),block_dim=TPB)
+        else:
+            for k in range(kc):
+                self.ctx.enqueue_function[center_scale_kernel](
+                    self._fp(x), self._fp(means), self._fp(resp), diff.unsafe_ptr(), scaled.unsafe_ptr(),
+                    Int32(n), Int32(d), Int32(k), Int32(kc), grid_dim=_grid(n * d), block_dim=TPB,
+                )
+                identical_gemm_into(self.ctx, raw, scaled, diff, ws, d, d, n, OP_TN)
+                self.ctx.enqueue_function[cov_finish_kernel](
+                    raw.unsafe_ptr(), self._fp(nk), self._fp(cov), Int32(d), Int32(k), reg, Int32(1),
+                    grid_dim=_grid(d * d), block_dim=TPB,
+                )
+            # the scratch buffers die with this call: drain first (pooled: they
+            # are handles of the ops object's buffers, nothing dies)
         if not pooled:
             self.ctx.synchronize()
         _ = raw^
@@ -2529,6 +2592,13 @@ struct DeviceOps(ClusterOps):
         var p_dv = dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_part = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_dm = self._fp(dm)
+        var packed = ctx.enqueue_create_buffer[DType.float32](n*(n+1)//2 if C42_ACTIVE_TRIANGLE else 1)
+        var active = ctx.enqueue_create_buffer[DType.int32](n if C42_ACTIVE_TRIANGLE else 1)
+        comptime if C42_ACTIVE_TRIANGLE:
+            ctx.enqueue_function[_c42_pack](p_dm,packed.unsafe_ptr(),Int32(n),grid_dim=_grid(n),block_dim=TPB)
+            ctx.synchronize()
+            self.shrink(dm)
+            p_dm=packed.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var con = Int32(1) if adj >= 0 else Int32(0)
         var p_adj = self._ip(adj) if adj >= 0 else p_lst
         var rb = n if n < AGG_RESCAN_BLOCKS else AGG_RESCAN_BLOCKS
@@ -2540,11 +2610,17 @@ struct DeviceOps(ClusterOps):
             p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, p_adj, con, grid_dim=rb, block_dim=AGG_TPB,
         )
         for step in range(n_merges):
-            ctx.enqueue_function[_agg_argmin_part_kernel](
-                p_md, p_nn, p_live, Int32(n), p_part, p_st, grid_dim=nb, block_dim=AGG_TPB,
-            )
+            var partial_count=nb
+            comptime if C42_ACTIVE_TRIANGLE:
+                partial_count=(n-step+AGG_PER-1)//AGG_PER
+                ctx.enqueue_function[_c42_active](p_live,active.unsafe_ptr(),Int32(n),grid_dim=1,block_dim=1)
+                ctx.enqueue_function[_c42_argmin](p_md,p_nn,active.unsafe_ptr(),Int32(n-step),p_part,grid_dim=partial_count,block_dim=AGG_TPB)
+            else:
+                ctx.enqueue_function[_agg_argmin_part_kernel](
+                    p_md,p_nn,p_live,Int32(n),p_part,p_st,grid_dim=nb,block_dim=AGG_TPB,
+                )
             ctx.enqueue_function[_agg_lw_kernel](
-                p_part, Int32(nb), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf, p_adj, con,
+                p_part, Int32(partial_count), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf, p_adj, con,
                 grid_dim=_grid(n), block_dim=TPB,
             )
             ctx.enqueue_function[_agg_flag_kernel](
@@ -2561,6 +2637,8 @@ struct DeviceOps(ClusterOps):
         ctx.enqueue_copy(dst_ptr=children.unsafe_ptr(), src_buf=ch)
         ctx.enqueue_copy(dst_ptr=dist.unsafe_ptr(), src_buf=dv)
         self._sync()
+        _ = packed^
+        _ = active^
         _ = live^
         _ = nn^
         _ = node^
@@ -2650,6 +2728,11 @@ struct DeviceOps(ClusterOps):
 
     def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
         self._ph0()
+        comptime if C36_CENTROID_TILES:
+            self.gather_rows(src,d,idx,m,dst)
+            self.nearest(dst,m,c,k,d,labels,dist)
+            self._ph1("mb_assign")
+            return
         self.ctx.enqueue_function[_mb_assign_kernel](
             self._fp(src), Int32(d), self._ip(idx), Int32(m), self._fp(c), Int32(k), self._ip(labels),
             self._fp(dist), self._fp(dst), grid_dim=_grid(m), block_dim=TPB,
@@ -2658,7 +2741,7 @@ struct DeviceOps(ClusterOps):
 
     def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
         self._ph0()
-        comptime if MB_BLOCK_FITS:
+        comptime if MB_BLOCK_FITS and not C37_ROW_PANELS:
             self.ctx.enqueue_function[_mb_centers_block_kernel](
                 self._fp(b), Int32(batch), self._ip(labels), self._fp(c), self._fp(w), Int32(d),
                 grid_dim=k, block_dim=MB_TPB,
@@ -2721,6 +2804,13 @@ struct DeviceOps(ClusterOps):
                 Int32(md), xa, xb, xa, Int32(cnt), po, po + 1, Int32(off), grid_dim=1, block_dim=RTPB,
             )
         self._ph1("fold_at")
+
+    def copy_from(mut self, src: Int, off: Int, n: Int, dst: Int) raises:
+        # C39 restore the accepted history state without a host round trip.
+        if n > 0:
+            self.ctx.enqueue_function[_copy_at_kernel](
+                self._fp(src)+off,Int32(n),self._fp(dst),Int32(0),grid_dim=_grid(n),block_dim=TPB,
+            )
 
     def copy_at(mut self, src: Int, n: Int, dst: Int, off: Int) raises:
         self._ph0()
@@ -3313,6 +3403,10 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("kpp_search")
 
+    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, output: Int) raises:
+        self.ctx.enqueue_function[_c38_distinct_kernel[False]](self._fp(centers),self._ip(ids),Int32(nt),self._fp(x),Int32(n),Int32(d),self._fp(output),grid_dim=_grid(nt*n),block_dim=TPB)
+        self.ctx.enqueue_function[_c38_distinct_kernel[True]](self._fp(centers),self._ip(ids),Int32(nt),self._fp(x),Int32(n),Int32(d),self._fp(output),grid_dim=_grid(nt*n),block_dim=TPB)
+
     def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:
         self._ph0()
         var o = self.zeros(2 * nt)
@@ -3522,3 +3616,44 @@ def _mb_assign_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, c: FPtr, k: Int3
                 bi = j
         labels[t] = Int32(bi)
         dist[t] = best
+
+
+def _c38_distinct_kernel[COPY: Bool](c: FPtr,ids: IPtr,nt: Int32,x: FPtr,n: Int32,d: Int32,output: FPtr):
+    var cell=_tid()
+    if cell>=Int(nt)*Int(n):
+        return
+    var trial=cell//Int(n)
+    var row=cell%Int(n)
+    var first=trial
+    for t in range(trial):
+        if ids[t]==ids[trial]:
+            first=t
+            break
+    comptime if COPY:
+        if first!=trial:
+            output[cell]=output[first*Int(n)+row]
+    else:
+        if first==trial:
+            output[cell]=sq_dist_rows(c,trial,x,row,Int(d))
+
+
+def _c36_nearest_group(a: FPtr,na: Int32,c: FPtr,k: Int32,d: Int32,labels: IPtr,dist: FPtr):
+    var first=_tid()*C36_ROWS
+    var best=InlineArray[Float32,C36_ROWS](fill=Float32(0))
+    var ids=InlineArray[Int32,C36_ROWS](fill=Int32(0))
+    for center in range(Int(k)):
+        var acc=InlineArray[Float32,C36_ROWS](fill=Float32(0))
+        for f in range(Int(d)):
+            var cv=ftz(c[center*Int(d)+f])
+            comptime for r in range(C36_ROWS):
+                if first+r<Int(na):
+                    var delta=ftz(ftz(a[(first+r)*Int(d)+f])-cv)
+                    acc[r]=ftz(acc[r]+ftz(identical_mul(delta,delta)))
+        comptime for r in range(C36_ROWS):
+            if center==0 or acc[r]<best[r]:
+                best[r]=acc[r]
+                ids[r]=Int32(center)
+    comptime for r in range(C36_ROWS):
+        if first+r<Int(na):
+            labels[first+r]=ids[r]
+            dist[first+r]=best[r]

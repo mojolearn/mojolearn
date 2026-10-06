@@ -28,6 +28,8 @@ The CPU column runs this file on `x_decomp/kit.mojo`; the GPU binding runs
 x_decomp/kit_device.mojo's `fast_mcd_dev`, the same search with every
 matrix resident on the device.
 """
+from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_STATE
+from experiments.classical_identical_ideas.linear_controls import C23_CENTERED_PANELS
 from std.memory import bitcast
 from std.builtin.sort import sort
 
@@ -187,6 +189,17 @@ struct Mcd[E: Exec]:
         var Xc = self.k.ew2(OP_SUB, Xs, self.colmean(Xs))
         return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
 
+    def emp_cov_at(self, Xs: Mat, loc: Mat) raises -> Mat:
+        # C57 retains this candidate's just-computed immutable subset mean.
+        # No reuse across support changes; the centered products are unchanged.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        comptime if C23_CENTERED_PANELS:
+            return self.k.ew1(OP_SCALE, self.k.classical_centered_gram(Xs, loc), 1.0 / Float64(Xs.r))
+        comptime if C57_CANDIDATE_STATE:
+            var Xc = self.k.ew2(OP_SUB, Xs, loc)
+            return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
+        return self.emp_cov(Xs)
+
     def mahal(self, X: Mat, loc: Mat, P: Mat) raises -> Mat:
         var Xc = self.k.ew2(OP_SUB, X, loc)
         return self.k.rowsum(self.k.ew2(OP_MUL, self.k.mm(Xc, P, False, False), Xc))
@@ -262,7 +275,7 @@ struct Mcd[E: Exec]:
             sel = smallest_sorted(dist, h)
         var Xs = take_rows(X, sel)
         var loc = self.colmean(Xs)
-        var cov = self.emp_cov(Xs)
+        var cov = self.emp_cov_at(Xs, loc)
         var det = self.fast_logdet(cov)
         var P = Mat(0, 0)
         var has_p = False
@@ -286,7 +299,7 @@ struct Mcd[E: Exec]:
             sel = smallest_sorted(dist, h)
             Xs = take_rows(X, sel)
             loc = self.colmean(Xs)
-            cov = self.emp_cov(Xs)
+            cov = self.emp_cov_at(Xs, loc)
             det = self.fast_logdet(cov)
             iters -= 1
         if not has_p:

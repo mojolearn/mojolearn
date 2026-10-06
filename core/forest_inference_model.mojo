@@ -17,10 +17,11 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COL
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from core.forest_inference import (
     _forest_shape_checks, forest_pack_device, forest_validate_device, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
-    device_all_finite,
+    device_all_finite, forest_labels_kernel, launch_forest_leaf_labels,
 )
 from core.forest_inference_pool import PooledForest, forest_device_count
 from core.neural_context import process_ctx
+from core.forest_experiments import T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T37_WORKSPACE, T38_FUSED_LABELS
 
 
 #: The resident path checks its input and output for non-finite values on
@@ -114,6 +115,11 @@ struct ForestIOWorkspace(Defaultable, Movable):
     def prepare(mut self, ctx: DeviceContext, n_in: Int, n_out: Int) raises:
         if self.input_len == n_in and self.output_len == n_out:
             return
+        comptime if T37_WORKSPACE:
+            # Reuse at most 2x the live request; capacity is bounded by caller
+            # demand and stale larger buffers are released on substantial shrink.
+            if n_in <= self.input_len <= 2*n_in and n_out <= self.output_len <= 2*n_out:
+                return
         self.release()
         try:
             self.input = ctx.enqueue_create_buffer[DType.float32](n_in)
@@ -207,6 +213,9 @@ struct ResidentForest(Movable):
         self.left = Optional[DeviceBuffer[DType.int32]]()
         self.leaves = Optional[DeviceBuffer[DType.float32]]()
         var device_count = forest_device_count()
+        comptime if T34_CHUNK_FOLD or T36_FINITE_STAGE or T38_FUSED_LABELS:
+            if device_count != 1:
+                raise Error("selected TREES inference experiment requires one device; pooled integration remains pending")
         comptime if FOREST_PACKED_NODES:
             if len(columns) > 2147483647 // 4:
                 raise Error("packed forest node word count exceeds Int32")
@@ -343,7 +352,7 @@ struct ResidentForest(Movable):
         var result = List[Float32](length=rows * outputs, fill=Float32(0.0))
         try:
             self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_ptr())
-            if not device_all_finite(self.ctx.value(), dx, rows * features):
+            if not T36_FINITE_STAGE and not device_all_finite(self.ctx.value(), dx, rows * features):
                 raise Error("resident forest requires finite Float32 values")
             if self.ordered:
                 launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
@@ -390,7 +399,7 @@ struct ResidentForest(Movable):
         if self.pool:
             self.pool.value().predict_into[RF_INPUT](x, output, rows)
             return
-        if reuse_io and self.shared:
+        if (reuse_io or T37_WORKSPACE) and self.shared:
             var io = RF_IO.get_or_create_ptr()
             comptime if not RF_INPUT:
                 io = ET_IO.get_or_create_ptr()
@@ -405,7 +414,7 @@ struct ResidentForest(Movable):
                 self.leaves.value(), x, output, rows, features, outputs, self.trees,
                 io[].input.value(), io[].output.value(), io_stage, io_staged,
                 self.ordered)
-        elif reuse_io:
+        elif reuse_io or T37_WORKSPACE:
             self.prepare_workspace(rows)
             var stage = x
             var staged = False
@@ -439,6 +448,9 @@ struct ResidentForest(Movable):
         # Calls are synchronous and the binding holds the GIL throughout.
         if self.workspace_rows == rows:
             return
+        comptime if T37_WORKSPACE:
+            if rows <= self.workspace_rows <= 2*rows:
+                return
         self.input_workspace = None
         self.output_workspace = None
         self.label_workspace = None
@@ -466,9 +478,42 @@ struct ResidentForest(Movable):
         x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Int32, MutAnyOrigin],
         rows: Int, features: Int, outputs: Int) raises:
         """`predict_labels`' device leg on a given workspace."""
-        self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x)
-        if not device_all_finite(self.ctx.value(), dx, rows * features):
+        self.ctx.value().enqueue_copy(dst_buf=dx.create_sub_buffer[DType.float32](0, rows*features), src_ptr=x)
+        if not T36_FINITE_STAGE and not device_all_finite(self.ctx.value(), dx, rows * features):
             raise Error("resident forest requires finite Float32 values")
+        comptime if T38_FUSED_LABELS and (T35_LEAF_REUSE or T36_FINITE_STAGE):
+            if self.ordered:
+                launch_forest_leaf_labels[RF_INPUT, False, FOREST_PACKED_NODES](self.ctx.value(), self.offsets.value(), self.columns.value(),
+                    self.thresholds.value(), self.left.value(), self.leaves.value(), dx, dlab, rows, features, outputs, self.trees)
+            else:
+                launch_forest_leaf_labels[RF_INPUT, True, FOREST_PACKED_NODES](self.ctx.value(), self.offsets.value(), self.columns.value(),
+                    self.thresholds.value(), self.left.value(), self.leaves.value(), dx, dlab, rows, features, outputs, self.trees)
+            self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dlab.create_sub_buffer[DType.int32](0, rows))
+            self.ctx.value().synchronize()
+            return
+        comptime if T38_FUSED_LABELS:
+            var bad = self.ctx.value().enqueue_create_buffer[DType.int32](1)
+            self.ctx.value().enqueue_memset(bad, Int32(0))
+            if self.ordered:
+                self.ctx.value().enqueue_function[forest_labels_kernel[RF_INPUT, False, FOREST_PACKED_NODES]](
+                    self.offsets.value().unsafe_ptr(), self.columns.value().unsafe_ptr(), self.thresholds.value().unsafe_ptr(),
+                    self.left.value().unsafe_ptr(), self.leaves.value().unsafe_ptr(), dx.unsafe_ptr(), dlab.unsafe_ptr(), bad.unsafe_ptr(),
+                    Int32(rows), Int32(features), Int32(outputs), Int32(self.trees), grid_dim=(rows+127)//128, block_dim=128)
+            else:
+                self.ctx.value().enqueue_function[forest_labels_kernel[RF_INPUT, True, FOREST_PACKED_NODES]](
+                    self.offsets.value().unsafe_ptr(), self.columns.value().unsafe_ptr(), self.thresholds.value().unsafe_ptr(),
+                    self.left.value().unsafe_ptr(), self.leaves.value().unsafe_ptr(), dx.unsafe_ptr(), dlab.unsafe_ptr(), bad.unsafe_ptr(),
+                    Int32(rows), Int32(features), Int32(outputs), Int32(self.trees), grid_dim=(rows+127)//128, block_dim=128)
+            var host_bad = self.ctx.value().enqueue_create_host_buffer[DType.int32](1)
+            self.ctx.value().enqueue_copy(dst_ptr=host_bad.unsafe_ptr(), src_buf=bad)
+            self.ctx.value().synchronize()
+            if host_bad.unsafe_ptr().unsafe_load(0) != 0:
+                raise Error("resident forest requires finite Float32 scores")
+            self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dlab.create_sub_buffer[DType.int32](0, rows))
+            self.ctx.value().synchronize()
+            _ = host_bad^
+            _ = bad^
+            return
         if self.ordered:
             launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
                 self.ctx.value(), self.offsets.value(), self.columns.value(),
@@ -484,7 +529,7 @@ struct ResidentForest(Movable):
         if not device_all_finite(self.ctx.value(), dout, rows * outputs):
             raise Error("resident forest requires finite Float32 values")
         launch_forest_argmax(self.ctx.value(), dout, dlab, rows, outputs)
-        self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dlab)
+        self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dlab.create_sub_buffer[DType.int32](0, rows))
         self.ctx.value().synchronize()
 
     def predict_labels[RF_INPUT: Bool](mut self,
@@ -514,35 +559,25 @@ struct ResidentForest(Movable):
                 raise e
         else:
             self.prepare_workspace(rows)
+            if not self.label_workspace:
+                self.label_workspace = self.ctx.value().enqueue_create_buffer[DType.int32](rows)
+            # Move the three workspaces out while the model borrows its other
+            # buffers. Restore ownership after the synchronous operation on both
+            # paths; no second mutable borrow through self reaches _labels_on.
+            var dx = self.input_workspace.take()
+            var dout = self.output_workspace.take()
+            var dlab = self.label_workspace.take()
             try:
-                if not self.label_workspace:
-                    self.label_workspace = self.ctx.value().enqueue_create_buffer[DType.int32](rows)
-                self.ctx.value().enqueue_copy(dst_buf=self.input_workspace.value(), src_ptr=x)
-                if not device_all_finite(self.ctx.value(), self.input_workspace.value(), rows * features):
-                    raise Error("resident forest requires finite Float32 values")
-                if self.ordered:
-                    launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
-                        self.ctx.value(), self.offsets.value(), self.columns.value(),
-                        self.thresholds.value(), self.left.value(), self.leaves.value(),
-                        self.input_workspace.value(), self.output_workspace.value(), rows,
-                        features, outputs, self.trees,
-                    )
-                else:
-                    launch_forest_inference[RF_INPUT, True, FOREST_PACKED_NODES](
-                        self.ctx.value(), self.offsets.value(), self.columns.value(),
-                        self.thresholds.value(), self.left.value(), self.leaves.value(),
-                        self.input_workspace.value(), self.output_workspace.value(), rows,
-                        features, outputs, self.trees,
-                    )
-                if not device_all_finite(self.ctx.value(), self.output_workspace.value(), rows * outputs):
-                    raise Error("resident forest requires finite Float32 values")
-                launch_forest_argmax(self.ctx.value(), self.output_workspace.value(),
-                                     self.label_workspace.value(), rows, outputs)
-                self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=self.label_workspace.value())
-                self.ctx.value().synchronize()
+                self._labels_on[RF_INPUT](dx, dout, dlab, x, output, rows, features, outputs)
             except e:
                 self.ctx.value().synchronize()
+                self.input_workspace = dx^
+                self.output_workspace = dout^
+                self.label_workspace = dlab^
                 raise e
+            self.input_workspace = dx^
+            self.output_workspace = dout^
+            self.label_workspace = dlab^
 
 
 def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
@@ -570,8 +605,8 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     comptime if FOREST_PROFILE:
         t1 = Int(perf_counter_ns())
     try:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
-        if not device_all_finite(ctx, dx, rows * features):
+        ctx.enqueue_copy(dst_buf=dx.create_sub_buffer[DType.float32](0, rows*features), src_ptr=x)
+        if not T36_FINITE_STAGE and not device_all_finite(ctx, dx, rows * features):
             raise Error("resident forest requires finite Float32 values")
         comptime if FOREST_PROFILE:
             ctx.synchronize()
@@ -585,7 +620,7 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
         comptime if FOREST_PROFILE:
             ctx.synchronize()
             t3 = Int(perf_counter_ns())
-        ctx.enqueue_copy(dst_ptr=output, src_buf=dout)
+        ctx.enqueue_copy(dst_ptr=output, src_buf=dout.create_sub_buffer[DType.float32](0, rows*outputs))
         ctx.synchronize()
         if not device_all_finite(ctx, dout, rows * outputs):
             raise Error("resident forest requires finite Float32 values")

@@ -2,6 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
+from ensemble.bootstrap_sort import sort_selected_rows
+from core.segmented_sort import SORT_BLOCK
+from std.collections import InlineArray
+from core.tree_math import tree_log
+from ensemble.tree_moments import balanced_mse_gain, et_leaf_moment_host
+from ensemble.tree_identical_ideas import T02, T04, T05, T06, T07, T09, T11, T11_LEVELS, T12, T12_BYTES, T13, T13_BYTES, T14, T14_EXACT, C48
 from std.memory import bitcast, memcpy
 
 from ensemble.instruments import StageTimes
@@ -11,6 +17,7 @@ from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GAMMA,
     CRITERION_GINI,
+    CRITERION_MSE,
     CRITERION_INVERSE_GAUSSIAN,
     CRITERION_POISSON,
     DecisionTreeParams,
@@ -48,6 +55,15 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels impo
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import (
     node_feature_range_decode_kernel,
     node_feature_is_constant,
+    draw_threshold_device,
+    range_key,
+    range_unkey,
+    RANGE_KEY_MIN_SEED,
+    RANGE_KEY_MAX_SEED,
+    classification_key_shift,
+    regression_key,
+    SCORE_SAB_NONE,
+    T05_SMALL_NODE_ROWS,
     node_nonconstant_flag_kernel,
     FeatureRange,
     WorkloadPlan,
@@ -148,6 +164,9 @@ from std.atomic import Atomic
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from max.gpu.primitives.block import min as block_min
+from max.gpu.primitives.block import max as block_max
+from max.gpu.primitives.block import sum as block_sum
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator, size_of
 
@@ -1287,6 +1306,9 @@ def _exact_candidate(
         metric = gain_per_split(
             left_p, total_p, 0, n_acc, cell.n_total, cell.n_left, min_samples_leaf
         )
+        comptime if T14 and not T14_EXACT:
+            if not is_classification and criterion == CRITERION_MSE:
+                metric = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(Float32(cell.n_total),Float32(cell.n_left),Float32(acc_total[0]),Float32(acc_left[0]))))
         num = cell.gini_num
         den = cell.gini_den
     _ = acc_left^
@@ -1397,6 +1419,10 @@ def set_leaf_predictions_exact_host(
         if not tree.sparsetree[node_id].IsLeaf():
             continue
         var rng = node_instances[node_id]
+        comptime if T14 and not T14_EXACT:
+            if not is_classification:
+                tree.vector_leaf[node_id*k] = et_leaf_moment_host(dataset.row_ids,labels_q,Int(rng.begin),Int(rng.count),inv_scale)
+                continue
         var acc = List[Int32](length=k, fill=Int32(0))
         var seen = Int32(0)
         for i in range(Int(rng.begin), Int(rng.begin) + Int(rng.count)):
@@ -1827,6 +1853,7 @@ def score_to_candidate_kernel(
     n_classes_in: Int32,
     min_samples_leaf_in: Int32,
     criterion_in: Int32,
+    columns_per_node: Int32 = 1,
 ):
     """Scored cells into reduction candidates, elementwise.
 
@@ -1889,6 +1916,30 @@ def score_to_candidate_kernel(
     )
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
+    var parent_terms = InlineArray[Float32,32](fill=Float32(0))
+    comptime if T06:
+        if entropy and n_classes <= 32:
+            var node = idx
+            var width = Int(columns_per_node)
+            var start = node*width
+            if start >= n_cells:
+                return
+            n_cells = min(n_cells,start+width)
+            idx = start
+            stride = 1
+            for feature in range(start,n_cells):
+                if in_status[unsafe_offset=feature] == SCORE_STATUS_SCORED:
+                    var inv_len = ftz(Float32(1)/Float32(in_n_total[unsafe_offset=feature]))
+                    for c in range(n_classes):
+                        var count = in_acc_total[unsafe_offset=feature*n_classes+c]
+                        if count != 0:
+                            var value = ftz(Float32(count)*inv_len)
+                            var term = ftz(value*tree_log(value))
+                            parent_terms[c] = ftz(term/tree_log(Float32(2)))
+                    break
+    # T06 preserves the same class fold and exact parent statements; only the
+    # per-node transform lifetime changes. Cached terms are never weighted.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
     while idx < n_cells:
         if in_status[unsafe_offset=idx] == SCORE_STATUS_SCORED:
             cand_quesval[unsafe_offset=idx] = in_threshold[unsafe_offset=idx]
@@ -1896,15 +1947,17 @@ def score_to_candidate_kernel(
             cand_nleft[unsafe_offset=idx] = in_n_left[unsafe_offset=idx]
             if entropy:
                 # DEVIATION 459: the float gain is the metric AND the key.
-                var g = entropy_gain_per_split(
-                    in_acc_left,
-                    in_acc_total,
-                    idx * n_classes,
-                    n_classes,
-                    in_n_total[unsafe_offset=idx],
-                    in_n_left[unsafe_offset=idx],
-                    min_samples_leaf,
-                )
+                var g = Float32(0)
+                if T06 and n_classes <= 32:
+                    var objective = EntropyObjectiveFunction[DType.float32](Int32(n_classes),min_samples_leaf)
+                    g = objective.GainPerSplitCached(
+                        in_acc_left.unsafe_offset(idx*n_classes).unsafe_bitcast[CountBin](),
+                        in_acc_total.unsafe_offset(idx*n_classes).unsafe_bitcast[CountBin](),
+                        in_n_total[unsafe_offset=idx],in_n_left[unsafe_offset=idx],parent_terms,
+                    )
+                else:
+                    g = entropy_gain_per_split(in_acc_left,in_acc_total,idx*n_classes,n_classes,
+                        in_n_total[unsafe_offset=idx],in_n_left[unsafe_offset=idx],min_samples_leaf)
                 cand_metric[unsafe_offset=idx] = g
                 cand_num[unsafe_offset=idx] = float_gain_key(g)
                 cand_den[unsafe_offset=idx] = Int64(1)
@@ -1931,6 +1984,11 @@ def score_to_candidate_kernel(
                     in_n_left[unsafe_offset=idx],
                     min_samples_leaf,
                 )
+                comptime if T14 and not T14_EXACT:
+                    if criterion_in == CRITERION_MSE:
+                        cand_metric[unsafe_offset=idx] = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(
+                            Float32(in_n_total[unsafe_offset=idx]),Float32(in_n_left[unsafe_offset=idx]),
+                            Float32(in_acc_total[unsafe_offset=idx]),Float32(in_acc_left[unsafe_offset=idx]))))
                 cand_num[unsafe_offset=idx] = in_gini_num[unsafe_offset=idx]
                 cand_den[unsafe_offset=idx] = in_gini_den[unsafe_offset=idx]
             cand_valid[unsafe_offset=idx] = Int32(1)
@@ -1943,6 +2001,206 @@ def score_to_candidate_kernel(
             cand_den[unsafe_offset=idx] = Int64(0)
             cand_valid[unsafe_offset=idx] = Int32(0)
         idx += stride
+
+
+comptime ET_SMALL_NODE_TPB = T05_SMALL_NODE_ROWS
+"""T05 one row per lane, two exact class-count planes of at most 32 Int32s.
+
+The capacity is a portable 128-thread block, not a dataset or tree-size gate.
+Every admitted row stays in a register from its range read through threshold
+scoring. Integer shared counts take 256 bytes; range/threshold scratch is
+bounded independently of feature count. Larger nodes keep the incumbent path.
+NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+"""
+
+
+def small_node_raw_split_kernel[CLASSIFICATION: Bool](
+    cand_quesval: MutPointer[Float32, MutAnyOrigin],
+    cand_colid: MutPointer[Int32, MutAnyOrigin],
+    cand_metric: MutPointer[Float32, MutAnyOrigin],
+    cand_nleft: MutPointer[Int32, MutAnyOrigin],
+    cand_num: MutPointer[Int64, MutAnyOrigin],
+    cand_den: MutPointer[Int64, MutAnyOrigin],
+    cand_valid: MutPointer[Int32, MutAnyOrigin],
+    nonconstant: MutPointer[Int32, MutAnyOrigin],
+    out_min: MutPointer[Float32, MutAnyOrigin],
+    out_max: MutPointer[Float32, MutAnyOrigin],
+    out_missing: MutPointer[Int32, MutAnyOrigin],
+    out_draw: MutPointer[Float32, MutAnyOrigin],
+    data: MutPointer[Float32, MutAnyOrigin],
+    rows: MutPointer[Int32, MutAnyOrigin],
+    labels: MutPointer[Int32, MutAnyOrigin],
+    items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    columns: MutPointer[Int32, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
+    n_rows: Int32,
+    n_columns_per_node: Int32,
+    n_acc: Int32,
+    seed: UInt64,
+    min_samples_leaf: Int32,
+    criterion: Int32,
+):
+    """T05/C45: one raw-value range, random draw, statistic and score block.
+
+    Called after ordinary conversion, which initializes invalid small-node
+    candidates from the deliberately empty separate range cells. This block
+    replaces those candidates and supplies the ranges/draw consumed by tracing.
+    Statistics remain shared: no intermediate class/moment arrays are written.
+    Feature sampling and the following canonical split reducer are unchanged.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    var nid = Int(block_idx.x)
+    var feature = Int(block_idx.y)
+    var tid = Int(thread_idx.x)
+    var length = Int(items[unsafe_offset=nid].instances.count)
+    if length <= 0 or length > ET_SMALL_NODE_TPB or n_acc < 1 or n_acc > 32:
+        return
+    var begin = Int(items[unsafe_offset=nid].instances.begin)
+    var slot = nid * Int(n_columns_per_node) + feature
+    var col = Int(columns[unsafe_offset=slot])
+    if tid == 0:
+        cand_quesval[unsafe_offset=slot] = Float32.MIN_FINITE
+        cand_colid[unsafe_offset=slot] = Int32(-1)
+        cand_metric[unsafe_offset=slot] = Float32.MIN_FINITE
+        cand_nleft[unsafe_offset=slot] = Int32(0)
+        cand_num[unsafe_offset=slot] = Int64(0)
+        cand_den[unsafe_offset=slot] = Int64(0)
+        cand_valid[unsafe_offset=slot] = Int32(0)
+
+    # At most one row per lane, also at most one row per lane in the
+    # incumbent range block. Its key-space min/max, missing sentinel and
+    # signed-zero choices therefore need no new floating reduction graph.
+    var row = 0
+    var value = Float32(0)
+    var lo_key = RANGE_KEY_MIN_SEED
+    var hi_key = RANGE_KEY_MAX_SEED
+    var missing = Int32(0)
+    if tid < length:
+        row = Int(rows[unsafe_offset=begin+tid])
+        value = data[unsafe_offset=col*Int(n_rows)+row]
+        if value != value:
+            missing = Int32(1)
+        else:
+            lo_key = range_key(value)
+            hi_key = lo_key
+    var minimum = block_min[block_size=ET_SMALL_NODE_TPB](lo_key)
+    barrier()
+    var maximum = block_max[block_size=ET_SMALL_NODE_TPB](hi_key)
+    barrier()
+    var missing_total = block_sum[block_size=ET_SMALL_NODE_TPB](missing)
+    barrier()
+    var threshold = stack_allocation[1,Float32,address_space=AddressSpace.SHARED]()
+    var active = stack_allocation[1,Int32,address_space=AddressSpace.SHARED]()
+    if tid == 0:
+        var lo = range_unkey(minimum)
+        var hi = range_unkey(maximum)
+        if lo > hi:
+            lo = Float32(1)
+            hi = Float32(-1)
+        out_min[unsafe_offset=slot] = lo
+        out_max[unsafe_offset=slot] = hi
+        out_missing[unsafe_offset=slot] = missing_total
+        var extent = FeatureRange(lo,hi,missing_total)
+        var constant = node_feature_is_constant(extent,Int32(length))
+        if not constant:
+            _ = Atomic.fetch_add(nonconstant.unsafe_offset(nid),Int32(1))
+        active[unsafe_offset=0] = Int32(0)
+        threshold[unsafe_offset=0] = Float32(0)
+        if missing_total == 0 and not constant:
+            var key = key_for(seed,tree_ids[unsafe_offset=nid].cast[DType.uint32](),
+                UInt32(Int(items[unsafe_offset=nid].idx)),UInt32(col))
+            threshold[unsafe_offset=0] = draw_threshold_device(key,extent)
+            out_draw[unsafe_offset=slot] = threshold[unsafe_offset=0]
+            active[unsafe_offset=0] = Int32(1)
+    barrier()
+    if active[unsafe_offset=0] == 0:
+        return
+
+    var histogram = stack_allocation[64,Int32,address_space=AddressSpace.SHARED]()
+    if tid < 64:
+        histogram[unsafe_offset=tid] = Int32(0)
+    barrier()
+    var left = Int32(0)
+    if tid < length:
+        var label = labels[unsafe_offset=row]
+        var goes_left = value <= threshold[unsafe_offset=0]
+        left = Int32(1) if goes_left else Int32(0)
+        comptime if CLASSIFICATION:
+            if label >= 0 and label < n_acc:
+                _ = Atomic.fetch_add(histogram.unsafe_offset(32+Int(label)),Int32(1))
+                if goes_left:
+                    _ = Atomic.fetch_add(histogram.unsafe_offset(Int(label)),Int32(1))
+        else:
+            _ = Atomic.fetch_add(histogram.unsafe_offset(32),label)
+            if goes_left:
+                _ = Atomic.fetch_add(histogram,label)
+    var left_count = block_sum[block_size=ET_SMALL_NODE_TPB](left)
+    barrier()
+    if tid != 0:
+        return
+    var right_count = Int32(length)-left_count
+    if left_count < min_samples_leaf or right_count < min_samples_leaf or left_count == 0 or right_count == 0:
+        return
+    comptime if CLASSIFICATION:
+        for c in range(Int(n_acc)):
+            if histogram[unsafe_offset=32+c] == Int32(length):
+                return
+
+    # Exactly node_feature_score_finalize_kernel's integer key, then the
+    # same score helpers used by score_to_candidate_kernel. The canonical
+    # feature/tie reduction stays a separate consumer of these winners.
+    var numerator = Int64(0)
+    var denominator = Int64(0)
+    comptime if CLASSIFICATION:
+        var sq_left = Int64(0)
+        var sq_right = Int64(0)
+        for c in range(Int(n_acc)):
+            var lv = Int64(Int(histogram[unsafe_offset=c]))
+            var rv = Int64(Int(histogram[unsafe_offset=32+c]-histogram[unsafe_offset=c]))
+            sq_left += lv*lv
+            sq_right += rv*rv
+        var nl = Int64(Int(left_count))
+        var nr = Int64(Int(right_count))
+        var shift = Int64(classification_key_shift(length))
+        numerator = (sq_left >> shift)*nr+(sq_right >> shift)*nl
+        denominator = nl*nr
+    else:
+        if not regression_key(Int64(Int(histogram[unsafe_offset=0])),
+            Int64(Int(histogram[unsafe_offset=32])),Int(left_count),
+            Int(right_count),length,SCORE_SAB_NONE,numerator,denominator):
+            return
+    # The canonical helpers accept generic device pointers. Shared storage is
+    # live through this finalization, after the block barrier above.
+    var gain = Float32(0)
+    if criterion == CRITERION_ENTROPY:
+        # T06's parent cache belongs to the separate multi-feature score
+        # pass. A fused feature already consumes its exact counts once.
+        gain = entropy_gain_per_split(histogram.unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
+            histogram.unsafe_offset(32).unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
+            0,Int(n_acc),Int32(length),left_count,min_samples_leaf)
+        numerator = float_gain_key(gain)
+        denominator = Int64(1)
+    elif criterion == CRITERION_POISSON or criterion == CRITERION_GAMMA or criterion == CRITERION_INVERSE_GAUSSIAN:
+        gain = regression_deviance_gain(histogram[unsafe_offset=0],
+            histogram[unsafe_offset=32],left_count,Int32(length),criterion)
+        numerator = float_gain_key(gain)
+        denominator = Int64(1)
+    else:
+        gain = gain_per_split(histogram.unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
+            histogram.unsafe_offset(32).unsafe_address_space_cast[AddressSpace.GENERIC]().unsafe_origin_cast[MutAnyOrigin](),
+            0,Int(n_acc),Int32(length),left_count,min_samples_leaf)
+        comptime if T14 and not T14_EXACT and not CLASSIFICATION:
+            if criterion == CRITERION_MSE:
+                gain = max(Float32(0),ftz(Float32(2)*balanced_mse_gain(
+                    Float32(length),Float32(left_count),
+                    Float32(histogram[unsafe_offset=32]),Float32(histogram[unsafe_offset=0]))))
+    cand_quesval[unsafe_offset=slot] = threshold[unsafe_offset=0]
+    cand_colid[unsafe_offset=slot] = Int32(col)
+    cand_metric[unsafe_offset=slot] = gain
+    cand_nleft[unsafe_offset=slot] = left_count
+    cand_num[unsafe_offset=slot] = numerator
+    cand_den[unsafe_offset=slot] = denominator
+    cand_valid[unsafe_offset=slot] = Int32(1)
 
 
 def row_ids_sequence_kernel(
@@ -2057,6 +2315,23 @@ def fill_row_slots(
             UInt64(Int(row_sample_seed(seed, tree_ids[first + s]))),
         )
         _ = slot^
+    comptime if T09:
+        # Draw first, then sort each exact bootstrap multiset with RF's shared
+        # radix schedule. Threshold/feature counters still use logical IDs.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        var keys = ctx.enqueue_create_buffer[DType.uint32](max(1,Int(slot_rows)))
+        var offsets = ctx.enqueue_create_buffer[DType.int32](max(1,Int(slot_rows)))
+        var blocks = ctx.enqueue_create_buffer[DType.int32](max(1,ceildiv(Int(slot_rows),SORT_BLOCK)))
+        for slot_id in range(g):
+            var slot = d_row_ids.create_sub_buffer[DType.int32](slot_id*Int(slot_rows),Int(slot_rows))
+            sort_selected_rows(ctx,slot,Int(slot_rows),Int(n_rows),keys,offsets,blocks)
+            _ = slot^
+        # This helper owns scratch: finish its uses before releasing it.
+        # The whole-operation recipe includes this synchronization.
+        ctx.synchronize()
+        _ = keys^
+        _ = offsets^
+        _ = blocks^
     _ = d_row_ids.unsafe_ptr()
 
 
@@ -3176,6 +3451,18 @@ def _device_tpb() -> Int:
     must alternate arms inside one window, not assume independence.
     ==================================================================
     """
+    # AFT F06: two 32-lane SIMD groups per block reduces the live score
+    # reduction footprint. Keep range/partition work-map geometry coupled
+    # through DEVICE_TPB, as the stable scatter consumes that same map.
+    # This is a new 64-thread arm, not the rejected Apple 256-thread retry
+    # recorded above. experiments/apple_fast_trees/IDEAS.md; no quality or
+    # speed evidence; opt-in and uncompiled/unverified/unmeasured.
+    if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and has_apple_gpu_accelerator()
+        and is_defined["MOJOLEARN_AFT_F06"]()
+    ):
+        return 64
     if is_defined["MOJOLEARN_ET_TPB_1024"]():
         return 1024
     if is_defined["MOJOLEARN_ET_TPB_512"]():
@@ -3320,9 +3607,22 @@ comptime ET_RANGE_TILED = (
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_range_tiled_kernel`)."""
 
-comptime ET_FEATURE_TILE = 16
+# AFCL-T09: eight sampled features per task halves the private range/score
+# tile footprint and admits more independent tasks on Apple. Every selected
+# feature keeps its RNG identity and full row set; this changes no threshold.
+# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
+comptime AFCL_T09 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_T09"]()
+)
+comptime ET_FEATURE_TILE = 8 if AFCL_T09 else 16
 
 comptime ET_SPLIT_REDUCE_ONE_BLOCK = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+# T07: 128 lanes, all candidate columns in strided lanes; existing exact
+# comparator and feature/node RNG salts retained. Same total winner graph.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime ET_REDUCE_TPB = 128 if T07 else DEVICE_TPB
 """DEVIATION 5611 (2026-09-27): under IDENTICAL every node's candidates are
 reduced by ONE block (`blocks_per_node = 1`), so `split_reduce_kernel`
 never merges two blocks through the node's device mutex. That merge reads
@@ -3399,7 +3699,17 @@ def search_grid(row_blocks: Int, k: Int) -> Tuple[Int, Int, Int]:
     return (row_blocks, k, 1)
 
 
-comptime PART_ROWS_PER_THREAD = (
+# AFT F07: double the partition's rows/lane relative to the search work
+# budget. At the shipped Apple geometry this is 4096 rows/block, reducing
+# count/scan/scatter workgroup count without changing stable row order.
+# The existing separate search/partition workload maps handle unequal tiles.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_F07 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F07"]()
+)
+comptime PART_ROWS_PER_THREAD = 2 * SEARCH_ROWS_PER_THREAD if AFT_F07 else (
     SEARCH_ROWS_PER_THREAD
     if (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -3612,7 +3922,17 @@ def print_stage_times(clock: PhaseClock, what: StringSlice) raises:
     print("  total ->", Float64(total) / 1e9, "s")
 
 
-comptime FOREST_ROW_SLOT_CAP = 1 << 26
+# AFT F08: permit 1 GiB total for the two Int32 row-slot planes, versus
+# the default 512 MiB. More whole trees then expose independent nodes in
+# one frontier; each tree retains its feature RNG and node growth policy.
+# This is a byte budget, unrelated to any dataset dimension. Other per-tree
+# scratch adds to this budget, so peak memory is a later qualification gate.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime FOREST_ROW_SLOT_CAP = (1 << 27) if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F08"]()
+) else (1 << 26)
 """Ceiling on `in-flight trees * n_rows` row SLOTS one group of the batched
 forest trainer (DEVIATION 211) may hold: 2^26 slots = 256 MB in `d_row_ids`
 plus the same again in the partition's alternate buffer. Trees beyond the cap
@@ -3995,6 +4315,80 @@ def _enqueue_classification_score[MAX_ACC: Int](
     )
 
 
+def _enqueue_raw_range[FUSED_SMALL: Bool](
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    n_blocks: Int,
+    columns_per_node: Int,
+    tiled: Bool,
+) raises:
+    """Existing raw-value range launch with an explicit T05 node owner.
+
+    Keeping the choice in a compile-time kernel argument preserves the existing
+    raw kernel ABI for direct callers. Both variants use the same stored input
+    layout and workload descriptors; only T05 skips its bounded fused nodes.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    comptime TPB = DEVICE_TPB
+    if tiled:
+        ctx.enqueue_function[node_feature_range_tiled_kernel[TPB,ET_FEATURE_TILE,DType.float32,FUSED_SMALL]](
+            ws.d_minkey.unsafe_ptr(),ws.d_maxkey.unsafe_ptr(),
+            ws.d_missing.unsafe_ptr(),ws.d_merges.unsafe_ptr(),
+            dataset.d_data_rm.unsafe_ptr(),d_row_ids.unsafe_ptr(),
+            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            ws.d_colids.unsafe_ptr(),dataset.n_cols,Int32(columns_per_node),
+            dataset.d_quant.unsafe_ptr(),
+            grid_dim=(n_blocks,ceildiv(columns_per_node,ET_FEATURE_TILE),1),
+            block_dim=(TPB,1,1),
+        )
+    else:
+        ctx.enqueue_function[node_feature_range_kernel[TPB,ET_ROW_MAJOR,FUSED_SMALL]](
+            ws.d_minkey.unsafe_ptr(),ws.d_maxkey.unsafe_ptr(),
+            ws.d_missing.unsafe_ptr(),ws.d_merges.unsafe_ptr(),
+            dataset.search_data_ptr(),d_row_ids.unsafe_ptr(),
+            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            ws.d_colids.unsafe_ptr(),dataset.n_rows,dataset.n_cols,
+            Int32(columns_per_node),Int32(0),
+            grid_dim=search_grid(n_blocks,columns_per_node),block_dim=(TPB,1,1),
+        )
+
+
+def _enqueue_small_node_splits[CLASSIFICATION: Bool](
+    ctx: DeviceContext,
+    mut ws: LevelWorkspace,
+    mut dataset: DeviceDataset,
+    mut d_row_ids: DeviceBuffer[DType.int32],
+    n_nodes: Int,
+    columns_per_node: Int,
+    n_acc: Int32,
+    seed: UInt64,
+    params: DecisionTreeParams,
+) raises:
+    """T05 production raw-value fusion before the existing winner reducer.
+
+    Range kernels reserve the same <=ET_SMALL_NODE_TPB nodes. The fused launch
+    reuses existing sampled columns, logical tree/node IDs and candidate slots.
+    Ordinary range-only surveys and quantile-code routes never reserve nodes.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    ctx.enqueue_function[small_node_raw_split_kernel[CLASSIFICATION]](
+        ws.c_q.unsafe_ptr(),ws.c_c.unsafe_ptr(),ws.c_m.unsafe_ptr(),
+        ws.c_l.unsafe_ptr(),ws.c_nu.unsafe_ptr(),ws.c_de.unsafe_ptr(),ws.c_v.unsafe_ptr(),
+        ws.d_nonconst.unsafe_ptr(),ws.d_min.unsafe_ptr(),ws.d_max.unsafe_ptr(),
+        ws.d_missing.unsafe_ptr(),ws.d_thresh.unsafe_ptr(),
+        dataset.d_data.unsafe_ptr(),d_row_ids.unsafe_ptr(),dataset.d_labels.unsafe_ptr(),
+        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+        ws.d_colids.unsafe_ptr(),ws.d_tree.unsafe_ptr(),
+        dataset.n_rows,Int32(columns_per_node),n_acc,seed,
+        params.min_samples_leaf,params.split_criterion,
+        grid_dim=(n_nodes,columns_per_node),block_dim=ET_SMALL_NODE_TPB,
+    )
+
+
 def split_tie_tally_kernel(
     out_tally: MutPointer[Int32, MutAnyOrigin],
     r_c: MutPointer[Int32, MutAnyOrigin],
@@ -4073,6 +4467,11 @@ def search_batch_enqueue(
     if n_nodes == 0:
         return
     var n_cells = n_nodes * Int(k)
+    # T05 exclusive small-node dispatch. Survey passes must populate every
+    # range, while scored raw-value nodes may keep their statistics shared.
+    # One row per fused lane bounds registers and preserves range key seams.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var fused_small_rows = Int32(ET_SMALL_NODE_TPB) if T05 and not range_only and n_classes <= 32 else Int32(0)
 
     # --- per-batch device buffers ------------------------------------
     ref d_min = ws.d_min
@@ -4144,12 +4543,16 @@ def search_batch_enqueue(
     # of their old phases; the timed program was always the serialized
     # one, and no seeded value moves.
     # =================================================================
-    var setup_report = Int32(ws.cap_report) if use_sampler else Int32(0)
+    # T04: every future larger frontier is initialized at its own extent.
+    # Dummy nodes inside n_nodes remain initialized; capacity tails are unread.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var setup_nodes = n_nodes if T04 else ws.cap_nodes
+    var setup_report = Int32(sampler_report_len(n_nodes) if T04 else ws.cap_report) if use_sampler else Int32(0)
     var setup_a_extent = n_cells
     if Int(setup_report) > setup_a_extent:
         setup_a_extent = Int(setup_report)
-    if ws.cap_nodes > setup_a_extent:
-        setup_a_extent = ws.cap_nodes
+    if setup_nodes > setup_a_extent:
+        setup_a_extent = setup_nodes
     ctx.enqueue_function[phase_setup_a_kernel](
         d_samp_report.unsafe_ptr(),
         setup_report,
@@ -4161,15 +4564,15 @@ def search_batch_enqueue(
         d_merges.unsafe_ptr(),
         Int32(n_cells),
         ws.d_nonconst.unsafe_ptr(),
-        Int32(ws.cap_nodes),
+        Int32(setup_nodes),
         grid_dim=ceildiv(setup_a_extent, PHASE_SETUP_TPB),
         block_dim=PHASE_SETUP_TPB,
     )
     if not range_only:
         var setup_acc = n_cells * Int(n_classes)
         var setup_b_extent = setup_acc
-        if ws.cap_nodes > setup_b_extent:
-            setup_b_extent = ws.cap_nodes
+        if setup_nodes > setup_b_extent:
+            setup_b_extent = setup_nodes
         ctx.enqueue_function[phase_setup_b_kernel](
             d_status.unsafe_ptr(),
             d_thresh.unsafe_ptr(),
@@ -4183,7 +4586,7 @@ def search_batch_enqueue(
             Int32(n_cells),
             Int32(setup_acc),
             r_mx.unsafe_ptr(),
-            Int32(ws.cap_nodes),
+            Int32(setup_nodes),
             r_q.unsafe_ptr(),
             r_c.unsafe_ptr(),
             r_m.unsafe_ptr(),
@@ -4248,43 +4651,10 @@ def search_batch_enqueue(
     var tiled_range = False
     comptime if ET_RANGE_TILED:
         tiled_range = dataset.has_rm
-    if tiled_range:
-        ctx.enqueue_function[
-            node_feature_range_tiled_kernel[TPB, ET_FEATURE_TILE]
-        ](
-            d_minkey.unsafe_ptr(),
-            d_maxkey.unsafe_ptr(),
-            d_missing.unsafe_ptr(),
-            d_merges.unsafe_ptr(),
-            dataset.d_data_rm.unsafe_ptr(),
-            d_row_ids.unsafe_ptr(),
-            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-            d_colids.unsafe_ptr(),
-            n_cols,
-            Int32(k),
-            dataset.d_quant.unsafe_ptr(),
-            grid_dim=(n_blocks, ceildiv(Int(k), ET_FEATURE_TILE), 1),
-            block_dim=(TPB, 1, 1),
-        )
+    if fused_small_rows != 0:
+        _enqueue_raw_range[True](ctx,ws,dataset,d_row_ids,n_blocks,k,tiled_range)
     else:
-        ctx.enqueue_function[node_feature_range_kernel[TPB, ET_ROW_MAJOR]](
-            d_minkey.unsafe_ptr(),
-            d_maxkey.unsafe_ptr(),
-            d_missing.unsafe_ptr(),
-            d_merges.unsafe_ptr(),
-            dataset.search_data_ptr(),
-            d_row_ids.unsafe_ptr(),
-            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-            d_colids.unsafe_ptr(),
-            n_rows,
-            n_cols,
-            Int32(k),
-            Int32(0),
-            grid_dim=search_grid(n_blocks, Int(k)),
-            block_dim=(TPB, 1, 1),
-        )
+        _enqueue_raw_range[False](ctx,ws,dataset,d_row_ids,n_blocks,k,tiled_range)
     # DEVIATION 204: the merge produced order-preserving KEYS; this
     # turns them back into the `(min, max)` floats every later pass
     # reads, and applies the empty-cell sentinel.
@@ -4386,17 +4756,22 @@ def search_batch_enqueue(
         n_classes,
         params.min_samples_leaf,
         params.split_criterion,
+        Int32(k),
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
     )
 
+    if fused_small_rows != 0:
+        _enqueue_small_node_splits[True](ctx,ws,dataset,d_row_ids,
+            n_nodes,k,n_classes,seed,params)
+
     # --- 6. evalBestSplit's reduction ---------------------------------
     # DEVIATION 470: the reduce cells and the `r_mx` mutexes (over full
     # capacity) were seeded by fused half B above.
-    var bpn = ceildiv(Int(k), TPB)
+    var bpn = ceildiv(Int(k), ET_REDUCE_TPB)
     if bpn < 1 or ET_SPLIT_REDUCE_ONE_BLOCK:
         bpn = 1
-    ctx.enqueue_function[split_reduce_kernel[TPB]](
+    ctx.enqueue_function[split_reduce_kernel[ET_REDUCE_TPB]](
         r_q.unsafe_ptr(),
         r_c.unsafe_ptr(),
         r_m.unsafe_ptr(),
@@ -4420,7 +4795,7 @@ def search_batch_enqueue(
         Int32(bpn),
         Int32(0),
         grid_dim=(bpn, n_nodes, 1),
-        block_dim=(TPB, 1, 1),
+        block_dim=(ET_REDUCE_TPB, 1, 1),
     )
     # DEVIATION 463: the exact-tie counter, only when the build asks for it.
     comptime if is_defined["MOJOLEARN_ET_TIE_STATS"]():
@@ -4627,7 +5002,7 @@ def search_batch(
 # column's queue (`host_builder.mojo`, `train_tree_exact`) and the checks'.
 # =============================================================================
 
-comptime ET_LOOP_K = (
+comptime ET_LOOP_K = max(1, T11_LEVELS) if T11 else (
     1 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K1"]() else (
         2 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K2"]() else (
             8 if is_defined["MOJOLEARN_ET_DEVICE_LOOP_K8"]() else 4
@@ -4966,6 +5341,12 @@ struct EtDeviceLoop(Movable):
         var chunks = (nb + ETL_TPB - 1) // ETL_TPB
         var fcap = f_cap if f_cap > 0 else 1
         var cap0 = g + 2 * ET_LOOP_K * nb
+        comptime if T13:
+            # Group-owned node/queue arena reserves one bounded capacity for
+            # reuse across all frontier batches and trees in this group.
+            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+            var bytes_per_node = size_of[SparseTreeNode[DType.float32]]() + 4*ETL_META_INTS + 4*ETL_Q_INTS
+            cap0 = max(cap0,T13_BYTES//max(1,bytes_per_node))
         self.g = g
         self.max_batch = nb
         self.n_chunks_cap = chunks
@@ -5179,6 +5560,7 @@ struct EtDeviceLoop(Movable):
         part_tile: Int,
         blocks_bound: Int,
         scalar_tree: Int32,
+        search_phase: Bool = True,
     ) raises:
         """`stage_batch` from a device list (`ETL_SRC_*`) into the search
         workspace, then its block map. The host staging's shadow copies no
@@ -5230,6 +5612,7 @@ struct EtDeviceLoop(Movable):
             Int32(part_tile),
             Int32(blocks_bound),
             scalar_tree,
+            Int32(1) if search_phase else Int32(0),
             grid_dim=1,
             block_dim=ETL_TPB,
         )
@@ -5621,24 +6004,25 @@ def _et_enqueue_partition(
         grid_dim=(n_blocks, 1, 1),
         block_dim=(TPB, 1, 1),
     )
-    ctx.enqueue_function[partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]](
-        ws.d_blk_off.unsafe_ptr(),
-        ws.d_blk_left.unsafe_ptr(),
-        ws.d_blk_base.unsafe_ptr(),
-        ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-        splits,
-        params.min_impurity_decrease,
-        params.min_samples_leaf,
-        PART_MB_SAB_NONE,
-        grid_dim=(n_part, 1, 1),
-        block_dim=(TPB, 1, 1),
-    )
+    comptime if not C48:
+        ctx.enqueue_function[partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]](
+            ws.d_blk_off.unsafe_ptr(),
+            ws.d_blk_left.unsafe_ptr(),
+            ws.d_blk_base.unsafe_ptr(),
+            ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            splits,
+            params.min_impurity_decrease,
+            params.min_samples_leaf,
+            PART_MB_SAB_NONE,
+            grid_dim=(n_part, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
     ctx.enqueue_function[
-        partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS]
+        partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS, C48]
     ](
         ws.d_row_alt.unsafe_ptr(),
         d_row_ids.unsafe_ptr(),
-        ws.d_blk_off.unsafe_ptr(),
+        ws.d_blk_left.unsafe_ptr() if C48 else ws.d_blk_off.unsafe_ptr(),
         dataset.d_data.unsafe_ptr(),
         ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
         ws.d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
@@ -5854,7 +6238,7 @@ def _et_run_depthwise[
                     )
             lp.enqueue_stage(
                 ctx, ws, ETL_SRC_BATCH, ETL_H_CUR, nb, k, tile_p, tile_p,
-                bound_p, scalar,
+                bound_p, scalar, search_phase=False,
             )
             _et_enqueue_partition(
                 ctx, ws, dataset, d_row_ids,
@@ -5946,7 +6330,7 @@ def _et_run_bestfirst[
             clock.tick(ctx, PHASE_HOST_QUEUE)
             lp.enqueue_stage(
                 ctx, ws, ETL_SRC_PART, ETL_H_GCOUNT, g, k, tile_p, tile_p,
-                bound_p, Int32(0),
+                bound_p, Int32(0), search_phase=False,
             )
             _et_enqueue_partition(
                 ctx, ws, dataset, d_row_ids,
@@ -6161,6 +6545,11 @@ def train_forest_classification_device_timed(
             " (randomforest.cuh:69)"
         )
     var group_cap = row_slot_cap // Int(slot_rows)
+    comptime if T12:
+        # Account for both row-id streams plus each tree's bounded queue;
+        # immutable dataset remains shared. IDs/archive positions do not move.
+        var per_tree_bytes = max(1, 8 * Int(slot_rows) + Int(params.max_batch_size)*32)
+        group_cap = min(group_cap, max(1, T12_BYTES // per_tree_bytes))
     if group_cap < 1:
         group_cap = 1
     clock.mark(ctx)
@@ -6403,6 +6792,10 @@ def search_batch_regression_enqueue(
     if n_nodes == 0:
         return
     var n_cells = n_nodes * Int(k)
+    # T05 operates on exact raw feature values. The optional incumbent code
+    # representation has a separate threshold-snapping contract and keeps B.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var fused_small_rows = Int32(ET_SMALL_NODE_TPB) if T05 and not range_only and not dataset.bins_active() else Int32(0)
 
     ref d_min = ws.d_min
     ref d_max = ws.d_max
@@ -6453,12 +6846,16 @@ def search_batch_regression_enqueue(
     # no grid sync) is at the classification twin's launch. The one twin
     # difference: the class-accumulator extent is `n_cells` (one output),
     # exactly what the old score-init launch passed here.
-    var setup_report = Int32(ws.cap_report) if use_sampler else Int32(0)
+    # T04: every future larger frontier is initialized at its own extent.
+    # Dummy nodes inside n_nodes remain initialized; capacity tails are unread.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var setup_nodes = n_nodes if T04 else ws.cap_nodes
+    var setup_report = Int32(sampler_report_len(n_nodes) if T04 else ws.cap_report) if use_sampler else Int32(0)
     var setup_a_extent = n_cells
     if Int(setup_report) > setup_a_extent:
         setup_a_extent = Int(setup_report)
-    if ws.cap_nodes > setup_a_extent:
-        setup_a_extent = ws.cap_nodes
+    if setup_nodes > setup_a_extent:
+        setup_a_extent = setup_nodes
     ctx.enqueue_function[phase_setup_a_kernel](
         d_samp_report.unsafe_ptr(),
         setup_report,
@@ -6470,14 +6867,14 @@ def search_batch_regression_enqueue(
         d_merges.unsafe_ptr(),
         Int32(n_cells),
         ws.d_nonconst.unsafe_ptr(),
-        Int32(ws.cap_nodes),
+        Int32(setup_nodes),
         grid_dim=ceildiv(setup_a_extent, PHASE_SETUP_TPB),
         block_dim=PHASE_SETUP_TPB,
     )
     if not range_only:
         var setup_b_extent = n_cells
-        if ws.cap_nodes > setup_b_extent:
-            setup_b_extent = ws.cap_nodes
+        if setup_nodes > setup_b_extent:
+            setup_b_extent = setup_nodes
         ctx.enqueue_function[phase_setup_b_kernel](
             d_status.unsafe_ptr(),
             d_thresh.unsafe_ptr(),
@@ -6491,7 +6888,7 @@ def search_batch_regression_enqueue(
             Int32(n_cells),
             Int32(n_cells),
             r_mx.unsafe_ptr(),
-            Int32(ws.cap_nodes),
+            Int32(setup_nodes),
             r_q.unsafe_ptr(),
             r_c.unsafe_ptr(),
             r_m.unsafe_ptr(),
@@ -6570,43 +6967,10 @@ def search_batch_regression_enqueue(
             grid_dim=(n_blocks, ceildiv(Int(k), ET_CODE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
-    elif tiled_range:
-        ctx.enqueue_function[
-            node_feature_range_tiled_kernel[TPB, ET_FEATURE_TILE]
-        ](
-            d_minkey.unsafe_ptr(),
-            d_maxkey.unsafe_ptr(),
-            d_missing.unsafe_ptr(),
-            d_merges.unsafe_ptr(),
-            dataset.d_data_rm.unsafe_ptr(),
-            d_row_ids.unsafe_ptr(),
-            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-            d_colids.unsafe_ptr(),
-            n_cols,
-            Int32(k),
-            dataset.d_quant.unsafe_ptr(),
-            grid_dim=(n_blocks, ceildiv(Int(k), ET_FEATURE_TILE), 1),
-            block_dim=(TPB, 1, 1),
-        )
+    elif fused_small_rows != 0:
+        _enqueue_raw_range[True](ctx,ws,dataset,d_row_ids,n_blocks,k,tiled_range)
     else:
-        ctx.enqueue_function[node_feature_range_kernel[TPB, ET_ROW_MAJOR]](
-            d_minkey.unsafe_ptr(),
-            d_maxkey.unsafe_ptr(),
-            d_missing.unsafe_ptr(),
-            d_merges.unsafe_ptr(),
-            dataset.search_data_ptr(),
-            d_row_ids.unsafe_ptr(),
-            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-            d_colids.unsafe_ptr(),
-            n_rows,
-            n_cols,
-            Int32(k),
-            Int32(0),
-            grid_dim=search_grid(n_blocks, Int(k)),
-            block_dim=(TPB, 1, 1),
-        )
+        _enqueue_raw_range[False](ctx,ws,dataset,d_row_ids,n_blocks,k,tiled_range)
     # DEVIATION 204: the merge produced order-preserving KEYS; this
     # turns them back into the `(min, max)` floats every later pass
     # reads, and applies the empty-cell sentinel.
@@ -6782,15 +7146,20 @@ def search_batch_regression_enqueue(
         Int32(1),
         params.min_samples_leaf,
         params.split_criterion,
+        Int32(k),
         grid_dim=ceildiv(n_cells, 64),
         block_dim=64,
     )
+    if fused_small_rows != 0:
+        _enqueue_small_node_splits[False](ctx,ws,dataset,d_row_ids,
+            n_nodes,k,Int32(1),seed,params)
+
     # DEVIATION 470: the reduce cells and the `r_mx` mutexes (over full
     # capacity) were seeded by fused half B above.
-    var bpn = ceildiv(Int(k), TPB)
+    var bpn = ceildiv(Int(k), ET_REDUCE_TPB)
     if bpn < 1 or ET_SPLIT_REDUCE_ONE_BLOCK:
         bpn = 1
-    ctx.enqueue_function[split_reduce_kernel[TPB]](
+    ctx.enqueue_function[split_reduce_kernel[ET_REDUCE_TPB]](
         r_q.unsafe_ptr(),
         r_c.unsafe_ptr(),
         r_m.unsafe_ptr(),
@@ -6814,7 +7183,7 @@ def search_batch_regression_enqueue(
         Int32(bpn),
         Int32(0),
         grid_dim=(bpn, n_nodes, 1),
-        block_dim=(TPB, 1, 1),
+        block_dim=(ET_REDUCE_TPB, 1, 1),
     )
     # DEVIATION 463: the exact-tie counter, only when the build asks for it.
     comptime if is_defined["MOJOLEARN_ET_TIE_STATS"]():
@@ -7154,6 +7523,11 @@ def train_forest_regression_device_timed(
             " (randomforest.cuh:69)"
         )
     var group_cap = row_slot_cap // Int(slot_rows)
+    comptime if T12:
+        # Account for both row-id streams plus each tree's bounded queue;
+        # immutable dataset remains shared. IDs/archive positions do not move.
+        var per_tree_bytes = max(1, 8 * Int(slot_rows) + Int(params.max_batch_size)*32)
+        group_cap = min(group_cap, max(1, T12_BYTES // per_tree_bytes))
     if group_cap < 1:
         group_cap = 1
     clock.mark(ctx)

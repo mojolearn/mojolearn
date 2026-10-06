@@ -550,6 +550,60 @@ def _leafwise_argmax_write[
             out_bin.unsafe_store(out_slot, UInt32(0xFFFFFFFF))
 
 
+def fused_root_scan_score_kernel[
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    normalize: Bool = False,
+](
+    bf_skip: MutPointer[UInt8, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    bf_feature_id: MutPointer[UInt32, MutAnyOrigin],
+    feature_weights: MutPointer[Float32, MutAnyOrigin],
+    histograms: MutPointer[Float32, MutAnyOrigin],
+    part_stats: MutPointer[Float32, MutAnyOrigin],
+    stat_count_in: Int32,
+    part_id_in: Int32,
+    maybe_second_part_id_in: Int32,
+    multiclass_optimization: Int32,
+    lambda_l2: Float32,
+    score_std_dev: Float32,
+    global_seed: UInt64,
+    out_score: MutPointer[Float32, MutAnyOrigin],
+    out_bin: MutPointer[UInt32, MutAnyOrigin],
+    min_child_hessian: Float32,
+    feature_first: MutPointer[UInt32, MutAnyOrigin],
+    feature_folds: MutPointer[UInt32, MutAnyOrigin],
+    feature_one_hot: MutPointer[UInt8, MutAnyOrigin],
+    feature_count: Int32,
+):
+    """C45: root prefix and canonical split scoring share one block.
+
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    Capacity is one score block's histogram. Root prefixes remain stored for
+    sibling-cache lifetime, but no separate scan launch/score array exists.
+    The original score statements, comparator and per-feature prefix order
+    are reused; no changed split candidates or floating atomics.
+    """
+    var feature = Int(thread_idx.x)
+    while feature < Int(feature_count):
+        var folds = Int(feature_folds.unsafe_load(feature))
+        if feature_one_hot.unsafe_load(feature) == UInt8(0) and folds > 1:
+            for stat in range(Int(stat_count_in)):
+                var base = (Int(part_id_in) * Int(stat_count_in) + stat) * Int(bin_feature_count_in)
+                base += Int(feature_first.unsafe_load(feature))
+                var running = Float32(0.0)
+                for bin in range(folds):
+                    running = ftz(running + histograms.unsafe_load(base + bin))
+                    histograms.unsafe_store(base + bin, running)
+        feature += Int(block_dim.x)
+    barrier()
+    compute_optimal_split_kernel[score_function, normalize](
+        bf_skip, bin_feature_count_in, bf_feature_id, feature_weights,
+        histograms, part_stats, stat_count_in, part_id_in,
+        maybe_second_part_id_in, multiclass_optimization, lambda_l2,
+        score_std_dev, global_seed, out_score, out_bin, min_child_hessian,
+    )
+
+
 def compute_optimal_split_kernel[
     score_function: Int = SCORE_FUNCTION_COSINE,
     normalize: Bool = False,
@@ -665,3 +719,62 @@ def compute_optimal_splits_region_kernel[
         out_score,
         out_bin,
     )
+
+
+def fused_symmetric_scan_score_kernel[
+    score_function: Int = SCORE_FUNCTION_COSINE,
+    normalize: Bool = False,
+](
+    bf_skip: MutPointer[UInt8, MutAnyOrigin], bin_feature_count_in: Int32,
+    bf_feature_id: MutPointer[UInt32, MutAnyOrigin], feature_weights: MutPointer[Float32, MutAnyOrigin],
+    histograms: MutPointer[Float32, MutAnyOrigin], part_stats: MutPointer[Float32, MutAnyOrigin],
+    stat_count_in: Int32, part_ids: MutPointer[UInt32, MutAnyOrigin], p_count_in: Int32,
+    multiclass_optimization: Int32, lambda_l2: Float32, score_std_dev: Float32, global_seed: UInt64,
+    out_score: MutPointer[Float32, MutAnyOrigin], out_bin: MutPointer[UInt32, MutAnyOrigin],
+    feature_first: MutPointer[UInt32, MutAnyOrigin], feature_folds: MutPointer[UInt32, MutAnyOrigin],
+    feature_one_hot: MutPointer[UInt8, MutAnyOrigin], feature_count: Int32,
+    compute_ids: MutPointer[UInt32, MutAnyOrigin], compute_count: Int32,
+    subtract_from: MutPointer[UInt32, MutAnyOrigin], subtract_what: MutPointer[UInt32, MutAnyOrigin], subtract_count: Int32,
+):
+    """C45 symmetric bounded prefix + sibling derivation + exact score/tie.
+
+    Default OFF. NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    One physical score block owns the complete bounded level. Prefixes remain
+    in the parent-cache histogram; only the intervening launch boundary goes.
+    Every scalar prefix and subtraction is histogram_utils.mojo's statement;
+    scoring, dither draws and tie reduction call the actual incumbent kernel.
+    """
+    var nf = Int(feature_count)
+    var ns = Int(stat_count_in)
+    var bins = Int(bin_feature_count_in)
+    var tid = Int(thread_idx.x)
+    var unit = tid
+    while unit < Int(compute_count)*ns*nf:
+        var feature = unit%nf
+        var stat = (unit//nf)%ns
+        var leaf = Int(compute_ids.unsafe_load(unit//(nf*ns)))
+        var folds = Int(feature_folds.unsafe_load(feature))
+        if feature_one_hot.unsafe_load(feature) == UInt8(0) and folds > 1:
+            var base = (leaf*ns+stat)*bins+Int(feature_first.unsafe_load(feature))
+            var running = Float32(0)
+            for bin in range(folds):
+                running = ftz(running+histograms.unsafe_load(base+bin))
+                histograms.unsafe_store(base+bin, running)
+        unit += SCORE_BLOCK_SIZE
+    barrier()
+    unit = tid
+    while unit < Int(subtract_count)*ns*bins:
+        var bin = unit%bins
+        var stat = (unit//bins)%ns
+        var pair = unit//(bins*ns)
+        var dst = (Int(subtract_from.unsafe_load(pair))*ns+stat)*bins+bin
+        var src = (Int(subtract_what.unsafe_load(pair))*ns+stat)*bins+bin
+        var value = ftz(histograms.unsafe_load(dst)-histograms.unsafe_load(src))
+        if stat == 0:
+            value = max(value, Float32(0))
+        histograms.unsafe_store(dst, value)
+        unit += SCORE_BLOCK_SIZE
+    barrier()
+    compute_optimal_splits_kernel[score_function, normalize](bf_skip, bin_feature_count_in, bf_feature_id, feature_weights,
+        histograms, part_stats, stat_count_in, part_ids, p_count_in, multiclass_optimization, lambda_l2, score_std_dev,
+        global_seed, out_score, out_bin)

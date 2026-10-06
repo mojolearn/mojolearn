@@ -56,6 +56,7 @@ list is not a function of the grades.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from gbdt.apple_fast_tree_experiments import AFT_N07, AFT_N08
 from std.math import isfinite
 from std.memory import stack_allocation
 from std.sys import is_defined
@@ -71,6 +72,9 @@ from checks.numerics import (
     identical_mul,
 )
 from gbdt.data.pairs import IDN_PAIRLOGIT_GROUP
+from gbdt.trees_identical_switches import T29, T29_VERSIONED
+from gbdt.targets.tree_t29_units import T29_GROUP_LANES
+from gbdt.targets.kernel.tree_t29_pair import pair_logit_group_versioned_kernel
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     pinned_block_sum,
@@ -184,7 +188,11 @@ comptime PL_PAIRS_ONCE = pl_pairs_once_for[TARGET_COLUMN]()
 comptime PL_GROUP_NARROW = pl_group_narrow_for[TARGET_COLUMN]()
 #: the group kernel's block: 128 under `PL_GROUP_NARROW`, else `PLG_THREADS`
 #: (`MSE_BLOCK_SIZE`, 256)
-comptime PLG_LAUNCH_THREADS = 128 if PL_GROUP_NARROW else MSE_BLOCK_SIZE
+# N07: two simdgroups per query block trade more serial query tiles for
+# smaller register/shared reservations. Every document and unlike-grade pair
+# remains present; queries wider than the block keep the complete tile loop.
+# New64-lane arm, not the historical256-vs128 experiment. No evidence.
+comptime PLG_LAUNCH_THREADS = 64 if AFT_N07 else (128 if PL_GROUP_NARROW else MSE_BLOCK_SIZE)
 
 #: threads per group block, one document per thread per chunk; the value
 #: and magnitude partials use `pinned_block_sum` at this width
@@ -265,6 +273,7 @@ def pair_logit_group_kernel[
     store_acc: Bool,
     threads: Int = PLG_THREADS,
     pairs_once: Bool = False,
+    work_class: Int = 0,
 ](
     point: MutPointer[Float32, MutAnyOrigin],
     grades: MutPointer[Float32, MutAnyOrigin],
@@ -317,6 +326,15 @@ def pair_logit_group_kernel[
     var begin = Int(group_offsets.unsafe_load(g))
     var end = Int(group_offsets.unsafe_load(g + 1))
     var size = end - begin
+    # T29 scheduling only: short and long queries use separate launches.
+    # The threshold is one shared-memory tile, not a dataset dimension.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    comptime if work_class == 1:
+        if size > threads:
+            return
+    elif work_class == 2:
+        if size <= threads:
+            return
     var w = group_w.unsafe_load(g)
     var n_chunks = (size + threads - 1) // threads
     var fv_local = Float32(0.0)
@@ -454,39 +472,45 @@ def pair_logit_group_kernel[
             if tile_n > threads:
                 tile_n = threads
             if in_range:
-                for k in range(tile_n):
-                    var g_j = sh_grade.unsafe_load(k)
-                    if g_j != g_i:
-                        # `pair_logit.cu:25-40` for the pair (winner, loser)
-                        var winner_side = g_i > g_j
-                        var diff = p_i - sh_point.unsafe_load(k)
-                        if not winner_side:
-                            diff = sh_point.unsafe_load(k) - p_i
-                        var exp_diff = routed_exp(diff)
-                        var p = Float32(1.0)
-                        if isfinite(Float32(1.0) + exp_diff):
-                            p = exp_diff / (Float32(1.0) + exp_diff)
-                        p = max(
-                            min(p, Float32(1.0) - Float32(1e-40)),
-                            Float32(1e-40),
-                        )
-                        var direction = Float32(1.0) - p
-                        var scale = ftz(identical_mul(p, Float32(1.0) - p))
-                        var wd = ftz(identical_mul(w, direction))
-                        if winner_side:
-                            acc_der = acc_der + wd
-                            if compute_fv != Int32(0):
-                                var log_exp_val_plus_one = diff
+                # N08: unroll two ascending endpoint visits to expose
+                # independent shared loads. Keep addition and pair order;
+                # this is not the rejected each-pair-once route. No evidence.
+                for pair_base in range(0, tile_n, 2 if AFT_N08 else 1):
+                    comptime for pair_lane in range(2 if AFT_N08 else 1):
+                        var k = pair_base + pair_lane
+                        if k < tile_n:
+                            var g_j = sh_grade.unsafe_load(k)
+                            if g_j != g_i:
+                                # `pair_logit.cu:25-40` for the pair (winner, loser)
+                                var winner_side = g_i > g_j
+                                var diff = p_i - sh_point.unsafe_load(k)
+                                if not winner_side:
+                                    diff = sh_point.unsafe_load(k) - p_i
+                                var exp_diff = routed_exp(diff)
+                                var p = Float32(1.0)
                                 if isfinite(Float32(1.0) + exp_diff):
-                                    log_exp_val_plus_one = routed_log(
-                                        Float32(1.0) + exp_diff
-                                    )
-                                fv_local = fv_local + identical_mul(
-                                    w, diff - log_exp_val_plus_one
+                                    p = exp_diff / (Float32(1.0) + exp_diff)
+                                p = max(
+                                    min(p, Float32(1.0) - Float32(1e-40)),
+                                    Float32(1e-40),
                                 )
-                        else:
-                            acc_der = acc_der + (-wd)
-                        acc_der2 = acc_der2 + ftz(identical_mul(w, scale))
+                                var direction = Float32(1.0) - p
+                                var scale = ftz(identical_mul(p, Float32(1.0) - p))
+                                var wd = ftz(identical_mul(w, direction))
+                                if winner_side:
+                                    acc_der = acc_der + wd
+                                    if compute_fv != Int32(0):
+                                        var log_exp_val_plus_one = diff
+                                        if isfinite(Float32(1.0) + exp_diff):
+                                            log_exp_val_plus_one = routed_log(
+                                                Float32(1.0) + exp_diff
+                                            )
+                                        fv_local = fv_local + identical_mul(
+                                            w, diff - log_exp_val_plus_one
+                                        )
+                                else:
+                                    acc_der = acc_der + (-wd)
+                                acc_der2 = acc_der2 + ftz(identical_mul(w, scale))
         var der = ftz(acc_der)
         var der2 = ftz(acc_der2)
         var weight = Float32(0.0)
@@ -606,24 +630,62 @@ def launch_pair_logit_group[
     given offsets, passed as ONE pointer plus offsets (two pointers
     derived from `acc` are refused as aliasing; the accumulators are
     written only under `store_acc`)."""
-    ctx.enqueue_function[
-        pair_logit_group_kernel[
-            estimation, second_order, store_acc, PLG_LAUNCH_THREADS, PL_PAIRS_ONCE
-        ]
-    ](
-        point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
-        acc.unsafe_ptr(), Int32(group_w_at), row_weights.unsafe_ptr(), Int32(n_rows),
-        write_map.unsafe_ptr(), Int32(1) if has_write_map else Int32(0),
-        stats.unsafe_ptr(), function_value.unsafe_ptr(),
-        Int32(1) if compute_fv else Int32(0),
-        plane_magnitudes.unsafe_ptr(),
-        Int32(1) if compute_magnitudes else Int32(0),
-        Int32(der_acc_at),
-        Int32(der2_acc_at),
-        Int32(fv_acc_at),
-        grid_dim=(n_groups, 1, 1),
-        block_dim=(PLG_LAUNCH_THREADS, 1, 1),
-    )
+    comptime if T29_VERSIONED:
+        comptime for class_slot in range(2 if T29 else 1):
+            ctx.enqueue_function[
+                pair_logit_group_versioned_kernel[
+                    estimation, second_order, store_acc, class_slot + 1 if T29 else 0
+                ]
+            ](
+                point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
+                acc.unsafe_ptr(), Int32(group_w_at), row_weights.unsafe_ptr(), Int32(n_rows),
+                write_map.unsafe_ptr(), Int32(1) if has_write_map else Int32(0),
+                stats.unsafe_ptr(), function_value.unsafe_ptr(),
+                Int32(1) if compute_fv else Int32(0),
+                plane_magnitudes.unsafe_ptr(),
+                Int32(1) if compute_magnitudes else Int32(0),
+                Int32(der_acc_at), Int32(der2_acc_at), Int32(fv_acc_at),
+                grid_dim=(n_groups, 1, 1), block_dim=(T29_GROUP_LANES, 1, 1),
+            )
+    elif T29:
+        comptime for wc in range(1, 3):
+            ctx.enqueue_function[
+                pair_logit_group_kernel[
+                    estimation, second_order, store_acc, PLG_LAUNCH_THREADS, PL_PAIRS_ONCE, wc
+                ]
+            ](
+                point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
+                acc.unsafe_ptr(), Int32(group_w_at), row_weights.unsafe_ptr(), Int32(n_rows),
+                write_map.unsafe_ptr(), Int32(1) if has_write_map else Int32(0),
+                stats.unsafe_ptr(), function_value.unsafe_ptr(),
+                Int32(1) if compute_fv else Int32(0),
+                plane_magnitudes.unsafe_ptr(),
+                Int32(1) if compute_magnitudes else Int32(0),
+                Int32(der_acc_at),
+                Int32(der2_acc_at),
+                Int32(fv_acc_at),
+                grid_dim=(n_groups, 1, 1),
+                block_dim=(PLG_LAUNCH_THREADS, 1, 1),
+            )
+    else:
+        ctx.enqueue_function[
+            pair_logit_group_kernel[
+                estimation, second_order, store_acc, PLG_LAUNCH_THREADS, PL_PAIRS_ONCE
+            ]
+        ](
+            point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
+            acc.unsafe_ptr(), Int32(group_w_at), row_weights.unsafe_ptr(), Int32(n_rows),
+            write_map.unsafe_ptr(), Int32(1) if has_write_map else Int32(0),
+            stats.unsafe_ptr(), function_value.unsafe_ptr(),
+            Int32(1) if compute_fv else Int32(0),
+            plane_magnitudes.unsafe_ptr(),
+            Int32(1) if compute_magnitudes else Int32(0),
+            Int32(der_acc_at),
+            Int32(der2_acc_at),
+            Int32(fv_acc_at),
+            grid_dim=(n_groups, 1, 1),
+            block_dim=(PLG_LAUNCH_THREADS, 1, 1),
+        )
 
 
 def launch_pair_logit_group_reuse(

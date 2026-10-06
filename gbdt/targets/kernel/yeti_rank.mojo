@@ -95,6 +95,7 @@ the block kernel, the order this DEVIATION must not change.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from gbdt.apple_fast_tree_experiments import AFT_N09, AFT_N10, AFT_N11
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from std.sys import is_defined
@@ -116,6 +117,7 @@ from checks.numerics import (
     identical_mul,
     identical_pow,
 )
+from gbdt.trees_identical_switches import T29_YETI
 from gbdt.data.yeti_rank_tasks import (
     YETI_TASK_POSITIONS,
     yeti_rank_cuda_seed,
@@ -133,11 +135,21 @@ from gbdt.targets.kernel.pointwise_targets import (
 )
 from gbdt.targets.kernel.query_rmse import (
     QuerywiseTargetBuffers,
+    launch_aft_group_means,
     make_querywise_target_buffers,
 )
 
 comptime YETI_THREADS = 256
 comptime YETI_LANES = 4
+# N09 reuses a threadgroup's allocated task scratch across two complete
+# tasks. Task IDs, per-task seed streams and query boundaries never change.
+# N10 doubles merge outputs per active lane, halving co-rank searches while
+# retaining the 256-thread RNG/pair ownership. N11 runs two rows per lane
+# in each ORIGINAL 256-row partial tile; partial array sizes stay unchanged.
+# All three are source-only, no performance/quality evidence, default OFF.
+comptime AFT_YETI_TASKS_PER_BLOCK = 2 if AFT_N09 else 1
+comptime AFT_YETI_MERGE_LANES = 8 if AFT_N10 else YETI_LANES
+comptime AFT_YETI_ROW_THREADS = 128 if AFT_N11 else MSE_BLOCK_SIZE
 
 
 def yeti_block_parallel_for[column: Int]() -> Bool:
@@ -180,7 +192,7 @@ def yeti_block_parallel_for[column: Int]() -> Bool:
     return column == COLUMN_NVIDIA
 
 
-comptime YETI_BLOCK_PARALLEL = yeti_block_parallel_for[TARGET_COLUMN]()
+comptime YETI_BLOCK_PARALLEL = T29_YETI or yeti_block_parallel_for[TARGET_COLUMN]()
 #: negative control for DEVIATION 3040: phase 2 before phase 1 (default off)
 comptime YETI_SABOTAGE = is_defined["MOJOLEARN_GBDT_YETI_SABOTAGE"]()
 
@@ -548,6 +560,7 @@ def yeti_rank_task_block_kernel(
     permutations_in: Int32,
     der_acc: MutPointer[Float32, MutAnyOrigin],
     weight_acc: MutPointer[Float32, MutAnyOrigin],
+    n_tasks_in: Int32 = Int32(0),
 ):
     """One task on one 256-thread block, 4 lanes a thread (DEVIATION 3040).
     Grid `(n_tasks, 1, 1)`, block `(YETI_THREADS, 1, 1)`: every block is a
@@ -583,249 +596,258 @@ def yeti_rank_task_block_kernel(
         address_space = AddressSpace.SHARED,
     ]()
 
-    var task = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var offset = Int(task_offsets.unsafe_load(task))
-    var size = Int(task_sizes.unsafe_load(task))
-    var first_qid = row_qids.unsafe_load(offset)
-    var pad_qid = row_qids.unsafe_load(offset + size - 1) + UInt32(1) - first_qid
-    var perms = Int(permutations_in)
-
-    # this thread's stream (`:224-237`), advanced through its lanes in order
-    # every round: what the sequential kernel kept in `s_seed[tid]`
-    var s = _task_seed(task_qids.unsafe_load(task), tid, cuda_seed)
-
-    # per lane: the local query id, the query begin and the pair decay
-    var lane_qid = SIMD[DType.uint32, YETI_LANES](0)
-    var lane_begin = SIMD[DType.int32, YETI_LANES](0)
-    var lane_decay = SIMD[DType.float32, YETI_LANES](0.0)
-    for k in range(YETI_LANES):
-        var p = tid + YETI_THREADS * k
-        var qid = pad_qid
-        # the padding is one query that begins at the first padded position
-        var begin = size
-        if p < size:
-            var row_qid = row_qids.unsafe_load(offset + p)
-            qid = row_qid - first_qid
-            begin = Int(q_offsets.unsafe_load(Int(row_qid))) - offset
-            var w = Float32(1.0)
-            if has_weights != Int32(0):
-                w = weights.unsafe_load(offset + p)
-            sh_relev.unsafe_store(p, ftz(relev.unsafe_load(offset + p) * w))
-            sh_exp.unsafe_store(
-                p, routed_exp(min(approx.unsafe_load(offset + p), Float32(70.0)))
-            )
-        else:
-            sh_relev.unsafe_store(p, Float32(1000.0))
-            sh_exp.unsafe_store(p, Float32(1000.0))
-        sh_der.unsafe_store(p, Float32(0.0))
-        sh_weight.unsafe_store(p, Float32(0.0))
-        lane_qid[k] = qid
-        lane_begin[k] = Int32(begin)
-        if p != begin:
-            # the round loop's `0.15 * pow(decaySpeed, j - queryBegin - 1)`,
-            # hoisted: it depends on the position and its query begin only
-            lane_decay[k] = Float32(0.15) * identical_pow(
-                decay_speed, Float32(p - begin - 1)
-            )
-    barrier()
-
-    for _ in range(perms):
-        # the draws (`:112-121`)
-        for k in range(YETI_LANES):
-            var p = tid + YETI_THREADS * k
-            var val = Float32(-1000.0)
-            if p < size:
-                val = sh_exp.unsafe_load(p)
-            s = _advance_seed32(s)
-            # `NextUniformFloat32`: `v * 2.328306435996595e-10f`, whose
-            # float is exactly 2^-32
-            var uni = identical_mul(Float32(s), Float32(2.328306435996595e-10))  # exact; pinned (lane/pinned-mul-contract-free)
-            val = val * (uni / (Float32(1.000001) - uni))
-            var bits = bitcast[DType.uint32](val)
-            if (bits & UInt32(0x80000000)) != UInt32(0):
-                bits = bits ^ UInt32(0xFFFFFFFF)
-            else:
-                bits = bits ^ UInt32(0x80000000)
-            # (query ascending, key descending, position ascending) as ONE
-            # ascending integer; the position makes every composite distinct
-            var composite = (
-                (UInt64(lane_qid[k]) << UInt64(42))
-                | (UInt64(bits ^ UInt32(0xFFFFFFFF)) << UInt64(10))
-                | UInt64(p)
-            )
-            sh_keys.unsafe_store(p, composite)
-        barrier()
-
-        var src = 0
-        comptime if YETI_FAST_SORT:
-            comptime assert YETI_THREADS * YETI_LANES == YETI_TASK_POSITIONS
-            comptime assert YETI_THREADS % YETI_SIMD_W == 0
-            # (1) a bitonic sort of each simdgroup's 128 contiguous keys in
-            # registers: element e = lane * 4 + r of the simdgroup's run
-            var ln = tid % YETI_SIMD_W
-            var run_base = (tid // YETI_SIMD_W) * YETI_SIMD_RUN + ln * YETI_LANES
-            var v = SIMD[DType.uint64, YETI_LANES](0)
-            comptime for r in range(YETI_LANES):
-                v[r] = sh_keys.unsafe_load(run_base + r)
-            comptime for kk in range(1, 8):
-                comptime k = 1 << kk
-                comptime for t in range(kk):
-                    comptime jj = kk - 1 - t
-                    comptime j = 1 << jj
-                    comptime if j < YETI_LANES:
-                        comptime for r in range(YETI_LANES):
-                            comptime if (r & j) == 0:
-                                var a = v[r]
-                                var b = v[r | j]
-                                var asc = ((ln * YETI_LANES + r) & k) == 0
-                                if (a > b) == asc:
-                                    v[r] = b
-                                    v[r | j] = a
-                    else:
-                        comptime m = j // YETI_LANES
-                        var lower = (ln & m) == 0
-                        comptime for r in range(YETI_LANES):
-                            var x = v[r]
-                            var o_hi = shuffle_xor(UInt32(x >> UInt64(32)), UInt32(m))
-                            var o_lo = shuffle_xor(
-                                UInt32(x & UInt64(0xFFFFFFFF)), UInt32(m)
-                            )
-                            var o = (UInt64(o_hi) << UInt64(32)) | UInt64(o_lo)
-                            var asc = ((ln * YETI_LANES + r) & k) == 0
-                            if lower == asc:
-                                v[r] = min(x, o)
-                            else:
-                                v[r] = max(x, o)
-            comptime for r in range(YETI_LANES):
-                sh_keys.unsafe_store(run_base + r, v[r])
-            barrier()
-            # (2) merge-path passes: thread tid writes outputs 4 * tid .. +3
-            # of the merged pair of runs; one co-rank binary search, then a
-            # sequential merge with the run heads in registers. UInt64.MAX
-            # is a sentinel no composite reaches (they are below 2^52).
-            var dst = YETI_TASK_POSITIONS
-            var width = YETI_SIMD_RUN
-            var o0 = tid * YETI_LANES
-            while width < YETI_TASK_POSITIONS:
-                var lo = (o0 // (2 * width)) * (2 * width)
-                var d = o0 - lo
-                var a_base = src + lo
-                var b_base = a_base + width
-                var i_lo = max(0, d - width)
-                var i_hi = min(d, width)
-                while i_lo < i_hi:
-                    var mid = (i_lo + i_hi) // 2
-                    if sh_keys.unsafe_load(a_base + mid) < sh_keys.unsafe_load(
-                        b_base + d - mid - 1
-                    ):
-                        i_lo = mid + 1
-                    else:
-                        i_hi = mid
-                var ia = i_lo
-                var ib = d - i_lo
-                var va = UInt64.MAX
-                if ia < width:
-                    va = sh_keys.unsafe_load(a_base + ia)
-                var vb = UInt64.MAX
-                if ib < width:
-                    vb = sh_keys.unsafe_load(b_base + ib)
-                comptime for t in range(YETI_LANES):
-                    if va < vb:
-                        sh_keys.unsafe_store(dst + o0 + t, va)
-                        ia += 1
-                        va = UInt64.MAX
-                        if ia < width:
-                            va = sh_keys.unsafe_load(a_base + ia)
-                    else:
-                        sh_keys.unsafe_store(dst + o0 + t, vb)
-                        ib += 1
-                        vb = UInt64.MAX
-                        if ib < width:
-                            vb = sh_keys.unsafe_load(b_base + ib)
-                barrier()
-                var swap = src
-                src = dst
-                dst = swap
-                width = width * 2
-        else:
-            # the two stable radix passes as a ten-pass merge: every element
-            # finds its output slot by a binary search of the sibling run (the
-            # composites are distinct, so "strictly below" needs no tie rule).
-            # Ten passes, so the order ends where it began, at `sh_keys[0:1024]`.
-            var dst = YETI_TASK_POSITIONS
-            var width = 1
-            while width < YETI_TASK_POSITIONS:
-                for k in range(YETI_LANES):
-                    var i = tid + YETI_THREADS * k
-                    var lo = (i // (2 * width)) * (2 * width)
-                    var mid = lo + width
-                    var sibling = mid
-                    var own_rank = i - lo
-                    if i >= mid:
-                        sibling = lo
-                        own_rank = i - mid
-                    var key = sh_keys.unsafe_load(src + i)
-                    var base = 0
-                    var length = width
-                    while length > 1:
-                        var half = length // 2
-                        if sh_keys.unsafe_load(src + sibling + base + half - 1) < key:
-                            base += half
-                        length -= half
-                    var below = base
-                    if sh_keys.unsafe_load(src + sibling + base) < key:
-                        below += 1
-                    sh_keys.unsafe_store(dst + lo + own_rank + below, key)
-                barrier()
-                var swap = src
-                src = dst
-                dst = swap
-                width = width * 2
-
-        # the pairs (`:130-168`): for each lane, phase 1 then phase 2
-        for k in range(YETI_LANES):
-            var j = tid + YETI_THREADS * k
-            var qb = Int(lane_begin[k])
-            var has_pair = j != qb
-            var idx1 = 0
-            var idx2 = 0
-            var pair_weight = Float32(0.0)
-            var ll = Float32(0.0)
-            if has_pair:
-                idx1 = Int(sh_keys.unsafe_load(src + j - 1) & UInt64(1023))
-                idx2 = Int(sh_keys.unsafe_load(src + j) & UInt64(1023))
-                var relev1 = sh_relev.unsafe_load(idx1)
-                var relev2 = sh_relev.unsafe_load(idx2)
-                var approx1 = sh_exp.unsafe_load(idx1)
-                var approx2 = sh_exp.unsafe_load(idx2)
-                var decay = lane_decay[k]
-                pair_weight = ftz(decay * abs(relev1 - relev2) / Float32(perms))
-                var sel = -approx1
-                if relev1 > relev2:
-                    sel = approx2
-                ll = ftz(pair_weight * sel / (approx2 + approx1))
-            comptime for step in range(2):
-                comptime phase = (1 - step) if YETI_SABOTAGE else step
-                comptime if phase == 0:
-                    if has_pair and idx1 < size:
-                        sh_weight.unsafe_store(
-                            idx1, ftz(sh_weight.unsafe_load(idx1) + pair_weight)
-                        )
-                        sh_der.unsafe_store(idx1, ftz(sh_der.unsafe_load(idx1) + ll))
+    var task_count = Int(grid_dim.x)
+    comptime if AFT_N09:
+        if n_tasks_in > Int32(0):
+            task_count = Int(n_tasks_in)
+    comptime for task_lane in range(AFT_YETI_TASKS_PER_BLOCK):
+        var task = Int(block_idx.x) + task_lane * Int(grid_dim.x)
+        if task < task_count:
+            var tid = Int(thread_idx.x)
+            var offset = Int(task_offsets.unsafe_load(task))
+            var size = Int(task_sizes.unsafe_load(task))
+            var first_qid = row_qids.unsafe_load(offset)
+            var pad_qid = row_qids.unsafe_load(offset + size - 1) + UInt32(1) - first_qid
+            var perms = Int(permutations_in)
+        
+            # this thread's stream (`:224-237`), advanced through its lanes in order
+            # every round: what the sequential kernel kept in `s_seed[tid]`
+            var s = _task_seed(task_qids.unsafe_load(task), tid, cuda_seed)
+        
+            # per lane: the local query id, the query begin and the pair decay
+            var lane_qid = SIMD[DType.uint32, YETI_LANES](0)
+            var lane_begin = SIMD[DType.int32, YETI_LANES](0)
+            var lane_decay = SIMD[DType.float32, YETI_LANES](0.0)
+            for k in range(YETI_LANES):
+                var p = tid + YETI_THREADS * k
+                var qid = pad_qid
+                # the padding is one query that begins at the first padded position
+                var begin = size
+                if p < size:
+                    var row_qid = row_qids.unsafe_load(offset + p)
+                    qid = row_qid - first_qid
+                    begin = Int(q_offsets.unsafe_load(Int(row_qid))) - offset
+                    var w = Float32(1.0)
+                    if has_weights != Int32(0):
+                        w = weights.unsafe_load(offset + p)
+                    sh_relev.unsafe_store(p, ftz(relev.unsafe_load(offset + p) * w))
+                    sh_exp.unsafe_store(
+                        p, routed_exp(min(approx.unsafe_load(offset + p), Float32(70.0)))
+                    )
                 else:
-                    if has_pair and idx2 < size:
-                        sh_weight.unsafe_store(
-                            idx2, ftz(sh_weight.unsafe_load(idx2) + pair_weight)
-                        )
-                        sh_der.unsafe_store(idx2, ftz(sh_der.unsafe_load(idx2) + (-ll)))
+                    sh_relev.unsafe_store(p, Float32(1000.0))
+                    sh_exp.unsafe_store(p, Float32(1000.0))
+                sh_der.unsafe_store(p, Float32(0.0))
+                sh_weight.unsafe_store(p, Float32(0.0))
+                lane_qid[k] = qid
+                lane_begin[k] = Int32(begin)
+                if p != begin:
+                    # the round loop's `0.15 * pow(decaySpeed, j - queryBegin - 1)`,
+                    # hoisted: it depends on the position and its query begin only
+                    lane_decay[k] = Float32(0.15) * identical_pow(
+                        decay_speed, Float32(p - begin - 1)
+                    )
+            barrier()
+        
+            for _ in range(perms):
+                # the draws (`:112-121`)
+                for k in range(YETI_LANES):
+                    var p = tid + YETI_THREADS * k
+                    var val = Float32(-1000.0)
+                    if p < size:
+                        val = sh_exp.unsafe_load(p)
+                    s = _advance_seed32(s)
+                    # `NextUniformFloat32`: `v * 2.328306435996595e-10f`, whose
+                    # float is exactly 2^-32
+                    var uni = identical_mul(Float32(s), Float32(2.328306435996595e-10))  # exact; pinned (lane/pinned-mul-contract-free)
+                    val = val * (uni / (Float32(1.000001) - uni))
+                    var bits = bitcast[DType.uint32](val)
+                    if (bits & UInt32(0x80000000)) != UInt32(0):
+                        bits = bits ^ UInt32(0xFFFFFFFF)
+                    else:
+                        bits = bits ^ UInt32(0x80000000)
+                    # (query ascending, key descending, position ascending) as ONE
+                    # ascending integer; the position makes every composite distinct
+                    var composite = (
+                        (UInt64(lane_qid[k]) << UInt64(42))
+                        | (UInt64(bits ^ UInt32(0xFFFFFFFF)) << UInt64(10))
+                        | UInt64(p)
+                    )
+                    sh_keys.unsafe_store(p, composite)
                 barrier()
-
-    for k in range(YETI_LANES):
-        var p = tid + YETI_THREADS * k
-        if p < size:
-            der_acc.unsafe_store(offset + p, sh_der.unsafe_load(p))
-            weight_acc.unsafe_store(offset + p, sh_weight.unsafe_load(p))
+        
+                var src = 0
+                comptime if YETI_FAST_SORT:
+                    comptime assert YETI_THREADS * YETI_LANES == YETI_TASK_POSITIONS
+                    comptime assert YETI_THREADS % YETI_SIMD_W == 0
+                    # (1) a bitonic sort of each simdgroup's 128 contiguous keys in
+                    # registers: element e = lane * 4 + r of the simdgroup's run
+                    var ln = tid % YETI_SIMD_W
+                    var run_base = (tid // YETI_SIMD_W) * YETI_SIMD_RUN + ln * YETI_LANES
+                    var v = SIMD[DType.uint64, YETI_LANES](0)
+                    comptime for r in range(YETI_LANES):
+                        v[r] = sh_keys.unsafe_load(run_base + r)
+                    comptime for kk in range(1, 8):
+                        comptime k = 1 << kk
+                        comptime for t in range(kk):
+                            comptime jj = kk - 1 - t
+                            comptime j = 1 << jj
+                            comptime if j < YETI_LANES:
+                                comptime for r in range(YETI_LANES):
+                                    comptime if (r & j) == 0:
+                                        var a = v[r]
+                                        var b = v[r | j]
+                                        var asc = ((ln * YETI_LANES + r) & k) == 0
+                                        if (a > b) == asc:
+                                            v[r] = b
+                                            v[r | j] = a
+                            else:
+                                comptime m = j // YETI_LANES
+                                var lower = (ln & m) == 0
+                                comptime for r in range(YETI_LANES):
+                                    var x = v[r]
+                                    var o_hi = shuffle_xor(UInt32(x >> UInt64(32)), UInt32(m))
+                                    var o_lo = shuffle_xor(
+                                        UInt32(x & UInt64(0xFFFFFFFF)), UInt32(m)
+                                    )
+                                    var o = (UInt64(o_hi) << UInt64(32)) | UInt64(o_lo)
+                                    var asc = ((ln * YETI_LANES + r) & k) == 0
+                                    if lower == asc:
+                                        v[r] = min(x, o)
+                                    else:
+                                        v[r] = max(x, o)
+                    comptime for r in range(YETI_LANES):
+                        sh_keys.unsafe_store(run_base + r, v[r])
+                    barrier()
+                    # (2) merge-path passes: thread tid writes outputs 4 * tid .. +3
+                    # of the merged pair of runs; one co-rank binary search, then a
+                    # sequential merge with the run heads in registers. UInt64.MAX
+                    # is a sentinel no composite reaches (they are below 2^52).
+                    var dst = YETI_TASK_POSITIONS
+                    var width = YETI_SIMD_RUN
+                    var o0 = tid * AFT_YETI_MERGE_LANES
+                    while width < YETI_TASK_POSITIONS:
+                        if o0 < YETI_TASK_POSITIONS:
+                            var lo = (o0 // (2 * width)) * (2 * width)
+                            var d = o0 - lo
+                            var a_base = src + lo
+                            var b_base = a_base + width
+                            var i_lo = max(0, d - width)
+                            var i_hi = min(d, width)
+                            while i_lo < i_hi:
+                                var mid = (i_lo + i_hi) // 2
+                                if sh_keys.unsafe_load(a_base + mid) < sh_keys.unsafe_load(
+                                    b_base + d - mid - 1
+                                ):
+                                    i_lo = mid + 1
+                                else:
+                                    i_hi = mid
+                            var ia = i_lo
+                            var ib = d - i_lo
+                            var va = UInt64.MAX
+                            if ia < width:
+                                va = sh_keys.unsafe_load(a_base + ia)
+                            var vb = UInt64.MAX
+                            if ib < width:
+                                vb = sh_keys.unsafe_load(b_base + ib)
+                            comptime for t in range(AFT_YETI_MERGE_LANES):
+                                if va < vb:
+                                    sh_keys.unsafe_store(dst + o0 + t, va)
+                                    ia += 1
+                                    va = UInt64.MAX
+                                    if ia < width:
+                                        va = sh_keys.unsafe_load(a_base + ia)
+                                else:
+                                    sh_keys.unsafe_store(dst + o0 + t, vb)
+                                    ib += 1
+                                    vb = UInt64.MAX
+                                    if ib < width:
+                                        vb = sh_keys.unsafe_load(b_base + ib)
+                        barrier()
+                        var swap = src
+                        src = dst
+                        dst = swap
+                        width = width * 2
+                else:
+                    # the two stable radix passes as a ten-pass merge: every element
+                    # finds its output slot by a binary search of the sibling run (the
+                    # composites are distinct, so "strictly below" needs no tie rule).
+                    # Ten passes, so the order ends where it began, at `sh_keys[0:1024]`.
+                    var dst = YETI_TASK_POSITIONS
+                    var width = 1
+                    while width < YETI_TASK_POSITIONS:
+                        for k in range(YETI_LANES):
+                            var i = tid + YETI_THREADS * k
+                            var lo = (i // (2 * width)) * (2 * width)
+                            var mid = lo + width
+                            var sibling = mid
+                            var own_rank = i - lo
+                            if i >= mid:
+                                sibling = lo
+                                own_rank = i - mid
+                            var key = sh_keys.unsafe_load(src + i)
+                            var base = 0
+                            var length = width
+                            while length > 1:
+                                var half = length // 2
+                                if sh_keys.unsafe_load(src + sibling + base + half - 1) < key:
+                                    base += half
+                                length -= half
+                            var below = base
+                            if sh_keys.unsafe_load(src + sibling + base) < key:
+                                below += 1
+                            sh_keys.unsafe_store(dst + lo + own_rank + below, key)
+                        barrier()
+                        var swap = src
+                        src = dst
+                        dst = swap
+                        width = width * 2
+        
+                # the pairs (`:130-168`): for each lane, phase 1 then phase 2
+                for k in range(YETI_LANES):
+                    var j = tid + YETI_THREADS * k
+                    var qb = Int(lane_begin[k])
+                    var has_pair = j != qb
+                    var idx1 = 0
+                    var idx2 = 0
+                    var pair_weight = Float32(0.0)
+                    var ll = Float32(0.0)
+                    if has_pair:
+                        idx1 = Int(sh_keys.unsafe_load(src + j - 1) & UInt64(1023))
+                        idx2 = Int(sh_keys.unsafe_load(src + j) & UInt64(1023))
+                        var relev1 = sh_relev.unsafe_load(idx1)
+                        var relev2 = sh_relev.unsafe_load(idx2)
+                        var approx1 = sh_exp.unsafe_load(idx1)
+                        var approx2 = sh_exp.unsafe_load(idx2)
+                        var decay = lane_decay[k]
+                        pair_weight = ftz(decay * abs(relev1 - relev2) / Float32(perms))
+                        var sel = -approx1
+                        if relev1 > relev2:
+                            sel = approx2
+                        ll = ftz(pair_weight * sel / (approx2 + approx1))
+                    comptime for step in range(2):
+                        comptime phase = (1 - step) if YETI_SABOTAGE else step
+                        comptime if phase == 0:
+                            if has_pair and idx1 < size:
+                                sh_weight.unsafe_store(
+                                    idx1, ftz(sh_weight.unsafe_load(idx1) + pair_weight)
+                                )
+                                sh_der.unsafe_store(idx1, ftz(sh_der.unsafe_load(idx1) + ll))
+                        else:
+                            if has_pair and idx2 < size:
+                                sh_weight.unsafe_store(
+                                    idx2, ftz(sh_weight.unsafe_load(idx2) + pair_weight)
+                                )
+                                sh_der.unsafe_store(idx2, ftz(sh_der.unsafe_load(idx2) + (-ll)))
+                        barrier()
+        
+            for k in range(YETI_LANES):
+                var p = tid + YETI_THREADS * k
+                if p < size:
+                    der_acc.unsafe_store(offset + p, sh_der.unsafe_load(p))
+                    weight_acc.unsafe_store(offset + p, sh_weight.unsafe_load(p))
+            comptime if AFT_N09:
+                barrier()
 
 
 def yeti_rank_decay_table_kernel(
@@ -887,6 +909,7 @@ def yeti_rank_task_block16k_kernel(
     decay_table: MutPointer[Float32, MutAnyOrigin],
     der_acc: MutPointer[Float32, MutAnyOrigin],
     weight_acc: MutPointer[Float32, MutAnyOrigin],
+    n_tasks_in: Int32 = Int32(0),
 ):
     """`yeti_rank_task_block_kernel` on 16 KiB of threadgroup memory
     (`YETI_TASK_16K`, lane/apple-fast-trees-yeti). Grid `(n_tasks, 1, 1)`,
@@ -936,203 +959,211 @@ def yeti_rank_task_block16k_kernel(
         address_space = AddressSpace.SHARED,
     ]()
 
-    var task = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var offset = Int(task_offsets.unsafe_load(task))
-    var size = Int(task_sizes.unsafe_load(task))
-    var first_qid = row_qids.unsafe_load(offset)
-    var pad_qid = row_qids.unsafe_load(offset + size - 1) + UInt32(1) - first_qid
-    var perms = Int(permutations_in)
-
-    # this thread's stream (`:224-237`), advanced through its lanes in order
-    # every round
-    var s = _task_seed(task_qids.unsafe_load(task), tid, cuda_seed)
-
-    # per lane: the local query id, the query begin, this document's
-    # `relev * weight` and exp, and its two accumulators
-    var lane_qid = SIMD[DType.uint32, YETI_LANES](0)
-    var lane_begin = SIMD[DType.int32, YETI_LANES](0)
-    var own_relev = SIMD[DType.float32, YETI_LANES](0.0)
-    var own_exp = SIMD[DType.float32, YETI_LANES](0.0)
-    var acc_der = SIMD[DType.float32, YETI_LANES](0.0)
-    var acc_weight = SIMD[DType.float32, YETI_LANES](0.0)
-    var my_key = SIMD[DType.uint64, YETI_LANES](0)
-    for k in range(YETI_LANES):
-        var p = tid + YETI_THREADS * k
-        var qid = pad_qid
-        # the padding is one query that begins at the first padded position
-        var begin = size
-        var rv = Float32(1000.0)
-        var ev = Float32(1000.0)
-        if p < size:
-            var row_qid = row_qids.unsafe_load(offset + p)
-            qid = row_qid - first_qid
-            begin = Int(q_offsets.unsafe_load(Int(row_qid))) - offset
-            var w = Float32(1.0)
-            if has_weights != Int32(0):
-                w = weights.unsafe_load(offset + p)
-            rv = ftz(relev.unsafe_load(offset + p) * w)
-            ev = routed_exp(min(approx.unsafe_load(offset + p), Float32(70.0)))
-        sh_relev.unsafe_store(p, rv)
-        sh_exp.unsafe_store(p, ev)
-        own_relev[k] = rv
-        own_exp[k] = ev
-        lane_qid[k] = qid
-        lane_begin[k] = Int32(begin)
-    barrier()
-
-    for _ in range(perms):
-        # the draws (`:112-121`)
-        for k in range(YETI_LANES):
-            var p = tid + YETI_THREADS * k
-            var val = Float32(-1000.0)
-            if p < size:
-                val = own_exp[k]
-            s = _advance_seed32(s)
-            # `NextUniformFloat32`: `v * 2.328306435996595e-10f`, whose
-            # float is exactly 2^-32
-            var uni = identical_mul(Float32(s), Float32(2.328306435996595e-10))  # exact; pinned (lane/pinned-mul-contract-free)
-            val = val * (uni / (Float32(1.000001) - uni))
-            var bits = bitcast[DType.uint32](val)
-            if (bits & UInt32(0x80000000)) != UInt32(0):
-                bits = bits ^ UInt32(0xFFFFFFFF)
-            else:
-                bits = bits ^ UInt32(0x80000000)
-            # (query ascending, key descending, position ascending) as ONE
-            # ascending integer; the position makes every composite distinct
-            var composite = (
-                (UInt64(lane_qid[k]) << UInt64(42))
-                | (UInt64(bits ^ UInt32(0xFFFFFFFF)) << UInt64(10))
-                | UInt64(p)
-            )
-            sh_keys.unsafe_store(p, composite)
-            my_key[k] = composite
-        barrier()
-
-        # the merge passes of width 1 and 2: each thread sorts the aligned
-        # run of four it reads back, in registers
-        var run = SIMD[DType.uint64, YETI_LANES](0)
-        for e in range(YETI_LANES):
-            run[e] = sh_keys.unsafe_load(YETI_LANES * tid + e)
-        _sort4_keys(run)
-        for e in range(YETI_LANES):
-            sh_keys.unsafe_store(YETI_LANES * tid + e, run[e])
-        barrier()
-
-        # the eight wider passes, the rank merge in place: every element
-        # finds its output slot by a binary search of the sibling run (the
-        # composites are distinct, so "strictly below" needs no tie rule);
-        # all reads of a pass precede all its writes.
-        var width = YETI_LANES
-        while width < YETI_TASK_POSITIONS:
-            var dest = SIMD[DType.int32, YETI_LANES](0)
-            for e in range(YETI_LANES):
-                var i = YETI_LANES * tid + e
-                var lo = (i // (2 * width)) * (2 * width)
-                var mid = lo + width
-                var sibling = mid
-                var own_rank = i - lo
-                if i >= mid:
-                    sibling = lo
-                    own_rank = i - mid
-                var key = sh_keys.unsafe_load(i)
-                var base = 0
-                var length = width
-                while length > 1:
-                    var half = length // 2
-                    if sh_keys.unsafe_load(sibling + base + half - 1) < key:
-                        base += half
-                    length -= half
-                var below = base
-                if sh_keys.unsafe_load(sibling + base) < key:
-                    below += 1
-                run[e] = key
-                dest[e] = Int32(lo + own_rank + below)
+    var task_count = Int(grid_dim.x)
+    comptime if AFT_N09:
+        if n_tasks_in > Int32(0):
+            task_count = Int(n_tasks_in)
+    comptime for task_lane in range(AFT_YETI_TASKS_PER_BLOCK):
+        var task = Int(block_idx.x) + task_lane * Int(grid_dim.x)
+        if task < task_count:
+            var tid = Int(thread_idx.x)
+            var offset = Int(task_offsets.unsafe_load(task))
+            var size = Int(task_sizes.unsafe_load(task))
+            var first_qid = row_qids.unsafe_load(offset)
+            var pad_qid = row_qids.unsafe_load(offset + size - 1) + UInt32(1) - first_qid
+            var perms = Int(permutations_in)
+        
+            # this thread's stream (`:224-237`), advanced through its lanes in order
+            # every round
+            var s = _task_seed(task_qids.unsafe_load(task), tid, cuda_seed)
+        
+            # per lane: the local query id, the query begin, this document's
+            # `relev * weight` and exp, and its two accumulators
+            var lane_qid = SIMD[DType.uint32, YETI_LANES](0)
+            var lane_begin = SIMD[DType.int32, YETI_LANES](0)
+            var own_relev = SIMD[DType.float32, YETI_LANES](0.0)
+            var own_exp = SIMD[DType.float32, YETI_LANES](0.0)
+            var acc_der = SIMD[DType.float32, YETI_LANES](0.0)
+            var acc_weight = SIMD[DType.float32, YETI_LANES](0.0)
+            var my_key = SIMD[DType.uint64, YETI_LANES](0)
+            for k in range(YETI_LANES):
+                var p = tid + YETI_THREADS * k
+                var qid = pad_qid
+                # the padding is one query that begins at the first padded position
+                var begin = size
+                var rv = Float32(1000.0)
+                var ev = Float32(1000.0)
+                if p < size:
+                    var row_qid = row_qids.unsafe_load(offset + p)
+                    qid = row_qid - first_qid
+                    begin = Int(q_offsets.unsafe_load(Int(row_qid))) - offset
+                    var w = Float32(1.0)
+                    if has_weights != Int32(0):
+                        w = weights.unsafe_load(offset + p)
+                    rv = ftz(relev.unsafe_load(offset + p) * w)
+                    ev = routed_exp(min(approx.unsafe_load(offset + p), Float32(70.0)))
+                sh_relev.unsafe_store(p, rv)
+                sh_exp.unsafe_store(p, ev)
+                own_relev[k] = rv
+                own_exp[k] = ev
+                lane_qid[k] = qid
+                lane_begin[k] = Int32(begin)
             barrier()
-            for e in range(YETI_LANES):
-                sh_keys.unsafe_store(Int(dest[e]), run[e])
-            barrier()
-            width = width * 2
-
-        # the pairs (`:130-168`), gathered by each document's owner in the
-        # (lane, phase) order of the 32 KiB kernel's scatter
-        for k in range(YETI_LANES):
-            var p = tid + YETI_THREADS * k
-            if p < size:
-                # this document's sorted rank: the lower bound of its own
-                # composite, which is present
-                var key = my_key[k]
-                var base = 0
-                var length = YETI_TASK_POSITIONS
-                while length > 1:
-                    var half = length // 2
-                    if sh_keys.unsafe_load(base + half - 1) < key:
-                        base += half
-                    length -= half
-                var r = base
-                if sh_keys.unsafe_load(base) < key:
-                    r = base + 1
-                var qb = Int(lane_begin[k])
-                var relev_p = own_relev[k]
-                var exp_p = own_exp[k]
-
-                # phase 1 of slot r + 1: this document is `doc1`
-                var has1 = False
-                var pw1 = Float32(0.0)
-                var ll1 = Float32(0.0)
-                if r + 1 < YETI_TASK_POSITIONS:
-                    var next_key = sh_keys.unsafe_load(r + 1)
-                    if (next_key >> UInt64(42)) == UInt64(lane_qid[k]):
-                        has1 = True
-                        var idx2 = Int(next_key & UInt64(1023))
-                        var relev2 = sh_relev.unsafe_load(idx2)
-                        var approx2 = sh_exp.unsafe_load(idx2)
-                        # slot j = r + 1: `0.15 * pow(decaySpeed, j - qb - 1)`
-                        var decay = decay_table.unsafe_load(r - qb)
-                        pw1 = ftz(decay * abs(relev_p - relev2) / Float32(perms))
-                        var sel = -exp_p
-                        if relev_p > relev2:
-                            sel = approx2
-                        ll1 = ftz(pw1 * sel / (approx2 + exp_p))
-
-                # phase 2 of slot r: this document is `doc2`
-                var has2 = r != qb
-                var pw2 = Float32(0.0)
-                var ll2 = Float32(0.0)
-                if has2:
-                    var prev_key = sh_keys.unsafe_load(r - 1)
-                    var idx1 = Int(prev_key & UInt64(1023))
-                    var relev1 = sh_relev.unsafe_load(idx1)
-                    var approx1 = sh_exp.unsafe_load(idx1)
-                    # slot j = r: `0.15 * pow(decaySpeed, j - qb - 1)`
-                    var decay = decay_table.unsafe_load(r - qb - 1)
-                    pw2 = ftz(decay * abs(relev1 - relev_p) / Float32(perms))
-                    var sel = -approx1
-                    if relev1 > relev_p:
-                        sel = exp_p
-                    ll2 = ftz(pw2 * sel / (exp_p + approx1))
-
-                # the scatter's step order: phase 2's slot r sits in an
-                # earlier lane than phase 1's slot r + 1 only when r + 1
-                # begins a lane
-                var two_first = has1 and has2 and ((r // YETI_THREADS) < ((r + 1) // YETI_THREADS))
-                if two_first:
-                    acc_weight[k] = ftz(acc_weight[k] + pw2)
-                    acc_der[k] = ftz(acc_der[k] + (-ll2))
-                if has1:
-                    acc_weight[k] = ftz(acc_weight[k] + pw1)
-                    acc_der[k] = ftz(acc_der[k] + ll1)
-                if has2 and not two_first:
-                    acc_weight[k] = ftz(acc_weight[k] + pw2)
-                    acc_der[k] = ftz(acc_der[k] + (-ll2))
-        # the next round's draws overwrite the keys every thread just read
-        barrier()
-
-    for k in range(YETI_LANES):
-        var p = tid + YETI_THREADS * k
-        if p < size:
-            der_acc.unsafe_store(offset + p, acc_der[k])
-            weight_acc.unsafe_store(offset + p, acc_weight[k])
+        
+            for _ in range(perms):
+                # the draws (`:112-121`)
+                for k in range(YETI_LANES):
+                    var p = tid + YETI_THREADS * k
+                    var val = Float32(-1000.0)
+                    if p < size:
+                        val = own_exp[k]
+                    s = _advance_seed32(s)
+                    # `NextUniformFloat32`: `v * 2.328306435996595e-10f`, whose
+                    # float is exactly 2^-32
+                    var uni = identical_mul(Float32(s), Float32(2.328306435996595e-10))  # exact; pinned (lane/pinned-mul-contract-free)
+                    val = val * (uni / (Float32(1.000001) - uni))
+                    var bits = bitcast[DType.uint32](val)
+                    if (bits & UInt32(0x80000000)) != UInt32(0):
+                        bits = bits ^ UInt32(0xFFFFFFFF)
+                    else:
+                        bits = bits ^ UInt32(0x80000000)
+                    # (query ascending, key descending, position ascending) as ONE
+                    # ascending integer; the position makes every composite distinct
+                    var composite = (
+                        (UInt64(lane_qid[k]) << UInt64(42))
+                        | (UInt64(bits ^ UInt32(0xFFFFFFFF)) << UInt64(10))
+                        | UInt64(p)
+                    )
+                    sh_keys.unsafe_store(p, composite)
+                    my_key[k] = composite
+                barrier()
+        
+                # the merge passes of width 1 and 2: each thread sorts the aligned
+                # run of four it reads back, in registers
+                var run = SIMD[DType.uint64, YETI_LANES](0)
+                for e in range(YETI_LANES):
+                    run[e] = sh_keys.unsafe_load(YETI_LANES * tid + e)
+                _sort4_keys(run)
+                for e in range(YETI_LANES):
+                    sh_keys.unsafe_store(YETI_LANES * tid + e, run[e])
+                barrier()
+        
+                # the eight wider passes, the rank merge in place: every element
+                # finds its output slot by a binary search of the sibling run (the
+                # composites are distinct, so "strictly below" needs no tie rule);
+                # all reads of a pass precede all its writes.
+                var width = YETI_LANES
+                while width < YETI_TASK_POSITIONS:
+                    var dest = SIMD[DType.int32, YETI_LANES](0)
+                    for e in range(YETI_LANES):
+                        var i = YETI_LANES * tid + e
+                        var lo = (i // (2 * width)) * (2 * width)
+                        var mid = lo + width
+                        var sibling = mid
+                        var own_rank = i - lo
+                        if i >= mid:
+                            sibling = lo
+                            own_rank = i - mid
+                        var key = sh_keys.unsafe_load(i)
+                        var base = 0
+                        var length = width
+                        while length > 1:
+                            var half = length // 2
+                            if sh_keys.unsafe_load(sibling + base + half - 1) < key:
+                                base += half
+                            length -= half
+                        var below = base
+                        if sh_keys.unsafe_load(sibling + base) < key:
+                            below += 1
+                        run[e] = key
+                        dest[e] = Int32(lo + own_rank + below)
+                    barrier()
+                    for e in range(YETI_LANES):
+                        sh_keys.unsafe_store(Int(dest[e]), run[e])
+                    barrier()
+                    width = width * 2
+        
+                # the pairs (`:130-168`), gathered by each document's owner in the
+                # (lane, phase) order of the 32 KiB kernel's scatter
+                for k in range(YETI_LANES):
+                    var p = tid + YETI_THREADS * k
+                    if p < size:
+                        # this document's sorted rank: the lower bound of its own
+                        # composite, which is present
+                        var key = my_key[k]
+                        var base = 0
+                        var length = YETI_TASK_POSITIONS
+                        while length > 1:
+                            var half = length // 2
+                            if sh_keys.unsafe_load(base + half - 1) < key:
+                                base += half
+                            length -= half
+                        var r = base
+                        if sh_keys.unsafe_load(base) < key:
+                            r = base + 1
+                        var qb = Int(lane_begin[k])
+                        var relev_p = own_relev[k]
+                        var exp_p = own_exp[k]
+        
+                        # phase 1 of slot r + 1: this document is `doc1`
+                        var has1 = False
+                        var pw1 = Float32(0.0)
+                        var ll1 = Float32(0.0)
+                        if r + 1 < YETI_TASK_POSITIONS:
+                            var next_key = sh_keys.unsafe_load(r + 1)
+                            if (next_key >> UInt64(42)) == UInt64(lane_qid[k]):
+                                has1 = True
+                                var idx2 = Int(next_key & UInt64(1023))
+                                var relev2 = sh_relev.unsafe_load(idx2)
+                                var approx2 = sh_exp.unsafe_load(idx2)
+                                # slot j = r + 1: `0.15 * pow(decaySpeed, j - qb - 1)`
+                                var decay = decay_table.unsafe_load(r - qb)
+                                pw1 = ftz(decay * abs(relev_p - relev2) / Float32(perms))
+                                var sel = -exp_p
+                                if relev_p > relev2:
+                                    sel = approx2
+                                ll1 = ftz(pw1 * sel / (approx2 + exp_p))
+        
+                        # phase 2 of slot r: this document is `doc2`
+                        var has2 = r != qb
+                        var pw2 = Float32(0.0)
+                        var ll2 = Float32(0.0)
+                        if has2:
+                            var prev_key = sh_keys.unsafe_load(r - 1)
+                            var idx1 = Int(prev_key & UInt64(1023))
+                            var relev1 = sh_relev.unsafe_load(idx1)
+                            var approx1 = sh_exp.unsafe_load(idx1)
+                            # slot j = r: `0.15 * pow(decaySpeed, j - qb - 1)`
+                            var decay = decay_table.unsafe_load(r - qb - 1)
+                            pw2 = ftz(decay * abs(relev1 - relev_p) / Float32(perms))
+                            var sel = -approx1
+                            if relev1 > relev_p:
+                                sel = exp_p
+                            ll2 = ftz(pw2 * sel / (exp_p + approx1))
+        
+                        # the scatter's step order: phase 2's slot r sits in an
+                        # earlier lane than phase 1's slot r + 1 only when r + 1
+                        # begins a lane
+                        var two_first = has1 and has2 and ((r // YETI_THREADS) < ((r + 1) // YETI_THREADS))
+                        if two_first:
+                            acc_weight[k] = ftz(acc_weight[k] + pw2)
+                            acc_der[k] = ftz(acc_der[k] + (-ll2))
+                        if has1:
+                            acc_weight[k] = ftz(acc_weight[k] + pw1)
+                            acc_der[k] = ftz(acc_der[k] + ll1)
+                        if has2 and not two_first:
+                            acc_weight[k] = ftz(acc_weight[k] + pw2)
+                            acc_der[k] = ftz(acc_der[k] + (-ll2))
+                # the next round's draws overwrite the keys every thread just read
+                barrier()
+        
+            for k in range(YETI_LANES):
+                var p = tid + YETI_THREADS * k
+                if p < size:
+                    der_acc.unsafe_store(offset + p, acc_der[k])
+                    weight_acc.unsafe_store(offset + p, acc_weight[k])
+            comptime if AFT_N09:
+                barrier()
 
 
 def yeti_rank_row_kernel[estimation: Bool](
@@ -1151,32 +1182,31 @@ def yeti_rank_row_kernel[estimation: Bool](
     `[der, pair weight]` at `write_map[row]` (`Scatter`, `kernel.h:470-473`);
     every value partial is 0.0 (`FillBuffer(FunctionValue, 0)`)."""
     var n_rows = Int(n_rows_in)
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var in_range = i < n_rows
-    var der = Float32(0.0)
-    var weight = Float32(0.0)
-    if in_range:
-        der = der_acc.unsafe_load(i)
-        weight = weight_acc.unsafe_load(i)
-        comptime if estimation:
-            var dst = i
-            if has_write_map != Int32(0):
-                dst = Int(write_map.unsafe_load(i))
-            stats.unsafe_store(dst, der)
-            stats.unsafe_store(n_rows + dst, weight)
-        else:
-            stats.unsafe_store(i, weight)
-            stats.unsafe_store(n_rows + i, der)
+    var w_abs = Float32(0.0)
+    var g_abs = Float32(0.0)
+    # Logical 256-row tiles preserve all caller allocation/fold contracts.
+    comptime for row_lane in range(MSE_BLOCK_SIZE // AFT_YETI_ROW_THREADS):
+        var i = Int(block_idx.x) * MSE_BLOCK_SIZE + Int(thread_idx.x) + row_lane * AFT_YETI_ROW_THREADS
+        if i < n_rows:
+            var der = der_acc.unsafe_load(i)
+            var weight = weight_acc.unsafe_load(i)
+            comptime if estimation:
+                var dst = i
+                if has_write_map != Int32(0):
+                    dst = Int(write_map.unsafe_load(i))
+                stats.unsafe_store(dst, der)
+                stats.unsafe_store(n_rows + dst, weight)
+            else:
+                stats.unsafe_store(i, weight)
+                stats.unsafe_store(n_rows + i, der)
+            if compute_magnitudes != Int32(0):
+                w_abs += abs(weight)
+                g_abs += abs(der)
     if compute_fv != Int32(0) and thread_idx.x == 0:
         function_value.unsafe_store(Int(block_idx.x), Float32(0.0))
     if compute_magnitudes != Int32(0):
-        var w_abs = Float32(0.0)
-        var g_abs = Float32(0.0)
-        if in_range:
-            w_abs = abs(weight)
-            g_abs = abs(der)
-        var w_total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](w_abs)
-        var g_total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](g_abs)
+        var w_total = pinned_block_sum[block_size=AFT_YETI_ROW_THREADS](w_abs)
+        var g_total = pinned_block_sum[block_size=AFT_YETI_ROW_THREADS](g_abs)
         if thread_idx.x == 0:
             plane_magnitudes.unsafe_store(2 * Int(block_idx.x), w_total)
             plane_magnitudes.unsafe_store(2 * Int(block_idx.x) + 1, g_total)
@@ -1423,43 +1453,44 @@ def yeti_rank_task_fused_kernel[estimation: Bool](
             # is a sentinel no composite reaches (they are below 2^52).
             var dst = YETI_TASK_POSITIONS
             var width = YETI_SIMD_RUN
-            var o0 = tid * YETI_LANES
+            var o0 = tid * AFT_YETI_MERGE_LANES
             while width < YETI_TASK_POSITIONS:
-                var lo = (o0 // (2 * width)) * (2 * width)
-                var d = o0 - lo
-                var a_base = src + lo
-                var b_base = a_base + width
-                var i_lo = max(0, d - width)
-                var i_hi = min(d, width)
-                while i_lo < i_hi:
-                    var mid = (i_lo + i_hi) // 2
-                    if sh_keys.unsafe_load(a_base + mid) < sh_keys.unsafe_load(
-                        b_base + d - mid - 1
-                    ):
-                        i_lo = mid + 1
-                    else:
-                        i_hi = mid
-                var ia = i_lo
-                var ib = d - i_lo
-                var va = UInt64.MAX
-                if ia < width:
-                    va = sh_keys.unsafe_load(a_base + ia)
-                var vb = UInt64.MAX
-                if ib < width:
-                    vb = sh_keys.unsafe_load(b_base + ib)
-                comptime for t in range(YETI_LANES):
-                    if va < vb:
-                        sh_keys.unsafe_store(dst + o0 + t, va)
-                        ia += 1
-                        va = UInt64.MAX
-                        if ia < width:
-                            va = sh_keys.unsafe_load(a_base + ia)
-                    else:
-                        sh_keys.unsafe_store(dst + o0 + t, vb)
-                        ib += 1
-                        vb = UInt64.MAX
-                        if ib < width:
-                            vb = sh_keys.unsafe_load(b_base + ib)
+                if o0 < YETI_TASK_POSITIONS:
+                    var lo = (o0 // (2 * width)) * (2 * width)
+                    var d = o0 - lo
+                    var a_base = src + lo
+                    var b_base = a_base + width
+                    var i_lo = max(0, d - width)
+                    var i_hi = min(d, width)
+                    while i_lo < i_hi:
+                        var mid = (i_lo + i_hi) // 2
+                        if sh_keys.unsafe_load(a_base + mid) < sh_keys.unsafe_load(
+                            b_base + d - mid - 1
+                        ):
+                            i_lo = mid + 1
+                        else:
+                            i_hi = mid
+                    var ia = i_lo
+                    var ib = d - i_lo
+                    var va = UInt64.MAX
+                    if ia < width:
+                        va = sh_keys.unsafe_load(a_base + ia)
+                    var vb = UInt64.MAX
+                    if ib < width:
+                        vb = sh_keys.unsafe_load(b_base + ib)
+                    comptime for t in range(AFT_YETI_MERGE_LANES):
+                        if va < vb:
+                            sh_keys.unsafe_store(dst + o0 + t, va)
+                            ia += 1
+                            va = UInt64.MAX
+                            if ia < width:
+                                va = sh_keys.unsafe_load(a_base + ia)
+                        else:
+                            sh_keys.unsafe_store(dst + o0 + t, vb)
+                            ib += 1
+                            vb = UInt64.MAX
+                            if ib < width:
+                                vb = sh_keys.unsafe_load(b_base + ib)
                 barrier()
                 var swap = src
                 src = dst
@@ -1859,7 +1890,7 @@ def launch_yeti_rank_with[estimation: Bool](
         launch_gather_with_mask_f32(
             ctx, y.d_der_acc, predictions, y.query.inverse, n_rows, UInt32(0xFFFFFFFF)
         )
-        launch_compute_group_means(
+        launch_aft_group_means(
             ctx, y.d_der_acc, y.query.weights, False, y.query.q_offsets, UInt32(0),
             y.query.q_sizes, y.query.q_count, y.query.query_means,
         )
@@ -1870,7 +1901,7 @@ def launch_yeti_rank_with[estimation: Bool](
             block_dim=(MSE_BLOCK_SIZE, 1, 1),
         )
     else:
-        launch_compute_group_means(
+        launch_aft_group_means(
             ctx, predictions, y.query.weights, False, y.query.q_offsets, UInt32(0),
             y.query.q_sizes, y.query.q_count, y.query.query_means,
         )
@@ -1900,7 +1931,8 @@ def launch_yeti_rank_with[estimation: Bool](
                 yeti_rank_cuda_seed(seed), y.decay, Int32(y.permutations),
                 y.s_exp.unsafe_ptr(),
                 y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(),
-                grid_dim=(y.n_tasks, 1, 1),
+                Int32(y.n_tasks),
+                grid_dim=((y.n_tasks + AFT_YETI_TASKS_PER_BLOCK - 1) // AFT_YETI_TASKS_PER_BLOCK, 1, 1),
                 block_dim=(YETI_THREADS, 1, 1),
             )
         else:
@@ -1914,7 +1946,8 @@ def launch_yeti_rank_with[estimation: Bool](
                 y.d_task_qids.unsafe_ptr(),
                 yeti_rank_cuda_seed(seed), y.decay, Int32(y.permutations),
                 y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(),
-                grid_dim=(y.n_tasks, 1, 1),
+                Int32(y.n_tasks),
+                grid_dim=((y.n_tasks + AFT_YETI_TASKS_PER_BLOCK - 1) // AFT_YETI_TASKS_PER_BLOCK, 1, 1),
                 block_dim=(YETI_THREADS, 1, 1),
             )
     else:
@@ -1928,7 +1961,7 @@ def launch_yeti_rank_with[estimation: Bool](
             plane_magnitudes.unsafe_ptr(),
             Int32(1) if compute_magnitudes else Int32(0),
             grid_dim=(row_blocks, 1, 1),
-            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+            block_dim=(AFT_YETI_ROW_THREADS, 1, 1),
         )
     else:
         ctx.enqueue_function[yeti_rank_row_kernel[estimation]](
@@ -1939,7 +1972,7 @@ def launch_yeti_rank_with[estimation: Bool](
             plane_magnitudes.unsafe_ptr(),
             Int32(1) if compute_magnitudes else Int32(0),
             grid_dim=(row_blocks, 1, 1),
-            block_dim=(MSE_BLOCK_SIZE, 1, 1),
+            block_dim=(AFT_YETI_ROW_THREADS, 1, 1),
         )
 
 
@@ -1968,7 +2001,7 @@ def launch_yeti_rank_estimation_from_search(
         plane_magnitudes.unsafe_ptr(),
         Int32(1) if compute_magnitudes else Int32(0),
         grid_dim=(row_blocks, 1, 1),
-        block_dim=(MSE_BLOCK_SIZE, 1, 1),
+        block_dim=(AFT_YETI_ROW_THREADS, 1, 1),
     )
 
 

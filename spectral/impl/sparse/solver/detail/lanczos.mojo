@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`raft/sparse/solver/detail/lanczos.cuh`: the thick-restart Lanczos
 eigensolver cuVS's spectral embedding calls, function for function.
 
@@ -154,6 +152,10 @@ the re-orthogonalization, which no fixture here produces; the clamp at
 `1e-6` makes it reachable for a graph whose residual is tiny but nonzero.
 ======================================================================
 """
+from checks.numerics import identical_mul
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import sum as _fl_warp_sum
@@ -370,6 +372,103 @@ def id_spmv_lanes_kernel(
         result.unsafe_store(r, part[base])
 
 
+@always_inline
+def _c43_value(value: Float32,row: Int,col: Int,diag: MutPointer[Float32,MutAnyOrigin]) -> Float32:
+    if row==col:
+        return Float32(1)
+    var rs=ftz(Float32(1)/diag[row]) if diag[row]!=Float32(0) else Float32(0)
+    var cs=ftz(Float32(1)/diag[col]) if diag[col]!=Float32(0) else Float32(0)
+    return ftz(identical_mul(ftz(identical_mul(rs,value)),cs))
+
+
+def _c43_spmv_kernel(
+    result: MutPointer[Float32, MutAnyOrigin],
+    indptr: MutPointer[Int32, MutAnyOrigin],
+    cols: MutPointer[Int32, MutAnyOrigin],
+    vals: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    normalizer: MutPointer[Float32,MutAnyOrigin],
+):
+    """`cusparseSpMV(A, v) -> u` (`:304-313`): one thread per row, the
+    row's entries in their canonical (ascending column) order, `acc =
+    ftz(identical_mul_add(val, x[col], acc))` from `+0.0`. THE FIXED-ORDER
+    CONTRACTION of the matvec: a pure function of the row's bits and of
+    nothing about the launch."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if r >= Int(n_in):
+        return
+    var lo = Int(indptr.unsafe_load(r))
+    var hi = Int(indptr.unsafe_load(r + 1))
+    var acc = Float32(0.0)
+    comptime if SAB_SPMV_ROTATE:
+        var cnt = hi - lo
+        if cnt > 0:
+            var start = lo + (Int(block_idx.x) % cnt)
+            for jj in range(cnt):
+                var j = lo + ((start - lo + jj) % cnt)
+                acc = ftz(
+                    identical_mul_add(
+                        _c43_value(vals.unsafe_load(j),r,Int(cols.unsafe_load(j)),normalizer), x.unsafe_load(Int(cols.unsafe_load(j))), acc
+                    )
+                )
+    else:
+        for j in range(lo, hi):
+            acc = ftz(
+                identical_mul_add(
+                    _c43_value(vals.unsafe_load(j),r,Int(cols.unsafe_load(j)),normalizer), x.unsafe_load(Int(cols.unsafe_load(j))), acc
+                )
+            )
+    result.unsafe_store(r, acc)
+
+
+def _c43_spmv_lanes_kernel(
+    result: MutPointer[Float32, MutAnyOrigin],
+    indptr: MutPointer[Int32, MutAnyOrigin],
+    cols: MutPointer[Int32, MutAnyOrigin],
+    vals: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    normalizer: MutPointer[Float32,MutAnyOrigin],
+):
+    """`spmv_kernel` in the lane order of `spectral/spmv_order.mojo`: one
+    thread per lane of a row (SPMV_LANES lanes, ID_SPMV_ROWS rows a block),
+    each a strided `fma` chain over the row's ascending entries, then the
+    row's lane 0 folds the SPMV_LANES lane sums in the fixed pairwise tree.
+    A pure function of the row's bits: the block shape only schedules."""
+    var part = stack_allocation[
+        ID_SPMV_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var t = Int(thread_idx.x)
+    var slot = t // SPMV_LANES
+    var lane = t % SPMV_LANES
+    var r = Int(block_idx.x) * ID_SPMV_ROWS + slot
+    var live = r < Int(n_in)
+    var acc = Float32(0.0)
+    if live:
+        var hi = Int(indptr.unsafe_load(r + 1))
+        var j = Int(indptr.unsafe_load(r)) + lane
+        comptime if SAB_SPMV_ROTATE:
+            j = Int(indptr.unsafe_load(r)) + ((lane + Int(block_idx.x)) % SPMV_LANES)
+        while j < hi:
+            acc = ftz(
+                identical_mul_add(
+                    _c43_value(vals.unsafe_load(j),r,Int(cols.unsafe_load(j)),normalizer), x.unsafe_load(Int(cols.unsafe_load(j))), acc
+                )
+            )
+            j += SPMV_LANES
+    part[t] = acc
+    barrier()
+    if live and lane == 0:
+        var base = slot * SPMV_LANES
+        var w = SPMV_LANES // 2
+        while w >= 1:
+            for l in range(w):
+                part[base + l] = ftz(part[base + l] + part[base + l + w])
+            w = w // 2
+        result.unsafe_store(r, part[base])
+
+
 def spmv_enqueue(
     ctx: DeviceContext,
     mut A: DeviceCoo,
@@ -384,6 +483,12 @@ def spmv_enqueue(
     `x_off`."""
     var u = ub.unsafe_ptr()
     var x = xb.unsafe_ptr().unsafe_offset(x_off)
+    if A.normalizer:
+        comptime if IDN_SPMV_LANES:
+            ctx.enqueue_function[_c43_spmv_lanes_kernel](u,A.indptr.unsafe_ptr(),A.cols.unsafe_ptr(),A.vals.unsafe_ptr(),x,Int32(n),A.normalizer.value().unsafe_ptr(),grid_dim=((n+ID_SPMV_ROWS-1)//ID_SPMV_ROWS,1,1),block_dim=(ID_SPMV_TPB,1,1))
+        else:
+            ctx.enqueue_function[_c43_spmv_kernel](u,A.indptr.unsafe_ptr(),A.cols.unsafe_ptr(),A.vals.unsafe_ptr(),x,Int32(n),A.normalizer.value().unsafe_ptr(),grid_dim=(_grid(n,tpb),1,1),block_dim=(tpb,1,1))
+        return
     comptime if IDN_SPMV_LANES:
         ctx.enqueue_function[id_spmv_lanes_kernel](
             u, A.indptr.unsafe_ptr(), A.cols.unsafe_ptr(),
@@ -750,7 +855,16 @@ def fl_clamp_normalize_kernel(
 #: the per-row thread.
 comptime SPMV_WARP = LANCZOS_FAST and not is_defined["MOJOLEARN_SPMV_WARP_OFF"]()
 comptime FL_SPMV_WARP_MIN = 64
-comptime FL_SPMV_ROWS_PER_TG = 8
+# AFCL-G11: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Four complete SIMD groups schedule CSR rows independently in smaller
+# blocks, limiting skew-induced block lifetime while preserving each row's
+# lane partition and sum. This reaches SpectralEmbedding/Clustering's
+# Lanczos product; LLE's separate dense solve is outside this candidate.
+comptime AFCL_G11 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G11"]()
+)
+comptime FL_SPMV_ROWS_PER_TG = 4 if AFCL_G11 else 8
 
 
 def fl_spmv_warp_kernel(

@@ -78,7 +78,11 @@ comptime RL = 8
 #: threads per tile and per fold threadgroup
 comptime TPB = CT * RL
 #: rows each thread walks
-comptime RPT = 64
+# AFCL-P07: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Twice as many row tiles, half as many observations per lane: an occupancy
+# versus partial-buffer traffic experiment covering every feature width.
+comptime AFCL_P07 = SELECT_FAST_APPLE and is_defined["MOJOLEARN_AFCL_P07"]()
+comptime RPT = 32 if AFCL_P07 else 64
 #: rows per tile
 comptime RT = RL * RPT
 #: the most classes the class-sum tile holds in threadgroup memory

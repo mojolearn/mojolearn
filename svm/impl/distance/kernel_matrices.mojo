@@ -39,6 +39,8 @@ This implementation, both modes the same association, the pins under IDENTICAL:
 # =========================================================================
 """
 
+from experiments.classical_identical_ideas.linear_controls import C22_TRIANGLE
+from svm.impl.classical_kernel_device import classical_triangle_kernel
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.info import has_apple_gpu_accelerator
 from std.math import exp
@@ -299,7 +301,7 @@ def rbf_fused_tile_kernel[KPAD: Int](
 
 def _rbf_fused_launch[KPAD: Int](
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],
     mut norm_a: DeviceBuffer[DType.float32],
@@ -310,7 +312,7 @@ def _rbf_fused_launch[KPAD: Int](
     gain: Float32,
 ) raises:
     ctx.enqueue_function[rbf_fused_tile_kernel[KPAD]](
-        out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+        output.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
         norm_a.unsafe_ptr(), norm_b.unsafe_ptr(),
         Int32(m), Int32(n), Int32(k), gain,
         grid_dim=(_grid_tpb(n, RBF_FUSED_TPB), 1, 1),
@@ -324,7 +326,7 @@ def _grid_tpb(n: Int, tpb: Int) -> Int:
 
 def rbf_fused_tile(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],
     mut norm_a: DeviceBuffer[DType.float32],
@@ -338,37 +340,37 @@ def rbf_fused_tile(
     tile, False when k is too wide and the caller must take the GEMM path."""
     var kpad = ((k + 3) // 4) * 4
     if kpad == 4:
-        _rbf_fused_launch[4](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[4](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 8:
-        _rbf_fused_launch[8](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[8](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 12:
-        _rbf_fused_launch[12](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[12](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 16:
-        _rbf_fused_launch[16](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[16](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 20:
-        _rbf_fused_launch[20](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[20](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 24:
-        _rbf_fused_launch[24](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[24](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 28:
-        _rbf_fused_launch[28](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[28](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 32:
-        _rbf_fused_launch[32](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[32](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 36:
-        _rbf_fused_launch[36](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[36](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 40:
-        _rbf_fused_launch[40](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[40](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 44:
-        _rbf_fused_launch[44](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[44](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 48:
-        _rbf_fused_launch[48](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[48](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 52:
-        _rbf_fused_launch[52](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[52](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 56:
-        _rbf_fused_launch[56](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[56](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 60:
-        _rbf_fused_launch[60](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[60](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     elif kpad == 64:
-        _rbf_fused_launch[64](ctx, out, a, b, norm_a, norm_b, m, n, k, gain)
+        _rbf_fused_launch[64](ctx, output, a, b, norm_a, norm_b, m, n, k, gain)
     else:
         return False
     return True
@@ -481,7 +483,7 @@ def idn_rbf_fused_tile_kernel[KPAD: Int](
 
 def idn_rbf_fused_tile(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],
     mut norm_a: DeviceBuffer[DType.float32],
@@ -499,7 +501,7 @@ def idn_rbf_fused_tile(
     comptime for KP in [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64]:
         if kpad == KP:
             ctx.enqueue_function[idn_rbf_fused_tile_kernel[KP]](
-                out.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                output.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
                 norm_a.unsafe_ptr(), norm_b.unsafe_ptr(),
                 Int32(m), Int32(n), Int32(k), gain,
                 grid_dim=(_grid_tpb(n, RBF_FUSED_TPB), 1, 1),
@@ -511,7 +513,7 @@ def idn_rbf_fused_tile(
 def kernel_op(
     ctx: DeviceContext,
     kp: KernelParams,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],
     m: Int,
@@ -522,47 +524,56 @@ def kernel_op(
     mut ws: DeviceBuffer[DType.float32],
     distribute: Bool = True,
 ) raises:
-    """`KernelOp(handle, kernel, x1, n1, n_cols, x2, n2, out, norm_x1,
-    norm_x2)`: `out[m x n] = K(a_i, b_j)`, row-major. `GramMatrixBase::
+    """`KernelOp(handle, kernel, x1, n1, n_cols, x2, n2, output, norm_x1,
+    norm_x2)`: `output[m x n] = K(a_i, b_j)`, row-major. `GramMatrixBase::
     evaluate` (linear) or `RBFKernel::evaluate` (linear + expansion).
     ASYNCHRONOUS; `ws` is the caller's identical-GEMM workspace, at least
     `kernel_workspace_floats(m, n, k)` floats."""
     if m <= 0 or n <= 0:
         return
+    comptime if C22_TRIANGLE:
+        # Pointer equality proves one immutable dataset on both sides; a
+        # square cross-kernel between distinct datasets is not symmetric.
+        if m == n and Int(a.unsafe_ptr()) == Int(b.unsafe_ptr()) and (kp.kernel == KERNEL_LINEAR or kp.kernel == KERNEL_RBF or kp.kernel == KERNEL_POLYNOMIAL or kp.kernel == KERNEL_TANH):
+            ctx.enqueue_function[classical_triangle_kernel](
+                a.unsafe_ptr(), norm_a.unsafe_ptr(), output.unsafe_ptr(), Int32(n), Int32(k), Int32(kp.kernel),
+                Float32(kp.gamma), Float32(kp.coef0), Int32(kp.degree), grid_dim=_grid(n * n), block_dim=KM_TPB,
+            )
+            return
     if distribute:
         var setting = String(getenv("MOJOLEARN_SVM_DEVICE_COUNT"))
         if setting != "" and setting != "1":
             var count = Int(setting)
             if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
                 raise Error("parallel SVM kernels require IDENTICAL and 1..64 devices")
-            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL: _kernel_rows(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, count)
+            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL: _kernel_rows(ctx, kp, output, a, b, m, n, k, norm_a, norm_b, count)
             return
     # DEVIATION 2492: FAST RBF in one fused kernel when k fits a register row.
     # Apple only. 0.8.19's NVPTX/AMDGPU FAST hang was NOT these kernels: it was the
     # kernel_op -> _kernel_rows -> kernel_op cycle reaching MAX matmul (gated above).
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         if kp.kernel == KERNEL_RBF and k <= RBF_FUSED_KREG:
-            if rbf_fused_tile(ctx, out, a, b, norm_a, norm_b, m, n, k, Float32(kp.gamma)):
+            if rbf_fused_tile(ctx, output, a, b, norm_a, norm_b, m, n, k, Float32(kp.gamma)):
                 return
     # lane/fam-linear: IDENTICAL RBF at k <= 64 in one launch, same bits.
     comptime if SVM_IDN_FUSED_TILE:
         if kp.kernel == KERNEL_RBF:
-            if idn_rbf_fused_tile(ctx, out, a, b, norm_a, norm_b, m, n, k, Float32(kp.gamma)):
+            if idn_rbf_fused_tile(ctx, output, a, b, norm_a, norm_b, m, n, k, Float32(kp.gamma)):
                 return
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        identical_gemm_into(ctx, out, a, b, ws, m, n, k, OP_NT)
+        identical_gemm_into(ctx, output, a, b, ws, m, n, k, OP_NT)
     else:
-        gemm_nt(ctx, out, a, b, m, n, k)
+        gemm_nt(ctx, output, a, b, m, n, k)
     if kp.kernel == KERNEL_RBF:
         comptime if RBF_EPILOGUE_2D:
             ctx.enqueue_function[rbf_kernel_expanded_2d_kernel](
-                out.unsafe_ptr(), Int32(m), Int32(n),
+                output.unsafe_ptr(), Int32(m), Int32(n),
                 norm_a.unsafe_ptr(), norm_b.unsafe_ptr(), Float32(kp.gamma),
                 grid_dim=((n + KM_TPB - 1) // KM_TPB, m, 1), block_dim=KM_TPB,
             )
         else:
             ctx.enqueue_function[rbf_kernel_expanded_kernel](
-                out.unsafe_ptr(), Int32(m), Int32(n),
+                output.unsafe_ptr(), Int32(m), Int32(n),
                 norm_a.unsafe_ptr(), norm_b.unsafe_ptr(), Float32(kp.gamma),
                 grid_dim=_grid(m * n), block_dim=KM_TPB,
             )
@@ -573,7 +584,7 @@ def kernel_op(
         # multiply-add, then an ascending repeated product, so a negative
         # base is legal where `identical_pow` would return NaN).
         ctx.enqueue_function[polynomial_epilogue_kernel](
-            out.unsafe_ptr(), Int32(m * n), Int32(kp.degree),
+            output.unsafe_ptr(), Int32(m * n), Int32(kp.degree),
             Float32(kp.gamma), Float32(kp.coef0),
             grid_dim=_grid(m * n), block_dim=KM_TPB,
         )
@@ -582,7 +593,7 @@ def kernel_op(
         # `tanh(gain * K + offset)` cell by cell, the kernel_methods lane's
         # epilogue (one fused multiply-add, identical_tanh).
         ctx.enqueue_function[tanh_epilogue_kernel](
-            out.unsafe_ptr(), Int32(m * n), Float32(kp.gamma), Float32(kp.coef0),
+            output.unsafe_ptr(), Int32(m * n), Float32(kp.gamma), Float32(kp.coef0),
             grid_dim=_grid(m * n), block_dim=KM_TPB,
         )
     elif kp.kernel != KERNEL_LINEAR:
@@ -616,7 +627,7 @@ struct SVMKernelShard(Movable):
 
 
 def _kernel_rows(ctx: DeviceContext, kp: KernelParams,
-    mut out: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int,
     mut norm_a: DeviceBuffer[DType.float32], mut norm_b: DeviceBuffer[DType.float32],
     count: Int,
@@ -689,7 +700,7 @@ def _kernel_rows(ctx: DeviceContext, kp: KernelParams,
             raise Error("SVM kernel row shard failed: " + String(rank))
     for rank in range(active):
         ref shard = shards[rank]
-        var destination = out.create_sub_buffer[DType.float32](shard.first * n, shard.rows * n)
+        var destination = output.create_sub_buffer[DType.float32](shard.first * n, shard.rows * n)
         shard.out.enqueue_copy_to(destination)
         shard.ctx.synchronize()
     _ = shards^

@@ -6,6 +6,7 @@ Failed modules remain FAILED while independent modules continue compiling.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -40,6 +41,80 @@ def candidate_recipe(repo,sha,name,role):
     if len(matches)!=1: raise ValueError('unknown/ambiguous candidate recipe: '+name)
     row=matches[0]
     return row, row[role+'_defines'], hashlib.sha256(payload).hexdigest()
+
+
+def neural_recipe(repo,sha,identities,variant_specs,role):
+    """Resolve neural controls from the frozen source, including helper provenance.
+
+    The current helper implementation is usable only when both helper files
+    match the requested commit byte for byte. Lane records and the caller map
+    always come from git-show; mutable working-tree metadata is never an arm.
+    """
+    hashes={}
+    def frozen(path):
+        payload=subprocess.check_output(['git','-C',str(repo),'show',sha+':'+path])
+        hashes[path]=hashlib.sha256(payload).hexdigest()
+        return payload
+
+    helper_dir=Path(__file__).resolve().parent
+    names=('neural_identical_ideas','neural_identical_integration')
+    for name in names:
+        path='tools/'+name+'.py'
+        if (helper_dir/(name+'.py')).read_bytes()!=frozen(path):
+            raise ValueError('neural selection helper differs from --sha: '+path+
+                             '; use the frozen checkout tools')
+    # Load by the exact compared path, not by a potentially different module
+    # on PYTHONPATH. The integration helper imports this same registered ideas
+    # module when it constructs the two common source plans.
+    helpers={}
+    for name in names:
+        spec=importlib.util.spec_from_file_location(name,helper_dir/(name+'.py'))
+        if spec is None or spec.loader is None:
+            raise ValueError('cannot load frozen-matching neural helper: '+name)
+        module=importlib.util.module_from_spec(spec)
+        sys.modules[name]=module
+        spec.loader.exec_module(module)
+        helpers[name]=module
+    ideas=helpers['neural_identical_ideas']
+    integration=helpers['neural_identical_integration']
+    variants=ideas.variant_selections(variant_specs)
+    cards=[]; seen=set()
+    directory=ideas.DIRECTORY.relative_to(ideas.ROOT).as_posix()
+    for lane in ideas.LANES:
+        document=json.loads(frozen(directory+'/'+lane+'.json'))
+        for entry in document['experiments']:
+            identity=entry['id']
+            if identity in seen:
+                raise ValueError('duplicate frozen neural lane record: '+identity)
+            seen.add(identity)
+            cards.append(dict(entry,implementation_lane=lane))
+    pair=integration.selection(cards,identities,variants)
+    integration.require_selectable(pair)
+    mapping=json.loads(frozen(integration.MAPPING))
+    bindings=set(); workloads=set()
+    selected_ids=pair['A']['ids']
+    for identity in selected_ids:
+        row=mapping['ideas'][identity]
+        bindings.update(row['binding_families'])
+        workloads.update(row['workloads'])
+    builders=[name for family in sorted(bindings)
+              for name in ((family,) if family.endswith('_host') else (family,family+'_host'))]
+    builders=list(dict.fromkeys(builders))
+    if not builders:
+        raise ValueError('neural selection has no recorded caller binding builders')
+    selected_arm='A' if role=='candidate' else 'B'
+    plan=pair[selected_arm]
+    return {
+        'schema':'mojolearn.neural-identical-native-build-selection/1',
+        'source_sha':sha,'ids':selected_ids,'variants':variants,
+        'recipe_role':role,'selected_arm':selected_arm,
+        'source_selection':pair,
+        'recommended_builders':builders,
+        'runtime_environment':plan['runtime_environment'],
+        'affected_workloads':{name:mapping['workloads'][name] for name in sorted(workloads)},
+        'source_file_sha256':hashes,
+        'helper_policy':'Current helper bytes match frozen commit before import; lane and integration metadata read with git show.',
+    }, integration.compiler_defines(plan)
 
 
 def define_source_locations(repo,sha,defines):
@@ -93,6 +168,10 @@ def main():
     p.add_argument('--mode',choices=('identical','fast'),default='identical')
     p.add_argument('--define',action='append',default=[],help='Explicit MOJOLEARN_NAME[=positive_integer]; omit presence flags to disable, never use =0')
     p.add_argument('--candidate-recipe',help='ID from tools/identical_candidate_recipes.json at --sha')
+    p.add_argument('--neural-idea',action='append',default=[],metavar='NIxx',
+                   help='Neural idea from frozen lane records; repeat to combine ideas')
+    p.add_argument('--neural-variant',action='append',default=[],metavar='NIxx=NAME',
+                   help='Recorded variant for a selected --neural-idea; repeat for different ideas')
     p.add_argument('--recipe-role',choices=('baseline','candidate'),default=None)
     p.add_argument('--builders',help='Comma list; defaults to recipe dependencies or the standard batch')
     p.add_argument('--plan-only',action='store_true',help='Validate frozen source/recipe/flags and print receipt without creating a worktree or compiling')
@@ -102,23 +181,33 @@ def main():
     if sys.platform!='linux': p.error('Linux GPU box required')
     if not re.fullmatch('[0-9a-f]{40}',a.sha): p.error('full immutable SHA required')
     a.repo=a.repo.resolve(); a.out=a.out.resolve(); a.python=a.python.resolve()
-    recipe=None; recipe_hash=None
+    recipe=None; recipe_hash=None; neural=None
     try:
         values=list(a.define)
-        if a.candidate_recipe:
+        if a.neural_idea:
+            if a.mode!='identical': raise ValueError('neural ideas require --mode identical')
+            if a.candidate_recipe or a.define or a.arm=='off':
+                raise ValueError('--neural-idea cannot mix with --candidate-recipe, --define, or --arm off; each idea records its own A/B controls')
+            neural,values=neural_recipe(a.repo,a.sha,a.neural_idea,a.neural_variant,a.recipe_role or 'candidate')
+        elif a.neural_variant:
+            raise ValueError('--neural-variant requires --neural-idea')
+        elif a.candidate_recipe:
             if a.mode!='identical': raise ValueError('IDENTICAL recipes require --mode identical')
             recipe, recipe_values, recipe_hash=candidate_recipe(a.repo,a.sha,a.candidate_recipe,a.recipe_role or 'candidate')
             values=recipe_values+values
         elif a.recipe_role:
-            raise ValueError('--recipe-role requires --candidate-recipe')
+            raise ValueError('--recipe-role requires --candidate-recipe or --neural-idea')
         defines=explicit_defines(values)
         references=define_source_locations(a.repo,a.sha,defines)
-    except (ValueError,RuntimeError,subprocess.CalledProcessError) as exc:
+    except (ValueError,RuntimeError,KeyError,OSError,subprocess.CalledProcessError) as exc:
         p.error(str(exc))
-    builders=(a.builders or (','.join(recipe['recommended_builders']) if recipe else DEFAULT)).split(',')
+    recommended=(neural or recipe or {}).get('recommended_builders')
+    builders=(a.builders or (','.join(recommended) if recommended else DEFAULT)).split(',')
     if len(set(builders))!=len(builders) or any(not re.fullmatch('[a-z0-9_]+',b) for b in builders): p.error('unique binding names required')
     if recipe and not set(recipe['recommended_builders']).issubset(builders):
         p.error('recipe dependency builders missing; use --define for an explicitly narrower diagnostic')
+    if neural and not set(neural['recommended_builders']).issubset(builders):
+        p.error('neural caller dependency builders missing from --builders')
     if a.mode=='fast' and any(b.endswith('_host') for b in builders): p.error('host twins support IDENTICAL only; omit host builders for FAST')
     if not a.semaphore.is_file(): p.error('required compile semaphore missing: '+str(a.semaphore))
     source=a.out/'source'; arch=a.gpu_arch or {'nvidia':'sm_89','amd':'gfx942'}[a.vendor]
@@ -130,12 +219,21 @@ def main():
              MOJOLEARN_TARGET_COLUMN=a.vendor,PYTHONUNBUFFERED='1',MOJOLEARN_SKIP_BUILD_GATE='1',
              MOJOLEARN_MOJO_BUILD_FLAGS=' '.join('-D '+d for d in (['MOJOLEARN_IDN_ALL_OFF=1'] if a.arm=='off' else [])+defines),
              PYTHONPATH=str(source/'python'),LD_LIBRARY_PATH=str(source/'python/mojolearn/.libs')+':'+os.environ.get('LD_LIBRARY_PATH',''))
+    if neural:
+        for key,value in neural['runtime_environment'].items():
+            if key in env and env[key]!=value:
+                p.error('neural runtime environment conflicts with managed build environment: '+key)
+            env[key]=value
     report={'sha':a.sha,'vendor':a.vendor,'arch':arch,'arm':a.arm,'mode':a.mode,'status':'RUNNING','expected_builders':builders,'modules':{},'bootstrap':[]}
     report.update(explicit_defines=defines,define_source_locations=references,
                   effective_mojo_build_flags=env['MOJOLEARN_MOJO_BUILD_FLAGS'],
-                  candidate_recipe=recipe,recipe_role=a.recipe_role or ('candidate' if recipe else None),
+                  candidate_recipe=recipe,recipe_role=a.recipe_role or ('candidate' if recipe or neural else None),
                   candidate_recipe_file_sha256=recipe_hash,
-                  candidate_qualification='BUILD_ONLY; fixture route/identity/quality/timing still required' if recipe or defines else None)
+                  candidate_qualification='BUILD_ONLY; fixture route/identity/quality/timing still required' if recipe or neural or defines else None)
+    if neural:
+        report.update(neural_selection=neural,
+                      runtime_environment=neural['runtime_environment'],
+                      candidate_qualification='BUILD_ONLY; same-version host/NVIDIA/AMD/Apple identity, full-workload quality and end-to-end A/B timing still required')
     if a.plan_only:
         report['status']='PLANNED_NOT_BUILT'
         print(json.dumps(report,indent=2))

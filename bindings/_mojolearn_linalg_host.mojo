@@ -41,6 +41,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from gemm.contract import GEMM_NUMERICAL_PROFILE, GEMM_NUMERICAL_PROFILE_VERSION
 
 from bindings.hostptr import f32_ptr, f64_ptr, read_f32
 from checks.kernel_matrix import (
@@ -155,10 +156,12 @@ def linalg_vendor_binding() raises -> PythonObject:
 
 
 def linalg_profile_version_binding() raises -> PythonObject:
-    """The MAJOR VERSION of the GEMM profile this binary implements: 1, for
-    `mojolearn.identical.gemm.fp32.v1`. `gemm_oracle` IS that version's
-    definition (leaf rule, contract section 7.1; fold topology, 7.2)."""
-    return PythonObject(1)
+    """Read the same numerical contract version as every GPU binding."""
+    return PythonObject(GEMM_NUMERICAL_PROFILE_VERSION)
+
+
+def linalg_numerical_profile_binding() raises -> PythonObject:
+    return PythonObject(String(GEMM_NUMERICAL_PROFILE))
 
 
 def gemm_binding(
@@ -751,6 +754,7 @@ def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
         module.def_function[linalg_vendor_binding]("linalg_vendor")
         module.def_function[linalg_numeric_mode_binding]("linalg_numeric_mode")
         module.def_function[linalg_profile_version_binding]("linalg_profile_version")
+        module.def_function[linalg_numerical_profile_binding]("linalg_numerical_profile")
         module.def_function[gemm_binding]("gemm")
         module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         module.def_function[cholesky_factor_binding]("cholesky_factor")

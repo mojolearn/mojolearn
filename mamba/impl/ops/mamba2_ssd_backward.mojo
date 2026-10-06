@@ -27,7 +27,7 @@ from checks.numerics import (
     identical_softplus,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from gemm.checks.gemm_identical import (
+from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
@@ -35,6 +35,10 @@ from gemm.contract import OP_NN
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
 from mamba.impl.modeling.modeling_mamba import mamba_scratch
 
+
+# NN39: shared pure Mojo profile imported by both device and checked-in
+# generated host source. Future regeneration preserves the same import.
+from mamba.impl.ops.neural_gradient_profile import NN39_M2_GRAD_TREE, nn39_gradient_tree
 
 comptime M2_SSD_BWD_TPB = 128
 
@@ -68,7 +72,17 @@ comptime IDN_M2_BWD_CELL = (
 comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
     "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
 ]()
-comptime M2_BWD_FOLD_ROWS = 256
+# NI44 V subarm: halve each logical gradient leaf to expose twice the
+# independent token work before the same ascending tile merge. 128 is a fixed
+# reduction granularity, not a benchmark shape; all host/GPU columns change
+# the graph together. Existing allocation uses m2_fold_tiles, including tails.
+# Default OFF. No gradient/trajectory quality or performance claim is made.
+comptime IDN_M2_GRAD_LEAF128 = (
+    IDN_M2_BWD_FOLD_TILED
+    and is_defined["MOJOLEARN_IDN_M2_GRAD_LEAF128"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime M2_BWD_FOLD_ROWS = 128 if IDN_M2_GRAD_LEAF128 else 256
 
 
 def m2_fold_rows_per_tile(rows: Int) -> Int:
@@ -180,13 +194,13 @@ def mamba2_cstate_ddecay_kernel(
 
 
 def mamba2_cstate_ddecay_into(
-    ctx: DeviceContext, mut out: Mamba2SSDBackwardState,
+    ctx: DeviceContext, mut output: Mamba2SSDBackwardState,
     mut xd: DeviceBuffer[DType.float32], mut xbc: DeviceBuffer[DType.float32],
     b: Int, t: Int, nh: Int, di: Int, cd: Int, nc: Int, qv: Int,
 ) raises:
     var cells = b * nh * nc * qv
     ctx.enqueue_function[mamba2_cstate_ddecay_kernel](
-        out.d_decay_cstate.unsafe_ptr(), out.d_cstate.unsafe_ptr(),
+        output.d_decay_cstate.unsafe_ptr(), output.d_cstate.unsafe_ptr(),
         xd.unsafe_ptr(), xbc.unsafe_ptr(), Int32(b), Int32(t), Int32(nh),
         Int32(di), Int32(cd), Int32(nc), Int32(qv),
         grid_dim=(_grid(cells), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
@@ -382,7 +396,7 @@ def mamba2_cb_backward_kernel(
 
 def mamba2_s18_direct_dpass_into(
     ctx: DeviceContext,
-    mut out: Mamba2SSDBackwardState,
+    mut output: Mamba2SSDBackwardState,
     mut d_yoff: DeviceBuffer[DType.float32],
     mut xbc: DeviceBuffer[DType.float32],
     mut pass_states: DeviceBuffer[DType.float32],
@@ -399,7 +413,7 @@ def mamba2_s18_direct_dpass_into(
     if cells < 1:
         return
     ctx.enqueue_function[mamba2_s18_direct_dpass_kernel](
-        out.direct_d_pass.unsafe_ptr(), d_yoff.unsafe_ptr(), xbc.unsafe_ptr(),
+        output.direct_d_pass.unsafe_ptr(), d_yoff.unsafe_ptr(), xbc.unsafe_ptr(),
         dacs.unsafe_ptr(), Int32(b), Int32(t_work), Int32(nh), Int32(di),
         Int32(cd), Int32(nc), Int32(qv),
         grid_dim=(_grid(cells), 1, 1),
@@ -410,7 +424,7 @@ def mamba2_s18_direct_dpass_into(
     if dc_cells > extra_cells:
         extra_cells = dc_cells
     ctx.enqueue_function[mamba2_s18_dc_ddacs_kernel](
-        out.d_c_yoff.unsafe_ptr(), out.d_dacs_yoff.unsafe_ptr(),
+        output.d_c_yoff.unsafe_ptr(), output.d_dacs_yoff.unsafe_ptr(),
         d_yoff.unsafe_ptr(), xbc.unsafe_ptr(), pass_states.unsafe_ptr(),
         dacs.unsafe_ptr(), Int32(b), Int32(t_work), Int32(nh), Int32(di),
         Int32(cd), Int32(nc), Int32(qv), grid_dim=(_grid(extra_cells), 1, 1),
@@ -597,7 +611,7 @@ def mamba2_conv_backward_kernel(
 
 
 def mamba2_conv_backward_prefill_into(
-    ctx: DeviceContext, mut out: Mamba2ConvBackward,
+    ctx: DeviceContext, mut output: Mamba2ConvBackward,
     mut merged: Mamba2SSDDiscretizeBackward,
     mut conv: DeviceBuffer[DType.float32],
     mut inp: DeviceBuffer[DType.float32],
@@ -609,34 +623,34 @@ def mamba2_conv_backward_prefill_into(
     comptime if IDN_M2_BWD_CELL:
         var rows = b * l
         ctx.enqueue_function[mamba2_conv_backward_dconv_cell_kernel](
-            out.d_conv.unsafe_ptr(), merged.d_x_total.unsafe_ptr(),
+            output.d_conv.unsafe_ptr(), merged.d_x_total.unsafe_ptr(),
             merged.d_b_total.unsafe_ptr(), merged.d_c_total.unsafe_ptr(),
             conv.unsafe_ptr(), Int32(rows), Int32(di), Int32(cd),
             grid_dim=(_grid(rows * cd), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
         ctx.enqueue_function[mamba2_conv_backward_din_cell_kernel](
-            out.d_in_xbc.unsafe_ptr(), out.d_conv.unsafe_ptr(), w.unsafe_ptr(),
+            output.d_in_xbc.unsafe_ptr(), output.d_conv.unsafe_ptr(), w.unsafe_ptr(),
             Int32(b), Int32(l), Int32(cd),
             grid_dim=(_grid(rows * cd), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
         var per = m2_fold_rows_per_tile(rows)
         var tiles = m2_fold_tiles(rows)
         ctx.enqueue_function[mamba2_conv_dw_partial_kernel](
-            out.fold_part.unsafe_ptr(), out.d_conv.unsafe_ptr(), inp.unsafe_ptr(),
+            output.fold_part.unsafe_ptr(), output.d_conv.unsafe_ptr(), inp.unsafe_ptr(),
             Int32(b), Int32(l), Int32(di), Int32(cd), Int32(dip),
             Int32(per), Int32(tiles),
             grid_dim=(_grid(tiles * cd), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
         ctx.enqueue_function[m2_fold_tiles_kernel](
-            out.d_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), out.d_b.unsafe_ptr(), out.d_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            w.unsafe_ptr(), out.fold_part.unsafe_ptr(),
+            output.d_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), output.d_b.unsafe_ptr(), output.d_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            w.unsafe_ptr(), output.fold_part.unsafe_ptr(),
             Int32(tiles), Int32(cd * 5), Int32(cd * 4), Int32(0),
             grid_dim=(_grid(cd * 5), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
     else:
         ctx.enqueue_function[mamba2_conv_backward_kernel](
-            out.d_conv.unsafe_ptr(), out.d_in_xbc.unsafe_ptr(), out.d_w.unsafe_ptr(),
-            out.d_b.unsafe_ptr(), merged.d_x_total.unsafe_ptr(),
+            output.d_conv.unsafe_ptr(), output.d_in_xbc.unsafe_ptr(), output.d_w.unsafe_ptr(),
+            output.d_b.unsafe_ptr(), merged.d_x_total.unsafe_ptr(),
             merged.d_b_total.unsafe_ptr(), merged.d_c_total.unsafe_ptr(),
             conv.unsafe_ptr(), inp.unsafe_ptr(), w.unsafe_ptr(), Int32(b), Int32(l),
             Int32(di), Int32(cd), Int32(dip), grid_dim=(_grid(cd),1,1),
@@ -663,7 +677,7 @@ def mamba2_postconv_merge_kernel(
 
 def mamba2_postconv_merge_into(
     ctx: DeviceContext,
-    mut out: Mamba2SSDDiscretizeBackward,
+    mut output: Mamba2SSDDiscretizeBackward,
     mut ssd: Mamba2SSDBackwardState,
     mut d_x_d: DeviceBuffer[DType.float32],
     b: Int, t: Int, nh: Int,
@@ -674,9 +688,9 @@ def mamba2_postconv_merge_into(
     if cc > cells:
         cells = cc
     ctx.enqueue_function[mamba2_postconv_merge_kernel](
-        out.d_c_total.unsafe_ptr(), out.d_x_total.unsafe_ptr(),
-        ssd.d_c_yoff.unsafe_ptr(), out.d_c_cb.unsafe_ptr(),
-        d_x_d.unsafe_ptr(), out.d_x_from_xd.unsafe_ptr(), Int32(cc), Int32(xc),
+        output.d_c_total.unsafe_ptr(), output.d_x_total.unsafe_ptr(),
+        ssd.d_c_yoff.unsafe_ptr(), output.d_c_cb.unsafe_ptr(),
+        d_x_d.unsafe_ptr(), output.d_x_from_xd.unsafe_ptr(), Int32(cc), Int32(xc),
         grid_dim=(_grid(cells), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
 def mamba2_cstate_dxd_db_kernel(
@@ -1184,8 +1198,11 @@ def m2_fold_tiles_kernel(
     if c >= cols:
         return
     var acc = part.unsafe_load(c)
-    for tile in range(1, tiles):
-        acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
+    comptime if NN39_M2_GRAD_TREE:
+        acc = nn39_gradient_tree(part, tiles, cols, c)
+    else:
+        for tile in range(1, tiles):
+            acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
     if c < split:
         out_a.unsafe_store(c, acc)
         if has_scale != 0:
@@ -1233,7 +1250,7 @@ def mamba2_dt_cell_kernel(
 
 
 def _m2_da_product_into(
-    ctx: DeviceContext, mut out: Mamba2SSDDiscretizeBackward,
+    ctx: DeviceContext, mut output: Mamba2SSDDiscretizeBackward,
     use_total: Bool,
     mut dt: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
     bt: Int, nh: Int,
@@ -1241,31 +1258,31 @@ def _m2_da_product_into(
     """`mamba2_da_product_backward_kernel` as cells + a row-tile fold; the
     upstream is `d_da_total` when use_total, else `d_da`."""
     var d_da_ptr: MutPointer[Float32, MutAnyOrigin] = (
-        out.d_da.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        output.d_da.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     )
     if use_total:
-        d_da_ptr = out.d_da_total.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        d_da_ptr = output.d_da_total.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     comptime if IDN_M2_BWD_CELL:
         ctx.enqueue_function[mamba2_da_cell_kernel](
-            out.d_dt.unsafe_ptr(), d_da_ptr, a.unsafe_ptr(), Int32(bt), Int32(nh),
+            output.d_dt.unsafe_ptr(), d_da_ptr, a.unsafe_ptr(), Int32(bt), Int32(nh),
             grid_dim=(_grid(bt * nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
         var per = m2_fold_rows_per_tile(bt)
         var tiles = m2_fold_tiles(bt)
         ctx.enqueue_function[m2_fold_rows_partial_kernel](
-            out.fold_part.unsafe_ptr(), dt.unsafe_ptr(), d_da_ptr,
+            output.fold_part.unsafe_ptr(), dt.unsafe_ptr(), d_da_ptr,
             Int32(bt), Int32(nh), Int32(per), Int32(tiles), Int32(1),
             grid_dim=(_grid(tiles * nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
         ctx.enqueue_function[m2_fold_tiles_kernel](
-            out.d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), out.d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), out.d_a_log.unsafe_ptr(),
-            a.unsafe_ptr(), out.fold_part.unsafe_ptr(),
+            output.d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), output.d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), output.d_a_log.unsafe_ptr(),
+            a.unsafe_ptr(), output.fold_part.unsafe_ptr(),
             Int32(tiles), Int32(nh), Int32(nh), Int32(1),
             grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
     else:
         ctx.enqueue_function[mamba2_da_product_backward_kernel](
-            out.d_a.unsafe_ptr(), out.d_a_log.unsafe_ptr(), out.d_dt.unsafe_ptr(),
+            output.d_a.unsafe_ptr(), output.d_a_log.unsafe_ptr(), output.d_dt.unsafe_ptr(),
             d_da_ptr, dt.unsafe_ptr(), a.unsafe_ptr(), Int32(bt), Int32(nh),
             grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
@@ -1273,25 +1290,25 @@ def _m2_da_product_into(
 
 def mamba2_reverse_cumsum_and_da_into(
     ctx: DeviceContext,
-    mut out: Mamba2SSDDiscretizeBackward,
+    mut output: Mamba2SSDDiscretizeBackward,
     mut d_dacs: DeviceBuffer[DType.float32],
     mut dt: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],
     b: Int, t_work: Int, nh: Int, nc: Int, qv: Int,
 ) raises:
     ctx.enqueue_function[mamba2_reverse_cumsum_kernel](
-        out.d_da.unsafe_ptr(), d_dacs.unsafe_ptr(), Int32(b), Int32(t_work),
+        output.d_da.unsafe_ptr(), d_dacs.unsafe_ptr(), Int32(b), Int32(t_work),
         Int32(nh), Int32(nc), Int32(qv), grid_dim=(_grid(b * nh * nc), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
     _m2_da_product_into(
-        ctx, out, False, dt, a, b * t_work, nh
+        ctx, output, False, dt, a, b * t_work, nh
     )
 
 
 def mamba2_ydiag_xd_and_partial_dt_into(
     ctx: DeviceContext,
-    mut out: Mamba2SSDDiscretizeBackward,
+    mut output: Mamba2SSDDiscretizeBackward,
     mut d_y: DeviceBuffer[DType.float32],
     mut cb_g: DeviceBuffer[DType.float32],
     mut seg_l: DeviceBuffer[DType.float32],
@@ -1307,15 +1324,15 @@ def mamba2_ydiag_xd_and_partial_dt_into(
     dt_lo: Float32, dt_hi: Float32,
 ) raises:
     ctx.enqueue_function[mamba2_ydiag_matrix_backward_kernel](
-        out.d_cb_ydiag.unsafe_ptr(), out.d_seg_ydiag.unsafe_ptr(),
+        output.d_cb_ydiag.unsafe_ptr(), output.d_seg_ydiag.unsafe_ptr(),
         d_y.unsafe_ptr(), xd.unsafe_ptr(), cb_g.unsafe_ptr(), seg_l.unsafe_ptr(),
         Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
         grid_dim=(_grid(b * nc * qv * qv), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
     ctx.enqueue_function[mamba2_cb_backward_kernel](
-        out.d_b_cb.unsafe_ptr(), out.d_c_cb.unsafe_ptr(),
-        out.d_cb_ydiag.unsafe_ptr(), xbc.unsafe_ptr(), Int32(b), Int32(t_work),
+        output.d_b_cb.unsafe_ptr(), output.d_c_cb.unsafe_ptr(),
+        output.d_cb_ydiag.unsafe_ptr(), xbc.unsafe_ptr(), Int32(b), Int32(t_work),
         Int32(di), Int32(cd), Int32(nc), Int32(qv),
         grid_dim=(_grid(b * t_work * M2_D_STATE), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
@@ -1324,42 +1341,42 @@ def mamba2_ydiag_xd_and_partial_dt_into(
     if b * t_work * M2_D_STATE > cstate_cells:
         cstate_cells = b * t_work * M2_D_STATE
     ctx.enqueue_function[mamba2_cstate_dxd_db_kernel](
-        out.d_xd_cstate.unsafe_ptr(), out.d_b_cstate.unsafe_ptr(),
-        out.d_b_total.unsafe_ptr(), out.d_b_cb.unsafe_ptr(), d_cstate.unsafe_ptr(),
+        output.d_xd_cstate.unsafe_ptr(), output.d_b_cstate.unsafe_ptr(),
+        output.d_b_total.unsafe_ptr(), output.d_b_cb.unsafe_ptr(), d_cstate.unsafe_ptr(),
         xd.unsafe_ptr(), xbc.unsafe_ptr(), decay.unsafe_ptr(), Int32(b), Int32(t_work),
         Int32(nh), Int32(di), Int32(cd), Int32(nc), Int32(qv),
         grid_dim=(_grid(cstate_cells),1,1), block_dim=(M2_SSD_BWD_TPB,1,1),
     )
     ctx.enqueue_function[mamba2_seg_backward_kernel](
-        out.d_da_seg.unsafe_ptr(), out.d_da_total.unsafe_ptr(),
-        out.d_seg_ydiag.unsafe_ptr(), seg_l.unsafe_ptr(), out.d_da.unsafe_ptr(),
+        output.d_da_seg.unsafe_ptr(), output.d_da_total.unsafe_ptr(),
+        output.d_seg_ydiag.unsafe_ptr(), seg_l.unsafe_ptr(), output.d_da.unsafe_ptr(),
         Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
         grid_dim=(_grid(b * t_work * nh), 1, 1),
         block_dim=(M2_SSD_BWD_TPB, 1, 1),
     )
     _m2_da_product_into(
-        ctx, out, True, dt, a, b * t_work, nh
+        ctx, output, True, dt, a, b * t_work, nh
     )
     comptime if IDN_M2_SSD_TILES:
         ctx.enqueue_function[mamba2_ydiag_xd_backward_tile_kernel](
-            out.d_xd_ydiag.unsafe_ptr(), out.d_x_from_xd.unsafe_ptr(),
-            out.d_dt_from_xd.unsafe_ptr(), out.d_dt_merged.unsafe_ptr(),
+            output.d_xd_ydiag.unsafe_ptr(), output.d_x_from_xd.unsafe_ptr(),
+            output.d_dt_from_xd.unsafe_ptr(), output.d_dt_merged.unsafe_ptr(),
             d_y.unsafe_ptr(), cb_g.unsafe_ptr(), seg_l.unsafe_ptr(),
-            xbc.unsafe_ptr(), dt.unsafe_ptr(), out.d_dt.unsafe_ptr(),
-            out.d_xd_cstate.unsafe_ptr(),
-            out.d_xd_total.unsafe_ptr(),
+            xbc.unsafe_ptr(), dt.unsafe_ptr(), output.d_dt.unsafe_ptr(),
+            output.d_xd_cstate.unsafe_ptr(),
+            output.d_xd_total.unsafe_ptr(),
             Int32(b), Int32(t_work), Int32(nh), Int32(di), Int32(cd),
             Int32(nc), Int32(qv), grid_dim=(b * t_work * nh, 1, 1),
             block_dim=(M2_HEADDIM, 1, 1),
         )
     else:
         ctx.enqueue_function[mamba2_ydiag_xd_backward_kernel](
-            out.d_xd_ydiag.unsafe_ptr(), out.d_x_from_xd.unsafe_ptr(),
-            out.d_dt_from_xd.unsafe_ptr(), out.d_dt_merged.unsafe_ptr(),
+            output.d_xd_ydiag.unsafe_ptr(), output.d_x_from_xd.unsafe_ptr(),
+            output.d_dt_from_xd.unsafe_ptr(), output.d_dt_merged.unsafe_ptr(),
             d_y.unsafe_ptr(), cb_g.unsafe_ptr(), seg_l.unsafe_ptr(),
-            xbc.unsafe_ptr(), dt.unsafe_ptr(), out.d_dt.unsafe_ptr(),
-            out.d_xd_cstate.unsafe_ptr(),
-            out.d_xd_total.unsafe_ptr(),
+            xbc.unsafe_ptr(), dt.unsafe_ptr(), output.d_dt.unsafe_ptr(),
+            output.d_xd_cstate.unsafe_ptr(),
+            output.d_xd_total.unsafe_ptr(),
             Int32(b), Int32(t_work), Int32(nh), Int32(di), Int32(cd),
             Int32(nc), Int32(qv), grid_dim=(_grid(b * t_work * nh), 1, 1),
             block_dim=(M2_SSD_BWD_TPB, 1, 1),
@@ -1367,7 +1384,7 @@ def mamba2_ydiag_xd_and_partial_dt_into(
     comptime if IDN_M2_BWD_CELL:
         var bt = b * t_work
         ctx.enqueue_function[mamba2_dt_cell_kernel](
-            out.d_dtraw.unsafe_ptr(), out.d_dt_merged.unsafe_ptr(),
+            output.d_dtraw.unsafe_ptr(), output.d_dt_merged.unsafe_ptr(),
             dtraw.unsafe_ptr(), dt_bias.unsafe_ptr(),
             Int32(bt), Int32(nh), dt_lo, dt_hi,
             grid_dim=(_grid(bt * nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
@@ -1375,22 +1392,22 @@ def mamba2_ydiag_xd_and_partial_dt_into(
         var per = m2_fold_rows_per_tile(bt)
         var tiles = m2_fold_tiles(bt)
         ctx.enqueue_function[m2_fold_rows_partial_kernel](
-            out.fold_part.unsafe_ptr(), out.d_dtraw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            out.d_dtraw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            output.fold_part.unsafe_ptr(), output.d_dtraw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            output.d_dtraw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             Int32(bt), Int32(nh), Int32(per), Int32(tiles), Int32(0),
             grid_dim=(_grid(tiles * nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
         ctx.enqueue_function[m2_fold_tiles_kernel](
-            out.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), out.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            out.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dt_bias.unsafe_ptr(),
-            out.fold_part.unsafe_ptr(),
+            output.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), output.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            output.d_dt_bias.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dt_bias.unsafe_ptr(),
+            output.fold_part.unsafe_ptr(),
             Int32(tiles), Int32(nh), Int32(nh), Int32(0),
             grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
     else:
         ctx.enqueue_function[mamba2_dt_backward_kernel](
-            out.d_dtraw.unsafe_ptr(), out.d_dt_bias.unsafe_ptr(),
-            out.d_dt_merged.unsafe_ptr(), dtraw.unsafe_ptr(), dt_bias.unsafe_ptr(),
+            output.d_dtraw.unsafe_ptr(), output.d_dt_bias.unsafe_ptr(),
+            output.d_dt_merged.unsafe_ptr(), dtraw.unsafe_ptr(), dt_bias.unsafe_ptr(),
             Int32(b * t_work), Int32(nh), dt_lo, dt_hi,
             grid_dim=(_grid(nh), 1, 1), block_dim=(M2_SSD_BWD_TPB, 1, 1),
         )
@@ -1500,7 +1517,7 @@ def mamba2_reverse_chunk_state_kernel(
 
 def mamba2_reverse_chunk_state_into(
     ctx: DeviceContext,
-    mut out: Mamba2SSDBackwardState,
+    mut output: Mamba2SSDBackwardState,
     mut d_final: DeviceBuffer[DType.float32],
     mut pass_states: DeviceBuffer[DType.float32],
     mut dacs: DeviceBuffer[DType.float32],
@@ -1514,11 +1531,11 @@ def mamba2_reverse_chunk_state_into(
     if chains < 1 or nc < 1:
         return
     ctx.enqueue_function[mamba2_reverse_chunk_state_kernel](
-        out.d_pass.unsafe_ptr(),
-        out.d_cstate.unsafe_ptr(),
-        out.d_scale_product.unsafe_ptr(),
-        out.d_initial.unsafe_ptr(),
-        out.direct_d_pass.unsafe_ptr(),
+        output.d_pass.unsafe_ptr(),
+        output.d_cstate.unsafe_ptr(),
+        output.d_scale_product.unsafe_ptr(),
+        output.d_initial.unsafe_ptr(),
+        output.direct_d_pass.unsafe_ptr(),
         d_final.unsafe_ptr(),
         pass_states.unsafe_ptr(),
         dacs.unsafe_ptr(),

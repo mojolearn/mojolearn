@@ -40,9 +40,14 @@ from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz
+from gbdt.apple_fast_tree_experiments import AFT_N03, AFT_N04, AFT_N06
 
 # ---- MOJOLEARN_GBDT_DW2_PART_VEC4 ------------------------------------------
-comptime DW2_PART_BLOCK = 512
+# N03: eight simdgroups instead of sixteen per partition block, keeping
+# four consecutive rows per lane. Chunk allocation/scan/scatter use this
+# same geometry, so stable order and the complete partition are retained.
+# No performance/quality evidence; source only, default OFF.
+comptime DW2_PART_BLOCK = 256 if AFT_N03 else 512
 comptime DW2_PART_VEC = 4
 comptime DW2_PART_CHUNK = DW2_PART_BLOCK * DW2_PART_VEC
 comptime DW2_COPY_BLOCK = 256
@@ -351,25 +356,35 @@ def dw2_copy_back_kernel[GUARD: Bool = False](
     var n_groups = (end - a0 + DW2_PART_VEC - 1) // DW2_PART_VEC
     var gi = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
+    # N06: two independent vector groups per worker iteration reuse the
+    # leaf descriptor and grid stride. This is row-index cursor movement,
+    # not prediction-value application. No timing/quality evidence.
     while gi < n_groups:
-        var g = a0 + gi * DW2_PART_VEC
-        if g >= offset and g + DW2_PART_VEC <= end:
-            row_index.unsafe_store[width=4, alignment=16](
-                g, temp_index.unsafe_load[width=4, alignment=16](g)
-            )
-        else:
-            comptime for e in range(4):
-                var j = g + e
-                if j >= offset and j < end:
-                    row_index.unsafe_store(j, temp_index.unsafe_load(j))
-        gi += stride
+        comptime for tile in range(2 if AFT_N06 else 1):
+            if gi < n_groups:
+                var g = a0 + gi * DW2_PART_VEC
+                if g >= offset and g + DW2_PART_VEC <= end:
+                    row_index.unsafe_store[width=4, alignment=16](
+                        g, temp_index.unsafe_load[width=4, alignment=16](g)
+                    )
+                else:
+                    comptime for e in range(4):
+                        var j = g + e
+                        if j >= offset and j < end:
+                            row_index.unsafe_store(j, temp_index.unsafe_load(j))
+                gi += stride
+
 
 
 # ---- MOJOLEARN_GBDT_DW2_SCAN_SMEM ------------------------------------------
 #: Features per block. 16 x 255 folds fits the page with room for the
 #: alignment head and tail.
-comptime DW2_SCAN_FT = 16
-comptime DW2_SCAN_CAP = 4096 + 8
+# N04: eight features and an 8 KiB slab (plus alignment slack) instead
+# of sixteen/16 KiB. More independent leaf/stat tiles may reside together;
+# each feature still performs the complete ordered bin prefix. Source only:
+# no performance/quality evidence, default OFF.
+comptime DW2_SCAN_FT = 8 if AFT_N04 else 16
+comptime DW2_SCAN_CAP = DW2_SCAN_FT * 256 + 8
 comptime DW2_SCAN_BLOCK = 256
 
 

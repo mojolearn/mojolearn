@@ -1,0 +1,168 @@
+{
+  "id": "T30",
+  "title": "DART and tree AdaBoost state reuse",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "source_integrated_uncompiled_scoped",
+  "default": "OFF",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T30",
+      "A": [
+        "MOJOLEARN_TREES_T30=1"
+      ],
+      "B": [],
+      "scope": "DART stores exact unscaled per-tree row predictions in its fit session during the existing add pass; later dropout folds read them in original tree order. AdaBoost subarm caches exact SAMME miss flags/R2 loss values within a round on host and GPU.",
+      "production_callers": [
+        "xtrees/dart_units.mojo",
+        "xtrees/dart_device.mojo",
+        "xtrees/dart_host.mojo",
+        "xtrees/ops_device_boost.mojo",
+        "xtrees/ops.mojo",
+        "xtrees/api.mojo",
+        "python/mojolearn/_expansion_trees.py"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "recipe_keys": [
+        "dart"
+      ],
+      "full_dataset_recipes": [
+        "dart:taxi",
+        "dart:taxireg",
+        "dart:istella",
+        "dart:istellareg",
+        "dart:year"
+      ]
+    },
+    {
+      "name": "T30_ADABOOST",
+      "A": [
+        "MOJOLEARN_TREES_T30_ADABOOST=1"
+      ],
+      "B": [],
+      "scope": "DecisionTree-base SAMME/R2 round-state cache",
+      "production_callers": [
+        "xtrees/ops_device_boost.mojo",
+        "xtrees/ops.mojo",
+        "xtrees/api.mojo",
+        "python/mojolearn/_expansion_trees.py"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "recipe_keys": [
+        "adaboost"
+      ],
+      "full_dataset_recipes": [
+        "adaboost:taxi",
+        "adaboost:taxireg",
+        "adaboost:istella",
+        "adaboost:istellareg",
+        "adaboost:year"
+      ]
+    }
+  ],
+  "supported_estimators": [
+    "dart",
+    "dart-reg",
+    "adaboost",
+    "adaboost-reg"
+  ],
+  "production_callers": [
+    "xtrees/dart_units.mojo",
+    "xtrees/dart_device.mojo",
+    "xtrees/dart_host.mojo",
+    "xtrees/ops_device_boost.mojo",
+    "xtrees/ops.mojo",
+    "xtrees/api.mojo",
+    "python/mojolearn/_expansion_trees.py"
+  ],
+  "implementation": "DART stores exact unscaled per-tree row predictions in its fit session during the existing add pass; later dropout folds read them in original tree order. AdaBoost subarm caches exact SAMME miss flags/R2 loss values within a round on host and GPU.",
+  "overlap_ids": [],
+  "remaining_gaps": [
+    "AdaBoost cache explicitly selected only for public DecisionTreeClassifier/Regressor base objects; custom non-tree estimators use B.",
+    "AdaBoost cross-round resident weight sessions remain pending; no pointer-only cache over mutable input.",
+    "DART memory grows by 4*rows*classes*iterations bytes and is released at session close; complete fit boundary includes it.",
+    "Saved full-data DART/AdaBoost constructor recipes must be resolved from retained settings, not invented."
+  ],
+  "demonstrated_runtime_reach": false,
+  "qualification": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false
+  },
+  "harness": {
+    "entry": "bench/speed/forest_speed_arm.py",
+    "selection": "tools/trees_identical_ideas.py",
+    "arguments": [
+      "--trees-experiment",
+      "T30",
+      "--trees-arm",
+      "A|B",
+      "--trees-recipe",
+      "<full-workload-recipe>",
+      "--trees-artifact",
+      "<frozen-artifact>",
+      "--trees-recipe-facts",
+      "<retained-facts.json>",
+      "--trees-result",
+      "<result.json>"
+    ],
+    "execution": "FORBIDDEN in this source-only task",
+    "whole_operation": "tools/trees_identical_workload.py",
+    "separate_spans": [
+      "fit",
+      "cold inference",
+      "repeated inference"
+    ]
+  },
+  "recipes": {
+    "saved_sources": [
+      "tools/bench_board.py:TREE_LANES/TREE_TASK_LANES/TREE_TASK_DATASETS",
+      "tools/speed_gbdt_arm.py:lane_config/TASK_LANES",
+      "experiments/performance_ideas/README.md"
+    ],
+    "lanes": [
+      "dart",
+      "dart-reg",
+      "adaboost",
+      "adaboost-reg"
+    ],
+    "dataset_version": null,
+    "dataset_hash": null,
+    "actual_dimensions": null,
+    "estimator_settings": null,
+    "full_dataset_intrinsic_caps_audited": false,
+    "coverage_status": "PENDING full retained recipe facts; no reduced substitution"
+  },
+  "modular_prerequisites": "No unsupported compiler/runtime technique introduced; toolchain support not demonstrated because compilation is forbidden.",
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_keys": [
+    "dart",
+    "dart-reg",
+    "adaboost",
+    "adaboost-reg"
+  ],
+  "full_dataset_recipes": [
+    "dart:taxi",
+    "adaboost:taxi",
+    "dart:taxireg",
+    "adaboost:taxireg",
+    "dart:istella",
+    "adaboost:istella",
+    "dart:istellareg",
+    "adaboost:istellareg",
+    "dart:year",
+    "adaboost:year"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

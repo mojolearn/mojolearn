@@ -18,6 +18,8 @@ ascending and divided by k. Without an intercept nothing is centered.
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, cholesky, chol_solve, row_dot, seq_rows
 from x_linear.ridge import chol_trusted, ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import FOLD_BLOCK
+from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS
+from x_linear.classical_fold_stats import fold_stat_words, kfold_mean_cell, kfold_gram_cell, kfold_combine_unit
 
 
 @always_inline
@@ -195,6 +197,17 @@ def ridge_kfold_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
     var ffw = d + 1 + d * d + d
     var ffl = List[Float32](length=2 * ffw + 2 * d + 2 * d * d + d + 1, fill=Float32(0))
     var ffb = FP(unsafe_from_address=Int(ffl.unsafe_ptr()))
+    # C13: one immutable compensated cache for the disjoint contiguous folds.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var fold_words = List[Float32](length=k * fold_stat_words(d) if C13_FOLD_STATS else 1, fill=Float32(0))
+    var fold_cache = FP(unsafe_from_address=Int(fold_words.unsafe_ptr()))
+    comptime if C13_FOLD_STATS:
+        for f in range(k):
+            for j in range(d + 1):
+                kfold_mean_cell(x, y, n, d, k, f, j, fi, fold_cache)
+            for i in range(d + 1):
+                for j in range(i, d + 1):
+                    kfold_gram_cell(x, y, n, d, k, f, i, j, fold_cache)
     for f in range(k):
         var s = kf_start(n, k, f)
         var e = kf_end(n, k, f)
@@ -206,7 +219,8 @@ def ridge_kfold_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
                 else:
                     st(ymp, 0, kf_mean(y, 1, 0, n, s, e) if fi else Float32(0))
 
-        seq_rows(means, d + 1, 1)
+        comptime if not C13_FOLD_STATS:
+            seq_rows(means, d + 1, 1)
 
         def cells(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm s, imm e, imm xm, imm ymp, imm g, imm xty}:
             for j in range(lo, hi):
@@ -217,7 +231,11 @@ def ridge_kfold_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
                     st(g, c * d + j, v)
                 st(xty, j, kf_cross(x, d, j, mj, y, 1, 0, ld(ymp, 0), n, s, e))
 
-        seq_rows(cells, d, 1)
+        comptime if C13_FOLD_STATS:
+            for u in range(d + 1 + d * d + d):
+                kfold_combine_unit(u, fold_cache, d, k, f, xm, g, xty)
+        else:
+            seq_rows(cells, d, 1)
         var have_ff = False
         for a in range(na):
             var r = kf_solve(g, xty, xm, ld(ymp, 0), d, ld(fp, a), fi, aw, w + a * d)
@@ -238,6 +256,7 @@ def ridge_kfold_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
     for a in range(na):
         st(res, a, fd(ld(sums, a), i2f(k)))
     _ = ffl^
+    _ = fold_words^
 
 
 def _kf_ff_stats_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, s: Int, e: Int, ffb: FP):

@@ -327,3 +327,23 @@ def _dcg_row_ranked(f: FP, S: Int, Yr: Int, k: Int, K: Int, D: Int) -> Float32:
         last_key = bkey
         last_idx = best
     return acc.result()
+
+
+# C10 copies only initialized tie boundaries of an immediately preceding
+# curve with identical immutable source offsets. It never retains a pointer
+# or order across calls. Weighted prefix arithmetic is not recomputed.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+def curve_copy_unit(t: Int, f: FP, q: IP):
+    var n = p(q, 0)
+    var problem = t//n
+    var row = t%n
+    var count = ldi(f, p(q, 4)+problem)
+    # G carries a -1 for zero-weight rows; their ORD cells were never
+    # initialized and must never be read by reuse or ordinary consumers.
+    if ldi(f, p(q, 11)+t) >= 0:
+        sti(f, p(q, 10)+t, ldi(f, p(q, 9)+t))
+    if row == 0:
+        sti(f, p(q, 8)+problem, count)
+    if row < count:
+        for channel in range(3):
+            f.unsafe_store(p(q, 5+channel)+t, f.unsafe_load(p(q, 1+channel)+t))

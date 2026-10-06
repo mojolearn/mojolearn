@@ -53,8 +53,11 @@ from mamba.checks.mamba3_fixture import (
     M3_NUM_ROPE_ANGLES,
     M3_PI,
 )
+from mamba.impl.modules.afn_defines import AFN26_MAMBA3_THREADS64, AFN26_MAMBA3_THREADS256
 
-comptime AFN_M3_TPB = 128
+# M09: not tested. Launch grids and cell indexing share this block geometry;
+# varying simdgroups per block changes scheduling, never the work extent.
+comptime AFN_M3_TPB = 64 if AFN26_MAMBA3_THREADS64 else (256 if AFN26_MAMBA3_THREADS256 else 128)
 
 
 def _afn_grid(n: Int) -> Int:

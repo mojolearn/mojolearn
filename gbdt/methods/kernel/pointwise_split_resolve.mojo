@@ -39,8 +39,10 @@ from max.gpu.sync import barrier
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+from gbdt.gpu_data.apple_fast_trees_experiments import AFT_G03
 
 from gbdt.methods.kernel.sym_fast import SYM_RESOLVE_BLOCK
+from gbdt.apple_fast_classical import AFCL_RESOLVE_RECORDS
 from gbdt.methods.pointwise_optimization_subsets import SPLIT_BLOCK_SIZE
 
 comptime PW_SENTINEL_ID = UInt32(0xFFFFFFFF)
@@ -387,35 +389,42 @@ def _fold_block(
     var loc_bin = UInt32(0)
     var loc_score = FLOAT32_MAX
     var loc_gain = FLOAT32_MAX
-    var r = tid
-    while r < total:
-        var c_fid: UInt32
-        var c_bin: UInt32
-        var c_score: Float32
-        var c_gain: Float32
-        if r < n0:
-            c_fid = r0_ids.unsafe_load(2 * r)
-            c_bin = r0_ids.unsafe_load(2 * r + 1)
-            c_score = r0_scores.unsafe_load(2 * r)
-            c_gain = r0_scores.unsafe_load(2 * r + 1)
-        elif r < n0 + n1:
-            var q = r - n0
-            c_fid = r1_ids.unsafe_load(2 * q)
-            c_bin = r1_ids.unsafe_load(2 * q + 1)
-            c_score = r1_scores.unsafe_load(2 * q)
-            c_gain = r1_scores.unsafe_load(2 * q + 1)
-        else:
-            var q = r - n0 - n1
-            c_fid = r2_ids.unsafe_load(2 * q)
-            c_bin = r2_ids.unsafe_load(2 * q + 1)
-            c_score = r2_scores.unsafe_load(2 * q)
-            c_gain = r2_scores.unsafe_load(2 * q + 1)
-        if _record_less(c_gain, c_fid, c_bin, loc_gain, loc_fid, loc_bin):
-            loc_fid = c_fid
-            loc_bin = c_bin
-            loc_score = c_score
-            loc_gain = c_gain
-        r += threads
+    # AFCL-T05 changes only the assignment of the same complete candidate
+    # list to lanes. Four adjacent records improve per-lane metadata reuse;
+    # tails are guarded before any record load.
+    var first = tid * AFCL_RESOLVE_RECORDS
+    while first < total:
+        for record in range(AFCL_RESOLVE_RECORDS):
+            var r = first + record
+            if r >= total:
+                break
+            var c_fid: UInt32
+            var c_bin: UInt32
+            var c_score: Float32
+            var c_gain: Float32
+            if r < n0:
+                c_fid = r0_ids.unsafe_load(2 * r)
+                c_bin = r0_ids.unsafe_load(2 * r + 1)
+                c_score = r0_scores.unsafe_load(2 * r)
+                c_gain = r0_scores.unsafe_load(2 * r + 1)
+            elif r < n0 + n1:
+                var q = r - n0
+                c_fid = r1_ids.unsafe_load(2 * q)
+                c_bin = r1_ids.unsafe_load(2 * q + 1)
+                c_score = r1_scores.unsafe_load(2 * q)
+                c_gain = r1_scores.unsafe_load(2 * q + 1)
+            else:
+                var q = r - n0 - n1
+                c_fid = r2_ids.unsafe_load(2 * q)
+                c_bin = r2_ids.unsafe_load(2 * q + 1)
+                c_score = r2_scores.unsafe_load(2 * q)
+                c_gain = r2_scores.unsafe_load(2 * q + 1)
+            if _record_less(c_gain, c_fid, c_bin, loc_gain, loc_fid, loc_bin):
+                loc_fid = c_fid
+                loc_bin = c_bin
+                loc_score = c_score
+                loc_gain = c_gain
+        first += threads * AFCL_RESOLVE_RECORDS
 
     var s_fid = stack_allocation[
         SPLIT_BLOCK_SIZE,
@@ -501,7 +510,31 @@ def pw_resolve_pack_bins_kernel(
     var g_bin = UInt32(0)
     var g_score = FLOAT32_MAX
     var g_gain = FLOAT32_MAX
-    comptime if SYM_RESOLVE_BLOCK:
+    comptime if AFT_G03:
+        # G03: preserve the original serial record order, but only lane 0
+        # performs it. Broadcast costs one barrier and sixteen shared bytes,
+        # avoiding both per-row folds and the older block-tree reduction.
+        # Uncompiled/unverified/unmeasured; original tie comparison retained.
+        var ids = stack_allocation[
+            2, UInt32, address_space=AddressSpace.SHARED
+        ]()
+        var scores = stack_allocation[
+            2, Float32, address_space=AddressSpace.SHARED
+        ]()
+        if Int(thread_idx.x) == 0:
+            _fold_winner_kern(r0_ids, r0_scores, Int(n0_in), g_fid, g_bin, g_score, g_gain)
+            _fold_winner_kern(r1_ids, r1_scores, Int(n1_in), g_fid, g_bin, g_score, g_gain)
+            _fold_winner_kern(r2_ids, r2_scores, Int(n2_in), g_fid, g_bin, g_score, g_gain)
+            ids[unsafe_offset=0] = g_fid
+            ids[unsafe_offset=1] = g_bin
+            scores[unsafe_offset=0] = g_score
+            scores[unsafe_offset=1] = g_gain
+        barrier()
+        g_fid = ids[unsafe_offset=0]
+        g_bin = ids[unsafe_offset=1]
+        g_score = scores[unsafe_offset=0]
+        g_gain = scores[unsafe_offset=1]
+    elif SYM_RESOLVE_BLOCK:
         _fold_block(
             r0_ids, r0_scores, Int(n0_in),
             r1_ids, r1_scores, Int(n1_in),
@@ -561,5 +594,5 @@ def pw_resolve_pack_bins_kernel(
         else:
             goes_right = feature_val > value
         if goes_right:
-            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << bin_depth))
+            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << UInt32(bin_depth)))
         i += stride

@@ -79,6 +79,7 @@ IEEE `/` (correctly rounded on every column measured, IDENTITY_PATHS row
     `hw_estimate_check.mojo` compares their bits.
 """
 
+from experiments.classical_identical_ideas.stats_controls import C58_SERIES4, C58_SHARED_PREP
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -172,6 +173,15 @@ def _series_scale(
         if v > m:
             m = v
     return _pow2_scale(m)
+
+
+def hw_classical_scale_kernel(ts: MutPointer[Float32, MutAnyOrigin], scratch: MutPointer[Float32, MutAnyOrigin],
+                             n: Int32, batch: Int32, offset: Int32):
+    # C58: one immutable observation scan shared by all parameter starts.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var series = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if series < Int(batch):
+        scratch[Int(offset)+series] = _series_scale(series, ts, Int(n), Int(batch))
 
 
 # ---------------------------------------------------------------------------
@@ -688,14 +698,20 @@ def holtwinters_estimate_gpu_kernel(
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var batch_size = Int(batch_size_in)
     var frequency = Int(frequency_in)
-    if tid < batch_size:
-        hw_estimate_series(
-            tid, ts, Int(n_in), batch_size, frequency, additive_in != 0,
-            start_level.unsafe_load(tid), start_trend.unsafe_load(tid),
-            start_season.unsafe_offset(tid),
-            scratch.unsafe_offset(tid * hw_est_scratch_len(frequency)),
-            level, trend, season, alpha, beta, gamma, error, criterion, niter, theta_out,
-        )
+    # C58 bounded independent series tasks; IDs and recurrence order fixed.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    comptime GROUP = 4 if C58_SERIES4 else 1
+    var first = tid*GROUP
+    for member in range(GROUP):
+        tid = first+member
+        if tid < batch_size:
+            hw_estimate_series(
+                tid, ts, Int(n_in), batch_size, frequency, additive_in != 0,
+                start_level.unsafe_load(tid), start_trend.unsafe_load(tid),
+                start_season.unsafe_offset(tid),
+                scratch.unsafe_offset(tid * hw_est_scratch_len(frequency)),
+                level, trend, season, alpha, beta, gamma, error, criterion, niter, theta_out,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -927,7 +943,11 @@ def holtwinters_estimate_block_kernel[B: Int = HW_EST_BLOCK](
     var sw = base.unsafe_offset(d * d + f * d)
     var thp = sw.unsafe_offset(f)
 
-    var sc = _series_scale(s, ts, n, batch_size)
+    var sc: Float32
+    comptime if C58_SHARED_PREP:
+        sc = scratch[batch_size*HW_EST_STARTS*hw_est_block_scratch_len(f)+s]
+    else:
+        sc = _series_scale(s, ts, n, batch_size)
     var inv_sc = _inv_pow2(sc)
     var l0 = _f(_mad(Float32(-f), start_trend.unsafe_load(s), start_level.unsafe_load(s)) * sc)
     var b0 = _f(start_trend.unsafe_load(s) * sc)

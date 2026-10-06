@@ -797,6 +797,12 @@ struct HostOps(ClusterOps):
         po[off] = v.hi
         po[off + 1] = v.lo
 
+    def copy_from(mut self, src: Int, off: Int, n: Int, dst: Int) raises:
+        var source = self._fp(src)
+        var target = self._fp(dst)
+        for i in range(n):
+            target[i] = source[off+i]
+
     def copy_at(mut self, src: Int, n: Int, dst: Int, off: Int) raises:
         var ps = self._fp(src)
         var pd = self._fp(dst)
@@ -1131,6 +1137,20 @@ struct HostOps(ClusterOps):
             pi[t] = Int32(kpp_search_cell(mode, pc, pw, pth, ptl, m, v.hi, v.lo))
         _ = th^
         _ = tl^
+
+    def kpp_distinct(mut self, centers: Int, ids: Int, nt: Int, x: Int, n: Int, d: Int, output: Int) raises:
+        var pc=self._fp(centers)
+        var pi=self._ip(ids)
+        var px=self._fp(x)
+        var po=self._fp(output)
+        for trial in range(nt):
+            var first=trial
+            for t in range(trial):
+                if pi[t]==pi[trial]:
+                    first=t
+                    break
+            for row in range(n):
+                po[trial*n+row]=po[first*n+row] if first!=trial else sq_dist_rows(pc,trial,px,row,d)
 
     def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:
         var pc = self._fp(closest)

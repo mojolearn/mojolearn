@@ -787,6 +787,86 @@ def _ours_record(lane, config_readback=None):
     return rec
 
 
+def _read_neural_ab_config(path):
+    """Read selected source-arm metadata; this never builds or admits a binary."""
+    if not path:
+        return None
+    with open(path, encoding="utf-8") as fh:
+        config = json.load(fh)
+    if not isinstance(config, dict) or config.get("mode") != "identical":
+        raise ValueError("neural A/B config requires an object with mode='identical'")
+    if not isinstance(config.get("id"), str) or not isinstance(config.get("arm"), str):
+        raise ValueError("neural A/B config requires string id and arm")
+    definitions = config.get("compile_defines", [])
+    if (not isinstance(definitions, list)
+            or any(not isinstance(v, str) or "=" not in v or v.startswith("-D") for v in definitions)):
+        raise ValueError("neural A/B compile_defines must be bare NAME=value strings")
+    env = config.get("environment", {})
+    if (not isinstance(env, dict)
+            or any(not isinstance(k, str) or not isinstance(v, str) for k, v in env.items())):
+        raise ValueError("neural A/B environment requires string names and values")
+    if env.get("MOJOLEARN_NUMERIC_MODE", "identical") != "identical":
+        raise ValueError("neural A/B environment cannot override the IDENTICAL mode")
+    unset = config.get("environment_unset", [])
+    if not isinstance(unset, list) or any(not isinstance(k, str) for k in unset):
+        raise ValueError("neural A/B environment_unset requires a list of names")
+    if not isinstance(config.get("runtime", {}), dict):
+        raise ValueError("neural A/B runtime must be an object")
+    return config
+
+
+_NEURAL_AB_TRANSFORMER_FULL = dict(BLOCK_SHAPES["transformer"]["full"])
+
+
+def _apply_neural_ab_environment(config):
+    BLOCK_SHAPES["transformer"]["full"] = dict(_NEURAL_AB_TRANSFORMER_FULL)
+    if config is not None:
+        for name in config.get("environment_unset", []):
+            os.environ.pop(name, None)
+        os.environ.update(config.get("environment", {}))
+        os.environ["MOJOLEARN_NUMERIC_MODE"] = "identical"
+        runtime = config.get("runtime", {})
+        dimensions = runtime.get("transformer_config")
+        if dimensions is not None:
+            # Explicit saved workload, never a kernel dispatch/board-row rule.
+            # The conductor and worker install the same complete dimensions
+            # before fixture creation, shape reporting or model construction.
+            fields = {"batch", "length", "d_model", "n_heads", "n_kv", "head_dim", "intermediate"}
+            if (runtime.get("operation") != "transformer_configured_forward"
+                    or not isinstance(dimensions, dict) or set(dimensions) != fields
+                    or any(type(v) is not int or v < 1 or v > (1 << 20) for v in dimensions.values())):
+                raise ValueError("explicit transformer workload requires all positive dimensions and its own operation")
+            if (dimensions["d_model"] != dimensions["n_heads"] * dimensions["head_dim"]
+                    or dimensions["n_heads"] % dimensions["n_kv"] or dimensions["head_dim"] % 2):
+                raise ValueError("explicit transformer workload has incompatible head dimensions")
+            BLOCK_SHAPES["transformer"]["full"] = dict(dimensions)
+
+
+def _neural_ab_operation(config):
+    return (config or {}).get("runtime", {}).get("operation", "model_default")
+
+
+def _neural_ab_receipt(runner, config, executed=False):
+    if config is None:
+        return None
+    # A supplied define is configuration, not evidence of the loaded binary
+    # or of a conditional kernel branch actually running. Native metadata
+    # below may prove ownership/retention, never unobserved kernel coverage.
+    receipt = {"id": config["id"], "arm": config["arm"],
+               "configured": config, "operation": _neural_ab_operation(config),
+               "public_operation_completed": bool(executed),
+               "compile_defines_status": "requested_not_binary_verified",
+               "kernel_reach_status": "unproven_without_native_counter",
+               "full_affected_estimator_coverage": "not_established_by_one_workload"}
+    metadata = getattr(runner, "neural_ab_runtime", None)
+    if metadata is not None:
+        receipt["native_or_public_runtime_metadata"] = dict(metadata)
+        if metadata.get("operation") == "mamba3_owned_forward":
+            # Native counter readback is outside the measured operation.
+            receipt["native_or_public_runtime_metadata"]["session_info"] = runner.block.session_info()
+    return receipt
+
+
 class Ours:
     """Common shape of an `ours` runner: call / sync / outputs / digest."""
     out = None
@@ -804,12 +884,22 @@ class Ours:
 class OursLM(Ours):
     """lm-train-step and lm-forward through LanguageModelTrainer."""
 
-    def __init__(self, lane, shape, data):
+    def __init__(self, lane, shape, data, ab_runtime=None):
         import numpy as np
         self.np = np
         ml = _ours_module()
         dims = lm_dims(lane, shape)
         cfg = ml.LanguageModelConfig(*dims)
+        runtime = ab_runtime or {}
+        if runtime.get("chunked_lm_head_v2", False):
+            if lane != "lm-train-step":
+                raise RuntimeError("REFUSED: chunked_lm_head_v2 operation requires lm-train-step")
+            from dataclasses import replace
+            cfg = replace(cfg, chunked_lm_head_v2=True)
+        self.neural_ab_runtime = {
+            "chunked_lm_head_v2_requested": bool(runtime.get("chunked_lm_head_v2", False)),
+            "chunked_lm_head_v2_config": bool(getattr(cfg, "chunked_lm_head_v2", False)),
+            "kernel_reach": "unproven_without_native_counter"}
         twin = lm_registry(dims)
         ours = [(e["name"], tuple(e["shape"])) for e in ml.LanguageModelTrainer.parameter_registry(cfg)]
         if ours != [(n, tuple(s)) for n, s in twin]:
@@ -908,17 +998,26 @@ class OursGEMM(Ours):
 class OursBlock(Ours):
     """transformer-* and mamba*-*: one block's zero-state forward."""
 
-    def __init__(self, lane, shape, data):
+    def __init__(self, lane, shape, data, ab_runtime=None):
         import numpy as np
         self.np = np
+        self.runtime = dict(ab_runtime or {})
+        self.operation = self.runtime.get("operation", "model_default")
+        self.gradients = None
+        self.window_state = None
+        self.neural_ab_runtime = {"operation": self.operation, "public_calls_completed": 0}
         ml = _ours_module()
         model, cpu = MODEL_OF[lane], DEVICE_OF[lane] == "cpu"
         d = _dims_of(lane, shape)
         w = {k: np.ascontiguousarray(v) for k, v in _weights(data).items()}
         if model == "transformer":
+            window = int(self.runtime.get("transformer_window", 0))
+            if window < 0 or (window and self.operation != "transformer_windowed_forward"):
+                raise RuntimeError("REFUSED: a positive transformer_window needs the explicit windowed operation")
             cls = ml.TransformerBlockInference if cpu else ml.TransformerBlock
             self.block = cls(w, n_heads=d["n_heads"], n_kv_heads=d["n_kv"], head_dim=d["head_dim"],
-                             norm_eps=BLOCK_NORM_EPS, rope_theta=BLOCK_ROPE_THETA)
+                             norm_eps=BLOCK_NORM_EPS, rope_theta=BLOCK_ROPE_THETA, window=window)
+            self.neural_ab_runtime["transformer_window"] = window
         else:
             name = {"mamba1": "Mamba1Block", "mamba2": "Mamba2Block", "mamba3": "Mamba3Block"}[model]
             cls = getattr(ml, name + ("Inference" if cpu else ""))
@@ -928,13 +1027,76 @@ class OursBlock(Ours):
                                _mode_of(self.block, ml), "cpu" if cpu else "gpu")
         self.info.update(call=LANE_TEXT[lane][0], cls=cls.__name__)
         self.record = _ours_record(lane)
+        if self.operation == "transformer_forward_vjp_tape":
+            if lane != "transformer-forward":
+                raise RuntimeError("REFUSED: transformer tape operation requires transformer-forward")
+            self.info["call"] = "TransformerBlock.forward_with_tape(x); backward_from_tape(tape, x)"
+            self.info["operation_scope"] = "full declared block forward plus VJP; no loss or optimizer"
+            self.neural_ab_runtime["cotangent_source"] = "same immutable full input x"
+        elif self.operation == "transformer_windowed_forward":
+            if lane != "transformer-forward" or window <= 0:
+                raise RuntimeError("REFUSED: windowed operation needs transformer-forward and transformer_window > 0")
+            self.window_state = self.block.allocate_state(int(self.x.shape[0]), int(self.x.shape[1]))
+            self.info["call"] = "TransformerBlock.forward(x, state=zero_position_window_state)"
+            self.info["operation_scope"] = "full input prefill plus consumed K/V ring cache; reset logical position per round"
+            self.neural_ab_runtime["carried_decode_coverage"] = "not_established_by_prefill"
+        elif self.operation == "mamba_forward_vjp":
+            if lane not in ("mamba1-forward", "mamba2-forward", "mamba3-forward"):
+                raise RuntimeError("REFUSED: Mamba VJP requires a full GPU Mamba block fixture")
+            self.info.update(call="MambaBlock.forward + MambaBlock.backward",
+                             operation_scope="complete zero-state prefill block forward and all input/weight VJPs; no loss or optimizer")
+            self.neural_ab_runtime["cotangent_source"] = "same immutable full input x"
+        elif self.operation == "mamba3_owned_forward":
+            if lane != "mamba3-forward":
+                raise RuntimeError("REFUSED: owned-weight operation requires mamba3-forward")
+            install = bool(self.runtime.get("install_owned_weights", False))
+            generation = self.block.install_owned_weights() if install else None
+            self.neural_ab_runtime.update(owned_weights_requested=install,
+                installed_generation=generation, installation_boundary="preparation_in_cold_total")
 
     def call(self):
-        self.out = self.block.forward(self.x)
+        if self.operation == "transformer_forward_vjp_tape":
+            self.out, tape = self.block.forward_with_tape(self.x,
+                activation_budget_bytes=int(self.runtime.get("activation_budget_bytes", 536870912)),
+                minimum_replay_ops_per_byte=int(self.runtime.get("minimum_replay_ops_per_byte", 0)))
+            self.neural_ab_runtime.update(retained=bool(tape.retained),
+                stage_bytes=int(tape.stage_bytes), profile=str(tape.profile))
+            expected = self.runtime.get("expect_retained")
+            if expected is not None and bool(tape.retained) != bool(expected):
+                tape.close()
+                raise RuntimeError("REFUSED: tape retained/replay selection did not reach the declared A/B arm")
+            try:
+                self.gradients = self.block.backward_from_tape(tape, self.x)
+            finally:
+                tape.close()
+            self.neural_ab_runtime["vjp_completed"] = True
+        elif self.operation == "mamba_forward_vjp":
+            self.out = self.block.forward(self.x)
+            self.gradients = self.block.backward(self.x, self.x)
+            self.neural_ab_runtime["vjp_completed"] = True
+        elif self.operation == "transformer_windowed_forward":
+            # Position is API metadata. Native code reads no previous keys
+            # at zero; each repeat processes the same entire saved input.
+            self.window_state.cached_tokens = 0
+            self.out = self.block.forward(self.x, state=self.window_state)
+            self.neural_ab_runtime["cached_tokens"] = int(self.window_state.cached_tokens)
+        else:
+            self.out = self.block.forward(self.x)
+        self.neural_ab_runtime["public_calls_completed"] += 1
+
+    def outputs(self):
+        out = {"y": self.np.asarray(self.out)}
+        if self.window_state is not None:
+            out.update(k_cache=self.np.asarray(self.window_state.k_cache),
+                       v_cache=self.np.asarray(self.window_state.v_cache))
+        if self.gradients is not None:
+            out.update({"grad:" + name: self.np.asarray(value)
+                        for name, value in self.gradients.items()})
+        return out
 
 
 class OursSamba(Ours):
-    def __init__(self, lane, shape, data):
+    def __init__(self, lane, shape, data, ab_runtime=None):
         import numpy as np
         self.np = np
         ml = _ours_module()
@@ -948,18 +1110,27 @@ class OursSamba(Ours):
                                "conductor's (tools/bench_board_neural.py samba_registry)")
         w = {k: np.ascontiguousarray(v) for k, v in _weights(data).items()}
         self.lane = lane
+        runtime = ab_runtime or {}
+        max_norm = runtime.get("samba_max_norm")
+        accumulation_steps = int(runtime.get("samba_accumulation_steps", 1))
+        if (max_norm is not None or accumulation_steps != 1) and lane != "samba-train-step":
+            raise RuntimeError("REFUSED: Samba optimizer A/B settings require samba-train-step")
+        self.neural_ab_runtime = dict(max_norm=max_norm, accumulation_steps=accumulation_steps,
+                                     public_calls_completed=0)
         if lane == "samba-infer":
             self.model = ml.SambaInference(cfg, w)
             mode, dev = ml.numeric_mode(), "cpu"
         else:
             self.model = ml.SambaStack(cfg, weights=w, lr=ADAMW["lr"], betas=ADAMW["betas"],
                                        eps=ADAMW["eps"], weight_decay=ADAMW["weight_decay"],
-                                       max_norm=None)
+                                       max_norm=max_norm, accumulation_steps=accumulation_steps)
             mode, dev = _mode_of((getattr(self.model, "_blocks", None) or [None])[0], ml), "gpu"
         self.info = _ours_info(ml, getattr(sys.modules[type(self.model).__module__], "__file__", None),
                                mode, dev)
         self.info.update(call=LANE_TEXT[lane][0], config=json.dumps(cfg.to_dict(), sort_keys=True))
         self.record = _ours_record(lane, config_readback=cfg.to_dict())
+        if lane == "samba-train-step":
+            self.record.update(max_grad_norm=max_norm, accumulation_steps=accumulation_steps)
         self.batches = data["batches"]
         self.ids = np.ascontiguousarray(self.batches[0][:, :-1])
         self.k = 0
@@ -974,6 +1145,7 @@ class OursSamba(Ours):
             self.k += 1
         else:
             self.out = self.model.forward(self.ids)
+        self.neural_ab_runtime["public_calls_completed"] += 1
 
     def outputs(self):
         if self.lane == "samba-train-step":
@@ -1071,6 +1243,66 @@ class OursMLP(Ours):
         # Worker invokes this only AFTER stopping the round timer and memory probe.
         return (mlp_state_digest(self._snapshot()) if self.lane == "mlp-train-step"
                 else Ours.digest(self))
+
+
+class OursMLPSessions(Ours):
+    """Full saved MLP inputs through the explicit native session operation."""
+    def __init__(self, lane, shape, data, runtime):
+        import numpy as np
+        from mojolearn import training
+        if lane != "mlp-forward":
+            raise RuntimeError("REFUSED: MLP sessions require the GPU mlp-forward lane")
+        self.np, self.training = np, training
+        self.weights = [np.ascontiguousarray(data["w:" + name]) for name in MLP_NAMES]
+        self.x = np.ascontiguousarray(data["X"][0])
+        count = int(runtime.get("session_count", 4))
+        if count < 1 or count > len(self.x):
+            raise ValueError("session_count must be in [1, full input rows]")
+        # Metadata-only partition, all original rows exactly once in order.
+        # Native Mojo owns packing, projections, activation and scattering.
+        edges = [j * len(self.x) // count for j in range(count + 1)]
+        self.sessions = [self.x[edges[j]:edges[j + 1]] for j in range(count)]
+        ml = _ours_module()
+        self.info = _ours_info(ml, training.__file__, ml.numeric_mode(), "gpu")
+        self.info.update(call="mojolearn.training.mlp_inference_sessions", operation_scope="complete stateless MLP forward over every saved input row")
+        self.record = _ours_record(lane)
+        self.neural_ab_runtime = dict(operation="mlp_inference_sessions", session_rows=[len(x) for x in self.sessions],
+                                     public_calls_completed=0, input_rows=len(self.x))
+
+    def call(self):
+        self.out = self.training.mlp_inference_sessions(self.sessions, *self.weights, numeric_mode="identical")
+        self.neural_ab_runtime["public_calls_completed"] += 1
+
+
+class OursResidualDropout(Ours):
+    """An explicit layer plus VJP; never labeled a full transformer step."""
+    def __init__(self, lane, shape, data, runtime):
+        import numpy as np
+        from mojolearn import training
+        if lane != "transformer-forward":
+            raise RuntimeError("REFUSED: residual/dropout uses the complete transformer-forward input fixture")
+        self.np, self.training = np, training
+        self.x = np.ascontiguousarray(data["x"])
+        self.residual = self.x.copy()
+        self.dy = self.x.copy()
+        self.settings = dict(p=float(runtime.get("dropout_probability", 0.1)),
+                             seed=int(runtime.get("seed", SEED)), stream=int(runtime.get("stream", 0)),
+                             offset=int(runtime.get("offset", 0)))
+        ml = _ours_module()
+        self.info = _ours_info(ml, training.__file__, ml.numeric_mode(), "gpu")
+        self.info.update(call="residual_dropout + residual_dropout_backward",
+                         operation_scope="complete explicit residual/dropout layer and VJP; not a transformer block or model")
+        self.record = {"__library__": "mojolearn", **self.settings}
+        self.neural_ab_runtime = dict(operation="residual_dropout_forward_vjp", public_calls_completed=0,
+                                     full_input_shape=list(self.x.shape), cotangent_source="immutable copy of full input")
+
+    def call(self):
+        self.out = self.training.residual_dropout(self.x, self.residual, **self.settings)
+        self.dx, self.dr = self.training.residual_dropout_backward(self.dy, **self.settings)
+        self.neural_ab_runtime["public_calls_completed"] += 1
+
+    def outputs(self):
+        return {"y": self.np.asarray(self.out), "d_values": self.np.asarray(self.dx), "d_residual": self.np.asarray(self.dr)}
 
 
 OURS = {"lm": OursLM, "gemm": OursGEMM, "transformer": OursBlock, "mamba1": OursBlock,
@@ -1462,12 +1694,45 @@ def _load_speed_torch_seq(torch, info):
     return mod
 
 
-def build_runner(lane, arm, shape, data):
+def build_runner(lane, arm, shape, data, ab_config=None):
+    operation = _neural_ab_operation(ab_config)
+    supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "transformer_forward_vjp_tape", "mamba3_owned_forward", "lm_chunked_head_v2",
+                 "residual_dropout_forward_vjp", "mlp_inference_sessions", "samba_training_config", "mamba_forward_vjp")
+    if operation not in supported:
+        raise RuntimeError("REFUSED: no actual public workload implementation for neural A/B operation " + str(operation))
     if arm in OUR_ARMS:
         if os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower() != OUR_MODE[arm]:
             raise RuntimeError("REFUSED: arm %s runs under MOJOLEARN_NUMERIC_MODE=%s, not %r"
                                % (arm, OUR_MODE[arm], os.environ.get("MOJOLEARN_NUMERIC_MODE")))
-        return OURS[MODEL_OF[lane]](lane, shape, data)
+        model = MODEL_OF[lane]
+        runtime = (ab_config or {}).get("runtime", {})
+        if operation == "residual_dropout_forward_vjp":
+            return OursResidualDropout(lane, shape, data, runtime)
+        if operation == "mlp_inference_sessions":
+            return OursMLPSessions(lane, shape, data, runtime)
+        if operation == "samba_training_config" and lane != "samba-train-step":
+            raise RuntimeError("REFUSED: Samba A/B optimizer operation requires samba-train-step")
+        if operation == "transformer_configured_forward" and (lane != "transformer-forward" or shape != "full" or not runtime.get("transformer_config")):
+            raise RuntimeError("REFUSED: explicit transformer configuration requires its full transformer-forward recipe")
+        if operation == "lm_chunked_head_v2" and (lane != "lm-train-step" or not runtime.get("chunked_lm_head_v2")):
+            raise RuntimeError("REFUSED: lm_chunked_head_v2 requires lm-train-step and its config flag")
+        if operation == "transformer_windowed_forward" and (lane != "transformer-forward" or int(runtime.get("transformer_window", 0)) <= 0):
+            raise RuntimeError("REFUSED: windowed operation requires transformer-forward and a positive configured window")
+        if operation == "transformer_forward_vjp_tape" and model != "transformer":
+            raise RuntimeError("REFUSED: tape operation requires a transformer block")
+        if operation == "mamba3_owned_forward" and model != "mamba3":
+            raise RuntimeError("REFUSED: owned-weight operation requires Mamba3")
+        if operation == "mamba_forward_vjp" and model not in ("mamba1", "mamba2", "mamba3"):
+            raise RuntimeError("REFUSED: Mamba VJP operation requires a Mamba block")
+        if model == "lm":
+            return OursLM(lane, shape, data, ab_runtime=runtime)
+        if model == "samba":
+            return OursSamba(lane, shape, data, ab_runtime=runtime)
+        if model in ("transformer", "mamba1", "mamba2", "mamba3"):
+            return OursBlock(lane, shape, data, ab_runtime=runtime)
+        return OURS[model](lane, shape, data)
+    if operation != "model_default":
+        raise RuntimeError("REFUSED: experimental operation has no matched opponent implementation")
     return TorchArm(lane, shape, data, arm)
 
 
@@ -1481,12 +1746,14 @@ def worker(args):
         proto.write(json.dumps(obj, sort_keys=True, default=str) + "\n")
         proto.flush()
 
-    import numpy as np
     try:
+        ab_config = _read_neural_ab_config(getattr(args, "neural_ab_config", None))
+        _apply_neural_ab_environment(ab_config)
+        import numpy as np
         with np.load(args.data) as z:
             data = {k: z[k] for k in z.files}
         preparation_start = time.perf_counter()
-        runner = build_runner(args.lane, args.arm, args.shape, data)
+        runner = build_runner(args.lane, args.arm, args.shape, data, ab_config=ab_config)
         runner.sync()
         preparation_ms = (time.perf_counter() - preparation_start) * 1000.0
     except (Exception, SystemExit) as exc:  # noqa: BLE001  (a twin's refuse() exits)
@@ -1497,7 +1764,8 @@ def worker(args):
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_load("bench_board_probe").library_identity(runner.info))
     say({"event": "ready", "info": runner.info, "pid": os.getpid(),
-         "params_record": getattr(runner, "record", None)})
+         "params_record": getattr(runner, "record", None),
+         "neural_ab": _neural_ab_receipt(runner, ab_config)})
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
         library=(runner.info or {}).get("library") or "?")
@@ -1530,8 +1798,9 @@ def worker(args):
                          if r == 0 and "compile" in args.arm else "", repr(exc)[:2000])})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "neural_ab": _neural_ab_receipt(runner, ab_config, executed=True),
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms if r == 0 else 0.0,
-                               "scope": "training-step-or-forward-consume", "dataset_load_included": False,
+                               "scope": (_neural_ab_operation(ab_config) if ab_config else "training-step-or-forward-consume"), "dataset_load_included": False,
                                "cold_total_ms": preparation_ms + operation_ms if r == 0 else None}})
         elif parts[0] == "save":
             try:
@@ -1693,10 +1962,17 @@ SPAN = {"input_home": "host", "pre_clock_fit": False,
 
 
 def race(args):
+    ab_config = _read_neural_ab_config(getattr(args, "neural_ab_config", None))
+    _apply_neural_ab_environment(ab_config)
+    operation = _neural_ab_operation(ab_config)
     import numpy as np
     ctd = _load("classical_two_datasets")
     lane, shape = args.lane, args.shape
     arms = [a for a in args.arms.split(",") if a]
+    if ab_config and any(a == "ours-fast" for a in arms):
+        raise SystemExit("neural A/B config is IDENTICAL-only; ours-fast is incompatible")
+    if operation != "model_default" and any(a != "ours" for a in arms):
+        raise SystemExit("experimental public operation requires --arms ours; matched opponent operation is not implemented")
     probe = _load("bench_board_probe")
     probe.refuse_our_cpu_arms(arms, "bench_board_neural")
     if DEVICE_OF.get(lane) == "cpu" and any(a.startswith("ours") for a in arms):
@@ -1710,7 +1986,15 @@ def race(args):
             raise SystemExit("no arm %r for lane %r" % (a, lane))
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.work, exist_ok=True)
+    frozen_config = None
+    if ab_config is not None:
+        frozen_config = os.path.abspath(os.path.join(args.out, "neural-ab-config.json"))
+        with open(frozen_config, "w", encoding="utf-8") as fh:
+            json.dump(ab_config, fh, indent=2, sort_keys=True)
+            fh.write("\n")
     tag = "%s-%s" % (lane, DATA_OF[lane])
+    if operation != "model_default":
+        tag += "-" + operation
     data_path = os.path.join(args.work, "neural-%s-%s.npz" % (lane, shape))
     inputs = make_inputs(lane, shape, args.rounds + 1, data_path)
     srec = shape_record(lane, shape)
@@ -1720,11 +2004,17 @@ def race(args):
               "torch_settings": {a: precision_text(arm_setting(a)[1]) for a in arms
                                  if a.startswith("torch-")},
               "commit": os.environ.get("MOJOLEARN_REPO_COMMIT", "unknown")}
+    result["neural_ab_config"] = ab_config
+    result["operation"] = operation
+    result["comparison_scope"] = ("declared public experimental operation; not the ordinary lane boundary"
+                                  if operation != "model_default" else "ordinary lane boundary")
     workers = {}
     for arm in arms:
         py = args.ours_python if arm in OUR_ARMS else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--shape", shape, "--data", data_path]
+        if frozen_config is not None:
+            cmd += ["--neural-ab-config", frozen_config]
         workers[arm] = ctd.Worker(arm, cmd, _worker_env(arm),
                                   os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO)
         result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [], "digests": [],
@@ -1740,6 +2030,7 @@ def race(args):
         w.info = msg["info"]
         result["arms"][arm]["info"] = msg["info"]
         result["arms"][arm]["params_record"] = msg.get("params_record")
+        result["arms"][arm]["neural_ab_preparation"] = msg.get("neural_ab")
     # THE PARAMETER CHECK (tools/bench_board_params.py), before the first
     # timed round: same seed, same tuning parameters on every arm, read back
     # from what each worker constructed. A refusal fails the race by name.
@@ -1788,6 +2079,8 @@ def race(args):
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
             result["arms"][arm]["digests"].append(msg["digest"])
+            if msg.get("neural_ab") is not None:
+                result["arms"][arm].setdefault("neural_ab_rounds", []).append(dict(msg["neural_ab"], round=r, warmup=r == 0))
             if msg.get("operation") is not None:
                 result["arms"][arm].setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
             if msg.get("state_receipt") is not None:
@@ -1819,7 +2112,27 @@ def race(args):
     try:
         with np.load(data_path) as z:
             data = {k: z[k] for k in z.files}
-        result["quality"] = quality(lane, data, outs, shape=args.shape)
+        if operation == "transformer_windowed_forward":
+            # The ordinary reference uses window=0 and cannot qualify this
+            # explicitly different model configuration or its saved ring.
+            result["quality"] = {"status": "pending_windowed_forward_and_cache_reference"}
+            for row in result["arms"].values():
+                if row.get("status") == "ok":
+                    row["status"] = "unqualified_experimental_operation"
+        elif operation == "residual_dropout_forward_vjp":
+            # The ordinary reference computes a transformer block, not this
+            # explicit layer. Preserve outputs for its own future admission.
+            result["quality"] = {"status": "pending_layer_forward_and_vjp_reference"}
+            for row in result["arms"].values():
+                if row.get("status") == "ok":
+                    row["status"] = "unqualified_experimental_operation"
+        else:
+            result["quality"] = quality(lane, data, outs, shape=args.shape)
+        if operation in ("transformer_forward_vjp_tape", "mamba_forward_vjp"):
+            result["experimental_quality"] = {
+                "forward": "ordinary host forward comparator only",
+                "vjp": "not_qualified_by_forward_quality",
+                "full_model_training": "not_measured_by_block_forward_vjp"}
     except Exception as exc:  # noqa: BLE001
         result["quality"] = {"error": repr(exc)}
     mark_forward_quality_failures(result)
@@ -1860,6 +2173,7 @@ def build_parser():
     r.add_argument("--lane", required=True, choices=LANES)
     r.add_argument("--shape", default="full", choices=sorted(LM_SHAPES))
     r.add_argument("--arms", default="ours,torch-eager-fp32")
+    r.add_argument("--neural-ab-config", help="selected source-arm JSON; records requested flags without building or admitting the binary")
     r.add_argument("--rounds", type=int, default=5)
     r.add_argument("--out", required=True)
     r.add_argument("--work", required=True)
@@ -1879,6 +2193,7 @@ def build_parser():
     w.add_argument("--arm", required=True, choices=ARMS)
     w.add_argument("--lane", required=True, choices=LANES)
     w.add_argument("--shape", required=True, choices=sorted(LM_SHAPES))
+    w.add_argument("--neural-ab-config", help="frozen selected source-arm JSON from conductor")
     w.add_argument("--data", required=True)
     return p
 

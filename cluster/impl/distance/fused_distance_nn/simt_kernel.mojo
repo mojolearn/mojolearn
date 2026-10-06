@@ -167,8 +167,11 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     ftz,
     ftz_simd,
     identical_mul_add,
@@ -185,15 +188,24 @@ comptime FUSED_CLAMP_PRECISION = Float32(1.0e-6)
 
 # `Policy4x4<float, _veclen>`: KernelPolicy<float, v, 32, 4, 4, 16, 16>
 # (`raft/linalg/contractions.cuh:160-166`).
+# AFCL-G05: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Halve row ownership per threadgroup (both existing feature policies).
+# Column ownership, vector alignment and exhaustive centroid traversal stay
+# fixed. Smaller X pages and fewer threads trade operand reuse for occupancy
+# across neighboring shapes; no input size or dataset chooses this arm.
+comptime AFCL_G05 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G05"]()
+)
 comptime FUSED_NORMAL_KBLK = 32
-comptime FUSED_NORMAL_TR = 16
+comptime FUSED_NORMAL_TR = 8 if AFCL_G05 else 16
 comptime FUSED_NORMAL_TC = 16
 
 # `Policy4x4Skinny<float, _veclen>`: KernelPolicy<float, v, 8, 4, 4, 8, 8>
 # (`raft/linalg/contractions.cuh:183-196`), "faster for fusedL2NN on skinny
 # matrices, i.e., matrices with a small k dimension" (`:177-181`).
 comptime FUSED_SKINNY_KBLK = 8
-comptime FUSED_SKINNY_TR = 8
+comptime FUSED_SKINNY_TR = 4 if AFCL_G05 else 8
 comptime FUSED_SKINNY_TC = 8
 
 

@@ -41,6 +41,10 @@ FAST that kernel is `block.sum` (the library's shape) and the sqeuclidean
 comparison is a REPORT.
 """
 
+from experiments.classical_identical_ideas.stats_controls import C52_PAIR
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+from core.classical_distance import direct_squared_distance, direct_distance_step
+from kde.pair_lse import pair_row
 from std.math import cos, exp, lgamma, log, pi, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -200,6 +204,10 @@ def oracle_distance_ptr(
     That is this file's whole contract (see its header): if the device
     kernel and this function ever disagree, one of them is wrong and the
     gate says which cell."""
+    comptime if C30_DIRECT_DISTANCE:
+        if metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_UNEXPANDED:
+            var direct = direct_squared_distance(query+q*d, train+j*d, d)
+            return ftz(identical_sqrt(direct)) if metric == DIST_L2_SQRT_UNEXPANDED else direct
     var acc = Float32(0.0)
     if metric == DIST_COSINE_EXPANDED:
         # `cosine.cuh:68` core, then `:86` epilog.
@@ -284,6 +292,8 @@ def oracle_logsumexp_row(
     Row 39: strict `>` from `j = 0`, the lower index wins a tie of `-0.0`
     and `+0.0` (the device's rule, `logsumexp_kernel`). DEVIATION 603: a
     row of all `-inf` is `-inf`, not `exp(NaN)`."""
+    comptime if C52_PAIR:
+        return pair_row(host_list_ptr(logk) + base, n_train, kde_chunk_rows_for(n_train))
     var max_exp = logk[base]
     for j in range(1, n_train):
         if logk[base + j] > max_exp:
@@ -422,6 +432,8 @@ comptime KdeV = SIMD[DType.float32, KDE_W]
 def _kde_step[M: Int](acc: KdeV, qv: Float32, t: KdeV, metric_arg: Float32) -> KdeV:
     """One feature step of W cells of `oracle_distance_ptr`, the metric
     fixed at compile time (see `_kde_tile`)."""
+    comptime if C30_DIRECT_DISTANCE and (M == DIST_L2_EXPANDED or M == DIST_L2_SQRT_UNEXPANDED):
+        return direct_distance_step[KDE_W](acc, KdeV(qv), t)
     comptime if M == DIST_COSINE_EXPANDED or M == DIST_L2_EXPANDED:
         return ftz_v[KDE_W](identical_mul_add_simd[KDE_W](KdeV(qv), t, acc))
     elif M == DIST_L2_SQRT_UNEXPANDED:
@@ -477,6 +489,9 @@ def _kde_tile(
 @always_inline
 def _kde_epilogue(acc: KdeV, qn: Float32, tn: KdeV, metric: Int, metric_arg: Float32) -> KdeV:
     """The epilogues of `oracle_distance_ptr`, W cells of one query row."""
+    comptime if C30_DIRECT_DISTANCE:
+        if metric == DIST_L2_EXPANDED:
+            return acc
     if metric == DIST_COSINE_EXPANDED:
         var denom = ftz_v[KDE_W](KdeV(qn) * tn)
         var ratio = ftz_v[KDE_W](ftz_v[KDE_W](acc) / ftz_v[KDE_W](denom))
@@ -527,6 +542,10 @@ def _kde_log_kernel_v(x: KdeV, h: Float32, kernel: Int) -> KdeV:
 
 def _kde_lse_row(row: HostF32Ptr, n_train: Int) -> Tuple[Float32, Float32]:
     """`oracle_logsumexp_row` over one row buffer (see the block engine)."""
+    comptime if C52_PAIR:
+        # pair_row reads the caller-owned buffer through its shared raw ABI.
+        var raw = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(row))
+        return pair_row(raw, n_train, kde_chunk_rows_for(n_train))
     var max_exp = row.unsafe_load(0)
     for j in range(1, n_train):
         var v = row.unsafe_load(j)
@@ -565,6 +584,9 @@ def _kde_lse_row_chunked(row: HostF32Ptr, n_train: Int) -> Tuple[Float32, Float3
     of `kde_chunk_rows_for(n_train)` cells, ascending, the pair (m, s) with
     the rescale on a new strict max; then the chunk maxima's max and the
     chunk sums scaled to it, chunks ascending. Returns `(rowmax, lse)`."""
+    comptime if C52_PAIR:
+        var raw = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(row))
+        return pair_row(raw, n_train, kde_chunk_rows_for(n_train))
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var chunk_rows = kde_chunk_rows_for(n_train)
     var n_chunks = (n_train + chunk_rows - 1) // chunk_rows

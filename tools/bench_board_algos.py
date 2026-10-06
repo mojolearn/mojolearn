@@ -99,6 +99,19 @@ FIT_ROWS = 1_000_000          # the classical2 cls/reg blocks' fit rows
 EVAL_ROWS = 100_000
 SUB = {"quad": 10_000, "cubic": 3_000, "knn": 200_000, "mid": 100_000, "small": 20_000,
        "tiny": 5_000}
+# Explicit full-workload input/measurement support, only for the tree families
+# requested by the Apple FAST experiment programme. Default boards keep their
+# historical blocks and subsets. Source added uncompiled/unverified/unmeasured.
+AFT_FULL_TREE_LANES = frozenset((
+    "decision-tree-clf", "decision-tree-reg", "bagging-clf", "bagging-reg",
+    "adaboost-clf", "adaboost-reg", "dart", "dart-reg",
+    "random-trees-embedding", "tree-shap",
+))
+AFT_ALGOS_BOUNDARY = (
+    "public constructor/model preparation, fit or explanation, required synchronization, "
+    "inference or transform and consumed outputs; dataset loading/CPU input normalization "
+    "and startup probe excluded; preparation, fit/explanation and inference timings separate"
+)
 GRAPH_NODES = 100_000
 GRAPH_SMALL = 20_000          # the graph-algorithm races: ours takes a dense adjacency
 TS_H = 48                     # held-out hours / points per series
@@ -1687,6 +1700,8 @@ MORE_LANE_OF = {"cls": "logreg", "reg": "ridge", "manifold": "umap", "tsvd": "ts
 def block_file(lane, dataset):
     """The npz/json basename a (lane, dataset) reads."""
     b = block_of(lane)
+    if _aft_full_tree_workload(lane):
+        return "aft-full-%s-%s" % (b, dataset)
     if b in ("dense", "sym", "tensor", "optim", "images", "corpus"):
         return None
     if b == "seqwin":
@@ -1826,6 +1841,68 @@ def synthetic_series(kind, n_series, n_obs, seed=SEED):
     return more.seasonal_series(n_series, n_obs).astype(np.float64)
 
 
+def _aft_full_tree_workload(lane):
+    enabled = os.environ.get("MOJOLEARN_AFT_FULL_TREE_WORKLOAD") == "1"
+    if enabled:
+        raise ValueError("integration benchmark freeze forbids removing existing tree caps; coverage remains pending")
+    if enabled and lane not in AFT_FULL_TREE_LANES:
+        raise ValueError("full-tree-workload is restricted to the named tree estimator lanes")
+    return enabled
+
+
+def _aft_prepare_full_tree_blocks(args, lanes, datasets):
+    """CPU-only input step using the existing complete saved loader splits.
+
+    Distinct names prevent replacing capped historical board inputs. The same
+    sentinel cleanup, train-statistic standardization, targets and taxi numeric
+    feature schema remain; only row sampling is removed. No corpus download,
+    model fitting, benchmark or quality admission happens in this input step.
+    """
+    if any(lane not in AFT_FULL_TREE_LANES for lane in lanes):
+        raise ValueError("full-tree-workload prep accepts tree lanes only")
+    if args.max_rows or os.environ.get("MOJOLEARN_ALGOS_SMOKE_ROWS"):
+        raise ValueError("full-tree-workload cannot accept a row cap")
+    if any(ds not in TAB for ds in datasets):
+        raise ValueError("full tree prep supports existing taxi and istella saved splits only")
+    np = _np()
+    ctd = _tool("classical_two_datasets")
+    harness = ctd._module("speed_gbdt_arm")
+    for block in sorted({block_of(lane) for lane in lanes}):
+        if block not in ("cls", "reg"):
+            raise ValueError("full tree prep supports cls/reg blocks only")
+        for dataset in datasets:
+            name = "aft-full-%s-%s" % (block, dataset)
+            if any(os.path.exists(os.path.join(args.data, name + suffix))
+                   for suffix in (".npz", ".json")):
+                raise FileExistsError("retain existing full input artifacts; choose a new data directory: " + name)
+            xtr, xte, ytr, yte = _tab_loader(ctd, harness, dataset, block)
+            source_dimensions = {"train": list(xtr.shape), "test": list(xte.shape)}
+            source_arrays = {"X": ctd.sha256_array(xtr), "Xq": ctd.sha256_array(xte),
+                             "y": ctd.sha256_array(ytr), "yq": ctd.sha256_array(yte)}
+            X, bad_x = ctd.clean_sentinel(xtr)
+            Xq, bad_q = ctd.clean_sentinel(xte)
+            X, Xq = ctd.standardize(X, Xq)
+            y = np.ascontiguousarray(ytr, dtype=np.float32)
+            yq = np.ascontiguousarray(yte, dtype=np.float32)
+            if block == "cls" and len(np.unique(y)) != 2:
+                raise RuntimeError("full classifier block must retain both original classes")
+            ctd._write_block(args.data, name, {"X": X, "y": y, "Xq": Xq, "yq": yq}, {
+                "rule": "tools/bench_board_algos.py prep --full-tree-workload",
+                "full_tree_workload": True, "smoke_max_rows": None, "seed": SEED,
+                "block": block, "dataset": dataset, "data_root": harness.data_root(),
+                "loader": "bench_board_algos._tab_loader existing shipped split, no rows_cap",
+                "source_dimensions": source_dimensions, "source_array_sha256": source_arrays,
+                "fit_rows": "all loader train rows", "eval_rows": "all loader held-out rows",
+                "target": "binary" if block == "cls" else "real",
+                "scaling": "standardized by all fit rows using existing float64 mean/std",
+                "feature_schema": "existing taxi numeric columns or all Istella features",
+                "sentinel_cells_replaced": {"X": bad_x, "Xq": bad_q},
+                "intrinsic_caps": {"FIT_ROWS": None, "EVAL_ROWS": None, "lane_subsets": None},
+                "coverage": "complete existing saved dataset split; source hashes retained, no external release/version claim",
+            })
+    return 0
+
+
 def prep(args):
     np = _np()
     ctd = _tool("classical_two_datasets")
@@ -1837,6 +1914,9 @@ def prep(args):
     datasets = [d for d in args.datasets.split(",") if d]
     cap = int(args.max_rows) if args.max_rows else None
     os.makedirs(args.data, exist_ok=True)
+    if getattr(args, "full_tree_workload", False):
+        raise ValueError("integration benchmark freeze forbids --full-tree-workload; retain the saved race")
+        return _aft_prepare_full_tree_blocks(args, lanes, datasets)
     base = {"rule": "tools/bench_board_algos.py prep", "smoke_max_rows": cap, "seed": SEED}
     need = set()
     for l in lanes:
@@ -2043,7 +2123,10 @@ def lane_arrays(lane, B):
         D["X"], D["Xq"] = (np.ascontiguousarray(D[k][:, :16]) for k in ("X", "Xq"))
     if b in ("raw32",):
         D["X"], D["Xq"] = (np.ascontiguousarray(D[k][:, :32]) for k in ("X", "Xq"))
-    for k, m in s["sub"].items():
+    # The explicit tree-only path consumes the complete prepared train/query
+    # matrices. This is a harness input policy, never a kernel shape route.
+    subsets = {} if _aft_full_tree_workload(lane) else s["sub"]
+    for k, m in subsets.items():
         if k in D:
             D[k] = _stride(D[k], m)
             yk = {"X": "y", "Xq": "yq"}[k]
@@ -2284,6 +2367,90 @@ def _cuml_up(arrays):
     ctd = _tool("classical_two_datasets")
     dev, info = ctd._cuml_setup(arrays)
     return dev, info, ctd._cupy_sync
+
+
+_NEURAL_AB_ORIGINAL_LANES = {}
+
+
+def _configure_neural_ab(path, lane):
+    """Apply an explicitly selected neural source recipe before any builder.
+
+    This reads settings only: requested compilation flags are retained as
+    provenance, never treated as evidence about the installed binary. The
+    descriptor copy is local to this process, shared by ours and opponents.
+    """
+    for name, descriptor in _NEURAL_AB_ORIGINAL_LANES.items():
+        LANES[name] = descriptor
+    _NEURAL_AB_ORIGINAL_LANES.clear()
+    if not path:
+        return None
+    with open(path, encoding="utf-8") as fh:
+        config = json.load(fh)
+    if not isinstance(config, dict) or config.get("schema") != 1 or config.get("mode") != "identical":
+        raise ValueError("neural A/B config requires schema=1 and mode='identical'")
+    if not isinstance(config.get("id"), str) or not isinstance(config.get("arm"), str):
+        raise ValueError("neural A/B config requires string id and arm")
+    descriptor = LANES[lane]
+    if (descriptor["kind"] not in ("seqmodel", "cnnclf", "layer", "optim")
+            and lane not in ("mlp-clf", "mlp-reg")):
+        raise ValueError("--neural-ab-config accepts neural lanes only")
+    definitions = config.get("compile_defines", [])
+    if (not isinstance(definitions, list)
+            or any(not isinstance(v, str) or "=" not in v or v.startswith("-D") for v in definitions)):
+        raise ValueError("neural A/B compile_defines must be bare NAME=value strings")
+    environment = config.get("environment", {})
+    unset = config.get("environment_unset", [])
+    if (not isinstance(environment, dict)
+            or any(not isinstance(k, str) or not isinstance(v, str) for k, v in environment.items())):
+        raise ValueError("neural A/B environment requires string names and values")
+    if not isinstance(unset, list) or any(not isinstance(k, str) for k in unset):
+        raise ValueError("neural A/B environment_unset requires names")
+    if environment.get("MOJOLEARN_NUMERIC_MODE", "identical") != "identical":
+        raise ValueError("neural A/B mode must remain IDENTICAL")
+    runtime = config.get("runtime", {})
+    if not isinstance(runtime, dict):
+        raise ValueError("neural A/B runtime must be an object")
+    if runtime.get("numeric_mode", "identical") != "identical":
+        raise ValueError("neural A/B runtime numeric_mode must be identical")
+    if runtime.get("operation", "model_default") != "model_default" or runtime.get("owned_weights"):
+        raise ValueError("explicit session/owned operations require bench_board_neural.py")
+    settings = runtime.get("estimator_settings", {})
+    if not isinstance(settings, dict) or set(settings) - {"pool_size"}:
+        raise ValueError("algos neural A/B supports estimator_settings.pool_size only")
+    selected = dict(descriptor)
+    selected["params"] = dict(descriptor["params"])
+    if "pool_size" in settings:
+        pool = settings["pool_size"]
+        if lane != "cnn-clf" or not isinstance(pool, int) or isinstance(pool, bool) or pool < 1:
+            raise ValueError("pool_size requires a positive integer on cnn-clf")
+        selected["params"]["pool_size"] = pool
+    if config["id"] == "NN45" and settings.get("pool_size") != 1:
+        raise ValueError("NN45 needs the declared unpooled CNN recipe: pool_size=1 in both arms")
+    if "training" in runtime:
+        if lane not in ("batchnorm1d", "batchnorm2d", "resnet-block") or type(runtime["training"]) is not bool:
+            raise ValueError("training is supported only for neural batchnorm/ResNet layers")
+        selected["_neural_ab_training"] = runtime["training"]
+    if "graphsage_aggregator" in runtime:
+        if lane != "graphsage" or runtime["graphsage_aggregator"] != "mean":
+            raise ValueError("NN48 GraphSAGE recipe requires mean aggregation")
+        selected["params"]["aggr"] = "mean"
+    for name in unset:
+        os.environ.pop(name, None)
+    os.environ.update(environment)
+    os.environ["MOJOLEARN_NUMERIC_MODE"] = "identical"
+    # Complete model construction/preparation stays inside the existing whole
+    # operation clock. No dataset size, intrinsic cap or dataset source changes.
+    os.environ["MOJOLEARN_BENCH_WHOLE_OPERATION"] = "1"
+    if os.environ.get("MOJOLEARN_ALGOS_SMOKE_ROWS"):
+        raise ValueError("neural A/B recipe refuses inherited smoke-row caps")
+    _NEURAL_AB_ORIGINAL_LANES[lane] = descriptor
+    LANES[lane] = selected
+    return config
+
+
+def _neural_ab_layer_mode(layer, descriptor):
+    if "_neural_ab_training" in descriptor:
+        layer.train(descriptor["_neural_ab_training"])
 
 
 def build(lane, arm, D):
@@ -2579,7 +2746,7 @@ def _build_cnnclf(lane, arm, D):
         layers = []
         for co in p["conv_channels"]:
             layers += [nn.Conv2d(c, co, p["kernel_size"], padding=p["kernel_size"] // 2), nn.ReLU()]
-            if h >= p["pool_size"] and w >= p["pool_size"]:
+            if h >= p["pool_size"] and w >= p["pool_size"] and p["pool_size"] > 1:
                 layers.append(nn.MaxPool2d(p["pool_size"]))
                 h, w = h // p["pool_size"], w // p["pool_size"]
             c = co
@@ -3454,6 +3621,7 @@ def _build_layer(lane, arm, D):
     s = LANES[lane]
     make, x_cpu, extra_cpu = _layer_inputs(lane, D, torch)
     ref = make()
+    _neural_ab_layer_mode(ref, s)
     state = {k: v.detach().cpu().numpy() for k, v in ref.state_dict().items()}
     g = torch.Generator().manual_seed(SEED + 1)
     S = {}
@@ -3508,6 +3676,7 @@ def _build_layer(lane, arm, D):
         except (TypeError, ValueError):
             pass
         layer = cls(**kw)
+        _neural_ab_layer_mode(layer, s)
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
         info["weights_loaded"] = False
         if s["task"] == "moe":                # HF's fused layout from the per-expert transcription
@@ -3595,6 +3764,7 @@ def _build_layer(lane, arm, D):
     torch.backends.cuda.matmul.allow_tf32 = prec == "tf32"
     torch.backends.cudnn.allow_tf32 = prec == "tf32"
     mod = make()
+    _neural_ab_layer_mode(mod, s)
     mod.load_state_dict({k: torch.from_numpy(v) for k, v in state.items()})
     mod = mod.to(dev)
     x = x_cpu.to(dev)
@@ -4062,10 +4232,19 @@ def _build_shap(lane, arm, D):
             model = ml.RandomForestRegressor(n_estimators=gb["n_estimators"], max_depth=gb["max_depth"],
                                              random_state=SEED)
             model.fit(X, y)
-            bg = _stride(X, 100)
+            bg = X if _aft_full_tree_workload(lane) else _stride(X, 100)
             info["pre_clock_fit"] = True
             info["config"] = ("mojolearn.%s(RandomForestRegressor(n_estimators=%d, max_depth=%d), "
-                              "data=100 stride rows)" % (name, gb["n_estimators"], gb["max_depth"]))
+                              "data=%d %s rows)" % (name, gb["n_estimators"], gb["max_depth"],
+                              bg.shape[0], "full" if _aft_full_tree_workload(lane) else "stride"))
+            if os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1":
+                info["aft_tree_shap"] = {
+                    "background_rows": int(bg.shape[0]), "explain_rows": int(Xq.shape[0]),
+                    "model_fit_rows": int(X.shape[0]), "model": "RandomForestRegressor",
+                    "model_params": {"n_estimators": gb["n_estimators"],
+                                     "max_depth": gb["max_depth"], "random_state": SEED},
+                    "model_fit_during_build": True,
+                }
 
             def fit():
                 ex = cls(model, bg)
@@ -4297,7 +4476,69 @@ def _load_block(lane, dataset, data):
         B = {k: np.ascontiguousarray(z[k]) for k in z.files}
     with open(base + ".json") as fh:
         rec = json.load(fh)
+    if _aft_full_tree_workload(lane):
+        actual = {"train": list(B["X"].shape), "test": list(B["Xq"].shape)}
+        if (rec.get("full_tree_workload") is not True or rec.get("smoke_max_rows")
+                or rec.get("dataset") != dataset or rec.get("source_dimensions") != actual):
+            raise ValueError("full tree input must retain uncapped loader shapes and provenance")
     return B, rec
+
+
+def _aft_capture_worker(args, B, D, rec, runner):
+    """Untimed evidence from this actual worker, never estimator runtime."""
+    ctd = _tool("classical_two_datasets")
+    loaded = {}
+    for module in tuple(sys.modules.values()):
+        path = getattr(module, "__file__", None)
+        if not path or not os.path.basename(path).startswith("_mojolearn") or not path.endswith(".so"):
+            continue
+        path = os.path.realpath(path)
+        name = os.path.basename(path)
+        if os.path.basename(os.path.dirname(path)) == "identical":
+            name = "identical/" + name
+        digest = hashlib.sha256()
+        with open(path, "rb") as stream:
+            for block in iter(lambda: stream.read(1 << 20), b""):
+                digest.update(block)
+        loaded[name] = {"path": path, "sha256": digest.hexdigest()}
+    dimensions = {"train": list(D["X"].shape), "test": list(D["Xq"].shape)}
+    full = _aft_full_tree_workload(args.lane)
+    cfg = lane_config(args.lane)
+    settings = {"lane_config": cfg, "full_tree_workload": full,
+                "effective_stride_subsets": {} if full else dict(LANES[args.lane]["sub"])}
+    if args.lane == "tree-shap":
+        settings["tree_shap"] = dict((runner.info or {}).get("aft_tree_shap", {}))
+    input_hashes = {k: ctd.sha256_array(D[k]) for k in ("X", "Xq", "y", "yq") if k in D}
+    prepared_hashes = {k: rec.get("arrays", {}).get(k, {}).get("sha256") for k in input_hashes}
+    if full and input_hashes != prepared_hashes:
+        raise ValueError("prepared full input hashes disagree with actual worker arrays")
+    pools = None
+    try:
+        from threadpoolctl import threadpool_info
+        pools = threadpool_info()
+    except ImportError:
+        pass
+    return {
+        "schema": "aft-algos-capture-v1", "dataset": rec.get("dataset"),
+        "dimensions": dimensions, "estimator_settings": settings,
+        "actual_worker_parameters": getattr(runner, "record", None),
+        "actual_worker_config": (runner.info or {}).get("config"),
+        "timed_boundary": AFT_ALGOS_BOUNDARY, "loaded_bindings": loaded,
+        "mode": (runner.info or {}).get("numeric_mode_used"),
+        "vendor": (runner.info or {}).get("vendor_used"),
+        "input_array_sha256": input_hashes, "prepared_block": rec,
+        "full_dataset_coverage": "all saved loader train/test rows" if full else "pending: historical caps/subsets",
+        "intrinsic_caps": {"full_tree_workload": full, "prepared_smoke_max_rows": rec.get("smoke_max_rows"),
+                           "historical_FIT_ROWS": FIT_ROWS, "historical_EVAL_ROWS": EVAL_ROWS,
+                           "historical_lane_subsets": dict(LANES[args.lane]["sub"]),
+                           "applied_lane_subsets": {} if full else dict(LANES[args.lane]["sub"]),
+                           "tree_shap_background_rows": settings.get("tree_shap", {}).get("background_rows")},
+        "pre_clock_fit": bool((runner.info or {}).get("pre_clock_fit")),
+        "whole_operation_requested": os.environ.get("MOJOLEARN_BENCH_WHOLE_OPERATION") == "1",
+        "resource_policy": {"cpu_libraries": "unrestricted on dedicated Apple",
+                            "cpu_count": os.cpu_count(), "effective_pools": pools,
+                            "thread_environment": {key: os.environ.get(key) for key in ctd.THREAD_ENV}},
+    }
 
 
 def worker(args):
@@ -4311,6 +4552,9 @@ def worker(args):
 
     np = _np()
     try:
+        ab_config = _configure_neural_ab(getattr(args, "neural_ab_config", None), args.lane)
+        if ab_config is not None and args.arm == "ours-fast":
+            raise ValueError("neural A/B configuration requires the ours IDENTICAL arm")
         B, rec = _load_block(args.lane, args.dataset, args.data)
         D = lane_arrays(args.lane, B)
         runner = build(args.lane, args.arm, D)
@@ -4324,6 +4568,10 @@ def worker(args):
         return 1
     if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
         runner.info.update(_tool("bench_board_probe").library_identity(runner.info))
+        if ab_config is not None:
+            runner.info["neural_ab_config"] = ab_config
+            runner.info["neural_ab_lane_config"] = lane_config(args.lane)
+            runner.info["neural_ab_binary_admission"] = "requested source flags only; not established by this config"
     say({"event": "ready", "info": runner.info, "pid": os.getpid(),
          "params_record": getattr(runner, "record", None)})
     mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
@@ -4365,12 +4613,16 @@ def worker(args):
                 digest = h.hexdigest()[:16]
                 from bench_board_state import scored_receipt
                 state_receipt = scored_receipt(last, runner) if r > 0 else None
+                aft_capture = None
+                if r > 0 and os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1":
+                    aft_capture = _aft_capture_worker(args, B, D, rec, runner)
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "infer_ms": ims, "digest": digest, "mem": m, "state_receipt": state_receipt,
+                 "aft_capture": aft_capture,
                  "operation": {"ms": operation_ms, "preparation_ms": preparation_ms,
                                "scope": "prepare-fit-consume" if whole_requested else "call-consume",
                                "dataset_load_included": False,
@@ -4816,13 +5068,23 @@ def _none_on_both(BP, records, ref="ours"):
 
 
 def race(args):
+    ab_config = _configure_neural_ab(getattr(args, "neural_ab_config", None), args.lane)
+    if ab_config is not None and args.smoke_rows:
+        raise ValueError("neural A/B recipes require full saved workload, without --smoke-rows")
     np = _np()
     ctd = _tool("classical_two_datasets")
     lane, ds = args.lane, args.dataset
     arms = [a for a in args.arms.split(",") if a]
+    if ab_config is not None and "ours-fast" in arms:
+        raise ValueError("neural A/B configuration cannot relabel an ours-fast worker")
     _tool("bench_board_probe").refuse_our_cpu_arms(arms, "bench_board_algos")
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.work, exist_ok=True)
+    frozen_config = None
+    if ab_config is not None:
+        frozen_config = os.path.abspath(os.path.join(args.out, "neural-ab-config.json"))
+        with open(frozen_config, "w", encoding="utf-8") as fh:
+            json.dump(ab_config, fh, indent=2, sort_keys=True)
     if args.smoke_rows:           # the conductor builds the same seeded arrays as its workers
         os.environ["MOJOLEARN_ALGOS_SMOKE_ROWS"] = str(args.smoke_rows)
     B, rec = _load_block(lane, ds, args.data)
@@ -4833,6 +5095,9 @@ def race(args):
               "lane_config": lane_config(lane), "rounds_requested": args.rounds,
               "started": now_utc(), "script": "tools/bench_board_algos.py",
               "commit": os.environ.get("MOJOLEARN_REPO_COMMIT", "unknown")}
+    if ab_config is not None:
+        result["neural_ab_config"] = ab_config
+        result["neural_ab_binary_admission"] = "requested source flags only; identity/quality/timing acceptance separate"
     tag = "%s-%s" % (lane, ds)
     workers = {}
     env_extra = {}
@@ -4843,6 +5108,11 @@ def race(args):
         py = arm_python.get(arm) or (args.ours_python if arm in OURS_ARMS else args.theirs_python)
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm, "--lane", lane,
                                  "--dataset", ds, "--data", args.data]
+        if frozen_config is not None:
+            cmd += ["--neural-ab-config", frozen_config]
+        if getattr(args, "full_tree_workload", False):
+            raise ValueError("integration benchmark freeze forbids --full-tree-workload; retain the saved race")
+            cmd.append("--full-tree-workload")
         env = _worker_env(arm)
         env.update(env_extra)
         workers[arm] = ctd.Worker(arm, cmd, env, os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO)
@@ -4896,7 +5166,17 @@ def race(args):
         os.replace(out_json + ".tmp", out_json)
         print("ALGOS-PARAMS-REFUSED lane=%s dataset=%s %s" % (lane, ds, str(exc)[:2000]), flush=True)
         return 3
-    for r in range(args.rounds + 1):
+    external_warmup = (
+        os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1"
+        and os.environ.get("MOJOLEARN_AFT_EXTERNAL_WARMUP") == "1"
+        and _aft_full_tree_workload(lane)
+    )
+    if os.environ.get("MOJOLEARN_AFT_CAPTURE") == "1":
+        result["aft_warmup_policy"] = (
+            "outer queue supplies excluded warmup in a fresh isolated process; no internal warmup"
+            if external_warmup else "one internal excluded warmup"
+        )
+    for r in range(1 if external_warmup else 0, args.rounds + 1):
         live = [a for a in arms if workers[a].alive]
         if not live:
             break
@@ -4924,6 +5204,8 @@ def race(args):
                 a.setdefault("operations", []).append(dict(msg["operation"], round=r, warmup=r == 0))
             if msg.get("state_receipt") is not None:
                 a.setdefault("state_receipts", []).append(msg["state_receipt"])
+            if msg.get("aft_capture") is not None:
+                a.setdefault("aft_captures", []).append(msg["aft_capture"])
             a["mem"].append(msg.get("mem"))
             print("ALGOS-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f infer_ms=%s digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg.get("infer_ms"), msg["digest"]), flush=True)
@@ -4947,7 +5229,7 @@ def race(args):
         result["host_quality_receipt"] = _tool("bench_board_host_quality").enrich(
             lane, D, outs, result["quality"], args.ours_python,
             os.path.join(args.work, tag + "-host-quality"), args.round_seconds,
-            fit_calls=args.rounds + 1)
+            fit_calls=args.rounds + (0 if external_warmup else 1))
     except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
@@ -4957,7 +5239,7 @@ def race(args):
         a = result["arms"][arm]
         ok = a["status"] == "ok" and len(a["ms"]) == args.rounds
         a["median_ms"] = statistics.median(a["ms"]) if ok else None
-        timed = a["digests"][1:]
+        timed = a["digests"][0 if external_warmup else 1:]
         a["digest_stable"] = (len(set(timed)) == 1) if ok and len(timed) >= 2 else None
         info = a.get("info") or {}
         home = info.get("input_home") or "host"
@@ -4993,15 +5275,20 @@ def build_parser():
     pr.add_argument("--lanes", default=",".join(LANE_ORDER))
     pr.add_argument("--datasets", default="taxi,istella")
     pr.add_argument("--max-rows", type=int, default=0)
+    pr.add_argument("--full-tree-workload", action="store_true",
+                    help="tree-only: save all existing taxi/istella split rows in separate aft-full cls/reg blocks")
     r = sub.add_parser("race")
     r.add_argument("--lane", required=True, choices=LANE_ORDER)
     r.add_argument("--dataset", required=True)
     r.add_argument("--data", required=True)
     r.add_argument("--arms", required=True)
+    r.add_argument("--neural-ab-config", help="selected neural A/B JSON; applies runtime recipe without compiling or admitting the binary")
     r.add_argument("--rounds", type=int, default=5)
     r.add_argument("--out", required=True)
     r.add_argument("--work", required=True)
     r.add_argument("--smoke-rows", type=int, default=0)
+    r.add_argument("--full-tree-workload", action="store_true",
+                   help="tree-only: use aft-full inputs, no lane row subsets, full TreeSHAP background")
     r.add_argument("--ours-python", default=sys.executable)
     r.add_argument("--theirs-python", default=sys.executable)
     r.add_argument("--arm-python", action="append", default=[], metavar="ARM=PY",
@@ -5017,12 +5304,23 @@ def build_parser():
     w.add_argument("--lane", required=True, choices=LANE_ORDER)
     w.add_argument("--dataset", required=True)
     w.add_argument("--data", required=True)
+    w.add_argument("--neural-ab-config", help="frozen neural A/B JSON from conductor")
+    w.add_argument("--full-tree-workload", action="store_true")
     sub.add_parser("table")
     return p
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if getattr(args, "full_tree_workload", False):
+        raise ValueError("integration benchmark freeze forbids --full-tree-workload; retain the saved race")
+        if getattr(args, "smoke_rows", 0) or getattr(args, "max_rows", 0):
+            raise ValueError("full-tree-workload is incompatible with row caps")
+        if os.environ.get("MOJOLEARN_ALGOS_SMOKE_ROWS"):
+            raise ValueError("full-tree-workload refuses MOJOLEARN_ALGOS_SMOKE_ROWS")
+        if args.cmd in ("worker", "race") and args.lane not in AFT_FULL_TREE_LANES:
+            raise ValueError("full-tree-workload accepts the named tree estimator lanes only")
+        os.environ["MOJOLEARN_AFT_FULL_TREE_WORKLOAD"] = "1"
     if args.cmd == "prep":
         return prep(args)
     if args.cmd == "worker":

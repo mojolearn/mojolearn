@@ -37,11 +37,25 @@ from embedding.checks.embedding_identical import (
 )
 from embedding.checks.embedding_oracle import EmbConfig
 
-comptime EMB_ATOMIC_BWD = (
+comptime EMB_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
-    and is_defined["MOJOLEARN_AFN_EMB_ATOMIC_BWD"]()
 )
+# E06: not tested in this campaign; preserve this existing opt-in mechanism.
+comptime EMB_ATOMIC_BWD = EMB_FAST_APPLE and is_defined["MOJOLEARN_AFN_EMB_ATOMIC_BWD"]()
+# E07: not tested. Eight contiguous cells amortize the ID/index load; width
+# divisibility is a memory-vector legality rule covering every aligned row.
+comptime AFN26_EMB_GATHER8 = EMB_ATOMIC_BWD and is_defined["MOJOLEARN_AFN26_EMB_GATHER8"]()
+# E08: not tested. Fewer threads trade blocks for lower per-block resource
+# occupancy; both variants keep the same cells and relaxed atomic semantics.
+comptime AFN26_EMB_THREADS64 = EMB_ATOMIC_BWD and is_defined["MOJOLEARN_AFN26_EMB_THREADS64"]()
+comptime AFN26_EMB_THREADS128 = EMB_ATOMIC_BWD and is_defined["MOJOLEARN_AFN26_EMB_THREADS128"]()
+comptime AFN26_EMB_TPB = 64 if AFN26_EMB_THREADS64 else (128 if AFN26_EMB_THREADS128 else EMB_TPB)
+# E09-E10: not tested. Reuse the existing token-owned table and size-owned
+# scratch implementation on FAST Apple only. Scratch explicitly depends on
+# table residency for this experiment; neither depends on atomic gradients.
+comptime AFN26_EMB_RESIDENT = EMB_FAST_APPLE and is_defined["MOJOLEARN_AFN26_EMB_RESIDENT"]()
+comptime AFN26_EMB_SCRATCH = AFN26_EMB_RESIDENT and is_defined["MOJOLEARN_AFN26_EMB_SCRATCH"]()
 
 
 def emb_scatter_add_kernel(
@@ -104,19 +118,29 @@ def fast_embedding_forward_into(
     else:
         if cfg.width < 1 or n_positions < 1:
             return
+        # E07: not tested; wider gather only when every row has full vectors.
+        comptime if AFN26_EMB_GATHER8:
+            if cfg.width % 8 == 0:
+                var octets = n_positions * (cfg.width // 8)
+                ctx.enqueue_function[emb_gather8_kernel](
+                    out_y.unsafe_ptr(), weight.unsafe_ptr(), ids.unsafe_ptr(),
+                    Int32(n_positions), Int32(cfg.width),
+                    grid_dim=(_grid_for(octets, AFN26_EMB_TPB), 1, 1), block_dim=(AFN26_EMB_TPB, 1, 1),
+                )
+                return
         if cfg.width % 4 == 0:
             var quads = n_positions * (cfg.width // 4)
             ctx.enqueue_function[emb_gather4_kernel](
                 out_y.unsafe_ptr(), weight.unsafe_ptr(), ids.unsafe_ptr(),
                 Int32(n_positions), Int32(cfg.width),
-                grid_dim=(_grid_for(quads), 1, 1), block_dim=(EMB_TPB, 1, 1),
+                grid_dim=(_grid_for(quads, AFN26_EMB_TPB), 1, 1), block_dim=(AFN26_EMB_TPB, 1, 1),
             )
             return
         var cells = n_positions * cfg.width
         ctx.enqueue_function[emb_gather_kernel](
             out_y.unsafe_ptr(), weight.unsafe_ptr(), ids.unsafe_ptr(),
             Int32(n_positions), Int32(cfg.width), Int32(cfg.vocab),
-            grid_dim=(_grid_for(cells), 1, 1), block_dim=(EMB_TPB, 1, 1),
+            grid_dim=(_grid_for(cells, AFN26_EMB_TPB), 1, 1), block_dim=(AFN26_EMB_TPB, 1, 1),
         )
 
 
@@ -139,17 +163,37 @@ def fast_embedding_backward_into(
         if not cfg.accumulate:
             ctx.enqueue_function[emb_seed_kernel](
                 dw.unsafe_ptr(), Int32(cells),
-                grid_dim=(_grid_for(cells), 1, 1), block_dim=(EMB_TPB, 1, 1),
+                grid_dim=(_grid_for(cells, AFN26_EMB_TPB), 1, 1), block_dim=(AFN26_EMB_TPB, 1, 1),
             )
         if n_positions >= 1:
             var work = n_positions * cfg.width
             ctx.enqueue_function[emb_scatter_add_kernel](
                 dw.unsafe_ptr(), dy.unsafe_ptr(), ids.unsafe_ptr(),
                 Int32(n_positions), Int32(cfg.width), Int32(cfg.padding_idx),
-                grid_dim=(_grid_for(work), 1, 1), block_dim=(EMB_TPB, 1, 1),
+                grid_dim=(_grid_for(work, AFN26_EMB_TPB), 1, 1), block_dim=(AFN26_EMB_TPB, 1, 1),
             )
         if cfg.has_padding():
             ctx.enqueue_function[emb_pad_row_kernel](
                 dw.unsafe_ptr(), Int32(cfg.width), Int32(cfg.padding_idx),
-                grid_dim=(_grid_for(cfg.width), 1, 1), block_dim=(EMB_TPB, 1, 1),
+                grid_dim=(_grid_for(cfg.width, AFN26_EMB_TPB), 1, 1), block_dim=(AFN26_EMB_TPB, 1, 1),
             )
+
+
+def emb_gather8_kernel(
+    out_y: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    ids: MutPointer[Int32, MutAnyOrigin],
+    n_positions_in: Int32,
+    width_in: Int32,
+):
+    """E07: not tested; one complete float8 gather per thread, no conversion."""
+    var width = Int(width_in)
+    var octets = width // 8
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= Int(n_positions_in) * octets:
+        return
+    var t = cell // octets
+    var q = cell - t * octets
+    var v = Int(ids.unsafe_load(t))
+    var src = weight.unsafe_load[width=8](v * width + q * 8)
+    out_y.unsafe_store[width=8](t * width + q * 8, src)

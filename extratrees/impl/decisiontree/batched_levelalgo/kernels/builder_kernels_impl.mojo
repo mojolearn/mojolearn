@@ -7,6 +7,9 @@ uses one threshold drawn from the node-local feature range, following sklearn's
 RandomSplitter, instead of cuML's quantile histogram (DEVIATION 137).
 """
 
+from ensemble.tree_identical_ideas import T14, T14_EXACT
+from ensemble.tree_moments import moment_pair, moment_finish, et_leaf_moment_host
+from checks.soft_f64 import sf64_from_f32
 from std.sys.compile import is_defined
 from std.sys.info import has_amd_gpu_accelerator, has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
 
@@ -24,6 +27,11 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels impo
 
 comptime TPB_DEFAULT = 128
 """`builder_kernels_impl.cuh:33`, `static constexpr int TPB_DEFAULT = 128`."""
+
+comptime T05_SMALL_NODE_ROWS = 128
+# One row per lane in the portable T05 block; same admission for both range
+# launchers and its fused consumer. No benchmark dimension enters this bound.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
 
 
 comptime SEARCH_ROWS_PER_THREAD = _search_rows_per_thread()
@@ -484,7 +492,7 @@ def node_feature_range_decode_kernel(
 
 
 def node_feature_range_kernel[
-    TPB: Int, ROW_MAJOR: Bool = False
+    TPB: Int, ROW_MAJOR: Bool = False, FUSED_SMALL: Bool = False
 ](
     out_minkey: MutPointer[UInt32, MutAnyOrigin],
     out_maxkey: MutPointer[UInt32, MutAnyOrigin],
@@ -520,6 +528,14 @@ def node_feature_range_kernel[
 
     var range_start = Int(work_items[unsafe_offset=nid].instances.begin)
     var range_len = Int(work_items[unsafe_offset=nid].instances.count)
+    # T05 production dispatch reserves these nodes for the one-block raw-value
+    # range/draw/score consumer. The ordinary setup's empty range makes the
+    # following separate score kernels return without reading rows. Direct
+    # kernel callers retain B through the False compile-time default.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    comptime if FUSED_SMALL:
+        if range_len <= T05_SMALL_NODE_ROWS:
+            return
 
     var m = Int(m_in)
     var n = Int(n_in)
@@ -702,8 +718,21 @@ def et_snap_code(
     return Int(lo) - 1
 
 
+# AFT F09: gather two row addresses before scanning the feature tile, then
+# reuse each feature descriptor for both independent rows. Preserve FT (and
+# especially the accepted 8-code tile); this does NOT retry the slower
+# 16/32-code feature tiles recorded in builder.mojo. Adjacent lanes still
+# read adjacent row-id slots, and the guarded second row preserves tails.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_ET_RANGE_ROW_TILE = 2 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F09"]()
+) else 1
+
+
 def node_feature_range_tiled_kernel[
-    TPB: Int, FT: Int, DT: DType = DType.float32
+    TPB: Int, FT: Int, DT: DType = DType.float32, FUSED_SMALL: Bool = False
 ](
     out_minkey: MutPointer[UInt32, MutAnyOrigin],
     out_maxkey: MutPointer[UInt32, MutAnyOrigin],
@@ -738,6 +767,12 @@ def node_feature_range_tiled_kernel[
     var num_blocks = Int(workload_info[unsafe_offset=wb].num_blocks)
     var range_start = Int(work_items[unsafe_offset=nid].instances.begin)
     var range_len = Int(work_items[unsafe_offset=nid].instances.count)
+    # T05: same exclusive node ownership as the scalar raw-value range pass.
+    # Coded/quantized production callers retain False and their own contract.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    comptime if FUSED_SMALL:
+        if range_len <= T05_SMALL_NODE_ROWS:
+            return
     var n = Int(n_in)
     var k = Int(n_sampled_cols_in)
     var f0 = ftile * FT
@@ -755,18 +790,24 @@ def node_feature_range_tiled_kernel[
     var stride = TPB * num_blocks
     var i = range_start + Int(thread_idx.x) + offset_blockid * TPB
     while i < end:
-        var base = Int(row_ids[unsafe_offset=i]) * n
+        var bases = SIMD[DType.int64, AFT_ET_RANGE_ROW_TILE](0)
+        comptime for r in range(AFT_ET_RANGE_ROW_TILE):
+            if i + r * stride < end:
+                bases[r] = Int64(Int(row_ids[unsafe_offset=i + r * stride]) * n)
         comptime for j in range(FT):
             if j < nf:
-                var v = Float32(data_rm[unsafe_offset = base + Int(cols[j])])
-                if v != v:
-                    lmiss[j] += 1
-                else:
-                    if range_key(v) < range_key(lmin[j]):
-                        lmin[j] = v
-                    if range_key(v) > range_key(lmax[j]):
-                        lmax[j] = v
-        i += stride
+                var col = Int(cols[j])
+                comptime for r in range(AFT_ET_RANGE_ROW_TILE):
+                    if i + r * stride < end:
+                        var v = Float32(data_rm[unsafe_offset = Int(bases[r]) + col])
+                        if v != v:
+                            lmiss[j] += 1
+                        else:
+                            if range_key(v) < range_key(lmin[j]):
+                                lmin[j] = v
+                            if range_key(v) > range_key(lmax[j]):
+                                lmax[j] = v
+        i += stride * AFT_ET_RANGE_ROW_TILE
     # One barrier for the whole tile: each warp folds its FT features with
     # shuffles, lane 0 parks them in shared memory, and thread j folds
     # feature j across the warps. Same min, max and count as the block
@@ -2510,6 +2551,10 @@ def leaf_values_host(
             continue
         var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
         var count = Int(instance_ranges[unsafe_offset=node_id].count)
+        comptime if T14 and not T14_EXACT:
+            if not is_classification:
+                out[node_id*num_outputs] = et_leaf_moment_host(row_ids,labels_q,begin,count,inv_scale)
+                continue
         var acc = List[Int32](length=num_outputs, fill=Int32(0))
         var seen = 0
         for i in range(begin, begin + count):
@@ -2579,6 +2624,41 @@ def leaf_kernel[
 
     var begin = Int(instance_ranges[unsafe_offset=node_id].begin)
     var count = Int(instance_ranges[unsafe_offset=node_id].count)
+
+    comptime if T14 and not T14_EXACT and not CLASSIFICATION:
+        # V1: exact row-ID keyed partials, shared portable binary64 pair tree.
+        # Same logical 128 slots as host regardless of TPB/warp width.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        var partials = stack_allocation[128,Int32,address_space=AddressSpace.SHARED]()
+        var moments = stack_allocation[128,UInt64,address_space=AddressSpace.SHARED]()
+        var lane = tid
+        while lane < 128:
+            partials[unsafe_offset=lane] = Int32(0)
+            lane += TPB
+        barrier()
+        var pos = begin+tid
+        while pos < begin+count:
+            var row = Int(row_ids[unsafe_offset=pos])
+            _ = Atomic.fetch_add(partials.unsafe_offset(row%128),labels_q[unsafe_offset=row])
+            pos += TPB
+        barrier()
+        lane = tid
+        while lane < 128:
+            moments[unsafe_offset=lane] = sf64_from_f32(ftz(Float32(partials[unsafe_offset=lane])*inv_scale))
+            lane += TPB
+        barrier()
+        var distance = 64
+        while distance > 0:
+            lane = tid
+            while lane < distance:
+                moments[unsafe_offset=lane] = moment_pair(moments[unsafe_offset=lane],moments[unsafe_offset=lane+distance])
+                lane += TPB
+            barrier()
+            distance //= 2
+        if tid == 0:
+            out_leaves[unsafe_offset=node_id*k] = moment_finish(moments[unsafe_offset=0],Float32(count))
+            out_visit[unsafe_offset=node_id] = LEAF_VISIT_PUBLISHED
+        return
 
     var priv = stack_allocation[MAX_OUT, Scalar[DType.int32]]()
     for c in range(MAX_OUT):

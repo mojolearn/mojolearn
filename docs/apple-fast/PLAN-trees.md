@@ -1,5 +1,13 @@
 # Apple FAST trees: state and plan (from lane apple-fast-trees2, 2026-10-02)
 
+New source-only programme (2026-10-06):
+[48 candidates and 12 A/B interaction ideas](../../experiments/apple_fast_trees/IDEAS.md),
+with [implementation records and selector](../../experiments/apple_fast_trees/README.md),
+on `ideas/apple-fast-trees-20261006`. Forked from local main `07f2b3c00`.
+The owner prohibited compilation, verification and measurement: these new
+candidates are opt-in, uncompiled, unverified and unmeasured. No new quality
+or speed result is implied by the historical evidence below.
+
 Branch `lane/apple-fast-trees2`, head 50dfdcca0 (pushed), off origin/main 79cb08be2.
 Worktree `~/mojolearn-wt/apple-fast-trees2`. Tools: `tools/aft_ab.sh` (alternating
 FAST A/B of one binding, two define sets, board tree driver, prints AFT-MEDIAN with

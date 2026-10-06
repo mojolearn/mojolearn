@@ -69,14 +69,20 @@ comptime AFN_LMGRAD_APPLE = (
     and TARGET_COLUMN == COLUMN_APPLE
 )
 comptime _AFN_LMGRAD_ALL = is_defined["MOJOLEARN_AFN_LMGRAD_ALL"]()
+# T04 AFN26 alias: not tested in this campaign; enables the existing split arm.
 comptime AFN_LM_WGRAD_SPLIT = AFN_LMGRAD_APPLE and (
     is_defined["MOJOLEARN_AFN_LM_WGRAD_SPLIT"]() or _AFN_LMGRAD_ALL
+    or is_defined["MOJOLEARN_AFN26_LM_WGRAD_SPLIT"]()
 )
+# T05 AFN26 alias: not tested in this campaign; independently selectable.
 comptime AFN_LM_BWD_EPILOGUE = AFN_LMGRAD_APPLE and (
     is_defined["MOJOLEARN_AFN_LM_BWD_EPILOGUE"]() or _AFN_LMGRAD_ALL
+    or is_defined["MOJOLEARN_AFN26_LM_BWD_EPILOGUE"]()
 )
+# T05 AFN26 alias: not tested in this campaign; independently selectable.
 comptime AFN_LM_BWD_NORM1_RESID = AFN_LMGRAD_APPLE and (
     is_defined["MOJOLEARN_AFN_LM_BWD_NORM1_RESID"]() or _AFN_LMGRAD_ALL
+    or is_defined["MOJOLEARN_AFN26_LM_BWD_NORM1_RESID"]()
 )
 
 #: Blocks the split weight-gradient grid aims for (tiles x splits). The
@@ -85,9 +91,20 @@ comptime AFN_LM_WGRAD_BLOCKS = get_defined_int[
     "MOJOLEARN_AFN_LM_WGRAD_BLOCKS", 2 * AFN_GEMM_CORES
 ]()
 #: Fewest `k` steps one split walks (whole KB windows).
-comptime AFN_LM_WGRAD_MIN_STEPS = 256
+# T09: not tested. Lower minimum exposes more parallel output tiles when the
+# hardware occupancy target is not met, but increases launch/atomic overhead
+# per reduction element. It applies to all neighboring K, never named shapes.
+comptime AFN_LM_WGRAD_MIN_STEPS = (
+    128 if AFN_LMGRAD_APPLE and is_defined["MOJOLEARN_AFN26_LM_WGRAD_MIN128"]()
+    else 256
+)
 #: Most splits per product.
-comptime AFN_LM_WGRAD_MAX_SPLITS = 16
+# T09: not tested. Fewer splits bound concurrent atomic partials per output
+# tile. Independent of the minimum-work control; neither enables splitting.
+comptime AFN_LM_WGRAD_MAX_SPLITS = (
+    8 if AFN_LMGRAD_APPLE and is_defined["MOJOLEARN_AFN26_LM_WGRAD_CAP8"]()
+    else 16
+)
 
 
 # ===========================================================================

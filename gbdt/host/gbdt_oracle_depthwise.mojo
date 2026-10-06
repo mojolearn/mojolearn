@@ -114,6 +114,8 @@ and therefore every later tree's structure and every prediction move.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the two lanes is the measurement.
 """
+from gbdt.trees_identical_switches import T26
+from gbdt.methods.leaves_estimation.tree_t26_units import t26_host_leaves
 from std.math import exp, fma, log, sqrt
 from std.memory import bitcast
 
@@ -403,7 +405,7 @@ def _score_leaf(
     bf_feature: List[Int],
     bf_bin: List[Int],
     layout: CompressedIndexLayout,
-    mut out: _NsLeaf,
+    mut output: _NsLeaf,
 ):
     """The score kernel's records for one leaf, then the host reduce.
 
@@ -419,7 +421,7 @@ def _score_leaf(
     poison skipped, `TBestSplitProperties(feature, clamp(bin), -gain, -gain)`
     folded through `best_split_properties_less` from the default record; the
     fold REPLACES the leaf's record, defined or not."""
-    out.reset_best()
+    output.reset_best()
     for bx in range(argmax_blocks):
         var blk_gain = -GBDT_FLOAT32_MAX
         var blk_bin = -1
@@ -452,12 +454,12 @@ def _score_leaf(
         # its fields: gain Float32.MAX, feature (ui32)-1, bin 0)
         if _best_split_less(
             cand_gain, Int32(feature), Int32(bin),
-            out.best_gain, out.best_feature, out.best_bin,
+            output.best_gain, output.best_feature, output.best_bin,
         ):
-            out.best_feature = Int32(feature)
-            out.best_bin = Int32(bin)
-            out.best_gain = cand_gain
-            out.best_defined = True
+            output.best_feature = Int32(feature)
+            output.best_bin = Int32(bin)
+            output.best_gain = cand_gain
+            output.best_defined = True
 
 
 # ===========================================================================
@@ -1171,46 +1173,61 @@ def gbdt_host_fit_non_symmetric(
 
         # ---- the bins off the model, the stable grouping ----
         var bins = _non_symmetric_bins(tree, layout, cindex, n_rows)
-        var sizes = List[Int](length=n_bins, fill=0)
-        for r in range(n_rows):
-            if bins[r] < 0 or bins[r] >= n_bins:
-                raise Error(
-                    "partition_from_bins: row " + String(r) + " fell in leaf "
-                    + String(bins[r]) + " of " + String(n_bins)
-                )
-            sizes[bins[r]] += 1
-        var offsets = List[Int]()
-        var running = 0
-        for i in range(n_bins):
-            offsets.append(running)
-            running += sizes[i]
-        var fill = offsets.copy()
-        var row_index = List[Int](length=n_rows, fill=0)
-        for r in range(n_rows):
-            row_index[fill[bins[r]]] = r
-            fill[bins[r]] += 1
-
-        # ---- the estimation task and `AppendModels` ----
         var estimated: List[Float32]
-        if plain_newton:
-            estimated = _estimate_leaves(
-                y, cursor, row_index, offsets, sizes, n_rows, border,
-                base.l2_leaf_reg, base.leaf_estimation_iterations, weights,
-            )
+        var t26_on = (T26 and params.loss.objective == GBDT_OBJ_RMSE
+            and params.loss.method == GBDT_LEAF_NEWTON and params.loss.iterations == 1
+            and len(weights) == 0)
+        if t26_on:
+            # T26 V1 uses original row IDs, with no leaf sort or data gather.
+            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+            var raw_bins = List[UInt32](capacity=n_rows)
+            for row in range(n_rows):
+                if bins[row] < 0 or bins[row] >= n_bins:
+                    raise Error("T26 row fell outside the tree's leaves")
+                raw_bins.append(UInt32(bins[row]))
+            estimated = t26_host_leaves(raw_bins, y, cursor, n_rows, n_bins, base.l2_leaf_reg)
+            for row in range(n_rows):
+                cursor[row] = identical_mul_add(estimated[bins[row]], lr, cursor[row])
         else:
-            estimated = _estimate_leaves_for_loss(
-                params.loss, y, cursor, row_index, offsets, sizes, n_rows,
-                base.l2_leaf_reg,
-            )
-        if len(estimated) != n_bins:
-            raise Error(
-                "the estimator returned " + String(len(estimated))
-                + " values for a non-symmetric tree of " + String(n_bins) + " bins"
-            )
-        for leaf in range(n_bins):
-            for k in range(sizes[leaf]):
-                var row = row_index[offsets[leaf] + k]
-                cursor[row] = identical_mul_add(estimated[leaf], lr, cursor[row])
+            var sizes = List[Int](length=n_bins, fill=0)
+            for r in range(n_rows):
+                if bins[r] < 0 or bins[r] >= n_bins:
+                    raise Error(
+                        "partition_from_bins: row " + String(r) + " fell in leaf "
+                        + String(bins[r]) + " of " + String(n_bins)
+                    )
+                sizes[bins[r]] += 1
+            var offsets = List[Int]()
+            var running = 0
+            for i in range(n_bins):
+                offsets.append(running)
+                running += sizes[i]
+            var fill = offsets.copy()
+            var row_index = List[Int](length=n_rows, fill=0)
+            for r in range(n_rows):
+                row_index[fill[bins[r]]] = r
+                fill[bins[r]] += 1
+
+            # ---- the estimation task and `AppendModels` ----
+            if plain_newton:
+                estimated = _estimate_leaves(
+                    y, cursor, row_index, offsets, sizes, n_rows, border,
+                    base.l2_leaf_reg, base.leaf_estimation_iterations, weights,
+                )
+            else:
+                estimated = _estimate_leaves_for_loss(
+                    params.loss, y, cursor, row_index, offsets, sizes, n_rows,
+                    base.l2_leaf_reg,
+                )
+            if len(estimated) != n_bins:
+                raise Error(
+                    "the estimator returned " + String(len(estimated))
+                    + " values for a non-symmetric tree of " + String(n_bins) + " bins"
+                )
+            for leaf in range(n_bins):
+                for k in range(sizes[leaf]):
+                    var row = row_index[offsets[leaf] + k]
+                    cursor[row] = identical_mul_add(estimated[leaf], lr, cursor[row])
         for i in range(len(tree.node_feature)):
             node_feature.append(tree.node_feature[i])
             node_bin.append(tree.node_bin[i])

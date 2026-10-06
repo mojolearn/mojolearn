@@ -39,6 +39,7 @@ from forest_inference_binding import (
     forest_vector_groves_binding, forest_predict_resident_into_gpu_binding,
     forest_predict_resident_labels_gpu_binding,
     forest_resident_layout_binding, forest_ordered_resident_binding,
+    forest_identical_fused_labels_binding,
     forest_pool_available, forest_pool_fault_available,
 )
 from core.forest_inference import forest_predict_gpu
@@ -668,6 +669,8 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         m.def_function[et_predict_gpu_parallel_binding]("et_predict_gpu_parallel")
         m.def_function[forest_resident_layout_binding]("forest_resident_layout")
         m.def_function[forest_ordered_resident_binding]("forest_ordered_resident")
+        # T38/C50 — NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        m.def_function[forest_identical_fused_labels_binding]("forest_identical_fused_labels")
         m.def_function[forest_pool_available]("forest_pool_available")
         m.def_function[forest_pool_fault_available]("forest_pool_fault_available")
         m.def_function[et_forest_export_binding]("forest_export")

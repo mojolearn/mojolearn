@@ -11,6 +11,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz, identical_mul, identical_mul_add
+from gaussian_process.afcl_prediction import AFCL_GP_VAR_TPB
 from gaussian_process.gp_var_seg import (
     GP_IDN_VAR_SEG,
     GP_VAR_PTS,
@@ -52,7 +53,7 @@ def gpc_latent_var_kernel(
     """`gpc_latent_var`, one thread per column: the fold over i ascending."""
     var n_train = Int(n_train_in)
     var n_star = Int(n_star_in)
-    var t = Int(block_idx.x) * GPC_VAR_TPB + Int(thread_idx.x)
+    var t = Int(block_idx.x) * AFCL_GP_VAR_TPB + Int(thread_idx.x)
     if t >= n_star:
         return
     var acc = Float32(0.0)
@@ -124,6 +125,6 @@ def gpc_latent_var_launch(
     else:
         ctx.enqueue_function[gpc_latent_var_kernel](
             dvar.unsafe_ptr(), dv.unsafe_ptr(), Int32(n_train), Int32(n_star), kss,
-            grid_dim=((n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
-            block_dim=(GPC_VAR_TPB, 1, 1),
+            grid_dim=((n_star + AFCL_GP_VAR_TPB - 1) // AFCL_GP_VAR_TPB, 1, 1),
+            block_dim=(AFCL_GP_VAR_TPB, 1, 1),
         )

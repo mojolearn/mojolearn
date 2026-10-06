@@ -35,8 +35,10 @@ comptime _AFN_LM_ALL = is_defined["MOJOLEARN_AFN_LM_ALL"]()
 #: the Adam kernel with no entry scans and no wait, and every validation
 #: (loss, gradients, parameters, moments, v >= 0) is ONE status kernel with
 #: integer atomic minimums, read back with the loss in one copy and one wait.
+# T01 AFN26 alias: not tested in this campaign; preserves the existing arm.
 comptime AFN_LM_NOSYNC = BYTE_LM_FAST_APPLE and (
     is_defined["MOJOLEARN_AFN_LM_NOSYNC"]() or _AFN_LM_ALL
+    or is_defined["MOJOLEARN_AFN26_LM_NOSYNC"]()
 )
 #: -D MOJOLEARN_AFN_LM_BWD_NOSYNC: the block backward's RMSNorm stage drops
 #: the three host waits the non-IDENTICAL tiers kept there ("old fences",
@@ -60,8 +62,10 @@ comptime AFN_LM_BWD_NOSYNC = BYTE_LM_FAST_APPLE and (
 # same 12-step/513-vocab task; heldout/resume unchanged. Small single-shape
 # gain remains tentative; retain OFF. Same caller/build provenance and
 # evidence root as F08/default above, results/F08/fused; no identity retest.
+# T05 AFN26 alias: not tested in this campaign; historical evidence above stands.
 comptime AFN_LM_BWD_FUSE = BYTE_LM_FAST_APPLE and (
     is_defined["MOJOLEARN_AFN_LM_BWD_FUSE"]() or _AFN_LM_ALL
+    or is_defined["MOJOLEARN_AFN26_LM_BWD_FUSE"]()
 )
 #: -D MOJOLEARN_AFN_LM_PARAM_VIEWS: every block's nine weights are views of
 #: the flat `param` and its nine weight gradients views of the flat `grad`,
@@ -71,15 +75,19 @@ comptime AFN_LM_BWD_FUSE = BYTE_LM_FAST_APPLE and (
 # heldout/resume unchanged. Mixed small single-sample gain; retain OFF.
 # Same 12-step task and provenance, evidence results/F08/views; promoting
 # NOSYNC does not claim the unmeasured combination with views or fusion.
+# T03 AFN26 alias: not tested in this campaign; historical evidence above stands.
 comptime AFN_LM_PARAM_VIEWS = BYTE_LM_FAST_APPLE and (
     is_defined["MOJOLEARN_AFN_LM_PARAM_VIEWS"]() or _AFN_LM_ALL
+    or is_defined["MOJOLEARN_AFN26_LM_PARAM_VIEWS"]()
 )
 #: -D MOJOLEARN_AFN_LM_HEAD_FUSE: softmax, cross entropy, the mean loss and
 #: the logits gradient in ONE row kernel after the head GEMM (plus a one-cell
 #: reset), replacing the CE forward (refusal scan, targets download, two
 #: waits, its kernels) and the CE backward's two kernels.
+# T02 AFN26 alias: not tested in this campaign; default remains disabled.
 comptime AFN_LM_HEAD_FUSE = BYTE_LM_FAST_APPLE and (
     is_defined["MOJOLEARN_AFN_LM_HEAD_FUSE"]() or _AFN_LM_ALL
+    or is_defined["MOJOLEARN_AFN26_LM_HEAD_FUSE"]()
 )
 
 #: Status cells of the NOSYNC step (in `DeviceScanScratch.part`).
@@ -91,6 +99,15 @@ comptime AFN_ST_V = 4
 comptime AFN_ST_VNEG = 5
 comptime AFN_ST_CELLS = 8
 comptime AFN_TPB = 256
+# T11: not tested. Power-of-two blocks preserve the complete reduction tree;
+# fewer threads trade vocabulary strides for occupancy, more trade occupancy
+# for fewer strides. This CE-only choice leaves status scan geometry unchanged.
+# These controls do not enable HEAD_FUSE; use one geometry define per arm.
+comptime AFN_LM_CE_TPB = (
+    128 if BYTE_LM_FAST_APPLE and is_defined["MOJOLEARN_AFN26_LM_CE_BLOCK128"]()
+    else 512 if BYTE_LM_FAST_APPLE and is_defined["MOJOLEARN_AFN26_LM_CE_BLOCK512"]()
+    else 256
+)
 comptime AFN_SCAN_MAX_BLOCKS = 1024
 
 
@@ -190,16 +207,16 @@ def afn_ce_fused_kernel(
     var vocab = Int(vocab_in)
     var base = row * vocab
     var red = stack_allocation[
-        AFN_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
+        AFN_LM_CE_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
     ]()
     var mx = bitcast[DType.float32](CE_NEG_INF_BITS)
     var j = tid
     while j < vocab:
         mx = identical_fmax(mx, logits.unsafe_load(base + j))
-        j += AFN_TPB
+        j += AFN_LM_CE_TPB
     red.unsafe_store(tid, mx)
     barrier()
-    var active = AFN_TPB // 2
+    var active = AFN_LM_CE_TPB // 2
     while active > 0:
         if tid < active:
             red.unsafe_store(tid, identical_fmax(red.unsafe_load(tid), red.unsafe_load(tid + active)))
@@ -211,10 +228,10 @@ def afn_ce_fused_kernel(
     j = tid
     while j < vocab:
         s += identical_exp(logits.unsafe_load(base + j) - rmax)
-        j += AFN_TPB
+        j += AFN_LM_CE_TPB
     red.unsafe_store(tid, s)
     barrier()
-    active = AFN_TPB // 2
+    active = AFN_LM_CE_TPB // 2
     while active > 0:
         if tid < active:
             red.unsafe_store(tid, red.unsafe_load(tid) + red.unsafe_load(tid + active))
@@ -227,7 +244,7 @@ def afn_ce_fused_kernel(
         var p = identical_div(identical_exp(logits.unsafe_load(base + j) - rmax), denom)
         var t = Float32(1.0) if j == target else Float32(0.0)
         dlogits.unsafe_store(base + j, identical_div(p - t, divisor))
-        j += AFN_TPB
+        j += AFN_LM_CE_TPB
     if tid == 0:
         var nll = identical_log(denom) - (logits.unsafe_load(base + target) - rmax)
         _ = Atomic.fetch_add(loss, identical_div(nll, divisor))
@@ -260,7 +277,7 @@ def afn_ce_fused(ctx: DeviceContext, mut loss: DeviceBuffer[DType.float32],
     ctx.enqueue_function[afn_ce_fused_kernel](
         loss.unsafe_ptr(), dlogits.unsafe_ptr(), logits.unsafe_ptr(),
         targets.unsafe_ptr(), Int32(vocab), Float32(rows),
-        grid_dim=(rows, 1, 1), block_dim=(AFN_TPB, 1, 1),
+        grid_dim=(rows, 1, 1), block_dim=(AFN_LM_CE_TPB, 1, 1),
     )
 
 

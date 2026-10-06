@@ -27,6 +27,8 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
     add_acc, axpy_centered,
 )
+from experiments.classical_identical_ideas.linear_controls import C18_RESIDUAL_NEXT, C13_FOLD_STATS
+from x_linear.classical_fold_stats import fold_stat_words, fold_mean_cell, fold_gram_cell, fold_prep_from_cache
 from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.tops import upper_cell, fold_fa_ix, fold_sq_ix, chain_cfmad_ix
@@ -55,12 +57,18 @@ def enet_gram_cd(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float
     for it in range(max_iter):
         var w_max = Float32(0)
         var dw_max = Float32(0)
+        var next_qw = ld(fw, qw) if d > 0 else Float32(0)
         for j in range(d):
             var qjj = ld(fw, gg + j * d + j)
             if qjj == 0:
+                if j + 1 < d:
+                    next_qw = ld(fw, qw + j + 1)
                 continue
             var wj = ld(fw, w + j)
-            var t = fa(fs(ld(fw, q + j), ld(fw, qw + j)), fm(wj, qjj))
+            var residual = ld(fw, qw + j)
+            comptime if C18_RESIDUAL_NEXT:
+                residual = next_qw
+            var t = fa(fs(ld(fw, q + j), residual), fm(wj, qjj))
             var nw = fd(fm(fsign(t), fmax(fs(fabs(t), l1), Float32(0))), fa(qjj, l2))
             if positive and t < 0:
                 nw = Float32(0)  # theirs: positive and tmp < 0 -> w_j = 0
@@ -68,7 +76,15 @@ def enet_gram_cd(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float
             if nw != wj:
                 var delta = fs(nw, wj)
                 for k in range(d):
-                    st(fw, qw + k, fmad(delta, ld(fw, gg + j * d + k), ld(fw, qw + k)))
+                    var updated = fmad(delta, ld(fw, gg + j * d + k), ld(fw, qw + k))
+                    st(fw, qw + k, updated)
+                    # C18: forward the next ordered consumer directly from
+                    # the write; the coordinate order and FMA are unchanged.
+                    comptime if C18_RESIDUAL_NEXT:
+                        if k == j + 1:
+                            next_qw = updated
+            elif j + 1 < d:
+                next_qw = ld(fw, qw + j + 1)
             var dw = fabs(fs(nw, wj))
             if dw > dw_max:
                 dw_max = dw
@@ -250,14 +266,28 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     var alphas = d + 4
     var mse = alphas + l_n * a_n
     var rr = t.row(0)
+    var cache = fw + d * d + 4 * d + 3 + a_n * (d + 2)
+    comptime if C13_FOLD_STATS and not is_gpu():
+        for f in range(f_n):
+            for col in range(d + 1):
+                fold_mean_cell(x, y, n, d, f, col, fi, cache)
+            for i in range(d + 1):
+                for j in range(i, d + 1):
+                    fold_gram_cell(x, y, n, d, f, i, j, cache)
     # the grids, on all rows
-    _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
+    comptime if C13_FOLD_STATS and not is_gpu():
+        fold_prep_from_cache(cache, d, f_n, -1, fw, xm, gg, q, sc)
+    else:
+        _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
     if t.lead():
         ecv_alphas(res, alphas, fp, l_n, a_n, explicit, eps, fw, q, d, n)
     t.sync()
     # the path on each fold
     for f in range(f_n):
-        _prep(t, x, y, n, d, fid, f, fi, fw, xm, gg, q, sc)
+        comptime if C13_FOLD_STATS and not is_gpu():
+            fold_prep_from_cache(cache, d, f_n, f, fw, xm, gg, q, sc)
+        else:
+            _prep(t, x, y, n, d, fid, f, fi, fw, xm, gg, q, sc)
         var ym = ld(fw, sc)
         var yn = ld(fw, sc + 1)
         var rows = Int(ld(fw, sc + 2))
@@ -320,7 +350,10 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
         ecv_choose(res, fp, d, l_n, a_n, f_n)
     t.sync()
     # the refit on all rows, from zero
-    _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
+    comptime if C13_FOLD_STATS and not is_gpu():
+        fold_prep_from_cache(cache, d, f_n, -1, fw, xm, gg, q, sc)
+    else:
+        _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
     if not t.lead():
         return
     var l1r = ld(res, d + 2)
@@ -546,15 +579,21 @@ def t_enet_gram_cd(t: Team, fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, yn
     for it in range(max_iter):
         var w_max = Float32(0)
         var dw_max = Float32(0)
+        var next_qw = ld(fw, qw + t.tid) if t.tid < d else Float32(0)
         for j in range(d):
             var qjj = ld(fw, gg + j * d + j)
             if qjj == 0:
+                if j + 1 < d and (j + 1) % t.nt == t.tid:
+                    next_qw = ld(fw, qw + j + 1)
                 continue
             var s = 8 + (nb & 1) * 2
             nb += 1
             if j % t.nt == t.tid:
                 var wj0 = ld(fw, w + j)
-                var tt = fa(fs(ld(fw, q + j), ld(fw, qw + j)), fm(wj0, qjj))
+                var residual = ld(fw, qw + j)
+                comptime if C18_RESIDUAL_NEXT:
+                    residual = next_qw
+                var tt = fa(fs(ld(fw, q + j), residual), fm(wj0, qjj))
                 var nw0 = fd(fm(fsign(tt), fmax(fs(fabs(tt), l1), Float32(0))), fa(qjj, l2))
                 if positive and tt < 0:
                     nw0 = Float32(0)
@@ -567,7 +606,13 @@ def t_enet_gram_cd(t: Team, fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, yn
             if nw != wj:
                 var delta = fs(nw, wj)
                 for k in range(t.tid, d, t.nt):
-                    st(fw, qw + k, fmad(delta, ld(fw, gg + j * d + k), ld(fw, qw + k)))
+                    var updated = fmad(delta, ld(fw, gg + j * d + k), ld(fw, qw + k))
+                    st(fw, qw + k, updated)
+                    comptime if C18_RESIDUAL_NEXT:
+                        if k == j + 1:
+                            next_qw = updated
+            elif j + 1 < d and (j + 1) % t.nt == t.tid:
+                next_qw = ld(fw, qw + j + 1)
             var dw = fabs(fs(nw, wj))
             if dw > dw_max:
                 dw_max = dw

@@ -1,0 +1,135 @@
+{
+  "lane": "residual",
+  "branch": "ideas/neural-identical-ab-20261006-r3",
+  "baseline_commit": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
+  "cross_owner_experiments": [
+    {
+      "id": "NN59",
+      "implementation_status": "wired_draft",
+      "default_enabled": false,
+      "implementation_paths": [
+        "training/residual_dropout_contract.mojo",
+        "training/residual_dropout.mojo",
+        "training/residual_dropout_host.mojo",
+        "training/neural_ab_pointwise.mojo",
+        "bindings/residual_dropout_common.mojo",
+        "bindings/residual_dropout_boundary.mojo",
+        "bindings/residual_dropout_boundary_host.mojo",
+        "python/mojolearn/_residual_dropout_impl.py",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo",
+        "python/mojolearn/training.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1",
+        "MOJOLEARN_NN59_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "mojolearn.training.residual_dropout(values,residual,p,seed,stream,offset)",
+        "mojolearn.training.residual_dropout_backward(gradient,p,seed,stream,offset)"
+      ],
+      "chosen_workload": "Explicit complete residual-dropout layer forward and paired backward. No implicit CNN/transformer route is claimed.",
+      "arms": {
+        "A": "One forward producer for dropout then rounded residual; one backward producer for dValues and raw-word dResidual.",
+        "B": "Dropout temporary plus separate residual addition; backward dropout kernel plus separate gradient copy. CPU baseline uses separate passes."
+      },
+      "numeric_contract": "Philox4x32-10 counter=(block low,block high,stream,0), key=(seed low,seed high), word index=(offset+i)%4; 24-bit uniform. Shared pure Mojo FP32 dropout product seam, residual add seam, portable scale. Backward regenerates same mask for identical coordinates. Probability is explicitly FTZ-normalized before mask comparison in both columns.",
+      "admission": [
+        "IDENTICAL only; native float32 C-contiguous equal-shape inputs",
+        "Finite input/residual/gradient and finite output checked in Mojo",
+        "Native Float32 p finite in [0,1); scale computed in Mojo as 1/(1-p)",
+        "uint64 seed; uint32 stream; nonnegative Int64 offset with admitted offset+n; n fits Int32",
+        "Disjoint borrowed outputs and inputs; empty shapes admitted without pointer access"
+      ],
+      "timed_boundary": "Binding entry through return includes validation, input upload, scratch allocation, all kernels/passes, finite scans, required synchronization and consumed output download. Cold and repeated use must be reported separately.",
+      "remaining": [
+        "Compilation, static verification, four-column identity, quality and full-workload timing intentionally not run by request.",
+        "Saved full-workload dataset/version/hash and empirical admission remain required before any default promotion."
+      ],
+      "optional_variants": [
+        "Additional explicit model placements are separate arms; existing models have not been silently given dropout."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "registration_status": "GPU/host builder functions and public training.py exports authored by root; no execution evidence.",
+      "selected_arm_programming_remaining": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    }
+  ],
+  "experiments": [
+    {
+      "id": "NN59",
+      "implementation_status": "wired_draft",
+      "default_enabled": false,
+      "implementation_paths": [
+        "training/residual_dropout_contract.mojo",
+        "training/residual_dropout.mojo",
+        "training/residual_dropout_host.mojo",
+        "training/neural_ab_pointwise.mojo",
+        "bindings/residual_dropout_common.mojo",
+        "bindings/residual_dropout_boundary.mojo",
+        "bindings/residual_dropout_boundary_host.mojo",
+        "python/mojolearn/_residual_dropout_impl.py",
+        "bindings/_mojolearn_training.mojo",
+        "bindings/_mojolearn_training_host.mojo",
+        "python/mojolearn/training.py"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "MOJOLEARN_NN59_DROPOUT_RESIDUAL=1",
+        "MOJOLEARN_NN59_CONTROL=1"
+      ],
+      "runtime_env": {},
+      "entry_points": [
+        "mojolearn.training.residual_dropout(values,residual,p,seed,stream,offset)",
+        "mojolearn.training.residual_dropout_backward(gradient,p,seed,stream,offset)"
+      ],
+      "chosen_workload": "Explicit complete residual-dropout layer forward and paired backward. No implicit CNN/transformer route is claimed.",
+      "arms": {
+        "A": "One forward producer for dropout then rounded residual; one backward producer for dValues and raw-word dResidual.",
+        "B": "Dropout temporary plus separate residual addition; backward dropout kernel plus separate gradient copy. CPU baseline uses separate passes."
+      },
+      "numeric_contract": "Philox4x32-10 counter=(block low,block high,stream,0), key=(seed low,seed high), word index=(offset+i)%4; 24-bit uniform. Shared pure Mojo FP32 dropout product seam, residual add seam, portable scale. Backward regenerates same mask for identical coordinates. Probability is explicitly FTZ-normalized before mask comparison in both columns.",
+      "admission": [
+        "IDENTICAL only; native float32 C-contiguous equal-shape inputs",
+        "Finite input/residual/gradient and finite output checked in Mojo",
+        "Native Float32 p finite in [0,1); scale computed in Mojo as 1/(1-p)",
+        "uint64 seed; uint32 stream; nonnegative Int64 offset with admitted offset+n; n fits Int32",
+        "Disjoint borrowed outputs and inputs; empty shapes admitted without pointer access"
+      ],
+      "timed_boundary": "Binding entry through return includes validation, input upload, scratch allocation, all kernels/passes, finite scans, required synchronization and consumed output download. Cold and repeated use must be reported separately.",
+      "remaining": [
+        "Compilation, static verification, four-column identity, quality and full-workload timing intentionally not run by request.",
+        "Saved full-workload dataset/version/hash and empirical admission remain required before any default promotion."
+      ],
+      "optional_variants": [
+        "Additional explicit model placements are separate arms; existing models have not been silently given dropout."
+      ],
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "identity": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "registration_status": "GPU/host builder functions and public training.py exports authored by root; no execution evidence.",
+      "selected_arm_programming_remaining": [],
+      "integration_inventory": "experiments/neural_identical_ab/lanes/gemm_integration_inventory.json"
+    }
+  ],
+  "compilation": "not_run_by_request",
+  "verification": "not_run_by_request",
+  "timing": "not_run_by_request",
+  "commit": "root-owned; subagent did not commit"
+}

@@ -35,6 +35,7 @@ The restatement is a prediction until measured. tools/forest_host_gate.py is
 the measurement.
 """
 from core.host_parallel import host_parallelize
+from core.forest_experiments import T34_CHUNK_FOLD, FOREST_CHUNK, forest_chunk_sum, forest_chunk_finish, chunk_add
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
@@ -194,12 +195,12 @@ def rf_host_predict(
     n_cols: Int,
     n_trees: Int,
     num_outputs: Int,
-    mut out: List[Float32],
+    mut output: List[Float32],
     workers: Int = 0,
 ) raises:
     """MIRRORS `RandomForest.predict_proba`, `ensemble/randomforest.mojo:1140-1161`.
 
-    `rows` is ROW-major, `n_rows * n_cols`. `out` receives
+    `rows` is ROW-major, `n_rows * n_cols`. `output` receives
     `n_rows * num_outputs` values, the vote divided by `n_trees` and nothing
     else (the classifier's argmax is the Python layer's, as it is for the GPU
     binding; the regressor reads output 0 of a one-output vote, which is
@@ -212,8 +213,8 @@ def rf_host_predict(
         raise Error("forest host: the tree list does not hold n_trees trees")
     if len(rows) < n_rows * n_cols:
         raise Error("forest host: rows holds fewer than n_rows * n_cols values")
-    if len(out) < n_rows * num_outputs:
-        raise Error("forest host: out holds fewer than n_rows * num_outputs values")
+    if len(output) < n_rows * num_outputs:
+        raise Error("forest host: output holds fewer than n_rows * num_outputs values")
     # `decisiontree.cuh:350-352`, `DecisionTree.predict`'s refusal of an
     # empty tree, asked once per tree here instead of once per row and tree.
     # The other two checks `DecisionTree.predict` makes are the two bounds
@@ -222,17 +223,17 @@ def rf_host_predict(
         if len(trees[i].sparsetree) == 0:
             raise Error("Cannot predict w/ empty tree, tree size 0")
     var divisor = _divisor(n_trees)
-    # DEVIATION 2900: rows fan out to contiguous tasks; each task runs the
+    # DEVIATION 2900: rows fan output to contiguous tasks; each task runs the
     # reference loop below for its own rows and writes only its own rows.
     # The tasks capture pointers, never the lists (the parallelize trap of
     # `ensemble/host_layout.mojo`); the caller keeps `trees`, `rows` and
-    # `out` alive across this call.
+    # `output` alive across this call.
     var tasks = host_task_count(n_rows, host_worker_count(workers))
     var chunk = (n_rows + tasks - 1) // tasks
     var failed = List[Int](length=tasks, fill=0)
     var tp = Pointer(to=trees)
     var rp = Pointer(to=rows)
-    var op = out.unsafe_ptr()
+    var op = output.unsafe_ptr()
     var fp = failed.unsafe_ptr()
 
     def _rows_task(c: Int) {imm tp, imm rp, imm op, imm fp, imm chunk, imm n_rows,
@@ -250,13 +251,31 @@ def rf_host_predict(
                 # `:404-412`, one row at a time, every tree adds into it:
                 # `DecisionTree.predict` with `n_rows=1` is `predict_all`
                 # over one row is `predict_one` at that row's offset.
-                for i in range(n_trees):
-                    DecisionTree.predict_one(
-                        rp[], row_id * n_cols, tp[][i], row_prediction, 0, num_outputs
-                    )
+                comptime if T34_CHUNK_FOLD:
+                    var part = List[Float32](length=FOREST_CHUNK*num_outputs, fill=Float32(0))
+                    var values = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
+                    var first = 0
+                    while first < n_trees:
+                        for j in range(FOREST_CHUNK*num_outputs):
+                            part[j] = 0
+                        for i in range(min(FOREST_CHUNK, n_trees-first)):
+                            DecisionTree.predict_one(rp[], row_id*n_cols, tp[][first+i], part, i*num_outputs, num_outputs)
+                        for k in range(num_outputs):
+                            for i in range(FOREST_CHUNK):
+                                values[i] = part[i*num_outputs+k]
+                            row_prediction[k] = chunk_add(row_prediction[k], forest_chunk_sum(values))
+                        first += FOREST_CHUNK
+                else:
+                    for i in range(n_trees):
+                        DecisionTree.predict_one(
+                            rp[], row_id * n_cols, tp[][i], row_prediction, 0, num_outputs
+                        )
                 # `:414-416`, divide by n_trees, and stop.
                 for k in range(num_outputs):
-                    op.unsafe_store(row_id * num_outputs + k, row_prediction[k] / divisor)
+                    comptime if T34_CHUNK_FOLD:
+                        op.unsafe_store(row_id*num_outputs+k, forest_chunk_finish(row_prediction[k], n_trees))
+                    else:
+                        op.unsafe_store(row_id * num_outputs + k, row_prediction[k] / divisor)
         except:
             fp.unsafe_store(c, 1)
 
@@ -310,28 +329,28 @@ def et_host_predict(
     n_cols: Int,
     n_trees: Int,
     num_outputs: Int,
-    mut out: List[Float32],
+    mut output: List[Float32],
     workers: Int = 0,
 ) raises:
     """MIRRORS `forest_vote_host`, `extratrees/impl/randomforest/randomforest.mojo:611-641`,
-    once per row, into `out` as `et_predict_binding` writes it (`:528-532`).
+    once per row, into `output` as `et_predict_binding` writes it (`:528-532`).
     `workers` is the thread count, `host_worker_count`'s reading of zero
-    (DEVIATION 2900, the same fan-out as `rf_host_predict`)."""
+    (DEVIATION 2900, the same fan-output as `rf_host_predict`)."""
     if n_rows <= 0 or n_cols <= 0:
         raise Error("forest host: n_rows and n_cols must be positive")
     if n_trees <= 0 or len(trees) != n_trees:
         raise Error("forest host: the tree list does not hold n_trees trees")
     if len(rows) < n_rows * n_cols:
         raise Error("forest host: rows holds fewer than n_rows * n_cols values")
-    if len(out) < n_rows * num_outputs:
-        raise Error("forest host: out holds fewer than n_rows * num_outputs values")
+    if len(output) < n_rows * num_outputs:
+        raise Error("forest host: output holds fewer than n_rows * num_outputs values")
     var divisor = _divisor(n_trees)
     var tasks = host_task_count(n_rows, host_worker_count(workers))
     var chunk = (n_rows + tasks - 1) // tasks
     var failed = List[Int](length=tasks, fill=0)
     var tp = Pointer(to=trees)
     var rp = Pointer(to=rows)
-    var op = out.unsafe_ptr()
+    var op = output.unsafe_ptr()
     var fp = failed.unsafe_ptr()
 
     def _rows_task(c: Int) {imm tp, imm rp, imm op, imm fp, imm chunk, imm n_rows,
@@ -347,11 +366,29 @@ def et_host_predict(
                 for k in range(num_outputs):
                     acc[k] = Float32(0.0)
                 # `predict_one`'s `+=`, every tree in order (DEVIATION 147).
-                for i in range(n_trees):
-                    predict_one_accumulate(rp[], r * n_cols, tp[][i], acc, 0, num_outputs)
+                comptime if T34_CHUNK_FOLD:
+                    var part = List[Float32](length=FOREST_CHUNK*num_outputs, fill=Float32(0))
+                    var values = InlineArray[Float32, FOREST_CHUNK](fill=Float32(0))
+                    var first = 0
+                    while first < n_trees:
+                        for j in range(FOREST_CHUNK*num_outputs):
+                            part[j] = 0
+                        for i in range(min(FOREST_CHUNK, n_trees-first)):
+                            predict_one_accumulate(rp[], r*n_cols, tp[][first+i], part, i*num_outputs, num_outputs)
+                        for k in range(num_outputs):
+                            for i in range(FOREST_CHUNK):
+                                values[i] = part[i*num_outputs+k]
+                            acc[k] = chunk_add(acc[k], forest_chunk_sum(values))
+                        first += FOREST_CHUNK
+                else:
+                    for i in range(n_trees):
+                        predict_one_accumulate(rp[], r * n_cols, tp[][i], acc, 0, num_outputs)
                 # `row_prediction[k] /= n_trees`.
                 for k in range(num_outputs):
-                    op.unsafe_store(r * num_outputs + k, acc[k] / divisor)
+                    comptime if T34_CHUNK_FOLD:
+                        op.unsafe_store(r*num_outputs+k, forest_chunk_finish(acc[k], n_trees))
+                    else:
+                        op.unsafe_store(r * num_outputs + k, acc[k] / divisor)
         except:
             fp.unsafe_store(c, 1)
 

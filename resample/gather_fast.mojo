@@ -21,6 +21,16 @@ def gather_rows_f32_kernel(
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+
+# AFCL-P10: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Keep 256 threads but exchange feature reuse for more rows per block. This
+# covers every width with masked tails; it is not an input-width dispatch rule.
+comptime AFCL_P10 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P10"]()
+comptime GATHER_COLS = 16 if AFCL_P10 else 32
+comptime GATHER_ROWS = 256 // GATHER_COLS
 
 
 def gather_rows_tiled_f32_kernel(
@@ -29,12 +39,12 @@ def gather_rows_tiled_f32_kernel(
     rows: MutPointer[Int32, MutAnyOrigin], count_in: Int32, d_in: Int32,
 ):
     var tid = Int(thread_idx.x)
-    var local_row = tid // 32
-    var row = Int(block_idx.y) * 8 + local_row
-    var col = Int(block_idx.x) * 32 + tid % 32
-    var selected = stack_allocation[8, Int32, address_space=AddressSpace.SHARED]()
-    if tid < 8:
-        var output_row = Int(block_idx.y) * 8 + tid
+    var local_row = tid // GATHER_COLS
+    var row = Int(block_idx.y) * GATHER_ROWS + local_row
+    var col = Int(block_idx.x) * GATHER_COLS + tid % GATHER_COLS
+    var selected = stack_allocation[GATHER_ROWS, Int32, address_space=AddressSpace.SHARED]()
+    if tid < GATHER_ROWS:
+        var output_row = Int(block_idx.y) * GATHER_ROWS + tid
         selected[tid] = rows.unsafe_load(output_row) if output_row < Int(count_in) else Int32(0)
     barrier()
     if row < Int(count_in) and col < Int(d_in):
@@ -77,3 +87,22 @@ def permutation_merge_kernel(
         else:
             hi = probe
     dst[base + (i - own_lo) + (lo - other_lo)] = Int32(position)
+
+
+# C11 deterministic counter draws at the output consumer, preserving the
+# exact utils_draw_kernel index (key, replicate=0, output row). No index
+# storage, no pointer-based cache and no mutable generator state.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+from resample.checks.index_map import draw_row_index, key_join
+
+
+def classical_draw_gather_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin], src: MutPointer[Float32, MutAnyOrigin],
+    key_lo: Int32, key_hi: Int32, n_in: Int32, count_in: Int32, d_in: Int32,
+):
+    var o = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    var d = Int(d_in)
+    if o < Int(count_in)*d:
+        var row = o//d
+        var selected = Int(draw_row_index(key_join(key_lo, key_hi), 0, row, n_in))
+        dst.unsafe_store(o, src.unsafe_load(selected*d+o%d))

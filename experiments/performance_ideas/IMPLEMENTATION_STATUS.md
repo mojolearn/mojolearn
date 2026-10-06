@@ -1,5 +1,19 @@
 # Implementation and qualification ledger
 
+This historical ledger covers the original 60 I/A/N/F cards. The shared catalog
+now also includes 54 [AFCL source-only classical cards](../apple_fast_classical_20261006/INTEGRATION.md).
+Those new cards remain uncompiled, unverified and unmeasured with switches OFF;
+none inherits the compilation or qualification statements below. Their source
+integration and per-caller limits are recorded in the linked AFCL artifacts.
+
+Separate follow-on campaign:
+[Apple FAST neural ideas and integration](../apple_fast_neural_20261006/README.md#integration-status-and-entry-points).
+Its 44 mechanism cards and eight combinations use `AFN26-*` global IDs.
+Runtime source controls and discovery/plan integration are programmed;
+everything is **not tested**, and complete executable full-workload harness
+integration is still pending. None of the historical compile/measurement
+claims in this ledger qualify that later campaign.
+
 The source branch is `codex/performance-experiment-ideas-20261005`, forked from
 the performance experiment ideas document at `32e455e029`. Each of the 60 cards
 has its own experiment commit. Later corrections retain the same card ID in

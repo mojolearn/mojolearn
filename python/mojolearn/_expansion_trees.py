@@ -27,6 +27,7 @@ columns and 0/1 targets; its Python reference arm is deleted).
 """
 import numbers
 import os
+import weakref
 
 from . import _portable_math as math
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
@@ -1220,7 +1221,8 @@ class AdaBoostClassifier(_AdaBoostBase):
             pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]
             b.x_trees_samme_step(addr(w, name="w"), addr_ro(pred, name="pred"), addr_ro(codes, name="y"),
                                  addr(stats, name="stats"),
-                                 [n, k, float(self.learning_rate), 1 if it == m - 1 else 0])
+                                 [n, k, float(self.learning_rate), 1 if it == m - 1 else 0,
+                                  int(isinstance(base, DecisionTreeClassifier))])
             status, alpha, err, total = stats.tolist()
             if status == 2.0:
                 if not self.estimators_:
@@ -1338,7 +1340,8 @@ class AdaBoostRegressor(_AdaBoostBase):
             pred, _ = as_f32_c(est.predict(Xa), ndim=1, name="prediction")
             b.x_trees_r2_step(addr(w, name="w"), addr_ro(pred, name="pred"), addr_ro(y32, name="y"),
                               addr(stats, name="stats"),
-                              [n, self._LOSSES[self.loss], float(self.learning_rate), 1 if it == m - 1 else 0])
+                              [n, self._LOSSES[self.loss], float(self.learning_rate), 1 if it == m - 1 else 0,
+                               int(isinstance(base, DecisionTreeRegressor))])
             status, alpha, err, total = stats.tolist()
             if status == 2.0:
                 if not self.estimators_:
@@ -3056,14 +3059,43 @@ class TreeExplainer(_TreesEnsembleBase):
         self._shape = (n_trees, k, n_nodes, int(slots), width)
         self.expected_value = ev.tolist()[0] if k == 1 else ev
         self.n_features_in_ = bg.shape[1]
+        # T44/C51 owns an immutable native snapshot for this explainer. A
+        # model refit cannot leave pointers into mutable/released model arrays.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        native = self._bind()
+        enabled = getattr(native, "x_trees_tree_shap_cache_enabled", None)
+        self._shap_cache = None
+        self._shap_closed = False
+        if callable(enabled) and enabled():
+            self._shap_cache = native.x_trees_tree_shap_cache_create(
+                [addr_ro(a, name="forest") for a in self._forest],  # glue: five model addresses
+                addr_ro(self._tscale, name="tscale"), addr_ro(self._cover, name="cover"),
+                [self.n_features_in_, n_trees, k, n_nodes])
+            self._shap_cache_finalizer = weakref.finalize(
+                self, native.x_trees_tree_shap_cache_release, self._shap_cache)
+
+    def close(self):
+        """Release the optional native explanation snapshot."""
+        finalizer = getattr(self, "_shap_cache_finalizer", None)
+        if finalizer is not None and finalizer.alive:
+            finalizer()
+        self._shap_cache = None
+        self._shap_closed = True
 
     def shap_values(self, X):
+        if getattr(self, "_shap_closed", False):
+            raise RuntimeError("this TreeExplainer has been closed")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n, d = Xa.shape
         if d != self.n_features_in_:
             raise ValueError(f"X has {d} features, data has {self.n_features_in_}")
         n_trees, k, n_nodes, slots, width = self._shape
         phi = zeros((n * d * k,), "<f4")
+        if self._shap_cache is not None:
+            self._bind().x_trees_tree_shap_cache_values(
+                self._shap_cache, addr_ro(Xa, name="X"), addr(phi, name="phi"),
+                [n, slots, width])
+            return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))
         self._bind().x_trees_tree_shap([addr_ro(a, name="forest") for a in self._forest],  # glue: forest array addresses for the binding
                                        addr_ro(self._tscale, name="tscale"), addr_ro(self._cover, name="cover"),
                                        addr_ro(Xa, name="X"), addr(phi, name="phi"),

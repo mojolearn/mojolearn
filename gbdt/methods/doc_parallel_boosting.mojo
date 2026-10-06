@@ -9,6 +9,8 @@ from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
 from std.sys.compile import is_defined
+from gbdt.trees_identical_switches import T18, T26
+from gbdt.methods.leaves_estimation.tree_t26_device import t26_estimate_apply
 from std.sys.info import has_apple_gpu_accelerator
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
 from gbdt.metrics.optimal_const_device import optimum_const_approx_device
@@ -3543,7 +3545,24 @@ def fit_with_test(
             )
             loop_times.stop_host("iter_tree_search", t_search)
             var n_bins = tree.bin_count()
-            if device_leaf_partition:
+            # T26 V1: only a same-version host/device supported contract.
+            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+            var t26_done = False
+            comptime if T26:
+                if (objective == OBJECTIVE_RMSE and not has_weights and perm_count == 1
+                    and approx_dim == 1 and leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+                    and leaf_estimation_iterations == 1):
+                    var direct_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+                    compute_non_symmetric_bins_for_model(
+                        ctx, layout_for_test, tree.model_structure, lc, n_rows, direct_bins,
+                    )
+                    leaf_values = t26_estimate_apply(
+                        ctx, direct_bins, targets, cursors[0], n_rows, n_bins,
+                        l2_leaf_reg, learning_rate,
+                    )
+                    t26_done = True
+                    _ = direct_bins^
+            if device_leaf_partition and not t26_done:
                 # DEVIATION 2551: the pool of one, keyed on the row count,
                 # with a leaf capacity of the policy's own bound
                 if (
@@ -3562,7 +3581,7 @@ def fit_with_test(
             var perm_batched = False
             comptime if CTR_PERM_BATCH:
                 if (
-                    perm_count > 1
+                    not t26_done and perm_count > 1
                     and device_leaf_partition
                     and approx_dim == 1
                     and estimate_can_batch(
@@ -3587,7 +3606,15 @@ def fit_with_test(
                     # bins for the model and the partition of every
                     # permutation, enqueued back to back
                     var t_bins_b = loop_times.start()
+                    # T18: only the learning permutation shares search row IDs.
+                    # A folded-back Lossguide leaf remains refused by final_ready.
+                    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+                    var inherit_learn = T18 and len(dws) == 1
+                    if inherit_learn:
+                        inherit_learn = dws[0].final_ready and len(dws[0].final_sizes) == n_bins
                     for p in range(perm_count):
+                        if inherit_learn and p == learn_p:
+                            continue
                         ref lp = perm_leaf_parts[p]
                         if p == learn_p:
                             compute_non_symmetric_bins_for_model(
@@ -3606,6 +3633,12 @@ def fit_with_test(
                     ctx.synchronize()
                     var parts = List[LeafPartition]()
                     for p in range(perm_count):
+                        if inherit_learn and p == learn_p:
+                            parts.append(LeafPartition(
+                                row_index.copy(), dws[0].final_offsets.copy(),
+                                dws[0].final_sizes.copy(),
+                            ))
+                            continue
                         parts.append(
                             perm_leaf_parts[p].partition_collect(
                                 ctx, n_rows, n_bins
@@ -3656,7 +3689,7 @@ def fit_with_test(
                     _ = parts^  # past the drain (step-33 race class)
                     _ = pend^  # past the drain (step-33 race class)
                     loop_times.stop_host("iter_estimate_apply", t_est_b)
-            for p in range(0 if perm_batched else perm_count):
+            for p in range(0 if (perm_batched or t26_done) else perm_count):
                 var pv = List[Float32]()
                 var t_bins = loop_times.start()
                 var part: LeafPartition
@@ -3665,7 +3698,7 @@ def fit_with_test(
                 var inherit = False
                 comptime if NS_INHERIT_PARTITION:
                     inherit = (
-                        perm_count == 1
+                        (perm_count == 1 or T18)
                         and p == learn_p
                         and len(dws) == 1
                         and dws[0].final_ready

@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The prep lane's host runner: the same program as x_prep/device.mojo, on
 the caller's arena, in place. No accelerator import, so the CPU-only host
 binding compiles it.
@@ -15,6 +13,10 @@ before the next stage. Which thread runs a unit never changes what the unit
 computes, so the bits are the serial walk's at every task count
 (MOJOLEARN_CPU_THREADS = 1, 3 or the default; `core/host_predict_threads.mojo`
 holds the one count policy). THIS IS NOT A NUMERIC ROW."""
+from experiments.classical_identical_ideas.shared_controls import C08_GROUPED_OUTPUT, C55_CLASS_GROUP
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_prep.common import FP, IP, STAGE_INTS
@@ -91,6 +93,8 @@ def _groups[K: Int](total: Int, q: IP) -> Int:
     elif K == OP_MATMUL:
         return matmul_host_groups(total, q)
     elif K == OP_CLASS_STATS:
+        comptime if C55_CLASS_GROUP:
+            return 0
         return class_stats_host_groups(total, q)
     elif K == OP_QDA_COV:
         return qda_cov_host_groups(total, q)
@@ -159,6 +163,9 @@ def run_program_host_ptr(f: FP, arena_len: Int, qbase: IP, stages: Int) raises:
     for s in range(stages):
         var op = Int(qbase.unsafe_load(s * STAGE_INTS))
         var total = Int(qbase.unsafe_load(s * STAGE_INTS + 1))
+        comptime if C08_GROUPED_OUTPUT:
+            if op == 9:
+                total = (total+3)//4
         var q = qbase + (s * STAGE_INTS + 2)
         comptime for k in range(N_OPS):
             if op == k:

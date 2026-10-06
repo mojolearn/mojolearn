@@ -26,7 +26,8 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from bindings.hostptr import copy_f32
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
+from experiments.classical_identical_ideas.stats_controls import C60_LAG4, C60_DIFF_REUSE
 from core.column_stats import STATS_TPB
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 from tsa.impl.timeSeries.stationarity import (
@@ -93,6 +94,25 @@ def choose_d_kernel(chosen: MutPointer[Int32, MutAnyOrigin], res: MutPointer[UIn
     chosen.unsafe_store(b, Int32(c))
 
 
+def classical_second_diff_reuse(
+    raw: MutPointer[Float32, MutAnyOrigin], workspace: MutPointer[Float32, MutAnyOrigin],
+    n_obs_in: Int32, previous_in: Int32, output_in: Int32,
+):
+    # C60: d=1 already produced raw[i+2]-raw[i+1]. Reuse exactly that
+    # rounded first subtraction in d=2's incumbent left-to-right expression.
+    # This is not diff(diff(raw)), which has a different association.
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    var n = Int(n_obs_in)
+    var series = Int(block_idx.x)
+    var i = Int(thread_idx.x)
+    while i < n-2:
+        var first = workspace[Int(previous_in)+series*(n-1)+i+1]
+        var mid = ftz(raw[series*n+i+1])
+        var low = ftz(raw[series*n+i])
+        workspace[Int(output_in)+series*(n-2)+i] = ftz(ftz(first-mid)+low)
+        i += Int(block_dim.x)
+
+
 def select_d_fast(
     ctx: DeviceContext,
     mut d_y: DeviceBuffer[DType.float32],
@@ -132,6 +152,7 @@ def select_d_fast(
     comptime sum_kernel = series_sum_kernel[False]
     comptime sumsq_kernel = series_sum_kernel[True]
     var off = 0
+    var previous_y_at = 0
     for d_ in range(d_max):
         var nd = n_obs - d_ - s * D
         var tot = batch_size * nd
@@ -149,8 +170,15 @@ def select_d_fast(
             # the round tests the input itself: a device-to-device copy into the workspace
             var src = d_y.create_sub_buffer[DType.float32](0, tot)
             ctx.enqueue_copy(dst_buf=y_diff, src_buf=src)
+        elif C60_DIFF_REUSE and D == 0 and d_ == 2:
+            ctx.enqueue_function[classical_second_diff_reuse](
+                d_y.unsafe_ptr(), w.unsafe_ptr(), Int32(n_obs),
+                Int32(previous_y_at), Int32(y_at),
+                grid_dim=(batch_size, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
+            )
         else:
             prepare_data(ctx, y_diff, d_y, batch_size, n_obs, d_, D, s)
+        previous_y_at = y_at
         # `_kpss_test`'s launches (tsa/impl/timeSeries/stationarity.mojo), on the workspace
         var nd_f = Float32(nd)
         var ratio = Float32(1.0) / nd_f
@@ -171,9 +199,10 @@ def select_d_fast(
         )
         var lags = kpss_lags(nd)
         var coeffs = kpss_s2B_coefficients(nd, lags)
+        var lag_tasks = batch_size * ((nd + 3) // 4) if C60_LAG4 else tot
         ctx.enqueue_function[s2B_accumulation_kernel](
             wp + acc_at, wp + cent_at, Int32(lags), Int32(nd), Int32(tot), coeffs[0], coeffs[1],
-            grid_dim=(elem_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
+            grid_dim=((lag_tasks + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
         )
         ctx.enqueue_function[sum_kernel](
             wp + s2b_at, wp + acc_at, Int32(nd), Float32(1.0),
@@ -299,9 +328,10 @@ def kpss_one_wait(
     )
     var lags = kpss_lags(nd)
     var coeffs = kpss_s2B_coefficients(nd, lags)
+    var lag_tasks = batch_size * ((nd + 3) // 4) if C60_LAG4 else tot
     ctx.enqueue_function[s2B_accumulation_kernel](
         wp + acc_at, wp + cent_at, Int32(lags), Int32(nd), Int32(tot), coeffs[0], coeffs[1],
-        grid_dim=(elem_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
+        grid_dim=((lag_tasks + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
     )
     ctx.enqueue_function[sum_kernel](
         wp + s2b_at, wp + acc_at, Int32(nd), Float32(1.0),

@@ -68,7 +68,11 @@ comptime IDN_NB_CSR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (is_defin
 comptime CSR_FLAG_FALLBACK = 1
 comptime CSR_FLAG_NEG = 2
 #: Rows per block of the count kernel (its indptr slice in threadgroup memory).
-comptime CSR_ROWS = 64
+# AFCL-P04: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# Half the metadata and row-search span per block; every nonzero remains in
+# exactly one row group. More groups can offset skew, but increase scheduling.
+comptime AFCL_P04 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_AFCL_P04"]()
+comptime CSR_ROWS = 32 if AFCL_P04 else 64
 comptime CSR_TPB = 256
 
 

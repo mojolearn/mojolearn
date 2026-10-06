@@ -9,6 +9,14 @@ from x_decomp.cells import F32Ptr, I32Ptr
 
 trait Exec:
     @staticmethod
+    def classical_centered_gram(x: F32Ptr, means: F32Ptr, output: F32Ptr, n: Int, d: Int) raises:
+        ...
+
+    @staticmethod
+    def classical_contrast(y: F32Ptr, gx: F32Ptr, gp: F32Ptr, count: Int, fun: Int, alpha: Float32) raises:
+        ...
+
+    @staticmethod
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
         ...
 

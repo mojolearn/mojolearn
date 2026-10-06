@@ -1,10 +1,12 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Compact k-NN connectivity graph, with the dense graph's exact cell order.
 
 Rows contain k slots, sorted by column. Duplicates and missing neighbors
 become -1 padding. No n-by-m storage or scan, including graph normalization.
 """
+from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn.
+
 from std.memory import bitcast
 from checks.numerics import ftz, identical_div, identical_sqrt, identical_mul_add
 from x_neighbors.items import FP, IP, _add
@@ -51,6 +53,17 @@ def op_lp_knn_graph(idx: Int, cols: Int, vals: Int, n: Int, m: Int, k: Int, vari
             denom = _add(denom, Float32(1))
         if denom == Float32(0):
             denom = Float32(1)
+        comptime if C43_RESIDENT_NORMALIZATION:
+            if variant == 0 and counts[i] > 0:
+                # C43 compact propagation descriptor: a negative first value
+                # stores the positive row degree; other values remain zero.
+                # Connectivity weights are nonnegative, so this format is
+                # disjoint from materialized coefficients and prediction rows.
+                # Its consumer performs the identical quotient once per row/
+                # output chain and retains ascending neighbor accumulation.
+                # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+                pv.unsafe_store(i*k, -denom)
+                continue
         for e in range(counts[i]):
             var j = Int(pc.unsafe_load(i * k + e))
             var value = Float32(1)
@@ -79,12 +92,18 @@ def lp_knn_product_item(t: Int, cols: IP, vals: FP, x: FP, res: FP,
     var i = t // c
     var j = t % c
     var acc = Float32(0)
+    var raw_row = False
+    var row_weight = Float32(0)
+    comptime if C43_RESIDENT_NORMALIZATION:
+        if k > 0 and vals.unsafe_load(i*k) < Float32(0):
+            raw_row = True
+            row_weight = ftz(identical_div(Float32(1),-vals.unsafe_load(i*k)))
     if finite:
         for e in range(k):
             var p = Int(cols.unsafe_load(i * k + e))
             if p < 0:
                 break
-            var a = ftz(vals.unsafe_load(i * k + e))
+            var a = row_weight if raw_row else ftz(vals.unsafe_load(i * k + e))
             if a != Float32(0):
                 acc = ftz(identical_mul_add(a, ftz(x.unsafe_load(p * c + j)), acc))
     else:
@@ -93,7 +112,7 @@ def lp_knn_product_item(t: Int, cols: IP, vals: FP, x: FP, res: FP,
         for p in range(m):
             var a = Float32(0)
             if e < k and Int(cols.unsafe_load(i * k + e)) == p:
-                a = ftz(vals.unsafe_load(i * k + e))
+                a = row_weight if raw_row else ftz(vals.unsafe_load(i * k + e))
                 e += 1
             acc = ftz(identical_mul_add(a, ftz(x.unsafe_load(p * c + j)), acc))
     res.unsafe_store(t, acc)

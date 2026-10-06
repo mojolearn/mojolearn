@@ -19,6 +19,7 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fabs, fmax, ld, st, ldi, i2f,
     fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, par_rows, seq_rows, row_dots,
 )
+from experiments.classical_identical_ideas.linear_controls import C16_GLM_FUSED
 from std.sys.info import is_gpu
 from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined
@@ -94,6 +95,31 @@ def _unit(power: Float32, link: Int, y: Float32, eta: Float32, what: Int) -> Flo
     return fs(fm(fs(Float32(2), power), a2), fm(fm(fs(Float32(1), power), y), a1))
 
 
+def _unit_all(power: Float32, link: Int, y: Float32, eta: Float32) -> Tuple[Float32, Float32, Float32]:
+    """C16 shares link values; loss, first and second derivative keep B seams.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    if link == GLM_LINK_IDENTITY:
+        var r = fs(eta, y)
+        return (fm(Float32(0.5), fm(r, r)), r, Float32(1))
+    if power == 0:
+        var mu = fexp(eta)
+        var r = fs(mu, y)
+        return (fm(Float32(0.5), fm(r, r)), fm(r, mu), fm(mu, fs(fm(Float32(2), mu), y)))
+    if power == 1:
+        var mu = fexp(eta)
+        return (fs(mu, fm(y, eta)), fs(mu, y), mu)
+    if power == 2:
+        var e = fexp(-eta)
+        var ye = fm(y, e)
+        return (fa(eta, ye), fs(Float32(1), ye), ye)
+    var a2 = fexp(fm(fs(Float32(2), power), eta))
+    var a1 = fexp(fm(fs(Float32(1), power), eta))
+    var ya1 = fm(y, a1)
+    return (fs(fd(a2, fs(Float32(2), power)), fd(ya1, fs(Float32(1), power))),
+            fs(a2, ya1), fs(fm(fs(Float32(2), power), a2), fm(fm(fs(Float32(1), power), y), a1)))
+
+
 def _objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int, alpha: Float32,
                theta: FP, toff: Int, eta: FP, sw: Bool, den: Float32) -> Float32:
     """Rows dealt across the team (eta and each row's loss term), then the
@@ -122,23 +148,38 @@ def _objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Floa
 
 
 def _objective_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int, alpha: Float32,
-               theta: FP, toff: Int, eta: FP, sw: Bool, den: Float32, ls: FP) -> Float32:
+               theta: FP, toff: Int, eta: FP, sw: Bool, den: Float32, ls: FP, hs: FP) -> Float32:
     """Map (eta and each row's loss term into `ls`), then fold rows ascending."""
     var b = ld(theta, toff + d) if fi else Float32(0)
+    var loss_words = List[Float32](length=n if C16_GLM_FUSED else 1, fill=Float32(0))
+    var losses = FP(unsafe_from_address=Int(loss_words.unsafe_ptr())) if C16_GLM_FUSED else ls
 
     def rows_map(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm power, imm link, imm theta,
-                                     imm toff, imm eta, imm sw, imm ls, imm b}:
+                                     imm toff, imm eta, imm sw, imm ls, imm hs, imm losses, imm b}:
         row_dots(x, lo, hi, d, theta, toff, eta)
         for i in range(lo, hi):
             var e = fa(ld(eta, i), b)
             st(eta, i, e)
-            var l = _unit(power, link, ld(y, i), e, 0)
+            var l = Float32(0)
+            comptime if C16_GLM_FUSED:
+                var values = _unit_all(power, link, ld(y, i), e)
+                l = values[0]
+                var gi = values[1]
+                var hi_ = fmax(Float32(0), values[2])
+                if sw:
+                    gi = fm(ld(y, n + i), gi)
+                    hi_ = fm(ld(y, n + i), hi_)
+                st(ls, i, gi)
+                st(hs, i, hi_)
+            else:
+                l = _unit(power, link, ld(y, i), e, 0)
             if sw:
                 l = fm(ld(y, n + i), l)
-            st(ls, i, l)
+            st(losses, i, l)
 
     par_rows(rows_map, n)
-    var acc = fold_fa_blocked(ls, 0, 1, n)
+    var acc = fold_fa_blocked(losses, 0, 1, n)
+    _ = loss_words^
     var reg = Float32(0)
     for j in range(d):
         var w = ld(theta, toff + j)
@@ -147,13 +188,13 @@ def _objective_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link
 
 
 def _objective(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int, alpha: Float32,
-               theta: FP, toff: Int, eta: FP, sw: Bool, den: Float32, ls: FP) -> Float32:
+               theta: FP, toff: Int, eta: FP, sw: Bool, den: Float32, ls: FP, hs: FP) -> Float32:
     """The device runs the team schedule, the host the map-then-fold
     schedule over `ls` (lane linear-cpu). The same bits either way."""
     comptime if is_gpu():
         return _objective_team(t, x, y, n, d, fi, power, link, alpha, theta, toff, eta, sw, den)
     else:
-        return _objective_host(x, y, n, d, fi, power, link, alpha, theta, toff, eta, sw, den, ls)
+        return _objective_host(x, y, n, d, fi, power, link, alpha, theta, toff, eta, sw, den, ls, hs)
 
 
 @always_inline
@@ -463,7 +504,7 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     t.sync()
     var iters = 0
     var converged = False
-    var f = _objective(t, x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1)
+    var f = _objective(t, x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1, s2)
     # lane/neural-pass68 (2026-10-01): iterations whose accepted step left the
     # objective unchanged at float32 resolution, in a row. In float32 the mean
     # gradient of a million rows keeps a noise floor above `tol` (taxi fares:
@@ -524,7 +565,8 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     st(s1, i, gi)
                     st(s2, i, hi_)
 
-            par_rows(rows_gh, n)
+            comptime if not C16_GLM_FUSED:
+                par_rows(rows_gh, n)
             # every entry of g and of H's lower triangle is its own accumulator.
             # Units: 0..d-1 the Hessian rows, d the intercept's row, d+1 the
             # gradient; a unit owns its accumulators and folds rows ascending,
@@ -593,7 +635,7 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                 for j in range(m):
                     st(trial, j, fmad(tt, ld(step, j), ld(res, j)))
             t.sync()
-            var ft = _objective(t, x, y, n, d, fi, power, link, alpha, trial, 0, eta, sw, den, s1)
+            var ft = _objective(t, x, y, n, d, fi, power, link, alpha, trial, 0, eta, sw, den, s1, s2)
             if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
                 if t.lead():
                     copy(res, 0, trial, 0, m)
@@ -611,7 +653,7 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                 print("GLM_TRACE it", it, "accepted", accepted, "tt", tt, "f", f)
         if not accepted:
             # no decrease at float32 resolution: the fit has converged as far as it can
-            f = _objective(t, x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1)
+            f = _objective(t, x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1, s2)
             break
         if stall >= GLM_STALL_ITERS:
             converged = True

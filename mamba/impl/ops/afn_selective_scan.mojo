@@ -9,13 +9,16 @@ one `(batch, dim)` pair: at the board shape (B 1, L 2048, d_inner 768)
 that is 768 threads each walking 2048 steps of 16 states, a launch that
 leaves most of an Apple GPU idle for the whole scan.
 
-Here one THREADGROUP of 32 lanes (one simdgroup) owns a `(batch, dim)`
-pair and the sequence is cut into 32 chunks of `ceil(L / 32)` steps:
+Here one THREADGROUP owns a `(batch, dim)` pair and the sequence is cut
+into `AFN_SCAN_CHUNKS` chunks of `ceil(L / AFN_SCAN_CHUNKS)` steps. The
+default is 32; the AFN26 16/64-chunk variants are not tested. The 16-chunk
+variant keeps one complete 32-lane simdgroup with 16 inactive lanes; the
+64-chunk variant uses two simdgroups and threadgroup-wide barriers.
 
   pass 1  lane c walks its chunk from h = 0, keeping the chunk's local end
           state S_c[n] and the product of its decays P_c[n] = prod exp(dt A_n)
           (both f32, the same per-step products as main's kernel);
-  carry   lane 0 folds the 32 chunk summaries serially in threadgroup
+  carry   lane 0 folds the occupied chunk summaries serially in threadgroup
           memory: h_start_{c+1} = fma(P_c, h_start_c, S_c) from the
           incoming state h_start_0 = h_in;
   pass 2  lane c re-walks its chunk from h_start_c with main's per-step
@@ -23,7 +26,7 @@ pair and the sequence is cut into 32 chunks of `ceil(L / 32)` steps:
           h, deltaB_u), y = sum_n C_n h_n ascending from +0.0, out = y + u D)
           and writes y, out; the last chunk's lane stores the final state.
 
-ONE launch instead of one, but 32x the parallelism, no scratch buffer and
+ONE launch instead of one, with parallel chunks, no scratch buffer and
 no host step. The per-step arithmetic is main's; what moves is the FOLD
 ORDER of the recurrence across a chunk boundary (the carry is injected as
 P h_start + S instead of being threaded through every step), which is f32
@@ -41,9 +44,14 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz, identical_exp, identical_mul, identical_mul_add
+from mamba.impl.modules.afn_defines import AFN26_MAMBA1_CHUNKS16, AFN26_MAMBA1_CHUNKS64
 
-#: lanes per (batch, dim) threadgroup: one Metal simdgroup
-comptime AFN_SCAN_LANES = 32
+# M07: not tested. Storage follows chunk count; the launch keeps whole Apple
+# simdgroups. No sequence length selects an experimental geometry.
+# Three f32 summary arrays cost 3 * chunks * DSTATE * 4 bytes; the public
+# caller's DSTATE=16 uses 3072/6144/12288 bytes for 16/32/64 chunks.
+comptime AFN_SCAN_CHUNKS = 16 if AFN26_MAMBA1_CHUNKS16 else (64 if AFN26_MAMBA1_CHUNKS64 else 32)
+comptime AFN_SCAN_LANES = 64 if AFN26_MAMBA1_CHUNKS64 else 32
 
 
 def afn_scan_chunked_kernel[
@@ -77,13 +85,13 @@ def afn_scan_chunked_kernel[
     var nc = (seqlen + chunk - 1) // chunk
 
     var s_end = stack_allocation[
-        AFN_SCAN_LANES * DSTATE, Scalar[DType.float32], address_space=AddressSpace.SHARED
+        AFN_SCAN_CHUNKS * DSTATE, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
     var s_prod = stack_allocation[
-        AFN_SCAN_LANES * DSTATE, Scalar[DType.float32], address_space=AddressSpace.SHARED
+        AFN_SCAN_CHUNKS * DSTATE, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
     var s_start = stack_allocation[
-        AFN_SCAN_LANES * DSTATE, Scalar[DType.float32], address_space=AddressSpace.SHARED
+        AFN_SCAN_CHUNKS * DSTATE, Scalar[DType.float32], address_space=AddressSpace.SHARED
     ]()
 
     var a_vals = SIMD[DType.float32, DSTATE](0.0)
@@ -110,9 +118,12 @@ def afn_scan_chunked_kernel[
                 var dbu = ftz(identical_mul(ftz(identical_mul(dl, bv)), uv))
                 st[n] = ftz(identical_mul_add(da, st[n], dbu))
                 pr[n] = ftz(identical_mul(pr[n], da))
-    comptime for n in range(DSTATE):
-        s_end.unsafe_store(lane * DSTATE + n, st[n])
-        s_prod.unsafe_store(lane * DSTATE + n, pr[n])
+    # M07: not tested. Empty logical chunks keep (S=0,P=1); surplus physical
+    # lanes in the 16-chunk arm touch no shared slot but join both barriers.
+    if lane < AFN_SCAN_CHUNKS:
+        comptime for n in range(DSTATE):
+            s_end.unsafe_store(lane * DSTATE + n, st[n])
+            s_prod.unsafe_store(lane * DSTATE + n, pr[n])
     barrier()
 
     # ---- the carry: h entering every chunk, from the incoming state.
@@ -166,7 +177,7 @@ def afn_selective_scan_chunked[
     DSTATE: Int
 ](
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut y: DeviceBuffer[DType.float32],
     mut h_state: DeviceBuffer[DType.float32],
     mut u: DeviceBuffer[DType.float32],
@@ -184,12 +195,14 @@ def afn_selective_scan_chunked[
     var total = batch * dim
     if total <= 0 or seqlen <= 0:
         return
-    var chunk = (seqlen + AFN_SCAN_LANES - 1) // AFN_SCAN_LANES
+    # M07: not tested. nc <= AFN_SCAN_CHUNKS even for short/ragged sequences;
+    # only occupied chunks are folded, and their last lane stores h_state.
+    var chunk = (seqlen + AFN_SCAN_CHUNKS - 1) // AFN_SCAN_CHUNKS
     if chunk < 1:
         chunk = 1
     comptime kern = afn_scan_chunked_kernel[DSTATE]
     ctx.enqueue_function[kern](
-        out.unsafe_ptr(),
+        output.unsafe_ptr(),
         y.unsafe_ptr(),
         h_state.unsafe_ptr(),
         u.unsafe_ptr(),

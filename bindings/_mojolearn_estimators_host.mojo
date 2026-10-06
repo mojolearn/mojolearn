@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_estimators` family: KernelDensity (the
 CPU training lane, phase 1, 2026-09-13) and, since the classical host
 inference lane the same day, the INFERENCE entries of LinearRegression,
@@ -52,6 +50,10 @@ function of the GPU binding (inverse_transform, ...) is
 deliberately absent, so those surfaces refuse BY NAME through
 `_HostBinding` and never hash something else.
 """
+from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from glm.host.center_host import col_sums_on_cpu, center_on_cpu, scale_rows_on_cpu
 from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from decomposition.impl.pca_rank import pca_rank_finish
@@ -424,6 +426,26 @@ def tsvd_explained_binding(
         host_tsvd_explained(f32_ptr(x_address), f32_ptr(c_address), ep, rp, nr, nf, nc)
     return PythonObject(0)
 
+
+
+def lm_classical_stats_binding() raises -> PythonObject:
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    return PythonObject(Int(C02_LINEAR_PAIR))
+
+
+def lm_col_sums_pair_binding(x: PythonObject, y: PythonObject, sx: PythonObject, sy: PythonObject, params: PythonObject) raises -> PythonObject:
+    if len(params) != 2:
+        raise Error("lm_col_sums_pair: params must contain rows, cols")
+    var xa = Int(py=x)
+    var ya = Int(py=y)
+    var sxa = Int(py=sx)
+    var sya = Int(py=sy)
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    with GILReleased(Python()):
+        col_sums_on_cpu(xa, sxa, rows, cols)
+        col_sums_on_cpu(ya, sya, rows, 1)
+    return PythonObject(0)
 
 
 def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1467,6 +1489,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[tsvd_explained_binding]("tsvd_explained")
         module.def_function[ols_fit_binding]("ols_fit")
         module.def_function[lm_col_sums_binding]("lm_col_sums")
+        module.def_function[lm_classical_stats_binding]("lm_classical_stats")
+        module.def_function[lm_col_sums_pair_binding]("lm_col_sums_pair")
         module.def_function[lm_means_finish_binding]("lm_means_finish")
         module.def_function[lm_intercept_binding]("lm_intercept")
         module.def_function[pca_rank_finish_binding]("pca_rank_finish")

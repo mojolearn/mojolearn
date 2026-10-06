@@ -2750,3 +2750,35 @@ def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
         [_addr(loss), _addr(row_max), _addr(row_denom), _addr(d_hidden),
          _addr(d_weight), _addr_ro(h), _addr_ro(w), _addr_ro(t)], plist)
     return float(loss[0]), d_hidden, d_weight
+
+
+def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode="identical"):
+    """Run independent row sessions through one shared Linear/ReLU/Linear model.
+
+    Returns concatenated logits in caller session order. Empty sessions are
+    allowed. The native NN64 switch selects packed projection versus separate
+    projection calls. All numerical work and status checks run in Mojo.
+    Stateful caches and dropout are outside this stateless model's contract.
+    """
+    w1 = _c32(weight1, "weight1", "mlp_inference_sessions")
+    b1 = _c32(bias1, "bias1", "mlp_inference_sessions")
+    w2 = _c32(weight2, "weight2", "mlp_inference_sessions")
+    b2 = _c32(bias2, "bias2", "mlp_inference_sessions")
+    if len(w1.shape) != 2 or len(w2.shape) != 2:
+        raise ValueError("MLP session weights must be matrices")
+    hidden, width = w1.shape
+    out_width, hidden2 = w2.shape
+    if hidden2 != hidden or b1.shape != (hidden,) or b2.shape != (out_width,):
+        raise ValueError("MLP session weight/bias shapes do not agree")
+    # API objects and their shape metadata only; row values stay in buffers.
+    sessions = [_c32(x, "session input", "mlp_inference_sessions") for x in inputs]
+    if not sessions or any(len(x.shape) != 2 or x.shape[1] != width for x in sessions):
+        raise ValueError("MLP sessions require at least one (rows, width) input")
+    rows = [int(x.shape[0]) for x in sessions]
+    output = _buffers.empty((sum(rows), out_width), '<f4')
+    wrote = int(_load(numeric_mode).mlp_sessions(
+        [_addr(output), _addr_ro(w1), _addr_ro(b1), _addr_ro(w2), _addr_ro(b2)],
+        [_addr_ro(x) for x in sessions], rows, [width, hidden, out_width]))
+    if wrote != output.size:
+        raise RuntimeError("MLP sessions returned an invalid output count")
+    return output

@@ -1,0 +1,24 @@
+{
+  "id": "C49",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "SHARED_SCOPED_IMPLEMENTATIONS_UNVERIFIED",
+  "default": "OFF",
+  "shared_implementations": [
+    "T12",
+    "T13",
+    "T41"
+  ],
+  "implementation_records": [
+    "experiments/trees_identical_20261006/forest/T12.json",
+    "experiments/trees_identical_20261006/forest/T13.json",
+    "experiments/trees_identical_20261006/inference/T41.json"
+  ],
+  "overlap_explanation": "T12/T13 forest concurrent immutable representations and T41 IF bounded tasks; preserve stable tree/node/draw IDs.",
+  "selector": "tools/trees_identical_ideas.py:OVERLAPS",
+  "harness": "bench/speed/forest_speed_arm.py --trees-experiment C49",
+  "recipe_mapping": "experiments/trees_identical_20261006/recipes.json",
+  "full_dataset_facts": "PENDING; every shared record retains its affected scopes and gaps",
+  "demonstrated_runtime_reach": false,
+  "evidence": [],
+  "classical_source": "../mojolearn-classical-identical-ideas/docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md (read only)"
+}

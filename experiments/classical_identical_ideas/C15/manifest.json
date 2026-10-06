@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "id": "C15",
+  "title": "Solve against factors instead of forming inverses",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "x_linear/bayes.mojo",
+    "x_linear/bayes_grid.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Prediction, posterior variance/evidence, condition sensitivity and residuals at least as good as control.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C15",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C15",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C15",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C15",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C15",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/linear_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/linear_controls.mojo"
+  ],
+  "default_configuration": "factor_solve",
+  "configurations": {
+    "factor_solve": {
+      "name": "factor_solve",
+      "candidate_defines": [
+        "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C15"
+      ],
+      "source_gaps": [
+        "No new BayesianRidge inverse-elision arm where production already solves factors.",
+        "Gaussian-process inverse-materialization callers need independent integration by owning family."
+      ],
+      "scope": "ARD posterior mean directly solves existing Cholesky factor; covariance retained for required posterior/gamma diagnostics",
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "expanded:bayesian-ridge",
+        "expanded:ard",
+        "more:ridge",
+        "expanded:min-cov-det",
+        "expanded:elliptic-envelope"
+      ]
+    }
+  },
+  "source_gaps": [
+    "No new BayesianRidge inverse-elision arm where production already solves factors.",
+    "Gaussian-process inverse-materialization callers need independent integration by owning family."
+  ],
+  "catalog_estimators": [
+    "BayesianRidge",
+    "ARD",
+    "Ridge",
+    "covariance consumers with solve-only needs"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "expanded:bayesian-ridge",
+    "expanded:ard",
+    "more:ridge",
+    "expanded:min-cov-det",
+    "expanded:elliptic-envelope"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

@@ -127,6 +127,7 @@ from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
 from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA, SYM_REUSE_PARTITION
 from gbdt.methods.dynamic_boosting_folds import TFold
 from gbdt.methods.ordered_fast_switches import ORD_ALL, ORD_DOC_ID_STORAGE
+from gbdt.trees_identical_switches import T22
 from gbdt.methods.kernel.pointwise_scores import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_NEWTON_COSINE,
@@ -503,6 +504,8 @@ def fit_oblivious_tree_structure_traced(
             fold_order = fold_count > 1 and ordered_fold_index()
     else:
         fold_order = fold_count > 1 and ordered_fold_index()
+    comptime if T22:
+        fold_order = fold_count > 1
     var stride = doc_count if fold_order else n_rows
     var blocks = blocks_for(layout, stride)
     var global_ids = List[Int]()

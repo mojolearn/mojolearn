@@ -211,7 +211,17 @@ comptime MF_F32_EPS = Float32(1.1920928955078125e-07)
 comptime MF_FLT_MIN = Float32(1.1754943508222875e-38)
 #: Error words: NaN draw/distance, no pinvh, eigensolve budget, Frobenius drift.
 comptime MF_ERR = 4
-comptime MF_SH_INT = MF_TPB * 16 + 32 + MF_TPB
+# AFCL-L13: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# Select each trial's complete support with four SIMD groups instead of
+# eight. Private-bin/scan shared storage falls from 17.125 to 8.625 KiB,
+# allowing more independent trials to reside concurrently. All eight radix
+# passes, integer counts and ascending-index tie selection remain intact.
+# This schedules the accepted existing C-step route; it does not revive a
+# rejected covariance/eigensolve arm or reduce trials/C steps.
+comptime AFCL_L13 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L13"]())
+comptime MF_SELECT_TPB = 128 if AFCL_L13 else MF_TPB
+comptime MF_SH_INT = MF_SELECT_TPB * 16 + 32 + MF_SELECT_TPB
 
 
 def _blocks(count: Int) -> Int:
@@ -717,7 +727,7 @@ def mf_select_kernel(dist: F32Ptr, mask: I32Ptr, r: Int32, h: Int32, active: I32
     var rr = Int(r)
     var base = c * rr
     var sh = stack_allocation[MF_SH_INT, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var tot = 16 * MF_TPB
+    var tot = 16 * MF_SELECT_TPB
     var scan = tot + 32
     var prefix = UInt32(0)
     var need = Int(h)
@@ -730,13 +740,13 @@ def mf_select_kernel(dist: F32Ptr, mask: I32Ptr, r: Int32, h: Int32, active: I32
             var im = _image(dist.unsafe_load(base + i))
             if first or (im >> UInt32(shift + 4)) == prefix:
                 cnt[Int((im >> UInt32(shift)) & UInt32(15))] += 1
-            i += MF_TPB
+            i += MF_SELECT_TPB
         for b in range(16):
             sh[tid * 16 + b] = cnt[b]
         barrier()
         if tid < 16:
             var s = Int32(0)
-            for t in range(MF_TPB):
+            for t in range(MF_SELECT_TPB):
                 s += sh[t * 16 + tid]
             sh[tot + tid] = s
         barrier()
@@ -771,7 +781,7 @@ def mf_select_kernel(dist: F32Ptr, mask: I32Ptr, r: Int32, h: Int32, active: I32
         sh[scan + tid] = Int32(eq)
         barrier()
         var off = 1
-        while off < MF_TPB:
+        while off < MF_SELECT_TPB:
             var v = sh[scan + tid]
             var a = sh[scan + tid - off] if tid >= off else Int32(0)
             barrier()
@@ -779,13 +789,13 @@ def mf_select_kernel(dist: F32Ptr, mask: I32Ptr, r: Int32, h: Int32, active: I32
             barrier()
             off *= 2
         var rank = Int(sh[scan + tid]) - eq
-        var total = Int(sh[scan + MF_TPB - 1])
+        var total = Int(sh[scan + MF_SELECT_TPB - 1])
         if valid:
             var take = lt or (eq == 1 and done + rank < need)
             mask.unsafe_store(base + i, Int32(1) if take else Int32(0))
         done += total
         barrier()
-        i0 += MF_TPB
+        i0 += MF_SELECT_TPB
 
 
 def mf_any_kernel(active: I32Ptr, nc: Int32, dst: I32Ptr):
@@ -1146,7 +1156,7 @@ def _run_phase(
                 grid_dim=_blocks(nc * r), block_dim=MF_TPB,
             )
     ctx.enqueue_function[mf_select_kernel](
-        _f(ph.dist), _i(ph.mask0), Int32(r), Int32(ph.h), _i(ph.active), grid_dim=nc, block_dim=MF_TPB,
+        _f(ph.dist), _i(ph.mask0), Int32(r), Int32(ph.h), _i(ph.active), grid_dim=nc, block_dim=MF_SELECT_TPB,
     )
     _lap(ctx, prof, 0, tp)
     for s in range(ph.n_iter + 1):
@@ -1248,7 +1258,7 @@ def _run_phase(
             )
         ctx.enqueue_function[mf_select_kernel](
             _f(ph.dist), _i(ph.mask0) if par == 1 else _i(ph.mask1), Int32(r), Int32(ph.h), _i(ph.active),
-            grid_dim=nc, block_dim=MF_TPB,
+            grid_dim=nc, block_dim=MF_SELECT_TPB,
         )
         _lap(ctx, prof, 4, tp)
     if want_dist:

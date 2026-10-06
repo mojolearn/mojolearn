@@ -47,6 +47,9 @@ helper implemented from a guess.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceil, log2
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 from checks.kernel_matrix import (
     TARGET_COLUMN,
@@ -401,6 +404,71 @@ def scan_pointwise_histograms_kernel(
             var at = base + b * hist_count + hist_id
             running += histogram.unsafe_load(at)
             histogram.unsafe_store(at, running)
+
+
+comptime AFT_SCAN_LANES = 128
+
+
+def aft_cooperative_scan_kernel(
+    feature_first_fold_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_folds: MutPointer[UInt32, MutAnyOrigin],
+    feature_one_hot: MutPointer[UInt8, MutAnyOrigin],
+    hist_line_size_in: Int32,
+    hist_count_in: Int32,
+    fold_count_in: Int32,
+    histogram: MutPointer[Float32, MutAnyOrigin],
+):
+    """G01: uniform-barrier inclusive scan; uncompiled/unverified/unmeasured.
+
+    One feature owns an entire block, so its bin count and one-hot decision
+    are uniform. A 128-lane tile uses four Apple SIMD groups and only 512
+    bytes of shared state. Padded bins contribute zero, never global loads.
+    The carry keeps arbitrarily long feature slices complete; FAST rounding
+    differs from the serial scan. No dimension/dataset dispatch is involved.
+    """
+    var feature = Int(block_idx.x)
+    var folds = Int(feature_folds.unsafe_load(feature))
+    if folds <= 1 or feature_one_hot.unsafe_load(feature) != UInt8(0):
+        return
+    var tid = Int(thread_idx.x)
+    var hc = Int(hist_count_in)
+    var part = Int(block_idx.y) * Int(fold_count_in) + Int(block_idx.z)
+    var base = (
+        part * Int(hist_line_size_in)
+        + Int(feature_first_fold_index.unsafe_load(feature))
+    ) * hc
+    var scan = stack_allocation[
+        AFT_SCAN_LANES, Scalar[DType.float32],
+        address_space=AddressSpace.SHARED,
+    ]()
+    for stat in range(hc):
+        var carry = Float32(0.0)
+        var tile = 0
+        while tile < folds:
+            var bin = tile + tid
+            var value = Float32(0.0)
+            if bin < folds:
+                value = histogram.unsafe_load(base + bin * hc + stat)
+            scan[unsafe_offset=tid] = value
+            barrier()
+            var distance = 1
+            while distance < AFT_SCAN_LANES:
+                var previous = Float32(0.0)
+                if tid >= distance:
+                    previous = scan[unsafe_offset=tid - distance]
+                barrier()
+                if tid >= distance:
+                    scan[unsafe_offset=tid] += previous
+                barrier()
+                distance <<= 1
+            var prefix = carry + scan[unsafe_offset=tid]
+            var next_carry = carry + scan[unsafe_offset=AFT_SCAN_LANES - 1]
+            if bin < folds:
+                histogram.unsafe_store(base + bin * hc + stat, prefix)
+            # Every lane finishes reading the tile before the next writes it.
+            barrier()
+            carry = next_carry
+            tile += AFT_SCAN_LANES
 
 
 def scan_sub_pointwise_histograms_kernel(

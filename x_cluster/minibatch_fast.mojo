@@ -57,8 +57,15 @@ comptime MINIBATCH_FAST_DEV = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF"]()
 )
-comptime MBF_TPB = 256
-comptime MBF_CH = 256
+# AFCL-G07: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Four Apple SIMD groups per block reduce the register/shared footprint and
+# increase independent assignment blocks. Keep the center chunk equal to
+# the block width for the existing one-row-per-thread compaction kernel.
+# Every batch, random draw, speculative group and convergence test remains;
+# partial-sum association can move FAST bits and the stopping trajectory.
+comptime AFCL_G07 = MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_AFCL_G07"]()
+comptime MBF_TPB = 128 if AFCL_G07 else 256
+comptime MBF_CH = MBF_TPB
 """Batch rows per chunk of `_mbf_sum_kernel`."""
 comptime MBF_MAX_KD = 4096
 """Center cells staged in threadgroup memory (16 KB)."""

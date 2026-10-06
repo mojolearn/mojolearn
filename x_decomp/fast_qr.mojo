@@ -34,7 +34,14 @@ from x_decomp.cells import F32Ptr, geqrf_scale_elem, geqrf_update_elem, orgqr_in
 #: threads per block of every kernel here
 comptime FQ_TPB = 256
 #: rows a reflector-product block folds (one partial per block and column)
-comptime FQ_ROWS = 256
+# AFCL-L09: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
+# 128-row reflector products shorten serial chains and expose more blocks,
+# trading twice the product scratch/fold work for parallelism. The scaled
+# norm, reflector signs and full factorization remain unchanged. This is the
+# grid Householder route, not blocked TSQR: QR_FAST_DEV is needed in BOTH arms.
+comptime AFCL_L09 = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                    and is_defined["MOJOLEARN_AFCL_L09"]())
+comptime FQ_ROWS = 128 if AFCL_L09 else 256
 #: most blocks of the norm's first pass (the finish kernel folds their pairs)
 comptime FQ_MAX_BLOCKS = 1024
 

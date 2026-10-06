@@ -1,0 +1,18 @@
+{
+  "schema": "mojolearn.six-lane-main-merge/1",
+  "main_parent": "74967f7119a802d30216f4198d1d9c47bc4165fd",
+  "integration_parent": "46bf6fd3ed01b9be272e75568ce086903fa0d8d0",
+  "authorization": "Owner explicitly requested merge into main and no recheck of existing compilation evidence.",
+  "master_harness": "retained",
+  "main_results": "preserved; integration added compile evidence, no competing timing measurements",
+  "original_benchmark": "experiments/six_lane_integration/benchmark.integration-freeze.json",
+  "merged_benchmark": "experiments/six_lane_integration/benchmark.json",
+  "merge_adjustments": [
+    "Allow compile-only planner on clean committed main.",
+    "Forward saved recipes to the updated more-runner.",
+    "Preserve original benchmark snapshot and record merged main reference."
+  ],
+  "compile_evidence": "Retained with original source hashes; not revalidated or rebuilt for this merge.",
+  "runtime_execution": "NOT RUN",
+  "promotion": "none; new candidates stay default off"
+}

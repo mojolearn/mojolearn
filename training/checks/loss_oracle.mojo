@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host FP32 oracle of softmax cross-entropy under profile `mojolearn.identical.loss.ce.fp32.v1`, and its Float64 tolerance reference. The shared contract (constants, configuration, refusals) is in `training/checks/loss_contract.mojo`; `refuse_nonfinite` there is a THIRD COPY (DEVIATION 1164)."""
 
+from training.neural_ab_profile_contract import NN54_LOSS_PROFILE, nn_reduce_host_admitted
 from checks.numerics import (
     ftz,
     identical_div,
@@ -11,8 +12,8 @@ from checks.numerics import (
     identical_mul,
 )
 from gemm.contract import OP_NN
-from gemm.checks.gemm_oracle import gemm_oracle
-from gemm.host.gemm_host_rows import gemm_host_rows
+from gemm.host.neural_gemm import gemm_oracle
+from gemm.host.neural_gemm import gemm_host_rows
 from training.checks.loss_contract import (
     CE_MAX_EXACT_COUNT,
     CE_MAX_ROWS,
@@ -40,6 +41,10 @@ from training.checks.loss_contract import (
 
 
 
+from training.neural_identical_experiments import IDN_LOSS_TOKEN_TREE_V2
+from training.loss_reduction_v2 import loss_token_tree_v2_host
+
+
 def ce_fold(
     values: List[Float32], base: Int, count: Int, ones: List[Float32]
 ) -> Float32:
@@ -49,6 +54,15 @@ def ce_fold(
         row.append(values[base + t])
     var out = gemm_host_rows(row, ones, OP_NN, 1, 1, count)
     return out[0]
+
+
+def ce_total_fold(values: List[Float32], count: Int, ones: List[Float32]) -> Float32:
+    """NN54 v2 changes only row-total order; normalization stays unchanged."""
+    comptime if NN54_LOSS_PROFILE:
+        return nn_reduce_host_admitted[128, False](rebind[MutPointer[Float32, MutAnyOrigin]](values.unsafe_ptr()), count)
+    comptime if IDN_LOSS_TOKEN_TREE_V2:
+        return loss_token_tree_v2_host(values, 0, count)
+    return ce_fold(values, 0, count, ones)
 
 
 def ce_fold_serial_diagnostic(
@@ -133,7 +147,11 @@ def _row_combine(
 def ce_forward_oracle(
     logits: List[Float32], targets: List[Int32], cfg: CeConfig
 ) raises -> CeStages:
-    """**THE NORMATIVE FORWARD ANSWER of `mojolearn.identical.loss.ce.fp32.v1`.** Scalar, single threaded, host. That is deterministic, the same on every vendor, and admitted."""
+    """Native host forward under CE_NUMERICAL_PROFILE.
+
+    The default retains v1; NI35 selects its separate L12 token-total tree.
+    NI35's source has not been compiled or checked for cross-column identity.
+    """
     var n = ce_refuse_inputs(logits, targets, cfg)
     var v = cfg.vocab
     var smoothing = cfg.smoothing_is_spelled()
@@ -198,7 +216,7 @@ def ce_forward_oracle(
     if cfg.reduction == REDUCTION_NONE:
         return st^
 
-    var total = ce_fold(st.row, 0, n, ones)
+    var total = ce_total_fold(st.row, n, ones)
     st.total.append(total)
 
     var divisor = ce_divisor(cfg.reduction, st.count, cfg.num_items)

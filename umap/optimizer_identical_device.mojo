@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTICAL UMAP layout optimizer on the device: one thread per vertex, one
 epoch snapshot, every vertex's update a fixed-order fold.
 
@@ -43,6 +41,10 @@ was removed (hr-optin-flags).
 FAST keeps `umap/optimizer_fast.mojo` untouched (one attractive move per
 edge, SplitMix64 negatives, stdlib pow); it is not compared to this.
 """
+from experiments.classical_identical_ideas.graph_controls import C44_SAMPLING_DESCRIPTORS
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import memcpy
 from dbscan.impl.adjgraph.algo import exclusive_scan, scan_blocks_needed
@@ -374,6 +376,145 @@ def umap_identical_epoch_kernel_rt(
         destination.unsafe_store(v * C + c, ftz(x[c] + acc[c]))
 
 
+def _c44_sampling_kernel(scaled: MutPointer[Float32,MutAnyOrigin], samples: MutPointer[UInt32,MutAnyOrigin], edges: Int32, n: Int32, rate: Int32, epoch: Int32, seed: UInt64):
+    # One independent edge descriptor. The original Philox counter mapping
+    # is retained; SGD consumers still visit every edge/draw in original order.
+    var e=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if e>=Int(edges):
+        return
+    var R=Int(rate)
+    var base=e*(R+1)
+    var scale=scaled[e]
+    var live=Int(Float32(epoch+1)*scale)>Int(Float32(epoch)*scale)
+    samples[base]=UInt32(1) if live else UInt32(0)
+    if not live:
+        return
+    var key=SIMD[DType.uint32,2](UInt32(seed & 0xFFFFFFFF),UInt32((seed>>32)&0xFFFFFFFF))
+    var draw=SIMD[DType.uint32,4](0)
+    for j in range(R):
+        if (j&3)==0:
+            draw=philox4x32_10(SIMD[DType.uint32,4](UInt32(e & 0xFFFFFFFF),UInt32((e>>32)&0xFFFFFFFF),UInt32(epoch),UInt32(j>>2)),key)
+        samples[base+j+1]=draw[j&3]%UInt32(n)
+
+
+def _c44_epoch_kernel(
+    source: MutPointer[Float32, MutAnyOrigin],
+    row_offsets: MutPointer[UInt32, MutAnyOrigin],
+    tails: MutPointer[UInt32, MutAnyOrigin],
+    scaled: MutPointer[Float32, MutAnyOrigin],
+    destination: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    epoch_in: Int32,
+    alpha: Float32,
+    negative_rate_in: Int32,
+    neg2ab: Float32,
+    rep2b: Float32,
+    a: Float32,
+    b: Float32,
+    seed: UInt64,
+    c_in: Int32,
+    samples: MutPointer[UInt32,MutAnyOrigin],
+):
+    """`umap_identical_epoch_kernel[C]` with the dimension C read at run
+    time (n_components 1 and 4 to 32; lane/algos-decomp, 2026-09-27,
+    DEVIATION 5322): the same statements in the same order, the per-vertex
+    rows in local arrays of UMAP_RT_WIDTH instead of 4-wide registers. 2 and
+    3 keep the comptime kernel, so their bits are unchanged."""
+    var C = Int(c_in)
+    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_in)
+    if v >= n:
+        return
+    var epoch = Int(epoch_in)
+    var epoch_f = Float32(epoch)
+    var next_f = Float32(epoch + 1)
+    var epoch_u = UInt32(epoch)
+    var n_u = UInt32(n)
+    var key = SIMD[DType.uint32, 2](
+        UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF)
+    )
+    var x = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    var acc = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    for c in range(C):
+        x[c] = source.unsafe_load(v * C + c)
+    var begin = Int(row_offsets.unsafe_load(v))
+    var end = Int(row_offsets.unsafe_load(v + 1))
+    var rate = Int(negative_rate_in)
+    for e in range(begin, end):
+        if samples[e*(rate+1)] == UInt32(0):
+            continue
+        var u = Int(tails.unsafe_load(e))
+        var delta = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+        var d2 = Float32(0.0)
+        for c in range(C):
+            delta[c] = ftz(x[c] - source.unsafe_load(u * C + c))
+            d2 = ftz(identical_mul_add(delta[c], delta[c], d2))
+        if d2 > Float32(0.0):
+            var dp = identical_pow(d2, b)
+            var coeff = identical_div(
+                identical_mul(neg2ab, identical_div(dp, d2)),
+                ftz(identical_mul_add(a, dp, Float32(1.0))),
+            )
+            for c in range(C):
+                var g = ftz(
+                    identical_mul(alpha, _clip(ftz(identical_mul(coeff, delta[c]))))
+                )
+                comptime if UMAP_LIVE_BOTH_ARM:
+                    # Trial arm only: both moves applied to the running row.
+                    x[c] = ftz(x[c] + g)
+                    x[c] = ftz(x[c] + g)
+                elif UMAP_LIVE_ROW:
+                    # DEVIATION 2668: the head move lands on the running
+                    # position now, so the next edge's delta sees it; the
+                    # mirror (tail) move stays deferred to the epilogue.
+                    x[c] = ftz(x[c] + g)
+                    acc[c] = ftz(acc[c] + g)
+                else:
+                    acc[c] = ftz(acc[c] + g)
+                    acc[c] = ftz(acc[c] + g)
+        for j in range(rate):
+            var other = Int(samples[e*(rate+1)+j+1])
+            if other == v:
+                continue
+            var nd = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+            var n2 = Float32(0.0)
+            for c in range(C):
+                nd[c] = ftz(x[c] - source.unsafe_load(other * C + c))
+                n2 = ftz(identical_mul_add(nd[c], nd[c], n2))
+            if n2 > Float32(0.0):
+                var np_ = identical_pow(n2, b)
+                var coeff = identical_div(
+                    rep2b,
+                    identical_mul(
+                        ftz(Float32(0.001) + n2),
+                        ftz(identical_mul_add(a, np_, Float32(1.0))),
+                    ),
+                )
+                for c in range(C):
+                    comptime if UMAP_LIVE_ROW or UMAP_LIVE_BOTH_ARM:
+                        # DEVIATION 2668: the repulsive move lands on the
+                        # running position, as cuML's serial kernel applies it.
+                        x[c] = ftz(
+                            x[c]
+                            + ftz(
+                                identical_mul(
+                                    alpha, _clip(ftz(identical_mul(coeff, nd[c])))
+                                )
+                            )
+                        )
+                    else:
+                        acc[c] = ftz(
+                            acc[c]
+                            + ftz(
+                                identical_mul(
+                                    alpha, _clip(ftz(identical_mul(coeff, nd[c])))
+                                )
+                            )
+                        )
+    for c in range(C):
+        destination.unsafe_store(v * C + c, ftz(x[c] + acc[c]))
+
+
 def _launch_epoch[C: Int](
     ctx: DeviceContext,
     source: MutPointer[Float32, MutAnyOrigin],
@@ -491,6 +632,10 @@ def _umap_epochs_download(
 ) raises -> List[Float32]:
     """The epoch launches of `optimize_csr_layout_identical_device` over
     buffers already on the device, then the embedding's one download."""
+    # C44 retains one epoch descriptor arena throughout optimization. The
+    # storage bound follows graph edges and requested negative samples.
+    var sample_cells = len(d_tails)*(negative_rate+1) if C44_SAMPLING_DESCRIPTORS else 1
+    var samples = ctx.enqueue_create_buffer[DType.uint32](max(sample_cells,1))
     for epoch in range(n_epochs):
         # The serial schedule's alpha, computed on the host in Float64 as
         # the host loops do, then handed to the kernel as one Float32.
@@ -505,6 +650,11 @@ def _umap_epochs_download(
         var p_offsets = d_offsets.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_tails = d_tails.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_scaled = d_scaled.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        comptime if C44_SAMPLING_DESCRIPTORS:
+            if len(d_tails)>0:
+                ctx.enqueue_function[_c44_sampling_kernel](p_scaled,samples.unsafe_ptr(),Int32(len(d_tails)),Int32(n_samples),Int32(negative_rate),Int32(epoch),seed,grid_dim=((len(d_tails)+127)//128,1,1),block_dim=128)
+            ctx.enqueue_function[_c44_epoch_kernel](src,p_offsets,p_tails,p_scaled,dst,Int32(n_samples),Int32(epoch),alpha,Int32(negative_rate),neg2ab,rep2b,a,b,seed,Int32(n_components),samples.unsafe_ptr(),grid_dim=((n_samples+UMAP_IDENTICAL_OPT_TPB-1)//UMAP_IDENTICAL_OPT_TPB,1,1),block_dim=UMAP_IDENTICAL_OPT_TPB)
+            continue
         if n_components == 2:
             _launch_epoch[2](
                 ctx, src, p_offsets, p_tails, p_scaled, dst, n_samples, epoch,
@@ -535,6 +685,7 @@ def _umap_epochs_download(
     var out = List[Float32](length=n_values, fill=Float32(0.0))
     memcpy(dest=out.unsafe_ptr(), src=host_out.unsafe_ptr(), count=n_values)
     _ = host_out^
+    _ = samples^
     return out^
 
 

@@ -515,6 +515,28 @@ struct Mamba3DeviceStages(Movable):
         self.v_last = mamba_zeros(ctx, b * nh * p_dim)
         self.theta_last = mamba_zeros(ctx, b * nh * r_ang)
 
+    def reuse_decode_window(mut self, q0: Int) raises:
+        """NI47 S arm: rebind owned capacity to the existing logical boundary.
+
+        Storage is allocated for a complete open chunk plus the next token;
+        q0, t_work and nc still describe only this call. No arithmetic chunk,
+        state schema, offset, cache report or serialization convention changes.
+        Tail words are zeroed exactly as a fresh constructor would initialize
+        them. Call only after the preceding decode operation has completed.
+        """
+        if self.l != 1 or q0 < 0 or q0 > M3_CHUNK_SIZE:
+            raise Error("mamba3 decode workspace: invalid logical window")
+        var t = q0 + 1
+        var nc = m3_n_chunks(t)
+        if len(self.adt_work) < self.b * t * self.dims.nheads:
+            raise Error("mamba3 decode workspace: insufficient token capacity")
+        if len(self.pass_states) < self.b * nc * self.dims.nheads * M3_HEADDIM * M3_D_STATE:
+            raise Error("mamba3 decode workspace: insufficient boundary capacity")
+        self.q0 = q0
+        self.t_work = t
+        self.nc = nc
+        self.rezero()
+
     def rezero(mut self) raises:
         """lane/fam2-lm (IDN_M3_SESSION_STAGE_REUSE): every stage back to
         the zeros its constructor filled, on the buffers already held (no

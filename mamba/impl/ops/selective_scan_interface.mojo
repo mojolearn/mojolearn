@@ -144,7 +144,8 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
+from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from mamba.impl.ops.identical_scan_window import identical_selective_scan_window
 #: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA1_CHUNKSCAN`
 #: runs the scan as a chunked parallel scan (afn_selective_scan.mojo); every
 #: other build takes the kernel below unchanged.
@@ -244,6 +245,18 @@ comptime ANY_SABOTAGE = (
     or SAB_S11_D_FIRST
     or SAB_S10_DESCENDING
     or SAB_S5_EXP2
+)
+
+
+# NI38 S subarm, independent of the unfinished V affine composition. Native
+# host keeps the original serial graph, as do checkpoint/backward consumers.
+# Off unless explicitly selected; no current default or sabotage path changes.
+comptime IDN_M1_STATE_WINDOW = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_M1_STATE_WINDOW"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not is_defined["MOJOLEARN_COLUMN_CPU"]()
+    and not ANY_SABOTAGE
 )
 
 
@@ -445,7 +458,7 @@ def selective_scan_fwd_kernel[
 
 def selective_scan_fn(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut y: DeviceBuffer[DType.float32],
     mut h_state: DeviceBuffer[DType.float32],
     mut u: DeviceBuffer[DType.float32],
@@ -472,11 +485,11 @@ def selective_scan_fn(
     ARGUMENT NAMES AND ORDER ARE THE REFERENCE'S. `z` and `delta_bias` are
     PRESENCE flags rather than buffers -- `False` is the reference's `None` -- and
     both are REFUSED when True (DEVIATION 723): the profile's block owns S12
-    (`gate.out`) and S14 (`softplus.out`) as recorded stages of its own, and
+    (`gate.output`) and S14 (`softplus.output`) as recorded stages of its own, and
     a second spelling of a seam this file does not own is a second place for
     it to drift. `delta` arrives POST-softplus for the same reason, exactly
     as `selective_scan_oracle` receives it. `return_last_state` is pinned
-    True: `h_state` is in-and-out on every call, because it is both the
+    True: `h_state` is in-and-output on every call, because it is both the
     recorded stage `scan.h` and the state a decode step carries.
 
     STAGES RECORDED HERE, and the driver must not record them again (the
@@ -484,9 +497,9 @@ def selective_scan_fn(
 
         <prefix>.scan.y      [M, dim]        S5-S10, before D
         <prefix>.scan.h      [B, dim, 16]    the state after the last token
-        <prefix>.skip.out    [M, dim]        S11
+        <prefix>.skip.output    [M, dim]        S11
 
-    THAT IS CONTRACT SECTION 7'S CARD ORDER, `scan.y`, `scan.h`, `skip.out`,
+    THAT IS CONTRACT SECTION 7'S CARD ORDER, `scan.y`, `scan.h`, `skip.output`,
     and it is the order these records are emitted in. It is NOT the order the
     seams run in -- S11 is computed inside the token loop, before the final
     state is stored -- and the difference does not matter, because a record is
@@ -505,28 +518,28 @@ def selective_scan_fn(
     """
     if z:
         raise Error(
-            "selective_scan_fn: z REFUSED. Seam S12 (out * silu(z), stage"
-            " gate.out) belongs to the block, mamba/impl/modeling/"
+            "selective_scan_fn: z REFUSED. Seam S12 (output * silu(z), stage"
+            " gate.output) belongs to the block, mamba/impl/modeling/"
             "models/mamba/modeling_mamba.mojo, not to the scan"
             " (DEVIATION 723)"
         )
     if delta_bias:
         raise Error(
             "selective_scan_fn: delta_bias REFUSED. Seam S14 (delta ="
-            " softplus(dt + bias), stage softplus.out) belongs to the block;"
+            " softplus(dt + bias), stage softplus.output) belongs to the block;"
             " pass delta already softplused, as selective_scan_oracle takes"
             " it (DEVIATION 723)"
         )
     if delta_softplus:
         raise Error(
             "selective_scan_fn: delta_softplus REFUSED. Seam S14 belongs to"
-            " the block and softplus.out is its recorded stage"
+            " the block and softplus.output is its recorded stage"
             " (DEVIATION 723)"
         )
     if not return_last_state:
         raise Error(
             "selective_scan_fn: return_last_state False REFUSED. h_state is"
-            " in-and-out on every call: it is the recorded stage scan.h and"
+            " in-and-output on every call: it is the recorded stage scan.h and"
             " the state a decode step carries (contract section 5,"
             " DEVIATION 723)"
         )
@@ -554,22 +567,26 @@ def selective_scan_fn(
     _require(len(C), m * MAX_DSTATE, "C", "[M, 16]")
     _require(len(D), dim, "D", "[dim]")
     _require(len(y), m * dim, "y", "[M, dim]")
-    _require(len(out), m * dim, "out", "[M, dim]")
+    _require(len(output), m * dim, "output", "[M, dim]")
     _require(
         len(h_state), batch * dim * MAX_DSTATE, "h_state", "[B, dim, 16]"
     )
 
     var total = batch * dim
     if total > 0:
-        comptime if AFN_MAMBA1_CHUNKSCAN:
+        comptime if IDN_M1_STATE_WINDOW:
+            identical_selective_scan_window[MAX_DSTATE](
+                ctx, output, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
+            )
+        elif AFN_MAMBA1_CHUNKSCAN:
             afn_selective_scan_chunked[MAX_DSTATE](
-                ctx, out, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
+                ctx, output, y, h_state, u, delta, A, B, C, D, batch, seqlen, dim
             )
         else:
             comptime kern = selective_scan_fwd_kernel[MAX_DSTATE]
             var grid = (total + block_size - 1) // block_size
             ctx.enqueue_function[kern](
-                out.unsafe_ptr(),
+                output.unsafe_ptr(),
                 y.unsafe_ptr(),
                 h_state.unsafe_ptr(),
                 u.unsafe_ptr(),
@@ -586,12 +603,12 @@ def selective_scan_fn(
             )
         ctx.synchronize()
 
-    # CONTRACT SECTION 7's card order, exactly: scan.y, scan.h, skip.out.
+    # CONTRACT SECTION 7's card order, exactly: scan.y, scan.h, skip.output.
     trace.record_device(ctx, prefix + ".scan.y", y, m * dim)
     trace.record_device(
         ctx, prefix + ".scan.h", h_state, batch * dim * MAX_DSTATE
     )
-    trace.record_device(ctx, prefix + ".skip.out", out, m * dim)
+    trace.record_device(ctx, prefix + ".skip.output", output, m * dim)
 
 
 def _require(got: Int, want: Int, name: String, shape: String) raises:

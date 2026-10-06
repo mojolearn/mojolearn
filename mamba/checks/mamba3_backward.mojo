@@ -7,8 +7,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
 from gemm.contract import OP_NN, OP_NT, contract_leaf_size, leaf_count
-from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
-from gemm.checks.gemm_backward import (
+from gemm.neural_dispatch import identical_gemm_workspace_max_floats
+from gemm.neural_backward import (
     gemm_backward_a_call,
     gemm_backward_b_call,
     gemm_backward_call_name,
@@ -271,7 +271,7 @@ def mamba3_reduction_needs_preproduct(which: Int) -> Bool:
 
 def mamba3_backward_reduce_into(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut src: DeviceBuffer[DType.float32],
     mut ones: DeviceBuffer[DType.float32],
     mut ws: DeviceBuffer[DType.float32],
@@ -279,9 +279,9 @@ def mamba3_backward_reduce_into(
     dims: Mamba3Dims,
     m: Int,
 ) raises:
-    """`out[w] = sum over the M rows of src[M, W]`, as a v1 `OP_NN` at `(1, W, M)`. ASYNCHRONOUS, caller-owned buffers, INCLUDING `ones` and `src`."""
+    """`output[w] = sum over the M rows of src[M, W]`, as a v1 `OP_NN` at `(1, W, M)`. ASYNCHRONOUS, caller-owned buffers, INCLUDING `ones` and `src`."""
     identical_gemm_backward_bias_into(
-        ctx, out, src, ones, ws, m, mamba3_reduction_width(which, dims)
+        ctx, output, src, ones, ws, m, mamba3_reduction_width(which, dims)
     )
 
 

@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`raft/sparse/linalg/detail/laplacian.cuh`: `compute_graph_laplacian`
 (the COO overload, `:119-234` -- the one the 26.08 cuVS path reaches, since
 both `create_connectivity_graph` and the precomputed-graph `transform` hand
@@ -40,6 +38,10 @@ MEASURED: `check_spectral_launch_invariance` runs it at two block widths;
 the hashed-weight fixture is what separates this fold from a split one.
 ======================================================================
 """
+from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
@@ -102,6 +104,7 @@ struct DeviceCoo(Movable):
     var cols: DeviceBuffer[DType.int32]
     var vals: DeviceBuffer[DType.float32]
     var indptr: DeviceBuffer[DType.int32]
+    var normalizer: Optional[DeviceBuffer[DType.float32]]
 
     def __init__(
         out self,
@@ -118,6 +121,7 @@ struct DeviceCoo(Movable):
         self.cols = cols^
         self.vals = vals^
         self.indptr = indptr^
+        self.normalizer = Optional[DeviceBuffer[DType.float32]]()
 
 
 def degree_kernel(
@@ -674,6 +678,14 @@ def laplacian_normalize_device(
         grid_dim=((n + tpb - 1) // tpb, 1, 1),
         block_dim=(tpb, 1, 1),
     )
+    comptime if C43_RESIDENT_NORMALIZATION:
+        # Keep sqrt-degree once; consumers reproduce the two scaling
+        # multiplies at each value load and pin the diagonal to one.
+        var normalizer=ctx.enqueue_create_buffer[DType.float32](n)
+        ctx.enqueue_copy(dst_buf=normalizer,src_buf=diagonal_out)
+        lap.normalizer=Optional[DeviceBuffer[DType.float32]](normalizer^)
+        ctx.synchronize()
+        return lap^
     ctx.enqueue_function[coo_scale_by_diagonal_symmetric_kernel](
         lap.rows.unsafe_ptr(),
         lap.cols.unsafe_ptr(),

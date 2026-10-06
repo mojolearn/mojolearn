@@ -114,6 +114,15 @@ comptime X_PREP_FAST_TE_GLOBAL = PREP2_FAST and not is_defined["MOJOLEARN_X_PREP
 #: Measured apart from TE_GLOBAL (a different stage; both on by default).
 comptime X_PREP_FAST_TE_ENC = PREP2_FAST and not is_defined["MOJOLEARN_X_PREP_FAST_TE_ENC_OFF"]()
 comptime TGR = 256
+# AFCL-P05/P06: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified.
+# P05 uses four Apple SIMD groups per category/fold rather than eight to
+# reduce shared scratch and barriers at the cost of longer lane sums.
+# P06 doubles convergence-reduction lanes to shorten each lane's row walk;
+# it keeps the existing runtime II_CONV prerequisite equal in both arms.
+comptime AFCL_P05 = PREP2_FAST and is_defined["MOJOLEARN_AFCL_P05"]()
+comptime AFCL_P06 = PREP2_FAST and is_defined["MOJOLEARN_AFCL_P06"]()
+comptime TE_TGR = 128 if AFCL_P05 else TGR
+comptime II_CONV_TGR = 512 if AFCL_P06 else TGR
 comptime OP_QUANTILE = 2
 comptime OP_TE_GLOBAL = 20
 comptime OP_TE_ENC = 21
@@ -161,11 +170,11 @@ def te_global_fast_kernel(f: FP, q: IP):
     var FO = p(q, 3)
     var fi = t // T
     var tt = t % T
-    var sh_s = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
-    var sh_c = stack_allocation[TGR, Int32, address_space = AddressSpace.SHARED]()
+    var sh_s = stack_allocation[TE_TGR, Float32, address_space = AddressSpace.SHARED]()
+    var sh_c = stack_allocation[TE_TGR, Int32, address_space = AddressSpace.SHARED]()
     var cnt = Int32(0)
     var s = Float32(0)
-    for i in range(tid, nn, TGR):
+    for i in range(tid, nn, TE_TGR):
         if Int(ld(f, FO + i)) == fi:
             continue
         s = add(s, ld(f, Y + i * T + tt))
@@ -173,7 +182,7 @@ def te_global_fast_kernel(f: FP, q: IP):
     sh_s[tid] = s
     sh_c[tid] = cnt
     barrier()
-    var w = TGR // 2
+    var w = TE_TGR // 2
     while w >= 1:
         if tid < w:
             sh_s[tid] = add(sh_s[tid], sh_s[tid + w])
@@ -187,14 +196,14 @@ def te_global_fast_kernel(f: FP, q: IP):
     barrier()
     var ss = Float32(0)
     if total > 0:
-        for i in range(tid, nn, TGR):
+        for i in range(tid, nn, TE_TGR):
             if Int(ld(f, FO + i)) == fi:
                 continue
             var e = sub(ld(f, Y + i * T + tt), mean)
             ss = add(ss, mul(e, e))
     sh_s[tid] = ss
     barrier()
-    var w2 = TGR // 2
+    var w2 = TE_TGR // 2
     while w2 >= 1:
         if tid < w2:
             sh_s[tid] = add(sh_s[tid], sh_s[tid + w2])
@@ -236,11 +245,11 @@ def te_enc_fast_kernel(f: FP, q: IP):
     var BF = gb + j * nn
     var BY = gb + d * nn + (j * T + tt) * nn
     var smooth = ld(f, p(q, 9))
-    var sh_s = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
-    var sh_c = stack_allocation[TGR, Int32, address_space = AddressSpace.SHARED]()
+    var sh_s = stack_allocation[TE_TGR, Float32, address_space = AddressSpace.SHARED]()
+    var sh_c = stack_allocation[TE_TGR, Int32, address_space = AddressSpace.SHARED]()
     var cnt = Int32(0)
     var s = Float32(0)
-    for k in range(lo + tid, hi, TGR):
+    for k in range(lo + tid, hi, TE_TGR):
         if Int(ld(f, BF + k)) == fi:
             continue
         s = add(s, ld(f, BY + k))
@@ -248,7 +257,7 @@ def te_enc_fast_kernel(f: FP, q: IP):
     sh_s[tid] = s
     sh_c[tid] = cnt
     barrier()
-    var w = TGR // 2
+    var w = TE_TGR // 2
     while w >= 1:
         if tid < w:
             sh_s[tid] = add(sh_s[tid], sh_s[tid + w])
@@ -263,14 +272,14 @@ def te_enc_fast_kernel(f: FP, q: IP):
     barrier()
     var ssd = Float32(0)
     if smooth < Float32(0) and total > 0:
-        for k in range(lo + tid, hi, TGR):
+        for k in range(lo + tid, hi, TE_TGR):
             if Int(ld(f, BF + k)) == fi:
                 continue
             var e = sub(ld(f, BY + k), mean)
             ssd = add(ssd, mul(e, e))
     sh_s[tid] = ssd
     barrier()
-    var w2 = TGR // 2
+    var w2 = TE_TGR // 2
     while w2 >= 1:
         if tid < w2:
             sh_s[tid] = add(sh_s[tid], sh_s[tid + w2])
@@ -292,15 +301,15 @@ def ii_conv_fast_kernel(f: FP, q: IP):
     var d = p(q, 6)
     var E = p(q, 7) - 1
     var rows = p(q, 2) // d
-    var sh = stack_allocation[TGR, Float32, address_space = AddressSpace.SHARED]()
+    var sh = stack_allocation[II_CONV_TGR, Float32, address_space = AddressSpace.SHARED]()
     var m = Float32(0)
-    for r in range(tid, rows, TGR):
+    for r in range(tid, rows, II_CONV_TGR):
         var e = ld(f, E + r)
         if e > m:
             m = e
     sh[tid] = m
     barrier()
-    var w = TGR // 2
+    var w = II_CONV_TGR // 2
     while w >= 1:
         if tid < w:
             if sh[tid + w] > sh[tid]:
@@ -742,13 +751,13 @@ def prep2_fast_stage(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
         qselect_device(ctx, f, w, qp, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[4]))
         return True
     if sw.te_global and op == OP_TE_GLOBAL:
-        ctx.enqueue_function[te_global_fast_kernel](f, qp, grid_dim=total, block_dim=TGR)
+        ctx.enqueue_function[te_global_fast_kernel](f, qp, grid_dim=total, block_dim=TE_TGR)
         return True
     if sw.te_enc and op == OP_TE_ENC and Int(hq[11]) > 0 and Int(hq[13]) > 0:
-        ctx.enqueue_function[te_enc_fast_kernel](f, qp, grid_dim=total, block_dim=TGR)
+        ctx.enqueue_function[te_enc_fast_kernel](f, qp, grid_dim=total, block_dim=TE_TGR)
         return True
     if sw.ii_conv and op == OP_II_CONV and Int(hq[7]) > 0:
-        ctx.enqueue_function[ii_conv_fast_kernel](f, qp, grid_dim=1, block_dim=TGR)
+        ctx.enqueue_function[ii_conv_fast_kernel](f, qp, grid_dim=1, block_dim=II_CONV_TGR)
         return True
     comptime if PREP2_FAST_EIGH_BLOCK:
         if sw.eigh_block and op == OP_EIGH and Int(hq[1]) <= EIG_MAX:

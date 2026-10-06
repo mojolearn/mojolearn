@@ -94,6 +94,8 @@ from gbdt.gpu_data.compressed_index_builder import (
 #: (`core/forest_host_predict.mojo`). A build with this define seeds the
 #: cursor at `bias + 1` instead of `bias`, so every raw prediction of every
 #: fixture is wrong by construction, and the gate must say so.
+from core.forest_experiments import C50_GB_PACKED
+
 comptime GBDT_HOST_SABOTAGE = is_defined["MOJOLEARN_FOREST_HOST_SABOTAGE"]()
 
 #: `borders[0]` is the count and the kernel's shared buffer has 256 slots
@@ -140,6 +142,7 @@ struct _GbdtHostPlan(Movable):
     var f_mask: List[UInt32]
     var f_shift: List[UInt32]
     var r_col: List[Int]
+    var r_packed: List[UInt32]
     var r_mask: List[UInt32]
     var r_shift: List[UInt32]
     var r_val: List[UInt32]
@@ -161,6 +164,7 @@ struct _GbdtHostPlan(Movable):
         self.f_mask = List[UInt32]()
         self.f_shift = List[UInt32]()
         self.r_col = List[Int]()
+        self.r_packed = List[UInt32]()
         self.r_mask = List[UInt32]()
         self.r_shift = List[UInt32]()
         self.r_val = List[UInt32]()
@@ -373,6 +377,11 @@ def _plan_oblivious(
             plan.r_shift.append(cf.shift)
             plan.r_val.append(UInt32(bin_idx) << cf.shift)
             plan.r_eq.append(UInt8(1) if split_take_bin_p[lo + level] != 0 else UInt8(0))
+            comptime if C50_GB_PACKED:
+                plan.r_packed.append(UInt32(cf.offset))
+                plan.r_packed.append(cf.mask << cf.shift)
+                plan.r_packed.append(UInt32(bin_idx) << cf.shift)
+                plan.r_packed.append(UInt32(1) if split_take_bin_p[lo+level] != 0 else UInt32(0))
             plan.r_left.append(0)
             plan.r_right.append(0)
 
@@ -391,6 +400,26 @@ def _apply_oblivious_block(
     values are BIN-major `[leaf * dim + d]`; the block's cursor is
     PLANE-major `[d * nb + r]`, so cell `(d, r)` receives one add per tree
     in tree order, exactly the whole-row-set cursor's sequence for its row."""
+    comptime if C50_GB_PACKED:
+        # C50: a row owns its complete tree fold and a vector read fetches one
+        # exact split record. Existing bounded row blocks bound index/scratch.
+        # Host and GPU retain the model's ordered additions and bias exactly.
+        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+        var records = plan.r_packed.unsafe_ptr()
+        for r in range(nb):
+            for t in range(n_trees):
+                var leaf = 0
+                var first = plan.t_lo[t]
+                for level in range(plan.t_n[t]):
+                    var words = records.unsafe_load[width=4](4*(first+level))
+                    var feature = cindex_p.unsafe_load(Int(words[0])*nb+r)&words[1]
+                    var split = feature == words[2] if words[3] != 0 else feature > words[2]
+                    if split:
+                        leaf += 1 << level
+                for d in range(dim):
+                    var at = d*nb+r
+                    cursor_p.unsafe_store(at, cursor_p.unsafe_load(at)+leaves_p.unsafe_load(plan.t_leaf[t]+leaf*dim+d))
+        return
     var r_col = plan.r_col.unsafe_ptr()
     var r_mask = plan.r_mask.unsafe_ptr()
     var r_val = plan.r_val.unsafe_ptr()
@@ -484,6 +513,15 @@ def _plan_non_symmetric(
             plan.r_shift.append(cf.shift)
             plan.r_val.append(UInt32(bin))
             plan.r_eq.append(UInt8(1) if node_take_bin_p[lo + i] != 0 else UInt8(0))
+            comptime if C50_GB_PACKED:
+                plan.r_packed.append(UInt32(cf.offset))
+                plan.r_packed.append(cf.mask)
+                plan.r_packed.append(cf.shift)
+                plan.r_packed.append(UInt32(1) if node_take_bin_p[lo+i] != 0 else UInt32(0))
+                plan.r_packed.append(UInt32(bin))
+                plan.r_packed.append(UInt32(left))
+                plan.r_packed.append(UInt32(right))
+                plan.r_packed.append(UInt32(0))
             plan.r_left.append(left)
             plan.r_right.append(right)
 
@@ -535,15 +573,16 @@ def _apply_non_symmetric_block(
                     fail_p.unsafe_store(3, n_nodes)
                     return False
                 var rec = rlo + node
-                var feature_val = (
-                    cindex_p.unsafe_load(r_col.unsafe_load(rec) * nb + r)
-                    >> r_shift.unsafe_load(rec)
-                ) & r_mask.unsafe_load(rec)
-                var split: Bool
-                if r_eq.unsafe_load(rec) != 0:
-                    split = feature_val == r_val.unsafe_load(rec)
+                var feature_val = UInt32(0)
+                var split = False
+                comptime if C50_GB_PACKED:
+                    var words = plan.r_packed.unsafe_ptr().unsafe_load[width=4](8*rec)
+                    var decision = plan.r_packed.unsafe_ptr().unsafe_load[width=4](8*rec+4)
+                    feature_val = (cindex_p.unsafe_load(Int(words[0])*nb+r) >> words[2]) & words[1]
+                    split = feature_val == decision[0] if words[3] != 0 else feature_val > decision[0]
                 else:
-                    split = feature_val > r_val.unsafe_load(rec)
+                    feature_val = (cindex_p.unsafe_load(r_col.unsafe_load(rec)*nb+r) >> r_shift.unsafe_load(rec)) & r_mask.unsafe_load(rec)
+                    split = feature_val == r_val.unsafe_load(rec) if r_eq.unsafe_load(rec) != 0 else feature_val > r_val.unsafe_load(rec)
                 if split:
                     var left = r_left.unsafe_load(rec)
                     bin += left
@@ -592,15 +631,20 @@ def _walk_rows(
     `gbdt/train.mojo:2470-2474`; for `dim == 1` it is `predict_floats`'s).
     Stops at the first refusal, which is in `fail_p`."""
     var columns = plan.columns
-    var cindex = List[UInt32](length=GBDT_HOST_BLOCK_ROWS * columns, fill=UInt32(0))
-    var cursor = List[Float32](length=GBDT_HOST_BLOCK_ROWS * dim, fill=seed)
+    var block_rows = GBDT_HOST_BLOCK_ROWS
+    comptime if C50_GB_PACKED:
+        # Bound this task's live quantized-index + cursor workspace by256KiB.
+        # The cost law varies continuously with actual columns/output width.
+        block_rows = max(1, min(n_rows, (256*1024)//max(4*(columns+dim), 1)))
+    var cindex = List[UInt32](length=block_rows * columns, fill=UInt32(0))
+    var cursor = List[Float32](length=block_rows * dim, fill=seed)
     var cp = rebind[MutPointer[UInt32, MutUntrackedOrigin]](cindex.unsafe_ptr())
     var up = rebind[MutPointer[Float32, MutUntrackedOrigin]](cursor.unsafe_ptr())
     var row0 = lo
     while row0 < hi:
         var nb = hi - row0
-        if nb > GBDT_HOST_BLOCK_ROWS:
-            nb = GBDT_HOST_BLOCK_ROWS
+        if nb > block_rows:
+            nb = block_rows
         for i in range(nb * columns):
             cp.unsafe_store(i, UInt32(0))
         for i in range(nb * dim):
@@ -687,12 +731,12 @@ def gbdt_host_predict(
     n_splits: Int,
     n_leaf_values: Int,
     bias: Float64,
-    mut out: List[Float32],
+    mut output: List[Float32],
     workers: Int = 0,
     row_major: Bool = False,
 ) raises:
     """`predict_floats` / `predict_multi_floats` on the host: RAW approxes,
-    `out[r * dim + d]`, ROW-major, `n_rows * dim` values.
+    `output[r * dim + d]`, ROW-major, `n_rows * dim` values.
 
     `x_colmajor` is COLUMN-major, `n_rows * n_features`, the layout the GPU
     binding takes (`gbdt_predict`, `bindings/_mojolearn_gbdt.mojo:410`).
@@ -707,8 +751,8 @@ def gbdt_host_predict(
         raise Error("gbdt host: n_rows, n_features and dim must be positive")
     if len(x_colmajor) < n_rows * n_features:
         raise Error("gbdt host: x holds fewer than n_rows * n_features values")
-    if len(out) < n_rows * dim:
-        raise Error("gbdt host: out holds fewer than n_rows * dim values")
+    if len(output) < n_rows * dim:
+        raise Error("gbdt host: output holds fewer than n_rows * dim values")
     if Int(tree_offsets_p[0]) != 0 or Int(tree_offsets_p[n_trees]) != n_splits:
         raise Error("gbdt host: tree_offsets must start at 0 and end at n_splits")
     if Int(leaf_offsets_p[0]) != 0 or Int(leaf_offsets_p[n_trees]) != n_leaf_values:
@@ -739,7 +783,7 @@ def gbdt_host_predict(
     var failed = List[Int](length=tasks * GBDT_HOST_FAIL_WORDS, fill=0)
     var pp = Pointer(to=plan)
     var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](x_colmajor.unsafe_ptr())
-    var op = rebind[MutPointer[Float32, MutUntrackedOrigin]](out.unsafe_ptr())
+    var op = rebind[MutPointer[Float32, MutUntrackedOrigin]](output.unsafe_ptr())
     var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failed.unsafe_ptr())
 
     def _rows_task(c: Int) {imm pp, imm xp, imm borders_p, imm leaves_p, imm op, imm fp,
@@ -760,7 +804,7 @@ def gbdt_host_predict(
     else:
         host_parallelize(_rows_task, tasks)
     _raise_first_failure(failed, tasks)
-    # the tasks read `plan`, `x_colmajor` and wrote `out` through pointers;
+    # the tasks read `plan`, `x_colmajor` and wrote `output` through pointers;
     # a use after the join keeps every owner alive past it
     _ = plan^
     _ = failed^

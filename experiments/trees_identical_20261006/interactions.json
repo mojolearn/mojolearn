@@ -1,0 +1,269 @@
+{
+  "schema": 1,
+  "interactions": [
+    {
+      "id": "X01",
+      "members": [
+        "T01",
+        "T02",
+        "T04",
+        "T05"
+      ],
+      "A": {
+        "selection": "T01,T02,T04,T05",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "T01,T02,T04,T05",
+        "arm": "B"
+      },
+      "partial_configurations": "tools/trees_identical_ideas.py matrix X01 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only.",
+      "scope": "Separate full affected-estimator recipes; a branch-inapplicable estimator does not demonstrate that component",
+      "qualification_prerequisite": "future frozen source and complete retained recipe facts",
+      "execution": "NOT RUN",
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+    },
+    {
+      "id": "X02",
+      "members": [
+        "T03",
+        "T08",
+        "T09",
+        "T10"
+      ],
+      "A": {
+        "selection": "T03,T08,T09,T10",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "T03,T08,T09,T10",
+        "arm": "B"
+      },
+      "partial_configurations": "tools/trees_identical_ideas.py matrix X02 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only.",
+      "scope": "Separate full affected-estimator recipes; a branch-inapplicable estimator does not demonstrate that component",
+      "qualification_prerequisite": "future frozen source and complete retained recipe facts",
+      "execution": "NOT RUN",
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+    },
+    {
+      "id": "X03",
+      "members": [
+        "T11",
+        "T12",
+        "T13",
+        "T15"
+      ],
+      "A": {
+        "selection": "T11,T12,T13,T15",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "T11,T12,T13,T15",
+        "arm": "B"
+      },
+      "partial_configurations": "tools/trees_identical_ideas.py matrix X03 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only.",
+      "scope": "Separate full affected-estimator recipes; a branch-inapplicable estimator does not demonstrate that component",
+      "qualification_prerequisite": "future frozen source and complete retained recipe facts",
+      "execution": "NOT RUN",
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+    },
+    {
+      "id": "X04",
+      "members": [
+        "T16",
+        "T17",
+        "T18",
+        "T19",
+        "T20"
+      ],
+      "A": {
+        "selection": "T16,T17,T18,T19,T20",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "T16,T17,T18,T19,T20",
+        "arm": "B"
+      },
+      "partial_configurations": "tools/trees_identical_ideas.py matrix X04 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only.",
+      "scope": "Separate full affected-estimator recipes; a branch-inapplicable estimator does not demonstrate that component",
+      "qualification_prerequisite": "future frozen source and complete retained recipe facts",
+      "execution": "NOT RUN",
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+    },
+    {
+      "id": "X05",
+      "members": [
+        "T21:T21_GROUP_STREAM2",
+        "T22",
+        "T23",
+        "T24",
+        "T25"
+      ],
+      "A": {
+        "selection": "T21:T21_GROUP_STREAM2,T22,T23,T24,T25",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "T21:T21_GROUP_STREAM2,T22,T23,T24,T25",
+        "arm": "B"
+      },
+      "partial_configurations": "tools/trees_identical_ideas.py matrix X05 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only.",
+      "scope": "Separate full affected-estimator recipes; a branch-inapplicable estimator does not demonstrate that component",
+      "qualification_prerequisite": "future frozen source and complete retained recipe facts",
+      "execution": "NOT RUN",
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+    },
+    {
+      "id": "X06",
+      "members": [
+        "T26",
+        "T27",
+        "T28:T28_ALL",
+        "T29"
+      ],
+      "A": {
+        "selection": "T26,T27,T28:T28_ALL,T29",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "T26,T27,T28:T28_ALL,T29",
+        "arm": "B"
+      },
+      "partial_configurations": "tools/trees_identical_ideas.py matrix X06 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only.",
+      "scope": "Separate full affected-estimator recipes; a branch-inapplicable estimator does not demonstrate that component",
+      "qualification_prerequisite": "future frozen source and complete retained recipe facts",
+      "execution": "NOT RUN",
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+    },
+    {
+      "id": "X07",
+      "members": [
+        "T31",
+        "T32",
+        "T33",
+        "T35",
+        "T36",
+        "T37",
+        "T38"
+      ],
+      "A": {
+        "selection": "T31,T32,T33,T35,T36,T37,T38",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "T31,T32,T33,T35,T36,T37,T38",
+        "arm": "B"
+      },
+      "partial_configurations": "tools/trees_identical_ideas.py matrix X07 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only.",
+      "scope": "Separate full affected-estimator recipes; a branch-inapplicable estimator does not demonstrate that component",
+      "qualification_prerequisite": "future frozen source and complete retained recipe facts",
+      "execution": "NOT RUN",
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+    },
+    {
+      "id": "X08",
+      "members": [
+        "T40",
+        "T41",
+        "T42",
+        "T43"
+      ],
+      "A": {
+        "selection": "T40,T41,T42,T43",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "T40,T41,T42,T43",
+        "arm": "B"
+      },
+      "partial_configurations": "tools/trees_identical_ideas.py matrix X08 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only.",
+      "scope": "Separate full affected-estimator recipes; a branch-inapplicable estimator does not demonstrate that component",
+      "qualification_prerequisite": "future frozen source and complete retained recipe facts",
+      "execution": "NOT RUN",
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+    },
+    {
+      "id": "X09",
+      "members": [
+        "T44",
+        "T45"
+      ],
+      "A": {
+        "selection": "T44,T45",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "T44,T45",
+        "arm": "B"
+      },
+      "partial_configurations": "tools/trees_identical_ideas.py matrix X09 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only.",
+      "scope": "Separate full affected-estimator recipes; a branch-inapplicable estimator does not demonstrate that component",
+      "qualification_prerequisite": "future frozen source and complete retained recipe facts",
+      "execution": "NOT RUN",
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+    },
+    {
+      "id": "X10",
+      "members": [
+        "T14",
+        "T26",
+        "T34"
+      ],
+      "A": {
+        "selection": "T14,T26,T34",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "T14,T26,T34",
+        "arm": "B"
+      },
+      "partial_configurations": "tools/trees_identical_ideas.py matrix X10 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only.",
+      "scope": "Separate full affected-estimator recipes; a branch-inapplicable estimator does not demonstrate that component",
+      "qualification_prerequisite": "accepted individual host/NVIDIA/AMD/Apple numerical identity and quality",
+      "execution": "NOT RUN",
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED"
+    },
+    {
+      "id": "XC45_51",
+      "members": [
+        "C45",
+        "C46",
+        "C47",
+        "C48",
+        "C49",
+        "C50",
+        "C51"
+      ],
+      "A": {
+        "selection": "C45,C46,C47,C48,C49,C50,C51",
+        "arm": "A"
+      },
+      "B": {
+        "selection": "C45,C46,C47,C48,C49,C50,C51",
+        "arm": "B"
+      },
+      "overlaps": "overlaps/C45.json through C51.json; controls deduplicated by define",
+      "execution": "NOT RUN",
+      "partial_configurations": "tools/trees_identical_ideas.py matrix XC45_51 (explicit @A/@B for every component)",
+      "subarms": "ID:control-name selects a subarm; @A/@B sets its independent arm. Named combinations describe source configurations only."
+    }
+  ],
+  "complete_selection_overrides": {
+    "X05": "T21:T21_GROUP_STREAM2,T22,T23,T24,T25",
+    "X06": "T26,T27,T28:T28_ALL,T29"
+  },
+  "subarm_alternatives": {
+    "X05": "replace T21_GROUP_STREAM2 with T21_GROUP_STREAM4 for four-wave replica arm",
+    "X06": "Generated PairLogit may select T29_GROUP_VERSIONED (scheduling + V1) or either component independently; YetiRank uses T29_YETI and its own saved recipe. Explicit pairs retain B. T28_ALL combines compatible prep/sort/prefix controls."
+  }
+}

@@ -11,6 +11,7 @@ column into nine exact Int64 digits (`cs_partial_kernel`); block c folds
 column c's partials (`cs_fold_kernel`, a threadgroup tree per digit: an
 integer sum, so any order is the same total) and its thread 0 rounds the
 total once to float64 bits. Center and scale: one thread per cell."""
+from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -273,3 +274,66 @@ def col_means_buf(
         d_sx.unsafe_ptr(), d_sy.unsafe_ptr(), d_mx.unsafe_ptr(), d_my.unsafe_ptr(), d_m64.unsafe_ptr(),
         Int64(cols), Int64(rows), grid_dim=(n + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB,
     )
+
+
+# C02 pairs exact X/y streams in one launch and invocation-owned partial.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+def cs_pair_partial_kernel(x: F32P, y: F32P, part: I64P, rows_: Int64, cols_: Int64, rb_: Int64):
+    var rows = Int(rows_)
+    var cols = Int(cols_)
+    var rb = Int(rb_)
+    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nrb = (rows + rb - 1) // rb
+    if tid >= nrb * (cols + 1):
+        return
+    var c = tid % (cols + 1)
+    var lo = (tid // (cols + 1)) * rb
+    var acc = InlineArray[Int64, CS_WORDS](fill=Int64(0))
+    for r in range(lo, min(lo + rb, rows)):
+        var v = y.unsafe_load(r) if c == cols else x.unsafe_load(r * cols + c)
+        exact_add(acc, v)
+    comptime for L in range(CS_WORDS):
+        part.unsafe_store(tid * CS_WORDS + L, acc[L])
+
+
+def col_sums_pair_buf(ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
+                      mut y: DeviceBuffer[DType.float32], mut sx: DeviceBuffer[DType.uint64],
+                      mut sy: DeviceBuffer[DType.uint64], rows: Int, cols: Int) raises:
+    comptime if not C02_LINEAR_PAIR:
+        col_sums_buf(ctx, x, sx, rows, cols)
+        col_sums_buf(ctx, y, sy, rows, 1)
+        return
+    comptime assert CS_SMEM_FITS, "paired column sums require the incumbent shared page"
+    if rows <= 0 or cols <= 0:
+        raise Error("col_sums: rows and cols must be positive")
+    var rb = cs_rows_per_block(rows)
+    var nrb = (rows + rb - 1) // rb
+    var tasks = nrb * (cols + 1)
+    var part = ctx.enqueue_create_buffer[DType.int64](tasks * CS_WORDS)
+    ctx.enqueue_function[cs_pair_partial_kernel](x.unsafe_ptr(), y.unsafe_ptr(), part.unsafe_ptr(),
+        Int64(rows), Int64(cols), Int64(rb), grid_dim=(tasks + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
+    ctx.enqueue_function[cs_fold_kernel](part.unsafe_ptr(), sx.unsafe_ptr(), Int64(nrb), Int64(cols + 1),
+        grid_dim=cols, block_dim=CS_TPB)
+    ctx.enqueue_function[cs_fold_kernel](part.unsafe_ptr() + cols * CS_WORDS, sy.unsafe_ptr(),
+        Int64(nrb), Int64(cols + 1), grid_dim=1, block_dim=CS_TPB)
+    ctx.synchronize()
+    _ = part^
+
+
+def col_sums_pair_device(ctx: DeviceContext, x: Int, y: Int, sx: Int, sy: Int, rows: Int, cols: Int) raises:
+    if rows <= 0 or cols <= 0:
+        raise Error("col_sums: rows and cols must be positive")
+    var dx = ctx.enqueue_create_buffer[DType.float32](rows * cols)
+    var dy = ctx.enqueue_create_buffer[DType.float32](rows)
+    var dsx = ctx.enqueue_create_buffer[DType.uint64](cols)
+    var dsy = ctx.enqueue_create_buffer[DType.uint64](1)
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=F32P(unsafe_from_address=x))
+    ctx.enqueue_copy(dst_buf=dy, src_ptr=F32P(unsafe_from_address=y))
+    col_sums_pair_buf(ctx, dx, dy, dsx, dsy, rows, cols)
+    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=sx), src_buf=dsx)
+    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=sy), src_buf=dsy)
+    ctx.synchronize()
+    _ = dx^
+    _ = dy^
+    _ = dsx^
+    _ = dsy^

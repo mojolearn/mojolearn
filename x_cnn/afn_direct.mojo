@@ -38,6 +38,7 @@ from x_cnn.ops import (
     FP, IP, _g, _ud, conv_out_val, relu_val,
 )
 
+# E01: not tested in this campaign; existing implicit-convolution A/B arm.
 comptime AFN_CNN_DIRECT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
@@ -47,9 +48,18 @@ comptime AFN_CNN_DIRECT = (
 #: imports this one): the one-leaf direct kernel keeps its shapes.
 comptime AFN_DC_MAXK = 32
 comptime AFN_DC_MAXW = 2048
-comptime AT_TR = 64
-comptime AT_TO = 32
-comptime AT_KC = 32
+# E02-E04: not tested. Smaller tiles trade shared storage/register pressure
+# for more blocks and barriers. These are explicit experiment-wide geometry
+# choices, never dispatch predicates on a benchmark's spatial/channel sizes.
+comptime AFN26_CNN_ROWS32 = AFN_CNN_DIRECT and is_defined["MOJOLEARN_AFN26_CNN_ROWS32"]()
+comptime AFN26_CNN_CHANNELS16 = AFN_CNN_DIRECT and is_defined["MOJOLEARN_AFN26_CNN_CHANNELS16"]()
+comptime AFN26_CNN_K16 = AFN_CNN_DIRECT and is_defined["MOJOLEARN_AFN26_CNN_K16"]()
+# E05: not tested. All channel tiles read the same input patch; giving its
+# saved backward columns one writer removes redundant global stores.
+comptime AFN26_CNN_COLS_ONCE = AFN_CNN_DIRECT and is_defined["MOJOLEARN_AFN26_CNN_COLS_ONCE"]()
+comptime AT_TR = 32 if AFN26_CNN_ROWS32 else 64
+comptime AT_TO = 16 if AFN26_CNN_CHANNELS16 else 32
+comptime AT_KC = 16 if AFN26_CNN_K16 else 32
 comptime AT_TPB = 256
 comptime AT_PER = AT_TO // (AT_TPB // AT_TR)  # 8 channels per thread
 
@@ -130,7 +140,9 @@ def afn_conv_tiled_kernel(
                 var ww = Int(s_w0[rl2]) + kw * DW
                 if h >= 0 and h < H and ww >= 0 and ww < W:
                     v = x.unsafe_load(((Int(s_n[rl2]) * C + c) * H + h) * W + ww)
-                if save_cols != Int32(0):
+                # E05: not tested; the x-grid still covers every row/tap,
+                # while only output-channel tile zero owns the saved cell.
+                if save_cols != Int32(0) and (not AFN26_CNN_COLS_ONCE or Int(block_idx.y) == 0):
                     cols.unsafe_store(r * ckk + q, v)
             s_a[rl2 * AT_KC + kk] = v
         barrier()

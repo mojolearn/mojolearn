@@ -1,0 +1,1871 @@
+{
+  "all_plan_statuses": {
+    "COMPILED": 260,
+    "FAILED": 1,
+    "NOT_COMPILED": 4619
+  },
+  "evidence_root": "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006",
+  "local_compiled": 195,
+  "local_deferred": [
+    {
+      "arm": "A",
+      "binding": "bindings/_mojolearn_gbdt.mojo",
+      "configuration": "I.X.complete-proposed",
+      "reason": "Not attempted after the narrower tree-combined MetalAIRPass compiler crash; no unsupported workaround. The exact superset is not labeled as a failed build.",
+      "status": "NOT_COMPILED"
+    }
+  ],
+  "local_scheduled": 195,
+  "numerical_source_freeze": "76165b54ec6a31b71854f9e2a7b2952934783b3a",
+  "nvidia_compiled": 65,
+  "nvidia_failed": 1,
+  "nvidia_selected": 66,
+  "qualification": "UNMEASURED; QUALITY AND IDENTITY NOT ASSESSED; RUNTIME REACH UNVERIFIED",
+  "rental_termination_evidence": [
+    "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/runpod-nvidia/attempt-2/termination.json",
+    "/Users/andrewhendel/CascadeProjects/mojolearn-integration-evidence-20261006/runpod-nvidia/attempt-3/termination.json"
+  ],
+  "schema": "mojolearn.six-lane-compile-selection/1",
+  "selected_jobs": [
+    {
+      "binding": "bindings/_mojolearn_estimators.mojo",
+      "key": "c0b1c5a4a8178ce4ee6c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_estimators.mojo",
+      "key": "835f186f14e7800f93c5",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_estimators_host.mojo",
+      "key": "c7a595d73a21136adb72",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_kernel_methods.mojo",
+      "key": "bb51e8ce4aea14ed28c1",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_kernel_methods.mojo",
+      "key": "f5e6a0c2c626aa5dad6b",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_kernel_methods_host.mojo",
+      "key": "9ac9f8ad832911cab5ea",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_linalg.mojo",
+      "key": "b6685601aa66cc2d66d3",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_linalg.mojo",
+      "key": "556f7c8ca65049421572",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_linalg_host.mojo",
+      "key": "f821e6add820cee06891",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_metrics.mojo",
+      "key": "360103392f14b8fa5ab4",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_metrics.mojo",
+      "key": "ea0acd79fce7dcc4ae5f",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_metrics_host.mojo",
+      "key": "61585e6c83744b1fc7b4",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_decomp.mojo",
+      "key": "c8c4bd83bbdb24210458",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_decomp.mojo",
+      "key": "f7bea6bd6354ca0734cc",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_decomp_host.mojo",
+      "key": "f9a9b894dc035c2127ef",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_metrics.mojo",
+      "key": "02aad8f0c91f3b958d58",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_metrics.mojo",
+      "key": "ed0ce42925e93f721cfb",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_metrics_host.mojo",
+      "key": "f68aa9a96ac6c9d58969",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_neighbors.mojo",
+      "key": "20713b1529cbf170e325",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_neighbors.mojo",
+      "key": "79b47958731072d4e085",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_neighbors_host.mojo",
+      "key": "980f262beaa0304e10a3",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_preprocessing.mojo",
+      "key": "541c90e50628c4261dc5",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_preprocessing.mojo",
+      "key": "eba31b4c59e8fa7c9d34",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_prep.mojo",
+      "key": "26b6a157d9c3fd503233",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_prep.mojo",
+      "key": "a15415b902bdd9450e0d",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_prep_host.mojo",
+      "key": "1ed146da15f99418e969",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn.mojo",
+      "key": "406fc702a0841de8ee87",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn.mojo",
+      "key": "edb58a11758774dc9693",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_hdbscan.mojo",
+      "key": "ac0b92206e13da9676cb",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_hdbscan.mojo",
+      "key": "949d93f537361f5f346c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_hdbscan_host.mojo",
+      "key": "c11b3c99315e5c2e2084",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_hdbscan_infer_host.mojo",
+      "key": "6aff4774c4e78c95529d",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_ivf.mojo",
+      "key": "74c789c8c2b0e368e92f",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_ivf.mojo",
+      "key": "9774b0dd17ba6c5a228c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_mixture.mojo",
+      "key": "1f679441fd71dfd37b06",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_mixture.mojo",
+      "key": "10ffb956b21fc2def2fe",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_solver.mojo",
+      "key": "2b71f3defd266d981b8b",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_solver.mojo",
+      "key": "5c0e4a1b1d463634bbb5",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_solver_host.mojo",
+      "key": "536bd5c41fb48b778b81",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_ann.mojo",
+      "key": "f33f1e2ef3e6fe59317c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_ann.mojo",
+      "key": "9b0287a87eddf6cbe6e9",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cluster.mojo",
+      "key": "7efb4630a275d6ac26d2",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cluster.mojo",
+      "key": "254d4a3486449b0eded3",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_resample.mojo",
+      "key": "87fd60e08aa2deca8789",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_resample.mojo",
+      "key": "b8045b5d973c6b8c2b8d",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_linear.mojo",
+      "key": "378c404e4f4d364f31ad",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_linear.mojo",
+      "key": "ca4918077f351c8926e8",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_linear_host.mojo",
+      "key": "23cb3c69c0a2e47e48f3",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_gp.mojo",
+      "key": "8d89ebeb52b6129a6ece",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_gp.mojo",
+      "key": "d42fbcfe39f1e6bcbd30",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cluster_host.mojo",
+      "key": "1a339160923d7ee26040",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_sequence.mojo",
+      "key": "e90a7a5e9b8d3cd8bb4b",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_sequence.mojo",
+      "key": "9411d0a6f0dc85ae8215",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_sequence_host.mojo",
+      "key": "d6f15f2ea75b4830f395",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_svm.mojo",
+      "key": "5f74ad4e240d8b67c1fe",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_svm.mojo",
+      "key": "3e98f6fdc338a455bcb3",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_svm_host.mojo",
+      "key": "a5ab1addc6ce736eb428",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_core_host.mojo",
+      "key": "abaa10fc6efa2b204cc4",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_ivf_host.mojo",
+      "key": "65e01190c03fc0c8fa14",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_ivf_search_host.mojo",
+      "key": "72291220fced47aca85b",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_mixture_host.mojo",
+      "key": "852e920eac06a0f42432",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_mixture_infer_host.mojo",
+      "key": "03c950604cddf7a4859a",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_ann_host.mojo",
+      "key": "ee1c428deef0b764037f",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_tsa.mojo",
+      "key": "5827d1b87edfb3eda3a3",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_tsa.mojo",
+      "key": "4de7ad19fc2bdd67b918",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_tsa_host.mojo",
+      "key": "c4b0e106e77bbdbfbc31",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_arima.mojo",
+      "key": "a93b38e9161715bf7125",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_arima.mojo",
+      "key": "fd5b978b5d98136798b8",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_forecast_host.mojo",
+      "key": "ae0ff4d79ff3ca924fb0",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_rf.mojo",
+      "key": "985cc34ca056a12c6907",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_rf.mojo",
+      "key": "89a6467bdc763e1b085c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_rf_host.mojo",
+      "key": "81f7c1c1f24ec4968551",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_trees.mojo",
+      "key": "930334ae59f8d427b74d",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_trees.mojo",
+      "key": "fc4012b8f28701821e10",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_trees_host.mojo",
+      "key": "e3ddb10625c01cd9514c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_trees.mojo",
+      "key": "6f3b1b10c973f1a73c74",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_trees.mojo",
+      "key": "0d88f18c2fec1c8976bf",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_trees_host.mojo",
+      "key": "e4a036c4c99319618edb",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_gbdt.mojo",
+      "key": "323a935b9ba320628f8e",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_gbdt.mojo",
+      "key": "55a19d7e82720a5d332b",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_gbdt_host.mojo",
+      "key": "3dd3fefead49171e1a64",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_forest_host.mojo",
+      "key": "f5de39fb2ab235c584fb",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_byte_lm.mojo",
+      "key": "655b5e21ba6ae9a1d9ba",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_byte_lm.mojo",
+      "key": "1e15fb25dd7102098357",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_byte_lm_host.mojo",
+      "key": "a1c6717e5ec572832e15",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_embedding.mojo",
+      "key": "bb918789e3f575991d34",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_embedding.mojo",
+      "key": "894290917e9c0c7b2544",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_mamba.mojo",
+      "key": "eb48600abcdfdf60714d",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_mamba.mojo",
+      "key": "bb7f5c6d7347a46156aa",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_mamba_host.mojo",
+      "key": "e7332a2802a8533224fd",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_neural_host.mojo",
+      "key": "9d2d3231cae47550692a",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_training.mojo",
+      "key": "4c81df99d414924ae0b8",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_training.mojo",
+      "key": "f734527f36b07372a42b",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_training_host.mojo",
+      "key": "0915903ca9371e0923f7",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_transformer.mojo",
+      "key": "1370b4817b7eb4050784",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_transformer.mojo",
+      "key": "39edf692d437c7138fb5",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_transformer_host.mojo",
+      "key": "7e7387826f355cf2a4c2",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cnn.mojo",
+      "key": "242f432cbe8ec9e4b063",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cnn.mojo",
+      "key": "1f68963d758df809d97e",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cnn_host.mojo",
+      "key": "cbc9c19413f50b72425f",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn.mojo",
+      "key": "fde4c5611a391724da90",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_metrics.mojo",
+      "key": "82aac5f7f16304715fa9",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_hdbscan.mojo",
+      "key": "8a4347ec972f39b28cb5",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_estimators.mojo",
+      "key": "75060227a913f8b5ab18",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_solver.mojo",
+      "key": "675d5b48bf385c10f039",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_mixture.mojo",
+      "key": "6e01b529feeddd712a08",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cluster.mojo",
+      "key": "825c20ebd4b0bd3783f3",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_ivf.mojo",
+      "key": "31b001289be011bea089",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_ann.mojo",
+      "key": "5add37d9fe0463f111db",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_linear.mojo",
+      "key": "095896d11a0209479daa",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_prep.mojo",
+      "key": "daf4195a68975f694421",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_svm.mojo",
+      "key": "fd5f856cbcab8be82308",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_kernel_methods.mojo",
+      "key": "c635fc5e49d0a17db343",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_decomp.mojo",
+      "key": "e3bc59a05fcb5ef8fa40",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_linalg.mojo",
+      "key": "dedd298d4c76752a2780",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_neighbors.mojo",
+      "key": "3cc936380b7412b9ee58",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_gp.mojo",
+      "key": "e11c219ad4d77b102aa3",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_metrics.mojo",
+      "key": "1eb009bf1566dbd790ea",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_resample.mojo",
+      "key": "ffe5b5179f6da3512686",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_tsa.mojo",
+      "key": "153c8809dffef2882104",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_arima.mojo",
+      "key": "698474c7756669b0a55f",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_gbdt.mojo",
+      "key": "4b531672225c54ede258",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_rf.mojo",
+      "key": "55243eea501c51613b44",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_trees.mojo",
+      "key": "24889f122f8df385a0f8",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_trees.mojo",
+      "key": "c90f43341e56e9835470",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_transformer.mojo",
+      "key": "a148cfb925a5d02b2ede",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_byte_lm.mojo",
+      "key": "9b55455dd118874eda9c",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_training.mojo",
+      "key": "62b6a842eaf21d2e5c4f",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_mamba.mojo",
+      "key": "9195418ea87880f49687",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cnn.mojo",
+      "key": "8535c5e91a74d4a4c5e3",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_embedding.mojo",
+      "key": "c065b4f6bdccae571b2b",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn.mojo",
+      "key": "8fd2484ebf30773c140e",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_metrics.mojo",
+      "key": "dc5ee73da2fb1f66b3e8",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_hdbscan.mojo",
+      "key": "f8ef6cb37d13be0479b1",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_estimators.mojo",
+      "key": "8e1e1cd466e5032dea88",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_solver.mojo",
+      "key": "fcd33e757d03669164a2",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_mixture.mojo",
+      "key": "071c30775f5f740c1b13",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cluster.mojo",
+      "key": "ffd7a9846401ca3ea5be",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_ivf.mojo",
+      "key": "7ba153f4ec95eed9f532",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_ann.mojo",
+      "key": "f51954811b9db962866e",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_linear.mojo",
+      "key": "a5bd4f23bc63aa6f2251",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_prep.mojo",
+      "key": "e959a5787fd512cda614",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_svm.mojo",
+      "key": "34e90c0036bf51b4c99c",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_kernel_methods.mojo",
+      "key": "caf271dd5c02979af597",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_decomp.mojo",
+      "key": "39762c6da07d7cc97cd2",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_linalg.mojo",
+      "key": "d7b3cd372124ec947cdf",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_neighbors.mojo",
+      "key": "6c5da3d4754f15957550",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_gp.mojo",
+      "key": "8ab43d405a5dc9565060",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_metrics.mojo",
+      "key": "9b70c95ad6083ccf8c23",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_resample.mojo",
+      "key": "e4cf709fd49a6cf7861a",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_tsa.mojo",
+      "key": "6475e481d053c10e1624",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_arima.mojo",
+      "key": "ecb0068c49ed8c6af2e2",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_gbdt.mojo",
+      "key": "90fc07e927982394c6fc",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_rf.mojo",
+      "key": "34b79ca709ac0826c65d",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_trees.mojo",
+      "key": "8e9cea379917418ea9c0",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_trees.mojo",
+      "key": "e03532e7323fe78034de",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_transformer.mojo",
+      "key": "bde540b26d2444cb0eba",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_byte_lm.mojo",
+      "key": "1b846b4bb4a49fbc1f4f",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_training.mojo",
+      "key": "02fc95661f49347d6c03",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_mamba.mojo",
+      "key": "8361c5dc81045db5fdc4",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cnn.mojo",
+      "key": "57afc036dcb395b7f5b8",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_embedding.mojo",
+      "key": "b37162068f4ad2e7c23d",
+      "mode": "fast",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_byte_lm.mojo",
+      "key": "f0018f47e588213cd5ee",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_byte_lm.mojo",
+      "key": "8a42d54853ba830f4456",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_byte_lm_host.mojo",
+      "key": "c6cc1cf769466c430126",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_mamba.mojo",
+      "key": "ed27655ce55ff3bfdc77",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_mamba.mojo",
+      "key": "b7c2d0fccce248c80723",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_mamba_host.mojo",
+      "key": "30eb25b46c743b5c919c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_neural_host.mojo",
+      "key": "511f673001a6c232c22b",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_training.mojo",
+      "key": "5bca3b5cb80bf6a652bd",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_training.mojo",
+      "key": "a384e7a3cb0868e8de6d",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_training_host.mojo",
+      "key": "4b7b75f5c69d9242a72e",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_transformer.mojo",
+      "key": "f63942c0a3e510c8c7ac",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_transformer.mojo",
+      "key": "3a83e0f87416e5b03ecc",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_transformer_host.mojo",
+      "key": "83e8442e5841d49cff12",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cnn.mojo",
+      "key": "d70a3b05856c03da880f",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cnn.mojo",
+      "key": "90de7b682ea35d72d5ec",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cnn_host.mojo",
+      "key": "3607be41534c038a7b46",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_estimators.mojo",
+      "key": "94a1b250a2abee796a6b",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_estimators.mojo",
+      "key": "0e6cf332c3aa4fc21119",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_estimators_host.mojo",
+      "key": "2e1de511409c62645a56",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_kernel_methods.mojo",
+      "key": "2696e716b413af11e7ff",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_kernel_methods.mojo",
+      "key": "bae9c50fe63cfc8bb0b9",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_kernel_methods_host.mojo",
+      "key": "76642f13905df9105748",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_linalg.mojo",
+      "key": "3c4aa129c84a14f99ad5",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_linalg.mojo",
+      "key": "ea8a6d973bb357773cad",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_linalg_host.mojo",
+      "key": "f78b0e8f51394133d172",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_metrics.mojo",
+      "key": "1e87e1906bee728d7911",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_metrics.mojo",
+      "key": "d5857f197cd8a3161182",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_metrics_host.mojo",
+      "key": "a50eaf763c35cd41ae68",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_decomp.mojo",
+      "key": "e2a8f980fae5a610a26c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_decomp.mojo",
+      "key": "7734db0606cfdd6bc893",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_decomp_host.mojo",
+      "key": "d47acfa55e7235cac9df",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_metrics.mojo",
+      "key": "acb9a9598f9974cf6f22",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_metrics.mojo",
+      "key": "aab7bfd8fe6f8cf7f046",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_metrics_host.mojo",
+      "key": "553fc9301e048f0f81fc",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_neighbors.mojo",
+      "key": "5fcbe94d7f511ce1bb9e",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_neighbors.mojo",
+      "key": "805101a9ad1f3cf42eb1",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_neighbors_host.mojo",
+      "key": "78b57ec23f33bb6ea790",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_preprocessing.mojo",
+      "key": "ab4ed4e1bd0631aeff3e",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_preprocessing.mojo",
+      "key": "b2363f2a3ecaa674f02c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_prep.mojo",
+      "key": "f49c2622bdefb6d8d170",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_prep.mojo",
+      "key": "c9b8aa15de2c725a744c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_prep_host.mojo",
+      "key": "39d0357b62e20d6d6dad",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn.mojo",
+      "key": "47d90bc3e8d75886c2b8",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn.mojo",
+      "key": "3e610e13e7761daa4d15",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_hdbscan.mojo",
+      "key": "9d807932eeaa7cc4246c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_hdbscan.mojo",
+      "key": "e8fbb2f0e08b2d6ddfea",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_hdbscan_host.mojo",
+      "key": "6b752226bfabb7347666",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_hdbscan_infer_host.mojo",
+      "key": "382c670d8995a9a05421",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_ivf.mojo",
+      "key": "c3e038e8a3753f59b176",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_ivf.mojo",
+      "key": "7f669fc419452375e13f",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_mixture.mojo",
+      "key": "5a408a4eb64757d4e3ff",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_mixture.mojo",
+      "key": "edf18dfa8e9405d4fa0b",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_solver.mojo",
+      "key": "51e904d897afee0770af",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_solver.mojo",
+      "key": "77b1c71e943f34cb9189",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_solver_host.mojo",
+      "key": "605495370f35348542bc",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_ann.mojo",
+      "key": "c71c08d53aef3aaaa650",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_ann.mojo",
+      "key": "86c699521e0b47985006",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cluster.mojo",
+      "key": "3e6c53946b89c716f1e4",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cluster.mojo",
+      "key": "b06c546b02fa3c59c8a2",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_resample.mojo",
+      "key": "e6bf55c607541bbc51df",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_resample.mojo",
+      "key": "b69574730416493fcf75",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_linear.mojo",
+      "key": "81195b602b8f871c0518",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_linear.mojo",
+      "key": "55b52e9d35fba4da0448",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_linear_host.mojo",
+      "key": "96206910c0ef6498b59e",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_gp.mojo",
+      "key": "665dd9be658536122504",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_gp.mojo",
+      "key": "9a8433d542208e6fffe3",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_cluster_host.mojo",
+      "key": "a61322a4a429615ea166",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_sequence.mojo",
+      "key": "5fbfd5fe59b86aaf5f7d",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_sequence.mojo",
+      "key": "7a9db7cb77ed19bf94b1",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_sequence_host.mojo",
+      "key": "c62c46c8ed2cf02fa691",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_svm.mojo",
+      "key": "eb53c0566dcac637dc08",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_svm.mojo",
+      "key": "2a67af0b36b437be9f27",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_svm_host.mojo",
+      "key": "51bc00480e1792abaeef",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_core_host.mojo",
+      "key": "07649975778efd3b7b98",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_ivf_host.mojo",
+      "key": "39fc06f79f9c93acd943",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_ivf_search_host.mojo",
+      "key": "2a799607fbc514d2364e",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_mixture_host.mojo",
+      "key": "a5334b05c54a38266673",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_mixture_infer_host.mojo",
+      "key": "07aff9ac63f44c2384dd",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_ann_host.mojo",
+      "key": "cb319a6739e851d984a3",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_tsa.mojo",
+      "key": "945f60bd91ca4914c818",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_tsa.mojo",
+      "key": "24146ccc7acacfaca254",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_tsa_host.mojo",
+      "key": "65bdeb1719f0bc72a3bf",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_arima.mojo",
+      "key": "0eb8af6bf4a023a844c1",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_arima.mojo",
+      "key": "99fe29cd5702315ed377",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_forecast_host.mojo",
+      "key": "3f65d1b5a662f4ed9771",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_rf.mojo",
+      "key": "0f195c7ef1f9ddf689d8",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_rf.mojo",
+      "key": "1f6b58b17a5edbe06ee2",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_rf_host.mojo",
+      "key": "819d8f310764bed230de",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_trees.mojo",
+      "key": "41145f1a51592244f58a",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_trees.mojo",
+      "key": "0a8184a1c08dc7a2fcf8",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_trees_host.mojo",
+      "key": "966a284bd47f24c0de8d",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_trees.mojo",
+      "key": "ed06f3d4cd0ff8984b89",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_trees.mojo",
+      "key": "53e5d5897181c128e1b4",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_x_trees_host.mojo",
+      "key": "c7adcf19aa804d71979c",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_gbdt.mojo",
+      "key": "6bc86a5073a8e23fba3c",
+      "mode": "identical",
+      "status": "NOT_COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_gbdt.mojo",
+      "key": "3907bf630958ef1a608e",
+      "mode": "identical",
+      "status": "FAILED",
+      "vendor": "nvidia"
+    },
+    {
+      "binding": "bindings/_mojolearn_gbdt_host.mojo",
+      "key": "db1564fc62dbe327755e",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_forest_host.mojo",
+      "key": "ae3d687133b84ae20717",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "host"
+    },
+    {
+      "binding": "bindings/_mojolearn_embedding.mojo",
+      "key": "1d58f3bbfa00520a99a8",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "apple"
+    },
+    {
+      "binding": "bindings/_mojolearn_embedding.mojo",
+      "key": "334210bddbf5553883ba",
+      "mode": "identical",
+      "status": "COMPILED",
+      "vendor": "nvidia"
+    }
+  ],
+  "selected_statuses": {
+    "COMPILED": 260,
+    "FAILED": 1,
+    "NOT_COMPILED": 1
+  },
+  "selection": "All baseline and compatible complete-proposed binding configurations for local Apple/host, and IDENTICAL NVIDIA. Exact standalone alternatives and other interactions remain separately NOT_COMPILED in the ledger."
+}

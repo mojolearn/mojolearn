@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Resident GPU drivers of the lane's iterations (lane neighbors-apple2).
 
 `op_lp_iterate`: LabelPropagation / LabelSpreading's fit loop
@@ -13,6 +11,14 @@ same values; only the stopping sum crosses back, one float per iteration,
 compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
+from experiments.classical_identical_ideas.graph_controls import C43_RESIDENT_NORMALIZATION
+from x_neighbors.classical_graph import classical_graph_degree, classical_graph_product
+from experiments.classical_identical_ideas.stats_controls import C54_PREDICT_TILES
+from experiments.classical_identical_ideas.graph_controls import C33_FROZEN_CHUNKS, C33_CHUNK
+from x_neighbors.items import matmul_item
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
 from x_neighbors.svgp_ff import (
     matmul_tn_acc_ff_item, svgp_ff_init_item, svgp_ff_chol_item, svgp_ff_chol_s_item, svgp_ff_column_item,
@@ -102,12 +108,53 @@ def xn_tree_fold_kernel(part: FP, res: FP, nb_: Int64):
         res.unsafe_store(0, sh[0])
 
 
+def _c33_stop(sum: FP, state: IP, threshold: Float32, iteration: Int32):
+    # First convergence wins, including which ping-pong buffer owns it.
+    if state[0] == 0 and sum[0] < threshold:
+        state[0] = 1
+        state[1] = iteration
+        state[2] = iteration % 2
+
+
+def _c33_product(state: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Int32, variant: Int32):
+    var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if state[0] == 0 and t < Int(n)*Int(c):
+        if raw_graph != 0:
+            classical_graph_product(t,graph,degree,cur,nxt,Int(n),Int(c),Int(variant))
+        else:
+            matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
+
+
+def _c33_clamp(state: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
+    var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if state[0] != 0:
+        return
+    if variant == 0:
+        if t < Int(n):
+            lp_clamp_item(t,nxt,ys,unl,output,Int(n),Int(c))
+    elif t < Int(n)*Int(c):
+        ls_clamp_item(t,nxt,ys,output,Int(n)*Int(c),alpha)
+
+
+def _c43_graph_degree(a: FP,degree: FP,n: Int32,variant: Int32):
+    var t=_tid()
+    if t < Int(n):
+        classical_graph_degree(t,a,degree,Int(n),Int(variant))
+
+
+def _c43_graph_product(a: FP,degree: FP,x: FP,dst: FP,n: Int32,c: Int32,variant: Int32):
+    var t=_tid()
+    if t < Int(n)*Int(c):
+        classical_graph_product(t,a,degree,x,dst,Int(n),Int(c),Int(variant))
+
+
 def op_lp_iterate(
     g: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
     n: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int,
     alpha: Float32,
 ) raises:
-    """variant 0 propagation (lp_clamp), 1 spreading (ls_clamp). `ld` in:
+    """variant 0 propagation, 1 spreading; C43 adds 2 for raw affinity.
+    `ld` in:
     the initial label distributions, out: the last. info (int32 x 2): the
     fit's n_iter_ and converged.
 
@@ -120,9 +167,14 @@ def op_lp_iterate(
     stopping sum and the finiteness test (and `-D MOJOLEARN_XN_LP_BATCH`,
     `_DENSE` and `_DEVICE_FOLD` chose other routes; they are gone)."""
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
+    var raw_graph = C43_RESIDENT_NORMALIZATION and variant >= 2
+    var clamp_variant = variant % 2
     var nc = n * c
     var ctx = xn_ctx()
     var d_g = _buf(ctx, g, n * n, True)
+    var d_degree = ctx.enqueue_create_buffer[DType.float32](max(n,1) if raw_graph else 1)
+    if raw_graph and n > 0:
+        ctx.enqueue_function[_c43_graph_degree](_p(d_g),_p(d_degree),Int32(n),Int32(clamp_variant),grid_dim=_grid(n),block_dim=BLOCK)
     var d_a = _buf(ctx, ld, nc, True)
     var d_b = _buf(ctx, 0, nc, False)
     ctx.enqueue_memset(d_b, Float32(0))
@@ -153,7 +205,7 @@ def op_lp_iterate(
     ctx.synchronize()
     var nnz = Int(hst[0])
     var maxk = Int(hst[1])
-    var use_sparse = nnz > 0 and nnz * 8 < n * n
+    var use_sparse = not raw_graph and nnz > 0 and nnz * 8 < n * n
     var ell = n * maxk if use_sparse else 1
     var d_cols = ctx.enqueue_create_buffer[DType.int32](max(ell, 1))
     var d_vals = ctx.enqueue_create_buffer[DType.float32](max(ell, 1))
@@ -162,45 +214,75 @@ def op_lp_iterate(
             d_g.unsafe_ptr(), Int64(n), Int64(maxk), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(),
             grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
         )
-    for it in range(max_iter):
-        n_iter = it
-        _absdiff_launch(ctx, cur, prev, _p(d_s), _p(d_part), nc)
-        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
-        ctx.synchronize()
-        if Float64(hs[0]) < tol:
-            converged = True
-            break
-        if use_sparse:
-            ctx.enqueue_memset(d_flag, Int32(0))
-            ctx.enqueue_function[lp_nonfinite_kernel](
-                cur, Int64(nc), d_flag.unsafe_ptr(), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-            )
-            ctx.enqueue_function[lp_prod_kernel](
-                d_flag.unsafe_ptr(), d_cnt.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), Int64(maxk),
-                d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(c),
-                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-            )
-        else:
-            ctx.enqueue_function[matmul_kernel](
-                d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(n), Int64(c),
-                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-            )
-        # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the
-        # old prev held, then the two names swap.
-        if variant == 0:
-            ctx.enqueue_function[lp_clamp_kernel](
-                d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, Int64(n), Int64(c),
-                grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
-            )
-        else:
-            ctx.enqueue_function[ls_clamp_kernel](
-                d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), prev, Int64(nc), alpha,
-                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-            )
-        var t = cur
-        cur = prev
-        prev = t
-        cur_is_a = not cur_is_a
+    comptime if C33_FROZEN_CHUNKS:
+        # Upward Float32 threshold gives exactly Float64(sum) < tol.
+        var threshold = Float32(tol)
+        if Float64(threshold) < tol:
+            threshold = bitcast[DType.float32](bitcast[DType.uint32](threshold) + UInt32(1))
+        var state = ctx.enqueue_create_buffer[DType.int32](3)
+        ctx.enqueue_memset(state,Int32(0))
+        var status = List[Int32](length=3,fill=Int32(0))
+        for chunk in range(0,max_iter,C33_CHUNK):
+            for it in range(chunk,min(chunk+C33_CHUNK,max_iter)):
+                n_iter = it
+                _absdiff_launch(ctx,cur,prev,_p(d_s),_p(d_part),nc)
+                ctx.enqueue_function[_c33_stop](_p(d_s),state.unsafe_ptr(),threshold,Int32(it),grid_dim=1,block_dim=1)
+                ctx.enqueue_function[_c33_product](state.unsafe_ptr(),_p(d_g),cur,_p(d_nxt),Int32(n),Int32(c),_p(d_degree),Int32(raw_graph),Int32(clamp_variant),grid_dim=_grid(nc),block_dim=BLOCK)
+                ctx.enqueue_function[_c33_clamp](state.unsafe_ptr(),_p(d_nxt),_p(d_ys),d_unl.unsafe_ptr(),prev,Int32(n),Int32(c),Int32(clamp_variant),alpha,grid_dim=_grid(nc),block_dim=BLOCK)
+                var tmp = cur
+                cur = prev
+                prev = tmp
+                cur_is_a = not cur_is_a
+            ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(),src_buf=state)
+            ctx.synchronize()
+            if status[0] != 0:
+                converged = True
+                n_iter = Int(status[1])
+                cur_is_a = status[2] == 0
+                break
+        _ = state^
+    else:
+        for it in range(max_iter):
+            n_iter = it
+            _absdiff_launch(ctx, cur, prev, _p(d_s), _p(d_part), nc)
+            ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
+            ctx.synchronize()
+            if Float64(hs[0]) < tol:
+                converged = True
+                break
+            if raw_graph:
+                ctx.enqueue_function[_c43_graph_product](_p(d_g),_p(d_degree),cur,_p(d_nxt),Int32(n),Int32(c),Int32(clamp_variant),grid_dim=_grid(nc),block_dim=BLOCK)
+            elif use_sparse:
+                ctx.enqueue_memset(d_flag, Int32(0))
+                ctx.enqueue_function[lp_nonfinite_kernel](
+                    cur, Int64(nc), d_flag.unsafe_ptr(), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+                )
+                ctx.enqueue_function[lp_prod_kernel](
+                    d_flag.unsafe_ptr(), d_cnt.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), Int64(maxk),
+                    d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(c),
+                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+                )
+            else:
+                ctx.enqueue_function[matmul_kernel](
+                    d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(n), Int64(c),
+                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+                )
+            # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the
+            # old prev held, then the two names swap.
+            if clamp_variant == 0:
+                ctx.enqueue_function[lp_clamp_kernel](
+                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, Int64(n), Int64(c),
+                    grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+                )
+            else:
+                ctx.enqueue_function[ls_clamp_kernel](
+                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), prev, Int64(nc), alpha,
+                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+                )
+            var t = cur
+            cur = prev
+            prev = t
+            cur_is_a = not cur_is_a
     if not converged:
         n_iter += 1
     if cur_is_a:
@@ -219,6 +301,7 @@ def op_lp_iterate(
     _ = d_cols^
     _ = d_vals^
     _ = d_g^
+    _ = d_degree^
     _ = d_a^
     _ = d_b^
     _ = d_nxt^
@@ -362,6 +445,24 @@ def cc_jump_kernel(lab: IP, n: Int32):
         lab.unsafe_store(v, Int32(p))
 
 
+# C33: preserve the first fixed-point round while later scheduled work is inert.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+def _c33_cc_hook(ip: IP, ix: IP, lab: IP, n: Int32, changed: IP, state: IP):
+    if state.unsafe_load(0) == 0:
+        cc_hook_kernel(ip, ix, lab, n, changed)
+
+
+def _c33_cc_jump(lab: IP, n: Int32, state: IP):
+    if state.unsafe_load(0) == 0:
+        cc_jump_kernel(lab, n)
+
+
+def _c33_cc_finish(changed: IP, state: IP, round_: Int32):
+    if thread_idx.x == 0 and state.unsafe_load(0) == 0 and changed.unsafe_load(0) == 0:
+        state.unsafe_store(0, Int32(1))
+        state.unsafe_store(1, round_)
+
+
 def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
     # Every host side of a copy is ONE pinned host buffer (lane/neural-pass95,
     # 2026-10-02): the peer's MI325X paid ~100 ms on the first fit after any
@@ -392,16 +493,35 @@ def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: 
         ctx.enqueue_copy(dst_buf=d_l, src_ptr=hp + o_l)
     var blocks = (n + 255) // 256
     var rounds = 0
-    while n > 0:
-        rounds += 1
-        d_c.enqueue_fill(Int32(0))
-        ctx.enqueue_function[cc_hook_kernel](d_ip.unsafe_ptr(), d_ix.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n),
-                                             d_c.unsafe_ptr(), grid_dim=blocks, block_dim=256)
-        ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
-        ctx.enqueue_copy(dst_ptr=hp + o_c, src_buf=d_c)
-        ctx.synchronize()
-        if hp[o_c] == 0:
-            break
+    comptime if C33_FROZEN_CHUNKS:
+        var state = ctx.enqueue_create_buffer[DType.int32](2)
+        state.enqueue_fill(Int32(0))
+        var hstate = List[Int32](length=2,fill=Int32(0))
+        while n > 0:
+            for offset in range(C33_CHUNK):
+                d_c.enqueue_fill(Int32(0))
+                ctx.enqueue_function[_c33_cc_hook](d_ip.unsafe_ptr(),d_ix.unsafe_ptr(),d_l.unsafe_ptr(),Int32(n),d_c.unsafe_ptr(),state.unsafe_ptr(),grid_dim=blocks,block_dim=256)
+                ctx.enqueue_function[_c33_cc_jump](d_l.unsafe_ptr(),Int32(n),state.unsafe_ptr(),grid_dim=blocks,block_dim=256)
+                ctx.enqueue_function[_c33_cc_finish](d_c.unsafe_ptr(),state.unsafe_ptr(),Int32(rounds+offset+1),grid_dim=1,block_dim=1)
+            rounds += C33_CHUNK
+            ctx.enqueue_copy(dst_ptr=hstate.unsafe_ptr(),src_buf=state)
+            ctx.synchronize()
+            if hstate[0] != 0:
+                rounds=Int(hstate[1])
+                break
+        _ = state^
+        _ = hstate^
+    else:
+        while n > 0:
+            rounds += 1
+            d_c.enqueue_fill(Int32(0))
+            ctx.enqueue_function[cc_hook_kernel](d_ip.unsafe_ptr(), d_ix.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n),
+                                                 d_c.unsafe_ptr(), grid_dim=blocks, block_dim=256)
+            ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+            ctx.enqueue_copy(dst_ptr=hp + o_c, src_buf=d_c)
+            ctx.synchronize()
+            if hp[o_c] == 0:
+                break
     if n > 0:
         ctx.enqueue_copy(dst_ptr=hp + o_l, src_buf=d_l)
         ctx.synchronize()
@@ -635,6 +755,11 @@ def cc_hook_dense_kernel(a: FP, lab: IP, n: Int32, changed: IP):
                         changed.unsafe_store(0, Int32(1))
 
 
+def _c33_cc_dense(a: FP, lab: IP, n: Int32, changed: IP, state: IP):
+    if state.unsafe_load(0) == 0:
+        cc_hook_dense_kernel(a, lab, n, changed)
+
+
 def cc_label_init_kernel(lab: IP, n: Int32):
     var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if v < Int(n):
@@ -659,16 +784,35 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     var rounds = 0
     if n > 0:
         ctx.enqueue_function[cc_label_init_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
-    while n > 0:
-        rounds += 1
-        d_c.enqueue_fill(Int32(0))
-        ctx.enqueue_function[cc_hook_dense_kernel](d_a.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n), d_c.unsafe_ptr(),
-                                                   grid_dim=blocks, block_dim=256)
-        ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
-        ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_c)
-        ctx.synchronize()
-        if hb.unsafe_ptr()[0] == 0:
-            break
+    comptime if C33_FROZEN_CHUNKS:
+        var state=ctx.enqueue_create_buffer[DType.int32](2)
+        state.enqueue_fill(Int32(0))
+        var hstate=List[Int32](length=2,fill=Int32(0))
+        while n > 0:
+            for offset in range(C33_CHUNK):
+                d_c.enqueue_fill(Int32(0))
+                ctx.enqueue_function[_c33_cc_dense](d_a.unsafe_ptr(),d_l.unsafe_ptr(),Int32(n),d_c.unsafe_ptr(),state.unsafe_ptr(),grid_dim=blocks,block_dim=256)
+                ctx.enqueue_function[_c33_cc_jump](d_l.unsafe_ptr(),Int32(n),state.unsafe_ptr(),grid_dim=blocks,block_dim=256)
+                ctx.enqueue_function[_c33_cc_finish](d_c.unsafe_ptr(),state.unsafe_ptr(),Int32(rounds+offset+1),grid_dim=1,block_dim=1)
+            rounds += C33_CHUNK
+            ctx.enqueue_copy(dst_ptr=hstate.unsafe_ptr(),src_buf=state)
+            ctx.synchronize()
+            if hstate[0] != 0:
+                rounds=Int(hstate[1])
+                break
+        _ = state^
+        _ = hstate^
+    else:
+        while n > 0:
+            rounds += 1
+            d_c.enqueue_fill(Int32(0))
+            ctx.enqueue_function[cc_hook_dense_kernel](d_a.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n), d_c.unsafe_ptr(),
+                                                       grid_dim=blocks, block_dim=256)
+            ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+            ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_c)
+            ctx.synchronize()
+            if hb.unsafe_ptr()[0] == 0:
+                break
     if n > 0:
         ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_l)
         ctx.synchronize()
@@ -1664,11 +1808,41 @@ def svgp_rbf_tile_kernel(q: FP, z: FP, dst: FP, rows_: Int64, m_: Int64, d_: Int
                 dst.unsafe_store(i * m + j, ftz(identical_mul_add(variance, ftz(k), Float32(0))))
 
 
+# C54 predicts four independent inducing-point outputs per query thread.
+# The feature fold, exponential, and variance scale match the incumbent;
+# query feature loads are reused. Scratch is four scalar accumulators.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+def _c54_svgp_predict_kernel(q: FP,z: FP,dst: FP,rows: Int32,m: Int32,d: Int32,gamma: Float32,variance: Float32):
+    var tile = _tid()
+    var per_row = (Int(m)+3)//4
+    var row = tile//per_row
+    var first = (tile%per_row)*4
+    if row >= Int(rows):
+        return
+    var sums = InlineArray[Float32,4](fill=Float32(0))
+    for feature in range(Int(d)):
+        var qv=q.unsafe_load(row*Int(d)+feature)
+        comptime for lane in range(4):
+            if first+lane < Int(m):
+                var delta=_sub(qv,z.unsafe_load((first+lane)*Int(d)+feature))
+                sums[lane]=ftz(identical_mul_add(delta,delta,sums[lane]))
+    comptime for lane in range(4):
+        if first+lane < Int(m):
+            var kval=ftz(identical_exp(ftz(identical_mul(-gamma,sums[lane]))))
+            dst.unsafe_store(row*Int(m)+first+lane,ftz(identical_mul_add(variance,ftz(kval),Float32(0))))
+
+
 def _launch_scaled_rbf(
     ctx: DeviceContext, q: FP, z: FP, kbuf: FP, dst: FP, rows: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
+    prediction: Bool = False,
 ) raises:
     """SVGP's `_k`: the rbf kernel (coef0 0, degree 0), then
     `unary(K, identity, variance, 0)`."""
+    comptime if C54_PREDICT_TILES:
+        if prediction:
+            if rows*m > 0:
+                ctx.enqueue_function[_c54_svgp_predict_kernel](q,z,dst,Int32(rows),Int32(m),Int32(d),gamma,variance,grid_dim=_grid(rows*((m+3)//4)),block_dim=BLOCK)
+            return
     comptime if SVGP_RBFTILE:
         if rows * m > 0:
             var nblk = ((rows + SVGP_RBF_T - 1) // SVGP_RBF_T) * ((m + SVGP_RBF_T - 1) // SVGP_RBF_T)
@@ -2242,7 +2416,7 @@ def op_svgp_predict(
     var r0 = 0
     while r0 < n:
         var rows = min(tr, n - r0)
-        _launch_scaled_rbf(ctx, qp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
+        _launch_scaled_rbf(ctx, qp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance, True)
         _launch_matmul(ctx, _p(d_ks), _p(d_al), mp + r0, rows, m, 1)
         ctx.enqueue_function[svgp_var_kernel](
             _p(d_ks), _p(d_c), vp + r0, Int64(rows), Int64(m), kdiag,
@@ -2700,7 +2874,7 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
 #: in float32 on the device. Expected: the per-iteration boundary crossings
 #: gone (LabelPropagation taxi runs its 1,000 steps).
 comptime LPK_TPB = 256
-comptime LPK_BATCH = 16
+comptime LPK_BATCH = C33_CHUNK if C33_FROZEN_CHUNKS else 16
 comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
 #: LP_FAST_RESIDENT: the default on FAST + Apple since the M3 A/B
 #: (n2-lp-res-taxi: label-propagation taxi 6,793 -> 2,086 ms, -69%, accuracy

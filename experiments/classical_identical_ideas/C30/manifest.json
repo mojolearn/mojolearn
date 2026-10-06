@@ -1,0 +1,290 @@
+{
+  "schema": 1,
+  "id": "C30",
+  "title": "Versioned direct-difference distance arithmetic",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "core/classical_distance.mojo",
+    "core/knn_host_predict.mojo",
+    "neighbors/impl/detail/knn_brute_force.mojo",
+    "cluster/impl/detail/classical_assignment.mojo",
+    "cluster/host/kmeans_oracle.mojo",
+    "neighbors/impl/ball_cover/common.mojo",
+    "dbscan/impl/neighbors/epsilon_neighborhood.mojo",
+    "dbscan/host/dbscan_oracle.mojo",
+    "cluster/impl/detail/kmeans_transform.mojo",
+    "cluster/checks/plus_plus.mojo",
+    "cluster/impl/detail/kmeans.mojo",
+    "ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo",
+    "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo",
+    "ivf/host/ivf_host.mojo",
+    "hierarchy/checks/linkage_oracle.mojo",
+    "hdbscan/host/hdbscan_host_oracle.mojo",
+    "hdbscan/impl/cluster/detail/sparse_mr_mst.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_C30_DIRECT_DISTANCE"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Neighbor membership, cancellation-sensitive distances, clustering quality, densities and model metrics; nearly equal large vectors.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C30",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C30",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C30",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C30",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C30",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/graph_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/graph_controls.mojo"
+  ],
+  "default_configuration": "direct_distance",
+  "configurations": {
+    "direct_distance": {
+      "name": "direct_distance",
+      "candidate_defines": [
+        "MOJOLEARN_C30_DIRECT_DISTANCE"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C30"
+      ],
+      "source_gaps": [
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+      ],
+      "scope": [
+        "KNN",
+        "KMeans",
+        "KDE",
+        "RBF kernels",
+        "RadiusNeighbors",
+        "DBSCAN",
+        "IVFFlat",
+        "HDBSCAN",
+        "hierarchy single-linkage"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:knn",
+        "classical:kmeans",
+        "classical:kde",
+        "classical:dbscan",
+        "classical:hdbscan",
+        "more:agglomerative",
+        "more:ivf",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:radius-neighbors"
+      ]
+    },
+    "direct_distance_rows_4": {
+      "name": "direct_distance_rows_4",
+      "candidate_defines": [
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C30_ROWS_4"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C30"
+      ],
+      "source_gaps": [
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+      ],
+      "scope": [
+        "KNN",
+        "KMeans",
+        "KDE",
+        "RBF kernels",
+        "RadiusNeighbors",
+        "DBSCAN",
+        "IVFFlat",
+        "HDBSCAN",
+        "hierarchy single-linkage"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:knn",
+        "classical:kmeans",
+        "classical:kde",
+        "classical:dbscan",
+        "classical:hdbscan",
+        "more:agglomerative",
+        "more:ivf",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:radius-neighbors"
+      ]
+    },
+    "combined": {
+      "name": "combined",
+      "selectable": true,
+      "candidate_ids": [
+        "C30"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C30_DIRECT_DISTANCE",
+        "MOJOLEARN_C30_ROWS_4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+      ],
+      "required_workload_keys": [
+        "classical:knn",
+        "classical:kmeans",
+        "classical:kde",
+        "classical:dbscan",
+        "classical:hdbscan",
+        "more:agglomerative",
+        "more:ivf",
+        "more:knn-clf",
+        "more:knn-reg",
+        "more:kernel-ridge",
+        "expanded:kernel-pca",
+        "expanded:radius-neighbors"
+      ],
+      "component_arms": [
+        {
+          "id": "C30",
+          "configuration": "direct_distance"
+        },
+        {
+          "id": "C30",
+          "configuration": "direct_distance_rows_4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "Direct separate-product ascending FTZ fold applies to supported Euclidean graph/clustering calls, KMeans init/transform and IVF scan/coarse calls. KDE integration owned root; GP/RBF and SVM owned root/linear. Non-Euclidean routes retain incumbent contracts. Runtime coverage across transitive callers remains undemonstrated."
+  ],
+  "catalog_estimators": [
+    "KNN",
+    "KMeans",
+    "KDE",
+    "RBF kernels",
+    "radius graphs"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "classical:knn",
+    "classical:kmeans",
+    "classical:kde",
+    "classical:dbscan",
+    "classical:hdbscan",
+    "more:agglomerative",
+    "more:ivf",
+    "more:knn-clf",
+    "more:knn-reg",
+    "more:kernel-ridge",
+    "expanded:kernel-pca",
+    "expanded:radius-neighbors"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

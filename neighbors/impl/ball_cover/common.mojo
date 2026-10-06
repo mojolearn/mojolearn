@@ -1,5 +1,3 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random ball cover: the distance functors and the sort comparator.
 
 Reference: `cuvs/src/neighbors/ball_cover/registers_types.cuh` (the `DistFunc`
@@ -42,6 +40,11 @@ by a rank-by-counting on the distance inside each group, with the tie broken
 by the original point index. See DEVIATION 3 there, including the measured
 reason `nn.argsort` is not an option.
 """
+from core.classical_distance import direct_squared_distance
+from experiments.classical_identical_ideas.graph_controls import C30_DIRECT_DISTANCE
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 
 from std.memory import bitcast
@@ -105,6 +108,8 @@ def eps_dist_sq(
     # subtraction of nearby coordinates, which is where a denormal appears;
     # `sum_sq += diff * diff` is a multiply-add and therefore the codegen's
     # to contract unless it is pinned.
+    comptime if C30_DIRECT_DISTANCE:
+        return direct_squared_distance(a+a_off,b+b_off,n_dims)
     var sum_sq = Float32(0.0)
     for i in range(n_dims):
         var diff = ftz(

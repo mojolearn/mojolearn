@@ -161,3 +161,9 @@ def forest_resident_layout_binding() raises -> PythonObject:
     comptime if FOREST_PACKED_NODES:
         return PythonObject("packed_siblings")
     return PythonObject("separate_arrays")
+
+
+def forest_identical_fused_labels_binding() raises -> PythonObject:
+    """T38 capability; absent define preserves incumbent classification."""
+    from core.forest_experiments import T38_FUSED_LABELS
+    return PythonObject(T38_FUSED_LABELS)

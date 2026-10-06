@@ -1,0 +1,53 @@
+{
+  "schema": "mojolearn.six-lane-evidence-policy/1",
+  "execution_authorized": false,
+  "whole_operation": "input preparation + fit/training + required synchronization + consumed outputs",
+  "separate_timings": [
+    "fit/training",
+    "inference",
+    "cold",
+    "repeated use"
+  ],
+  "hashing": "Outside timed boundary; typed shape/dtype/encoding/capture-scope manifests; missing model state explicit",
+  "provenance": [
+    "source commit",
+    "source closure",
+    "exact defines and runtime settings",
+    "binary hash and observed loaded artifact",
+    "compiler",
+    "target",
+    "hardware",
+    "dataset/version/hash/split/seed",
+    "dimensions",
+    "settings",
+    "intrinsic caps",
+    "harness hash",
+    "worker resource policy and effective pools",
+    "actual warmup/scored counts",
+    "failures/retries and full logs"
+  ],
+  "identical": {
+    "compare": "A across NVIDIA/AMD/Apple/host and B across those separately",
+    "cross_version_equality_required": false,
+    "promotion_voters": [
+      "nvidia",
+      "amd"
+    ],
+    "apple_timing_votes": false
+  },
+  "fast": {
+    "vendors": [
+      "apple"
+    ],
+    "acceptance": "unchanged task-quality rules",
+    "cross_vendor_bitwise_required": false
+  },
+  "boards": {
+    "tool": "tools/performance_measurement_board.py",
+    "own_only_ab_separate": true,
+    "opponent_ratios": false,
+    "automatic_admission": false,
+    "default_promotion": false
+  },
+  "runtime_reach": "UNVERIFIED"
+}

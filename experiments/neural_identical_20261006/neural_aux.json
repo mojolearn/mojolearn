@@ -1,0 +1,68 @@
+{
+  "schema": "mojolearn.neural-identical-source-lane/1",
+  "lane": "neural_aux",
+  "branch": "ideas/neural-identical-20261006-v2",
+  "base_commit": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
+  "scope": "GCN/GraphSAGE neural message passing and channel dropout only",
+  "validation": "NOT_RUN_OWNER_REQUEST",
+  "new_defaults_enabled": false,
+  "experiments": [
+    {
+      "id": "NI55", "title": "Graph neural feature register tiles",
+      "status": "wired_candidate_unverified", "numerical_contract": "S",
+      "implementation_paths": ["x_cnn/neural_aux_ops.mojo", "x_cnn/neural_aux_contract.mojo", "x_cnn/device.mojo"],
+      "candidate_defines": ["MOJOLEARN_NI55_GRAPH_FEATURE4=1"], "baseline_defines": [],
+      "candidate_env": {}, "baseline_env": {}, "dependencies": [],
+      "remaining_work": ["Compilation and all-column identity not run", "Full GCN/GraphSAGE operation and training-consumer recipes and A/B pending", "Measure interaction with NI57; the joint route preserves NI57 graph without promising the same metadata reuse"],
+      "quality_risks": ["Feature tails", "Empty CSR rows", "Mean normalization and transposed backward", "Register-pressure regression"]
+    },
+    {
+      "id": "NI56", "title": "Reuse graph normalization workspace",
+      "status": "existing_candidate_unverified", "numerical_contract": "S",
+      "implementation_paths": ["x_cnn/device.mojo"],
+      "candidate_defines": [], "baseline_defines": ["MOJOLEARN_IDN_GRAPH_M_OFF=1"],
+      "candidate_env": {}, "baseline_env": {}, "dependencies": [],
+      "remaining_work": ["Reuses existing graph_m/gcn_norm_m workspace route; no new implementation or default change", "Compilation and identity not run in this task; reuse accepted older evidence where applicable", "Full GCN preparation and consumer A/B pending", "The legacy control also changes SAGE/L2 residency; measure complete graph consumers and retain this wider scope"],
+      "quality_risks": ["Scratch reuse with changed topology", "Empty edge set", "Cold versus repeated allocation tradeoff"]
+    },
+    {
+      "id": "NI57", "title": "Versioned graph neural edge reduction",
+      "status": "wired_candidate_unverified", "numerical_contract": "V",
+      "arithmetic_version": "graph-neural-csr-leaf64-balanced-v2",
+      "implementation_paths": ["x_cnn/neural_aux_contract.mojo", "x_cnn/ops.mojo", "x_cnn/device.mojo", "x_cnn/host/ops_host.mojo"],
+      "candidate_defines": ["MOJOLEARN_NI57_GRAPH_TREE64=1"], "baseline_defines": [],
+      "candidate_env": {}, "baseline_env": {}, "dependencies": [],
+      "remaining_work": ["Compilation and same-version host/NVIDIA/AMD/Apple identity not run", "Full graph-neural quality and training trajectories pending", "The stack implementation evaluates leaves serially; parallel leaf scheduling is not implemented or claimed", "No speedup from this arithmetic prototype is established"],
+      "quality_risks": ["Cancellation", "Duplicate edges", "Long high-degree rows", "Changed forward/backward bits across versions", "Extra local state and branch cost"]
+    },
+    {
+      "id": "NI58", "title": "GraphSAGE max feature tiling",
+      "status": "wired_candidate_unverified", "numerical_contract": "S",
+      "implementation_paths": ["x_cnn/neural_aux_ops.mojo", "x_cnn/neural_aux_contract.mojo", "x_cnn/device.mojo"],
+      "candidate_defines": ["MOJOLEARN_NI58_SAGE_FEATURE4=1"], "baseline_defines": [],
+      "candidate_env": {}, "baseline_env": {}, "dependencies": [],
+      "remaining_work": ["Compilation and identity not run", "Max/tie-count and backward gradient evidence pending", "Full GraphSAGE max workload recipe and A/B pending"],
+      "quality_risks": ["NaN and signed-zero semantics", "Equal maximum count", "Empty rows and feature tails", "Default mean GraphSAGE board recipe alone cannot qualify max aggregation"]
+    },
+    {
+      "id": "NI59", "title": "One launch channel dropout",
+      "status": "wired_candidate_unverified", "numerical_contract": "S",
+      "implementation_paths": ["x_cnn/neural_aux_ops.mojo", "x_cnn/neural_aux_contract.mojo", "x_cnn/device.mojo"],
+      "candidate_defines": ["MOJOLEARN_NI59_DROPOUT_CHANNEL=1"], "baseline_defines": [],
+      "candidate_env": {}, "baseline_env": {}, "dependencies": [],
+      "mutually_exclusive_with": ["NI60"],
+      "remaining_work": ["Compilation, channel RNG/mask identity and backward evidence not run", "Full dropout and actual CNN consumer A/B pending", "Small channel-count and long spatial-plane occupancy evidence pending"],
+      "quality_risks": ["Seed counter mapping", "Broadcast synchronization", "Full mask ABI", "Low grid occupancy", "This is channel dropout, not elementwise dropout"]
+    },
+    {
+      "id": "NI60", "title": "Tile dropout mask application",
+      "status": "wired_candidate_unverified", "numerical_contract": "S",
+      "implementation_paths": ["x_cnn/neural_aux_ops.mojo", "x_cnn/neural_aux_contract.mojo", "x_cnn/device.mojo"],
+      "candidate_defines": ["MOJOLEARN_NI60_DROPOUT_APPLY4=1"], "baseline_defines": [],
+      "candidate_env": {}, "baseline_env": {}, "dependencies": [],
+      "mutually_exclusive_with": ["NI59"],
+      "remaining_work": ["Compilation and all-column identity not run", "Full dropout and actual CNN consumer A/B pending", "Partial spatial tile and zero-sized public-input semantics need later evidence"],
+      "quality_risks": ["Spatial tails", "Cross-channel indexing", "Register pressure", "Interaction with existing channel-mask OFF controls"]
+    }
+  ]
+}

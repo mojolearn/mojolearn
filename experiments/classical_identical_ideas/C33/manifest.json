@@ -1,0 +1,232 @@
+{
+  "schema": 1,
+  "id": "C33",
+  "title": "Freeze first graph convergence state on device",
+  "mode": "identical",
+  "vendors": [
+    "nvidia",
+    "amd",
+    "apple",
+    "host"
+  ],
+  "status": "source_draft",
+  "implementation_paths": [
+    "x_neighbors/iter_device.mojo",
+    "dbscan/impl/sparse/detail/csr.mojo",
+    "dbscan/impl/label/merge_labels.mojo"
+  ],
+  "validation_paths": [],
+  "candidate_defines": [
+    "MOJOLEARN_C33_FROZEN_CHUNKS"
+  ],
+  "baseline_defines": [],
+  "depends_on": [],
+  "quality_gates": [
+    "same-version NVIDIA/AMD/Apple/host exact output bits",
+    "Labels, graph probabilities, stopping counts, long chains, disconnected and nearly converged graphs.",
+    "saved full-workload coverage and source/configuration-matched native caller admission"
+  ],
+  "build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C33",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "baseline_build_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "build",
+    "--id",
+    "C33",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "capture",
+    "--id",
+    "C33",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "timing_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C33",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "run_argv": [
+    "{python}",
+    "{repo}/experiments/classical_identical_ideas/full_workload.py",
+    "run",
+    "--id",
+    "C33",
+    "--configuration",
+    "{configuration}",
+    "--arm",
+    "{arm}",
+    "--vendor",
+    "{vendor}",
+    "--output",
+    "{output}"
+  ],
+  "output_kind": "directory",
+  "paired_build": false,
+  "build_uses_compile_slot": false,
+  "timing_contract": "Full saved workload including preparation, fit/training, required synchronization and consumed outputs. Separate cold, excluded warmup, one repeated scored sample and same-model repeated inference. Missing facts/caps stay pending; no reduced substitute; only NVIDIA+AMD vote. Capture path emits unqualified output evidence without timing.",
+  "blocker": null,
+  "default_enabled": false,
+  "qualification": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "runtime_reach": "NOT DEMONSTRATED",
+  "source_ledger": [
+    "experiments/classical_identical_ideas/graph_implementation.json"
+  ],
+  "controls_paths": [
+    "experiments/classical_identical_ideas/graph_controls.mojo"
+  ],
+  "default_configuration": "frozen_chunks",
+  "configurations": {
+    "frozen_chunks": {
+      "name": "frozen_chunks",
+      "candidate_defines": [
+        "MOJOLEARN_C33_FROZEN_CHUNKS"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C33"
+      ],
+      "source_gaps": [
+        "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there."
+      ],
+      "scope": [
+        "DBSCAN",
+        "ConnectedComponents",
+        "LabelPropagation",
+        "LabelSpreading"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:dbscan",
+        "expanded:connected-components",
+        "expanded:label-propagation",
+        "expanded:label-spreading"
+      ]
+    },
+    "frozen_chunks_chunk_4": {
+      "name": "frozen_chunks_chunk_4",
+      "candidate_defines": [
+        "MOJOLEARN_C33_FROZEN_CHUNKS",
+        "MOJOLEARN_C33_CHUNK_4"
+      ],
+      "baseline_defines": [],
+      "candidate_ids": [
+        "C33"
+      ],
+      "source_gaps": [
+        "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there."
+      ],
+      "scope": [
+        "DBSCAN",
+        "ConnectedComponents",
+        "LabelPropagation",
+        "LabelSpreading"
+      ],
+      "adapter": null,
+      "selectable": true,
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "required_workload_keys": [
+        "classical:dbscan",
+        "expanded:connected-components",
+        "expanded:label-propagation",
+        "expanded:label-spreading"
+      ]
+    },
+    "combined": {
+      "name": "combined",
+      "selectable": true,
+      "candidate_ids": [
+        "C33"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_C33_FROZEN_CHUNKS",
+        "MOJOLEARN_C33_CHUNK_4"
+      ],
+      "baseline_defines": [],
+      "source_gaps": [
+        "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there."
+      ],
+      "required_workload_keys": [
+        "classical:dbscan",
+        "expanded:connected-components",
+        "expanded:label-propagation",
+        "expanded:label-spreading"
+      ],
+      "component_arms": [
+        {
+          "id": "C33",
+          "configuration": "frozen_chunks"
+        },
+        {
+          "id": "C33",
+          "configuration": "frozen_chunks_chunk_4"
+        }
+      ],
+      "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+      "default_enabled": false,
+      "scope": "Explicit interaction; all component source limitations retained; full workload union required."
+    }
+  },
+  "source_gaps": [
+    "Dense/CSR ConnectedComponents and DBSCAN first-stop state source-integrated. Dense LP uses its canonical dense product under the new chunk arm; existing compact kNN LP already freezes first convergence and exposes changed chunk cadence. Default chunk16 equals incumbent compact-kNN cadence; chunk4 is the distinct cadence subarm there."
+  ],
+  "catalog_estimators": [
+    "DBSCAN",
+    "connected components",
+    "label propagation/spreading"
+  ],
+  "workload_map": "experiments/classical_identical_ideas/workload_map.json",
+  "required_workload_keys": [
+    "classical:dbscan",
+    "expanded:connected-components",
+    "expanded:label-propagation",
+    "expanded:label-spreading"
+  ],
+  "external_owner": null,
+  "plan": "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
+  "source_catalog": "experiments/classical_identical_ideas/catalog.json"
+}

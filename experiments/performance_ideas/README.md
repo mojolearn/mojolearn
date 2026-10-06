@@ -1,9 +1,52 @@
 # Performance experiment implementations
 
+The newer neural-only NN01–NN64 source arms are indexed alongside this registry
+in [the experiment/file inventory](../../docs/plans/NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md).
+Their [selector](../../tools/neural_identical_ab.py) writes exact native-builder
+and neural-board configurations; the [neural README](../neural_identical_ab/README.md)
+describes that interface. These new drafts have no compilation, identity,
+quality or timing evidence and do not inherit acceptance from the experiments here.
+
+The [consolidated A/B experiment index](../AB_EXPERIMENT_INDEX.md) lists all
+114 registered cards with their files, plus existing IDENTICAL recipes,
+historical Apple FAST records and other A/B drivers.
+
+The shared catalog also registers the 54 source-only
+[Apple FAST classical candidates](../apple_fast_classical_20261006/README.md)
+as `AFCL-L01..L14`, `AFCL-G01..G14`, `AFCL-T01..T12` and `AFCL-P01..P14`.
+They are uncompiled, unverified and unmeasured, with every new switch OFF.
+Their source-ready status means implementation source exists, not acceptance.
+See the [integration workflow](../apple_fast_classical_20261006/INTEGRATION.md)
+for common catalog selection, paired packages and full-workload recipe inputs.
+
 This directory implements the cards in
 [`PERFORMANCE_EXPERIMENT_IDEAS_2026-10-05.md`](../../docs/plans/PERFORMANCE_EXPERIMENT_IDEAS_2026-10-05.md).
 Each card has its own source changes and manifest. Candidates remain opt-in;
 source availability and a successful build do not establish a performance win.
+
+The [experiment file index](../apple_fast_trees/EXPERIMENT_INDEX.md) maps all
+60 existing cards and 48 new Apple FAST tree cards to their files, alongside
+the new interaction plans and older tree A/B records.
+
+The same runner also exposes the 48 namespaced `AFT_F01`–`AFT_P12`
+[Apple FAST tree candidates](../apple_fast_trees/README.md). Their manifests
+are derived directly from the idea records, with paired-binding and full-workload
+integration described [here](../apple_fast_trees/INTEGRATION.md). They remain
+uncompiled, unverified and unmeasured; no new defaults are enabled. Legacy F/N
+experiment IDs keep their original meanings. The original `EXPECTED` roster is
+retained; the complete CLI roster additionally includes `TREE_IDS`.
+
+The later [Apple FAST neural source-only campaign](../apple_fast_neural_20261006/README.md)
+adds 44 mechanism cards and eight interaction groups. It is discoverable in
+`tools/performance_ideas.py list --mode fast` under the separate `AFN26-`
+namespace, with named variants selectable by `plan ... --variant NAME`.
+The same plans are exposed by `tools/neural_experiments.py --apple-fast-plan`
+and `tools/afn_ab.sh --experiment-plan`. The shared adapter reads the authored
+JSON; it does not duplicate defines. All entries remain `not_tested`.
+No integration entry point has been run. These are source/plan integrations,
+not executable full-workload manifests: AFN26 execution and qualification
+remain pending. The original manifest/check contract below remains scoped to
+the 60 legacy cards, and legacy AMD `A01` is distinct from `AFN26-A01`.
 
 See the [implementation ledger](IMPLEMENTATION_STATUS.md) for individual source
 commits and remaining sub-arms, and [Apple FAST coverage](apple_fast/coverage.md)
@@ -15,6 +58,18 @@ for the public callers and transport dependency attestations.
 | A01–A08 | IDENTICAL | AMD experiments with the complete identity contract |
 | N01–N08 | IDENTICAL | NVIDIA experiments with the complete identity contract |
 | F01–F20 | FAST | Apple M3 Ultra task quality and completion timing |
+| NI01–NI60 | IDENTICAL | [Neural source catalog](../neural_identical_20261006/README.md); default-OFF new arms, qualification pending |
+
+The neural ideas share their lane records with the existing tools through
+`python3 tools/performance_ideas.py neural list` (also
+`python3 tools/neural_experiments.py ideas list`). `neural plan` selects source
+controls, `neural build-plan` targets the frozen native binding builder, and
+`neural queue-template` maps those arms into the full-operation A/B queue.
+These commands describe work; they do not compile, execute or establish quality.
+The original `check --require-all` continues to cover the original 60 manifests.
+NI cards use their own source ledger, including partial and rejected ideas.
+
+| AFCL-L/G/T/P (54 cards) | FAST | Apple classical full-workload A/B and task quality; all evidence pending |
 
 IDENTICAL compares all columns within a compiled arithmetic version. A candidate
 may change that version's arithmetic contract only when all columns change
@@ -98,7 +153,7 @@ python3 tools/performance_ideas.py plan I01 --stage build --vendor amd --output 
 ```
 
 `check` verifies manifests, source references and dependency cycles. It does not
-compile, run, or qualify candidates. `--require-all` requires all 60 cards;
+compile, run, or qualify candidates. `--require-all` requires all 114 cards (60 original plus 54 AFCL);
 `--require-ready` also rejects recorded toolchain or prerequisite blockers.
 
 Implementation status is deliberately distinct from qualification:
@@ -171,3 +226,23 @@ The runner does not promote defaults or update performance boards. Each recipe
 still requires matched fixtures, warmup, a frozen source pair, one scored run
 per arm, full caller completion timing, and the quality and identity evidence
 specified by its card.
+
+## Apple FAST classical integration
+
+The AFCL registration manifests resolve `baseline_defines`, `candidate_defines`,
+arm environments and implementation paths from their authoritative lane JSON at
+read time. They do not copy a second set of controls. `recipe_digest` covers the
+resolved registration and its linked source recipes. Existing F/I/A/N cards keep
+their existing manifest-only digest contract.
+
+AFCL build recipes create paired packages via `apple_fast_classical_20261006/build_pair.py`.
+Device-stage recipes take `--artifacts` (the retained paired build directory) and
+`--workloads` (an explicitly audited full-workload configuration). These inputs
+become `{artifacts}` and `{workloads}` in the registered command. `paired_run`
+means one invocation processes A and B; asking separately for the baseline arm
+is refused. Per-arm runtime environment belongs to the paired runner.
+
+Task-quality admission is tied to the exact workload-configuration hash and
+paired-build-manifest hash as well as source, recipe and vendor. A successful
+worker exit cannot establish any quality gate. Compilation and validation are
+future explicitly selected stages: none was executed during source integration.

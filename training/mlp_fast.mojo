@@ -24,7 +24,7 @@ MOJOLEARN_AFN_MLP_FUSED_STEP   `mlp_fused_kernel`: forward (8x16 GEMV +
     in threadgroup memory, each block of MLP_FT_ROWS rows folding its
     gradient partials (dw1, db1, dw2, db2, the mean loss) in threadgroup
     memory into one 196-float slot; `mlp_fold_adam_kernel` sums the
-    (at most 4) block slots in a free order and applies AdamW in the same
+    (at most MLP_FT_MAX_BLOCKS) block slots in a free order and applies AdamW in the same
     thread. TWO launches, ONE wait, TWO allocations (one float arena with
     sub-buffer views, one int32 buffer for y) per step. f32 everywhere;
     the fold order is the free one FAST allows (per-block serial over the
@@ -60,14 +60,20 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime _AFN_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 comptime MLP_AFN_ALL = _AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MLP_ALL"]()
+# T07 AFN26 alias: not tested in this campaign; default remains disabled.
 comptime MLP_FUSED_STEP = _AFN_APPLE_FAST and (
     is_defined["MOJOLEARN_AFN_MLP_FUSED_STEP"]() or MLP_AFN_ALL
+    or is_defined["MOJOLEARN_AFN26_MLP_FUSED_STEP"]()
 )
+# T08 AFN26 alias: not tested in this campaign; multistep implies resident.
 comptime MLP_MULTISTEP = _AFN_APPLE_FAST and (
     is_defined["MOJOLEARN_AFN_MLP_MULTISTEP"]() or MLP_AFN_ALL
+    or is_defined["MOJOLEARN_AFN26_MLP_MULTISTEP"]()
 )
+# T08 AFN26 alias: not tested in this campaign; resident is a separate arm.
 comptime MLP_RESIDENT = _AFN_APPLE_FAST and (
     is_defined["MOJOLEARN_AFN_MLP_RESIDENT"]() or MLP_MULTISTEP
+    or is_defined["MOJOLEARN_AFN26_MLP_RESIDENT"]()
 )
 
 #: The architecture, 8 -> 16 -> 3, and the flat registry `[w1, b1, w2, b2]`
@@ -83,10 +89,20 @@ comptime FT_OFF_B2 = FT_OFF_W2 + FT_OUT * FT_HID
 comptime FT_TOTAL = FT_OFF_B2 + FT_OUT
 #: one block slot: the 195 gradient cells and the block's share of the loss
 comptime FT_SLOT = FT_TOTAL + 1
-#: rows per block (one thread per row) and the most blocks a 256-row batch needs
-comptime MLP_FT_ROWS = 64
-comptime MLP_FT_MAX_BLOCKS = 4
+# T12: not tested. One thread owns a row; 32 reduces per-block activation
+# scratch and increases partials, while 128 reduces partials and increases
+# shared storage. These fixed hardware/work alternatives do not dispatch on
+# batch dimensions. Neither enables fused or resident execution by itself.
+comptime MLP_FT_ROWS = (
+    32 if _AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_MLP_ROWS32"]()
+    else 128 if _AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_MLP_ROWS128"]()
+    else 64
+)
+# Public per-step row capacity from mlp_ops; not tested with alternate tiles.
 comptime MLP_FT_MAX_ROWS = 256
+# not tested: resident steps reuse this slot region serially, so capacity is
+# derived from one public step's row cap, not the multistep transport capacity.
+comptime MLP_FT_MAX_BLOCKS = (MLP_FT_MAX_ROWS + MLP_FT_ROWS - 1) // MLP_FT_ROWS
 #: `mlp_fold_adam_kernel`'s block
 comptime FT_FOLD_TPB = 64
 

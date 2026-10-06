@@ -60,8 +60,27 @@ comptime _APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_acc
 #: (the chain order is the T-launch path's; `team_barrier` orders device
 #: memory on CUDA/HIP/Metal by the repo's lowering notes, unproven by a
 #: run). -D MOJOLEARN_IDN_SEQ_LSTM_SCAN turns it on.
+# NI49 (2026-10-06) source-only disposition: NOT REPAIRED / NOT QUALIFIED.
+# The failed 8bb42b7de Args change is not evidence that the remaining issue is
+# numerical. No demonstrated source cause was established; preserve both
+# constant-prediction failures above and keep SCAN default OFF. Forward and
+# backward per-step device/host state digests and full training quality remain
+# required before timing or promoting this candidate. The owner forbids those
+# runs in this worktree; none were attempted. A faster broken arm is a loser.
 comptime SEQ_LSTM_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_SEQ_LSTM_SCAN"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-comptime SEQ_LSTM_SCAN = (_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()) or SEQ_LSTM_SCAN_IDN
+# NI49 independent conservative repair candidate, default OFF: one logical
+# row is one executor item. It executes the existing host scan body on GPU,
+# serial over units and timesteps, with no within-kernel inter-thread state
+# reads, barriers or gate regrouping. This is an ordinary scheduling algorithm,
+# not a toolchain modification. The standard packed Args executor transports it.
+# It removes T launches but reduces parallelism; neither quality recovery nor
+# speed is established. The earlier cooperative SCAN failures remain above.
+comptime SEQ_LSTM_ROW_SERIAL_SCAN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime SEQ_LSTM_SCAN = (_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN"]()) or SEQ_LSTM_SCAN_IDN or SEQ_LSTM_ROW_SERIAL_SCAN
 comptime SEQ_LSTM_SCAN_SMEM = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM"]()
 comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WGRAD"]()
 #: SEQ_FAST_LSTM_SCAN_WIDE (with SCAN; lane apple-fast-s-seq, 2026-10-05,
@@ -77,7 +96,12 @@ comptime SEQ_LSTM_WGRAD = _APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_LSTM_WG
 #: u adds the G partials onto the direct part in g order: a different fold
 #: from the one G H chain (FAST only). Shapes with G H > SCAN_MAX_H keep the
 #: H-lane scan.
-comptime SEQ_LSTM_SCAN_WIDE = SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE"]()
+# NI49 source-level contract repair: WIDE's backward re-associates gate
+# partials and its host body is the serial graph. A FAST-named define must
+# therefore never activate it in IDENTICAL, even when SCAN_IDN is also on.
+# This fixes a demonstrated mixed-define contract leak, not the unresolved
+# constant-prediction training failure above. No runtime validation performed.
+comptime SEQ_LSTM_SCAN_WIDE = _APPLE_FAST and SEQ_LSTM_SCAN and is_defined["MOJOLEARN_SEQ_FAST_LSTM_SCAN_WIDE"]()
 
 comptime OP_CELL_FWD_SCAN = 120
 comptime OP_CELL_BWD_SCAN = 121
@@ -90,6 +114,9 @@ comptime SCAN_SMEM = 4096
 
 def scan_applies(H: Int, G: Int) -> Bool:
     """The scan kernels' shape bound: one lane per unit, the staged row fits."""
+    comptime if SEQ_LSTM_ROW_SERIAL_SCAN:
+        # One scalar executor item owns the row; no H-wide launch/shared page.
+        return H >= 1
     return H >= 1 and H <= SCAN_MAX_H and G * H <= SCAN_SMEM
 
 

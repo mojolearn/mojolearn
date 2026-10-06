@@ -33,6 +33,10 @@ walker's lambda in `gbdt_oracle_losses.mojo`, so every PairLogit leaf moves.
 """
 
 from std.math import isfinite
+from gbdt.trees_identical_switches import T29_VERSIONED
+from gbdt.targets.tree_t29_units import (
+    T29_GROUP_LANES, t29_pair_row, t29_add, t29_fold_lanes,
+)
 
 from checks.numerics import ftz, identical_exp, identical_log, identical_mul
 from gbdt.host.gbdt_oracle import (
@@ -174,6 +178,28 @@ def host_pair_groups(
     )
 
 
+def _group_values_t29(
+    pairs: HostPairs, point: List[Float32], mut der: List[Float32],
+    mut der2: List[Float32], mut fv_partials: List[Float32],
+):
+    """Production host V1 graph, also used by estimation and final learn loss.
+    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    """
+    var points = point.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    var grades = pairs.grades.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    for group in range(len(pairs.group_w)):
+        var begin = pairs.group_offsets[group]
+        var end = pairs.group_offsets[group + 1]
+        var lanes = InlineArray[Float32, T29_GROUP_LANES](fill=0.0)
+        for row in range(begin, end):
+            var sums = t29_pair_row(points, grades, row, begin, end, pairs.group_w[group], True)
+            der[row] = sums[0]
+            der2[row] = sums[1]
+            var lane = (row - begin) % T29_GROUP_LANES
+            lanes[lane] = t29_add(lanes[lane], sums[2])
+        fv_partials[group] = t29_fold_lanes(lanes)
+
+
 def _group_values(
     pairs: HostPairs,
     point: List[Float32],
@@ -187,6 +213,9 @@ def _group_values(
     ROW order, and one value partial per group: each thread's `fv_local`
     accumulated over its documents in chunk order, then the 256-lane
     halving tree (`pinned_block_sum`)."""
+    comptime if T29_VERSIONED:
+        _group_values_t29(pairs, point, der, der2, fv_partials)
+        return
     for g in range(len(pairs.group_w)):
         var begin = pairs.group_offsets[g]
         var end = pairs.group_offsets[g + 1]
@@ -248,6 +277,22 @@ def _group_search_pass(
     var der = List[Float32](length=n_rows, fill=Float32(0.0))
     var der2 = List[Float32](length=n_rows, fill=Float32(0.0))
     _group_values(pairs, cursor, der, der2, fv_partials)
+    comptime if T29_VERSIONED:
+        for group in range(len(pairs.group_w)):
+            var begin = pairs.group_offsets[group]
+            var end = pairs.group_offsets[group + 1]
+            var weight_lanes = InlineArray[Float32, T29_GROUP_LANES](fill=0.0)
+            var gradient_lanes = InlineArray[Float32, T29_GROUP_LANES](fill=0.0)
+            for row in range(begin, end):
+                var lane = (row - begin) % T29_GROUP_LANES
+                var weight = pairs.group_row_weights[row]
+                stats[row] = weight
+                stats[n_rows + row] = der[row]
+                weight_lanes[lane] = t29_add(weight_lanes[lane], abs(weight))
+                gradient_lanes[lane] = t29_add(gradient_lanes[lane], abs(der[row]))
+            mag_partials[2 * group] = t29_fold_lanes(weight_lanes)
+            mag_partials[2 * group + 1] = t29_fold_lanes(gradient_lanes)
+        return
     for g in range(len(pairs.group_w)):
         var begin = pairs.group_offsets[g]
         var end = pairs.group_offsets[g + 1]

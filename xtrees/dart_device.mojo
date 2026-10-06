@@ -45,6 +45,7 @@ factors and the tree shapes are main's."""
 from std.ffi import _Global
 from std.gpu import block_idx, block_dim, grid_dim, thread_idx
 from std.sys.compile import is_defined
+from gbdt.trees_identical_switches import T30
 from std.sys import has_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -83,6 +84,8 @@ from std.memory import bitcast
 comptime DART_DEVICE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_accelerator() and not is_defined["MOJOLEARN_DART_DEVICE_OFF"]()
 ) or IDN_DART_DEVICE
+
+from core.apple_fast_tree_experiments import AFT_DART_ROWS, AFT_DART_ADD_ROWS
 
 comptime TPB = 256
 comptime GRID_MAX = 65535 * 16
@@ -132,18 +135,32 @@ def dart_drop_kernel(units: Int64, seed: Int64, stream: Int64, skip_thr: Int64, 
 
 def dart_row_kernel(
     units: Int64, n: Int64, k: Int32, t: Int32, kind: Int32, node_cap: Int32, flags: I32P, coef: F32P,
-    nodes: U16P, values: F32P, y: F32P, score: F32P, dsum: F32P, target: F32P, h: F32P,
+    nodes: U16P, values: F32P, y: F32P, score: F32P, dsum: F32P, target: F32P, h: F32P, cached: F32P,
 ):
     """Per row: dsum[c, i] = the dropped trees' coef x leaf value, taken off
     the score; then main's `gradients` (kind 0 L2, 1 logloss, 2 softmax,
     class-major) into target = -g and h."""
-    var e = _tid()
-    var stride = _tstride()
+    # P11/P12: bounded row planes per worker; dropout and unit arithmetic
+    # remain unchanged. Neighboring lanes access adjacent rows in each plane.
+    var e = Int(block_idx.x) * TPB * AFT_DART_ROWS + Int(thread_idx.x)
+    var stride = _tstride() * AFT_DART_ROWS
     while e < Int(units):
-        dart_row_unit(
-            e, Int(n), Int(k), Int(t), kind, Int(node_cap), flags, coef, nodes, values, y, score, dsum, target, h,
-        )
+        @parameter
+        for tile in range(AFT_DART_ROWS):
+            var item = e + tile * TPB
+            if item < Int(units):
+                dart_row_unit(
+                    item, Int(n), Int(k), Int(t), kind, Int(node_cap), flags, coef, nodes, values, y, score, dsum, target, h, cached,
+                )
         e += stride
+
+
+def dart_row_kernel_reference(
+    units: Int64, n: Int64, k: Int32, t: Int32, kind: Int32, node_cap: Int32, flags: I32P, coef: F32P,
+    nodes: U16P, values: F32P, y: F32P, score: F32P, dsum: F32P, target: F32P, h: F32P,
+):
+    """Incumbent launch, no candidate cache allocation or launch argument."""
+    dart_row_kernel(units, n, k, t, kind, node_cap, flags, coef, nodes, values, y, score, dsum, target, h, values)
 
 
 def dart_apply_kernel(
@@ -205,16 +222,30 @@ def dart_newton_kernel(
 
 def dart_add_kernel(
     units: Int64, class_off: Int64, row_off: Int64, voff: Int64, factor: Float32, shrink: Float32, nodes: U16P,
-    values: F32P, dsum: F32P, score: F32P,
+    values: F32P, dsum: F32P, score: F32P, cached: F32P,
 ):
     """score[c, i] += factor * dsum[c, i] + shrink * values[leaf of row i]:
     the dropped trees back at their rescaled weight (main: each one added
     again at coef x factor) and the new tree at its shrinkage."""
-    var e = _tid()
-    var stride = _tstride()
+    # P11/P12: bounded row planes per worker; dropout and unit arithmetic
+    # remain unchanged. Neighboring lanes access adjacent rows in each plane.
+    var e = Int(block_idx.x) * TPB * AFT_DART_ADD_ROWS + Int(thread_idx.x)
+    var stride = _tstride() * AFT_DART_ADD_ROWS
     while e < Int(units):
-        dart_add_unit(e, Int(class_off), Int(row_off), Int(voff), factor, shrink, nodes, values, dsum, score)
+        @parameter
+        for tile in range(AFT_DART_ADD_ROWS):
+            var item = e + tile * TPB
+            if item < Int(units):
+                dart_add_unit(item, Int(class_off), Int(row_off), Int(voff), factor, shrink, nodes, values, dsum, score, cached)
         e += stride
+
+
+def dart_add_kernel_reference(
+    units: Int64, class_off: Int64, row_off: Int64, voff: Int64, factor: Float32, shrink: Float32, nodes: U16P,
+    values: F32P, dsum: F32P, score: F32P,
+):
+    """Incumbent launch, no candidate cache allocation or launch argument."""
+    dart_add_kernel(units, class_off, row_off, voff, factor, shrink, nodes, values, dsum, score, values)
 
 
 def dart_predict_kernel(
@@ -223,12 +254,18 @@ def dart_predict_kernel(
 ):
     """dst[c * n + i] = DART's float64 raw score of row i for class c
     (`dart_predict_unit`): one unit per (class, row), its trees ascending."""
-    var e = _tid()
-    var stride = _tstride()
+    # P11/P12: bounded row planes per worker; dropout and unit arithmetic
+    # remain unchanged. Neighboring lanes access adjacent rows in each plane.
+    var e = Int(block_idx.x) * TPB * AFT_DART_ROWS + Int(thread_idx.x)
+    var stride = _tstride() * AFT_DART_ROWS
     while e < Int(units):
-        dart_predict_unit(
-            e, Int(n), Int(d), Int(k), Int(nt), toff, colid, quesval, left, values, coef, inits, x, dst, bad,
-        )
+        @parameter
+        for tile in range(AFT_DART_ROWS):
+            var item = e + tile * TPB
+            if item < Int(units):
+                dart_predict_unit(
+                    item, Int(n), Int(d), Int(k), Int(nt), toff, colid, quesval, left, values, coef, inits, x, dst, bad,
+                )
         e += stride
 
 
@@ -250,6 +287,7 @@ struct DartSession(Movable):
     var h: DeviceBuffer[DType.float32]
     var nodes: DeviceBuffer[DType.uint16]
     var values: DeviceBuffer[DType.float32]
+    var cached: DeviceBuffer[DType.float32]
     var coef: DeviceBuffer[DType.float32]
     var thr: DeviceBuffer[DType.int64]
     var flags: DeviceBuffer[DType.int32]
@@ -266,6 +304,7 @@ struct DartSession(Movable):
         var score: DeviceBuffer[DType.float32], var dsum: DeviceBuffer[DType.float32],
         var target: DeviceBuffer[DType.float32], var h: DeviceBuffer[DType.float32],
         var nodes: DeviceBuffer[DType.uint16], var values: DeviceBuffer[DType.float32],
+        var cached: DeviceBuffer[DType.float32],
         var coef: DeviceBuffer[DType.float32], var thr: DeviceBuffer[DType.int64],
         var flags: DeviceBuffer[DType.int32], var bad: DeviceBuffer[DType.int32],
         var part: DeviceBuffer[DType.float32], var colid: DeviceBuffer[DType.int32],
@@ -288,6 +327,7 @@ struct DartSession(Movable):
         self.h = h^
         self.nodes = nodes^
         self.values = values^
+        self.cached = cached^
         self.coef = coef^
         self.thr = thr^
         self.flags = flags^
@@ -362,6 +402,12 @@ def dart_open(
         var h = ctx.enqueue_create_buffer[DType.float32](k * n)
         var nodes = ctx.enqueue_create_buffer[DType.uint16](n_trees * n)
         var values = ctx.enqueue_create_buffer[DType.float32](n_trees * node_cap)
+        # Fit-owned exact cache, released by dart_close; no mutable-input reuse.
+        var cached: DeviceBuffer[DType.float32]
+        comptime if T30:
+            cached = ctx.enqueue_create_buffer[DType.float32](n_trees * n)
+        else:
+            cached = values.copy()  # not read by B; no extra allocation
         var coef = ctx.enqueue_create_buffer[DType.float32](n_trees)
         var thr = ctx.enqueue_create_buffer[DType.int64](cap_iters)
         var flags = ctx.enqueue_create_buffer[DType.int32](cap_iters)
@@ -383,7 +429,7 @@ def dart_open(
         var id = reg[].next_id
         reg[].next_id += 1
         reg[].sessions.append(DartSession(
-            id, n, d, k, kind, cap_iters, node_cap, n_chunks, x^, y^, score^, dsum^, target^, h^, nodes^, values^,
+            id, n, d, k, kind, cap_iters, node_cap, n_chunks, x^, y^, score^, dsum^, target^, h^, nodes^, values^, cached^,
             coef^, thr^, flags^, bad^, part^, colid^, quesval^, left^, rows^,
         ))
         return id
@@ -422,14 +468,24 @@ def dart_step(
                 _i(reg[].sessions[idx].flags),
                 grid_dim=(_blocks(t), 1, 1), block_dim=(TPB, 1, 1),
             )
-        ctx.enqueue_function[dart_row_kernel](
-            Int64(n), Int64(n), Int32(k), Int32(t), Int32(reg[].sessions[idx].kind),
-            Int32(reg[].sessions[idx].node_cap), _i(reg[].sessions[idx].flags), _f(reg[].sessions[idx].coef),
-            _u16(reg[].sessions[idx].nodes), _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].y),
-            _f(reg[].sessions[idx].score), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].target),
-            _f(reg[].sessions[idx].h),
-            grid_dim=(_blocks(n), 1, 1), block_dim=(TPB, 1, 1),
-        )
+        comptime if T30:
+            ctx.enqueue_function[dart_row_kernel](
+                Int64(n), Int64(n), Int32(k), Int32(t), Int32(reg[].sessions[idx].kind),
+                Int32(reg[].sessions[idx].node_cap), _i(reg[].sessions[idx].flags), _f(reg[].sessions[idx].coef),
+                _u16(reg[].sessions[idx].nodes), _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].y),
+                _f(reg[].sessions[idx].score), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].target),
+                _f(reg[].sessions[idx].h), _f(reg[].sessions[idx].cached),
+                grid_dim=(_blocks((n + AFT_DART_ROWS - 1) // AFT_DART_ROWS), 1, 1), block_dim=(TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[dart_row_kernel_reference](
+                Int64(n), Int64(n), Int32(k), Int32(t), Int32(reg[].sessions[idx].kind),
+                Int32(reg[].sessions[idx].node_cap), _i(reg[].sessions[idx].flags), _f(reg[].sessions[idx].coef),
+                _u16(reg[].sessions[idx].nodes), _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].y),
+                _f(reg[].sessions[idx].score), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].target),
+                _f(reg[].sessions[idx].h),
+                grid_dim=(_blocks((n + AFT_DART_ROWS - 1) // AFT_DART_ROWS), 1, 1), block_dim=(TPB, 1, 1),
+            )
         if t > 0:
             var fsub = reg[].sessions[idx].flags.create_sub_buffer[DType.int32](0, t)
             ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=flags_out), src_buf=fsub)
@@ -507,11 +563,19 @@ def dart_add(
             Float32(l1), Float32(mds), voff, _f(reg[].sessions[idx].values),
             grid_dim=(_blocks(n_nodes), 1, 1), block_dim=(TPB, 1, 1),
         )
-        ctx.enqueue_function[dart_add_kernel](
-            Int64(n), class_off, row_off, voff, Float32(factor), Float32(shrink), _u16(reg[].sessions[idx].nodes),
-            _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].score),
-            grid_dim=(_blocks(n), 1, 1), block_dim=(TPB, 1, 1),
-        )
+        comptime if T30:
+            ctx.enqueue_function[dart_add_kernel](
+                Int64(n), class_off, row_off, voff, Float32(factor), Float32(shrink), _u16(reg[].sessions[idx].nodes),
+                _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].score),
+                _f(reg[].sessions[idx].cached),
+                grid_dim=(_blocks((n + AFT_DART_ADD_ROWS - 1) // AFT_DART_ADD_ROWS), 1, 1), block_dim=(TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[dart_add_kernel_reference](
+                Int64(n), class_off, row_off, voff, Float32(factor), Float32(shrink), _u16(reg[].sessions[idx].nodes),
+                _f(reg[].sessions[idx].values), _f(reg[].sessions[idx].dsum), _f(reg[].sessions[idx].score),
+                grid_dim=(_blocks((n + AFT_DART_ADD_ROWS - 1) // AFT_DART_ADD_ROWS), 1, 1), block_dim=(TPB, 1, 1),
+            )
         var vsub = reg[].sessions[idx].values.create_sub_buffer[DType.float32](j * node_cap, n_nodes)
         ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=values_out), src_buf=vsub)
     else:
@@ -609,7 +673,7 @@ def dart_predict(
     ctx.enqueue_function[dart_predict_kernel](
         Int64(k * n), Int64(n), Int32(d), Int32(k), Int32(nt), _i(toff_d), _i(colid), _f(quesval), _i(left),
         _f(values), _u64(coef_d), _u64(inits_d), _f(x), _u64(out), _i(bad),
-        grid_dim=(_blocks(k * n), 1, 1), block_dim=(TPB, 1, 1),
+        grid_dim=(_blocks((k * n + AFT_DART_ROWS - 1) // AFT_DART_ROWS), 1, 1), block_dim=(TPB, 1, 1),
     )
     ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=out_addr), src_buf=out)
     var bad_h = List[Int32](length=1, fill=0)

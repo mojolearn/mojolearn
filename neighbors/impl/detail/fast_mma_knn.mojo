@@ -59,7 +59,15 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.os import getenv
 from std.time import perf_counter_ns
 
-comptime MQ_SG = 8
+# AFCL-G01: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Four complete Apple SIMD groups halve the query rows owned by a block,
+# exposing more independent blocks while retaining each group's matrix and
+# top-k work. This occupancy tradeoff applies to every eligible shape.
+comptime AFCL_G01 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G01"]()
+)
+comptime MQ_SG = 4 if AFCL_G01 else 8
 """Simdgroups per block."""
 comptime MQ_TPB = MQ_SG * 32
 comptime MQ_T = 128

@@ -103,12 +103,16 @@ def validate_result(data, job, config, arm, phase, artifacts):
     """
     if not isinstance(data, dict) or data.get('schema') != 'mojolearn.full-ab-result/1':
         raise ValueError('Missing full-operation result schema')
-    if data.get('status') != 'PASS' or embedded_failures(data):
+    execution_data = ({k:v for k,v in data.items() if k not in ('task_quality','master_qualification')}
+                      if job.get('master_selection') else data)
+    if data.get('status') != 'PASS' or embedded_failures(execution_data):
         raise ValueError('Result reports failure or incomplete work')
     expected = dict(source_sha=config['source_sha'], dataset_sha256=job['dataset_sha256'],
                     mode=job['mode'], vendor=config['vendor'], arm=arm, phase=phase)
     if any(data.get(key) != value for key, value in expected.items()):
         raise ValueError('Result source/dataset/mode/vendor/arm/phase provenance differs')
+    if job.get('master_selection') and data.get('estimator_settings') != job['estimator_settings']:
+        raise ValueError('Observed estimator settings differ from frozen recipe')
     if data.get('dimensions') != job['dimensions'] or data.get('full_dataset_coverage') is not True:
         raise ValueError('Actual full dataset dimensions/coverage differ from declared recipe')
     if data.get('timed_boundary') != job['timed_boundary']:
@@ -133,6 +137,9 @@ def validate_result(data, job, config, arm, phase, artifacts):
         raise ValueError('Model state must explicitly be CAPTURED or UNAVAILABLE')
     if data.get('loaded_artifacts') != artifacts[arm]:
         raise ValueError('Workload did not attest expected loaded artifact hashes')
+    if job.get('master_selection'):
+        from six_lane_evidence import validate_master_result
+        data['master_qualification'] = validate_master_result(data, job, config, arm, phase)
     return dict(output_sha256=data['output_sha256'], model_state=model,
                 timings=timings, model_identity_available=model['status'] == 'CAPTURED')
 
@@ -141,6 +148,8 @@ def run(config, root, retry_failed=False):
     source = config['source_sha']
     repo = Path(config['repo'])
     check_freeze(repo, source)
+    if any(j.get('master_selection') for j in config['jobs']) and not config.get('execution_authorized'):
+        raise ValueError('Master plan has no later measurement authorization')
     results_path = root / 'results.json'
     results = json.loads(results_path.read_text()) if results_path.exists() else {}
     if any(result['source_sha'] != source for result in results.values()):
@@ -178,6 +187,9 @@ def run(config, root, retry_failed=False):
             raise ValueError('Unsafe cell key')
         if not sha256_value(job['dataset_sha256']):
             raise ValueError('Dataset SHA256 required')
+        if job.get('neural_selection'):
+            from neural_identical_integration import resolve_job
+            job = resolve_job(job, config, repo)
         check_freeze(repo, source)
         artifacts = artifact_evidence(job)
         attempts = root / key / 'attempts'
@@ -199,7 +211,14 @@ def run(config, root, retry_failed=False):
                 log = cell / (phase + '-' + arm + '.log')
                 substitutions = {'output': str(output), 'phase': phase, 'arm': arm}
                 argv = [part.format_map(substitutions) for part in spec['argv']]
-                env = dict(os.environ, **config.get('environment', {}), **spec.get('environment', {}))
+                inherited = dict(os.environ)
+                if job.get('neural_selection') or job.get('master_selection'):
+                    # Clean experimental state before applying the explicitly
+                    # recorded worker setup and frozen A/B controls. Bindings
+                    # read many switches once, at import or first use.
+                    inherited = {name: value for name, value in inherited.items()
+                                 if not name.startswith('MOJOLEARN_')}
+                env = dict(inherited, **config.get('environment', {}), **spec.get('environment', {}))
                 env.update(MOJOLEARN_NUMERIC_MODE=job['mode'], MOJOLEARN_VENDOR=config['vendor'])
                 # Dedicated Apple uses unrestricted pools; Linux uses the actual
                 # worker allocation configured by the full-workload driver.
@@ -259,6 +278,19 @@ def run(config, root, retry_failed=False):
             if failed:
                 break
         scored = [r for r in receipt['runs'] if r['phase'] == 'scored']
+        if job.get('neural_selection') and not failed and len(scored) == 2:
+            contracts = job['neural_source_selection']['A']['contracts']
+            if all(contract == 'S' for contract in contracts.values()):
+                same_outputs = scored[0]['output_sha256'] == scored[1]['output_sha256']
+                captured = all(r.get('model_identity_available') for r in scored)
+                same_models = (not captured or
+                               scored[0]['model_state']['sha256'] == scored[1]['model_state']['sha256'])
+                receipt['neural_same_arithmetic_ab'] = 'PASS' if same_outputs and same_models else 'FAIL'
+                if not same_outputs or not same_models:
+                    receipt['error'] = 'An S neural arm changed output or captured model-state bits'
+                    failed = True
+            else:
+                receipt['neural_same_arithmetic_ab'] = 'NOT_REQUIRED_VERSIONED_ARITHMETIC'
         receipt.update(finished=time.time(), status='MEASUREMENT_FAILED' if failed else 'MEASURED_FULL',
                        model_identity_available=len(scored) == 2 and all(r.get('model_identity_available') for r in scored))
         write(cell / 'receipt.json', receipt)

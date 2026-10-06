@@ -51,10 +51,14 @@ from core.host_parallel import host_parallelize
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle, refuse_nonfinite
-from gemm.host.gemm_host_rows import GhrPtr
+from gemm.host.neural_gemm import GhrPtr
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
-from gemm.host.identical_gemm import gemm_oracle
+from gemm.host.neural_gemm import gemm_oracle
 from training.byte_lm_config import ByteConfig
+from training.chunked_lm_head_gemm_host import byte_chunked_head_forward
+from training.chunked_lm_head_host import chunked_lm_head_gemm_host_forward
+from training.neural_identical_experiments import IDN_ATTENTION_V2
+from transformer.impl.llama.attention_v2_model_host import attention_v2_host_forward
 from training.byte_lm_host_kernels import (
     all_finite_span,
     ce_causal_mean_loss_fast,
@@ -216,6 +220,9 @@ def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
     var x = _byte_host_hidden(params, inputs, batch, length, config)
     var head = _slice(params, config.offsets(), config.n_tensors() - 1)
     var m = batch * length
+    # chunked_lm_head_v2 selects the loss/gradient storage contract. The
+    # public inference API still returns the complete selected-GEMM logits,
+    # whose cells have the same contraction graph as each chunked panel.
     comptime if BYTE_HOST_SABOTAGE:
         return _sabotaged_head(x, head, m, config.vocab_size, config.d_model)
     return gemm_oracle(x, head, OP_NT, m, config.vocab_size, config.d_model)
@@ -445,25 +452,42 @@ def block_par(
             var rows = hi - lo
             var mchunk = mp[0].copy()  # empty: the fill is formed in the kernel
             var ctx = List[Float32](length=rows * qw, fill=Float32(0.0))
-            var qmat = List[Float32](length=rows * hd, fill=Float32(0.0))
-            var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
-            var vpack = List[Float32](length=s * hd, fill=Float32(0.0))
-            var cell = List[Float32](length=rows * s, fill=Float32(0.0))
-            var aweights = List[Float32](length=rows * s, fill=Float32(0.0))
-            var qsp = qtp[0].unsafe_ptr()
-            var qmp = qmat.unsafe_ptr()
-            var kpp = kpack.unsafe_ptr()
-            var vpp = vpack.unsafe_ptr()
-            for h in range(nh):
-                for qi in range(rows):
-                    for d in range(hd):
-                        qmp.unsafe_store(qi * hd + d, qsp.unsafe_load((lo + qi) * qw + h * hd + d))
-                # this head's shared packs, a block copy each
-                unsafe_memcpy(dest=kpp, src=kpk.unsafe_offset(h * hd * s), count=hd * s)
-                unsafe_memcpy(dest=vpp, src=vpk.unsafe_offset(h * s * hd), count=s * hd)
-                gemm_nt_rows(qmat, kpack, s, hd, 0, rows, cell)
-                _softmax_head(cell, mchunk, rows, s, scale, aweights, lo)
-                _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx, lo)
+            if IDN_ATTENTION_V2:
+                # Keep the existing host worker allocation. Each query chunk
+                # owns its rows; own0 preserves their absolute causal origin.
+                var qchunk = copy_rows(qtp[0], lo, hi, qw)
+                var nkv = nh // n_rep
+                var kp2 = List[Float32](length=nkv * s * hd, fill=Float32(0.0))
+                var vp2 = List[Float32](length=nkv * s * hd, fill=Float32(0.0))
+                for kh in range(nkv):
+                    var first_head = kh * n_rep
+                    for j in range(s):
+                        for d in range(hd):
+                            kp2[(kh * s + j) * hd + d] = kpk.unsafe_load(first_head * hd * s + d * s + j)
+                            vp2[(kh * s + j) * hd + d] = vpk.unsafe_load(first_head * s * hd + j * hd + d)
+                var av2 = attention_v2_host_forward(qchunk, kp2, vp2,
+                    1, rows, nh, nkv, s, hd, lo, 0, scale, diagnostic=False)
+                ctx = av2.output.copy()
+            else:
+                var qmat = List[Float32](length=rows * hd, fill=Float32(0.0))
+                var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
+                var vpack = List[Float32](length=s * hd, fill=Float32(0.0))
+                var cell = List[Float32](length=rows * s, fill=Float32(0.0))
+                var aweights = List[Float32](length=rows * s, fill=Float32(0.0))
+                var qsp = qtp[0].unsafe_ptr()
+                var qmp = qmat.unsafe_ptr()
+                var kpp = kpack.unsafe_ptr()
+                var vpp = vpack.unsafe_ptr()
+                for h in range(nh):
+                    for qi in range(rows):
+                        for d in range(hd):
+                            qmp.unsafe_store(qi * hd + d, qsp.unsafe_load((lo + qi) * qw + h * hd + d))
+                    # this head's shared packs, a block copy each
+                    unsafe_memcpy(dest=kpp, src=kpk.unsafe_offset(h * hd * s), count=hd * s)
+                    unsafe_memcpy(dest=vpp, src=vpk.unsafe_offset(h * s * hd), count=s * hd)
+                    gemm_nt_rows(qmat, kpack, s, hd, 0, rows, cell)
+                    _softmax_head(cell, mchunk, rows, s, scale, aweights, lo)
+                    _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx, lo)
             var xc = copy_rows(xp[0], lo, hi, dm)
             var o = List[Float32](length=rows * dm, fill=Float32(0.0))
             gemm_w(ctx, tp[][tb + 4], dm, qw, 0, rows, o)
@@ -815,6 +839,14 @@ def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch:
                               length: Int, config: ByteConfig, threads: Int = 0) raises -> List[Float32]:
     """`byte_host_logits` through the DEVIATION 2640 kernels on at most
     `threads` threads (0: one per physical core); same arguments, same bits."""
+    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        and (is_defined["MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"]()
+             or is_defined["MOJOLEARN_NN24_NORM_LANES8"]())):
+        # The legacy packed host block materializes the v1 attention/norm
+        # graph. A v2 build uses the shared host block contract, including
+        # its profile-specific tapes, rather than reusing that v1 graph.
+        return byte_host_logits(params, inputs, batch, length, config)
     _validate_logits_inputs(params, inputs, batch, length, config)
     return _threaded_rows(params, inputs, batch, length, config, byte_host_worker_count(threads))
 
@@ -830,6 +862,20 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
     Skipping those independent output cells changes no fold and no bit in the
     surviving row.
     """
+    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+        and (is_defined["MOJOLEARN_NN20_BALANCED_SUMMARY_TREE"]()
+             or is_defined["MOJOLEARN_NN24_NORM_LANES8"]())):
+        var logits = byte_host_logits(params, inputs, batch, length, config)
+        var chosen = List[Int32](length=batch, fill=Int32(0))
+        for row in range(batch):
+            var base = ((row + 1) * length - 1) * config.vocab_size
+            var best = 0
+            for token in range(1, config.vocab_size):
+                if logits[base + token] > logits[base + best]:
+                    best = token
+            chosen[row] = Int32(best)
+        return chosen^
     _validate_logits_inputs(params, inputs, batch, length, config)
     var vocab = config.vocab_size
     var layers = config.n_layers
@@ -930,6 +976,12 @@ def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig,
         for li in range(l):
             inputs.append(ids[bi * (l + 1) + li])
             targets.append(ids[bi * (l + 1) + li + 1])
+    if config.chunked_lm_head_v2:
+        _validate_logits_inputs(params,inputs,b,l,config)
+        var hidden = _byte_host_hidden(params,inputs,b,l,config)
+        var head = _slice(params,config.offsets(),config.n_tensors()-1)
+        var result = byte_chunked_head_forward(hidden,head,targets,b*l,config.vocab_size,config.d_model)
+        return result.loss
     if threaded:
         var fast_logits = byte_host_logits_threaded(params, inputs, b, l, config, threads)
         return ce_causal_mean_loss_fast(fast_logits, targets, config.vocab_size)

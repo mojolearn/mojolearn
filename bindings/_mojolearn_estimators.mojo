@@ -1,11 +1,13 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPython boundary for the verified DBSCAN, PCA, tSVD, OLS, Ridge and logistic kernels.
 
 Kept in a separate extension so the independently changing primary binding
 does not become a merge point. Arrays cross as borrowed NumPy addresses; all
 device buffers and contexts live for one call and no pointer is retained.
 """
+from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+
 
 # DEVIATION 2486: shared byte-preserving host copies.
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
@@ -111,7 +113,7 @@ from checks.soft_f64 import (
     sf64_sub, sf64_mul, sf64_to_f32,
 )
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
-from glm.impl.center_device import col_sums_device, center_device, scale_rows_device
+from glm.impl.center_device import col_sums_device, col_sums_pair_device, center_device, scale_rows_device
 from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from decomposition.impl.pca_rank import pca_rank_finish
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
@@ -613,6 +615,26 @@ def ols_fit_resident_binding(
         var ctx = process_ctx[_DEVCTX_SLOT]()
         ols_fit_resident_host(ctx, xp, yp, wp, mp, ymp, nr, nf, center)
         ctx.synchronize()
+    return PythonObject(0)
+
+
+def lm_classical_stats_binding() raises -> PythonObject:
+    # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+    return PythonObject(Int(C02_LINEAR_PAIR))
+
+
+def lm_col_sums_pair_binding(x: PythonObject, y: PythonObject, sx: PythonObject, sy: PythonObject, params: PythonObject) raises -> PythonObject:
+    if len(params) != 2:
+        raise Error("lm_col_sums_pair: params must contain rows, cols")
+    var xa = Int(py=x)
+    var ya = Int(py=y)
+    var sxa = Int(py=sx)
+    var sya = Int(py=sy)
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        col_sums_pair_device(ctx, xa, ya, sxa, sya, rows, cols)
     return PythonObject(0)
 
 
@@ -1480,6 +1502,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[ols_fit_resident_binding]("ols_fit_resident")
         m.def_function[ols_normal_eq_default_binding]("ols_normal_eq_default")
         m.def_function[lm_col_sums_binding]("lm_col_sums")
+        m.def_function[lm_classical_stats_binding]("lm_classical_stats")
+        m.def_function[lm_col_sums_pair_binding]("lm_col_sums_pair")
         m.def_function[lm_means_finish_binding]("lm_means_finish")
         m.def_function[lm_intercept_binding]("lm_intercept")
         m.def_function[pca_rank_finish_binding]("pca_rank_finish")

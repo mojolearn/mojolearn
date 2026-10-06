@@ -135,6 +135,7 @@ from isolation_forest.impl.rng.xorwow import (
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_log,
     identical_mul_add,
@@ -153,7 +154,15 @@ from checks.numerics import (
 #: same cell values (`ftz` is a no-op under FAST), the same trees, a
 #: coalesced read of each sampled row. `-D MOJOLEARN_IF_ROWMAJOR_OFF` keeps
 #: the column-major upload (the A/B arm).
-comptime IF_FAST_ROWMAJOR = (
+# T40/T41/T42 and C47/C48/C49: all opt-ins default OFF.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime IF_T40_ROWMAJOR = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T40_ROWMAJOR"]()
+comptime IF_T41_TREE_BATCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T41_TREE_BATCH"]()
+comptime IF_T42_CORRECTION_CACHE = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_T42_CORRECTION_CACHE"]()
+comptime IF_C47_LIVE_TASKS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C47_IF_LIVE_TASKS"]()
+comptime IF_C48_FUSED_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C48_IF_PARTITION"]()
+comptime IF_WORK_PLANES = 3 if IF_C48_FUSED_PARTITION else 2
+comptime IF_FAST_ROWMAJOR = IF_T40_ROWMAJOR or (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_IF_ROWMAJOR_OFF"]()
@@ -164,7 +173,16 @@ comptime EULER_MASCHERONI_F32 = Float32(0.5772156649015329)
 """`T(0.5772156649015329)` with T = float: 0x3f13c468. Printed and gated
 as hex by `if_check.mojo` so the constant cannot drift by a decimal."""
 
-comptime IF_BUILD_TPB = 128
+# AFT F10: two 32-lane groups share each tree instead of four; less idle
+# work on short ranges trades against less parallel sampling/minmax work.
+# The shared scratch remains sized by IF_BUILD_TPB_MAX, and all scans use
+# the actual n_threads. experiments/apple_fast_trees/IDEAS.md; opt-in,
+# no quality/speed evidence; uncompiled/unverified/unmeasured.
+comptime IF_BUILD_TPB = 64 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F10"]()
+) else 128
 """`build_isolation_trees_global_kernel<T><<<n_trees, 128, 0, stream>>>`
 (`:397`). A scheduling width: the sampling, the gather and every node's
 min/max and partition are split over the block's threads; no bit depends
@@ -191,7 +209,15 @@ Int32, carved into three disjoint slices. IT IS ONE KERNEL ARGUMENT, not
 three, ON PURPOSE: Metal caps a kernel at 31 arguments and this one already
 stands at 25. A new output here REUSES A SLICE."""
 
-comptime IF_PATH_TPB = 256
+# AFCL-T10: four SIMD groups per path/score block reduce live traversal
+# state per workgroup. All trees and correction terms remain unchanged.
+# NEVER RUN — PENDING MEASUREMENT; uncompiled/unverified; default OFF.
+comptime AFCL_T10 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_T10"]()
+)
+comptime IF_PATH_TPB = 128 if AFCL_T10 else 256
 """`compute_path_lengths`' `threads = 256` (`isolation_forest.cuh:146`)."""
 
 
@@ -212,6 +238,19 @@ def compute_c_n(n_samples: Int) -> Float32:
     var h = ftz(identical_log(n - Float32(1.0)) + EULER_MASCHERONI_F32)
     var tail = ftz(Float32(2.0) * (n - Float32(1.0)) / n)
     return ftz(identical_mul_add(Float32(2.0), h, -tail))  # the default build's fused op (lane/pinned-mul-contract-free)
+
+
+@always_inline
+def cached_c_n(n: Int, cache: MutPointer[Float32, MutAnyOrigin]) -> Float32:
+    comptime if IF_T42_CORRECTION_CACHE:
+        return cache.unsafe_load(n)
+    return compute_c_n(n)
+
+
+def if_correction_table_kernel(cache: MutPointer[Float32, MutAnyOrigin], count: Int32):
+    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if i < Int(count):
+        cache.unsafe_store(i, compute_c_n(i))
 
 
 # ---------------------------------------------------------------------------
@@ -543,7 +582,7 @@ def _block_select_smallest(
             cum += c
         k_rem -= cum
         prefix = prefix | (UInt32(digit) << shift)
-        mask = mask | (UInt32(15) << shift)
+        mask = mask | (UInt32(15) << UInt32(shift))
         barrier()
     # `prefix` is the k-th smallest key; `k_rem` rows holding it are taken,
     # lowest row first
@@ -618,6 +657,12 @@ def _block_min_max(
 ) -> Tuple[Float32, Float32]:
     """(min, max) of column `candidate` over the node's rows, each the
     serial positional fold's answer (ties to the lower position)."""
+    # C47 IF sub-arm: dead reduction lanes are absent from the logical task.
+    # Extrema compare (value,row-position), so changing lane grouping cannot
+    # change tie semantics. Every physical thread still reaches each barrier.
+    var active_threads = n_threads
+    comptime if IF_C47_LIVE_TASKS:
+        active_threads = max(1, min(n_threads, end-start))
     var lmin = Float32(0.0)
     var lmin_i = -1
     var lmax = Float32(0.0)
@@ -638,8 +683,8 @@ def _block_min_max(
     maxi[tid] = Int32(lmax_i)
     barrier()
     var s = 1
-    while s < n_threads:
-        if tid % (2 * s) == 0 and tid + s < n_threads:
+    while s < active_threads:
+        if tid % (2 * s) == 0 and tid + s < active_threads:
             if _better_min(minv[tid], Int(mini[tid]), minv[tid + s], Int(mini[tid + s])):
                 minv[tid] = minv[tid + s]
                 mini[tid] = mini[tid + s]
@@ -669,6 +714,41 @@ def _block_stable_partition(
 ) -> Int:
     """Rows of `[start, end)` with `value < threshold` first, then the rest,
     each side in its previous order; returns the split position."""
+    comptime if IF_C48_FUSED_PARTITION:
+        # temp holds n local output indices and n signed destinations. Each
+        # row's flag and global child prefix are produced once. Child metadata
+        # (split=start+left_count) comes from the same scan, never atomics.
+        var count = end-start
+        var destinations = temp.unsafe_offset(count)
+        var left_count = 0
+        var processed = 0
+        while processed < count:
+            var local = processed+tid
+            var flag = Int32(0)
+            if local < count:
+                var idx = Int(work_indices.unsafe_load(start+local))
+                flag = Int32(1) if local_data.unsafe_load(idx*n_cols+feature) < threshold else Int32(0)
+            var sc = _block_scan(scan, tid, n_threads, flag)
+            if local < count:
+                var lp = left_count+sc[0]
+                destinations.unsafe_store(local, Int32(lp if flag != 0 else -(local-lp+1)))
+            left_count += sc[1]
+            processed += n_threads
+        barrier()
+        var local = tid
+        while local < count:
+            var dest = Int(destinations.unsafe_load(local))
+            if dest < 0:
+                dest = left_count-dest-1
+            temp.unsafe_store(dest, work_indices.unsafe_load(start+local))
+            local += n_threads
+        barrier()
+        local = tid
+        while local < count:
+            work_indices.unsafe_store(start+local, temp.unsafe_load(local))
+            local += n_threads
+        barrier()
+        return start+left_count
     var n_less = 0
     var base_r = start
     while base_r < end:
@@ -734,6 +814,7 @@ def build_tree_iterative_global(
     scan: SHI32,
     tid: Int,
     n_threads: Int,
+    correction_cache: MutPointer[Float32, MutAnyOrigin],
 ):
     """`build_tree_iterative_global<T>` (`:125-243`), walked by the WHOLE
     block (cpu-gpu-cleanup t-forest, the comment block above). `local_data`
@@ -784,7 +865,7 @@ def build_tree_iterative_global(
         if stop_depth or stop_isolated or stop_capacity:
             if tid == 0:
                 var path_length = ftz(
-                    Float32(depth) + compute_c_n(n_node_samples)
+                    Float32(depth) + cached_c_n(n_node_samples, correction_cache)
                 )
                 node_feature.unsafe_store(node_idx, Int32(-1))
                 node_threshold.unsafe_store(node_idx, path_length)
@@ -825,7 +906,7 @@ def build_tree_iterative_global(
         if local_feature < 0:
             if tid == 0:
                 var path_length = ftz(
-                    Float32(depth) + compute_c_n(n_node_samples)
+                    Float32(depth) + cached_c_n(n_node_samples, correction_cache)
                 )
                 node_feature.unsafe_store(node_idx, Int32(-1))
                 node_threshold.unsafe_store(node_idx, path_length)
@@ -891,6 +972,19 @@ def build_tree_iterative_global(
 # ---------------------------------------------------------------------------
 
 
+# AFT F12: each lane copies a 16-byte tile of the flattened sampled matrix.
+# Unlike the old per-row gather, narrow feature rows use the whole block;
+# the first sampled-row lookup is reused within the tile when it stays in
+# that row. Tail/cross-row cells retain their own exact index and feature.
+# experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed evidence.
+comptime AFT_IF_GATHER_TILE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and IF_FAST_ROWMAJOR
+    and is_defined["MOJOLEARN_AFT_F12"]()
+)
+
+
 def build_isolation_trees_global_kernel(
     data: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int64,
@@ -918,6 +1012,8 @@ def build_isolation_trees_global_kernel(
     xorwow_sequence_table: MutPointer[UInt32, MutAnyOrigin],
     xorwow_offset_table: MutPointer[UInt32, MutAnyOrigin],
     global_tree_start: Int32 = 0,
+    batch_tree_start: Int32 = 0,
+    correction_cache: MutPointer[Float32, MutAnyOrigin] = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=0),
 ):
     """`build_isolation_trees_global_kernel<T>` (`:245-340`): `tree_id =
     blockIdx.x`; `curand_init(seed, tree_id, 0)`; thread 0 samples rows
@@ -928,7 +1024,8 @@ def build_isolation_trees_global_kernel(
     n_cols` exactly as theirs (`isolation_forest.hpp:118`)."""
     comptime if DIAG_ENTRY_RETURN:
         return
-    var tree_id = Int(block_idx.x)
+    var scratch_id = Int(block_idx.x)
+    var tree_id = scratch_id + Int(batch_tree_start)
     var n_trees = Int(n_trees_in)
     if tree_id >= n_trees:
         return
@@ -957,12 +1054,12 @@ def build_isolation_trees_global_kernel(
     if tid == 0:
         tree_offsets.unsafe_store(tree_id, Int32(tree_offset))
 
-    var local_data = subsample_buffer.unsafe_offset(tree_id * max_samples * max_features)
-    var tree_sample_indices = sample_indices.unsafe_offset(tree_id * max_samples)
+    var local_data = subsample_buffer.unsafe_offset(scratch_id * max_samples * max_features)
+    var tree_sample_indices = sample_indices.unsafe_offset(scratch_id * max_samples)
     var tree_feature_indices = feature_indices.unsafe_offset(tree_id * max_features)
     # two halves per tree: the partition order, then its scratch
-    var tree_work_indices = work_indices.unsafe_offset(tree_id * 2 * max_samples)
-    var tree_work_temp = work_indices.unsafe_offset(tree_id * 2 * max_samples + max_samples)
+    var tree_work_indices = work_indices.unsafe_offset(scratch_id * IF_WORK_PLANES * max_samples)
+    var tree_work_temp = work_indices.unsafe_offset(scratch_id * IF_WORK_PLANES * max_samples + max_samples)
     var sh_counts = stack_allocation[
         IF_KEY_BUCKETS * IF_BUILD_TPB_MAX, Scalar[DType.uint32],
         address_space = AddressSpace.SHARED,
@@ -990,7 +1087,7 @@ def build_isolation_trees_global_kernel(
     #   [0, 4*mn)              the stack
     #   [4*mn, 10*mn)          the per-node decision records
     #   [10*mn, 10*mn + 6)     this tree's final RNG state
-    var tree_scratch_base = tree_id * (
+    var tree_scratch_base = scratch_id * (
         max_nodes_per_tree * IF_SCRATCH_WORDS_PER_NODE + IF_RNG_STATE_WORDS
     )
     var tree_stack = stack.unsafe_offset(tree_scratch_base)
@@ -1033,24 +1130,46 @@ def build_isolation_trees_global_kernel(
         )
     barrier()
 
-    for s in range(max_samples):
-        var src_row = Int(tree_sample_indices.unsafe_load(s))
-        var f = tid
-        while f < max_features:
-            var src_col = f
-            if has_feature_indices:
-                src_col = Int(tree_feature_indices.unsafe_load(f))
-            comptime if IF_FAST_ROWMAJOR:
-                local_data.unsafe_store(
-                    s * max_features + f,
-                    data.unsafe_load(src_row * n_cols + src_col),
-                )
-            else:
-                local_data.unsafe_store(
-                    s * max_features + f,
-                    data.unsafe_load(src_row + src_col * n_rows),
-                )
-            f += n_threads
+    comptime if AFT_IF_GATHER_TILE:
+        var cells = max_samples * max_features
+        var first = tid * 4
+        while first < cells:
+            var first_sample = first // max_features
+            var first_row = Int(tree_sample_indices.unsafe_load(first_sample))
+            comptime for c in range(4):
+                var cell = first + c
+                if cell < cells:
+                    var s = cell // max_features
+                    var f = cell - s * max_features
+                    var src_row = first_row
+                    if s != first_sample:
+                        src_row = Int(tree_sample_indices.unsafe_load(s))
+                    var src_col = f
+                    if has_feature_indices:
+                        src_col = Int(tree_feature_indices.unsafe_load(f))
+                    local_data.unsafe_store(
+                        cell, data.unsafe_load(src_row * n_cols + src_col)
+                    )
+            first += n_threads * 4
+    else:
+        for s in range(max_samples):
+            var src_row = Int(tree_sample_indices.unsafe_load(s))
+            var f = tid
+            while f < max_features:
+                var src_col = f
+                if has_feature_indices:
+                    src_col = Int(tree_feature_indices.unsafe_load(f))
+                comptime if IF_FAST_ROWMAJOR:
+                    local_data.unsafe_store(
+                        s * max_features + f,
+                        data.unsafe_load(src_row * n_cols + src_col),
+                    )
+                else:
+                    local_data.unsafe_store(
+                        s * max_features + f,
+                        data.unsafe_load(src_row + src_col * n_rows),
+                    )
+                f += n_threads
     barrier()
     comptime if DIAG_GATHER_ONLY:
         return
@@ -1081,6 +1200,7 @@ def build_isolation_trees_global_kernel(
         sh_scan,
         tid,
         n_threads,
+        correction_cache,
     )
 
     # The stream POSITION this tree finished at. `if.rng.probe` verifies the
@@ -1126,6 +1246,19 @@ def traverse_global_tree(
     return Float32(0.0)
 
 
+# AFT F11: two independent rows/lane reuse each tree offset and the tree
+# loop; adjacent lanes retain adjacent rows within each stripe. Two FP32
+# accumulators bound register growth, and each still folds trees in order.
+# Used by both single-owner and tree-sharded traversal; score epilogues are
+# unchanged. experiments/apple_fast_trees/IDEAS.md; opt-in, no quality/speed
+# evidence; uncompiled/unverified/unmeasured.
+comptime AFT_IF_PATH_ROWS = 2 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFT_F11"]()
+) else 1
+
+
 def compute_path_lengths_global_kernel(
     data: MutPointer[Float32, MutAnyOrigin],
     n_samples_in: Int64,
@@ -1142,25 +1275,31 @@ def compute_path_lengths_global_kernel(
     ROW-MAJOR sample, `total_path += traverse(tree t)` for t ascending,
     then `/ n_trees`. The sum is a serial fold whose order is a pure
     function of `n_trees`; nothing crosses threads."""
-    var sample_idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if sample_idx >= Int(n_samples_in):
+    var first = Int(block_idx.x) * Int(block_dim.x) * AFT_IF_PATH_ROWS + Int(thread_idx.x)
+    if first >= Int(n_samples_in):
         return
     var n_cols = Int(n_cols_in)
     var n_trees = Int(n_trees_in)
-    var sample = data.unsafe_offset(sample_idx * n_cols)
-    var total_path = Float32(0.0)
+    var totals = SIMD[DType.float32, AFT_IF_PATH_ROWS](0)
     for t in range(n_trees):
         var off = Int(tree_offsets.unsafe_load(t))
-        total_path = ftz(
-            total_path
-            + traverse_global_tree(
-                node_feature, node_threshold, node_left, node_right, off, sample
-            )
-        )
-    var out = Float32(0.0)
-    if n_trees > 0:
-        out = ftz(total_path / Float32(n_trees))
-    path_lengths.unsafe_store(sample_idx, out)
+        comptime for r in range(AFT_IF_PATH_ROWS):
+            var sample_idx = first + r * Int(block_dim.x)
+            if sample_idx < Int(n_samples_in):
+                totals[r] = ftz(
+                    totals[r]
+                    + traverse_global_tree(
+                        node_feature, node_threshold, node_left, node_right,
+                        off, data.unsafe_offset(sample_idx * n_cols)
+                    )
+                )
+    comptime for r in range(AFT_IF_PATH_ROWS):
+        var sample_idx = first + r * Int(block_dim.x)
+        if sample_idx < Int(n_samples_in):
+            var out = Float32(0.0)
+            if n_trees > 0:
+                out = ftz(totals[r] / Float32(n_trees))
+            path_lengths.unsafe_store(sample_idx, out)
 
 
 def compute_path_lengths_range_kernel(
@@ -1183,22 +1322,33 @@ def compute_path_lengths_range_kernel(
     not a separately rounded shard sum. Traversal and each FTZ add are the
     same operations as compute_path_lengths_global_kernel.
     """
-    var sample_idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if sample_idx >= Int(n_samples_in):
+    var first = Int(block_idx.x) * Int(block_dim.x) * AFT_IF_PATH_ROWS + Int(thread_idx.x)
+    if first >= Int(n_samples_in):
         return
-    var sample = data.unsafe_offset(sample_idx * Int(n_cols_in))
-    var total_path = path_lengths.unsafe_load(sample_idx)
+    var totals = SIMD[DType.float32, AFT_IF_PATH_ROWS](0)
+    comptime for r in range(AFT_IF_PATH_ROWS):
+        var sample_idx = first + r * Int(block_dim.x)
+        if sample_idx < Int(n_samples_in):
+            totals[r] = path_lengths.unsafe_load(sample_idx)
     for t in range(Int(n_local_trees)):
         var off = Int(tree_offsets.unsafe_load(t))
-        total_path = ftz(
-            total_path
-            + traverse_global_tree(
-                node_feature, node_threshold, node_left, node_right, off, sample
-            )
-        )
-    if finalize != 0:
-        total_path = ftz(total_path / Float32(n_global_trees))
-    path_lengths.unsafe_store(sample_idx, total_path)
+        comptime for r in range(AFT_IF_PATH_ROWS):
+            var sample_idx = first + r * Int(block_dim.x)
+            if sample_idx < Int(n_samples_in):
+                totals[r] = ftz(
+                    totals[r]
+                    + traverse_global_tree(
+                        node_feature, node_threshold, node_left, node_right,
+                        off, data.unsafe_offset(sample_idx * Int(n_cols_in))
+                    )
+                )
+    comptime for r in range(AFT_IF_PATH_ROWS):
+        var sample_idx = first + r * Int(block_dim.x)
+        if sample_idx < Int(n_samples_in):
+            var total_path = totals[r]
+            if finalize != 0:
+                total_path = ftz(total_path / Float32(n_global_trees))
+            path_lengths.unsafe_store(sample_idx, total_path)
 
 
 def if_finite_scan_kernel(

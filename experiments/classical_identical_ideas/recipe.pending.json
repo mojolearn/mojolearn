@@ -1,0 +1,41 @@
+{
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "id": null,
+  "configuration": null,
+  "mode": "identical",
+  "source_sha": null,
+  "build_commands": [],
+  "acknowledged_source_gaps": null,
+  "worker_allocation": null,
+  "compiler_provisioning": null,
+  "workloads": [
+    {
+      "key": null,
+      "pending": "Resolve exact candidate workload coverage from workload_map.json; no smaller substitute",
+      "family": null,
+      "lane": null,
+      "adapter": null,
+      "dataset": null,
+      "dataset_version": null,
+      "dataset_sha256": null,
+      "split": null,
+      "data_directory": null,
+      "input_files": [],
+      "additional_array_files": {},
+      "actual_shapes": null,
+      "estimator_settings": null,
+      "estimator_settings_record": null,
+      "runtime_vendor": null,
+      "intrinsic_cap_audit": {"reviewed": false, "unresolved": ["saved factory row/subsample caps"]},
+      "required_outputs": null,
+      "fitted_output_attributes": null,
+      "inference": null,
+      "required_inference_outputs": null,
+      "inference_operations": null,
+      "coverage_basis": null,
+      "recipe_source_sha256": null,
+      "source_admission": null,
+      "timed_boundary": "preparation + full fit/training + synchronization + consumed outputs; separate inference/cold/warmup/repeated"
+    }
+  ]
+}

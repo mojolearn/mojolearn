@@ -68,7 +68,8 @@ def build(inventory, index):
     for card in cards.values():
         card['status'] = status(card['cells'])
     return {'schema': 'mojolearn.performance-measurement-board/1', 'campaign': inventory['campaign'],
-            'identity_policy': 'Previously validated; no separate retest by owner instruction',
+            'identity_policy': inventory.get('identity_policy', 'Previously validated; no separate retest by owner instruction'),
+            'evidence_policy': inventory.get('evidence_policy', 'One excluded warmup and one scored sample. Identity and compilation are reused; no separate retests.'),
             'promotion': False, 'machines': index.get('machines', []),
             'cards': list(cards.values()), 'notes': index.get('notes', []),
             'decisions': index.get('decisions', [])}
@@ -92,7 +93,7 @@ def write(board, out):
         temp.write_text(json.dumps(data, indent=2, allow_nan=False) + '\n')
         temp.replace(target)
         lines = ['# Candidate A/B measurements', '',
-                 'One excluded warmup and one scored sample. Identity and compilation are reused; no separate retests.',
+                 data.get('evidence_policy', 'One excluded warmup and one scored sample. Identity and compilation are reused; no separate retests.'),
                  'Component and public-caller fixtures retain their stated scope. Full-workload results and opponent comparisons require their own measurements. Default decisions are recorded beside source toggles; this board does not change them.', '',
                  '| Candidate | Mode | Measurement status | Captured pairs |', '|---|---|---|---:|']
         for card in data['cards']:

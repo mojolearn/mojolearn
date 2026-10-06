@@ -135,6 +135,9 @@ from gemm.checks.gemm_identical import (
     _leaf_bounds,
     contract_partition,
 )
+from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, NEURAL_CHAINS, neural_partition, neural_merge_chains
+from mamba.impl.ops.neural_scan_profile import NN34_AFFINE_PREFIX
+from mamba.impl.ops.neural_mamba_scan import nn34_checkpoint_chain, nn34_tree_vjp_chain
 from checks.kernel_matrix import TARGET_COLUMN, column_has_float_atomics
 from checks.numerics import ftz, identical_exp, identical_mul_add, identical_mul
 
@@ -432,6 +435,11 @@ def selective_scan_checkpoint_kernel[
     if bb >= batch or d >= dim:
         return
 
+    comptime if NN34_AFFINE_PREFIX:
+        for n in range(DSTATE):
+            nn34_checkpoint_chain((bb * dim + d) * DSTATE + n, hck_ptr, h_in_ptr, u_ptr, delta_ptr, a_ptr, b_ptr, seqlen, dim)
+        return
+
     var slots = seqlen + 1
 
     var state = SIMD[DType.float32, DSTATE](0.0)
@@ -692,6 +700,8 @@ def selective_scan_bwd_scan_kernel[
                         identical_mul_add(afac, dh_state[n], contrib)
                     )
 
+            comptime if NN34_AFFINE_PREFIX:
+                dh_n = ftz(dh_ptr.unsafe_load((t * dim + d) * DSTATE + n))
             dh_state[n] = dh_n
             da_carry[n] = da_t
             dh_ptr.unsafe_store((t * dim + d) * DSTATE + n, dh_n)
@@ -752,6 +762,10 @@ def selective_scan_bwd_scan_kernel[
                 var d_da = ftz(identical_mul(dh_state[n], hprev))
                 d_arg = ftz(identical_mul(d_da, da_carry[n]))
 
+            comptime if NN34_AFFINE_PREFIX:
+                var ga = ftz(dh_ptr.unsafe_load(batch * seqlen * dim * DSTATE + (t * dim + d) * DSTATE + n))
+                d_arg = ftz(identical_mul(ga, da_carry[n]))
+
             comptime if SAB_BWD_DDELTA_TWO_FOLDS:
                 # SABOTAGE: plan section 2.2's two-fold reading.
                 acc_dd_a = ftz(
@@ -773,6 +787,16 @@ def selective_scan_bwd_scan_kernel[
         # `DSTATE` times the memory and one extra rounding per `(t,d,n)`
         # rather than per `(t,d)`. DEVIATION 1072.
         w_ptr.unsafe_store(t * dim + d, ftz(identical_mul(dl, uv)))
+
+
+
+def nn34_tree_vjp_kernel(dh: MutPointer[Float32, MutAnyOrigin], dy: MutPointer[Float32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin], u: MutPointer[Float32, MutAnyOrigin], delta: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin], b: MutPointer[Float32, MutAnyOrigin], hck: MutPointer[Float32, MutAnyOrigin],
+    batch: Int32, length: Int32, dim: Int32):
+    var chain = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if chain < Int(batch) * Int(dim) * MAX_DSTATE:
+        nn34_tree_vjp_chain(chain, dh, dy, c, u, delta, a, b, hck, Int(batch), Int(length), Int(dim))
 
 
 def selective_scan_bwd_scan_into(
@@ -827,6 +851,11 @@ def selective_scan_bwd_scan_into(
         "[B, L+1, dim, 16]",
     )
 
+    comptime if NN34_AFFINE_PREFIX:
+        _require(len(dh), 2 * m * dim * MAX_DSTATE, "dh", "[factor-B | factor-A]")
+        var chains = batch * dim * MAX_DSTATE
+        if chains > 0:
+            ctx.enqueue_function[nn34_tree_vjp_kernel](dh.unsafe_ptr(), dy.unsafe_ptr(), C.unsafe_ptr(), u.unsafe_ptr(), delta.unsafe_ptr(), A.unsafe_ptr(), B.unsafe_ptr(), h_ckpt.unsafe_ptr(), Int32(batch), Int32(seqlen), Int32(dim), grid_dim=(_grid(chains, block_size), 1, 1), block_dim=(block_size, 1, 1))
     var total = batch * dim
     if total > 0:
         comptime kern = selective_scan_bwd_scan_kernel[MAX_DSTATE]
@@ -940,25 +969,35 @@ def mamba_bwd_dbc_kernel[
         var bounds = _leaf_bounds(_leaf_at(tt, p_count), leaf, di)
         var acc_c = Float32(0.0)
         var acc_b = Float32(0.0)
-        for d in range(bounds[0], bounds[1]):
-            acc_c = ftz(
-                identical_mul_add(
-                    ftz(dy_ptr.unsafe_load(t * di + d)),
-                    ftz(
-                        hck_ptr.unsafe_load(
-                            ((bb * slots + (li + 1)) * di + d) * DSTATE + n
-                        )
-                    ),
-                    acc_c,
+        comptime if NEURAL_PROFILE_CHANGED:
+            var ac = SIMD[DType.float32, NEURAL_CHAINS](0.0)
+            var ab = SIMD[DType.float32, NEURAL_CHAINS](0.0)
+            for d in range(bounds[0], bounds[1]):
+                var lane = (d - bounds[0]) % NEURAL_CHAINS
+                ac[lane] = ftz(identical_mul_add(ftz(dy_ptr.unsafe_load(t * di + d)), ftz(hck_ptr.unsafe_load(((bb * slots + li + 1) * di + d) * DSTATE + n)), ac[lane]))
+                ab[lane] = ftz(identical_mul_add(ftz(w_ptr.unsafe_load(t * di + d)), ftz(dh_ptr.unsafe_load((t * di + d) * DSTATE + n)), ab[lane]))
+            acc_c = neural_merge_chains[NEURAL_CHAINS](ac)
+            acc_b = neural_merge_chains[NEURAL_CHAINS](ab)
+        else:
+            for d in range(bounds[0], bounds[1]):
+                acc_c = ftz(
+                    identical_mul_add(
+                        ftz(dy_ptr.unsafe_load(t * di + d)),
+                        ftz(
+                            hck_ptr.unsafe_load(
+                                ((bb * slots + (li + 1)) * di + d) * DSTATE + n
+                            )
+                        ),
+                        acc_c,
+                    )
                 )
-            )
-            acc_b = ftz(
-                identical_mul_add(
-                    ftz(w_ptr.unsafe_load(t * di + d)),
-                    ftz(dh_ptr.unsafe_load((t * di + d) * DSTATE + n)),
-                    acc_b,
+                acc_b = ftz(
+                    identical_mul_add(
+                        ftz(w_ptr.unsafe_load(t * di + d)),
+                        ftz(dh_ptr.unsafe_load((t * di + d) * DSTATE + n)),
+                        acc_b,
+                    )
                 )
-            )
         _ = _fold_push(stack_c, occ_c, ftz(acc_c))
         _ = _fold_push(stack_b, occ_b, ftz(acc_b))
 
@@ -1097,7 +1136,7 @@ def mamba_bwd_dbc_into(
         )
         return
 
-    var part = contract_partition(dim)
+    var part = neural_partition[NEURAL_LEAF](dim) if NEURAL_PROFILE_CHANGED else contract_partition(dim)
     comptime kern = mamba_bwd_dbc_kernel[MAX_DSTATE]
     ctx.enqueue_function[kern](
         dCm.unsafe_ptr(),
@@ -1237,6 +1276,11 @@ def mamba_bwd_da_partial_kernel[
                 )
                 var d_da = ftz(identical_mul(dhv, hprev))
                 d_arg = ftz(identical_mul(d_da, da_t))
+
+            comptime if NN34_AFFINE_PREFIX:
+                var ga = ftz(dh_ptr.unsafe_load(batch * seqlen * dim * DSTATE + (t * dim + d) * DSTATE + n))
+                var da_t = ftz(identical_exp(ftz(identical_mul(dl, a_vals[n]))))
+                d_arg = ftz(identical_mul(ga, da_t))
 
             acc[n] = ftz(identical_mul_add(d_arg, dl, acc[n]))
 
@@ -1405,7 +1449,7 @@ def mamba_bwd_da_into(
 
 def mamba_bwd_param_fold_into(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32],
     mut partial: DeviceBuffer[DType.float32],
     batch: Int,
     width: Int,
@@ -1417,12 +1461,12 @@ def mamba_bwd_param_fold_into(
     so that a future unrouted parameter gradient has one fold to use rather
     than a second one to declare.
     """
-    _require(len(out), width, "out", "[W]")
+    _require(len(output), width, "output", "[W]")
     _require(len(partial), batch * width, "partial", "[B, W]")
     if width < 1:
         return
     ctx.enqueue_function[mamba_bwd_param_fold_kernel](
-        out.unsafe_ptr(),
+        output.unsafe_ptr(),
         partial.unsafe_ptr(),
         Int32(batch),
         Int32(width),
@@ -1504,7 +1548,7 @@ def bwd_h_checkpoint_floats(batch: Int, seqlen: Int, dim: Int) -> Int:
 
 def bwd_dh_floats(batch: Int, seqlen: Int, dim: Int) -> Int:
     """`M * dim * D_STATE`. No carry slot; T1's seed is structural."""
-    return batch * seqlen * dim * MAX_DSTATE
+    return (2 if NN34_AFFINE_PREFIX else 1) * batch * seqlen * dim * MAX_DSTATE
 
 
 def bwd_da_partial_floats(batch: Int, dim: Int) -> Int:

@@ -68,10 +68,11 @@ from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
 from core.pinned_reduce import pinned_block_sum
-from checks.numerics import ftz
+from checks.numerics import ftz, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 
 # READ FROM THE MATRIX, not restated here. `checks/kernel_matrix.mojo`
@@ -778,7 +779,16 @@ def finish_sum_kernel(
 # Old1024 also loses(1.413/1.639/2.416 ms). Cases100000x32,100001x33,
 # 65537x17,k32; one warmup/score. Existing256 default retained.
 # Evidence: overnight-ab-20261006/nvidia/default-repair-normalized-measurements.json.
-comptime BLOCK_ACC_ROWS = (
+# AFCL-G06: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Half-sized row chunks expose more independent per-feature accumulators,
+# doubling the partial table versus the current 256-row arm. Integer totals
+# and scale selection are unchanged. Keep the existing experimental blocked
+# accumulator enabled in BOTH arms; this does not promote it on Apple.
+comptime AFCL_G06 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_AFCL_G06"]()
+)
+comptime BLOCK_ACC_ROWS_BASELINE = (
     4096
     if (
         # A08 AMD loser on stated fits; retained as an explicit experimental arm.
@@ -795,6 +805,8 @@ comptime BLOCK_ACC_ROWS = (
         else 256
     )
 )
+
+comptime BLOCK_ACC_ROWS = 128 if AFCL_G06 else BLOCK_ACC_ROWS_BASELINE
 
 comptime BLOCK_ACC_TPB = 256
 

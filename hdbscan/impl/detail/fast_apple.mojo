@@ -23,6 +23,13 @@ comptime HDB_FAST_APPLE = (
 
 comptime HDB_ALL = is_defined["MOJOLEARN_HDBSCAN2_ALL"]()
 
+# AFCL-G04: NEVER RUN — PENDING MEASUREMENT; uncompiled and unverified.
+# Halve the core-distance reference tile to reduce threadgroup storage from
+# 16 KiB to 8 KiB at its existing widest row. More barriers may lose; the
+# reference rows and register top-k are unchanged. HDB_CORE_TILE must be
+# enabled in BOTH arms; this switch does not enable that older experiment.
+comptime AFCL_G04 = HDB_FAST_APPLE and is_defined["MOJOLEARN_AFCL_G04"]()
+
 comptime HDB_SMR_TILED = HDB_FAST_APPLE and (
     is_defined["MOJOLEARN_HDB_SMR_TILED"]() or HDB_ALL
     or not is_defined["MOJOLEARN_HDB_SMR_TILED_OFF"]()

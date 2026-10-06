@@ -1,0 +1,133 @@
+{
+  "id": "T18",
+  "title": "Search partition inheritance across matching permutations",
+  "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+  "source_status": "source_integrated_uncompiled_scoped",
+  "default": "OFF",
+  "contract": "S",
+  "controls": [
+    {
+      "name": "T18",
+      "A": [
+        "MOJOLEARN_TREES_T18=1"
+      ],
+      "B": [],
+      "scope": "Extend exact final partition handoff to the learning permutation in multi-permutation sequential and batched estimation; other permutations still rebuild.",
+      "production_callers": [
+        "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+        "gbdt/methods/doc_parallel_boosting.mojo"
+      ],
+      "default": false,
+      "status": "NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED",
+      "full_dataset_recipes": [
+        "gbdt-depthwise:taxi",
+        "gbdt-depthwise:istella",
+        "gbdt-depthwise:taxireg",
+        "gbdt-depthwise:istellareg",
+        "gbdt-depthwise:year",
+        "gbdt-lossguide:taxi",
+        "gbdt-lossguide:istella",
+        "gbdt-lossguide:taxireg",
+        "gbdt-lossguide:istellareg",
+        "gbdt-lossguide:year",
+        "gbdt-categorical:taxicat",
+        "gbdt-categorical:criteo"
+      ]
+    }
+  ],
+  "supported_estimators": [
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-categorical"
+  ],
+  "production_callers": [
+    "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+    "gbdt/methods/doc_parallel_boosting.mojo"
+  ],
+  "implementation": "Extend exact final partition handoff to the learning permutation in multi-permutation sequential and batched estimation; other permutations still rebuild.",
+  "overlap_ids": [],
+  "remaining_gaps": [
+    "A/B coincide for already-inherited single-permutation fits.",
+    "Folded-back lossguide leaves retain existing final_ready refusal because their concatenated row order differs."
+  ],
+  "demonstrated_runtime_reach": false,
+  "qualification": {
+    "compiled": false,
+    "tested": false,
+    "identity_verified": false,
+    "quality_verified": false,
+    "measured": false
+  },
+  "harness": {
+    "entry": "bench/speed/forest_speed_arm.py",
+    "selection": "tools/trees_identical_ideas.py",
+    "arguments": [
+      "--trees-experiment",
+      "T18",
+      "--trees-arm",
+      "A|B",
+      "--trees-recipe",
+      "<full-workload-recipe>",
+      "--trees-artifact",
+      "<frozen-artifact>",
+      "--trees-recipe-facts",
+      "<retained-facts.json>",
+      "--trees-result",
+      "<result.json>"
+    ],
+    "execution": "FORBIDDEN in this source-only task",
+    "whole_operation": "tools/trees_identical_workload.py",
+    "separate_spans": [
+      "fit",
+      "cold inference",
+      "repeated inference"
+    ]
+  },
+  "recipes": {
+    "saved_sources": [
+      "tools/bench_board.py:TREE_LANES/TREE_TASK_LANES/TREE_TASK_DATASETS",
+      "tools/speed_gbdt_arm.py:lane_config/TASK_LANES",
+      "experiments/performance_ideas/README.md"
+    ],
+    "lanes": [
+      "gbdt-depthwise",
+      "gbdt-lossguide",
+      "gbdt-categorical"
+    ],
+    "dataset_version": null,
+    "dataset_hash": null,
+    "actual_dimensions": null,
+    "estimator_settings": null,
+    "full_dataset_intrinsic_caps_audited": false,
+    "coverage_status": "PENDING full retained recipe facts; no reduced substitution"
+  },
+  "modular_prerequisites": "No unsupported compiler/runtime technique introduced; toolchain support not demonstrated because compilation is forbidden.",
+  "harness_entries": [
+    "tools/trees_identical_ab.sh:ideas-*",
+    "tools/trees_identical_ideas.py",
+    "tools/trees_identical_workload.py",
+    "bench/speed/forest_speed_arm.py"
+  ],
+  "recipe_keys": [
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-categorical"
+  ],
+  "full_dataset_recipes": [
+    "gbdt-depthwise:taxi",
+    "gbdt-depthwise:istella",
+    "gbdt-depthwise:taxireg",
+    "gbdt-depthwise:istellareg",
+    "gbdt-depthwise:year",
+    "gbdt-lossguide:taxi",
+    "gbdt-lossguide:istella",
+    "gbdt-lossguide:taxireg",
+    "gbdt-lossguide:istellareg",
+    "gbdt-lossguide:year",
+    "gbdt-categorical:taxicat",
+    "gbdt-categorical:criteo"
+  ],
+  "recipe_facts_status": "PENDING: source definitions mapped in recipes.json; dataset/version/hash, dimensions, constructor/settings, intrinsic caps and full coverage facts remain unattested.",
+  "inventory_kind": "NEW_SOURCE_EXPERIMENT",
+  "implementation_commit": "Containing Git commit; no frozen binary exists."
+}

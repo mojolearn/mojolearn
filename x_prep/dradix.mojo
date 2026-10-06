@@ -43,9 +43,13 @@ comptime IDN_XPREP_RADIX = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 )
 #: FAST on Apple, IDENTICAL everywhere unless IDN_XPREP_RADIX is off
 comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()) or IDN_XPREP_RADIX
-comptime RBITS = 8
-comptime RBINS = 256
-comptime RPASSES = 4
+# C07: histogram storage scales with 2**digit bits; smaller digits trade
+# extra passes for smaller clear/scan work. Keys/task is independent.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+from experiments.classical_identical_ideas.shared_controls import C07_DIGIT4, C07_DIGIT6
+comptime RBITS = 4 if C07_DIGIT4 else (6 if C07_DIGIT6 else 8)
+comptime RBINS = 1 << RBITS
+comptime RPASSES = (32 + RBITS - 1) // RBITS
 #: threads per block of every launch here
 comptime RBS = 64
 #: threads per block of the load and the store (one thread per word)
@@ -126,7 +130,7 @@ def radix_hist_kernel(w: RUP, src: Int32, H: Int32, n: Int32, ch_n: Int32, shift
     var base = Int(src) + c * nn
     var sh = UInt32(Int(shift))
     for i in range(lo, hi):
-        var dg = Int((w[base + i] >> sh) & UInt32(0xFF))
+        var dg = Int((w[base + i] >> sh) & UInt32(RBINS - 1))
         w[hb + dg] = w[hb + dg] + UInt32(1)
 
 
@@ -185,7 +189,7 @@ def radix_scatter_kernel(w: RUP, src: Int32, dst: Int32, H: Int32, START: Int32,
     var sh = UInt32(Int(shift))
     for i in range(lo, hi):
         var v = w[base + i]
-        var dg = Int((v >> sh) & UInt32(0xFF))
+        var dg = Int((v >> sh) & UInt32(RBINS - 1))
         var k = w[hb + dg]
         w[out + Int(k)] = v
         w[hb + dg] = k + UInt32(1)

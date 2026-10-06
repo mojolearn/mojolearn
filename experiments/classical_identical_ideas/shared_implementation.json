@@ -1,0 +1,1181 @@
+{
+  "branch": "ideas/classical-identical-20261006",
+  "commit": "UNCOMMITTED; root owns final commit",
+  "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+  "source_only": true,
+  "executed": {
+    "compilation": false,
+    "tests": false,
+    "verification": false,
+    "measurements": false,
+    "imports": false,
+    "remote_jobs": false
+  },
+  "controls_path": "experiments/classical_identical_ideas/shared_controls.mojo",
+  "entries": [
+    {
+      "id": "C01",
+      "arms": [
+        {
+          "name": "leaf64",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C01_LEAF64"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "x_metrics.common.PairSum",
+            "x_metrics.plan.plan_program",
+            "core.xtdz_coalesced.column_mean_launch",
+            "decomposition.host.pca_oracle.host_column_mean_launch"
+          ],
+          "affected_estimators": [
+            "PCA covariance/full",
+            "TruncatedSVD variance preparation",
+            "expanded regression/classification metric folds"
+          ],
+          "saved_recipe_refs": [
+            "tools/classical_two_datasets.py:LANES[pca] and BLOCK_OF",
+            "tools/bench_board_more.py:tsvd",
+            "tools/bench_board_algos.py:regression estimator recipe + C09 adapter"
+          ],
+          "source_paths": [
+            "x_metrics/common.mojo",
+            "core/classical_stats.mojo",
+            "core/xtdz_coalesced.mojo",
+            "decomposition/host/pca_oracle.mojo"
+          ],
+          "source_gaps": [
+            "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        },
+        {
+          "name": "leaf128",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C01_LEAF128"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "x_metrics.common.PairSum",
+            "x_metrics.plan.plan_program",
+            "core.xtdz_coalesced.column_mean_launch",
+            "decomposition.host.pca_oracle.host_column_mean_launch"
+          ],
+          "affected_estimators": [
+            "PCA covariance/full",
+            "TruncatedSVD variance preparation",
+            "expanded regression/classification metric folds"
+          ],
+          "saved_recipe_refs": [
+            "tools/classical_two_datasets.py:LANES[pca] and BLOCK_OF",
+            "tools/bench_board_more.py:tsvd",
+            "tools/bench_board_algos.py:regression estimator recipe + C09 adapter"
+          ],
+          "source_paths": [
+            "x_metrics/common.mojo",
+            "core/classical_stats.mojo",
+            "core/xtdz_coalesced.mojo",
+            "decomposition/host/pca_oracle.mojo"
+          ],
+          "source_gaps": [
+            "GLM objective reducers and non-decomposition column-statistic consumers not migrated to C01."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Logical leaf rows and adjacent binary-carry merge fixed in shared PairSum; +0 seed, FTZ additions, odd-tail same on host/device. Arithmetic revision relative to B."
+    },
+    {
+      "id": "C02",
+      "arms": [
+        {
+          "name": "paired_stats",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C02_STATS_PAIR"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "preprocessing.standard.standard_fit_dev -> standard_chunks_kernel[False]"
+          ],
+          "affected_estimators": [
+            "StandardScaler"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:standard-scaler"
+          ],
+          "source_paths": [
+            "preprocessing/standard.mojo"
+          ],
+          "source_gaps": [
+            "GaussianNB/class-stat streams compose with C55. PCA column means use C01, while covariance centered loads use C04/C23; no separate fused PCA mean/variance profile was added."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        },
+        {
+          "name": "linear_pair",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "python.mojolearn.linear_model._classical_xy_means -> lm_col_sums_pair bindings",
+            "glm.estimator.ols_fit_resident_host / ridge_fit_resident_host -> col_sums_pair_buf",
+            "x_decomp.device centered OLS entry -> col_sums_pair_buf"
+          ],
+          "affected_estimators": [
+            "LinearRegression unweighted centering, including default TSQR",
+            "Ridge unweighted centering"
+          ],
+          "saved_recipe_refs": [
+            "tools/classical_two_datasets.py:linear-regression/ridge",
+            "tools/bench_board_algos.py:linear/ridge saved families"
+          ],
+          "source_paths": [
+            "glm/impl/center_device.mojo",
+            "glm/estimator.mojo",
+            "bindings/_mojolearn_estimators.mojo",
+            "bindings/_mojolearn_estimators_host.mojo",
+            "python/mojolearn/linear_model.py",
+            "x_decomp/device.mojo"
+          ],
+          "source_gaps": [
+            "Weighted linear means keep incumbent scaling and sums. GPU schedules both exact streams together; host uses its incumbent exact sums under the same new binding."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Two independent mean/constant-marker trees share barriers and their already-shared input load. Centered variance remains a second pass; no raw-second-moment substitution. Independent linear_pair uses original exact integer-limb sums, original exact_finish and means_finish; GPU launch/partial storage combine X/y without changing solver selection or arithmetic."
+    },
+    {
+      "id": "C03",
+      "arms": [
+        {
+          "name": "finite_extrema",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "preprocessing.estimator.minmax_fit_direct -> _minmax_fit_direct_cls2 -> minmax_fit_flagged_dev"
+          ],
+          "affected_estimators": [
+            "MinMaxScaler"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:minmax-scaler"
+          ],
+          "source_paths": [
+            "preprocessing/minmax.mojo",
+            "preprocessing/estimator.mojo"
+          ],
+          "source_gaps": [
+            "Public MinMax refusal is boolean, with no first-error-index API. Internal canonical first-error-index output is not added.",
+            "MaxAbsScaler has no separate finite-validation pass: its existing NaN-skipping/Inf-accepting extrema semantics are preserved. _finite_2d is an _x2d shell, not an additional scan. No new refusal policy invented."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Same UInt32 total-order extrema and same public refusal before fitted output publication; host incumbent remains the exact-output baseline."
+    },
+    {
+      "id": "C04",
+      "arms": [
+        {
+          "name": "load_center",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C04_LOAD_CENTER"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "decomposition.impl.linalg.detail.pca.compute_covariance",
+            "decomposition.host.pca_oracle.host_pca_fit",
+            "python.mojolearn._expansion_prep.LinearDiscriminantAnalysis.transform -> centered_matmul op178"
+          ],
+          "affected_estimators": [
+            "PCA covariance_eigh",
+            "LinearDiscriminantAnalysis(solver=svd).transform"
+          ],
+          "saved_recipe_refs": [
+            "tools/classical_two_datasets.py:pca",
+            "tools/bench_board_algos.py:lda-clf (solver=svd) plus explicitly requested full transform/decision outputs"
+          ],
+          "source_paths": [
+            "core/classical_centered.mojo",
+            "decomposition/impl/linalg/detail/pca.mojo",
+            "decomposition/host/pca_oracle.mojo",
+            "x_prep/prims.mojo",
+            "x_prep/units.mojo",
+            "bindings/_mojolearn_x_prep.mojo",
+            "bindings/_mojolearn_x_prep_host.mojo",
+            "python/mojolearn/_expansion_prep.py",
+            "experiments/classical_identical_ideas/metric_workloads.py"
+          ],
+          "source_gaps": [
+            "PCA incumbent split-K already centers at load, so only its non-split route adds new behavior. LDA(svd) now uses the exact center_rows->matmul seam at load.",
+            "OLS/Ridge/GaussianNB and normalized-distance consumer fusion remain unimplemented; no unsupported-toolchain prerequisite is claimed."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct",
+          "additional_adapters": [
+            "classical_lda_outputs"
+          ]
+        }
+      ],
+      "contract": "Shared scalar helper replays GEMM-v1 leaf membership, FMA sequence, FTZ centered stores and adjacent-pair merge. C23 profile takes precedence in C04+C23. LDA center_rows subtract/optional scale operations are reproduced before the incumbent ascending mm_step chain; immutable means and scaling buffers, no input mutation."
+    },
+    {
+      "id": "C05",
+      "arms": [
+        {
+          "name": "phase_scratch",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "x_metrics.plan.plan_program -> run_program_device_ptr/run_program_host_ptr"
+          ],
+          "affected_estimators": [
+            "All expanded metrics programs"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:saved estimator recipes + C09/C10 adapters"
+          ],
+          "source_paths": [
+            "x_metrics/plan.mojo",
+            "x_metrics/device.mojo",
+            "x_metrics/host/program.mojo"
+          ],
+          "source_gaps": [
+            "Within-call phase reuse is integrated in the metrics planner. Optional repeated-call caches remain unimplemented; no implicit global ownership or pointer-only cache was introduced."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        },
+        {
+          "name": "ols_phase",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C05_OLS_PHASE"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "glm.estimator.ols_fit_host",
+            "glm.estimator.ols_fit_resident_host",
+            "glm.estimator.ols_fit_weighted_host"
+          ],
+          "affected_estimators": [
+            "LinearRegression normal-equations iterative Jacobi solve"
+          ],
+          "saved_recipe_refs": [
+            "tools/classical_two_datasets.py:linear-regression; explicit saved incumbent normal-equations route required"
+          ],
+          "source_paths": [
+            "glm/estimator.mojo",
+            "glm/impl/linalg/detail/lstsq.mojo"
+          ],
+          "source_gaps": [
+            "Default TSQR does not allocate these Gram/inverse buffers; do not claim its reach. No cross-call cache."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "One invocation owns its arena; expansion scratch reused only after each source stage finishes into caller arena. Peak live phase allocation, no global cache/context sharing. OLS covariance storage is reused only after Jacobi and diagonal extraction complete; inverse GEMM fully overwrites the allocation. Copied DeviceBuffer ownership handles remain invocation-local through existing synchronization, as the incumbent Ridge u/u_scratch pattern."
+    },
+    {
+      "id": "C06",
+      "arms": [
+        {
+          "name": "rows2",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C06_ROWS2"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "core.row_norms.enqueue_row_norms",
+            "neighbors.impl.detail.knn_brute_force.compute_norms/compute_norms_for_metric",
+            "kde.impl.distance.distance",
+            "cluster.impl.detail.min_cluster_distance_compute",
+            "cluster.impl.detail.kmeans row norms (graph agent)",
+            "neighbors.impl.detail.knn_brute_force ordinary/cosine norms (graph agent)",
+            "cluster.impl.detail.min_cluster_distance_compute centroid norms (graph agent)",
+            "hdbscan.impl.cluster.detail.sparse_mr_mst norms (graph agent)",
+            "kde.impl.distance.distance ordinary/cosine norms (root)"
+          ],
+          "affected_estimators": [
+            "KMeans",
+            "KNN",
+            "KDE"
+          ],
+          "saved_recipe_refs": [
+            "tools/classical_two_datasets.py:kmeans,knn,kde",
+            "tools/knn_datasets.py:index/query blocks"
+          ],
+          "source_paths": [
+            "core/row_norms.mojo",
+            "neighbors/impl/detail/knn_brute_force.mojo",
+            "kde/impl/distance/distance.mojo"
+          ],
+          "source_gaps": [
+            "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        },
+        {
+          "name": "rows4",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C06_ROWS4"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "core.row_norms.enqueue_row_norms",
+            "neighbors.impl.detail.knn_brute_force.compute_norms/compute_norms_for_metric",
+            "kde.impl.distance.distance",
+            "cluster.impl.detail.min_cluster_distance_compute",
+            "cluster.impl.detail.kmeans row norms (graph agent)",
+            "neighbors.impl.detail.knn_brute_force ordinary/cosine norms (graph agent)",
+            "cluster.impl.detail.min_cluster_distance_compute centroid norms (graph agent)",
+            "hdbscan.impl.cluster.detail.sparse_mr_mst norms (graph agent)",
+            "kde.impl.distance.distance ordinary/cosine norms (root)"
+          ],
+          "affected_estimators": [
+            "KMeans",
+            "KNN",
+            "KDE"
+          ],
+          "saved_recipe_refs": [
+            "tools/classical_two_datasets.py:kmeans,knn,kde",
+            "tools/knn_datasets.py:index/query blocks"
+          ],
+          "source_paths": [
+            "core/row_norms.mojo",
+            "neighbors/impl/detail/knn_brute_force.mojo",
+            "kde/impl/distance/distance.mojo"
+          ],
+          "source_gaps": [
+            "Normalizer uses a distinct scalar fold and is not migrated. Additional kernel-matrix consumers remain unclaimed. Graph/root handoffs list their exact C06 production sites."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Rows batch within physical block, each keeps NORM_TPB lanes, feature FMA chains, halving tree and portable sqrt. Host output profile unchanged."
+    },
+    {
+      "id": "C07",
+      "arms": [
+        {
+          "name": "digit4",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C07_DIGIT4"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "x_prep.device.run_program_device_ptr -> radix_sort_cols_device"
+          ],
+          "affected_estimators": [
+            "QuantileTransformer",
+            "KBinsDiscretizer",
+            "RobustScaler",
+            "categorical encoders",
+            "SimpleImputer sorted strategies",
+            "SplineTransformer quantile knots"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:quantile-transformer,kbins,robust-scaler,ordinal,onehot,simple-imputer,spline"
+          ],
+          "source_paths": [
+            "x_prep/dradix.mojo",
+            "x_prep/device.mojo"
+          ],
+          "source_gaps": [
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        },
+        {
+          "name": "digit6",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C07_DIGIT6"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "x_prep.device.run_program_device_ptr -> radix_sort_cols_device"
+          ],
+          "affected_estimators": [
+            "QuantileTransformer",
+            "KBinsDiscretizer",
+            "RobustScaler",
+            "categorical encoders",
+            "SimpleImputer sorted strategies",
+            "SplineTransformer quantile knots"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:quantile-transformer,kbins,robust-scaler,ordinal,onehot,simple-imputer,spline"
+          ],
+          "source_paths": [
+            "x_prep/dradix.mojo",
+            "x_prep/device.mojo"
+          ],
+          "source_gaps": [
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        },
+        {
+          "name": "keys1024",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C07_KEYS1024"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "x_prep.device.run_program_device_ptr -> radix_sort_cols_device"
+          ],
+          "affected_estimators": [
+            "QuantileTransformer",
+            "KBinsDiscretizer",
+            "RobustScaler",
+            "categorical encoders",
+            "SimpleImputer sorted strategies",
+            "SplineTransformer quantile knots"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:quantile-transformer,kbins,robust-scaler,ordinal,onehot,simple-imputer,spline"
+          ],
+          "source_paths": [
+            "x_prep/dradix.mojo",
+            "x_prep/device.mojo"
+          ],
+          "source_gaps": [
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        },
+        {
+          "name": "keys4096",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C07_KEYS4096"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "x_prep.device.run_program_device_ptr -> radix_sort_cols_device"
+          ],
+          "affected_estimators": [
+            "QuantileTransformer",
+            "KBinsDiscretizer",
+            "RobustScaler",
+            "categorical encoders",
+            "SimpleImputer sorted strategies",
+            "SplineTransformer quantile knots"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:quantile-transformer,kbins,robust-scaler,ordinal,onehot,simple-imputer,spline"
+          ],
+          "source_paths": [
+            "x_prep/dradix.mojo",
+            "x_prep/device.mojo"
+          ],
+          "source_gaps": [
+            "Ragged-segment bucket scheduling and isotonic route not integrated. Incumbent radix admission threshold retained, no new exact-shape route."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Digit radix is stable; exact bijective key unchanged including NaN payload and signed zeros. Last partial digit masks its high zeros. Host unique sorted result uses incumbent sorter."
+    },
+    {
+      "id": "C08",
+      "arms": [
+        {
+          "name": "dictionary_inverse",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C08_DICTIONARY"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "OrdinalEncoder.fit_transform -> fit -> _fit_categories_with_codes -> x_prep unique_inverse_unit -> _transform_encoded",
+            "OneHotEncoder.fit_transform -> _fit_categories_with_codes -> native count_neg/grouping/onehot",
+            "_fit_infrequent consumes fit-owned inverse for Ordinal/OneHot",
+            "TargetEncoder._run consumes one canonical unsupervised dictionary/inverse before fold statistics"
+          ],
+          "affected_estimators": [
+            "OrdinalEncoder.fit_transform (including infrequent grouping)",
+            "OneHotEncoder.fit_transform (including infrequent grouping)",
+            "TargetEncoder.fit / fit_transform"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:ordinal; adapter classical_ordinal_fit_transform in metric_workloads.py",
+            "tools/bench_board_algos.py:onehot",
+            "tools/bench_board_algos.py:target-encoder"
+          ],
+          "source_paths": [
+            "python/mojolearn/_expansion_prep.py",
+            "x_prep/prims.mojo",
+            "x_prep/units.mojo",
+            "bindings/_mojolearn_x_prep.mojo",
+            "bindings/_mojolearn_x_prep_host.mojo",
+            "experiments/classical_identical_ideas/metric_workloads.py"
+          ],
+          "source_gaps": [
+            "LabelEncoder numeric fit_transform already builds its dictionary and inverse in one incumbent program; not relabeled new.",
+            "NaiveBayes shared label consumers use existing canonical encoding; class-stat pass reuse tracked under C55. Explicit user-supplied dictionaries stay incumbent."
+          ],
+          "adapter": "classical_ordinal_fit_transform",
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct",
+          "additional_adapters": [
+            "classical_ordinal_fit_transform",
+            "classical_onehot_fit_transform"
+          ]
+        },
+        {
+          "name": "grouped_output",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "x_prep.units.run_unit[9] -> onehot_unit; device and host scheduled totals reduced by four"
+          ],
+          "affected_estimators": [
+            "OneHotEncoder"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:onehot"
+          ],
+          "source_paths": [
+            "x_prep/units.mojo",
+            "x_prep/device.mojo",
+            "x_prep/host/program.mojo"
+          ],
+          "source_gaps": [
+            "Dictionary reuse is independent of grouped emission; only one-hot emission integrated."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Fit-local dictionary and inverse owner released in finally; no cross-call pointer/shape cache. Four independent encoded cells per emission task; same exact dense cells. TargetEncoder reuse contains no targets or fitted fold statistics: canonical unsupervised IDs only; the existing held-out fold predicates remain unchanged. All temporary inverse owners die at the end of the fit operation."
+    },
+    {
+      "id": "C09",
+      "arms": [
+        {
+          "name": "regression_bundle",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C09_REG_BUNDLE"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "mojolearn.metrics.regression_report -> native adjacent reg_term stages -> x_metrics.plan op82 -> reg_pair_unit"
+          ],
+          "affected_estimators": [
+            "MSE",
+            "MAE",
+            "R2 regression report; arbitrary saved dense regression estimator"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:chosen task=reg estimator via _est_factory; adapter classical_regression_report"
+          ],
+          "source_paths": [
+            "python/mojolearn/_expansion_metrics.py",
+            "python/mojolearn/_metrics_impl.py",
+            "x_metrics/regression.mojo",
+            "x_metrics/plan.mojo",
+            "x_metrics/units.mojo",
+            "experiments/classical_identical_ideas/metric_workloads.py"
+          ],
+          "source_gaps": [
+            "Separate public scalar calls do not fuse. Full saved estimator selection/report weight settings/attrs unresolved; no standalone metric board recipe exists."
+          ],
+          "adapter": "classical_regression_report",
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "SQ/ABS share rounded difference and target/prediction loads; existing independent PairSum streams, sample weights, soft-f64 tails, force_finite/multioutput retained. New report B uses existing expanded metric semantics, not simple-kernel scalar API arithmetic."
+    },
+    {
+      "id": "C10",
+      "arms": [
+        {
+          "name": "ranking_bundle",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C10_RANK_REUSE"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "mojolearn.metrics.ranking_report -> adjacent bin_curve -> planner curve_copy_unit and rank_epi/curve_out tails"
+          ],
+          "affected_estimators": [
+            "Binary ROC AUC",
+            "average precision",
+            "ROC curve",
+            "precision-recall curve; saved classifier with score method"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:chosen task=clf estimator via _est_factory; adapter classical_ranking_report"
+          ],
+          "source_paths": [
+            "python/mojolearn/_expansion_metrics.py",
+            "python/mojolearn/_metrics_impl.py",
+            "x_metrics/ranking.mojo",
+            "x_metrics/plan.mojo",
+            "x_metrics/units.mojo",
+            "experiments/classical_identical_ideas/metric_workloads.py"
+          ],
+          "source_gaps": [
+            "Multiclass report and nonadjacent public-call reuse not integrated. Tiny/arena-limited planner fallback retains incumbent. Saved classifier binary-class/score-column facts remain pending."
+          ],
+          "adapter": "classical_ranking_report",
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Reuse only adjacent producers with identical score/label/weight offsets. Weighted row order, prefixes, tie boundaries and native status preserved; no cross-call retention."
+    },
+    {
+      "id": "C11",
+      "arms": [
+        {
+          "name": "draw_gather",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C11_DRAW_GATHER"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "mojolearn.resample.resample -> _gpu_gather -> binding resample_gather_gpu -> classical_draw_gather_kernel"
+          ],
+          "affected_estimators": [
+            "resample replace=True dense contiguous Float32 arrays"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:resample (both X and y gathers)"
+          ],
+          "source_paths": [
+            "resample/gather_fast.mojo",
+            "resample/estimator.mojo",
+            "python/mojolearn/resample.py"
+          ],
+          "source_gaps": [
+            "Permutation/test/CV consumers not integrated. Bootstrap statistics already regenerate draws in incumbent (not relabeled new). Forest bootstrap belongs C45-C51 external TREES lane. Host keeps incumbent deterministic index consumer; no new host scheduling optimization."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Exact utils_draw_kernel Philox mapping resample_key/replicate0/output-row; every array shares same deterministic draws. A reads selected source cells without index storage."
+    },
+    {
+      "id": "C12",
+      "arms": [
+        {
+          "name": "sparse_counts",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "x_metrics.plan OP_GROUP_SORT -> stable KEY_GROUP sort -> sparse_group_offsets_unit -> existing cm/cls tails",
+            "metric_workloads.classical_classification_report -> public cohen_kappa_score -> _confusion -> group_sort"
+          ],
+          "affected_estimators": [
+            "confusion_matrix",
+            "classification_report",
+            "precision_recall_fscore_support",
+            "other integer grouped-count metric preparation"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:sgd-clf complete saved training/query recipe plus explicitly requested classification_report + cohen_kappa_score"
+          ],
+          "source_paths": [
+            "x_metrics/plan.mojo",
+            "x_metrics/par.mojo",
+            "x_metrics/group.mojo",
+            "x_metrics/units.mojo",
+            "experiments/classical_identical_ideas/metric_workloads.py"
+          ],
+          "source_gaps": [
+            "NaiveBayes class-count caller and explicit sparse public output are not integrated. Dense OFF/public table allocation remains included.",
+            "Source guard is 6*n < m*C+m with scratch capacity; full saved low-cardinality data may retain B. No invented labels or reduced workloads to force admission. Candidate activation remains pending."
+          ],
+          "adapter": "classical_classification_report",
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance",
+            "saved class cardinality and resulting sparse-count cost-guard admission; no executed reach evidence"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Stable integer (class-pair,row) sorting then exact binary-search offsets. Same count schema; weighted downstream sums retain original order but no new weighted floating count profile."
+    },
+    {
+      "id": "C55",
+      "arms": [
+        {
+          "name": "class_group",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "GaussianNB/discrete NB _class_stats -> class_stats/class_stats_w -> class_stats_group_unit; host _groups bypass ensures candidate unit"
+          ],
+          "affected_estimators": [
+            "GaussianNB",
+            "MultinomialNB",
+            "ComplementNB",
+            "BernoulliNB",
+            "GaussianNB partial_fit and class-statistics consumers"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:gaussian-nb,bernoulli-nb,multinomial-nb,complement-nb"
+          ],
+          "source_paths": [
+            "x_prep/prims.mojo",
+            "x_prep/host/program.mojo",
+            "python/mojolearn/_expansion_prep.py",
+            "bindings/_mojolearn_x_prep.mojo",
+            "bindings/_mojolearn_x_prep_host.mojo"
+          ],
+          "source_gaps": [
+            "CategoricalNB histogram route not changed. CSR fast native NB callers may bypass _class_stats and are not claimed.",
+            "Feature-selection and discriminant direct class_stats consumers also see the shared C55 unit; include their full recipes when their call paths select it."
+          ],
+          "adapter": null,
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Eight independent classes per feature task share label/feature loads; two-pass centered variance and weighted term order. Shared serial class profile changes arithmetic from incumbent blocked profile on every vendor+host together; versioned unverified contract."
+    },
+    {
+      "id": "C56",
+      "arms": [
+        {
+          "name": "lda_input",
+          "candidate_defines": [
+            "MOJOLEARN_CLASSICAL_C56_LDA_INPUT"
+          ],
+          "baseline_defines": [],
+          "default_enabled": false,
+          "mode": "identical",
+          "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
+          "source_integration": "production_source_integrated_scope_below",
+          "runtime_reach": "UNVERIFIED: no invocation authorized",
+          "production_callers": [
+            "LinearDiscriminantAnalysis.decision_function binary branch -> one native matmul -> same coefficient-difference answer"
+          ],
+          "affected_estimators": [
+            "LinearDiscriminantAnalysis binary decision_function"
+          ],
+          "saved_recipe_refs": [
+            "tools/bench_board_algos.py:lda-clf (solver=svd) plus full decision/transform output extension"
+          ],
+          "source_paths": [
+            "experiments/classical_identical_ideas/shared_controls.mojo",
+            "bindings/_mojolearn_x_prep.mojo",
+            "bindings/_mojolearn_x_prep_host.mojo",
+            "python/mojolearn/_expansion_prep.py",
+            "experiments/classical_identical_ideas/metric_workloads.py"
+          ],
+          "source_gaps": [
+            "Candidate applies only to two-class decision_function; multiclass path is incumbent. Saved class count is pending. Ordinary classifier runner predict/proba does not exercise it; use explicit adapter."
+          ],
+          "adapter": "classical_lda_outputs",
+          "recipe_facts_pending": [
+            "dataset/version/hash/split",
+            "actual full rows/features/classes and output shapes",
+            "saved estimator settings reconciliation",
+            "intrinsic cap audit",
+            "weights and missing-value coverage",
+            "frozen binary/source/compiler provenance"
+          ],
+          "measurement_boundary": "preparation + full fit/training + required synchronization + consumed outputs; inference separately; cold/warmup/repeated distinct"
+        }
+      ],
+      "contract": "Scheduling/input ownership only: skip the discarded full-class score pass, then compute the incumbent binary coef_ / intercept_ matmul with unchanged validation and refusal ordering. Merge with root QDA project4 arm."
+    }
+  ],
+  "interactions": [
+    [
+      "C01",
+      "C09"
+    ],
+    [
+      "C01",
+      "C05"
+    ],
+    [
+      "C01",
+      "C23"
+    ],
+    [
+      "C02",
+      "C03"
+    ],
+    [
+      "C04",
+      "C23"
+    ],
+    [
+      "C05",
+      "C09",
+      "C10",
+      "C12"
+    ],
+    [
+      "C06",
+      "C29",
+      "C30",
+      "C36"
+    ],
+    [
+      "C07",
+      "C08"
+    ],
+    [
+      "C07_DIGIT4",
+      "C07_KEYS1024"
+    ],
+    [
+      "C07_DIGIT6",
+      "C07_KEYS4096"
+    ],
+    [
+      "C08_DICTIONARY",
+      "C08_GROUPED_OUTPUT"
+    ],
+    [
+      "C55",
+      "C56"
+    ],
+    [
+      "C02_LINEAR_PAIR",
+      "C05_OLS_PHASE"
+    ],
+    [
+      "C04_LOAD_CENTER",
+      "C56_LDA_INPUT"
+    ],
+    [
+      "C08_DICTIONARY",
+      "C08_GROUPED_OUTPUT",
+      "C07_DIGIT6",
+      "C07_KEYS4096"
+    ],
+    [
+      "C05_PHASE_SCRATCH",
+      "C09_REG_BUNDLE",
+      "C10_RANK_REUSE",
+      "C12_SPARSE_COUNTS"
+    ]
+  ],
+  "mutually_exclusive": [
+    [
+      "C01_LEAF64",
+      "C01_LEAF128"
+    ],
+    [
+      "C06_ROWS2",
+      "C06_ROWS4"
+    ],
+    [
+      "C07_DIGIT4",
+      "C07_DIGIT6"
+    ],
+    [
+      "C07_KEYS1024",
+      "C07_KEYS4096"
+    ]
+  ],
+  "unsupported_prerequisites": [],
+  "unverified_notice": "Source branches and callers are linked by reading/editing only; no demonstrated runtime reach or claimed capability/toolchain support. Remaining gaps are unfinished source integration, not invented Modular blockers.",
+  "root_harness": "experiments/classical_identical_ideas/full_workload.py",
+  "metric_adapter": "experiments/classical_identical_ideas/metric_workloads.py",
+  "additional_adapters": [
+    "classical_ordinal_fit_transform",
+    "classical_onehot_fit_transform",
+    "classical_lda_outputs",
+    "classical_regression_report",
+    "classical_ranking_report",
+    "classical_classification_report"
+  ],
+  "remaining_source_scope_notice": "Some card-wide extensions remain source gaps listed per arm. They are not claimed as completed or as unsupported Mojo prerequisites. Root requested final source handoff at this point for inventory and lane save/push."
+}

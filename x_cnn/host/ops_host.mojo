@@ -23,6 +23,8 @@ from checks.numerics import ftz
 from bindings.hostptr import i32_ptr, f32_ptr
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell, nn14_wgrad_at, nn14_input_grad_at
+from x_cnn.ops import NN45_CONV_RELU, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
 from x_cnn.ops import (
     canon,
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, CP_REV,
@@ -317,9 +319,28 @@ def conv2d_forward_into(x: FP, w: FP, bias: FP, dst: FP, prm: List[Int32]) raise
     the NCHW layout and bias (conv_out_at)."""
     var ckk = Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW])
     var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
-    var cols = scratch(rows * ckk)
-    conv2d_forward_cols(x, w, bias, dst, prm, cols)
-    cols.free()
+    comptime if NN14_BOUNDED_IM2COL:
+        var OC = Int(prm[CP_OC])
+        var tile_rows = nn14_conv_rows(rows, ckk, OC)
+        var cols = scratch(tile_rows * ckk)
+        var y2 = scratch(tile_rows * OC)
+        var ps = prm.copy()
+        var row0 = 0
+        while row0 < rows:
+            var take = min(tile_rows, rows - row0)
+            for i in range(take * ckk):
+                nn14_im2col_slice_cell(i, x, cols, hi(ps), row0)
+            gemm_host_into(cols, w, y2, OP_NT, take, OC, ckk)
+            for i in range(take * OC):
+                nn14_conv_slice_cell(i, y2, bias, dst, hi(ps), row0)
+            row0 += take
+        y2.free()
+        cols.free()
+        _ = ps^
+    else:
+        var cols = scratch(rows * ckk)
+        conv2d_forward_cols(x, w, bias, dst, prm, cols)
+        cols.free()
 
 
 def conv2d_forward_cols(x: FP, w: FP, bias: FP, dst: FP, prm: List[Int32], cols: FP) raises:
@@ -341,6 +362,23 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: Li
     """gx (when need_dx), gw [OC x ckk] and gb [OC] of a conv from its
     output gradient: dW = TN over the N*OH*OW rows (5701), db = TN against
     ones, dcols = NN, col2im as a gather (5700)."""
+    comptime if NN14_BOUNDED_IM2COL:
+        var OC = Int(prm[CP_OC])
+        var ckk = Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW])
+        var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
+        var nx = Int(prm[CP_N]) * Int(prm[CP_C]) * Int(prm[CP_H]) * Int(prm[CP_W])
+        var ps = _host_prm(prm, CP_REV)
+        var grow = scratch(rows * OC)
+        dout_rows_host(dout, grow, ps)
+        run[nn14_wgrad_at](x, grow, gw, gw, hi(ps), hi(ps), OC * ckk)
+        var ones = List[Float32](length=rows, fill=Float32(1))
+        gemm_host_into(grow, hp(ones), gb, OP_TN, OC, 1, rows)
+        if need_dx:
+            run[nn14_input_grad_at](grow, w, gx, gx, hi(ps), hi(ps), nx)
+        grow.free()
+        _ = ones^
+        _ = ps^
+        return
     var ckk = Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW])
     var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
     var ps = prm.copy()
@@ -421,13 +459,29 @@ def conv_block_forward_into(
     var ckk = Int(cprm[CP_C]) * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = Int(cprm[CP_N]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
     var zp: List[Int32] = [0, 0, 0]
-    var cols = kcols if keep else scratch(rows * ckk)
+    var cols = kcols if keep else scratch(1 if NN14_BOUNDED_IM2COL else rows * ckk)
     var y = ky if keep else (dst if not pool else scratch(ny))
-    conv2d_forward_cols(x, w, bias, y, cprm, cols)
+    var fused_relu = False
+    comptime if NN45_CONV_RELU and not NN14_BOUNDED_IM2COL:
+        if not pool:
+            var ps = cprm.copy()
+            var y2 = scratch(ny)
+            im2col_host(x, cols, ps)
+            gemm_host_into(cols, w, y2, OP_NT, rows, Int(cprm[CP_OC]), ckk)
+            run[nn45_conv_out_relu_at](y2, bias, y, dst, hi(ps), hi(ps), ny)
+            y2.free()
+            _ = ps^
+            fused_relu = True
+    if not fused_relu:
+        comptime if NN14_BOUNDED_IM2COL:
+            conv2d_forward_into(x, w, bias, y, cprm)
+        else:
+            conv2d_forward_cols(x, w, bias, y, cprm, cols)
     if not keep:
         cols.free()
     if not pool:
-        run[relu_fwd_at](y, y, dst, dst, hi(zp), hi(zp), ny)
+        if not fused_relu:
+            run[relu_fwd_at](y, y, dst, dst, hi(zp), hi(zp), ny)
     elif keep:
         var r = scratch(ny)
         run[relu_fwd_at](y, y, r, r, hi(zp), hi(zp), ny)
@@ -455,9 +509,12 @@ def conv_block_backward_into(
     var cols = kcols
     var yconv = ky
     if not keep:
-        cols = scratch(rows * ckk)
+        cols = scratch(1 if NN14_BOUNDED_IM2COL else rows * ckk)
         yconv = scratch(ny)
-        conv2d_forward_cols(x, w, bias, yconv, cprm, cols)
+        comptime if NN14_BOUNDED_IM2COL:
+            conv2d_forward_into(x, w, bias, yconv, cprm)
+        else:
+            conv2d_forward_cols(x, w, bias, yconv, cprm, cols)
     var gy = scratch(ny)
     if pool:
         var ps = _host_prm(pprm, PP_REV)
@@ -468,7 +525,10 @@ def conv_block_backward_into(
         run[relu_bwd_at](yconv, g, gy, gy, hi(zp), hi(zp), ny)
     if not keep:
         yconv.free()
-    conv2d_backward_cols(cols, w, gy, gx, gw, gb, cprm, need_dx)
+    comptime if NN14_BOUNDED_IM2COL:
+        conv2d_backward_into(x, w, gy, gx, gw, gb, cprm, need_dx)
+    else:
+        conv2d_backward_cols(cols, w, gy, gx, gw, gb, cprm, need_dx)
     if not keep:
         cols.free()
     gy.free()
@@ -843,9 +903,12 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, dst: FP, prm: List[Int32
             run[bn_stats_at](x, aux, aux, aux, hi(ps), hi(ps), C)
     else:
         run[bn_eval_stats_at](running, aux, aux, aux, hi(ps), hi(ps), C)
-    run[bn_apply_at](x, aux, dst, dst, hi(ps), hi(ps), total)
-    if training:
-        run[bn_running_at](running, aux, aux, aux, hi(ps), hi(ps), C)
+    if NN47_APPLY_RUNNING and training:
+        run[nn47_bn_apply_running_at](x, aux, dst, running, hi(ps), hi(ps), total)
+    else:
+        run[bn_apply_at](x, aux, dst, dst, hi(ps), hi(ps), total)
+        if training:
+            run[bn_running_at](running, aux, aux, aux, hi(ps), hi(ps), C)
     _ = ps^
     _ = part^
 

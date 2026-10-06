@@ -20,6 +20,7 @@ cell is written so it cannot:
     lu_result_word at the factor/solve boundary;
   * no float64 anywhere.
 """
+from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS
 from std.memory import bitcast
 
 from checks.numerics import (
@@ -110,6 +111,12 @@ comptime OP_MUZ = 36
 comptime OP_LGAMMA = 37
 #: the exact power-of-two column scale of a Gram diagonal entry (DEVIATION 2620)
 comptime OP_P2SCALE = 38
+# C26: same rounded division, optional sqrt, and final multiply as B.
+comptime OP_CLASSICAL_MU_IS = 39
+# C27 independent component maps preserve every rounded incumbent stage.
+# NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
+comptime OP_CLASSICAL_FA_LOAD = 40
+comptime OP_CLASSICAL_NORM = 41
 
 
 @always_inline
@@ -327,6 +334,13 @@ def ew_cell(op: Int, x_in: Float32, y_in: Float32, z_in: Float32, s_in: Float32)
         r = mul(x, div0(y, z if z != Float32(0) else s))
     elif op == OP_P2SCALE:
         r = p2_equilibration_scale(x)
+    elif op == OP_CLASSICAL_FA_LOAD:
+        var shifted = add(y, Float32(-1))
+        r = mul(mul(x, sqrt0(shifted if shifted > Float32(0) else Float32(0))), z)
+    elif op == OP_CLASSICAL_NORM:
+        r = div0(x, add(sqrt0(y), s))
+    elif op == OP_CLASSICAL_MU_IS:
+        r = mul(x, sqrt0(div0(y, z if z != Float32(0) else s)))
     return ftz(r)
 
 
@@ -1495,10 +1509,32 @@ def trs_feed_cell(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, h
     b.unsafe_store(i * nrhs + c, acc)
 
 
+def trs_block_group(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, hi: Int, c0: Int, c1: Int):
+    """C14: one factor entry feeds bounded RHS columns; each RHS retains B's fold."""
+    var forward = tri == 0 or tri == 2
+    for step in range(hi - lo):
+        var j = lo + step if forward else hi - 1 - step
+        if trs_divides(tri):
+            var diag = lu.unsafe_load(j * n + j)
+            for c in range(c0, c1):
+                b.unsafe_store(j * nrhs + c, div0(ftz(b.unsafe_load(j * nrhs + c)), diag))
+        var first = j + 1 if forward else lo
+        var last = hi if forward else j
+        for i in range(first, last):
+            var coeff = -ftz(trs_coef(lu, n, tri, i, j))
+            for c in range(c0, c1):
+                b.unsafe_store(i * nrhs + c, ftz(identical_mul_add(
+                    coeff, ftz(b.unsafe_load(j * nrhs + c)), ftz(b.unsafe_load(i * nrhs + c)))))
+
+
 def trs_tri_cols(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, c0: Int, c1: Int):
     """One triangle on the columns [c0, c1): the reference walk (one row at
     a time, each applied to every row it feeds, columns innermost). Every
     cell's chain is its own column's, so column slices run apart."""
+    comptime if C14_GROUP_RHS:
+        for first in range(c0, c1, 4):
+            trs_block_group(lu, b, n, nrhs, tri, 0, n, first, min(c1, first + 4))
+        return
     if tri == 0 or tri == 2:
         for j in range(n):
             if trs_divides(tri):
