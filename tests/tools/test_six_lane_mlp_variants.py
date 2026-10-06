@@ -3,6 +3,7 @@ import copy
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
@@ -61,6 +62,31 @@ class MLPAdmission(unittest.TestCase):
             with self.assertRaises(ValueError):validate_variant(bad,cell)
         wrong=dict(self.scope,vendor='amd')
         with self.assertRaises(ValueError):m.variant_cell(wrong,row)
+
+    def test_actual_worker_job_requires_both_binding_closures(self):
+        row=m.contracts()['rows'][0];cell,fact=self.fact(row)
+        fact['vendor']='nvidia'
+        fact['job']=dict(key=cell['key'],workload_id=cell['workload_id'],mode=cell['mode'],
+                        master_selection=dict(id=cell['configuration']))
+        with tempfile.TemporaryDirectory() as temp:
+            items=[]
+            for index,binding in enumerate(row['required_bindings']):
+                path=Path(temp)/(str(index)+'.json')
+                path.write_text(json.dumps(dict(binding=binding)))
+                items.append(dict(receipt=str(path)))
+            full={'A':items,'B':items}
+            # A valid top-level deployment cannot fill a missing worker job closure.
+            fact['artifact_provenance']=copy.deepcopy(full)
+            with patch.object(m,'retained',return_value=row['sidecar_metadata']):
+                for missing in (None,{}, {'A':items}, {'A':items[:1],'B':items},
+                                {'A':items,'B':items[:1]}):
+                    bad=copy.deepcopy(fact)
+                    if missing is not None:bad['job']['artifact_provenance']=missing
+                    with self.subTest(provenance=missing):
+                        with self.assertRaises(ValueError):validate_variant(bad,cell)
+                fact.pop('artifact_provenance')
+                fact['job']['artifact_provenance']=full
+                validate_variant(fact,cell)
 
     def test_unknown_variant_remains_rejected(self):
         with self.assertRaises(ValueError):validate_variant(dict(changes_frozen_race=True,registered_input_variant=dict(variant='anything')))

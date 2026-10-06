@@ -92,16 +92,27 @@ def validate_variant(facts, cell=None):
                          or any(cell[k] != original[k] for k in ('vendor','mode','configuration')))):
         raise ValueError('MLP variant identity differs')
     job = facts.get('job')
-    if job and (job['key'] != expected_cell['key'] or job['workload_id'] != expected_cell['workload_id']
-                or facts['vendor'] != original['vendor'] or job['mode'] != original['mode']
-                or job['master_selection']['id'] != original['configuration']):
-        raise ValueError('MLP worker identity differs')
+    if 'job' in facts:
+        if (not isinstance(job, dict) or job.get('key') != expected_cell['key']
+                or job.get('workload_id') != expected_cell['workload_id']
+                or facts.get('vendor') != original['vendor'] or job.get('mode') != original['mode']
+                or job.get('master_selection', {}).get('id') != original['configuration']):
+            raise ValueError('MLP worker identity differs')
+        # The worker executes this job, not the predeployment top-level facts.
+        provenance = job.get('artifact_provenance')
+        if not provenance:
+            raise ValueError('Full MLP worker artifact provenance missing')
+    else:
+        provenance = facts.get('artifact_provenance')
     if facts.get('source_sha', reg['measurement_source_sha']) != reg['measurement_source_sha']:
         raise ValueError('Wrong MLP measurement freeze')
-    if facts.get('artifact_provenance'):
+    if provenance is not None:
         for arm in ('A', 'B'):
+            items = provenance.get(arm)
+            if not items:
+                raise ValueError('Full MLP binding dependency missing: ' + arm)
             bindings = {json.loads(Path(item['receipt']).read_text())['binding']
-                        for item in facts['artifact_provenance'][arm]}
+                        for item in items}
             if not set(row['required_bindings']).issubset(bindings):
                 raise ValueError('Full MLP binding dependency missing: ' + arm)
     actual = facts['workload']
