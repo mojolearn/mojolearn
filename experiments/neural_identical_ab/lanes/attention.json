@@ -1,0 +1,413 @@
+{
+  "lane": "attention",
+  "branch": "ideas/neural-identical-ab-20261006-r3",
+  "baseline": "fd6cf80453a6f18eb02e81566c824e7da106ccf0",
+  "experiments": [
+    {
+      "id": "NN17",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_ATTN_ARM_TRIAL=1",
+        "MOJOLEARN_NN17_GQA_FOUR_HEADS=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_ATTN_ARM_TRIAL=1"
+      ],
+      "runtime_env": {
+        "MOJOLEARN_ATTN_ARM": "stash_tiled_fgrid_r32_qres_pf_kvgrid_r32"
+      },
+      "remaining": [
+        "Full GQA callers must actually reach HD64/TQ32/QRES/PF non-swizzled arm and GQA ratio divisible by four; otherwise record no-distinct-runtime-arm.",
+        "Retain I06 two-head LOSER evidence; no unchanged repeat is proposed.",
+        "Measure full forward+backward and complete default interactions."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "64 logical rows interleave four query heads, 16 positions each, sharing the same K/V shared page. Every score/value fold unchanged.",
+      "prior_evidence": "I06 corrected MI325X ratios 1.211/1.212 and L40S 1.147/1.108 were two-head component LOSERS. New four-head schedule is not that arm."
+    },
+    {
+      "id": "NN18",
+      "implementation_status": "reused_existing",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Fused v1 already bounds tiles by visible causal/window ranges and preserves signed-zero fallback/replay.",
+        "No new isolated masked-tile switch is invented; compare existing full path only with all bundled differences explicitly declared.",
+        "New task-compaction schedule needs a concrete consumer/trace-preservation implementation before isolated A/B."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Existing _row_range, _key_query_range and fused forward kernels skip structural tiles under admission; source already implements the catalog mechanism.",
+      "new_implementation": false,
+      "selectable": false
+    },
+    {
+      "id": "NN19",
+      "implementation_status": "reused_existing",
+      "implementation_paths": [
+        "transformer/impl/llama/fused_attention.mojo",
+        "experiments/performance_ideas/I07/state_cost.mojo",
+        "experiments/performance_ideas/I07/check.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_ATTN_ARM_TRIAL=1"
+      ],
+      "baseline_defines": [
+        "MOJOLEARN_ATTN_ARM_TRIAL=1",
+        "MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1"
+      ],
+      "runtime_env": {},
+      "remaining": [
+        "Reuse corrected I07 retained/recompute source and accepted fixture identity; no unchanged component rerun.",
+        "Full LM/transformer/Samba workloads, memory budget/lifetimes, cold vs repeated and complete configuration remain pending.",
+        "Preserve earlier no-distinct-arm and confounded evidence."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "prior_evidence": "I07 corrected component retained/recompute ratios MI325X .560/.586, L40S .666/.665; no full application promotion.",
+      "new_implementation": false
+    },
+    {
+      "id": "NN20",
+      "implementation_status": "component_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_summary_tree.mojo",
+        "transformer/impl/llama/attention_v2.mojo",
+        "transformer/ATTENTION_V2_CONTRACT.md"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN20_BALANCED_SUMMARY_TREE=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Production model/profile/checkpoint/decode integration is pending. Component B is a left-fold summary control, NOT incumbent v1/v2.",
+        "Finite input/score admission and row status consumption remain explicit caller responsibilities. New closed-form derivative graph requires gradient/task quality admission.",
+        "Current source one-thread-per-row stack is functional graph foundation, not proven throughput; preserve existing attention_v2 large-shape nonpromotion and do not claim its old evidence covers this new graph."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "new_implementation": true,
+      "selectable": false,
+      "mechanism": "Common host/device stable 32-key leaf summaries, portable rounded merge, bounded binary carry stack/odd-carry tree versus same leaves left-folded; forward/status/rowdot/dQ/dK/dV functions and launchers."
+    },
+    {
+      "id": "NN21",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN21_SCALE_MASK=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {
+        "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager"
+      },
+      "remaining": [
+        "Eager/fallback scope only; an automatic fused-only full model run cannot establish candidate reach.",
+        "Full affected model E2E, task quality, vendor+host bits and performance remain unrun."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Eager scale+mask one pass; writes both intermediates, keeps mandatory +0 add; softcap/plants/sabotage preserve old route."
+    },
+    {
+      "id": "NN22",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN22_EAGER_DKDV_PAIR=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {
+        "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager"
+      },
+      "remaining": [
+        "Eager/fallback scope only; an automatic fused-only full model run cannot establish candidate reach.",
+        "Full affected model E2E, task quality, vendor+host bits and performance remain unrun."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Two eager K/V accumulators share addressing/traversal, each includes all h-then-t terms and signed-zero masked contributions."
+    },
+    {
+      "id": "NN23",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN23_ROWDOT_DS=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {
+        "MOJOLEARN_TRANSFORMER_ATTN_PATH": "eager"
+      },
+      "remaining": [
+        "Eager/fallback scope only; an automatic fused-only full model run cannot establish candidate reach.",
+        "Full affected model E2E, task quality, vendor+host bits and performance remain unrun."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "One eager row owner folds z then writes dS; preserves both stage outputs without a global barrier or recomputation."
+    },
+    {
+      "id": "NN24",
+      "implementation_status": "component_draft",
+      "implementation_paths": [
+        "transformer/experiments/norm_profile.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN24_NORM_LANES8=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Wire model-wide norm profile version, including sequence/Mamba norms, fused residual norms, q/k norm and checkpoint metadata, before a model arm is selectable.",
+        "Component A uses eight logical interleaved lanes, B one lane; B is a within-component baseline, not a claim of incumbent LayerNorm backward equality.",
+        "Only component source exists; host+GPU common forward/backward/parameter helpers and launchers were not compiled or executed.",
+        "Measure full forward/backward quality; centered LayerNorm derivative graph must be admitted independently."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Common Mojo helpers define centered variance, epsilon, portable div/rsqrt, fixed adjacent lane tree, backward dots, dX and parameter products/ascending row folds.",
+      "selectable": false
+    },
+    {
+      "id": "NN25",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN25_RMS_SPLIT_SCALE=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "RMSNorm launcher scope; existing fused residual-norm and non-RMSNorm variants remain outside this arm.",
+        "Repeated scalar div/rsqrt in flat cell kernel may regress; record loss and full operation timing."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "First kernel writes original sequential sumsq; second parallelizes each scaled/weighted output cell, retaining exact arithmetic and no extra scalar scratch."
+    },
+    {
+      "id": "NN26",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN26_TRAIN_SWIGLU=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Plain gated SiLU training only; bias/GELU/ungated/forward-only calls preserve old routes.",
+        "Saved sigmoid/derivative extension is not implemented; this arm reuses existing paired backward and existing SiLU saved stage."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "One training forward kernel writes both SiLU and gate product with original rounding; existing fused bwd_mul2_silu_backward_kernel consumes identical saved stages."
+    },
+    {
+      "id": "NN27",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN27_QK_ROPE_PAIR=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "LlamaRopeTable already owns precomputed frequencies/sin/cos. New candidate shares position table loads between independent Q/K rotation outputs.",
+        "Cross-layer session-owner table sharing and skipping inv_freq validation are not implemented; no unsafe pointer trust cache was introduced.",
+        "Partial rotary dims, GQA/MQA, reset/decode positions and gradients pending."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "A Q-grid cell also rotates the corresponding KV-head cell where present, sharing its immutable sin/cos pair, all products/adds unchanged."
+    },
+    {
+      "id": "NN28",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo",
+        "training/byte_lm.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN28_DEAD_TRAINING_CACHE=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Root wires four full-prefill _byte_forward_loss calls after resetting cache.s=0; other training callers remain pending.",
+        "Explicit retain_kv_cache=False requires empty prefill; packed stage cache is still produced and trace/backward inputs retained.",
+        "Alternating train/infer owner/reset and complete gradient quality remain unrun."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Skip only final stage-to-decode cache copy/ring update and cache.s increment; capability defaults True and flag defaults OFF."
+    },
+    {
+      "id": "NN29",
+      "implementation_status": "wired_draft",
+      "implementation_paths": [
+        "transformer/experiments/attention_schedules.mojo",
+        "transformer/impl/llama/modeling_llama.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN29_RING_PAIR=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Windowed ring-update scope; paired linear K/V repack already exists and is not reinvented.",
+        "Direct-to-final append/layout fusion and multi-request batching are not implemented.",
+        "Full decode and windowed prefill, capacity/tail/reset/cache words pending."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "One traversal selects last new token per ring slot and writes both K/V, preserving gather-before-update stream order."
+    },
+    {
+      "id": "NN30",
+      "implementation_status": "reused_existing",
+      "implementation_paths": [
+        "transformer/checks/transformer_backward.mojo"
+      ],
+      "candidate_defines": [],
+      "baseline_defines": [
+        "MOJOLEARN_IDN_BWD_ENTRY_ALIAS_OFF=1"
+      ],
+      "runtime_env": {},
+      "remaining": [
+        "Existing IDN_BWD_ENTRY_ALIAS is already shipped ON in IDENTICAL and ALL_OFF disables it. No new default added.",
+        "Reuse existing evidence; broader alias/ownership-transfer changes remain pending."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "mechanism": "Existing production backward passes a read-only sub-buffer of incoming gradient; traced/materialized calls retain copies.",
+      "new_implementation": false
+    },
+    {
+      "id": "NN31",
+      "implementation_status": "component_draft",
+      "implementation_paths": [
+        "training/neural_attention_owner.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN31_BOUNDED_CHECKPOINTS=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Public LM/Samba model traversal and layer-group activation ownership integration pending.",
+        "Budget covers retained forward stage allocations only; input/weights/backward/common caches and transient current forward must be budgeted separately. No total-device OOM guarantee.",
+        "Cold/repeated full training quality, actual memory capacity and timing unrun."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "selectable": false,
+      "mechanism": "Native budget ledger tracks real retained stage+GEMM-workspace bytes and live single-use tickets; shape-derived replay-cost/byte eligibility chooses actual retain vs stage release+replay. Budget reset refuses all outstanding forwards including replay-only tickets."
+    },
+    {
+      "id": "NN32",
+      "implementation_status": "component_draft",
+      "implementation_paths": [
+        "training/neural_attention_owner.mojo"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NN32_RETAIN_FORWARD=1"
+      ],
+      "baseline_defines": [],
+      "runtime_env": {},
+      "remaining": [
+        "Public Samba/LM binding/session adoption and real optimizer mutation hooks pending; no existing public callsite uses this component.",
+        "Default FP32 full-prefill transformer only; nondefault options, dropout, prefix/decode cache and cross-model checkpoint/RNG metadata require coherent extensions.",
+        "Owner fields are internal; bindings must enforce no external mutation of moved-in buffers. Each session ID must be unique among simultaneously live native owners.",
+        "All compilation, identity, stale-ticket/failure cleanup behavior, task quality and timing remain unrun."
+      ],
+      "default_enabled": false,
+      "compilation": "not_run_by_request",
+      "verification": "not_run_by_request",
+      "quality": "not_run_by_request",
+      "timing": "not_run_by_request",
+      "selectable": false,
+      "mechanism": "Moves in native context/weights/RoPE; snapshots input on device; actual forward returns owner/input/weight/config/budget generation ticket. A retains real LlamaDeviceStages; B releases/recomputes before same existing backward. Tickets consumed once; replacement invalidates; failed owner has explicit abort cleanup; canonical parameter gradients copied out."
+    }
+  ],
+  "compilation": "not_run_by_request",
+  "verification": "not_run_by_request",
+  "quality": "not_run_by_request",
+  "timing": "not_run_by_request",
+  "evidence": "Source drafts only. Prior evidence references retained in existing files; no new validation/measurement logs.",
+  "log_policy": "Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output."
+}

@@ -1338,6 +1338,32 @@ def mamba3_angle_chunk_sum_kernel(
     sums.unsafe_store(cell,s)
 
 
+# NN38 extends the INHERITED angle-suffix profile; it is a scheduling
+# arm, not a newly implemented arithmetic profile. OFF and unmeasured.
+comptime NN38_CACHE_SUFFIX_SEEDS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and IDN_M3_ANGLE_DT_SUFFIX
+    and is_defined["MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def nn38_angle_chunk_seeds_kernel(sums: MutPointer[Float32, MutAnyOrigin], chains_in: Int32, nk_in: Int32):
+    """One owner per chain replaces each chunk total by its exclusive
+    descending suffix. Read original total before overwriting its cell.
+    The accumulator visits nk-1..k+1 exactly as each incumbent task did."""
+    var chain = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if chain >= Int(chains_in):
+        return
+    var nk = Int(nk_in)
+    var carry = Float32(0.0)
+    var k = nk - 1
+    while k >= 0:
+        var v = ftz(sums.unsafe_load(chain * nk + k))
+        sums.unsafe_store(chain * nk + k, carry)
+        carry = ftz(carry + v)
+        k -= 1
+
+
 def mamba3_angle_suffix_kernel(
     carry_out: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
     sums: MutPointer[Float32, MutAnyOrigin], b_in:Int32,l_in:Int32,nh_in:Int32,
@@ -1353,10 +1379,13 @@ def mamba3_angle_suffix_kernel(
     var r=chain%M3_NUM_ROPE_ANGLES;var bh=chain//M3_NUM_ROPE_ANGLES
     var h=bh%nh;var bb=bh//nh
     var carry=Float32(0.0)
-    var kk=nk-1
-    while kk>k:
-        carry=ftz(carry+ftz(sums.unsafe_load(chain*nk+kk)))
-        kk-=1
+    comptime if NN38_CACHE_SUFFIX_SEEDS:
+        carry=ftz(sums.unsafe_load(chain*nk+k))
+    else:
+        var kk=nk-1
+        while kk>k:
+            carry=ftz(carry+ftz(sums.unsafe_load(chain*nk+kk)))
+            kk-=1
     var t0=k*M3_ANGLE_SUFFIX_CHUNK;var t1=t0+M3_ANGLE_SUFFIX_CHUNK
     if t1>l:t1=l
     var t=t1-1
@@ -1400,6 +1429,9 @@ def mamba3_backward_angle_into(
         var nk=(l+M3_ANGLE_SUFFIX_CHUNK-1)//M3_ANGLE_SUFFIX_CHUNK
         var work=b*dims.nheads*M3_NUM_ROPE_ANGLES*nk
         ctx.enqueue_function[mamba3_angle_chunk_sum_kernel](sums.unsafe_ptr(),d_theta.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
+        comptime if NN38_CACHE_SUFFIX_SEEDS:
+            var chains=b*dims.nheads*M3_NUM_ROPE_ANGLES
+            ctx.enqueue_function[nn38_angle_chunk_seeds_kernel](sums.unsafe_ptr(),Int32(chains),Int32(nk),grid_dim=(_grid(chains),1,1),block_dim=(M3_BWD_TPB,1,1))
         ctx.enqueue_function[mamba3_angle_suffix_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),sums.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(work),1,1),block_dim=(M3_BWD_TPB,1,1))
         var m=b*l
         ctx.enqueue_function[mamba3_angle_suffix_dt_kernel](d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(m),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(_grid(m*dims.nheads),1,1),block_dim=(M3_BWD_TPB,1,1))

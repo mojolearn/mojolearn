@@ -2,9 +2,11 @@
 """Opt-in device forward/loss/backward for chunked LM-head v2."""
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL,
     ftz, identical_div, identical_exp, identical_fmax, identical_log,
     identical_mul_add,
 )
@@ -17,7 +19,24 @@ from gemm.contract import OP_NT
 # dWeight). 1024 keeps the workspace bounded while quartering the launch
 # count versus the original 256-cell slice; chunk boundaries do not alter
 # any row/token fold order.
-comptime LM_HEAD_V2_CHUNK = 1024
+# NN53: independently selectable storage/launch experiments, default OFF.
+# 512 halves panel storage; 2048 halves panel launches versus 1024. These
+# powers-of-two arise from workspace/launch tradeoffs, not a vocabulary row.
+# The canonical vocabulary loop and GEMM contraction are unchanged. Existing
+# chunked_lm_head_v2 must also be selected; no ordinary head changes profile.
+# All compilation/identity/quality/full-model A/B remain intentionally unrun.
+comptime NN53_CHUNK512 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN53_HEAD_CHUNK512"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime NN53_CHUNK2048 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN53_HEAD_CHUNK2048"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime assert not (NN53_CHUNK512 and NN53_CHUNK2048), "choose one NN53 panel arm"
+comptime LM_HEAD_V2_CHUNK = 512 if NN53_CHUNK512 else (2048 if NN53_CHUNK2048 else 1024)
 comptime LM_HEAD_V2_TPB = 256
 
 

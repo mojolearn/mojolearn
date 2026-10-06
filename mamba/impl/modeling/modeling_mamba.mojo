@@ -165,6 +165,8 @@ launches. FAST makes no identity claim (contract section 8's last sentence).
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.step_phase import step_count_sync
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -1192,6 +1194,68 @@ def causal_conv1d_fn_kernel(
         silu_out.unsafe_store((bb * l + li) * di + d, ftz(identical_silu(acc)))
 
 
+# NN35: two adjacent tokens share their convolution input window and
+# weights. Two is a fixed reuse tile, independent of datasets/dimensions;
+# it saves D_CONV-1 loads per pair without changing either tap chain.
+# OFF, uncompiled/unmeasured; host keeps the identical per-cell expression.
+comptime NN35_CONV_PAIR = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN35_CONV_PAIR"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def nn35_causal_pair_kernel(
+    conv_out: MutPointer[Float32, MutAnyOrigin],
+    silu_out: MutPointer[Float32, MutAnyOrigin],
+    in_proj: MutPointer[Float32, MutAnyOrigin],
+    conv_w: MutPointer[Float32, MutAnyOrigin],
+    conv_b: MutPointer[Float32, MutAnyOrigin],
+    win: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, di_in: Int32,
+):
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var di = Int(di_in)
+    var nt = (l + 1) // 2
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * nt * di:
+        return
+    var d = cell % di
+    var ti = cell // di
+    var bb = ti // nt
+    var li = (ti % nt) * 2
+    var inputs = stack_allocation[D_CONV + 1, Float32]()
+    var weights = stack_allocation[D_CONV, Float32]()
+    var valid = min(2, l - li)
+    # Only valid outputs' taps are loaded; no read past the odd tail.
+    for k in range(D_CONV + valid - 1):
+        var pos = li - (D_CONV - 1) + k
+        var v: Float32
+        if pos >= 0:
+            v = in_proj.unsafe_load((bb * l + pos) * (2 * di) + d)
+        else:
+            v = win.unsafe_load((bb * di + d) * D_CONV + D_CONV + pos)
+        inputs[k] = ftz(v)
+    for k in range(D_CONV):
+        weights[k] = ftz(conv_w.unsafe_load(d * D_CONV + k))
+    var bias = ftz(conv_b.unsafe_load(d))
+    for j in range(valid):
+        var acc = bias
+        comptime if SAB_S13_BIAS_LAST:
+            acc = Float32(0.0)
+        for kk in range(D_CONV):
+            var k = kk
+            comptime if SAB_S13_TAPS_REVERSED:
+                k = D_CONV - 1 - kk
+            acc = ftz(identical_mul_add(weights[k], inputs[j + k], acc))
+        comptime if SAB_S13_BIAS_LAST:
+            acc = ftz(acc + bias)
+        var out_i = (bb * l + li + j) * di + d
+        conv_out.unsafe_store(out_i, acc)
+        silu_out.unsafe_store(out_i, ftz(identical_silu(acc)))
+
+
 def causal_conv1d_cell_kernel(
     conv_out: MutPointer[Float32, MutAnyOrigin],
     silu_out: MutPointer[Float32, MutAnyOrigin],
@@ -1291,7 +1355,21 @@ def causal_conv1d_fn(
     """`causal_conv1d_fn(hidden_states, weight, bias, activation="silu")`
     (:81-100) plus the cache's window update (`update_conv_state`, MM:415).
     ASYNCHRONOUS."""
-    comptime if IDN_MAMBA_CONV_CELL:
+    comptime if NN35_CONV_PAIR:
+        ctx.enqueue_function[nn35_causal_pair_kernel](
+            conv_out.unsafe_ptr(),
+            silu_out.unsafe_ptr(),
+            in_proj.unsafe_ptr(),
+            conv_w.unsafe_ptr(),
+            conv_b.unsafe_ptr(),
+            old_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(d_inner),
+            grid_dim=(_grid(b * ((l + 1) // 2) * d_inner), 1, 1),
+            block_dim=(MAMBA_TPB, 1, 1),
+        )
+    elif IDN_MAMBA_CONV_CELL:
         ctx.enqueue_function[causal_conv1d_cell_kernel](
             conv_out.unsafe_ptr(),
             silu_out.unsafe_ptr(),

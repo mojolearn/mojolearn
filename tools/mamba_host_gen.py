@@ -122,6 +122,11 @@ for _src in (*HOST_OPT_FUNCTIONS, *HOST_OPT_STRUCTS, HOST_OPT_DEFINES):
 #: The shared-memory kernels those arms bypass are stubbed (rule 4 of the
 #: module docstring) and abort by name if ever reached.
 SUBSTITUTIONS = (
+    # NN36 uses GPU shared memory only. Its host column retains the exact
+    # cell exp/dot expression; generation and all checks are still pending.
+    ("mamba/impl/modules/ssd_minimal.mojo",
+     r'comptime NN36_SHARED_DECAY = [^\n]+',
+     "comptime NN36_SHARED_DECAY = False"),
     ("mamba/impl/ops/mamba3_siso.mojo",
      r"lib_smem_page_fits_for\[TARGET_COLUMN, \d+\]\(\)", "False"),
     ("mamba/impl/modules/mamba3_backward.mojo",

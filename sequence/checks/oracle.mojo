@@ -189,6 +189,13 @@ def _o_wgrad_block(K: Int) -> Int:
     R R >= K."""
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]():
         return K
+    # NN43: independently restated fixed absolute leaf profile; this is
+    # source only, no oracle/check was executed for the candidate.
+    comptime if is_defined["MOJOLEARN_NN43_WGRAD_FIXED128"]():
+        var leaf = 128
+        while (K + leaf - 1) // leaf > (1 << 22):
+            leaf *= 2
+        return leaf
     var r = 512
     while r * r < K:
         r *= 2

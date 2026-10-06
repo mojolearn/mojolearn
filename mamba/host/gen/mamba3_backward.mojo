@@ -1029,6 +1029,32 @@ def mamba3_angle_chunk_sum_kernel(gid_: Int,
     sums.unsafe_store(cell,s)
 
 
+# NN38 extends the INHERITED angle-suffix profile; it is a scheduling
+# arm, not a newly implemented arithmetic profile. OFF and unmeasured.
+comptime NN38_CACHE_SUFFIX_SEEDS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and IDN_M3_ANGLE_DT_SUFFIX
+    and is_defined["MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def nn38_angle_chunk_seeds_kernel(gid_: Int, sums: MutPointer[Float32, MutAnyOrigin], chains_in: Int32, nk_in: Int32):
+    """One owner per chain replaces each chunk total by its exclusive
+    descending suffix. Read original total before overwriting its cell.
+    The accumulator visits nk-1..k+1 exactly as each incumbent task did."""
+    var chain = gid_
+    if chain >= Int(chains_in):
+        return
+    var nk = Int(nk_in)
+    var carry = Float32(0.0)
+    var k = nk - 1
+    while k >= 0:
+        var v = ftz(sums.unsafe_load(chain * nk + k))
+        sums.unsafe_store(chain * nk + k, carry)
+        carry = ftz(carry + v)
+        k -= 1
+
+
 def mamba3_angle_suffix_kernel(gid_: Int,
     carry_out: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
     sums: MutPointer[Float32, MutAnyOrigin], b_in:Int32,l_in:Int32,nh_in:Int32,
@@ -1044,10 +1070,13 @@ def mamba3_angle_suffix_kernel(gid_: Int,
     var r=chain%M3_NUM_ROPE_ANGLES;var bh=chain//M3_NUM_ROPE_ANGLES
     var h=bh%nh;var bb=bh//nh
     var carry=Float32(0.0)
-    var kk=nk-1
-    while kk>k:
-        carry=ftz(carry+ftz(sums.unsafe_load(chain*nk+kk)))
-        kk-=1
+    comptime if NN38_CACHE_SUFFIX_SEEDS:
+        carry=ftz(sums.unsafe_load(chain*nk+k))
+    else:
+        var kk=nk-1
+        while kk>k:
+            carry=ftz(carry+ftz(sums.unsafe_load(chain*nk+kk)))
+            kk-=1
     var t0=k*M3_ANGLE_SUFFIX_CHUNK;var t1=t0+M3_ANGLE_SUFFIX_CHUNK
     if t1>l:t1=l
     var t=t1-1
@@ -1098,6 +1127,14 @@ def mamba3_backward_angle_into(
         def _launch_18(gid_: Int) {imm _l18_a0, imm _l18_a1, imm _l18_a2, imm _l18_a3, imm _l18_a4}:
             mamba3_angle_chunk_sum_kernel(gid_, _l18_a0, _l18_a1, _l18_a2, _l18_a3, _l18_a4)
         host_launch(_launch_18, launch_count((_grid(work),1,1), (M3_BWD_TPB,1,1)))
+        comptime if NN38_CACHE_SUFFIX_SEEDS:
+            var chains = b * dims.nheads * M3_NUM_ROPE_ANGLES
+            var seed_ptr = sums.unsafe_ptr()
+            var seed_chains = Int32(chains)
+            var seed_nk = Int32(nk)
+            def _nn38_seeds(gid_: Int) {imm seed_ptr, imm seed_chains, imm seed_nk}:
+                nn38_angle_chunk_seeds_kernel(gid_, seed_ptr, seed_chains, seed_nk)
+            host_launch(_nn38_seeds, chains)
         var _l19_a0 = d_rate.unsafe_ptr()
         var _l19_a1 = d_theta.unsafe_ptr()
         var _l19_a2 = sums.unsafe_ptr()

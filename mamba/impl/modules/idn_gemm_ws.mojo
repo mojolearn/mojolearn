@@ -7,7 +7,7 @@ Main's Mamba-1/2/3 forwards call `identical_gemm[False]` for every
 projection (in_proj, x_proj, dt_proj, out_proj): each call allocates its
 own workspace, launches, WAITS and frees it (the wait is load-bearing there
 only because the workspace is freed at its last use). `mamba_proj_gemm`
-keeps one process workspace, grown to the largest call, and launches
+keeps one workspace per device context, grown to the largest call, and launches
 through the asynchronous `identical_gemm_into[False]`: no allocation, no
 free and no wait per projection. It is `GemmWorkspace.run[False]`'s logic
 (the transformer block's route) with the buffer held here, because the
@@ -17,10 +17,9 @@ Same dispatcher, same plan, same kernels: no bit moves on any column.
 
 Lifetime: the operands are stage, state and weight buffers (or arena
 views) that every caller keeps alive to the block forward's final wait;
-the workspace lives for the process. Growth waits first, so a queued GEMM
-never loses the workspace it is using. One workspace per process, as the
-other process workspaces are: a process driving two device contexts must
-build with the `_OFF` define.
+the per-context workspace lives for the process. Growth waits first, so a
+queued GEMM never loses the workspace it is using. Different device contexts
+use distinct buffers keyed by core/ctx_key.mojo.
 
 `-D MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF` (or `-D MOJOLEARN_IDN_ALL_OFF`)
 restores `identical_gemm[False]` at every site. FAST builds always take
@@ -45,6 +44,20 @@ comptime IDN_MAMBA_GEMM_WS = (
         is_defined["MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
     )
 )
+
+
+# NN40 workspace-only sub-arm, OFF/unmeasured. Grow-ahead reserves 25%
+# headroom capped at 16 MiB; this size-independent allocation policy can
+# avoid repeated waits/reallocations across increasing prefill lengths.
+# Context ownership and the pre-replacement wait stay unchanged. It makes
+# NO claim about cached weights, generation invalidation or packed weights.
+comptime NN40_WS_HEADROOM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN40_WS_HEADROOM"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+
+
+def nn40_workspace_capacity(required: Int) -> Int:
+    comptime if NN40_WS_HEADROOM:
+        return required + min(max(required // 4, 1), 1 << 22)
+    return required
 
 
 struct _MambaGemmWs(Defaultable, Movable):
@@ -81,7 +94,7 @@ def mamba_proj_gemm(
         var si = ctx_cache_slot(g[].ids, ctx)
         if si < 0:
             step_count_device_alloc()
-            g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](required))
+            g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](nn40_workspace_capacity(required)))
             g[].ids.append(ctx_cache_key(ctx))
             si = len(g[].ids) - 1
         elif len(g[].bufs[si]) < required:
@@ -89,7 +102,7 @@ def mamba_proj_gemm(
             step_count_sync()
             ctx.synchronize()
             step_count_device_alloc()
-            g[].bufs[si] = ctx.enqueue_create_buffer[DType.float32](required)
+            g[].bufs[si] = ctx.enqueue_create_buffer[DType.float32](nn40_workspace_capacity(required))
         var ws = g[].bufs[si].create_sub_buffer[DType.float32](0, len(g[].bufs[si]))
         identical_gemm_into[False](ctx, c, a, b, ws, m, n, k, op)
     else:

@@ -356,6 +356,17 @@ comptime ANY_LOSS_SABOTAGE = (
     or SAB_REDUCE_SERIAL
 )
 
+# NN52: default OFF. Reuse each probability in its gradient consumer while
+# retaining both output stores and the L14/L16 rounding seams. This is a
+# memory/launch experiment for every row/vocabulary size, never a board route.
+# Compilation, four-column identity, task quality and full-model A/B are pending.
+comptime NN52_CE_WEIGHT_GRAD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN52_CE_WEIGHT_GRAD"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not ANY_LOSS_SABOTAGE
+)
+
 
 def loss_sabotage_name() -> String:
     """Which sabotage this binary compiled with, for a check's banner.
@@ -1031,6 +1042,39 @@ def ce_weights_kernel(
     )
 
 
+def ce_weights_dlogits_kernel(
+    weights: MutPointer[Float32, MutAnyOrigin],
+    dlogits: MutPointer[Float32, MutAnyOrigin],
+    expo: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    targets: MutPointer[Int32, MutAnyOrigin],
+    t_target: Float32, t_other: Float32, divisor: Float32,
+    n_rows_in: Int32, vocab_in: Int32, ignore_index_in: Int32,
+):
+    """NN52: the clean L14 and L16 cells, with a local probability value.
+
+    Same-cell aliases used by the resident LM remain valid: load expo before
+    either store, store the probability first and the final gradient last.
+    Distinct buffers still receive every probability, including ignored rows.
+    Sabotage builds retain the original kernels at the launcher below.
+    """
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var vocab = Int(vocab_in)
+    if cell >= Int(n_rows_in) * vocab:
+        return
+    var row = cell // vocab
+    var v = cell - row * vocab
+    var w = ftz(identical_div(ftz(expo.unsafe_load(cell)), ftz(denom.unsafe_load(row))))
+    var y = Int(targets.unsafe_load(row))
+    weights.unsafe_store(cell, w)
+    if y == Int(ignore_index_in):
+        dlogits.unsafe_store(cell, Float32(0.0))
+        return
+    var t = t_target if v == y else t_other
+    var d = ftz(ftz(w) - ftz(t))
+    dlogits.unsafe_store(cell, ftz(identical_div(d, divisor)))
+
+
 def ce_dlogits_kernel(
     dlogits: MutPointer[Float32, MutAnyOrigin],
     weights: MutPointer[Float32, MutAnyOrigin],
@@ -1651,6 +1695,16 @@ def identical_ce_backward_into(
     var divisor = ce_divisor(cfg.reduction, count, cfg.num_items)
     comptime if SAB_GRAD_DIVISOR_IS_N:
         divisor = Float32(n_rows)
+
+    comptime if NN52_CE_WEIGHT_GRAD:
+        step_count_launch()
+        ctx.enqueue_function[ce_weights_dlogits_kernel](
+            weights.unsafe_ptr(), dlogits.unsafe_ptr(), expo.unsafe_ptr(),
+            denom.unsafe_ptr(), targets.unsafe_ptr(), tv[0], tv[1], divisor,
+            Int32(n_rows), Int32(vocab), Int32(cfg.ignore_index),
+            grid_dim=(_grid_for(cells), 1, 1), block_dim=(CE_TPB, 1, 1),
+        )
+        return
 
     step_count_launch()
     ctx.enqueue_function[ce_weights_kernel](

@@ -21,6 +21,7 @@ from sequence.ops import (
     FP,
     Args,
     OP_BIAS,
+    NN42_INPUT_BIAS_FUSED,
     OP_CE,
     OP_CELL_BWD,
     OP_CELL_FWD,
@@ -66,6 +67,18 @@ from std.sys.compile import is_defined
 comptime SEQ_WGRAD_BLOCKED = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
     is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
+# NN43 fp32 fixed-leaf-v2: K is partitioned at absolute multiples of 128;
+# each leaf starts at +0, uses the incumbent pinned ascending FMA chain,
+# then leaves are added ascending from +0. Odd tail has only actual rows.
+# No launch/vendor/board shape chooses the graph. New bits across versions
+# are permitted. Host Exec and GPU Exec run the same OP_GEMM_SPLITK body.
+# Unmeasured, disabled; no quality/identity evidence is claimed.
+comptime NN43_WGRAD_FIXED128 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN43_WGRAD_FIXED128"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"]()
+)
 comptime WGRAD_MIN_BLOCK = 512
 #: partial floats one launch pair may hold (rows of cells are chunked to
 #: fit; chunking moves no bit, every cell's blocks are the same)
@@ -75,6 +88,14 @@ comptime WGRAD_IDN_SCRATCH = 1 << 22
 def wgrad_block(K: Int) -> Int:
     """Rows per block: the smallest power of two R >= WGRAD_MIN_BLOCK with
     R * R >= K (so at most R blocks)."""
+    comptime if NN43_WGRAD_FIXED128:
+        # A single cell's leaf partials must fit the fixed scratch budget.
+        # For exceptionally long K, double the leaf on ALL columns until
+        # it fits. This resource rule covers every neighboring K equally.
+        var leaf = 128
+        while (K + leaf - 1) // leaf > WGRAD_IDN_SCRATCH:
+            leaf *= 2
+        return leaf
     var r = WGRAD_MIN_BLOCK
     while r * r < K:
         r *= 2
@@ -389,7 +410,10 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
     for l in range(net.L):
         var din = net.din(l)
         gemm(ex, inp, P + net.w_ih(l), w.gx[l], T * B, GH, din, din, 1, 1, din, False, GH)
-        bias_rows(ex, w.gx[l], P + net.b_ih(l), w.gx[l], T * B, GH)
+        # Scan has separate wide/shared bodies; this arm is deliberately
+        # confined to the per-step path until those callers share the seam.
+        comptime if not NN42_INPUT_BIAS_FUSED or SEQ_LSTM_SCAN:
+            bias_rows(ex, w.gx[l], P + net.b_ih(l), w.gx[l], T * B, GH)
         comptime if SEQ_LSTM_SCAN:
             if scan_applies(H, net.G()):
                 # the whole recurrence, one block per row (h_0 = c_0 = 0
@@ -428,6 +452,8 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
             a.p6 = w.call[l] + (s + 1) * B * H
             a.p7 = P + net.w_hh(l)
             a.p8 = P + net.b_hh(l)
+            a.p9 = P + net.b_ih(l)
+            a.i5 = 1 if NN42_INPUT_BIAS_FUSED and not SEQ_LSTM_SCAN else 0
             a.i0 = net.cell
             a.i1 = B
             a.i2 = H

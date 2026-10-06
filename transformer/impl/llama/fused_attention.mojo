@@ -7046,7 +7046,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     comment above. Instantiated at HD 64 with TQ 64 or 32 only, QRES only
     at TQ 32 (`fused_attention_fwd_rows`); 256 threads per block, grid
     `B * nh * ceil(L / TQ)`; one shared page of `_fwd_r2_page_bytes`."""
-    comptime assert HEAD_SHARE==1 or (HEAD_SHARE==2 and TQ==64 and QRES and PF and not SABN and not SWZ), "attention head reuse: unsupported shared layout"
+    comptime assert HEAD_SHARE==1 or ((HEAD_SHARE==2 or HEAD_SHARE==4) and TQ==64 and QRES and PF and not SABN and not SWZ), "attention head reuse: unsupported shared layout"
     _attn_mode_enter()
     comptime RPT = TQ // 16
     comptime CPT = HD // 16
@@ -9364,6 +9364,18 @@ comptime ATTN_GQA_HEAD_REUSE = (
     and lib_smem_page_fits_for[TARGET_COLUMN,_fwd_r2_page_bytes(64,True)]()
 )
 
+# NN17 extends the rejected I06 two-head schedule by using four query heads
+# per K/V staging group at a fixed 64 logical rows: 16 positions/head. This
+# reduces per-head register residency while reusing the same K/V page four
+# times. Only compatible GQA groups enter, never a benchmark shape/name.
+# OFF; all compilation/identity/quality/full-workload timings are unrun.
+comptime NN17_GQA_FOUR_HEADS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN17_GQA_FOUR_HEADS"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and lib_smem_page_fits_for[TARGET_COLUMN, _fwd_r2_page_bytes(64, True)]()
+)
+
 @always_inline
 def _try_launch_shared_heads[HD: Int,TQ: Int,QRES: Bool,PF: Bool,SABN: Bool,SWZ: Bool](
     ctx: DeviceContext,mut ctxv: DeviceBuffer[DType.float32],mut amax: DeviceBuffer[DType.float32],
@@ -9371,6 +9383,13 @@ def _try_launch_shared_heads[HD: Int,TQ: Int,QRES: Bool,PF: Bool,SABN: Bool,SWZ:
     mut sstash: DeviceBuffer[DType.float32],mut q_rope: DeviceBuffer[DType.float32],
     mut k_cache: DeviceBuffer[DType.float32],mut v_cache: DeviceBuffer[DType.float32],
     b: Int,l: Int,nh: Int,nkv: Int,s: Int,pos0: Int,key_lo: Int,window: Int,scale: Float32) raises -> Bool:
+    comptime if NN17_GQA_FOUR_HEADS and HD==64 and TQ==32 and QRES and PF and not SABN and not SWZ:
+        if nkv > 0 and nh % nkv == 0 and (nh // nkv) % 4 == 0:
+            step_count_launch()
+            ctx.enqueue_function[fused_attn_forward_r2_kernel[64,64,True,True,False,False,4]](
+                ctxv.unsafe_ptr(),amax.unsafe_ptr(),denom.unsafe_ptr(),corner.unsafe_ptr(),sstash.unsafe_ptr(),q_rope.unsafe_ptr(),k_cache.unsafe_ptr(),v_cache.unsafe_ptr(),Int32(b),Int32(l),Int32(nh),Int32(nkv),Int32(s),Int32(pos0),Int32(key_lo),Int32(window),scale,
+                grid_dim=(b*(nh//4)*((l+15)//16),1,1),block_dim=(FUSED_THREADS,1,1))
+            return True
     comptime if ATTN_GQA_HEAD_REUSE and HD==64 and TQ==32 and QRES and PF and not SABN and not SWZ:
         # Two adjacent query heads share one KV head. Logical rows interleave
         # heads while each keeps the original32query tile and all row folds.

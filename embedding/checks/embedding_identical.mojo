@@ -545,6 +545,52 @@ comptime EMB_TOUCHED_ROWS = (
     and not ANY_EMB_SABOTAGE
 )
 
+# NN49: four independent adjacent feature chains share one run lookup. Four
+# is a register/live-range experiment, not a vocabulary/width dispatch rule.
+# OFF by default; no compile, identity, quality or full-LM timing evidence.
+comptime NN49_EMB_VECTOR4 = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN49_EMB_VECTOR4"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and not ANY_EMB_SABOTAGE
+)
+
+
+def emb_backward_touched_vector4_kernel(
+    dw: MutPointer[Float32, MutAnyOrigin],
+    dy: MutPointer[Float32, MutAnyOrigin],
+    perm: MutPointer[Int32, MutAnyOrigin],
+    run_begin: MutPointer[Int32, MutAnyOrigin],
+    ids: MutPointer[Int32, MutAnyOrigin],
+    n_positions_in: Int32, vocab_in: Int32, width_in: Int32,
+):
+    var width = Int(width_in)
+    var groups = (width + 3) // 4
+    var task = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if width < 1 or task >= Int(n_positions_in) * groups:
+        return
+    var r = task // groups
+    var first_feature = (task - r * groups) * 4
+    if r >= Int(run_begin[Int(vocab_in)]):
+        return
+    var v = Int(ids[Int(perm[r])])
+    var lo = Int(run_begin[v])
+    if r != lo:
+        return
+    var hi = Int(run_begin[v + 1])
+    var acc = InlineArray[Float32, 4](fill=Float32(0.0))
+    comptime for lane in range(4):
+        if first_feature + lane < width:
+            acc[lane] = dw[v * width + first_feature + lane]
+    for q in range(lo, hi):
+        var t = Int(perm[q])
+        comptime for lane in range(4):
+            if first_feature + lane < width:
+                acc[lane] = ftz(ftz(acc[lane]) + ftz(dy[t * width + first_feature + lane]))
+    comptime for lane in range(4):
+        if first_feature + lane < width:
+            dw[v * width + first_feature + lane] = ftz(acc[lane])
+
 
 def emb_backward_touched_kernel(
     dw: MutPointer[Float32, MutAnyOrigin],
@@ -947,8 +993,14 @@ def _emb_backward_launch(
     cfg: EmbConfig,
     plan: Int,
     block_threads: Int,
+    runs_ready: Bool = False,
 ) raises:
-    """Seams E0 through E4, launched. Every refusal is the caller's."""
+    """Seams E0 through E4, launched. Every refusal is the caller's.
+
+    NN50's explicit immutable run owner may pass runs_ready after constructing
+    the canonical sorted groups. Normal public callers always rebuild. The
+    owner must retain matching IDs/vocabulary/padding and complete run buffers.
+    """
 
     if cfg.vocab < 1 or cfg.width < 1:
         return
@@ -978,7 +1030,9 @@ def _emb_backward_launch(
             )
         return
 
-    if plan == PLAN_SORT:
+    if runs_ready:
+        pass
+    elif plan == PLAN_SORT:
         embedding_sort_runs(ctx, ids, counts, run_begin, perm, n_positions, cfg.vocab, cfg.padding_idx, block_threads)
     else:
         step_count_launch()
@@ -1031,18 +1085,22 @@ def _emb_backward_launch(
     else:
         if touched:
             step_count_launch()
-            ctx.enqueue_function[emb_backward_touched_kernel](
-                dw.unsafe_ptr(),
-                dy.unsafe_ptr(),
-                perm.unsafe_ptr(),
-                run_begin.unsafe_ptr(),
-                ids.unsafe_ptr(),
-                Int32(n_positions),
-                Int32(cfg.vocab),
-                Int32(cfg.width),
-                grid_dim=(_grid_for(n_positions * cfg.width, block_threads), 1, 1),
-                block_dim=(block_threads, 1, 1),
-            )
+            comptime if NN49_EMB_VECTOR4:
+                ctx.enqueue_function[emb_backward_touched_vector4_kernel](
+                    dw.unsafe_ptr(), dy.unsafe_ptr(), perm.unsafe_ptr(),
+                    run_begin.unsafe_ptr(), ids.unsafe_ptr(), Int32(n_positions),
+                    Int32(cfg.vocab), Int32(cfg.width),
+                    grid_dim=(_grid_for(n_positions * ((cfg.width + 3) // 4), block_threads), 1, 1),
+                    block_dim=(block_threads, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[emb_backward_touched_kernel](
+                    dw.unsafe_ptr(), dy.unsafe_ptr(), perm.unsafe_ptr(),
+                    run_begin.unsafe_ptr(), ids.unsafe_ptr(), Int32(n_positions),
+                    Int32(cfg.vocab), Int32(cfg.width),
+                    grid_dim=(_grid_for(n_positions * cfg.width, block_threads), 1, 1),
+                    block_dim=(block_threads, 1, 1),
+                )
         else:
             step_count_launch()
             ctx.enqueue_function[emb_backward_kernel](

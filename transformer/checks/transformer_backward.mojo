@@ -2,6 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Transformer backward kernels and host-side launch composition used by the independent gradient checks."""
 
+from transformer.experiments.attention_schedules import (
+    NN22_EAGER_DKDV_PAIR, eager_dkdv_pair_kernel,
+    NN23_ROWDOT_DS, eager_rowdot_ds_kernel,
+)
 from std.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
 from std.memory import bitcast, memcpy
@@ -2582,6 +2586,22 @@ def bwd_attention_grads(
         # Caller-owned outputs stay live; the final dv completion wait
         # drains this kernel too. The intervening work only enqueues.
 
+    # NN22 distinct eager/fallback arm. DQ above is unchanged; K/V retain
+    # their complete head/query folds and share only integer traversal.
+    comptime if NN22_EAGER_DKDV_PAIR and not BWD_ANY_SABOTAGE:
+        step_count_launch()
+        ctx.enqueue_function[eager_dkdv_pair_kernel](
+            bst.d_k_cache.unsafe_ptr(), bst.d_v_cache.unsafe_ptr(),
+            bst.d_qk_cell.unsafe_ptr(), fwd.weights.unsafe_ptr(),
+            fwd.q_rope.unsafe_ptr(), bst.d_attn_ctx.unsafe_ptr(),
+            Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(hd), Int32(s),
+            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
+        step_count_sync()
+        ctx.synchronize()
+        return
+
     # ---- dk ------------------------------------------------------------
     comptime if SAB_B11_DK_VIA_GEMM:
         # SABOTAGE: `OP_TN` at `(s, hd, l)`, `k' = L`, with the head group
@@ -2781,41 +2801,52 @@ def bwd_attention_eager_stages(
     # =====================================================================
     # STAGE 18-19. The softmax backward, ONE closed form. DEVIATION 1406.
     # =====================================================================
-    step_count_launch()
-    ctx.enqueue_function[bwd_softmax_zdot_kernel](
-        bst.attn_zdot.unsafe_ptr(),
-        bst.d_attn_weights.unsafe_ptr(),
-        fwd.weights.unsafe_ptr(),
-        Int32(b),
-        Int32(nh),
-        Int32(l),
-        Int32(s),
-        grid_dim=(_grid(b * nh * l), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
-    # statement is a trace record. `IdentityTrace.record_device` returns
-    # at once when tracing is off; when it is on it enqueues its OWN copy
-    # behind this kernel on the same in-order context and drains AFTER
-    # it. This wait ordered nothing in either branch.
-    _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
-    step_count_launch()
-    ctx.enqueue_function[bwd_softmax_ds_kernel](
-        bst.d_attn_masked.unsafe_ptr(),
-        bst.d_attn_weights.unsafe_ptr(),
-        fwd.weights.unsafe_ptr(),
-        bst.attn_zdot.unsafe_ptr(),
-        Int32(cells),
-        Int32(s),
-        grid_dim=(_grid(cells), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
-    # statement is a trace record. `IdentityTrace.record_device` returns
-    # at once when tracing is off; when it is on it enqueues its OWN copy
-    # behind this kernel on the same in-order context and drains AFTER
-    # it. This wait ordered nothing in either branch.
-    _rec(ctx, trace, prefix, 19, bst.d_attn_masked, cells)
+    comptime if NN23_ROWDOT_DS and not BWD_ANY_SABOTAGE:
+        step_count_launch()
+        ctx.enqueue_function[eager_rowdot_ds_kernel](
+            bst.attn_zdot.unsafe_ptr(), bst.d_attn_masked.unsafe_ptr(),
+            bst.d_attn_weights.unsafe_ptr(), fwd.weights.unsafe_ptr(),
+            Int32(b * nh * l), Int32(s),
+            grid_dim=(_grid(b * nh * l), 1, 1), block_dim=(BWD_TPB, 1, 1),
+        )
+        _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
+        _rec(ctx, trace, prefix, 19, bst.d_attn_masked, cells)
+    else:
+        step_count_launch()
+        ctx.enqueue_function[bwd_softmax_zdot_kernel](
+            bst.attn_zdot.unsafe_ptr(),
+            bst.d_attn_weights.unsafe_ptr(),
+            fwd.weights.unsafe_ptr(),
+            Int32(b),
+            Int32(nh),
+            Int32(l),
+            Int32(s),
+            grid_dim=(_grid(b * nh * l), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
+        # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+        # statement is a trace record. `IdentityTrace.record_device` returns
+        # at once when tracing is off; when it is on it enqueues its OWN copy
+        # behind this kernel on the same in-order context and drains AFTER
+        # it. This wait ordered nothing in either branch.
+        _rec(ctx, trace, prefix, 18, bst.attn_zdot, b * nh * l)
+        step_count_launch()
+        ctx.enqueue_function[bwd_softmax_ds_kernel](
+            bst.d_attn_masked.unsafe_ptr(),
+            bst.d_attn_weights.unsafe_ptr(),
+            fwd.weights.unsafe_ptr(),
+            bst.attn_zdot.unsafe_ptr(),
+            Int32(cells),
+            Int32(s),
+            grid_dim=(_grid(cells), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
+        # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+        # statement is a trace record. `IdentityTrace.record_device` returns
+        # at once when tracing is off; when it is on it enqueues its OWN copy
+        # behind this kernel on the same in-order context and drains AFTER
+        # it. This wait ordered nothing in either branch.
+        _rec(ctx, trace, prefix, 19, bst.d_attn_masked, cells)
 
     # =====================================================================
     # STAGE 20. S13's backward, an EXACT IDENTITY. DEVIATION 1414.

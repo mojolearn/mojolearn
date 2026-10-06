@@ -60,6 +60,8 @@ in `mamba/checks/mamba2_check.mojo`.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -557,6 +559,72 @@ def m2_conv_kernel(
         silu_out.unsafe_store(
             (bb * l + li) * cd + d, ftz(identical_silu(acc))
         )
+
+
+# NN35: two adjacent tokens share their convolution input window and
+# weights. Two is a fixed reuse tile, independent of datasets/dimensions;
+# it saves D_CONV-1 loads per pair without changing either tap chain.
+# OFF, uncompiled/unmeasured; host keeps the identical per-cell expression.
+comptime NN35_CONV_PAIR = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN35_CONV_PAIR"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+
+
+def nn35_m2_pair_kernel(
+    conv_out: MutPointer[Float32, MutAnyOrigin],
+    silu_out: MutPointer[Float32, MutAnyOrigin],
+    in_proj: MutPointer[Float32, MutAnyOrigin],
+    conv_w: MutPointer[Float32, MutAnyOrigin],
+    conv_b: MutPointer[Float32, MutAnyOrigin],
+    win: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, di_in: Int32,
+    cd_in: Int32,
+    dip_in: Int32,
+):
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var di = Int(di_in)
+    var cd = Int(cd_in)
+    var dip = Int(dip_in)
+    var nt = (l + 1) // 2
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= b * nt * cd:
+        return
+    var d = cell % cd
+    var ti = cell // cd
+    var bb = ti // nt
+    var li = (ti % nt) * 2
+    var inputs = stack_allocation[M2_D_CONV + 1, Float32]()
+    var weights = stack_allocation[M2_D_CONV, Float32]()
+    var valid = min(2, l - li)
+    # Only valid outputs' taps are loaded; no read past the odd tail.
+    for k in range(M2_D_CONV + valid - 1):
+        var pos = li - (M2_D_CONV - 1) + k
+        var v: Float32
+        if pos >= 0:
+            v = in_proj.unsafe_load((bb * l + pos) * (dip) + di + d)
+        else:
+            v = win.unsafe_load((bb * cd + d) * M2_D_CONV + M2_D_CONV + pos)
+        inputs[k] = ftz(v)
+    for k in range(M2_D_CONV):
+        weights[k] = ftz(conv_w.unsafe_load(d * M2_D_CONV + k))
+    var bias = ftz(conv_b.unsafe_load(d))
+    for j in range(valid):
+        var acc = bias
+        comptime if SAB_S6_BIAS_LAST:
+            acc = Float32(0.0)
+        for kk in range(M2_D_CONV):
+            var k = kk
+            comptime if SAB_S6_TAPS_REVERSED:
+                k = M2_D_CONV - 1 - kk
+            acc = ftz(identical_mul_add(weights[k], inputs[j + k], acc))
+        comptime if SAB_S6_BIAS_LAST:
+            acc = ftz(acc + bias)
+        var out_i = (bb * l + li + j) * cd + d
+        conv_out.unsafe_store(out_i, acc)
+        silu_out.unsafe_store(out_i, ftz(identical_silu(acc)))
 
 
 def m2_conv_cell_kernel(
@@ -1176,7 +1244,23 @@ def mamba2_block_forward(
     )
 
     # ---- S6/S7: conv + SiLU over xBC; window updated out of place.
-    comptime if IDN_MAMBA_CONV_CELL:
+    comptime if NN35_CONV_PAIR:
+        ctx.enqueue_function[nn35_m2_pair_kernel](
+            stages.conv_out.unsafe_ptr(),
+            stages.silu_out.unsafe_ptr(),
+            stages.in_proj.unsafe_ptr(),
+            w.conv_w.unsafe_ptr(),
+            w.conv_b.unsafe_ptr(),
+            state.conv_win.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(di),
+            Int32(cd),
+            Int32(dip),
+            grid_dim=(_grid(b * ((l + 1) // 2) * cd), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
+    elif IDN_MAMBA_CONV_CELL:
         ctx.enqueue_function[m2_conv_cell_kernel](
             stages.conv_out.unsafe_ptr(),
             stages.silu_out.unsafe_ptr(),

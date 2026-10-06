@@ -37,6 +37,8 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 #: compiled only under FAST + Apple + `-D MOJOLEARN_AFN_CNN_DIRECT`; every
 #: other build runs the paths below unchanged (x_cnn/afn_direct.mojo).
 from x_cnn.afn_direct import AFN_CNN_DIRECT, afn_conv_direct_applies, afn_conv_direct_launch
+from x_cnn.ops import NN14_BOUNDED_IM2COL, nn14_conv_rows, nn14_im2col_slice_cell, nn14_conv_slice_cell
+from x_cnn.ops import NN45_CONV_RELU, NN47_APPLY_RUNNING, nn45_conv_out_relu_at, nn47_bn_apply_running_at
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
     CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW,
@@ -985,6 +987,18 @@ def gemm_device(a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int, op: 
     return out^
 
 
+def nn14_im2col_slice_kernel(x: FP, cols: FP, p: IP, row0: Int32, count: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(count):
+        nn14_im2col_slice_cell(i, x, cols, p, Int(row0))
+
+
+def nn14_conv_slice_kernel(y2: FP, bias: FP, dst: FP, p: IP, row0: Int32, count: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(count):
+        nn14_conv_slice_cell(i, y2, bias, dst, p, Int(row0))
+
+
 def conv2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     """a = [x, w, bias, out]."""
     var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
@@ -995,10 +1009,20 @@ def conv2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     var dw = m_in(ctx, 1, a[1], OC * ckk, isdev(dev, 1))
     var dbias = m_in(ctx, 2, a[2], OC, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
-    var cols = ws(ctx, 4, rows * ckk)
-    var y2 = ws(ctx, 5, rows * OC)
+    var tile_rows = nn14_conv_rows(rows, ckk, OC) if NN14_BOUNDED_IM2COL else rows
+    var cols = ws(ctx, 4, tile_rows * ckk)
+    var y2 = ws(ctx, 5, tile_rows * OC)
     var dout = m_out(ctx, 6, a[3], rows * OC, isdev(dev, 3))
-    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, dout, rows, OC, ckk, N, C, False)
+    comptime if NN14_BOUNDED_IM2COL:
+        var row0 = 0
+        while row0 < rows:
+            var take = min(tile_rows, rows - row0)
+            ctx.enqueue_function[nn14_im2col_slice_kernel](fp(dx), fp(cols), ip(dp), Int32(row0), Int32(take * ckk), grid_dim=((take * ckk + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1))
+            device_gemm(ctx, y2, cols, dw, take, OC, ckk, OP_NT)
+            ctx.enqueue_function[nn14_conv_slice_kernel](fp(y2), fp(dbias), fp(dout), ip(dp), Int32(row0), Int32(take * OC), grid_dim=((take * OC + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1))
+            row0 += take
+    else:
+        _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, dout, rows, OC, ckk, N, C, False)
     m_fetch(ctx, dout, a[3], rows * OC, isdev(dev, 3))
     ctx.synchronize()
     _ = dx^
@@ -1655,9 +1679,12 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
                 launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
         launch[bn_eval_stats_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
-    launch[bn_apply_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
-    if training:
-        launch[bn_running_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+    if NN47_APPLY_RUNNING and training:
+        launch[nn47_bn_apply_running_at](ctx, fp(dx), fp(da), fp(dout), fp(dr), ip(dp), ip(dp), total)
+    else:
+        launch[bn_apply_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
+        if training:
+            launch[bn_running_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     m_fetch(ctx, dout, a[3], total, isdev(dev, 3))
     m_fetch(ctx, dr, a[1], nr, isdev(dev, 1))
     m_fetch(ctx, da, a[2], na, isdev(dev, 2))
@@ -1783,6 +1810,60 @@ def dropout2d_device(x: List[Float32], prm: List[Int32], hyper: List[Float32]) r
     return out^
 
 
+# NN48: one node/feature tile per block, sharing CSR column/weight words.
+# 128 features and 32 edges bound the page to 256 bytes and the block to
+# 128 lanes on all vendors. These are reuse/resource choices, no shape
+# threshold or benchmark name. OFF, uncompiled/unmeasured. Host keeps its
+# exact incumbent arithmetic; only read scheduling changes on the device.
+comptime NN48_CSR_TILES = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_NN48_CSR_TILES"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+comptime NN48_FEATURES = 128
+comptime NN48_EDGES = 32
+
+
+def nn48_spmm_tiled_kernel(vals: FP, h: FP, dst: FP, q: IP, p: IP):
+    var n = Int(p.unsafe_load(0))
+    var F = Int(p.unsafe_load(1))
+    var mode = Int(p.unsafe_load(3))
+    var tiles = (F + NN48_FEATURES - 1) // NN48_FEATURES
+    var task = Int(block_idx.x)
+    var row = task // tiles
+    var ftile = task % tiles
+    var lane = Int(thread_idx.x)
+    var feature = ftile * NN48_FEATURES + lane
+    var live = feature < F
+    var lo = Int(q.unsafe_load(row))
+    var hi = Int(q.unsafe_load(row + 1))
+    if mode == 3:
+        if live:
+            spmm_at(row * F + feature, vals, h, dst, dst, q, p)
+        return
+    var neighbors = stack_allocation[NN48_EDGES, Int32, address_space=AddressSpace.SHARED]()
+    var weights = stack_allocation[NN48_EDGES, Float32, address_space=AddressSpace.SHARED]()
+    var acc = Float32(0.0)
+    var base = lo
+    while base < hi:
+        var count = min(NN48_EDGES, hi - base)
+        if lane < count:
+            neighbors[lane] = q.unsafe_load(n + 1 + base + lane)
+            if mode == 0 or mode == 2:
+                weights[lane] = ftz(vals.unsafe_load(base + lane))
+        barrier()
+        if live:
+            for k in range(count):
+                var v = ftz(h.unsafe_load(Int(neighbors[k]) * F + feature))
+                if mode == 0:
+                    v = ftz(identical_mul(weights[k], v))
+                elif mode == 2:
+                    v = ftz(identical_div(v, weights[k]))
+                acc = ftz(acc + v)
+        barrier()
+        base += NN48_EDGES
+    if live:
+        if mode == 1 and hi > lo:
+            acc = ftz(identical_div(acc, Float32(hi - lo)))
+        dst.unsafe_store(row * F + feature, acc)
+
+
 def spmm_m(a: List[Int], dev: Int, nvals: Int, ncsr: Int, prm: List[Int32]) raises:
     """a = [vals, h, csr (int32, ncsr words), out]."""
     var total = Int(prm[0]) * Int(prm[1])
@@ -1794,7 +1875,12 @@ def spmm_m(a: List[Int], dev: Int, nvals: Int, ncsr: Int, prm: List[Int32]) rais
     var dq = m_in_i(ctx, 2, a[2], ncsr, isdev(dev, 2))
     var dp = put_prm(ctx, 3, prm)
     var dout = m_out(ctx, 4, a[3], total, isdev(dev, 3))
-    launch[spmm_at](ctx, fp(dv), fp(dh), fp(dout), fp(dout), ip(dq), ip(dp), total)
+    comptime if NN48_CSR_TILES:
+        if total > 0:
+            var feature_tiles = (Int(prm[1]) + NN48_FEATURES - 1) // NN48_FEATURES
+            ctx.enqueue_function[nn48_spmm_tiled_kernel](fp(dv), fp(dh), fp(dout), ip(dq), ip(dp), grid_dim=(Int(prm[0]) * feature_tiles, 1, 1), block_dim=(NN48_FEATURES, 1, 1))
+    else:
+        launch[spmm_at](ctx, fp(dv), fp(dh), fp(dout), fp(dout), ip(dq), ip(dp), total)
     m_fetch(ctx, dout, a[3], total, isdev(dev, 3))
     ctx.synchronize()
     _ = dv^
@@ -2474,9 +2560,10 @@ def _conv_relu_on_device(
     ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
     mut dbias: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], mut cols: DeviceBuffer[DType.float32],
     mut y2: DeviceBuffer[DType.float32], mut yconv: DeviceBuffer[DType.float32], rows: Int, OC: Int, ckk: Int,
-    N: Int, C: Int, need_cols: Bool = True,
-) raises:
-    """cols = im2col(x); y2 = cols . W^T; yconv = the NCHW conv output (+ bias).
+    N: Int, C: Int, need_cols: Bool = True, relu_addr: Int = 0,
+) raises -> Bool:
+    """Returns whether the optional NN45 ReLU output was written.
+    cols = im2col(x); y2 = cols . W^T; yconv = the NCHW conv output (+ bias).
     lane/cnn-apple2: a one-leaf k of at most DC_MAXK (the first block, C*9
     = 27) runs `direct_conv_kernel` instead: the same cols words (written
     only when `need_cols`), each output cell the contract's one-leaf chain,
@@ -2487,7 +2574,7 @@ def _conv_relu_on_device(
                 fp(dx), fp(dw), fp(dbias), fp(cols), fp(yconv), ip(dp), Int32(rows), Int32(1 if need_cols else 0),
                 grid_dim=((rows + DC_TPB - 1) // DC_TPB, 1, 1), block_dim=(DC_TPB, 1, 1),
             )
-            return
+            return False
     comptime if AFN_CNN_DIRECT:
         # lane afn-mlp: the shapes im2col + GEMM served, as one tiled launch
         if rows > 0 and afn_conv_direct_applies(ckk, OC):
@@ -2495,10 +2582,15 @@ def _conv_relu_on_device(
                 ctx, fp(dx), fp(dw), fp(dbias), fp(cols), fp(yconv), fp(yconv), ip(dp),
                 rows, OC, need_cols, False,
             )
-            return
+            return False
     _im2col(ctx, dx, cols, dp, rows, ckk, C)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
+    comptime if NN45_CONV_RELU:
+        if relu_addr != 0:
+            launch[nn45_conv_out_relu_at](ctx, fp(y2), fp(dbias), fp(yconv), FP(unsafe_from_address=relu_addr), ip(dp), ip(dp), rows * OC)
+            return True
     _conv_out(ctx, y2, dbias, yconv, dp, N, rows // N, OC)
+    return False
 
 
 def _conv_out(
@@ -2560,9 +2652,12 @@ def conv_block_forward_into[resident: Bool = False](
             _ = yconv^
             _ = ctx^
             return
-    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C, saved)
-    # the block's output: the pool's, or the ReLU's when there is no pool
+    # NN45 needs the output address before layout; the direct path still
+    # reports False and receives its usual separate ReLU below.
     var pout = outb[resident](ctx, 7, dst, no)
+    var relu_addr = Int(fp(pout)) if NN45_CONV_RELU and not pool else 0
+    var fused_relu = _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C, saved, relu_addr)
+    # the block's output: the pool's, or the ReLU's when there is no pool
     if pool:
         var dpp = put_prm(ctx, 9, pprm)
         var di = outb_i[resident](ctx, 10, idx_out, no)
@@ -2574,7 +2669,8 @@ def conv_block_forward_into[resident: Bool = False](
         _ = dpp^
         _ = di^
     else:
-        launch[relu_fwd_at](ctx, fp(yconv), fp(yconv), fp(pout), fp(pout), ip(dp), ip(dp), ny)
+        if not fused_relu:
+            launch[relu_fwd_at](ctx, fp(yconv), fp(yconv), fp(pout), fp(pout), ip(dp), ip(dp), ny)
         fetch[resident](ctx, pout, dst, ny)
         ctx.synchronize()
     _ = dx^

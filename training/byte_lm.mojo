@@ -65,6 +65,8 @@ from gemm.contract import OP_NT, OP_NN
 from embedding.checks.embedding_identical import (
     ANY_EMB_SABOTAGE, EMB_AUTO_SORT_MIN_CELLS, emb_run_scratch_ints,
     identical_embedding_forward_into, identical_embedding_backward_into,
+    identical_embedding_forward_prerefused_into,
+    identical_embedding_backward_prerefused_into,
 )
 from embedding.checks.embedding_oracle import EmbConfig
 from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
@@ -766,8 +768,33 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
 #: NVIDIA's out-of-place arm swaps it every step, which the re-bind handles,
 #: but that column has not run this yet.
 #: `-D MOJOLEARN_BYTE_LM_COPY_EMB_HEAD` restores the copies.
+# NN60: two independently selectable, default-OFF IDENTICAL view arms.
+# Existing sub-buffer APIs supply the mechanism; no new vendor capability is
+# assumed. These source drafts have no compile/identity/full-model A/B evidence.
+# Rebind from the CURRENT owner each call, including after optimizer swaps.
+comptime NN60_EMB_HEAD_VIEWS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN60_EMB_HEAD_VIEWS"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime NN51_RESIDENT_TOKEN_VALIDATION = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN51_RESIDENT_TOKEN_VALIDATION"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime NN28_DEAD_TRAINING_CACHE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN28_DEAD_TRAINING_CACHE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime NN60_BLOCK_VIEWS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_NN60_BLOCK_VIEWS"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS
 comptime BYTE_LM_EMB_HEAD_VIEWS = (
-    TARGET_COLUMN == COLUMN_APPLE
+    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS)
     and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
 )
 
@@ -797,8 +824,8 @@ def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWei
     the host is a Metal round trip for nothing.
     """
     var base = 1 + 9 * block
-    comptime if AFN_LM_PARAM_VIEWS:
-        # afn-lm PARAM_VIEWS (FAST + Apple only): the nine weights become
+    comptime if BYTE_LM_BLOCK_VIEWS:
+        # FAST Apple or opt-in NN60 IDENTICAL: the nine weights become
         # views of the CURRENT flat `param` (re-bound every call, as
         # `_bind_emb_head` does), so no launch and no separate allocation.
         ref vo = tb.offsets
@@ -838,7 +865,7 @@ def _pack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut bst: LlamaBackwardS
 
 
 def _afn_bind_grad_views(mut tb: ByteBuffers, mut bst: LlamaBackwardStages, block: Int) raises:
-    """afn-lm PARAM_VIEWS (FAST + Apple only): the block's nine weight
+    """FAST Apple / NN60 IDENTICAL: the block's nine weight
     gradients become views of the flat `grad` at the offsets `_pack_block`
     copies them to. Every one is written whole, once, by the block backward
     (a GEMM or the norm weight GEMM), so the flat buffer ends holding what
@@ -1321,7 +1348,13 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
     timing_bytes(ton, "step.unpack_weights_bytes", config.n_total() * 4)
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
     var ce = CeConfig.causal_lm(config.vocab_size)
-    identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
+    comptime if NN51_RESIDENT_TOKEN_VALIDATION:
+        # byte_require_tokens_device above completed the range admission on
+        # these owned IDs. No mutation occurs between that check and gather.
+        # Source draft only: all-vendor identity/full-step qualification pending.
+        identical_embedding_forward_prerefused_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
+    else:
+        identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
     # No wait: the block forward loop below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.embedding_forward")
@@ -1351,11 +1384,12 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                     next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_eps=Optional(tr.weights[layer + 1].eps))
+                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
+                    retain_kv_cache=not NN28_DEAD_TRAINING_CACHE)
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready)
+                    norm1_ready=norm1_ready, retain_kv_cache=not NN28_DEAD_TRAINING_CACHE)
         else:
             if fuse_next:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
@@ -1364,11 +1398,12 @@ def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteT
                     next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_eps=Optional(tr.weights[layer + 1].eps))
+                    next_norm_eps=Optional(tr.weights[layer + 1].eps),
+                    retain_kv_cache=not NN28_DEAD_TRAINING_CACHE)
             else:
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
-                    norm1_ready=norm1_ready)
+                    norm1_ready=norm1_ready, retain_kv_cache=not NN28_DEAD_TRAINING_CACHE)
         if _byte_layer_sync():
             step_count_sync()
             ctx.synchronize()
@@ -1654,8 +1689,8 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
     # A host round trip costs about a dozen kernel launches on Metal.
     pg.tick(ctx, "gemm.head_dB")
     timing_tick(ctx, ton, tk, "step.head_backward_db")
-    comptime if AFN_LM_PARAM_VIEWS:
-        # afn-lm PARAM_VIEWS: the weight gradients land in the flat `grad`.
+    comptime if BYTE_LM_BLOCK_VIEWS:
+        # The weight gradients land in the current flat `grad` owner.
         for layer in range(config.n_layers):
             _afn_bind_grad_views(tr.buffers, tr.backward[layer], layer)
     # Keep inter-layer cotangents on device, as the reference tensor graph
@@ -1710,13 +1745,20 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
         PLAN_SORT if config.vocab_size * M >= EMB_AUTO_SORT_MIN_CELLS
         else PLAN_SCAN
     )
-    identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
-        tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
-        tr.buffers.emb_perm, M, emb, emb_plan)
+    comptime if NN51_RESIDENT_TOKEN_VALIDATION:
+        # The immediately preceding forward in this gradient operation owned
+        # and validated the same IDs. This skips a redundant ID download only.
+        identical_embedding_backward_prerefused_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
+            tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
+            tr.buffers.emb_perm, M, emb, emb_plan)
+    else:
+        identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
+            tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
+            tr.buffers.emb_perm, M, emb, emb_plan)
     # No wait: the pack loop below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.embedding_backward")
-    for layer in range(0 if AFN_LM_PARAM_VIEWS else config.n_layers):
+    for layer in range(0 if BYTE_LM_BLOCK_VIEWS else config.n_layers):
         _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)

@@ -38,6 +38,10 @@ from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
 from mamba.host.gen.modeling_mamba import mamba_scratch
 
 
+# NN39: shared pure Mojo profile imported by both device and checked-in
+# generated host source. Future regeneration preserves the same import.
+from mamba.impl.ops.neural_gradient_profile import NN39_M2_GRAD_TREE, nn39_gradient_tree
+
 comptime M2_SSD_BWD_TPB = 128
 
 # ---------------------------------------------------------------------------
@@ -1181,8 +1185,11 @@ def m2_fold_tiles_kernel(gid_: Int,
     if c >= cols:
         return
     var acc = part.unsafe_load(c)
-    for tile in range(1, tiles):
-        acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
+    comptime if NN39_M2_GRAD_TREE:
+        acc = nn39_gradient_tree(part, tiles, cols, c)
+    else:
+        for tile in range(1, tiles):
+            acc = ftz(acc + ftz(part.unsafe_load(tile * cols + c)))
     if c < split:
         out_a.unsafe_store(c, acc)
         if has_scale != 0:
