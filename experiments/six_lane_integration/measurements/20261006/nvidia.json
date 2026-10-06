@@ -295,7 +295,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -451,7 +453,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -607,7 +611,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -763,7 +769,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -919,7 +927,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1075,7 +1085,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1231,7 +1243,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1387,7 +1401,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",

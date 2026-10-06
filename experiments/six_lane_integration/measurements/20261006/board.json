@@ -543,7 +543,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "AF.X.complete-proposed",
@@ -598,7 +600,308 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical2/linearsvr@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/05207b357bcbe067ca6a/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "e8a6d4298855fd20124779607ace39373ad31aeb924546986b991a2b1e792b26",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_more.py:quality/linearsvr; independent saved gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": -0.10702817996248681,
+                  "rmse": 0.8779596576997942
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_more.py:quality/linearsvr; independent saved gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": -0.10702817996248681,
+                  "rmse": 0.8779596576997942
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical2/ridge@dataset=istella/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/6d77306d88d72aab7b44/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              2043304,
+              220
+            ],
+            "Xq": [
+              500000,
+              220
+            ],
+            "y": [
+              2043304
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "8ad1ba53be89b4fc9eadb38c57d8ff0a37975d01a65146aee8fc11ee031496a0",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_more.py:quality/ridge; independent saved gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.3325338446311392,
+                  "rmse": 0.6817259832876175
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_more.py:quality/ridge; independent saved gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.3325338446311392,
+                  "rmse": 0.6817259832876175
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical2/linearsvr@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/71dfc119e59c074352bb/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "0663e4a2a0a24d6bc52cc7833fb39f844343c41ac4c9dff77eaa5d35b2cc55d8",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_more.py:quality/linearsvr; independent saved gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.8992839609513043,
+                  "rmse": 4.936408958120795
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_more.py:quality/linearsvr; independent saved gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.8992839609513043,
+                  "rmse": 4.936408958120795
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical2/ridge@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/94c802682d07720f1572/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ],
+            "y": [
+              5250086
+            ],
+            "yq": [
+              500000
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PENDING",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "850186c3601325cac3adc57e9cfb0e75169b9108de107dd231b64e09b6624842",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_more.py:quality/ridge; independent saved gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.9087715577966976,
+                  "rmse": 4.698150691368868
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_more.py:quality/ridge; independent saved gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "finite": true,
+                  "r2": 0.9087715577966976,
+                  "rmse": 4.698150691368868
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
+        },
+        {
+          "id": "AF.X.complete-proposed",
+          "vendor": "apple",
+          "case": "classical2/gmm@dataset=taxi/attempt-0001",
+          "scope": "full_workload",
+          "status": "PENDING_ADMISSION",
+          "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+          "evidence": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/d4f24411b4f604c84997/attempt-0001/receipt.json",
+          "dimensions": {
+            "X": [
+              5250086,
+              11
+            ],
+            "Xq": [
+              500000,
+              11
+            ]
+          },
+          "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+          "warmups": 1,
+          "scored_samples": 1,
+          "quality": "PASS_TASK_METRICS",
+          "identity": "NOT_REQUIRED",
+          "route": "apple-fast",
+          "receipt_sha256": "3c7e6b71521a40a6bf4e5070a42f0f0a1a4d8cb37fbab9112a2d44146df99a30",
+          "source_coverage_pending": [],
+          "quality_metrics": {
+            "A": {
+              "gate_source": "tools/bench_board_more.py:quality/gmm; independent saved gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "bic": -188789016.44902077,
+                  "mean_log_likelihood": 11.60158091121872,
+                  "n_iter": 24
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            },
+            "B": {
+              "gate_source": "tools/bench_board_more.py:quality/gmm; independent saved gate pending",
+              "metrics": {
+                "ours-fast": {
+                  "bic": -188789016.44902077,
+                  "mean_log_likelihood": 11.60158091121872,
+                  "n_iter": 24
+                }
+              },
+              "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+              "status": "PENDING"
+            }
+          },
+          "quality_assessment": "TASK_METRIC_GATE_PASSED",
+          "quality_reason": "Recorded candidate task metrics preserve baseline and meet same-input independent sklearn quality under existing tolerances."
         }
       ],
       "status": "FAILED_OR_INCOMPLETE, PENDING_ADMISSION, QUALITY_FAILED"
@@ -892,7 +1195,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1048,7 +1353,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1204,7 +1511,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1360,7 +1669,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1516,7 +1827,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1672,7 +1985,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1828,7 +2143,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",
@@ -1984,7 +2301,9 @@
               "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
               "status": "PENDING"
             }
-          }
+          },
+          "quality_assessment": "PENDING",
+          "quality_reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing."
         },
         {
           "id": "I.X.complete-proposed",

@@ -1,0 +1,116 @@
+[
+  {
+    "workload": "algos/resample@dataset=taxi",
+    "status": "MEASURED_FULL",
+    "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+    "candidate_over_incumbent": 1.0209277480850103,
+    "seconds": {
+      "A": 0.755789791001007,
+      "B": 0.7402970410184935
+    },
+    "output_hashes": {
+      "A": "2bd5822aac5cf07666d738135446446fe627bc15a9115db6329c0641c6d3dc95",
+      "B": "2bd5822aac5cf07666d738135446446fe627bc15a9115db6329c0641c6d3dc95"
+    },
+    "output_hash_scope": "Saved consumed xmean/ymean outputs; not full gathered-array or sampled-index byte identity",
+    "model_state": {
+      "A": {
+        "missing_state": [
+          "model owner"
+        ],
+        "reason": "Runner exposes no public model owner",
+        "status": "UNAVAILABLE"
+      },
+      "B": {
+        "missing_state": [
+          "model owner"
+        ],
+        "reason": "Runner exposes no public model owner",
+        "status": "UNAVAILABLE"
+      }
+    },
+    "quality": {
+      "A": {
+        "gate_source": "tools/bench_board_algos.py:quality/resample; independent existing task quality gate pending",
+        "metrics": {
+          "ours-fast": {
+            "max_mean_shift_over_std": 0.0008182939412305245
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      },
+      "B": {
+        "gate_source": "tools/bench_board_algos.py:quality/resample; independent existing task quality gate pending",
+        "metrics": {
+          "ours-fast": {
+            "max_mean_shift_over_std": 0.0008182939412305245
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      }
+    },
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/resample-full/runs/661a766183dd2fb07d65/attempts/attempt-0001/receipt.json",
+    "resource_admission": "Bulk data transport complete before launch; serial shared machine GPU lock; unrestricted CPU pools"
+  },
+  {
+    "workload": "algos/resample@dataset=istella",
+    "status": "MEASURED_FULL",
+    "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+    "candidate_over_incumbent": 0.9997119557712014,
+    "seconds": {
+      "A": 2.292678292025812,
+      "B": 2.2933388750534505
+    },
+    "output_hashes": {
+      "A": "337508d9a432ec0afe8c22b3f25c74ade6aab8cade8cf4ba2cbcc40fe85eb91b",
+      "B": "337508d9a432ec0afe8c22b3f25c74ade6aab8cade8cf4ba2cbcc40fe85eb91b"
+    },
+    "output_hash_scope": "Saved consumed xmean/ymean outputs; not full gathered-array or sampled-index byte identity",
+    "model_state": {
+      "A": {
+        "missing_state": [
+          "model owner"
+        ],
+        "reason": "Runner exposes no public model owner",
+        "status": "UNAVAILABLE"
+      },
+      "B": {
+        "missing_state": [
+          "model owner"
+        ],
+        "reason": "Runner exposes no public model owner",
+        "status": "UNAVAILABLE"
+      }
+    },
+    "quality": {
+      "A": {
+        "gate_source": "tools/bench_board_algos.py:quality/resample; independent existing task quality gate pending",
+        "metrics": {
+          "ours-fast": {
+            "max_mean_shift_over_std": 0.001946923534707672
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      },
+      "B": {
+        "gate_source": "tools/bench_board_algos.py:quality/resample; independent existing task quality gate pending",
+        "metrics": {
+          "ours-fast": {
+            "max_mean_shift_over_std": 0.001946923534707672
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      }
+    },
+    "samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/resample-full/runs/047898b203cef197f8fa/attempts/attempt-0001/receipt.json",
+    "resource_admission": "Bulk data transport complete before launch; serial shared machine GPU lock; unrestricted CPU pools"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "scope": "Apple AF.X.complete-proposed existing full saved regression workloads",
+  "excluded_workloads": [
+    "classical2/lasso@dataset=taxi",
+    "classical2/lasso@dataset=istella",
+    "classical2/elasticnet@dataset=taxi",
+    "classical2/elasticnet@dataset=istella"
+  ],
+  "status": "NO_APPLICABLE_FAST_CONTROL",
+  "reason": "Subagent source audit: retained solver A closure references proposed candidate defines only in global guard and unrelated HDBSCAN/Boruvka/kNN imports, with no reachable changed coordinate-descent/ElasticNet control. Paired compiled solver artifacts alone do not establish a distinct Lasso/ElasticNet A/B; avoid unchanged reruns.",
+  "candidate_receipt_key": "fcd33e757d03669164a2",
+  "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+  "numerical_source_sha": "4fc63c9d5486261f27fdd55eb31d1900e2cc0e8f",
+  "numerical_files": [
+    "solver/estimator.mojo",
+    "solver/impl/cd.mojo",
+    "bindings/_mojolearn_solver.mojo"
+  ],
+  "native_scope": "NVIDIA IDENTICAL coordinate-descent controls are a separate applicable configuration; Apple exclusions do not remove those cells"
+}

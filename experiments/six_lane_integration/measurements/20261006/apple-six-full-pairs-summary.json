@@ -1,0 +1,398 @@
+[
+  {
+    "workload": "classical/pca@dataset=istella",
+    "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+    "status": "MEASURED_FULL",
+    "candidate_over_incumbent": 1.5578354614321475,
+    "seconds": {
+      "A": 1.7872002499643713,
+      "B": 1.1472330000251532
+    },
+    "scored_samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/runs/918eace39f801d37fc21/attempts/attempt-0001/receipt.json",
+    "outputs": {
+      "A": "10726371d1598a82d16057c22b97d9addf6efecbd190eaf9d9912db196519a87",
+      "B": "d4582ca373bb08e0dd86a8a8b506e96028863f76823da4a87f203cf22a6c1f58"
+    },
+    "model_exports": {
+      "A": {
+        "class": "PCA",
+        "complete_export_sha256": "24f07f6ce0ce97003233c787433b252bd04871e5053af44a4846acd5d11eda4f",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "24f07f6ce0ce97003233c787433b252bd04871e5053af44a4846acd5d11eda4f",
+        "source": "public save npz",
+        "status": "ok"
+      },
+      "B": {
+        "class": "PCA",
+        "complete_export_sha256": "b9f9c118963d1a9c56fae6eb2e7b1136a3b15f042599401fa9b3d3e0bfa9b7fd",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "b9f9c118963d1a9c56fae6eb2e7b1136a3b15f042599401fa9b3d3e0bfa9b7fd",
+        "source": "public save npz",
+        "status": "ok"
+      }
+    },
+    "quality": {
+      "A": {
+        "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "explained_variance_ratio_sum": 1.0000000601776293
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      },
+      "B": {
+        "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "explained_variance_ratio_sum": 1.0000000568180731
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      }
+    },
+    "resource_limitations": {
+      "shared_storage_io": "Parent observed NVIDIA full-input transfer reading M3 shared external disk during first four PCA/OLS cells; KMeans overlap not established. Whole-operation timings include input preparation and disk load, so a quiet-storage claim is not supported.",
+      "measured_without_competing_gpu": "Shared exclusive GPU lock held; no other GPU workload observed at initial admission",
+      "promotion": "not eligible; quality acceptance and resource limitation unresolved"
+    }
+  },
+  {
+    "workload": "classical/pca@dataset=taxi",
+    "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+    "status": "MEASURED_FULL",
+    "candidate_over_incumbent": 0.9968616959152414,
+    "seconds": {
+      "A": 0.49895141704473644,
+      "B": 0.5005222079344094
+    },
+    "scored_samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/runs/75455971e66712016083/attempts/attempt-0001/receipt.json",
+    "outputs": {
+      "A": "f0732f2413e2d7a49e99f451c075a3333c5bf173236d7a0c874bdc0395ce9571",
+      "B": "d179e7c2ccaa36920bd3bb67adca3b200b6f148e2ad70ee8fd8b154251743c37"
+    },
+    "model_exports": {
+      "A": {
+        "class": "PCA",
+        "complete_export_sha256": "d227858a3205194981ca209a75c6ab2d73c37b5a0722236c2557203be664562b",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "d227858a3205194981ca209a75c6ab2d73c37b5a0722236c2557203be664562b",
+        "source": "public save npz",
+        "status": "ok"
+      },
+      "B": {
+        "class": "PCA",
+        "complete_export_sha256": "d55edbc0372eb1007df4ab254a34483767ec377135d53c552a9b3afdc1258123",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "d55edbc0372eb1007df4ab254a34483767ec377135d53c552a9b3afdc1258123",
+        "source": "public save npz",
+        "status": "ok"
+      }
+    },
+    "quality": {
+      "A": {
+        "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "explained_variance_ratio_sum": 0.9999965982735889
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      },
+      "B": {
+        "gate_source": "tools/classical_two_datasets.py:quality/pca; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "explained_variance_ratio_sum": 0.9999966062452422
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      }
+    },
+    "resource_limitations": {
+      "shared_storage_io": "Parent observed NVIDIA full-input transfer reading M3 shared external disk during first four PCA/OLS cells; KMeans overlap not established. Whole-operation timings include input preparation and disk load, so a quiet-storage claim is not supported.",
+      "measured_without_competing_gpu": "Shared exclusive GPU lock held; no other GPU workload observed at initial admission",
+      "promotion": "not eligible; quality acceptance and resource limitation unresolved"
+    }
+  },
+  {
+    "workload": "classical/ols@dataset=istella",
+    "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+    "status": "MEASURED_FULL",
+    "candidate_over_incumbent": 0.9936806997692913,
+    "seconds": {
+      "A": 1.5894755000481382,
+      "B": 1.5995837500086054
+    },
+    "scored_samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/runs/4a650353219f94bd483f/attempts/attempt-0001/receipt.json",
+    "outputs": {
+      "A": "992e038a195d3b2de0b0fc987bf250be4673c05134e205cc73542c3bbd26424a",
+      "B": "992e038a195d3b2de0b0fc987bf250be4673c05134e205cc73542c3bbd26424a"
+    },
+    "model_exports": {
+      "A": {
+        "class": "LinearRegression",
+        "complete_export_sha256": "e4739aa5f91dd6de7d627575ed9a2c1f3362e54f3a6ddd92dd5c765432efb46a",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "e4739aa5f91dd6de7d627575ed9a2c1f3362e54f3a6ddd92dd5c765432efb46a",
+        "source": "public save npz",
+        "status": "ok"
+      },
+      "B": {
+        "class": "LinearRegression",
+        "complete_export_sha256": "e4739aa5f91dd6de7d627575ed9a2c1f3362e54f3a6ddd92dd5c765432efb46a",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "e4739aa5f91dd6de7d627575ed9a2c1f3362e54f3a6ddd92dd5c765432efb46a",
+        "source": "public save npz",
+        "status": "ok"
+      }
+    },
+    "quality": {
+      "A": {
+        "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "finite": true,
+            "r2": 0.3319434511617213,
+            "rmse": 0.682027419998501
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      },
+      "B": {
+        "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "finite": true,
+            "r2": 0.3319434511617213,
+            "rmse": 0.682027419998501
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      }
+    },
+    "resource_limitations": {
+      "shared_storage_io": "Parent observed NVIDIA full-input transfer reading M3 shared external disk during first four PCA/OLS cells; KMeans overlap not established. Whole-operation timings include input preparation and disk load, so a quiet-storage claim is not supported.",
+      "measured_without_competing_gpu": "Shared exclusive GPU lock held; no other GPU workload observed at initial admission",
+      "promotion": "not eligible; quality acceptance and resource limitation unresolved"
+    }
+  },
+  {
+    "workload": "classical/ols@dataset=taxi",
+    "source_sha": "ad4214558e482c1391e7e7e59579bddbf54204bc",
+    "status": "MEASURED_FULL",
+    "candidate_over_incumbent": 1.0053626795489943,
+    "seconds": {
+      "A": 0.5343086250359192,
+      "B": 0.5314585829619318
+    },
+    "scored_samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/runs/440956ba5f3a721465b8/attempts/attempt-0001/receipt.json",
+    "outputs": {
+      "A": "664be34ae4128e86c35e3bef861fe8c875c9db3a776183d874b1817e2919593d",
+      "B": "664be34ae4128e86c35e3bef861fe8c875c9db3a776183d874b1817e2919593d"
+    },
+    "model_exports": {
+      "A": {
+        "class": "LinearRegression",
+        "complete_export_sha256": "7fd5841904b9ccc5c9a11347607bc52c98969cd7eacfd196115ee29e63f93542",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "7fd5841904b9ccc5c9a11347607bc52c98969cd7eacfd196115ee29e63f93542",
+        "source": "public save npz",
+        "status": "ok"
+      },
+      "B": {
+        "class": "LinearRegression",
+        "complete_export_sha256": "7fd5841904b9ccc5c9a11347607bc52c98969cd7eacfd196115ee29e63f93542",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "7fd5841904b9ccc5c9a11347607bc52c98969cd7eacfd196115ee29e63f93542",
+        "source": "public save npz",
+        "status": "ok"
+      }
+    },
+    "quality": {
+      "A": {
+        "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "finite": true,
+            "r2": 0.9087746820210518,
+            "rmse": 4.698070243856422
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      },
+      "B": {
+        "gate_source": "tools/classical_two_datasets.py:quality/ols; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "finite": true,
+            "r2": 0.9087746820210518,
+            "rmse": 4.698070243856422
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      }
+    },
+    "resource_limitations": {
+      "shared_storage_io": "Parent observed NVIDIA full-input transfer reading M3 shared external disk during first four PCA/OLS cells; KMeans overlap not established. Whole-operation timings include input preparation and disk load, so a quiet-storage claim is not supported.",
+      "measured_without_competing_gpu": "Shared exclusive GPU lock held; no other GPU workload observed at initial admission",
+      "promotion": "not eligible; quality acceptance and resource limitation unresolved"
+    }
+  },
+  {
+    "workload": "classical/kmeans@dataset=istella",
+    "source_sha": "51a3eb11bd99b921e775fa5fc6f6dbedca125382",
+    "status": "MEASURED_FULL",
+    "candidate_over_incumbent": 1.011368020972953,
+    "seconds": {
+      "A": 2.389335541985929,
+      "B": 2.3624788330635056
+    },
+    "scored_samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/kmeans-repair2/runs/69a08c873718b0d710ad/attempts/attempt-0001/receipt.json",
+    "outputs": {
+      "A": "58ffd6b449422f5b7dee93f3d5f3efb87a4088bd3a1996440ada290f2cc485f7",
+      "B": "58ffd6b449422f5b7dee93f3d5f3efb87a4088bd3a1996440ada290f2cc485f7"
+    },
+    "model_exports": {
+      "A": {
+        "class": "KMeans",
+        "complete_export_sha256": "346b024ec27dac04cddb82b5dde0cefe163586243121984e89edb43b7970229a",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "346b024ec27dac04cddb82b5dde0cefe163586243121984e89edb43b7970229a",
+        "source": "public save npz",
+        "status": "ok"
+      },
+      "B": {
+        "class": "KMeans",
+        "complete_export_sha256": "346b024ec27dac04cddb82b5dde0cefe163586243121984e89edb43b7970229a",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "346b024ec27dac04cddb82b5dde0cefe163586243121984e89edb43b7970229a",
+        "source": "public save npz",
+        "status": "ok"
+      }
+    },
+    "quality": {
+      "A": {
+        "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "inertia": 6.050717116872483e+17,
+            "n_iter": 33
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      },
+      "B": {
+        "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "inertia": 6.050717116872483e+17,
+            "n_iter": 33
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      }
+    },
+    "resource_limitations": {
+      "shared_storage_io": "Parent observed NVIDIA full-input transfer reading M3 shared external disk during first four PCA/OLS cells; KMeans overlap not established. Whole-operation timings include input preparation and disk load, so a quiet-storage claim is not supported.",
+      "measured_without_competing_gpu": "Shared exclusive GPU lock held; no other GPU workload observed at initial admission",
+      "promotion": "not eligible; quality acceptance and resource limitation unresolved"
+    }
+  },
+  {
+    "workload": "classical/kmeans@dataset=taxi",
+    "source_sha": "51a3eb11bd99b921e775fa5fc6f6dbedca125382",
+    "status": "MEASURED_FULL",
+    "candidate_over_incumbent": 1.9933566914004248,
+    "seconds": {
+      "A": 3.3190562500385568,
+      "B": 1.665058874990791
+    },
+    "scored_samples_per_arm": 1,
+    "excluded_warmups_per_arm": 1,
+    "receipt": "/Volumes/MojoPerfBuild20261005/six-lane-full-ab-20261006/apple/kmeans-repair2/runs/449522fb6bd97f700c04/attempts/attempt-0001/receipt.json",
+    "outputs": {
+      "A": "d6dd38bfbfcd968d6d74405912d982c39b5322e7662292412a85002f3eaa1af9",
+      "B": "d6dd38bfbfcd968d6d74405912d982c39b5322e7662292412a85002f3eaa1af9"
+    },
+    "model_exports": {
+      "A": {
+        "class": "KMeans",
+        "complete_export_sha256": "98bcf603137aab31840cf2e4c2d8184bedb15408735752b1bea3892195fe9e2a",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "98bcf603137aab31840cf2e4c2d8184bedb15408735752b1bea3892195fe9e2a",
+        "source": "public save npz",
+        "status": "ok"
+      },
+      "B": {
+        "class": "KMeans",
+        "complete_export_sha256": "98bcf603137aab31840cf2e4c2d8184bedb15408735752b1bea3892195fe9e2a",
+        "excluded_metadata": [],
+        "schema": "mojolearn-benchmark-state-v1",
+        "sha256": "98bcf603137aab31840cf2e4c2d8184bedb15408735752b1bea3892195fe9e2a",
+        "source": "public save npz",
+        "status": "ok"
+      }
+    },
+    "quality": {
+      "A": {
+        "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "inertia": 401987663.1286732,
+            "n_iter": 84
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      },
+      "B": {
+        "gate_source": "tools/classical_two_datasets.py:quality/kmeans; independent saved quality gate remains pending",
+        "metrics": {
+          "ours-fast": {
+            "inertia": 401987663.1286732,
+            "n_iter": 84
+          }
+        },
+        "reason": "Existing independent gate assessment remains required; no acceptance inferred from metrics alone",
+        "status": "PENDING"
+      }
+    },
+    "resource_limitations": {
+      "shared_storage_io": "Parent observed NVIDIA full-input transfer reading M3 shared external disk during first four PCA/OLS cells; KMeans overlap not established. Whole-operation timings include input preparation and disk load, so a quiet-storage claim is not supported.",
+      "measured_without_competing_gpu": "Shared exclusive GPU lock held; no other GPU workload observed at initial admission",
+      "promotion": "not eligible; quality acceptance and resource limitation unresolved"
+    }
+  }
+]

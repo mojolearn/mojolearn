@@ -1,0 +1,27 @@
+{
+  "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+  "status": "NUMERICAL_REFUSAL_BOTH_ARMS",
+  "paired_completed": 8,
+  "paired_failed": 1,
+  "expected_pairs": 9,
+  "A_phase": "warmup",
+  "B_phase": "warmup",
+  "same_refusal_message": true,
+  "failure": "Exception(\"GaussianMixture: fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the number of components, increase reg_covar, or scale the input data. FAILED AT EM iteration 1, COMPONENT 4, LAPACK info=11 (the leading minor of order 11 of that component's covariance is not positive definite). reg_covar was 0x358637bd. THE COMPONENT IS NOT RESET AND THE FIT IS NOT CONTINUED (DEVIATION 1723): the pivot decision is pinned in both halves by cholesky/checks/potrf.mojo's DEVIATION 1634, so this refusal is identical on every vendor -- and a silent reset would turn a decision that is identical into a value that is not, which is the worst outcome this lane can produce\")",
+  "baseline_collector_exit": 2,
+  "baseline_worker_exit": 1,
+  "scored_gmm_samples": 0,
+  "new_compilations": 0,
+  "unsupported_workarounds": 0,
+  "source_contract": [
+    "mixture/checks/mstep.mojo:28-76: pinned FP32 covariance accumulation; regularization after division, diagonal only; no collapsed component reset",
+    "mixture/estimator.mojo:645-680: existing greedy kmeans++ init and float32 rounding/refusal limitation",
+    "mixture/estimator.mojo:1405-1438: exact collapsed covariance exception"
+  ],
+  "conclusion": "The candidate and shipped incumbent both reject the unchanged full taxi recipe at the same numerical decision. No candidate-specific regression or harness defect is established. Preserve failure; no compile-free supported repair is identified. A numerical-precision experiment or separately authorized stabilization recipe would be new work, not a retry of this unchanged cell.",
+  "remaining": [
+    "Other8 pairs retain their scored timing/output/model records.",
+    "Original GMM cell has no valid paired measurement.",
+    "No settings/data/iteration changes, no Python runtime fallback."
+  ]
+}

@@ -1,0 +1,1742 @@
+{
+  "schema": "mojolearn.saved-quality-review/1",
+  "observed_at": "2026-10-06T16:47:47.999863+00:00",
+  "scope": "Native next9 regression/GMM pairs, Apple2resample pairs, and Apple next9reg pairs as captured; saved taskmetrics only",
+  "no_fits_builds_or_verification_reruns": true,
+  "gate_sources": [
+    "tools/af_quality.py rel_tol=1e-3 abs_tol=1e-6 and recorded metric directions",
+    "CLAUDE.md FAST main and best-opponent quality rule",
+    "tools/af_board_apply.py:quality_gate",
+    "CONTRIBUTING.md and docs/PERFORMANCE_ACCEPTANCE.md numeric-contract requirements"
+  ],
+  "sample_policy": "One excludedwarmup and one scored execution perarm; no extra samples demanded",
+  "counts": {
+    "PENDING": 14,
+    "TASK_METRIC_GATE_PASSED": 1
+  },
+  "completed_pairs_reviewed": 15,
+  "baseline_comparison_counts": {
+    "SAME": 15
+  },
+  "unfinished_or_failed_receipts": [
+    {
+      "vendor": "nvidia",
+      "workload": "more:gmm@dataset=taxi",
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/03f523ab5951d08a295b/attempts/attempt-0001/receipt.json",
+      "status": "MEASUREMENT_FAILED"
+    }
+  ],
+  "read_errors": [],
+  "rows": [
+    {
+      "vendor": "nvidia",
+      "workload": "more:linearsvr@dataset=taxi",
+      "mode": "identical",
+      "lane": "linearsvr",
+      "dataset": "taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/49c28f55539ef700a59f/attempt-0001/receipt.json",
+      "receipt_sha256": "0fc42ce3ba28b97247caf0296d3caec109747b0bc7195df349529874e044fc12",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.8992843220884433,
+          "rmse": 4.936400107880937
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.8992843220884433,
+          "rmse": 4.936400107880937
+        }
+      },
+      "output_sha256": {
+        "A": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db",
+        "B": "b529b32b073d0cb82730d69cd8e067276f876305a156458a0c41637181e118db"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.8992843220884433,
+            0.8992843220884433,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            4.936400107880937,
+            4.936400107880937,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/linearsvr/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.8998029364141075,
+            "rmse": 5.0415524294242635
+          }
+        },
+        {
+          "race": "algos/linearsvr/taxi/page",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": null,
+          "quality": {
+            "r2": 0.8998,
+            "rmse": 5.042
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/49c28f55539ef700a59f/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:ridge@dataset=taxi",
+      "mode": "identical",
+      "lane": "ridge",
+      "dataset": "taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/80deb286d318651dcdf8/attempt-0001/receipt.json",
+      "receipt_sha256": "3fdfedcb9c1daa65b02fa6884c774fa22b0e5ec5d66fdb3dc8e72b32c37de32f",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9087715562840102,
+          "rmse": 4.698150730319623
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9087715562840102,
+          "rmse": 4.698150730319623
+        }
+      },
+      "output_sha256": {
+        "A": "a3d9fd79a253e586a5bab06994e523b476db0f1e72358c29dcdc402bc66d52ce",
+        "B": "a3d9fd79a253e586a5bab06994e523b476db0f1e72358c29dcdc402bc66d52ce"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9087715562840102,
+            0.9087715562840102,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            4.698150730319623,
+            4.698150730319623,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/ridge/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.9089881272841808,
+            "rmse": 4.804916183767437
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/80deb286d318651dcdf8/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:ridge@dataset=istella",
+      "mode": "identical",
+      "lane": "ridge",
+      "dataset": "istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/4238c569b4eada2d0199/attempt-0001/receipt.json",
+      "receipt_sha256": "0ef319b7b718eace211c38e70fa505e353e508d2c93d3cd939183a07e8ffa58f",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.3325260597629055,
+          "rmse": 0.6817299588685769
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.3325260597629055,
+          "rmse": 0.6817299588685769
+        }
+      },
+      "output_sha256": {
+        "A": "65a3c3799c68b59ab1af9b1feba05fa50bee91d8724be182d131d3bfe0156df9",
+        "B": "65a3c3799c68b59ab1af9b1feba05fa50bee91d8724be182d131d3bfe0156df9"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.3325260597629055,
+            0.3325260597629055,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.6817299588685769,
+            0.6817299588685769,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/ridge/istella/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.32867550789273225,
+            "rmse": 0.6844262749675318
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/4238c569b4eada2d0199/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:lasso@dataset=taxi",
+      "mode": "identical",
+      "lane": "lasso",
+      "dataset": "taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1b07971bfe465c3ca93f/attempt-0001/receipt.json",
+      "receipt_sha256": "32ac494cdb2dc082aba8d18aa3f0034c36ff5cc900b7994499268a3303c52a1e",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9087904321273814,
+          "rmse": 4.697664664015075
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9087904321273814,
+          "rmse": 4.697664664015075
+        }
+      },
+      "output_sha256": {
+        "A": "26beed452801d91dee89b3a0155e4e48e97686695641ca899f76faf3f326faed",
+        "B": "26beed452801d91dee89b3a0155e4e48e97686695641ca899f76faf3f326faed"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9087904321273814,
+            0.9087904321273814,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            4.697664664015075,
+            4.697664664015075,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/lasso/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.9089946120073558,
+            "rmse": 4.804745002220221
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/1b07971bfe465c3ca93f/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:elasticnet@dataset=taxi",
+      "mode": "identical",
+      "lane": "elasticnet",
+      "dataset": "taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/14941dbe10b9bd78a1e4/attempt-0001/receipt.json",
+      "receipt_sha256": "fbf191894b5c4a303edf219a0e47159e58d8fb7d0a703a96f0dcb8c6c0671668",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9085667183561519,
+          "rmse": 4.703422221442629
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9085667183561519,
+          "rmse": 4.703422221442629
+        }
+      },
+      "output_sha256": {
+        "A": "412d73a150f01529b304ce45d709bb4b6c008c7502ae003486df4b022079711c",
+        "B": "412d73a150f01529b304ce45d709bb4b6c008c7502ae003486df4b022079711c"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9085667183561519,
+            0.9085667183561519,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            4.703422221442629,
+            4.703422221442629,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/elasticnet/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.9073783656595982,
+            "rmse": 4.847223119484475
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/14941dbe10b9bd78a1e4/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:linearsvr@dataset=istella",
+      "mode": "identical",
+      "lane": "linearsvr",
+      "dataset": "istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/55b2b5ab6491c0d7e9fe/attempt-0001/receipt.json",
+      "receipt_sha256": "aa0a63c3df4ffe5b2f386ab284a50504a69a2e2256c611a58d489dc44c972296",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": -0.10702878276489969,
+          "rmse": 0.8779598967344175
+        },
+        "B": {
+          "finite": true,
+          "r2": -0.10702878276489969,
+          "rmse": 0.8779598967344175
+        }
+      },
+      "output_sha256": {
+        "A": "d2c0d162ba015f0bbd08a522a03202949870814d679c5be9c9f242403d4c76db",
+        "B": "d2c0d162ba015f0bbd08a522a03202949870814d679c5be9c9f242403d4c76db"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            -0.10702878276489969,
+            -0.10702878276489969,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.8779598967344175,
+            0.8779598967344175,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/linearsvr/istella/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": -0.025728614423192298,
+            "rmse": 0.8460122727355569
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/55b2b5ab6491c0d7e9fe/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:lasso@dataset=istella",
+      "mode": "identical",
+      "lane": "lasso",
+      "dataset": "istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/1e17ae43f1c2de4a7171/attempt-0001/receipt.json",
+      "receipt_sha256": "58c6cac6d1a0e706376db7dcb57f6daa29b537c648c764e9897365deff5efc86",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.3146792341895772,
+          "rmse": 0.690783838262853
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.3146792341895772,
+          "rmse": 0.690783838262853
+        }
+      },
+      "output_sha256": {
+        "A": "653d598f98dbc4acbd8694e1099483f493a4214bfa90f4c9b226771398b1aae8",
+        "B": "653d598f98dbc4acbd8694e1099483f493a4214bfa90f4c9b226771398b1aae8"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.3146792341895772,
+            0.3146792341895772,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.690783838262853,
+            0.690783838262853,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/lasso/istella/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.3108369899344797,
+            "rmse": 0.6934599872634684
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/1e17ae43f1c2de4a7171/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "nvidia",
+      "workload": "more:elasticnet@dataset=istella",
+      "mode": "identical",
+      "lane": "elasticnet",
+      "dataset": "istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/nvidia/nvidia-native--capture-attempt-02--artifacts--measurements-next-reg/71d06cebb7470b76364a/attempt-0001/receipt.json",
+      "receipt_sha256": "e3d080542065c87c62e05809ddd176c2e1f1daffab266122ac97ab67537f348e",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.264634955806502,
+          "rmse": 0.7155610839165826
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.264634955806502,
+          "rmse": 0.7155610839165826
+        }
+      },
+      "output_sha256": {
+        "A": "6a83378c1df1c6f06f75d6de1b36f4b84f5c053d6179db842ee002548789c4f4",
+        "B": "6a83378c1df1c6f06f75d6de1b36f4b84f5c053d6179db842ee002548789c4f4"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.264634955806502,
+            0.264634955806502,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.7155610839165826,
+            0.7155610839165826,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/elasticnet/istella/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.2609218578248057,
+            "rmse": 0.7181341952031948
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "AMD timing and same-arm cross-column IDENTICAL identity",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/nvidia-native/capture-attempt-02/artifacts/measurements-next-reg/71d06cebb7470b76364a/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/resample@dataset=taxi",
+      "mode": "fast",
+      "lane": "resample",
+      "dataset": "taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/661a766183dd2fb07d65/attempt-0001/receipt.json",
+      "receipt_sha256": "55240fda290de6eb4c74dad86ef94de7c019d9214247ff63f2229d3a60523758",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "d0434339bed6f38495de319097654bbafff56579343eb69db183c96b4c949037",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "max_mean_shift_over_std": 0.0008182939412305245
+        },
+        "B": {
+          "max_mean_shift_over_std": 0.0008182939412305245
+        }
+      },
+      "output_sha256": {
+        "A": "2bd5822aac5cf07666d738135446446fe627bc15a9115db6329c0641c6d3dc95",
+        "B": "2bd5822aac5cf07666d738135446446fe627bc15a9115db6329c0641c6d3dc95"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "max_mean_shift_over_std": [
+            "SAME",
+            0.0008182939412305245,
+            0.0008182939412305245,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "max_mean_shift_over_std": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "algos/resample/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "quality": {
+            "max_mean_shift_over_std": 0.002256665791973721
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/resample-full/runs/661a766183dd2fb07d65/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "algos/resample@dataset=istella",
+      "mode": "fast",
+      "lane": "resample",
+      "dataset": "istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--resample-full--runs/047898b203cef197f8fa/attempt-0001/receipt.json",
+      "receipt_sha256": "7526baa0cad3655b0ebb5e7e8b34bfdd387287e33c12fccc5ec06dfe9da36188",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "090cbfba29a11e0fa362b66ebb421022caa47d87aa365b5a349f121dbbfa5060",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "max_mean_shift_over_std": 0.001946923534707672
+        },
+        "B": {
+          "max_mean_shift_over_std": 0.001946923534707672
+        }
+      },
+      "output_sha256": {
+        "A": "337508d9a432ec0afe8c22b3f25c74ade6aab8cade8cf4ba2cbcc40fe85eb91b",
+        "B": "337508d9a432ec0afe8c22b3f25c74ade6aab8cade8cf4ba2cbcc40fe85eb91b"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "max_mean_shift_over_std": [
+            "SAME",
+            0.001946923534707672,
+            0.001946923534707672,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "max_mean_shift_over_std": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "algos/resample/istella/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "quality": {
+            "max_mean_shift_over_std": 0.002552436077561093
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/resample-full/runs/047898b203cef197f8fa/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/linearsvr@dataset=taxi",
+      "mode": "fast",
+      "lane": "linearsvr",
+      "dataset": "taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/71dfc119e59c074352bb/attempt-0001/receipt.json",
+      "receipt_sha256": "0663e4a2a0a24d6bc52cc7833fb39f844343c41ac4c9dff77eaa5d35b2cc55d8",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.8992839609513043,
+          "rmse": 4.936408958120795
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.8992839609513043,
+          "rmse": 4.936408958120795
+        }
+      },
+      "output_sha256": {
+        "A": "456fbf6215fea8c716947ceded7b81312b0ff81f7c89e7d9ee1abff231e5162b",
+        "B": "456fbf6215fea8c716947ceded7b81312b0ff81f7c89e7d9ee1abff231e5162b"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.8992839609513043,
+            0.8992839609513043,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            4.936408958120795,
+            4.936408958120795,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/linearsvr/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.8998029364141075,
+            "rmse": 5.0415524294242635
+          }
+        },
+        {
+          "race": "algos/linearsvr/taxi/page",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": null,
+          "quality": {
+            "r2": 0.8998,
+            "rmse": 5.042
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/reg-full/runs/71dfc119e59c074352bb/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/linearsvr@dataset=istella",
+      "mode": "fast",
+      "lane": "linearsvr",
+      "dataset": "istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/05207b357bcbe067ca6a/attempt-0001/receipt.json",
+      "receipt_sha256": "e8a6d4298855fd20124779607ace39373ad31aeb924546986b991a2b1e792b26",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": -0.10702817996248681,
+          "rmse": 0.8779596576997942
+        },
+        "B": {
+          "finite": true,
+          "r2": -0.10702817996248681,
+          "rmse": 0.8779596576997942
+        }
+      },
+      "output_sha256": {
+        "A": "12023e1d229ced7a6f88e9e75bbb4d2614955112da15d43117e5dd8fafa39926",
+        "B": "12023e1d229ced7a6f88e9e75bbb4d2614955112da15d43117e5dd8fafa39926"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            -0.10702817996248681,
+            -0.10702817996248681,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.8779596576997942,
+            0.8779596576997942,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/linearsvr/istella/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": -0.025728614423192298,
+            "rmse": 0.8460122727355569
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/reg-full/runs/05207b357bcbe067ca6a/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/ridge@dataset=taxi",
+      "mode": "fast",
+      "lane": "ridge",
+      "dataset": "taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/94c802682d07720f1572/attempt-0001/receipt.json",
+      "receipt_sha256": "850186c3601325cac3adc57e9cfb0e75169b9108de107dd231b64e09b6624842",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ],
+        "y": [
+          5250086
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.9087715577966976,
+          "rmse": 4.698150691368868
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.9087715577966976,
+          "rmse": 4.698150691368868
+        }
+      },
+      "output_sha256": {
+        "A": "095f2b6bfedd6f006924ee42054561a9a382888a25493dbf5c1174507780bc49",
+        "B": "095f2b6bfedd6f006924ee42054561a9a382888a25493dbf5c1174507780bc49"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.9087715577966976,
+            0.9087715577966976,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            4.698150691368868,
+            4.698150691368868,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/ridge/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.9089881272841808,
+            "rmse": 4.804916183767437
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/reg-full/runs/94c802682d07720f1572/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/ridge@dataset=istella",
+      "mode": "fast",
+      "lane": "ridge",
+      "dataset": "istella",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/6d77306d88d72aab7b44/attempt-0001/receipt.json",
+      "receipt_sha256": "8ad1ba53be89b4fc9eadb38c57d8ff0a37975d01a65146aee8fc11ee031496a0",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          2043304,
+          220
+        ],
+        "Xq": [
+          500000,
+          220
+        ],
+        "y": [
+          2043304
+        ],
+        "yq": [
+          500000
+        ]
+      },
+      "dataset_sha256": "0b42ee853f43c8f4877e091f53858b13589d4bbaa78dd2cee18f7ff399e71e7d",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "finite": true,
+          "r2": 0.3325338446311392,
+          "rmse": 0.6817259832876175
+        },
+        "B": {
+          "finite": true,
+          "r2": 0.3325338446311392,
+          "rmse": 0.6817259832876175
+        }
+      },
+      "output_sha256": {
+        "A": "3938f979d33c96fa7c63d555dda53343474186353c1be36ee86a75321eb941b6",
+        "B": "3938f979d33c96fa7c63d555dda53343474186353c1be36ee86a75321eb941b6"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "finite": [
+            "SAME",
+            1.0,
+            1.0,
+            0.0
+          ],
+          "r2": [
+            "SAME",
+            0.3325338446311392,
+            0.3325338446311392,
+            0.0
+          ],
+          "rmse": [
+            "SAME",
+            0.6817259832876175,
+            0.6817259832876175,
+            0.0
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "finite": "higher",
+        "r2": "higher",
+        "rmse": "lower"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/ridge/istella/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+          "quality": {
+            "finite": true,
+            "r2": 0.32867550789273225,
+            "rmse": 0.6844262749675318
+          }
+        }
+      ],
+      "quality_assessment": "PENDING",
+      "reason": "Baseline task metrics show no material regression, but historical opponent used1,000,000fit/100,000eval rather than this full workload; matching independent quality reference is missing.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/reg-full/runs/6d77306d88d72aab7b44/attempts/attempt-0001/receipt.json"
+    },
+    {
+      "vendor": "apple",
+      "workload": "classical2/gmm@dataset=taxi",
+      "mode": "fast",
+      "lane": "gmm",
+      "dataset": "taxi",
+      "source_sha": "55a815e13728392be41903769c33ece8948cad4a",
+      "receipt": "experiments/six_lane_integration/measurements/20261006/receipts/apple/apple--captured--reg-full--runs/d4f24411b4f604c84997/attempt-0001/receipt.json",
+      "receipt_sha256": "3c7e6b71521a40a6bf4e5070a42f0f0a1a4d8cb37fbab9112a2d44146df99a30",
+      "execution_status": "MEASURED_FULL",
+      "returncodes": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dimensions": {
+        "X": [
+          5250086,
+          11
+        ],
+        "Xq": [
+          500000,
+          11
+        ]
+      },
+      "dataset_sha256": "cbf550206999aac6b51fee8145750d61bd66da3884822057fcc5ac876d65f0f4",
+      "promotion_authorized": false,
+      "metrics": {
+        "A": {
+          "bic": -188789016.44902077,
+          "mean_log_likelihood": 11.60158091121872,
+          "n_iter": 24
+        },
+        "B": {
+          "bic": -188789016.44902077,
+          "mean_log_likelihood": 11.60158091121872,
+          "n_iter": 24
+        }
+      },
+      "output_sha256": {
+        "A": "efaa05dc2559cdeedf5dfc4af9ace044ba88824b01b259768d21a9c7374d6b53",
+        "B": "efaa05dc2559cdeedf5dfc4af9ace044ba88824b01b259768d21a9c7374d6b53"
+      },
+      "sample_counts": {
+        "A": {
+          "excluded_warmups": 0,
+          "scored": 1
+        },
+        "B": {
+          "excluded_warmups": 0,
+          "scored": 1
+        }
+      },
+      "candidate_vs_baseline": {
+        "verdict": "SAME",
+        "metrics": {
+          "bic": [
+            "SAME",
+            -188789016.44902077,
+            -188789016.44902077,
+            0.0
+          ],
+          "mean_log_likelihood": [
+            "SAME",
+            11.60158091121872,
+            11.60158091121872,
+            0.0
+          ],
+          "n_iter": [
+            "INFO",
+            24.0,
+            24.0,
+            null
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "metric_directions": {
+        "bic": "lower",
+        "mean_log_likelihood": "higher",
+        "n_iter": "info"
+      },
+      "historical_opponents": [
+        {
+          "race": "classical2/gmm/taxi/rows=full",
+          "arm": "sklearn-cpu",
+          "status": "REFUSED(error: {\"error\": \"ValueError('Fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the numbe)",
+          "shape": "X 100000x11; Xq 20000x11",
+          "quality": {}
+        },
+        {
+          "race": "classical2/gmm/taxi/rows=full/workload=743e2c8bc8a5925d",
+          "arm": "sklearn-cpu",
+          "status": "ok",
+          "shape": "X 5250086x11; Xq 500000x11",
+          "quality": {
+            "bic": -184832994.344408,
+            "mean_log_likelihood": 10.690672192719653,
+            "n_iter": 24
+          }
+        }
+      ],
+      "reference_provenance": {
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/full-ab-main-20261006/apple-repair-2h/captured/attempt-01/cells/cell-03/board/raw/classical2/rows-full/gmm-taxi.json",
+        "sha256": "9ff3aabb61113049badda592b21ec80b8b3cf923ec6131c03513e0dc2d0d34f6",
+        "arrays_shape_dtype_sha256_match": true,
+        "shared_constructor_parameter_mismatches": {},
+        "runtime_reference_precision": "sklearn same-value float64 widening included in fit/inference clock; retained quality only",
+        "scope": "Independent task-quality comparison; no historical timing or ratio imported"
+      },
+      "opponent_metrics": {
+        "bic": -184832994.344408,
+        "mean_log_likelihood": 10.690672192719653,
+        "n_iter": 24
+      },
+      "candidate_vs_opponent": {
+        "verdict": "BETTER",
+        "metrics": {
+          "bic": [
+            "BETTER",
+            -188789016.44902077,
+            -184832994.344408,
+            0.020954725963525656
+          ],
+          "mean_log_likelihood": [
+            "BETTER",
+            11.60158091121872,
+            10.690672192719653,
+            0.07851591308717412
+          ],
+          "n_iter": [
+            "INFO",
+            24.0,
+            24.0,
+            null
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "baseline_vs_opponent": {
+        "verdict": "BETTER",
+        "metrics": {
+          "bic": [
+            "BETTER",
+            -188789016.44902077,
+            -184832994.344408,
+            0.020954725963525656
+          ],
+          "mean_log_likelihood": [
+            "BETTER",
+            11.60158091121872,
+            10.690672192719653,
+            0.07851591308717412
+          ],
+          "n_iter": [
+            "INFO",
+            24.0,
+            24.0,
+            null
+          ]
+        },
+        "unknown": [],
+        "worst": 0.0
+      },
+      "quality_assessment": "TASK_METRIC_GATE_PASSED",
+      "reason": "Recorded candidate task metrics preserve baseline and meet same-input independent sklearn quality under existing tolerances.",
+      "remaining_requirements": [
+        "Independent same-full-workload opponent quality unless explicitly qualified above",
+        "Complete affected estimator/configuration coverage"
+      ],
+      "original_review_receipt_path": "/Users/andrewhendel/mojolearn-evidence/six-lane-full-ab-20261006/apple/captured/reg-full/runs/d4f24411b4f604c84997/attempts/attempt-0001/receipt.json"
+    }
+  ],
+  "default_promotion": false
+}

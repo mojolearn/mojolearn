@@ -43,13 +43,14 @@ def main():
             seen.add(digest);receipt=json.loads(raw);job=receipt['workload']
             config=job['master_selection']['id']
             selected={r['arm']:r for r in receipt['runs'] if r['phase']=='scored' and r.get('returncode')==0 and r.get('result')}
-            complete=receipt['status']=='MEASURED_FULL' and set(selected)=={'A','B'}
+            execution_status=receipt.get('status','IN_PROGRESS')
+            complete=execution_status=='MEASURED_FULL' and set(selected)=={'A','B'}
             controller=source.relative_to(ROOT).as_posix().replace('/','--')
             target=OUT/'receipts'/vendor/controller/receipt['key']/path.parent.name/'receipt.json'
             target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(path,target)
             receipt_paths[digest]=str(target.relative_to(REPO))
             row=dict(id=config,vendor=vendor,case=job['workload_id']+'/'+path.parent.name,
-                     scope='full_workload',status='PENDING_ADMISSION' if complete else 'FAILED_OR_INCOMPLETE',
+                     scope='full_workload',status='PENDING_ADMISSION' if complete else 'IN_PROGRESS' if execution_status=='IN_PROGRESS' else 'FAILED_OR_INCOMPLETE',
                      source_sha=receipt['source_sha'],evidence=str(target.relative_to(REPO)),
                      dimensions=job['dimensions'],dataset_sha256=job['dataset_sha256'],
                      warmups=1,scored_samples=1 if complete else 0,
@@ -60,7 +61,7 @@ def main():
             if vendor=='apple' and source in [ROOT/'apple/captured/runs',ROOT/'apple/captured/kmeans-repair2/runs']:
                 row['resource_limitations']=['Shared external-disk I/O overlapped first four PCA/OLS pairs; overlap for KMeans unestablished. Quiet-storage timing is not established.']
             detail=dict(configuration=config,workload=job['workload_id'],vendor=vendor,
-                        source_sha=receipt['source_sha'],execution_status=receipt['status'],
+                        source_sha=receipt['source_sha'],execution_status=execution_status,
                         evidence=row['evidence'],returncodes=[r.get('returncode') for r in receipt['runs']])
             if complete:
                 a,b=(selected[k]['result'] for k in ('A','B'))
@@ -111,7 +112,8 @@ def main():
     print(json.dumps(dict(returncode=p.returncode,retained_attempts=len(cells),
                           complete_pairs=sum(c['execution_status']=='MEASURED_FULL' for c in summary),
                           quality_failed=sum(c['status']=='QUALITY_FAILED' for c in cells),
-                          failed_or_incomplete=sum(c['execution_status']!='MEASURED_FULL' for c in summary),board=str(OUT/'BOARD.md'))))
+                          in_progress=sum(c['execution_status']=='IN_PROGRESS' for c in summary),
+                          failed_or_incomplete=sum(c['execution_status'] not in ('MEASURED_FULL','IN_PROGRESS') for c in summary),board=str(OUT/'BOARD.md'))))
     raise SystemExit(p.returncode)
 
 
